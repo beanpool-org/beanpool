@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cara kerja BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="Kacang, perdagangan, penawaran dan permintaan, serta kredit, secara sederhana.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Tentang BeanPool</a></p>
+        <h1>Cara kerja BeanPool</h1>
+        <p class="lede">Kacang, perdagangan, penawaran dan permintaan, serta kredit, secara sederhana.</p>
+        <h2>Kacang</h2>
+        <p>Komunitasmu bertransaksi dengan <strong>kacang</strong>. Kacang bukanlah uang dari bank. Kacang adalah catatan tentang siapa yang telah membantu siapa.</p>
+        <p>Setiap orang memulai dari angka nol. Saat kamu membantu seseorang, kamu memperoleh kacang. Saat seseorang membantumu, kamu menghabiskan kacang.</p>
+        <p>Panduan perkiraan: 40 kacang bernilai sekitar satu jam waktu seseorang. Kamu dan orang lain tersebut menyepakati harga aslinya.</p>
+        <h2>Penawaran dan Permintaan</h2>
+        <p>Sebuah <strong>Penawaran</strong> adalah sesuatu yang dapat kamu lakukan atau berikan: roti, tumpangan, satu jam berkebun, perbaikan barang.</p>
+        <p>Sebuah <strong>Permintaan</strong> adalah sesuatu yang sedang kamu cari.</p>
+        <p>Di komunitas dengan Kacang, sebelum kamu dapat memposting Permintaan, atau meminta Penawaran orang lain, kamu harus telah memposting setidaknya satu Penawaran milikmu sendiri. Setiap orang membawa sesuatu. Di tempat yang tidak menggunakan Kacang, seperti di komunitas global, postingan pertamamu bisa berupa Permintaan.</p>
+        <h2>Cara kerja transaksi</h2>
+        <ul>
+            <li>Kamu menemukan Penawaran yang kamu inginkan dan memintanya, atau seseorang menanggapi Permintaanmu.</li>
+            <li>Ketika transaksi disepakati, kacang milik pembeli disimpan dengan aman. Tidak ada yang bisa menggunakannya selama transaksi berlangsung.</li>
+            <li>Pekerjaan diselesaikan.</li>
+            <li>Pembeli mengonfirmasi bahwa pekerjaan telah selesai. Kemudian kacang diserahkan kepada penjual.</li>
+        </ul>
+        <p>Jika suatu transaksi mengalami kendala, admin komunitasmu dapat turun tangan. Mereka dapat membayarkannya ke penjual, mengembalikan kacang ke pembeli, atau membaginya. Seorang admin tidak dapat memutuskan transaksi yang melibatkannya.</p>
+        <h2>Hadiah</h2>
+        <p>Kamu juga dapat mengirimkan kacang kepada seseorang sebagai hadiah, tanpa adanya transaksi.</p>
+        <ul>
+            <li>Hadiah hanya dapat berasal dari kacang yang kamu miliki. Hadiah tidak pernah bisa membuat saldomu berada di bawah nol.</li>
+            <li>Kamu dapat mengirim hadiah setelah kamu menyelesaikan suatu transaksi di pasar. Transaksi yang hanya bernilai 1 atau 2 kacang terlalu kecil untuk dihitung.</li>
+            <li>Hadiah tidak dikenakan biaya.</li>
+        </ul>
+        <h2>Berada di bawah nol: batas kreditmu</h2>
+        <p>Kamu dapat berbelanja sedikit lebih banyak dari yang kamu miliki, dan berada di bawah nol. Ini adalah <strong>batas kreditmu</strong>. Ini adalah janji untuk membantu orang lain nanti.</p>
+        <p>Batas kreditmu dimulai dari nol. Batas ini terbuka saat kamu menyelesaikan transaksi pertamamu di pasar (transaksi yang hanya bernilai 1 atau 2 kacang terlalu kecil untuk dihitung). Seseorang yang dipilih komunitasmu untuk menyambut pendatang baru juga dapat memberimu permulaan kecil dengan menjaminmu: 25, 50, atau 100 kacang.</p>
+        <p>Batas kreditmu bertumbuh seiring <strong>kepercayaanmu</strong>:</p>
+        <ul>
+            <li>Kamu memperoleh kepercayaan dengan menyelesaikan transaksi di pasar. Hadiah tidak menghasilkan kepercayaan.</li>
+            <li>Bertransaksi dengan banyak orang yang berbeda membangun lebih banyak kepercayaan. Transaksi dengan satu orang mana pun dihitung hingga 500 kacang.</li>
+            <li>Kepercayaan bertumbuh dengan cepat pada awalnya, lalu lebih lambat kemudian.</li>
+            <li>Penilaian bintang berpengaruh. Jika orang menilai kinerjamu, rata-rata penilaianmu menskalakan kepercayaan yang diperoleh transaksimu: 5 bintang mempertahankan semuanya, 1 bintang mempertahankan 60%.</li>
+            <li>Batas terdalam yang dapat dicapai batas kredit mana pun adalah 2.000 kacang di bawah nol. Suatu komunitas yang mengonfirmasi anggotanya dapat mengizinkan lebih (lihat di bawah).</li>
+        </ul>
+        <h2>Penawaranmu membuka kreditmu</h2>
+        <p>Kepercayaan menentukan seberapa dalam kamu <strong>bisa</strong> mencapai saldo negatif. Penawaran aktifmu menentukan seberapa dalam kamu <strong>boleh</strong> menggunakannya saat ini. Kamu mendapatkan nilai yang lebih kecil di antara keduanya.</p>
+        <ul>
+            <li>Tanpa Penawaran aktif: kamu tidak dapat berada di bawah nol.</li>
+            <li>1 Penawaran: hingga 200 di bawah nol.</li>
+            <li>2 Penawaran: hingga 500.</li>
+            <li>3 Penawaran: hingga 1.000.</li>
+            <li>4 Penawaran: hingga 1.500.</li>
+            <li>5 Penawaran: hingga 2.000.</li>
+        </ul>
+        <p>Jika kamu menurunkan Penawaran saat kamu berada di bawah nol, kamu mungkin berutang lebih banyak daripada yang sekarang ditanggung oleh Penawaranmu. Maka kamu tidak dapat berbelanja lebih banyak sampai kamu kembali berada dalam batasmu. Kamu tetap bisa memperoleh kacang, dan tidak ada yang diambil darimu.</p>
+        <p>Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat &quot;Batas kredit&quot;.</p>
+        <h2>Lencana kepercayaan</h2>
+        <p>Tingkat kepercayaanmu ditampilkan sebagai lencana. Lencananya adalah Pendatang Baru, Warga, Pengelola, dan Tetua. Kepercayaan di balik lencanamu menjumlahkan tiga hal: awal yang diberikan oleh penjamin, kepercayaan yang kamu peroleh dari bertransaksi, dan kepercayaan apa pun yang diberikan admin kepadamu. Seorang admin dapat memberikan lencana kepada anggota secara langsung, tanpa transaksi. Di komunitas yang mengonfirmasi anggotanya, batas kredit yang didapatkan anggota terkonfirmasi juga dihitung.</p>
+        <ul>
+            <li>Warga dari 200 kepercayaan.</li>
+            <li>Pengelola dari 600 kepercayaan.</li>
+            <li>Tetua dari 1.400 kepercayaan.</li>
+        </ul>
+        <p>Lencana adalah bentuk pengakuan, tidak lebih. Lencana tidak membatasi tindakan apa pun. Setiap orang dapat bertransaksi, mengundang, dan memberikan suara, apa pun lencananya.</p>
+        <h2>Biaya dan Sarana Bersama</h2>
+        <p>Komunitasmu memiliki kolam kacang bersama yang disebut <strong>Sarana Bersama</strong>. Biaya-biaya disalurkan ke dalamnya. Anggota memutuskan bersama bagaimana biaya tersebut dibelanjakan.</p>
+        <ul>
+            <li><strong>Biaya pasar:</strong> 1,5% dari setiap pembayaran pasar disalurkan ke Sarana Bersama. Biaya ini dipotong dari apa yang diterima penjual.</li>
+            <li><strong>Biaya peredaran:</strong> kacang dimaksudkan untuk terus berputar, bukan diam mengendap. 200 kacang pertama yang kamu miliki selalu bebas biaya. Di atas jumlah itu, biaya bulanan kecil disalurkan ke Sarana Bersama: 1% per bulan untuk kacang antara 200 dan 500, 1,5% antara 500 dan 1.000, 2% antara 1.000 dan 2.000, dan 2,5% di atas 2.000.</li>
+            <li>Saldo di bawah nol tidak pernah membayar biaya peredaran. Hadiah tidak pernah dikenakan biaya.</li>
+        </ul>
+        <h2>Usaha dan grup</h2>
+        <p>Sebuah <strong>usaha</strong> terus berjalan dan bertransaksi atas namanya sendiri: toko roti, perpustakaan alat, kios pasar. Usaha dijalankan oleh para <strong>pengurus</strong>, yang dipimpin oleh seorang <strong>pengurus utama</strong>. Pengurus dapat berkomitmen menyumbangkan sebagian kepercayaan mereka sendiri untuk memberi usaha tersebut batas kredit.</p>
+        <p>Sebuah <strong>grup</strong> adalah lingkaran anggota dengan obrolan dan postingannya sendiri, yang dijalankan oleh satu atau lebih <strong>koordinator</strong>. Salah satunya adalah <strong>koordinator utama</strong> — siapa pun yang membuat grup tersebut pada awalnya.</p>
+        <p>Kamu dapat membaca bagaimana pengurus dan koordinator dipilih di &quot;Rules and how decisions work&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

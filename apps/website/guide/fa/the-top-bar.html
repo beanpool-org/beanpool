@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نوار بالا — BeanPool members' guide</title>
+    <meta name="description" content="لوبیا، نمادهای کوچک نشان‌دهنده نیاز به توجه شما، و دکمه‌های بالا سمت راست.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">شروع کار</a></p>
+        <h1>نوار بالا</h1>
+        <p class="lede">لوبیا، نمادهای کوچک نشان‌دهنده نیاز به توجه شما، و دکمه‌های بالا سمت راست.</p>
+        <h2>محتوای آن چیست</h2>
+        <p>در تلفن، نوار بالای صفحه در هر زبانه یکسان است. از چپ به راست:</p>
+        <ul>
+            <li><strong>نماد لوبیا:</strong> جامعه شما، و این راهنما.</li>
+            <li><strong>نمادهای «به شما نیاز دارد»:</strong> فقط در حالی که چیزی در انتظار شما است.</li>
+            <li><strong>نماد ?، نماد دعوت، تنظیمات و عکس شما.</strong></li>
+        </ul>
+        <p>در یک مرورگر وب، نوار بالا ساده‌تر است. وضعیت اتصال در سمت چپ، نام صفحه، و نمایه شما، علامت <strong>?</strong> و تنظیمات در سمت راست قرار دارند. برگه لوبیا، نمادهای «به شما نیاز دارد» و نماد دعوت را ندارد: <strong>Invites</strong> در زیر <strong>افراد</strong> قرار دارد. زبانه‌ها در امتداد پایین صفحه، یا در یک صفحه عریض در سمت چپ قرار دارند.</p>
+        <h2>نماد لوبیا</h2>
+        <p>روی نماد لوبیا در بالا سمت چپ بزنید تا برگه <strong>BEANPOOL</strong> باز شود. این برگه موارد زیر را نشان می‌دهد:</p>
+        <ul>
+            <li><strong>جامعه شما:</strong> نام آن در بالا، و اینکه آیا در حال حاضر می‌توان به آن دسترسی داشت یا خیر.</li>
+            <li><strong>جوامع شما:</strong> روی یکی بزنید تا به آن تغییر دهید، یا روی <strong>افزودن جامعه</strong> بزنید. <strong>جامعهٔ جهانی</strong> همیشه یکی از آن‌ها است: خط دوم آن می‌گوید که آیا می‌توانید به آن بپیوندید یا خیر.</li>
+            <li><strong>جستجو در راهنما</strong>، سپس <strong>راهنماها</strong> (نحوه کارکرد BeanPool، قوانین، پرسش‌های متداول)، <strong>نحوه استفاده از برنامه</strong> (این راهنما، بخش به بخش) و <strong>پروژه BeanPool</strong>، همراه با <strong>What's new</strong>.</li>
+            <li><strong>beanpool.org:</strong> وب‌سایت عمومی، همراه با <strong>اشتراک‌گذاری</strong> برای ارسال آن به یک دوست.</li>
+        </ul>
+        <p>نقطه کوچک روی نماد لوبیا وضعیت را به شما می‌گوید:</p>
+        <ul>
+            <li><strong>سبز:</strong> متصل هستید، و در اینجا عضوید.</li>
+            <li><strong>کهربایی:</strong> به عنوان مهمان در حال بازدید هستید.</li>
+            <li><strong>قرمز:</strong> سرور جامعه شما در حال حاضر در دسترس نیست، یا این تلفن هنوز به جامعه‌ای متصل نشده است.</li>
+        </ul>
+        <p>یک بررسی کند تک، نقطه را قرمز نمی‌کند. تنها پس از اینکه بیش از یک بررسی متوالی با شکست مواجه شود، قرمز می‌شود.</p>
+        <h2>نمادهای «به شما نیاز دارد»</h2>
+        <p>بین نماد لوبیا و دکمه‌های سمت راست، نمادهای کوچکی فقط زمانی ظاهر می‌شوند که چیزی به شما نیاز داشته باشد. هر کدام مربوط به نوعی از موارد است. روی آن بزنید تا مستقیماً به آنجا بروید.</p>
+        <ul>
+            <li><strong>دست دادن:</strong> معامله‌ای در انتظار شما است. کسی منتظر است که درخواست او را بپذیرید، یا معامله‌ای که در آن هستید هنوز تمام نشده است. اگر یکی باشد، با ضربه زدن آن معامله باز می‌شود. اگر بیشتر باشد، <strong>معاملات من</strong> را باز می‌کند.</li>
+            <li><strong>صندوق رأی:</strong> رأیی که هنوز نداده‌اید. ضربه زدن روی آن <strong>مشاع</strong> را در بخش <strong>تصمیم‌گیری</strong> باز می‌کند. اگر اولین رأی مربوط به یک گروه یا رأی مدیران در یک طرح تجاری باشد، ضربه زدن به جای آن آن گروه یا طرح تجاری را باز می‌کند. رأیی که هنوز نمی‌توانید بدهید در اینجا شمرده نمی‌شود، برای مثال رأیی که لازم است ابتدا معامله‌ای را تمام کنید.</li>
+            <li><strong>حباب گفتار:</strong> یک پیام خوانده‌نشده از یک شخص. اگر از یک نفر باشد، با ضربه زدن آن گفتگو باز می‌شود. اگر از چند نفر باشد، <strong>گفتگو</strong> را در بخش <strong>پیام‌ها</strong> باز می‌کند و فقط موارد خوانده‌نشده را نشان می‌دهد.</li>
+            <li><strong>گروهی از افراد:</strong> خطوط جدید در گروه‌های شما، گفتگوهای طرح تجاری یا گفتگوهای رویداد. گفتگوهایی که بی‌صدا کرده‌اید در اینجا بی‌صدا می‌مانند. با ضربه زدن گفتگو باز می‌شود، یا اگر چند مورد باشد، <strong>گفتگو</strong> در بخش <strong>گروه‌ها</strong> باز می‌شود.</li>
+            <li><strong>سپر:</strong> فقط برای افرادی که به اداره جامعه شما کمک می‌کنند. در حالی که کارهای مدیریتی در انتظار است نشان داده می‌شود، مانند گزارشی برای بررسی یا معامله متوقف‌شده‌ای که نیاز به حکمیت دارد. با ضربه زدن قفل صفحه تلفن شما درخواست می‌شود، سپس تنظیمات جامعه شما در همان کار باز می‌گردد. اگر تنظیمات جامعه شما از یک کد ورود استفاده کند، آن را نیز می‌خواهد.</li>
+        </ul>
+        <p>نمادها از سمت راست روی هم چیده می‌شوند. مهم‌ترین مورد در کنار نماد ? قرار می‌گیرد و جای خود را با آمدن و رفتن بقیه حفظ می‌کند.</p>
+        <h3>تعداد و رنگ</h3>
+        <ul>
+            <li>یک عدد کوچک روی یک نماد به معنای بیش از یک مورد از آن نوع است: به عنوان مثال ۳ نفری که به شما پیام داده‌اند. بالاتر از ۹ عبارت <strong>+۹</strong> را نشان می‌دهد.</li>
+            <li>یک نماد زمانی که فوری‌تر باشد <strong>کهربایی</strong> می‌شود: معامله‌ای در انتظار شما، کارهای مدیریتی، یا رأی‌گیری‌ای که ظرف ۲ روز بسته می‌شود. هیچ چیز قرمز نمی‌شود.</li>
+        </ul>
+        <h3>در یک صفحه نمایش کوچک</h3>
+        <p>اگر جا برای همه نمادها نباشد، آخرین فضا <strong>•••</strong> را نشان می‌دهد. روی آن بزنید تا کل فهرست، <strong>به شما نیاز دارد</strong>، را به صورت کلمات ببینید. روی یک خط بزنید تا به آنجا بروید.</p>
+        <h3>یک نوار خلوت خبر خوبی است</h3>
+        <p>زمانی که چیزی به شما نیاز ندارد، هیچ نمادی وجود ندارد. چیزی را از دست نداده‌اید. نمادها با جابجایی شما در برنامه و هنگام بازگشت به آن به‌روزرسانی می‌شوند.</p>
+        <h2>پیوستن یا اتصال</h2>
+        <p>به جای نمادها، ممکن است دکمه‌ای ببینید:</p>
+        <ul>
+            <li><strong>پیوستن</strong> (کهربایی): به عنوان مهمان در حال بازدید هستید. روی آن بزنید تا <strong>Invites</strong> باز شود. در یک جامعه محلی با یک دعوت‌نامه در آنجا ملحق می‌شوید. در جامعه جهانی، روی <strong>Join with 12 words or a sign-in</strong> (<strong>Join with a sign-in</strong> در جایی که یک جامعه فقط ورود را می‌پذیرد) بزنید.</li>
+            <li><strong>اتصال</strong> (قرمز): این تلفن به جامعه‌ای متصل نیست. روی آن بزنید تا <strong>تنظیمات</strong> باز شود، جایی که می‌توانید جامعه‌ای اضافه کنید.</li>
+        </ul>
+        <p>در حالی که یکی از این‌ها نشان داده می‌شود، نماد دعوت پنهان است.</p>
+        <h2>دکمه‌های سمت راست</h2>
+        <ul>
+            <li><strong>نماد ?</strong> (علامت سؤال در یک دایره): راهنمایی برای صفحه‌ای که در آن هستید. برگه کوتاهی را باز می‌کند که توضیح می‌دهد آن صفحه برای چه کاری است، سپس گزینه‌های <strong>Read the guide page</strong>، <strong>جستجو در راهنما</strong> و <strong>مشاهده دوباره تور آشنایی</strong>. در هر زبانه برای اعضا و مهمانان وجود دارد. در وب‌اپلیکیشن بین عکس شما و تنظیمات در بالا قرار دارد، و در یک صفحه عریض در کنار تنظیمات در پایین نوار کناری می‌نشیند.</li>
+            <li><strong>نماد دعوت</strong> (شخصی با یک علامت بعلاوه): بخش <strong>Invites</strong> را باز می‌کند تا فردی را دعوت کنید یا به جامعه دیگری بپیوندید. به «پیوستن به BeanPool» مراجعه کنید.</li>
+            <li><strong>تنظیمات</strong> (اسلایدرها): <strong>تنظیمات</strong> را باز می‌کند. دوباره روی آن بزنید تا به جایی که بودید برگردید.</li>
+            <li><strong>عکس شما:</strong> نمایه خودتان را همان‌طور که دیگران می‌بینند باز می‌کند.</li>
+        </ul>
+        <h2>پیام‌های به‌روزرسانی</h2>
+        <p>گاهی اوقات یک نوار سبز در زیر نوار بالا نشان داده می‌شود:</p>
+        <ul>
+            <li><strong>به‌روزرسانی موجود است:</strong> نسخه جدیدتری از برنامه منتشر شده است. روی <strong>ارتقا</strong> بزنید تا آن را دریافت کنید، یا روی علامت ضربدر بزنید تا پیام بسته شود.</li>
+            <li><strong>برنامه شما برای این جامعه بسیار قدیمی است:</strong> قبل از اینکه برنامه در اینجا به درستی کار کند باید به‌روزرسانی کنید. این پیام را نمی‌توان بست. روی <strong>ارتقا</strong> بزنید.</li>
+        </ul>
+        <h2>زبانه‌ها</h2>
+        <p>زیر نوار بالا زبانه‌ها قرار دارند: <strong>خانه</strong>، <strong>بازار</strong>، <strong>نقشه</strong>، <strong>گفتگو</strong>، <strong>مشاع</strong> و <strong>دفتر کل</strong>. نام هر زبانه بالای نماد آن قرار دارد. در تلفن، یک جامعه محلی بدون لوبیا بخش‌های <strong>مشاع</strong> یا <strong>دفتر کل</strong> را نشان نمی‌دهد. جامعه جهانی هر دو را نشان می‌دهد، با نمونه‌هایی از یک جامعه محلی. به «لوبیا و جامعه جهانی» مراجعه کنید.</p>
+        <p>در یک صفحه طولانی، روی زبانه‌ای که از قبل روی آن هستید ضربه بزنید تا به بالا بپرید. این کار در هر زبانه‌ای به جز <strong>نقشه</strong> کار می‌کند.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>خانه</strong><span>خانه چیست، چه کارت‌هایی در تلفن و وب‌اپلیکیشن نشان می‌دهد، نحوه افزودن، جابجایی یا حذف، انتخاب علاقه‌مندی‌ها و حریم خصوصی هنگام خروج.</span></a></li>
+            <li><a href="the-bean.html"><strong>این راهنما</strong><span>کجا این راهنما را بیابید، چگونه در آن جستجو کنید و چگونه به‌روز می‌ماند.</span></a></li>
+            <li><a href="communities.html"><strong>بیش از یک جامعه</strong><span>با یک حساب عضو چند جامعه شوید، بین آن‌ها جابجا شوید، جامعه را به نشانی جدید دنبال کنید و ببینید جامعه جهانی چه نشان می‌دهد.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

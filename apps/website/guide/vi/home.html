@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trang chủ — BeanPool members' guide</title>
+    <meta name="description" content="Trang chủ là gì, các thẻ hiển thị trên điện thoại và web, cách thêm, di chuyển hoặc xóa thẻ, chọn sở thích và quyền riêng tư khi đăng xuất.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Bắt đầu</a></p>
+        <h1>Trang chủ</h1>
+        <p class="lede">Trang chủ là gì, các thẻ hiển thị trên điện thoại và web, cách thêm, di chuyển hoặc xóa thẻ, chọn sở thích và quyền riêng tư khi đăng xuất.</p>
+        <h2>Trang chủ là gì</h2>
+        <p><strong>Trang chủ</strong> là tab đầu tiên và là màn hình ứng dụng mở ra, trên điện thoại và trong ứng dụng web. Đây là bảng thông tin gồm các thẻ cho biết việc gì cần bạn xử lý, điều gì đang diễn ra xung quanh bạn, và bạn có thể làm gì tiếp theo. Mỗi thẻ gồm vài dòng và một lần nhấn để đi vào phần tương ứng của ứng dụng. Thẻ không có thông tin sẽ không chiếm chỗ trên màn hình.</p>
+        <p>Điện thoại và ứng dụng web hiển thị các thẻ giống nhau, với một vài điểm khác biệt. Trang này dùng cụm từ &quot;trên điện thoại&quot; hoặc &quot;trong ứng dụng web&quot; ở những chỗ có sự khác biệt.</p>
+        <h2>Getting started</h2>
+        <p>Trang chủ của một thành viên mới bắt đầu gần như trống: một thẻ, <strong>Bắt đầu</strong>, nằm giữa <strong>Cần bạn xử lý</strong> và <strong>Cộng đồng của bạn</strong> (trên cộng đồng toàn cầu, <strong>Tìm cộng đồng của bạn</strong> nằm ở phía trên thẻ này). Thẻ ghi &quot;Đây là Trang chủ của bạn. Bạn chọn những gì hiển thị ở đây. Trước khi bắt đầu, hãy dành một phút xem qua các tab khác.&quot;</p>
+        <ul>
+            <li><strong>Look around</strong> bắt đầu một phần tham quan ngắn. Một thanh ở cuối màn hình sẽ lần lượt chuyển ứng dụng đến từng tab và giới thiệu công dụng của tab đó trong một hoặc hai câu cho mỗi bước, với chú thích như <strong>Step 2 of 8</strong> ở phía trên (số bước tùy thuộc vào ứng dụng và các tab của cộng đồng bạn). Nhấn <strong>Tiếp</strong> để tiếp tục, hoặc <strong>Bỏ qua</strong> để dừng. Tab phía sau thanh điều hướng vẫn hoạt động bình thường: nhấn vào bất kỳ thứ gì, hoặc nhấn vào tab khác và chuyến tham quan sẽ đi theo bạn đến đó.</li>
+            <li>Bước cuối cùng sẽ quay lại Trang chủ: <strong>Add your first cards</strong>. Nhấn vào một thẻ để đưa thẻ đó vào Trang chủ, hoặc <strong>More cards</strong> để xem toàn bộ danh sách. Nhấn <strong>Xong</strong>. Nếu bạn không chọn thẻ nào, Trang chủ sẽ bắt đầu với năm thẻ thông thường (bên dưới).</li>
+            <li><strong>Bỏ qua</strong>, trên thẻ hoặc trên thanh điều hướng, sẽ kết thúc phần tham quan. Nếu bạn chưa tự thêm thẻ nào vào Trang chủ, ứng dụng sẽ cung cấp cho bạn năm thẻ thông thường. Nếu bạn đã thêm (từ <strong>Thêm thẻ</strong>, hoặc một lựa chọn ở bước cuối cùng của phần tham quan), Trang chủ sẽ giữ các thẻ bạn đã chọn.</li>
+            <li>Phần tham quan không bao giờ tự động bắt đầu. Nếu bạn đóng ứng dụng giữa chừng, thẻ sẽ ghi &quot;Tiếp tục xem giới thiệu tại bước 3&quot;.</li>
+            <li>Trạng thái Xong hoặc Bỏ qua được lưu trên tài khoản của bạn, do đó thẻ sẽ không xuất hiện lại trên các điện thoại hoặc trình duyệt khác của bạn. Để xem lại phần tham quan, hãy nhấn vào <strong>?</strong> ở trên cùng và chọn <strong>Xem lại phần giới thiệu</strong>.</li>
+            <li>Nếu bạn đã thiết lập Trang chủ của mình trước khi có tính năng tham quan này, sẽ không có gì thay đổi đối với bạn. <strong>Bắt đầu</strong> nằm trong <strong>Thêm thẻ</strong>, dưới mục <strong>Bắt đầu</strong>, nếu bạn muốn thêm.</li>
+        </ul>
+        <p>Sau khi bạn nhấn <strong>Bỏ qua</strong> trong phần tham quan, một mẹo gồm một dòng sẽ xuất hiện dưới thẻ đầu tiên. Nhấn <strong>✕</strong> để đóng lại. Sau khi nhấn <strong>Xong</strong>, mẹo này sẽ không hiển thị.</p>
+        <ul>
+            <li>Trên điện thoại, dòng mẹo ghi &quot;Đây là Trang chủ của bạn. Thêm thẻ ở dưới cùng, hoặc nhấn … trên thẻ để di chuyển hoặc xóa thẻ.&quot; Mẹo này chỉ hiển thị một lần duy nhất, dù bạn có nhấn <strong>✕</strong> hay không. Việc thêm hoặc xóa một thẻ cũng sẽ làm mẹo biến mất.</li>
+            <li>Trong ứng dụng web, dòng mẹo hiển thị các từ tương tự. Mẹo sẽ xuất hiện lại mỗi lần bạn mở Trang chủ, cho đến khi bạn nhấn <strong>✕</strong>.</li>
+        </ul>
+        <h2>Các thẻ của bạn</h2>
+        <p>Trên điện thoại và trong ứng dụng web, Trang chủ của bạn là một danh sách các thẻ do bạn chọn. Sau phần tham quan, năm thẻ thông thường gồm: <strong>Những bước đầu tiên</strong>, <strong>Mẹo hữu ích</strong>, <strong>Mới trên Chợ</strong> (<strong>Gần bạn</strong> trên cộng đồng toàn cầu), <strong>Sắp diễn ra</strong> và <strong>Từ cộng đồng của bạn</strong>. <strong>Bạn quan tâm đến điều gì?</strong> và <strong>Cách khôi phục tài khoản</strong> cũng đi kèm, và chỉ hiển thị khi có nội dung để thông báo. <strong>Cần bạn xử lý</strong> luôn ở trên cùng và <strong>Cộng đồng của bạn</strong> luôn ở dưới cùng.</p>
+        <ul>
+            <li><strong>Thêm thẻ</strong>, trên thẻ cộng đồng của bạn ở cuối Trang chủ, sẽ mở danh sách mọi thẻ mà cộng đồng của bạn có thể hiển thị, chia thành ba nhóm: <strong>Dành cho bạn</strong>, <strong>Quanh bạn</strong> và <strong>Bắt đầu</strong>. Nhấn <strong>Thêm</strong> bên cạnh một thẻ để đưa thẻ đó vào Trang chủ. Thẻ sẽ chuyển lên trên cùng, ngay dưới <strong>Cần bạn xử lý</strong>, và Trang chủ sẽ cuộn lên để hiển thị thẻ đó.</li>
+            <li>Thẻ đã có trên Trang chủ sẽ hiển thị <strong>Trên Trang chủ</strong> thay vì <strong>Thêm</strong>. Một số thẻ có thể được thêm nhiều lần, chẳng hạn như <strong>Tìm kiếm đã lưu</strong>: các thẻ này sẽ cho biết bạn đã có bao nhiêu thẻ, ví dụ &quot;2 trên 5 trên Trang chủ&quot;.</li>
+            <li><strong>Tìm kiếm đã lưu</strong> yêu cầu nhập từ khóa cần tìm trước khi được thêm, chẳng hạn như &quot;trứng&quot;. Bạn cũng có thể chọn <strong>Lời đề nghị</strong>, <strong>Nhu cầu</strong> hoặc <strong>Cả hai</strong>, một danh mục, và khoảng cách tìm kiếm: 1, 2, 5, 10 hoặc 25 km. Khoảng cách chỉ được cung cấp khi cộng đồng của bạn biết khu vực của bạn, hoặc khi bạn đã chia sẻ vị trí của mình; nếu không có, tìm kiếm sẽ tìm khắp mọi nơi.</li>
+            <li><strong>Mặt trời và mặt trăng</strong> hỏi sẽ sử dụng vị trí của ai trước khi được thêm: <strong>Cộng đồng của bạn</strong> (lựa chọn thông thường) hoặc <strong>Khu vực của bạn</strong>.</li>
+            <li>Một Trang chủ chứa tối đa 24 thẻ. Khi đã đầy, danh sách sẽ thông báo như vậy, và bạn cần xóa bớt một thẻ để thêm thẻ khác.</li>
+            <li>Các thẻ của bạn được lưu trên tài khoản của bạn, do đó chúng sẽ theo bạn sang các điện thoại và trình duyệt khác. Nếu máy chủ của cộng đồng bạn chưa được cập nhật, chúng sẽ chỉ ở trên điện thoại này hoặc trong trình duyệt này, và <strong>Chỉnh sửa trang chủ</strong> sẽ báo &quot;Máy chủ của cộng đồng bạn cần được cập nhật trước khi các thẻ của bạn có thể theo bạn sang các thiết bị khác.&quot; Chúng sẽ được gửi lại mỗi khi bạn mở Trang chủ.</li>
+            <li>Nếu bạn đã di chuyển hoặc ẩn thẻ trước lần thay đổi này, Trang chủ của bạn vẫn giữ thứ tự của bạn, không bao gồm các thẻ bạn đã ẩn. Nếu bạn chưa từng thay đổi, bạn sẽ thấy riêng thẻ <strong>Bắt đầu</strong>, và việc nhấn <strong>Bỏ qua</strong> hoặc <strong>Xong</strong> của phần tham quan sẽ cung cấp cho bạn năm thẻ, hoặc các thẻ bạn đã chọn (ở trên). Nếu bạn đã tham gia hơn một tuần trước, Trang chủ cũng sẽ thông báo cho bạn một lần, bên dưới <strong>Bắt đầu</strong> trong lần đầu tiên mở: &quot;Trang chủ hiện bắt đầu với ít thẻ hơn. Thêm thẻ sẽ mang phần còn lại trở lại.&quot;</li>
+        </ul>
+        <h2>Lưu tìm kiếm từ Chợ</h2>
+        <p>Khi có từ khóa trong ô tìm kiếm của Chợ, một nút bên dưới sẽ hiển thị <strong>Lưu tìm kiếm này vào Trang chủ</strong>. Nút này sẽ mở Trang chủ với một tìm kiếm đã lưu sẵn sàng để thêm: các từ khóa của bạn, <strong>Lời đề nghị</strong> hoặc <strong>Nhu cầu</strong> nếu bạn chỉ đang xem một loại, danh mục bạn đã chọn, và khoảng cách bạn đã chọn (mức gần nhất trong số 1, 2, 5, 10 hoặc 25 km bao quát được khoảng cách đó). Thay đổi bất kỳ điều gì bạn muốn, sau đó nhấn <strong>Thêm vào Trang chủ</strong>: thẻ sẽ chuyển lên trên cùng. Thẻ hiển thị các tin đăng mới nhất phù hợp lên đầu; trên cộng đồng toàn cầu, các tin gần nhất lên đầu, giống như Chợ của cộng đồng đó. Nếu tìm kiếm tương tự đã có trên Trang chủ, hoặc bạn đã có đủ năm tìm kiếm, Trang chủ sẽ thông báo và không thêm gì cả. Dưới mục <strong>Sự kiện</strong> và <strong>Thăm dò</strong> không có nút này: tìm kiếm đã lưu chỉ tìm kiếm Lời đề nghị và Nhu cầu.</p>
+        <h2>Các thẻ</h2>
+        <p>Trang chủ chỉ hiển thị những thẻ có điều cần thông báo cho bạn, theo thứ tự của chính bạn. Thẻ bạn thêm sẽ lên trên cùng, dưới <strong>Cần bạn xử lý</strong>. Dưới đây là các thẻ bạn có thể có:</p>
+        <ul>
+            <li><strong>Cần bạn xử lý:</strong> chỉ hiển thị khi có điều gì đó đang chờ bạn: một thỏa thuận đang chờ bạn xử lý, tin nhắn chưa đọc từ mọi người, các dòng tin nhắn mới trong nhóm của bạn, một cuộc bỏ phiếu mà bạn chưa tham gia (chuyển màu hổ phách khi sẽ kết thúc trong vòng hai ngày), và đối với chủ sở hữu, quản trị viên và người điều hành, công việc quản trị đang chờ họ xử lý, chẳng hạn như báo cáo cần xem xét. Trên điện thoại, đây chính là những điều mà các biểu tượng nhỏ ở đầu màn hình hiển thị. Thẻ này luôn đứng đầu và không thể di chuyển hoặc ẩn đi.</li>
+            <li><strong>Cách khôi phục tài khoản:</strong> nếu bạn tham gia bằng 12 từ và chưa kết nối phương thức đăng nhập nào, thẻ này sẽ nhắc bạn giữ chúng an toàn hoặc thêm phương thức đăng nhập. Nhấn <strong>✕</strong> để đóng lại. Thẻ sẽ xuất hiện lại một lần sau bài đăng đầu tiên của bạn và một lần nữa sau một tuần, sau đó chỉ nằm trong <strong>Cài đặt</strong>: dưới mục <strong>Bảo vệ tài khoản</strong> trên điện thoại, và ở đầu Cài đặt, có tiêu đề <strong>Một cách quay lại</strong>, trong ứng dụng web. Thẻ không hiển thị ở nơi mà kho lưu trữ khóa của BeanPool đã giữ một bản sao khóa của bạn.</li>
+            <li><strong>Tìm cộng đồng của bạn:</strong> chỉ có trên cộng đồng toàn cầu. Thẻ hiển thị các cộng đồng gần bạn nhất và cho phép bạn xin gia nhập (xem &quot;Tìm một cộng đồng gần bạn&quot;). Trên điện thoại, thẻ có <strong>Cộng đồng gần bạn</strong>, <strong>Tạo một cộng đồng</strong> và <strong>Báo cho tôi khi có cộng đồng ở đây</strong>. Trong ứng dụng web, mỗi cộng đồng là một liên kết dẫn đến trang riêng của cộng đồng đó. Nếu ứng dụng không biết bạn đang ở đâu, hãy nhấn <strong>hoặc nhập tên thị trấn</strong> và chọn thị trấn của bạn thay vì chia sẻ vị trí của bạn, trên điện thoại và trong ứng dụng web. Thẻ của ứng dụng web cũng có <strong>Chia sẻ khu vực của tôi</strong>. Khi bạn đã chọn một thị trấn, thẻ của ứng dụng web sẽ hiển thị &quot;Gần&quot; cùng tên thị trấn, với nút <strong>đổi</strong>. Nếu thẻ của ứng dụng web đã có một địa điểm, <strong>Không thấy ở đây? Hãy nhập thị trấn của bạn</strong> cũng làm điều tương tự. Trong 30 ngày đầu tiên của bạn trên cộng đồng toàn cầu, thẻ này luôn ở trên cùng và không thể xóa hoặc di chuyển. Sau thời gian đó, thẻ này trở thành một thẻ bình thường như mọi thẻ khác.</li>
+            <li><strong>Những bước đầu tiên:</strong> một danh sách kiểm tra ngắn. Trên một cộng đồng địa phương: đăng Lời đề nghị đầu tiên của bạn, thêm ảnh hồ sơ, chọn một vài điều bạn thích, và sau khi bạn đã đăng một Lời đề nghị, ở nơi bật tính năng mời, hãy mời ai đó. Ở nơi chỉ quản trị viên mới được mời, điện thoại chỉ hiển thị dòng cuối đó cho chủ sở hữu và quản trị viên. Ứng dụng web hiển thị dòng đó cho mọi thành viên, và một dòng chưa hoàn thành sẽ giữ thẻ hiển thị. Trên điện thoại, thẻ sẽ biến mất khi mọi dòng đều hoàn thành. Trong ứng dụng web, thẻ cũng sẽ ở lại trong 14 ngày đầu tiên của bạn.</li>
+            <li><strong>First steps on the global community:</strong> đăng một thứ gì đó miễn phí hoặc để trao đổi, và nếu có một cộng đồng trong phạm vi 250 km quanh bạn được liệt kê, một gợi ý xin gia nhập cộng đồng đó (dòng này không bao giờ giữ thẻ mở). Thẻ cũng có thể nêu các giới hạn trên tài khoản mới, chẳng hạn như bạn có thể đăng bao nhiêu tin và tạo bao nhiêu cuộc trò chuyện mới mỗi ngày trong thời gian đầu. Thẻ sẽ ở lại trong 14 ngày đầu tiên của bạn, và sau đó cho đến khi bài đăng hoàn tất và các giới hạn kết thúc.</li>
+            <li><strong>Mẹo hữu ích:</strong> từng mẹo ngắn một về cách hoạt động của BeanPool, dành cho các thành viên. Nhấn <strong>Tiếp</strong> để xem mẹo tiếp theo, hoặc <strong>Đọc thêm</strong> để mở trang tương ứng trong hướng dẫn này. Một mẹo mới cũng hiển thị trong lần truy cập đầu tiên của bạn vào ngày mới. Thẻ sẽ tự biến mất khi bạn đã xem hết mọi mẹo, hoặc biến mất ngay khi bạn nhấn <strong>Không hiển thị lại mẹo</strong>. Thêm lại thẻ bằng <strong>Thêm thẻ</strong> sẽ bắt đầu lại các mẹo từ mẹo đầu tiên.</li>
+            <li><strong>Bạn quan tâm đến điều gì?:</strong> cho phép bạn gắn dấu sao các danh mục bạn thích. Chỉ dành cho thành viên. Thẻ hiển thị khi bạn chưa gắn dấu sao danh mục nào, hoặc khi bạn nhấn <strong>Tùy chỉnh</strong> trên thẻ Chợ, và thẻ sẽ ở trên màn hình trong khi bạn chọn.</li>
+            <li><strong>Giao dịch của bạn:</strong> hiển thị các thỏa thuận đang mở của bạn và các thỏa thuận đang chờ bạn xử lý. Không có trên cộng đồng toàn cầu: ở đó, <strong>Giao dịch của tôi</strong> trong Chợ sẽ hiển thị các thỏa thuận mẫu từ một cộng đồng địa phương.</li>
+            <li><strong>Dự án của bạn:</strong> hiển thị các yêu cầu đang chờ phê duyệt cho các sáng kiến doanh nghiệp mà bạn quản lý. Thẻ được gọi là <strong>Dự án của bạn</strong> khi sáng kiến bạn quản lý là một dự án. Không có trên cộng đồng toàn cầu: ở đó, <strong>Chung</strong> hiển thị một doanh nghiệp mẫu từ một cộng đồng địa phương.</li>
+            <li><strong>Sắp diễn ra:</strong> các sự kiện sắp diễn ra gần bạn, cùng với phản hồi tham gia của bạn.</li>
+            <li><strong>Mới trên Chợ:</strong> các tin đăng mới nhất, với các danh mục được gắn dấu sao hiển thị trước. Trên cộng đồng toàn cầu, thẻ này có tên là <strong>Gần bạn</strong>, và các tin đăng ở gần nhất sẽ hiển thị trước. Nếu bạn đã nhập thị trấn của mình trong <strong>Tìm cộng đồng của bạn</strong>, điện thoại sẽ tính khoảng cách từ thị trấn đó. Nhấn <strong>Tùy chỉnh</strong> để chọn sở thích của bạn, hoặc <strong>Xem tất cả</strong> để mở Chợ. Trong khi chỉ có một vài tin đăng, thẻ có thể hiển thị một vài tin đăng mẫu, được đánh dấu là ví dụ, nếu cộng đồng của bạn đã bật tính năng này.</li>
+            <li><strong>Quyết định:</strong> các Quyết định đang mở và các cuộc thăm dò đang mở, dưới dạng các dòng riêng biệt trên điện thoại. Trên điện thoại, các Quyết định sẽ mở <strong>Quyết định</strong> trong <strong>Chung</strong> và các cuộc thăm dò sẽ mở <strong>Thăm dò</strong> trong Chợ. Trong ứng dụng web, đây là một dòng duy nhất, và nhấn vào đó sẽ mở Commons. Không có trên cộng đồng toàn cầu: các cuộc thăm dò ở đó nằm trong mục <strong>Thăm dò</strong> của Chợ, và <strong>Chung</strong> hiển thị một Quyết định mẫu từ một cộng đồng địa phương.</li>
+            <li><strong>Tìm kiếm đã lưu:</strong> các tin đăng phù hợp với các từ khóa bạn chọn. Bạn có thể có tối đa năm thẻ này. Dòng đầu tiên của thẻ là các từ khóa của bạn và khoảng cách, chẳng hạn như &quot;trứng · trong vòng 5 km&quot;. Tiếp theo là tối đa bốn tin đăng, mỗi tin đăng sẽ mở tin tương ứng; <strong>Xem thêm</strong> sẽ mở Chợ với các từ khóa của bạn đã có sẵn trong ô tìm kiếm. Tính năng này tìm thấy những gì mà tìm kiếm của Chợ tìm thấy, vì vậy từ &quot;trứng&quot; cũng sẽ tìm thấy các tin đăng có từ ngữ mang ý nghĩa tương tự. Khi không có gì phù hợp, thẻ sẽ thông báo như vậy, ví dụ &quot;Hiện không có trứng trong vòng 5 km&quot;. Một tìm kiếm bạn vừa thêm hoặc vừa thay đổi khi không có kết nối sẽ ghi &quot;Hiển thị khi cộng đồng phản hồi&quot; cho đến khi máy chủ của cộng đồng phản hồi. Để thay đổi từ khóa, nhấn <strong>…</strong> rồi chọn <strong>Cài đặt…</strong>: thẻ sẽ giữ nguyên vị trí.</li>
+            <li><strong>Nhóm của bạn:</strong> các nhóm và cuộc trò chuyện của bạn, cùng với số lượng tin nhắn chưa đọc.</li>
+            <li><strong>Thành viên mới:</strong> những người đã tham gia trong tuần này. Trên một cộng đồng địa phương, thẻ hiển thị tên và ảnh khuôn mặt. Trên cộng đồng toàn cầu, thẻ chỉ hiển thị số lượng theo khu vực và không có tên.</li>
+            <li><strong>Nhịp đập:</strong> các bài đăng được chia sẻ bởi hàng xóm từ các kênh bên ngoài như YouTube và blog, với các danh mục gắn dấu sao hiển thị trước. Nhấn <strong>Xem tất cả</strong> để mở The Pulse.</li>
+            <li><strong>Mặt trời và mặt trăng:</strong> trăng đêm nay cùng giờ mặt trời mọc và lặn hôm nay, trong một dòng, chẳng hạn như &quot;🌔 Waxing gibbous, 72% · Sunrise 6:12 · Sunset 17:48&quot;. Điện thoại hoặc trình duyệt của bạn tự tính toán thông tin này: thẻ không yêu cầu gì từ máy chủ cộng đồng của bạn. Thẻ sử dụng vị trí của cộng đồng bạn, được làm tròn đến khoảng một kilômét, hoặc khu vực của bạn ở nơi cộng đồng của bạn không có địa điểm (trên cộng đồng toàn cầu thì luôn là khu vực của bạn). Trên cộng đồng toàn cầu, điện thoại cũng có thể sử dụng vị trí gần nhất của nó, nhưng chỉ khi bạn đã cho phép ứng dụng sử dụng vị trí của mình: ứng dụng không bao giờ tự ý hỏi. Nếu bạn đã nhập thị trấn của mình trong <strong>Tìm cộng đồng của bạn</strong>, điện thoại sẽ sử dụng vị trí đó thay thế. Để sử dụng khu vực của bạn ngay cả khi cộng đồng có địa điểm, nhấn <strong>…</strong> rồi chọn <strong>Cài đặt…</strong> và chọn <strong>Khu vực của bạn</strong>. Thời gian dựa trên đồng hồ của điện thoại hoặc máy tính của bạn, do đó khi bạn đi du lịch, bạn sẽ thấy chúng theo giờ địa phương của bạn. Mặt trăng được vẽ theo hình dáng nhìn từ phía đó của đường xích đạo. Ở những nơi mặt trời không mọc hoặc không lặn hôm nay, thẻ sẽ thông báo như vậy, ví dụ &quot;Mặt trời mọc cả ngày&quot; hoặc &quot;Hôm nay không có hoàng hôn&quot;. Nếu chưa xác định được địa điểm, thẻ sẽ không hiển thị, và <strong>Chỉnh sửa trang chủ</strong> sẽ báo &quot;Hiện không có gì để hiển thị: chưa xác định được địa điểm.&quot; Trình đọc màn hình sẽ đọc bằng lời, chẳng hạn như &quot;Moon waxing gibbous, 72 percent lit. Sunrise 6:12 am. Sunset 5:48 pm.&quot;</li>
+            <li><strong>Đậu của bạn:</strong> số dư và hạn mức tín dụng của bạn (khoảng trống để chi tiêu). Không có trên cộng đồng toàn cầu. Ở đó, điện thoại sẽ hiển thị một thẻ mẫu thay thế: Đậu làm được gì trong một cộng đồng địa phương, và <strong>Xem sổ cái mẫu</strong>. Thẻ xuất hiện sau khi phần tham quan hoàn tất hoặc được bỏ qua (trong khi <strong>Bắt đầu</strong> còn hiển thị, bước Sổ cái của phần tham quan sẽ hiển thị ví dụ mẫu), và giữ nguyên cho đến khi bạn nhấn <strong>Ẩn thẻ này</strong>, ngay cả sau khi <strong>Những bước đầu tiên</strong> đã biến mất.</li>
+            <li><strong>Từ cộng đồng của bạn:</strong> các thông báo và lưu ý từ quản trị viên của cộng đồng bạn.</li>
+            <li><strong>Phát triển cộng đồng:</strong> cho phép bạn mời các thành viên mới sau Lời đề nghị đầu tiên của bạn, ở nơi bật tính năng mời. Không có trên cộng đồng toàn cầu. Trên điện thoại, ở nơi chỉ quản trị viên mới được mời, thẻ chỉ hiển thị cho chủ sở hữu hoặc quản trị viên. Trong ứng dụng web, thẻ không hiển thị ở đó.</li>
+            <li><strong>Cộng đồng của bạn:</strong> thẻ cuối cùng, có tiêu đề là tên cộng đồng của bạn (<strong>Cộng đồng toàn cầu</strong> trên cộng đồng toàn cầu). Thẻ hiển thị số lượng thành viên và số giao dịch trong tháng này; trên cộng đồng toàn cầu là số thành viên và số lượng cộng đồng được liệt kê. Thẻ có <strong>Thêm thẻ</strong> và <strong>Chỉnh sửa trang chủ</strong>. Thẻ này luôn ở dưới cùng và không thể di chuyển hoặc xóa.</li>
+        </ul>
+        <p>Trên điện thoại, khi cộng đồng của bạn đã chuyển sang một địa chỉ mới, một thẻ phía trên tất cả các thẻ này sẽ hỏi xem có sử dụng địa chỉ đó không: xem &quot;Khi cộng đồng của bạn chuyển sang địa chỉ mới&quot; trong &quot;Nhiều hơn một cộng đồng&quot;.</p>
+        <h2>Menu &quot;…&quot;</h2>
+        <p>Hầu hết các thẻ đều có nút <strong>…</strong> ở trên cùng bên phải. Các thẻ sau đây không có:</p>
+        <ul>
+            <li><strong>Cần bạn xử lý</strong>, <strong>Bắt đầu</strong> và <strong>Cộng đồng của bạn</strong>. <strong>Bắt đầu</strong> có nút <strong>Bỏ qua</strong> thay thế.</li>
+            <li><strong>Cách khôi phục tài khoản</strong>, trên điện thoại. Thẻ có nút <strong>✕</strong> riêng.</li>
+            <li><strong>Tìm cộng đồng của bạn</strong>, trong 30 ngày đầu tiên của bạn trên cộng đồng toàn cầu.</li>
+        </ul>
+        <p>Nhấn <strong>…</strong> để:</p>
+        <ul>
+            <li><strong>Cài đặt…:</strong> chỉ có trên thẻ có phần cài đặt, chẳng hạn như <strong>Tìm kiếm đã lưu</strong> hoặc <strong>Mặt trời và mặt trăng</strong>. Nút này thay đổi thẻ ngay tại chỗ.</li>
+            <li><strong>Di chuyển lên:</strong> hoán đổi vị trí thẻ với thẻ phía trên nó.</li>
+            <li><strong>Di chuyển xuống:</strong> hoán đổi vị trí thẻ với thẻ phía dưới nó.</li>
+            <li><strong>Xóa:</strong> đưa thẻ ra khỏi Trang chủ cùng với các cài đặt của thẻ. <strong>Thêm thẻ</strong> sẽ đưa thẻ trở lại. Không có hộp thoại nào yêu cầu bạn xác nhận. Xóa <strong>Mẹo hữu ích</strong> cũng tương đương với <strong>Không hiển thị lại mẹo</strong>.</li>
+        </ul>
+        <p>Trong ứng dụng web, <strong>Cách khôi phục tài khoản</strong> cũng có nút <strong>…</strong>, với các tùy chọn <strong>Di chuyển lên</strong>, <strong>Di chuyển xuống</strong> và <strong>Xóa</strong>.</p>
+        <p>Tùy chọn di chuyển sẽ chuyển sang màu xám khi không còn nơi nào để di chuyển: ở trên cùng hoặc dưới cùng của các thẻ bạn có thể di chuyển. Thẻ đầu tiên dưới <strong>Cần bạn xử lý</strong> không thể di chuyển lên, và thẻ cuối cùng phía trên <strong>Cộng đồng của bạn</strong> không thể di chuyển xuống.</p>
+        <h2>Chỉnh sửa trang chủ</h2>
+        <p>Ở cuối Trang chủ, trên thẻ cộng đồng của bạn, nhấn <strong>Chỉnh sửa trang chủ</strong>.</p>
+        <ul>
+            <li><strong>＋ Thêm thẻ</strong> xuất hiện đầu tiên. Nút này mở danh sách tương tự như <strong>Thêm thẻ</strong> trên Trang chủ.</li>
+            <li>Sau đó là các thẻ trên Trang chủ của bạn, theo thứ tự của bạn. Mỗi thẻ có các mũi tên lên và xuống cùng nút <strong>…</strong> riêng (Cài đặt…, Di chuyển lên, Di chuyển xuống, Xóa). Một tìm kiếm đã lưu được liệt kê theo từ khóa của nó, và theo <strong>Lời đề nghị</strong> hoặc <strong>Nhu cầu</strong> khi nó chỉ tìm kiếm một loại, chẳng hạn như &quot;trứng&quot; hoặc &quot;Nhu cầu · trứng&quot;, do đó hai tìm kiếm sẽ là hai hàng khác nhau.</li>
+            <li>Thẻ hiện không có gì để hiển thị sẽ báo <strong>Hiện không có gì để hiển thị</strong>. <strong>Mẹo hữu ích</strong> sẽ báo <strong>Đã xem hết mẹo</strong> khi bạn đã xem hết mọi mẹo, và <strong>Mặt trời và mặt trăng</strong> sẽ báo <strong>Hiện không có gì để hiển thị: chưa xác định được địa điểm.</strong> trong khi chưa có địa điểm để xử lý.</li>
+            <li>Nhấn <strong>Đặt lại về mặc định</strong> để quay lại năm thẻ thông thường.</li>
+            <li>Không có công tắc nào và không có danh sách ẩn: thẻ bạn đã xóa sẽ nằm trong <strong>Thêm thẻ</strong>.</li>
+            <li>Chỉ những thẻ mà cộng đồng của bạn có thể hiển thị mới được liệt kê, trên điện thoại và trong ứng dụng web. Ví dụ: danh sách của cộng đồng toàn cầu không có <strong>Đậu của bạn</strong> hoặc <strong>Giao dịch của bạn</strong>: ở đó, Sổ cái và <strong>Giao dịch của tôi</strong> sẽ hiển thị các ví dụ từ một cộng đồng địa phương thay thế.</li>
+            <li><strong>Cần bạn xử lý</strong> luôn ở trên cùng, và <strong>Cộng đồng của bạn</strong> luôn ở dưới cùng.</li>
+            <li><strong>Tìm cộng đồng của bạn</strong>, trong 30 ngày đầu tiên của bạn trên cộng đồng toàn cầu, không được liệt kê ở đây. Thẻ tạm thời ở gần trên cùng.</li>
+            <li><strong>Cách khôi phục tài khoản</strong> được liệt kê, cùng với các mũi tên và nút <strong>…</strong>, trong khi thẻ vẫn còn trên Trang chủ của bạn.</li>
+        </ul>
+        <h2>Sở thích của bạn là gì?</h2>
+        <p>Nhấn vào các danh mục bạn thích (Ẩm thực, Dụng cụ, Dịch vụ, Làm vườn và các danh mục khác) để gắn dấu sao cho chúng:</p>
+        <ul>
+            <li>Các danh mục được gắn dấu sao sẽ xuất hiện đầu tiên trên Trang chủ trong <strong>Mới trên Chợ</strong> và <strong>Nhịp đập</strong>.</li>
+            <li>Các danh mục được gắn dấu sao không bao giờ ẩn đi bất cứ thứ gì: các tin đăng và bài viết khác sẽ hiển thị ngay phía sau.</li>
+            <li>Các dấu sao bạn chọn trên Trang chủ hoàn toàn giống với các dấu sao được sử dụng trong mục <strong>★ Dành cho bạn</strong> ở tab Chợ.</li>
+            <li>Nhấn <strong>Tùy chỉnh</strong> trên thẻ Chợ bất cứ lúc nào để thay đổi các dấu sao của bạn.</li>
+        </ul>
+        <h2>Trên sảnh chờ web</h2>
+        <p>Trên trang web của cộng đồng toàn cầu, trước khi bạn tham gia hoặc đăng nhập, khách truy cập sẽ thấy một Trang chủ đơn giản hơn (trang web của một cộng đồng địa phương sẽ hiển thị trang chào mừng thay thế):</p>
+        <ul>
+            <li>Thẻ <strong>Tham gia</strong> ở trên cùng.</li>
+            <li>Chỉ hiển thị các thẻ công khai: một thẻ gồm các cộng đồng gần bạn, <strong>Sắp diễn ra</strong>, <strong>What people post</strong> (các tin đăng có ảnh và danh mục nhưng không có tên hoặc ảnh đại diện của thành viên), và <strong>Cộng đồng của bạn</strong>.</li>
+            <li>Khách truy cập không có menu <strong>…</strong>, không có <strong>Chỉnh sửa trang chủ</strong>, và không có các thẻ riêng tư như <strong>Cần bạn xử lý</strong> hoặc <strong>Đậu của bạn</strong>.</li>
+        </ul>
+        <h2>Quyền riêng tư và đăng xuất</h2>
+        <ul>
+            <li>Khi bạn đăng xuất khỏi một thiết bị (trong ứng dụng web là <strong>Đăng xuất (chỉ thiết bị này)</strong>, cũng có nhãn là <strong>Chỉ xóa khỏi thiết bị này</strong>), các bản sao của Trang chủ mà thiết bị đó đã lưu sẽ bị xóa khỏi thiết bị: phản hồi gần nhất của nó, bố cục của bạn và các dấu sao của bạn. Trong ứng dụng web, <strong>Force Clear &amp; Re-Sync</strong> và việc xóa tài khoản của bạn cũng sẽ xóa các bản sao tương tự.</li>
+            <li>Bố cục và các danh mục được gắn dấu sao của bạn cũng được lưu trên tài khoản của bạn tại cộng đồng của bạn. Khi đăng nhập lại, trên thiết bị này hoặc thiết bị khác, bạn sẽ nhận lại chúng. Một tài khoản khác sẽ bắt đầu với bố cục và các dấu sao riêng của tài khoản đó.</li>
+            <li>Trong ứng dụng web, việc đăng xuất ở một tab khác sẽ xóa Trang chủ ngay lập tức khỏi trình duyệt.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-top-bar.html"><strong>Thanh trên cùng</strong><span>Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.</span></a></li>
+            <li><a href="../browsing-the-market.html"><strong>Browsing the market</strong><span>Find Offers and Needs with search, filters and distance.</span></a></li>
+            <li><a href="your-profile.html"><strong>Hồ sơ của bạn</strong><span>Tên, ảnh đại diện, vài dòng giới thiệu về bạn và ai có thể xem thông tin liên hệ của bạn.</span></a></li>
+            <li><a href="finding-a-community.html"><strong>Tìm một cộng đồng gần bạn</strong><span>Từ cộng đồng toàn cầu, tìm một cộng đồng gần bạn và xin gia nhập, nhận thông báo khi có cộng đồng mới ở gần, hoặc tự tạo một cộng đồng.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Đậu và cộng đồng toàn cầu</strong><span>Mục đích của cộng đồng toàn cầu, một trong nhiều cộng đồng, và những gì bạn thấy: dấu hiệu 🏘️ Cộng đồng địa phương, cộng đồng mẫu Example Valley, lý do Đậu chờ ở đó và cách bắt đầu hoặc tìm cộng đồng địa phương.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

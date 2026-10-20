@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>این راهنما — BeanPool members' guide</title>
+    <meta name="description" content="کجا این راهنما را بیابید، چگونه در آن جستجو کنید و چگونه به‌روز می‌ماند.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">شروع کار</a></p>
+        <h1>این راهنما</h1>
+        <p class="lede">کجا این راهنما را بیابید، چگونه در آن جستجو کنید و چگونه به‌روز می‌ماند.</p>
+        <h2>باز کردن آن</h2>
+        <p>روی تلفن، روی نماد لوبیا در بالا سمت چپ صفحه بزنید. یا:</p>
+        <ul>
+            <li>بخش <strong>تنظیمات</strong> را با دکمه تنظیمات (اسلایدرها) در بالای صفحه باز کنید.</li>
+            <li>در زیر <strong>BeanPool</strong>، روی <strong>راهنما و نحوه کارکرد</strong> بزنید.</li>
+        </ul>
+        <p>در وب‌اپلیکیشن در همان مکان قرار دارد: <strong>تنظیمات</strong>، سپس <strong>راهنما و نحوه کارکرد</strong> در زیر <strong>BeanPool</strong>.</p>
+        <h2>محتوای آن چیست</h2>
+        <ul>
+            <li><strong>جامعه شما:</strong> نام آن (نشانی آن در وب‌اپلیکیشن)، و اینکه آیا در حال حاضر می‌توان به سرور آن دسترسی داشت یا خیر. در تلفن، در زیر آن، <strong>جوامع شما</strong>: روی یکی بزنید تا به آن تغییر یابد، یا روی <strong>افزودن جامعه</strong> بزنید. <strong>جامعهٔ جهانی</strong> همیشه یکی از ردیف‌ها است، با یک خط دوم که می‌گوید آیا عضو هستید، می‌توانید به آن بپیوندید، یا چرا اکنون نمی‌توان از آن استفاده کرد. به «بیش از یک جامعه» مراجعه کنید.</li>
+            <li><strong>راهنماها:</strong> نحوه کارکرد BeanPool، قوانین و نحوه تصمیم‌گیری، و پرسش‌های متداول.</li>
+            <li><strong>نحوه استفاده از برنامه:</strong> یک صفحه کوتاه برای هر وظیفه، گروه‌بندی‌شده به همان شیوه بخش‌های برنامه: شروع به کار، بازار، نقشه، گفتگو، نبض، مشاع، دفتر کل، و تنظیمات و ایمنی.</li>
+            <li><strong>پروژه BeanPool:</strong> آنچه در این نسخه جدید است، و پیوندی به وب‌سایت beanpool.org (در تلفن، همراه با دکمه <strong>اشتراک‌گذاری</strong> برای ارسال آن به یک دوست).</li>
+        </ul>
+        <h2>جستجو</h2>
+        <p>یک یا دو کلمه را در <strong>جستجو در راهنما</strong> تایپ کنید (در بالا در وب‌اپلیکیشن؛ زیر <strong>جوامع شما</strong> در تلفن). هر صفحه‌ای را که شامل تمام کلمات شما باشد نشان می‌دهد. بدون اتصال اینترنت کار می‌کند.</p>
+        <ul>
+            <li>کلمات کوتاه کار می‌کنند: «vot» واژه‌های «vote» و «voting» را پیدا می‌کند.</li>
+            <li>اگر چیزی پیدا نشد، یک کلمه ساده‌تر را امتحان کنید، مانند «gift»، «photo» یا «block».</li>
+        </ul>
+        <h2>همیشه در دسترس، به‌روز نگه داشته شده</h2>
+        <p>راهنما در داخل برنامه تعبیه شده است، بنابراین بدون هیچ اتصالی کار می‌کند. وقتی آنلاین هستید، برنامه وب‌سایت beanpool.org را برای راهنمای جدیدتر بررسی می‌کند و در صورت وجود از آن استفاده می‌کند. پایین راهنما نشان می‌دهد که در حال خواندن کدام نسخه هستید.</p>
+        <p>همین راهنما در وب‌سایت در beanpool.org/guide نیز موجود است.</p>
+        <h2>ویدیوها</h2>
+        <p>برخی صفحات ممکن است <strong>Watch:</strong> و نام یک ویدیو را نشان دهند. آن پیوند فقط زمانی ظاهر می‌شود که BeanPool ویدیویی برای آن صفحه ساخته باشد و جامعه شما آن را در نبض، زیر بخش <strong>یادگیری</strong> (<strong>راهنما</strong> در وب‌اپلیکیشن) داشته باشد. ویدیوهایی که اعضا به بخش یادگیری اضافه می‌کنند هرگز در صفحه راهنما نشان داده نمی‌شوند. هر صفحه بدون ویدیو نیز کامل است.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="getting-help.html"><strong>دریافت راهنمایی</strong><span>کجا دنبال پاسخ بگردید و از چه کسی بپرسید.</span></a></li>
+            <li><a href="how-it-works.html"><strong>نحوه کار BeanPool</strong><span>لوبیا، معامله، پیشنهادها و نیازها و اعتبار، به زبان ساده.</span></a></li>
+            <li><a href="faq.html"><strong>پرسش‌ها</strong><span>پاسخ‌های کوتاه به پرسش‌هایی که اعضا بیشتر می‌پرسند.</span></a></li>
+            <li><a href="../whats-new.html"><strong>What's new</strong><span>What changed in the app, in plain words.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>نوار بالا</strong><span>لوبیا، نمادهای کوچک نشان‌دهنده نیاز به توجه شما، و دکمه‌های بالا سمت راست.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

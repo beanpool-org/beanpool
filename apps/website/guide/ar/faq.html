@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الأسئلة — BeanPool members' guide</title>
+    <meta name="description" content="إجابات قصيرة عن الأسئلة الأكثر شيوعًا بين الأعضاء.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">حول BeanPool</a></p>
+        <h1>الأسئلة</h1>
+        <p class="lede">إجابات قصيرة عن الأسئلة الأكثر شيوعًا بين الأعضاء.</p>
+        <h2>من يدير مجتمعي؟</h2>
+        <p>يدير مجتمعك نفسه بنفسه. ويعتني بخادمه أشخاص اختارهم مجتمعك: مالكوه ومسؤولوه. وتُحفظ تداولاتك ومنشوراتك وتصويتاتك على ذلك الخادم. ويكتب مشروع BeanPool التطبيق، ويمكن لأي شخص استخدامه لبدء مجتمع.</p>
+        <h2>هل توجد فائدة على الدين؟</h2>
+        <p>لا. البقاء تحت الصفر لا يكلف شيئًا. فقط الفاصوليا التي تحتفظ بها وتزيد عن 200 تدفع رسوم التداول الصغيرة.</p>
+        <h2>هل يمكنني شراء أو بيع الفاصوليا بالمال؟</h2>
+        <p>لا توجد في التطبيق أي وسيلة لشراء أو بيع الفاصوليا بالمال. تُكتسب الفاصوليا بمساعدة الناس.</p>
+        <h2>لماذا لا يمكنني إرسال هدية؟</h2>
+        <p>تتطلب الهدية أمرين. يجب أن تكون قد أكملت صفقة في السوق (فاصوليا واحدة أو اثنتان أقل من أن تُحسب)، ولا يمكنك إهداء إلا ما لديك من فاصوليا. ولا يمكن للهدية أبدًا أن تأخذك إلى ما دون الصفر.</p>
+        <h2>لماذا لا يمكنني الإنفاق تحت الصفر؟</h2>
+        <p>يحدد أمران إلى أي مدى يمكنك النزول تحت الصفر. تحدد ثقتك المكتسبة من التداول أقصى حد يمكنك بلوغه على الإطلاق. وتحدد عروضك النشطة المقدار الذي يمكنك استخدامه من ذلك الآن. فإذا لم تكن لديك أي عروض نشطة، فلا يمكنك النزول تحت الصفر على الإطلاق. ويبدأ معظم الناس بالبيع: انشر عرضًا، وعندما يقبله شخص ما، تكسب فاصوليا وثقتك الأولى.</p>
+        <h2>شارتي تقول مشرف. لماذا لا يمكنني إنفاق إلا القليل جدًا؟</h2>
+        <p>تُظهر شارتك ثقتك. وما يمكنك إنفاقه الآن يعتمد أيضًا على عدد عروضك النشطة. فالشارات لا تمنح أي شيء بمفردها أبدًا.</p>
+        <h2>هل يمكنني تغيير تصويتي؟</h2>
+        <p>في القرار أو الاستطلاع، نعم، حتى يُغلق التصويت. أما في تصويت المسؤولين، أو تصويت خاص بمجموعة، أو تصويت لاختيار منسق رئيسي جديد، فلا.</p>
+        <h2>هل يمكن لأي شخص رؤية كيف صوتت؟</h2>
+        <p>في القرار، يظهر التطبيق الإجماليات فقط، وتصويتك الخاص لك وحدك. يُخزن تصويتك على خادم مجتمعك. ويمكن للمالكين والمسؤولين الذين يديرون الخادم أخذ نسخة من ملفاته، والاطلاع على تصويتك هناك. ويكون الاستطلاع مجهول الهوية بالطريقة نفسها، ما لم يجعله الشخص الذي بدأه <strong>تصويت علني</strong>: عندئذٍ يمكن للأعضاء رؤية من اختار ماذا. ويوضح الاستطلاع نوعه قبل أن تصوت.</p>
+        <h2>هل يمكن للأعضاء الآخرين رؤية رصيدي؟</h2>
+        <p>لا. لا يرى الأعضاء الآخرون رصيدك أبدًا. على الهاتف، في مجتمع به فاصوليا، يرون شارة ثقتك وعدد الصفقات التي قمت بها. وتُظهر الصفقة طرفيها الاثنين فقط. وإذا صوت المجتمع على إزالتك، فإن الأعضاء الذين يحق لهم التصويت في هذا القرار يرون رصيدك وأي دين عليك، في ذلك التصويت فقط. ويمكن للمسؤولين رؤية المزيد في بعض الحالات، وتُسجل عمليات الاطلاع تلك: انظر «ما يمكن للمشرفين رؤيته».</p>
+        <h2>فقدت هاتفي. هل ضاع حسابي؟</h2>
+        <p>لا، إذا كنت قد احتفظت بعبارة الاسترداد المكونة من 12 كلمة (وهي كلمات باللغة الإنجليزية). ثبّت التطبيق واستعد حسابك بتلك الكلمات الـ 12. وإذا كنت قد ربطت حساب تسجيل دخول في حماية الحساب، فيمكنك استخدامه أيضًا. احتفظ بكلماتك الـ 12 في مكان آمن وخاص. فكل من يملكها يمكنه استخدام حسابك.</p>
+        <p>فقدت كلماتك الـ 12 أيضًا؟ يمكن لمسؤول في مجتمعك نقل حسابك إلى هاتف جديد شخصيًا: انظر «فقدت هاتفك وكلماتك الـ 12» في «استعادة حسابك».</p>
+        <h2>هل أحتاج إلى حساب Google أو Apple أو Facebook؟</h2>
+        <p>لا. يسمح لك المجتمع المحلي بالانضمام عبر دعوة من أحد أعضائه. أما المجتمع العالمي فيتيح لأي شخص الانضمام باستخدام 12 كلمة سرية (وهي كلمات باللغة الإنجليزية)، أو باستخدام تسجيل دخول إذا كنت تفضل ذلك. وإذا انضممت باستخدام 12 كلمة وحدها، فستكون هي وسيلتك الوحيدة للعودة إلى حسابك، ويبدأ الحساب الجديد الذي تم إنشاؤه بهذه الطريقة بشكل أبطأ خلال أسبوعه الأول. ويمكنك إضافة تسجيل دخول لاحقًا، من أي هاتف أو متصفح تكون فيه داخل حسابك، وليس أثناء تعليق حسابك. انظر «الانضمام إلى BeanPool» و«كلماتك الـ 12».</p>
+        <h2>لماذا لا توجد فاصوليا في المجتمع العالمي؟</h2>
+        <p>الفاصوليا هي وعد بين أشخاص يمكن العثور عليهم مجددًا. يمكن لأي شخص الانضمام إلى المجتمع العالمي باستخدام 12 كلمة (وهي كلمات باللغة الإنجليزية)، لذا لا يمكن لأحد هناك بعدُ أن يزكي هوية أي شخص. وتعيش الفاصوليا، والصفقات، والمؤسسات، والقرارات في المجتمعات المحلية. ويعرضها المجتمع العالمي من مجتمع نموذجي، وادي المثال، مميزة بعلامة <strong>🏘️ مجتمع محلي</strong>. انظر «فاصوليا والمجتمع العالمي».</p>
+        <h2>كيف أبدأ مجتمعًا؟</h2>
+        <p>اضغط على <strong>إنشاء مجتمع</strong> في التطبيق. يعمل المجتمع على خادم صغير خاص به: كمبيوتر إضافي في المنزل، أو خادم مستأجر ببضعة دولارات شهريًا. البرنامج مجاني، ولا يحتاج المجتمع إلى beanpool.org. انظر «فاصوليا والمجتمع العالمي».</p>
+        <h2>هل يمكنني الانتماء إلى أكثر من مجتمع واحد؟</h2>
+        <p>نعم. على الهاتف، يمكنك حفظ عدة مجتمعات والتبديل بينها، باستخدام الهوية نفسها في كل منها. وفي تطبيق الويب، يفتح كل مجتمع على عنوانه الخاص. ولكل مجتمع فاصوليا وقواعد وأعضاء خاصون به.</p>
+        <h2>هل يمكنني الانضمام إلى مجتمع آخر يمكن لأي شخص الانضمام إليه؟</h2>
+        <p>نعم، بالحساب الذي لديك. تتيح بعض المجتمعات لأي شخص الانضمام، كما يفعل المجتمع العالمي، ويديرها أفرادها على عناوينهم الخاصة. وعندما يصل هاتفك إلى مجتمع لست عضوًا فيه بعد، فإنه يعرض <strong>لست عضوًا هنا بعد</strong> ويقترح <strong>الانضمام إلى ‹اسمه› بهذا الحساب</strong>. وتتسجل فيه بالطريقة نفسها التي انضممت بها إلى المجتمع العالمي: باستخدام الكلمات الـ 12 الموجودة بالفعل على هاتفك (وهي كلمات باللغة الإنجليزية)، أو باستخدام تسجيل دخول إذا كان يطلب ذلك. ويكون ذلك تحت اسم ذلك المجتمع الخاص، ويظهر عنوانه حتى تتمكن من معرفة المكان الذي تنضم إليه. ويظل مفتاحك وكلماتك الـ 12 كما هي، ولا يتغير أي شيء في مجتمعاتك الأخرى. الرابط يفتح فقط تلك الشاشة، ولا ينضم أحد حتى تضغط. ولعرضها، يسأل هاتفك ذلك المجتمع عن اسمه وعما إذا كان يسمح للأشخاص بالانضمام، لذا يمكن لمن يدير ذلك العنوان رؤية أن شخصًا ما فتح الرابط (لا يتم إرسال أي شيء عن حسابك).</p>
+        <h2>أنا سأغيب لفترة. ماذا علي أن أفعل؟</h2>
+        <p>فعّل وضع العطلة في الإعدادات. تُخفى عروضك ولا يمكن لأحد إرسال طلبات جديدة إليك. أنهِ أو ألغِ أي صفقات مفتوحة أولاً، لأن وضع العطلة لا يمكن أن يبدأ أثناء وجود صفقة مفتوحة.</p>
+        <h2>كيف أغادر؟</h2>
+        <p>يمكنك حذف حسابك في الإعدادات. أنهِ أو ألغِ أي صفقات مفتوحة أولاً. وعندما تحذف حسابك، تذهب أي فاصوليا بحوزتك إلى مشاع مجتمعك، وإذا كنت تحت الصفر، يغطي المشاع ذلك. لا يمكن التراجع عن هذا الإجراء، حتى باستخدام كلماتك الـ 12 (وهي كلمات باللغة الإنجليزية). يؤدي هذا إلى حذف حسابك فقط في المجتمع الذي تستخدمه. وإذا كان هناك مجتمع آخر على هاتفك لا يزال يضمك، فإن الهاتف يحتفظ بمفتاحك له؛ ولا يُحذف المفتاح إلا عندما تحذف حسابك في آخر مجتمع لك.</p>
+        <h2>حدث خطأ ما أو يمكن تحسين شيء ما. من أخبر؟</h2>
+        <p>بالنسبة للمشاكل المتعلقة بشخص أو صفقة، تحدث إلى مسؤولي مجتمعك. للإبلاغ عن منشور أو فعالية أو منشور في النبض، اضغط على علامة <strong>🚩 إبلاغ</strong> (على الهاتف، يقول زر المنشور <strong>إبلاغ عن المنشور</strong>). وفي تطبيق الويب، تحتوي المحادثة مع شخص واحد على زر <strong>إبلاغ</strong> أيضًا. يتم إخطار مسؤولي مجتمعك. اختر <strong>سلامة الأطفال</strong> إذا كان هناك طفل قد يتعرض للخطر. انظر «الإبلاغ عن مشكلة». للحصول على أفكار حول التطبيق نفسه، تفضل بزيارة beanpool.org.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>كلماتك الـ 12</strong><span>الكلمات الـ 12 هي مفتاح حسابك. لماذا هي مهمة، وأين تجدها، وكيف تحافظ عليها بأمان، وإضافة تسجيل دخول كطريقة ثانية للوصول.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="communities.html"><strong>أكثر من مجتمع واحد</strong><span>الانتماء إلى عدة مجتمعات بحساب واحد، والتبديل بينها، ومتابعة مجتمعك إلى عنوان جديد، ومعرفة ما يعرضه لك المجتمع العالمي.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>فاصوليا والمجتمع العالمي</strong><span>ما الغرض من المجتمع العالمي، مجتمع بين كثيرين، وما تراه هناك: علامة 🏘️ مجتمع محلي، والمجتمع النموذجي وادي المثال، ولماذا تنتظر الفاصوليا هناك، وكيف تبدأ مجتمعًا محليًا أو تعثر عليه.</span></a></li>
+            <li><a href="../holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="getting-help.html"><strong>طلب المساعدة</strong><span>أين تبحث عندما تواجه مشكلة، ومن تسأل.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>寻找附近的社区 — BeanPool members' guide</title>
+    <meta name="description" content="从全球社区出发，寻找附近的社区并申请加入，在附近有新社区成立时获得通知，或者自己发起一个社区。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">新手入门</a></p>
+        <h1>寻找附近的社区</h1>
+        <p class="lede">从全球社区出发，寻找附近的社区并申请加入，在附近有新社区成立时获得通知，或者自己发起一个社区。</p>
+        <h2>为什么需要本地社区</h2>
+        <p>全球社区是各地朋友相聚的地方。本地社区则是邻里开展互助交易的家园：它拥有属于自己的豆子、交易和公共资金池。在全球社区中，你可以在标有 <strong>🏘️ 本地社区</strong> 的示例社区中了解这些功能是如何运作的，但在那里进行的任何操作都不会赚取或花费豆子。因此那里的帖子会在描述中注明发布者希望如何回报：免费、交换，或私聊商量。参见“豆子与全球社区”。</p>
+        <p>全球社区只是众多社区中的一员。你自己的社区运行在自有服务器上，绝不需要依赖全球社区：全球社区只是帮助你找到它。</p>
+        <p>身边暂时还没有社区？你可以自己发起一个：参见下文“身边暂无社区”。</p>
+        <h2>你附近的社区</h2>
+        <p>在全球社区中，<strong>首页</strong>上的 <strong>寻找你的社区</strong> 卡片会展示离你最近的社区。在你加入的前 30 天内，它会固定在首页靠近顶部的位置，无法被移除或移动；30 天后你可以像普通卡片一样将其移除。在网页版中，卡片上的每个社区都是指向其自身页面的链接。如果应用不知道你的位置，请点按<strong>分享我的区域</strong>，或者点按 <strong>或输入你的城镇</strong> 并挑选你的城镇。以下步骤适用于手机应用。</p>
+        <p>尚未加入全球社区？点按左上角的豆子图标，在<strong>你的社区</strong>下方点按<strong>全球社区</strong>，然后使用你的现有账户加入：参见“多个社区”。如果尚未拥有账户，请在应用首个屏幕上点按<strong>探索全球 BeanPool</strong>：参见“加入 BeanPool”。</p>
+        <ul>
+            <li>点按<strong>你附近的社区</strong>查看完整列表。</li>
+            <li>当应用知道你的位置时，社区会按距离由近到远排列。如果不知道，请点按<strong>使用我的位置</strong>，或按名称搜索。不想分享你的位置？点按 <strong>或输入你的城镇</strong>，开始输入并从列表中选择你的城镇：系统仅保留大致点位，通过<strong>更改</strong>可以选择其他城镇。</li>
+            <li>与你距离大致相同的社区会随机打乱顺序，因此没有任何一个社区会始终排在首位。</li>
+            <li>在社区选择公开相关数据的情况下，每项都会显示距离你有多远以及有多少成员。</li>
+        </ul>
+        <p>尚未公布地址的社区虽然也会列出，但目前无法直接从此处发起申请。</p>
+        <h2>申请加入</h2>
+        <ul>
+            <li>在社区上点按<strong>申请加入</strong>。</li>
+            <li>核对你的名字，并写几句关于你自己的介绍（最多 280 个字符）：你住在哪里，你想分享或学习什么。</li>
+            <li>点按<strong>发送</strong>。</li>
+        </ul>
+        <p>你的申请会携带你的名字、留言和照片直接发送给该社区，而无需经过全球社区中转。只有该社区的成员才能看到。在仅限管理员邀请的社区中，只有其所有者和管理员才能看到。那里的成员可以准许你加入：他们点按 <strong>邀请</strong>，便会生成一张仅供你账户使用的专属邀请。</p>
+        <p>在等待期间，社区卡片会显示“你已申请加入。暂无回复”。社区通常会在几天内作出答复。你可以对每个社区各保持一个待处理的申请，且每个社区每天从单个互联网连接仅接纳少量申请。</p>
+        <p>如果 30 天内无人答复，卡片会显示<strong>未收到回复。你可以再次申请。</strong></p>
+        <p>如果社区无法接收你的申请，卡片会显示社区服务器返回的提示语，例如今天来自你所在网络的申请过多，或者该社区当前不接受加入申请。</p>
+        <h2>当对方同意时</h2>
+        <p>卡片会显示“已有成员邀请了你”。点按带有该社区名称的<strong>加入</strong>。</p>
+        <ul>
+            <li>你的账户会随你一同带过去：使用相同的密钥和相同的 12 个助记词。你的名字也会带过去。如果那里已有同名成员，系统会在名字后加上数字，例如“Sarah2”。你可以在下一步中进行修改。</li>
+            <li>你的帖子、聊天和交易保留在各个社区内部。在新社区中你将全新开始。</li>
+            <li>接下来核对你在新社区中使用的名字和照片。</li>
+            <li>保护账户的登录凭据由各个社区分别保存。应用会提示你也在新社区中保护账户：点按<strong>保护账户</strong>或点按<strong>稍后</strong>，且随时可以在<strong>设置</strong>中进行设置。</li>
+        </ul>
+        <p>你依然是全球社区的成员，并可以在各个社区之间自由切换：参见“多个社区”。</p>
+        <h2>身边暂无社区</h2>
+        <ul>
+            <li><strong>当此地有社区成立时通知我：</strong>当你所在位置附近有新社区成立时，你会收到通知。系统仅保留约 10 公里范围的区域信息，绝不记录你的精确位置。你最多可以关注 3 个地点，并可通过<strong>阻止</strong>停止关注某个地点。</li>
+            <li><strong>创建社区：</strong>每个社区都运行在自己的小型服务器上，由本地人员维护。仅需家里一台闲置电脑或每月几美元的花费，耗时约半小时：参见“豆子与全球社区”。应用展示了运维社区的三种方式：家里闲置的电脑、租用的小型服务器，或者寻求帮助。填入名称、地点以及人们如何与你取得联系，然后点按<strong>复制我的社区详情</strong>以便将其粘贴到新服务器的设置中。除非你在设置中主动开启，否则你的联系方式不会出现在公开目录中。</li>
+        </ul>
+        <h2>如果你是本地社区的成员</h2>
+        <p>用户可以从全球社区申请加入你的社区。点按<strong>对话</strong>，然后点按<strong>成员</strong>，再点按 <strong>Invites</strong>：申请会列在 <strong>Wants to join</strong> 下方，附带其名字、留言以及他们来自何处。加入申请在手机应用中处理：网页版不列出申请。</p>
+        <ul>
+            <li><strong>Invite：</strong>生成一张仅供其账户使用的专属邀请。对方的应用会自动发现该邀请，轻点一下即可加入。</li>
+            <li><strong>暂不：</strong>对方不会收到明确拒绝通知。他们会继续看到“暂无回复”，且在 30 天内无法再次申请。</li>
+        </ul>
+        <p>任何成员均可作出答复，无论其信任徽章如何，除非社区设定了仅限管理员邀请（社区服务器设置中<strong>Who may invite</strong>下的 <strong>Known</strong>）。若设定了此项，则只有所有者和管理员才能看到申请并进行答复。社区管理员可以关闭加入申请功能。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>加入 BeanPool</strong><span>两种加入方式：凭成员邀请加入本地社区，或在开放时凭 12 个助记词或一次登录加入全球社区。申请加入社区以及如何邀请他人。</span></a></li>
+            <li><a href="home.html"><strong>首页</strong><span>首页是什么、在手机与网页版上显示的卡片、如何添加、移动或移除卡片、选择兴趣偏好以及退出登录时的隐私保护。</span></a></li>
+            <li><a href="communities.html"><strong>加入多个社区</strong><span>用一个账户加入多个社区、在它们之间切换、跟随你的社区迁移到新地址，以及查看全球社区向你展示的内容。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆子与全球社区</strong><span>全球社区的用途、众多社区中的一员，以及你在那里看到的内容：🏘️ 本地社区标记、示例社区 Example Valley、为什么豆子在那里等待，以及如何发起或寻找本地社区。</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

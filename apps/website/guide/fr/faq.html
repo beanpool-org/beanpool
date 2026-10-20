@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Questions — BeanPool members' guide</title>
+    <meta name="description" content="Réponses courtes aux questions les plus posées par les membres.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Découvrir BeanPool</a></p>
+        <h1>Questions</h1>
+        <p class="lede">Réponses courtes aux questions les plus posées par les membres.</p>
+        <h2>Qui gère ma communauté ?</h2>
+        <p>Votre communauté se gère elle-même. Son serveur est pris en charge par des personnes choisies par votre communauté : ses propriétaires et administrateurs. Vos échanges, annonces et votes sont conservés sur ce serveur. Le projet BeanPool conçoit l'application, et tout le monde peut l'utiliser pour lancer une communauté.</p>
+        <h2>Y a-t-il des intérêts sur la dette ?</h2>
+        <p>Non. Être sous zéro ne coûte rien. Seuls les haricots que vous détenez au-delà de 200 paient les faibles frais de circulation.</p>
+        <h2>Puis-je acheter ou vendre des haricots contre de l'argent ?</h2>
+        <p>L'application ne permet pas d'acheter ou de vendre des haricots contre de l'argent. Les haricots se gagnent en aidant les autres.</p>
+        <h2>Pourquoi ne puis-je pas envoyer un don ?</h2>
+        <p>Un don nécessite deux conditions. Vous devez avoir conclu un échange sur le marché (1 ou 2 haricots est trop petit pour compter), et vous ne pouvez donner que les haricots que vous possédez. Un don ne peut jamais vous faire passer sous zéro.</p>
+        <h2>Pourquoi ne puis-je pas dépenser sous zéro ?</h2>
+        <p>Deux éléments déterminent jusqu'où vous pouvez descendre sous zéro. Votre confiance acquise par les échanges fixe le maximum absolu où vous pourriez aller. Vos Offres actives déterminent la part de ce montant que vous pouvez utiliser pour le moment. Sans aucune Offre active, vous ne pouvez pas du tout passer sous zéro. La plupart des gens commencent par vendre : publiez une Offre, et quand quelqu'un l'accepte, vous gagnez des haricots et votre première confiance.</p>
+        <h2>Mon badge indique Pilier. Pourquoi puis-je dépenser si peu ?</h2>
+        <p>Votre badge indique votre confiance. Ce que vous pouvez dépenser pour le moment dépend également du nombre d'Offres actives dont vous disposez. Les badges ne débloquent jamais rien d'eux-mêmes.</p>
+        <h2>Puis-je modifier mon vote ?</h2>
+        <p>Sur une Décision ou un Sondage, oui, jusqu'à la clôture du vote. Sur un vote entre gestionnaires, un vote interne de groupe ou un vote pour un nouveau coordinateur principal, non.</p>
+        <h2>Quelqu'un peut-il voir comment j'ai voté ?</h2>
+        <p>Sur une Décision, l'application ne montre que les totaux, et votre propre vote à vous seul. Votre vote est stocké sur le serveur de votre communauté. Les propriétaires et administrateurs qui gèrent le serveur peuvent prendre une copie de ses fichiers, et pourraient y retrouver votre vote. Un Sondage est anonyme de la même manière, sauf si la personne qui l'a lancé en a fait un <strong>vote public</strong> : les membres peuvent alors voir qui a choisi quoi. Le sondage indique dans quel mode il se trouve avant que vous ne votiez.</p>
+        <h2>Les autres membres peuvent-ils voir mon solde ?</h2>
+        <p>Non. Les autres membres ne voient jamais votre solde. Sur le téléphone, dans une communauté avec des haricots, ils voient votre badge de confiance et combien d'échanges vous avez réalisés. Un échange n'affiche que ses deux participants. Si la communauté vote sur votre exclusion, les membres pouvant voter y voient votre solde et toute éventuelle dette, lors de ce vote uniquement. Les administrateurs peuvent en voir davantage dans certains cas, et ces consultations sont enregistrées : voir « Ce que voient les admins ».</p>
+        <h2>J'ai perdu mon téléphone. Mon compte est-il perdu ?</h2>
+        <p>Non, si vous avez conservé votre phrase de récupération de 12 mots. Installez l'application et restaurez votre compte avec ces 12 mots (ce sont des mots en anglais). Si vous avez associé un compte de connexion dans Protection du compte, vous pouvez également l'utiliser. Gardez vos 12 mots dans un endroit sûr et privé. Quiconque les possède peut utiliser votre compte.</p>
+        <p>Vous avez également perdu vos 12 mots ? Un administrateur de votre communauté peut transférer votre compte vers un nouveau téléphone, en personne : voir « Téléphone et 12 mots perdus » dans « Récupérer votre compte ».</p>
+        <h2>Ai-je besoin d'un compte Google, Apple ou Facebook ?</h2>
+        <p>Non. Une communauté locale vous accueille avec une invitation de l'un de ses membres. La communauté globale accueille tout le monde avec 12 mots secrets, ou avec une connexion si vous préférez. Si vous rejoignez avec 12 mots seuls, ils sont votre unique moyen de revenir sur votre compte, et un nouveau compte créé de cette façon démarre plus lentement pendant sa première semaine. Vous pouvez ajouter une connexion plus tard, depuis n'importe quel téléphone ou navigateur où vous êtes sur votre compte, et pas lorsque votre compte est suspendu. Voir « Rejoindre BeanPool » et « Vos 12 mots ».</p>
+        <h2>Pourquoi n'y a-t-il pas de haricots sur la communauté globale ?</h2>
+        <p>Les haricots sont une promesse entre des personnes que l'on peut retrouver. Tout le monde peut rejoindre la communauté globale avec 12 mots, donc personne ne peut encore garantir qui est qui là-bas. Les haricots, les accords, les entreprises et les Décisions vivent dans les communautés locales. La communauté globale les présente à partir d'une communauté d'exemple, Example Valley, marquée <strong>🏘️ Communauté locale</strong>. Voir « Haricots et communauté globale ».</p>
+        <h2>Comment créer une communauté ?</h2>
+        <p>Touchez <strong>Créer une communauté</strong> dans l'application. Une communauté tourne sur son propre petit serveur : un ordinateur disponible à la maison, ou un serveur loué pour quelques dollars par mois. Le logiciel est gratuit, et la communauté n'a pas besoin de beanpool.org. Voir « Haricots et communauté globale ».</p>
+        <h2>Puis-je appartenir à plusieurs communautés ?</h2>
+        <p>Oui. Sur le téléphone, vous pouvez enregistrer plusieurs communautés et basculer entre elles, en utilisant la même identité dans chacune. Dans l'application web, chaque communauté s'ouvre à sa propre adresse. Chaque communauté possède ses propres haricots, ses propres règles et ses propres membres.</p>
+        <h2>Puis-je rejoindre une autre communauté ouverte à tous ?</h2>
+        <p>Oui, avec le compte que vous possédez. Certaines communautés permettent à tout le monde de les rejoindre, tout comme la communauté globale, et leurs propres membres les gèrent à leurs propres adresses. Quand votre téléphone accède à l'une d'entre elles où vous n'êtes pas encore membre, il affiche <strong>Vous n'êtes pas encore membre ici</strong> et propose <strong>Rejoindre ‹son nom› avec ce compte</strong>. Vous la rejoignez de la même manière que la communauté globale : avec les 12 mots déjà présents sur votre téléphone, ou avec une connexion si elle en demande une. C'est sous le nom propre de cette communauté, et son adresse est indiquée afin que vous sachiez où vous vous inscrivez. Votre clé et vos 12 mots restent les mêmes, et rien ne change dans vos autres communautés. Un lien ouvre seulement cet écran, et personne ne rejoint tant que vous n'avez pas touché. Pour l'afficher, votre téléphone interroge cette communauté sur son nom et pour savoir si elle accepte les adhésions, de sorte que la personne gérant cette adresse peut voir que quelqu'un a ouvert le lien (aucune information sur votre compte n'est envoyée).</p>
+        <h2>Je pars en voyage. Que dois-je faire ?</h2>
+        <p>Activez le Mode vacances dans les Paramètres. Vos Offres sont masquées et personne ne peut vous envoyer de nouvelles demandes. Terminez ou annulez d'abord tout échange en cours, car le Mode vacances ne peut pas démarrer tant qu'un échange est ouvert.</p>
+        <h2>Comment quitter la communauté ?</h2>
+        <p>Vous pouvez supprimer votre compte dans les Paramètres. Terminez ou annulez d'abord tout échange en cours. Lorsque vous supprimez votre compte, tous les haricots que vous détenez reviennent aux Communs de votre communauté, et si vous êtes sous zéro, les Communs couvrent la différence. Cette opération est irréversible, même avec vos 12 mots. Elle supprime votre compte uniquement dans la communauté que vous utilisez actuellement. Si une autre communauté sur le téléphone vous conserve toujours, le téléphone garde votre clé pour elle ; la clé ne disparaît que lorsque vous supprimez votre compte de votre dernière communauté.</p>
+        <h2>Quelque chose ne va pas ou pourrait être amélioré. À qui m'adresser ?</h2>
+        <p>Pour les problèmes avec une personne ou un échange, parlez-en aux administrateurs de votre communauté. Pour signaler une annonce, un événement ou une publication du Pouls, touchez le drapeau <strong>🚩 Signaler</strong> (sur le téléphone, le bouton d'une annonce indique <strong>Signaler l'annonce</strong>). Dans l'application web, une discussion avec une personne comporte également un bouton <strong>Signaler</strong>. Les administrateurs de votre communauté en sont informés. Choisissez <strong>Protection de l'enfance</strong> si un enfant peut être en danger. Voir « Signaler un problème ». Pour soumettre des idées concernant l'application elle-même, visitez beanpool.org.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Vos 12 mots</strong><span>Les 12 mots sont la clé de votre compte. Leur importance, où les trouver, comment les garder en sûreté et associer un compte de connexion en secours.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="communities.html"><strong>Plusieurs communautés</strong><span>Appartenir à plusieurs communautés avec un seul compte, basculer entre elles, suivre votre communauté vers une nouvelle adresse et voir ce que montre la communauté globale.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Haricots et communauté globale</strong><span>Le rôle de la communauté globale, une communauté parmi d'autres, et ce que vous y voyez : le repère 🏘️ Communauté locale, la communauté exemple Example Valley, l'attente des haricots et comment lancer ou trouver une communauté locale.</span></a></li>
+            <li><a href="../holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="getting-help.html"><strong>Besoin d'aide</strong><span>Où chercher en cas de doute et à qui vous adresser.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

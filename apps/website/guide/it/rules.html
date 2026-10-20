@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regole e decisioni — BeanPool members' guide</title>
+    <meta name="description" content="Votazioni, partecipazione, voto segreto, chi può votare, sospensione, rimozione di un membro, custodi, coordinatori e coordinatori principali.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Info su BeanPool</a></p>
+        <h1>Regole e decisioni</h1>
+        <p class="lede">Votazioni, partecipazione, voto segreto, chi può votare, sospensione, rimozione di un membro, custodi, coordinatori e coordinatori principali.</p>
+        <h2>Due modi per interpellare la comunità</h2>
+        <ul>
+            <li>Un <strong>Sondaggio</strong> è una domanda nel feed, come &quot;Mercato di domenica?&quot;. Mostra cosa pensano le persone. Non cambia mai nulla di per sé.</li>
+            <li>Una <strong>Decisione</strong> è vincolante. Se viene approvata, il server della tua comunità la esegue automaticamente. Nessuno deve premere un pulsante e nessuno può ignorarla silenziosamente.</li>
+        </ul>
+        <p>La comunità globale prevede Sondaggi ma nessuna Decisione: chiunque può entrarvi, con 12 parole o con un accesso, quindi una sola persona con diversi account potrebbe alterare una votazione. Tutto ciò che segue sulle Decisioni riguarda le comunità locali.</p>
+        <h2>Cosa può fare una Decisione</h2>
+        <p>Riguardo a un membro:</p>
+        <ul>
+            <li>Sospendere un membro, o revocare una sospensione.</li>
+            <li>Congelare il credito di un membro, o scongelarlo.</li>
+            <li>Concedere a un membro il diritto di fare da garante per i nuovi arrivati, o revocarlo.</li>
+            <li>Rimuovere un custode principale da un'impresa, o un responsabile da un progetto.</li>
+            <li>Rimuovere un membro dalla comunità, o reintegrarlo.</li>
+        </ul>
+        <p>Riguardo ai Beni comuni:</p>
+        <ul>
+            <li>Assegnare fagioli dai Beni comuni a un progetto o a un'impresa.</li>
+            <li>Concedere un sussidio di difficoltà dai Beni comuni a un membro.</li>
+            <li>Saldare il debito di un progetto o di un'impresa attingendo dai Beni comuni.</li>
+            <li>Condonare un debito che un membro che ha lasciato la comunità doveva ai Beni comuni. Nessun fagiolo si sposta. La registrazione rimane, contrassegnata come condonata. Dove una comunità conserva un elenco dei nomi, la procedura viene avviata da lì.</li>
+        </ul>
+        <p>Un sussidio non può superare quanto attualmente contenuto nei Beni comuni più quanto vi è affluito negli ultimi 30 giorni. Una richiesta di entità maggiore viene rifiutata all'avvio.</p>
+        <h2>Chi può avviare una Decisione</h2>
+        <p>Qualsiasi membro attivo il cui credito non sia congelato, e che abbia effettuato scambi nel mercato o a cui sia stato assegnato un badge di fiducia da un amministratore. Una garanzia da sola non è sufficiente. Anche gli amministratori possono farlo. Puoi avere una sola Decisione aperta alla volta. Devi spiegarne il motivo in almeno 10 caratteri.</p>
+        <h2>Chi può votare</h2>
+        <p>Qualsiasi membro attivo il cui credito non sia congelato e che si sia iscritto <strong>prima</strong> dell'apertura della Decisione. Le persone che si iscrivono durante una votazione non possono votare su di essa. Gli account delle imprese non possono votare.</p>
+        <h2>Come vengono conteggiati i voti</h2>
+        <ul>
+            <li>Decisioni riguardanti un membro: <strong>un membro, un voto</strong>. Sì o No.</li>
+            <li>Decisioni riguardanti i fagioli dei Beni comuni: i voti sono ponderati in base agli scambi. Puoi esprimere più di un voto, ma diventa costoso: 1 voto costa 1 credito di voto, 2 voti costano 4 crediti, 3 voti costano 9 crediti. I tuoi crediti di voto derivano dai tuoi scambi completati, conteggiati fino a 500 fagioli per partner di scambio. Ricevi nuovamente i tuoi crediti di voto completi per ogni Decisione. Non si esauriscono mai.</li>
+            <li>Se non hai mai completato uno scambio, non puoi ancora votare sui fagioli dei Beni comuni.</li>
+            <li>Puoi modificare il tuo voto in qualsiasi momento fino alla chiusura della votazione.</li>
+        </ul>
+        <h2>Voto segreto</h2>
+        <p>L'app non mostra mai a nessuno come hai votato, amministratori compresi. Ognuno vede i totali e tu vedi il tuo voto. Il tuo voto viene memorizzato sul server della tua comunità con il tuo account, affinché possa essere conteggiato e verificato. I proprietari e gli amministratori che gestiscono il server possono creare una copia dei relativi file e potrebbero visualizzare il tuo voto lì.</p>
+        <p>Anche i sondaggi sono anonimi, a meno che chi ne avvia uno non lo imposti come <strong>voto palese</strong>: in tal caso i membri possono vedere chi ha scelto cosa. Il sondaggio specifica di quale tipo si tratta.</p>
+        <h2>Quanto dura una votazione</h2>
+        <p>Ogni Decisione dura esattamente 7 giorni. La votazione si apre immediatamente. Al termine dei 7 giorni, il server della tua comunità conteggia i voti e applica il risultato.</p>
+        <h2>Partecipazione</h2>
+        <p>Una votazione è valida solo se partecipa un numero sufficiente di persone.</p>
+        <ul>
+            <li>Un numero sufficiente corrisponde al 30% dei membri aventi diritto al voto che sono stati attivi negli ultimi 30 giorni. Non sono mai meno di 3 persone.</li>
+            <li>Per la rimozione di un membro la quota è del 25%.</li>
+            <li>&quot;Attivo&quot; significa che la tua app ha inviato qualcosa al server della tua comunità in quei 30 giorni: un post, uno scambio, un voto, un messaggio. Sul telefono, solitamente conta anche il solo fatto di aprire l'app, poiché effettua l'accesso per le notifiche a ogni avvio.</li>
+            <li>La partecipazione conta le persone, non il peso dei loro voti.</li>
+        </ul>
+        <p>Se votano troppo poche persone, non succede nulla. La Decisione si chiude come &quot;irrisolta&quot;.</p>
+        <h2>Quanti Sì sono necessari</h2>
+        <ul>
+            <li>La maggior parte delle Decisioni: 60% di Sì.</li>
+            <li>Rimozione di un membro: 66% di Sì.</li>
+            <li>Annullamento di un provvedimento (revoca di una sospensione, scongelamento del credito, reintegro di un membro): più della metà.</li>
+            <li>Un pareggio equivale sempre a un rifiuto.</li>
+        </ul>
+        <h2>Quando una Decisione viene approvata</h2>
+        <ul>
+            <li>Il server della tua comunità verifica che abbia ancora senso: il membro esiste ancora, i Beni comuni hanno abbastanza fagioli. Quindi agisce.</li>
+            <li>Se nei Beni comuni mancano fagioli per un sussidio, il sussidio attende finché non ce ne sono a sufficienza. Rinuncia dopo 90 giorni.</li>
+            <li>Può rimanere in attesa un solo sussidio alla volta. Se un secondo sussidio viene approvato mentre i Beni comuni sono ancora insufficienti, questo non attende: si chiude definitivamente e la comunità deve votare di nuovo.</li>
+            <li>Se la persona o l'impresa non fa più parte della comunità, la Decisione si chiude senza eseguire alcuna azione.</li>
+        </ul>
+        <h2>Rimozione di un membro</h2>
+        <ul>
+            <li>Se una rimozione viene approvata, il membro viene sospeso e il suo credito viene congelato immediatamente.</li>
+            <li>Dopo ulteriori 7 giorni viene rimosso definitivamente. Durante questi 7 giorni, una Decisione per reintegrarlo annulla la rimozione.</li>
+            <li>Un membro che elimina personalmente il proprio account non può essere reintegrato, nemmeno dopo una rimozione. Può iscriversi di nuovo con un nuovo invito.</li>
+            <li>Quando un membro viene rimosso, i suoi annunci vengono ritirati. Se doveva fagioli, i Beni comuni saldano il debito. Se possedeva fagioli, quei fagioli passano ai Beni comuni.</li>
+            <li>La comunità può votare per rimuovere o sospendere qualsiasi membro, a eccezione di un proprietario o amministratore del server della tua comunità. Essi gestiscono il server stesso, quindi una votazione non può revocare tale ruolo; l'app lo segnala se ci provi. Un proprietario può prima revocare il ruolo di un amministratore, dopodiché questo diventa un membro come tutti gli altri.</li>
+        </ul>
+        <h2>Sospensione d'emergenza</h2>
+        <p>Un amministratore può sospendere immediatamente un membro, ad esempio per prevenire danni. Deve fornire una motivazione consultabile dai membri.</p>
+        <ul>
+            <li>Nello stesso istante si apre una Decisione di 7 giorni: &quot;Mantenere questa sospensione?&quot;.</li>
+            <li>Richiede la consueta partecipazione e il 60% di Sì.</li>
+            <li>Se non viene approvata, o se votano troppo poche persone, la sospensione decade automaticamente.</li>
+            <li>Un amministratore non può sospendere se stesso e non può sospendere l'unico proprietario del server. Solo un proprietario può sospendere un altro proprietario.</li>
+        </ul>
+        <p>Sulla comunità globale non c'è votazione. La sospensione dura 7 giorni e poi decade da sola, a meno che un amministratore non la revochi prima. Per tenere fuori qualcuno più a lungo, gli amministratori lo sospendono di nuovo o rimuovono il suo account.</p>
+        <h2>Cosa gli amministratori possono e non possono fare</h2>
+        <p>Il server della tua comunità ha proprietari e amministratori. Se ne prendono cura.</p>
+        <ul>
+            <li>Un amministratore può interrompere una Decisione aperta, ma deve fornire una motivazione scritta. I membri possono leggerla sulla Decisione.</li>
+            <li>Se una rimozione è stata approvata ed è nel suo periodo di attesa di 7 giorni, un amministratore può fermarla o renderla esecutiva immediatamente.</li>
+            <li>Gli amministratori possono concedere ai membri il diritto di fare da garanti per i nuovi arrivati.</li>
+            <li>Gli amministratori possono assegnare un badge di fiducia a un membro. Questo assegna al membro anche la fiducia necessaria per quel badge, ampliando la sua linea di credito.</li>
+            <li>Gli amministratori risolvono gli scambi bloccati, ma mai uno a cui partecipano direttamente.</li>
+        </ul>
+        <h2>Sondaggi</h2>
+        <ul>
+            <li>Qualsiasi membro attivo il cui credito non sia congelato può avviare un Sondaggio con 2-4 risposte. Rimane attivo per 3, 7 o 14 giorni.</li>
+            <li>Puoi avere un solo Sondaggio aperto alla volta. La tua comunità può avere 5 Sondaggi aperti contemporaneamente.</li>
+            <li>A un Sondaggio pubblicato in un gruppo possono rispondere solo i membri e i coordinatori di quel gruppo. Gli osservatori possono leggerlo ma non rispondere.</li>
+            <li>Anche per rispondere a un Sondaggio è necessario avere il credito non congelato. Puoi modificare la tua risposta fino alla chiusura del Sondaggio. Chi lo ha avviato può chiuderlo in anticipo.</li>
+            <li>Un Sondaggio è anonimo: tutti vedono solo i totali. Chi lo avvia può impostarlo come <strong>voto palese</strong>, in modo che i membri vedano chi ha scelto cosa. Tale scelta viene effettuata all'avvio del Sondaggio e non può essere modificata dopo la pubblicazione.</li>
+            <li>Sulla comunità globale, un Sondaggio anonimo chiuso indica anche quanti dei suoi voti provengono da account nuovi o creati con 12 parole, se ce ne sono stati. Ogni voto viene comunque conteggiato.</li>
+        </ul>
+        <h2>Imprese e custodi</h2>
+        <p>Un'impresa è gestita dai suoi custodi. Uno di loro è il custode principale.</p>
+        <ul>
+            <li><strong>Entrare:</strong> chiedi di diventare custode e dichiari quanta della fiducia guadagnata intendi vincolare (può essere 0). Non puoi vincolare più fiducia di quanta ne hai guadagnata scambiando, su tutte le tue imprese. Il custode principale approva o rifiuta.</li>
+            <li><strong>Vincolare in una comunità che conferma i propri membri:</strong> un membro confermato può anche vincolare parte della propria linea di credito nota, fino alla metà di essa. Quella quota viene detratta dalla sua linea personale.</li>
+            <li><strong>Finestra di opposizione:</strong> quando un'impresa ha già più di un custode, l'approvazione del responsabile attende 3 giorni. Qualsiasi altro custode può opporsi in quel periodo, e una sola opposizione la annulla.</li>
+            <li><strong>Rimuovere un custode:</strong> il responsabile può rimuovere un custode ordinario. Si applica la stessa finestra di 3 giorni, e qualsiasi altro custode può opporsi.</li>
+            <li><strong>Amministratori della comunità:</strong> un amministratore della tua comunità che non sia custode dell'impresa può approvare un custode o rimuovere un custode ordinario immediatamente, senza la finestra di 3 giorni. Questo serve affinché un'impresa bloccata possa essere aiutata.</li>
+            <li><strong>Dimettersi:</strong> qualsiasi custode può dimettersi. Se l'impresa è in debito e il tuo vincolo è necessario per coprirlo, devi attendere finché il debito non si riduce o gli altri custodi non vincolano di più. L'unico custode non può dimettersi; deve prima aggiungere un altro custode, oppure avviare la liquidazione dell'impresa.</li>
+            <li><strong>La tua garanzia</strong> sostiene la linea di credito dell'impresa. Un vincolo di fiducia guadagnata non viene mai prelevato dal tuo saldo personale né dalla tua linea di credito personale.</li>
+            <li><strong>Un responsabile inattivo:</strong> se il custode principale non ha svolto alcuna attività nell'app per 30 giorni, gli altri custodi possono scegliere un nuovo responsabile tra di loro. La votazione dura fino a 14 giorni, con Sì e No. Viene approvata quando più della metà degli altri custodi vota Sì. Se il responsabile torna e svolge un'attività nell'app, la votazione viene annullata. Mentre l'account del responsabile è sospeso, nessuna azione conta come rientro. I voti dei custodi non possono essere modificati.</li>
+            <li><strong>Votazioni tra i custodi:</strong> in un'impresa con due o più custodi, qualsiasi custode può proporre di pagare fagioli dal conto dell'impresa (mai più di quanti ne contenga, mai a se stessi, e a un custode solo da quanto guadagnato, con la commissione di scambio dell'1,5%), rimuovere un custode o, in un'impresa ma non in un progetto, nominare responsabile un altro custode. Votano i custodi presenti al momento dell'apertura; più della metà deve votare; 60% di Sì per effettuare pagamenti o rimuovere, più della metà per scegliere un responsabile. Dura 7 giorni o termina prima quando il risultato non può più cambiare, e viene eseguita automaticamente. Solo i custodi possono vederla. Mentre è aperta mostra quanti hanno votato; Sì e No compaiono alla chiusura. Nessuno vede chi ha votato come, ma in un gruppo molto piccolo il risultato e l'elenco dei votanti potrebbero farlo dedurre. Queste votazioni non toccano mai i Beni comuni né la reputazione di alcuno nella comunità: quelle sono Decisioni della comunità. Una votazione non può rimuovere il responsabile (si vota invece per un nuovo responsabile), l'unico custode, o un custode il cui vincolo copre un debito. Un custode non può proporre la propria rimozione: deve invece dimettersi.</li>
+            <li><strong>Se il responsabile se ne va o viene rimosso,</strong> il custode con maggiore anzianità diventa immediatamente responsabile, e gli altri custodi possono sostituirlo subito. Se non rimane alcun custode, l'impresa viene messa in pausa.</li>
+            <li><strong>Liquidazione:</strong> il custode principale, o l'unico custode, può avviare la chiusura di un'impresa. Può farlo anche un amministratore della comunità. Si apre quindi un'attesa di 7 giorni, e qualsiasi custode o un amministratore della comunità può annullarla. Un'impresa indebitata non può chiudere finché il debito non viene saldato o la comunità non lo cancella. Nulla conclude una liquidazione automaticamente: trascorsi i 7 giorni, il custode principale, l'unico custode o un amministratore della comunità deve finalizzare la chiusura, che non può essere completata se c'è ancora uno scambio aperto. Quando si chiude, tutti i fagioli rimanenti vanno ai Beni comuni.</li>
+        </ul>
+        <h2>Gruppi e coordinatori</h2>
+        <p>Un gruppo è gestito dai suoi coordinatori, e uno di essi è il suo <strong>coordinatore principale</strong>. Chiunque crei un gruppo ne è il primo coordinatore principale.</p>
+        <ul>
+            <li>Alcuni gruppi sono aperti a tutti. Alcuni richiedono l'approvazione di un coordinatore. Alcuni sono solo su invito.</li>
+            <li><strong>Qualsiasi coordinatore</strong> può approvare e invitare membri, rimuovere un membro o un osservatore, cambiare il ruolo di un membro o di un osservatore, nominare qualcuno coordinatore, rimuovere post e messaggi e modificare il gruppo e chi può unirsi ad esso.</li>
+            <li><strong>Solo il coordinatore principale</strong> può rimuovere un coordinatore o revocare il ruolo di coordinatore a qualcuno. Anche la votazione interna del gruppo può farlo.</li>
+            <li><strong>Nessuno può rimuovere il coordinatore principale o togliergli la guida.</strong> Né un altro coordinatore, né un amministratore della comunità — gli amministratori non hanno potere all'interno di un gruppo. Oltre al passaggio di consegne da parte del responsabile, solo la votazione interna del gruppo può scegliere un nuovo responsabile.</li>
+            <li><strong>Un coordinatore sospeso:</strong> mentre l'account di un coordinatore è sospeso, questi non può usare alcun potere da coordinatore, e anche i suoi poteri di responsabile rimangono in sospeso. Rimane coordinatore e il responsabile rimane responsabile; tutto torna a funzionare al termine della sospensione. Gli altri coordinatori proseguono normalmente e i membri continuano a chattare e pubblicare. Un membro sospeso non può nemmeno avviare o unirsi a un gruppo finché la sospensione non termina.</li>
+            <li><strong>Passaggio della guida:</strong> il responsabile può nominare qualcun altro responsabile. Può essere un altro coordinatore o un membro, che diventa coordinatore allo stesso tempo. Una volta effettuato, il responsabile non può revocarlo.</li>
+            <li><strong>Lasciare il gruppo, come responsabile:</strong> prima trasferisci la guida. Se nessun altro è nel gruppo, il responsabile può semplicemente andarsene.</li>
+            <li>L'ultimo coordinatore non può dimettersi e non può essere rimosso finché il gruppo ha altri membri. Se nessun altro è nel gruppo, può semplicemente andarsene.</li>
+            <li><strong>La votazione interna del gruppo.</strong> I membri e i coordinatori di un gruppo possono votare sulle questioni del gruppo: scegliere un nuovo coordinatore principale, nominare qualcuno coordinatore, riportare un coordinatore a membro ordinario, rimuovere qualcuno dal gruppo, modificare i criteri di accesso o chiudere il gruppo. Qualsiasi membro o coordinatore può proporne una; gli osservatori assistono ma non votano. Tutti coloro che erano membri o coordinatori all'apertura possono votare. Più della metà di essi deve votare. Rimuovere qualcuno e chiudere il gruppo richiedono il 60% di Sì; le altre opzioni richiedono più della metà. Dura 7 giorni, o termina prima quando il risultato non può più cambiare, dopodiché l'app la esegue automaticamente. I voti sono segreti e non possono essere modificati. Una votazione di gruppo non sposta mai fagioli e non modifica mai la reputazione di alcuno nella comunità, e gli amministratori non possono bloccarla. Un gruppo chiuso non accetta nuovi membri né nuovi messaggi, e i suoi post ed eventi vengono annullati. La chat rimane consultabile. Troverai la votazione sulla pagina del gruppo, sotto <strong>Decisioni</strong>. Per chiedere al gruppo cosa ne pensa senza modificare nulla, pubblica un Sondaggio nel gruppo.</li>
+            <li><strong>Un coordinatore principale inattivo:</strong> se il coordinatore principale di un gruppo non ha svolto alcuna attività nell'app per 30 giorni, il gruppo può sceglierne uno nuovo. Votano gli <strong>altri coordinatori</strong> — oppure i suoi <strong>membri</strong>, se nessuno degli altri coordinatori era già tale il giorno in cui il responsabile è stato attivo per l'ultima volta. Partecipano solo le persone già presenti in quel giorno: membri iscritti al gruppo entro tale data, o coordinatori nominati tali entro allora. Chiunque si sia iscritto, o sia stato nominato coordinatore dopo quella data, non può proporre, essere proposto o votare, e non viene conteggiato. Se lasci il gruppo e ti iscrivi di nuovo, vieni conteggiato a partire dalla tua nuova iscrizione. Se non è rimasto nessuno di chi era presente allora, nessuna votazione può aprirsi, e la schermata del gruppo lo segnala. Chiunque tra i partecipanti può proporre qualcuno tra di loro, se stesso incluso. La votazione dura fino a 14 giorni, Sì o No, a scrutinio segreto. Viene approvata quando più della metà di coloro che rispondono vota Sì. Se il responsabile torna e svolge un'attività nell'app, la votazione viene annullata. Mentre l'account del responsabile è sospeso, nessuna sua azione conta come ritorno. La persona scelta diventa coordinatore e guida del gruppo. Il responsabile inattivo rimane coordinatore se hanno votato i coordinatori, e diventa membro ordinario se hanno votato i membri. Troverai la votazione sulla schermata del gruppo, sopra l'elenco dei membri.</li>
+            <li><strong>Un coordinatore principale scorretto</strong> può essere rimosso da una Decisione della comunità. Questa funzionalità arriverà in un aggiornamento successivo.</li>
+        </ul>
+        <h2>Garanzie per i nuovi arrivati</h2>
+        <p>Solo gli amministratori e i membri scelti da un amministratore o da una Decisione della comunità possono fare da garanti per i nuovi arrivati. Una garanzia fornisce al nuovo arrivato una piccola linea di credito per iniziare: 25, 50 o 100 fagioli. I badge di fiducia non conferiscono mai questo diritto.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../proposing-a-decision.html"><strong>Proposing a Decision</strong><span>Ask the community to decide something binding.</span></a></li>
+            <li><a href="../polls.html"><strong>Polls</strong><span>Ask the community a quick question. Polls show opinion; they change nothing by themselves.</span></a></li>
+            <li><a href="../keepers.html"><strong>Keepers</strong><span>The people who run an enterprise and stand behind it. How to join, object, and step down.</span></a></li>
+            <li><a href="../groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.</span></a></li>
+            <li><a href="../people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

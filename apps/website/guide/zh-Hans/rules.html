@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>规则与决策机制 — BeanPool members' guide</title>
+    <meta name="description" content="投票、投票率、匿名投票、投票资格、暂停资格、移除成员、管理者以及召集人和主召集人。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">关于 BeanPool</a></p>
+        <h1>规则与决策机制</h1>
+        <p class="lede">投票、投票率、匿名投票、投票资格、暂停资格、移除成员、管理者以及召集人和主召集人。</p>
+        <h2>向社区征求意见的两种方式</h2>
+        <ul>
+            <li><strong>投票</strong>是动态信息流中的一个提问，例如“周日举办集市吗？”。它反映大家的想法，本身绝不会改变任何现状。</li>
+            <li><strong>决策</strong>具有约束力。一旦获得通过，社区服务器会自动执行该决策。无需任何人手动按键操作，也绝无人能够暗中无视它。</li>
+        </ul>
+        <p>全球社区仅有投票，没有决策：任何人都可以凭 12 个助记词或通过登录加入，因此一人创建多个账户可能会左右投票结果。以下关于决策的所有内容均针对本地社区。</p>
+        <h2>决策可以决定的事项</h2>
+        <p>关于成员个人：</p>
+        <ul>
+            <li>暂停某位成员的权限，或解除暂停。</li>
+            <li>冻结某位成员的信用额度，或予以解冻。</li>
+            <li>授予某位成员为新人担保的权利，或撤销该权利。</li>
+            <li>移除企业的主管理者，或移除项目的负责人。</li>
+            <li>将某位成员从社区中除名，或予以恢复。</li>
+        </ul>
+        <p>关于公共资金池：</p>
+        <ul>
+            <li>从公共资金池拨付豆子给某个项目或企业。</li>
+            <li>从公共资金池向某位成员发放困难补助。</li>
+            <li>从公共资金池偿还某个项目或企业的债务。</li>
+            <li>豁免已离开社区的成员所欠公共资金池的债务。此时不涉及豆子的流转，系统保留记录并标记为已豁免。在维护实名名单的社区中，此项操作从名单发起。</li>
+        </ul>
+        <p>拨款金额不得超过公共资金池当前的持有量加上过去 30 天内汇入的总量。若发起更大数额的拨款，会在发起时直接被拒绝。</p>
+        <h2>谁可以发起决策</h2>
+        <p>任何信用未被冻结的活跃成员，且曾在市集中完成过交易或由管理员授予了信任徽章，均可发起决策。仅凭他人担保尚不足以发起。管理员也可以发起。你同一时间只能发起一项进行中的决策。你必须陈述理由，长度至少为 10 个字符。</p>
+        <h2>谁可以参与投票</h2>
+        <p>任何信用未被冻结且在决策开启<strong>之前</strong>加入的活跃成员均可投票。在投票进行期间加入的人员无法参与该项投票。企业账户不能投票。</p>
+        <h2>计票规则</h2>
+        <ul>
+            <li>涉及成员个人的决策：<strong>一人一票</strong>。投赞成或反对。</li>
+            <li>涉及公共资金池豆子的决策：按交易权重计票。你可以投多票，但成本会呈二次方上升：投 1 票消耗 1 个表决点，投 2 票消耗 4 个，投 3 票消耗 9 个。你的表决点来自你已完成的交易，每个交易伙伴最高累计折算 500 颗豆子。在每一项决策中你都会重新获得全部表决点，它们永远不会被彻底耗尽。</li>
+            <li>如果你从未完成过任何交易，你尚不能就公共资金池豆子进行投票。</li>
+            <li>在投票截止之前，你可以随时更改自己的投票。</li>
+        </ul>
+        <h2>匿名投票</h2>
+        <p>应用绝不会向任何人展示你的具体投票选项，包括管理员在内。每个人都能看到计票总数，而你只能看到自己的投票。你的投票记录与你的账户一同保存在社区服务器上，以便进行统计和核验。运维服务器的所有者和管理员可以提取服务器文件副本，并可能在其中查阅到你的投票。</p>
+        <p>投票（轻量问卷）通常也是匿名的，除非发起人将其设定为<strong>公开投票</strong>：此时成员可以看到各自选择了什么。投票中会注明属于哪种类型。</p>
+        <h2>投票持续时间</h2>
+        <p>每项决策的投票期限固定为 7 天。投票立即开启。7 天期满后，社区服务器会统计票数并根据结果自动执行。</p>
+        <h2>投票率</h2>
+        <p>投票只有在参与人数达到要求时才有效。</p>
+        <ul>
+            <li>人数达到要求是指：在过去 30 天内活跃且具备投票资格的成员中，至少有 30% 参与投票。且任何情况下均不得少于 3 人。</li>
+            <li>对于移除成员的决策，该比例为 25%。</li>
+            <li>“活跃”是指你的应用在过去 30 天内曾向社区服务器发送过数据：发帖、交易、投票、消息。在手机上，通常仅打开应用也算作活跃，因为应用每次启动都会登录以接收通知提醒。</li>
+            <li>投票率计算的是实际参与人数，而非其表决票数的权重。</li>
+        </ul>
+        <p>如果参与投票的人数过少，则不会产生任何效力。该决策以“未决”状态关闭。</p>
+        <h2>需要多少赞成票</h2>
+        <ul>
+            <li>大多数决策：需 60% 赞成。</li>
+            <li>移除成员：需 66% 赞成。</li>
+            <li>撤销之前的决定（解除暂停、解冻信用、恢复成员资格）：需超过半数赞成。</li>
+            <li>平局一律视为未通过。</li>
+        </ul>
+        <h2>决策通过之后</h2>
+        <ul>
+            <li>社区服务器会检查前提条件依然成立：该成员依然存在，公共资金池有足够的豆子。随后服务器自动执行。</li>
+            <li>如果公共资金池的豆子不足以支付拨款，拨款会等待资金充足。等待期最长为 90 天，超时则作废。</li>
+            <li>同一时间只能有一笔拨款处于等待状态。如果在资金不足期间第二笔拨款决策也获得通过，第二笔不会排队等待：它会直接永久关闭，社区必须重新投票。</li>
+            <li>如果相关人员或企业已经离开或解散，决策直接关闭且不执行任何操作。</li>
+        </ul>
+        <h2>移除成员</h2>
+        <ul>
+            <li>如果移除成员的决策获得通过，该成员将立即被暂停权限并冻结信用。</li>
+            <li>再过 7 天后，该成员将被永久移除。在这 7 天缓冲期内，如果通过了一项恢复其资格的决策，则取消移除。</li>
+            <li>自行注销账户的成员无法被恢复，即使在除名后也是如此。他们只能凭新邀请重新加入。</li>
+            <li>当成员被移除时，其所有帖子均被下架。如果他们欠有豆子，由公共资金池代为偿还。如果他们账户尚存豆子，这些豆子将归入公共资金池。</li>
+            <li>社区可以投票移除或暂停任何成员，但社区服务器的所有者或管理员除外。他们直接负责运维服务器本身，因此投票无法剥夺其权限；若尝试操作，应用会予以说明。所有者可以先解除管理员的角色，此后他们就变成了与普通成员无异的用户。</li>
+        </ul>
+        <h2>紧急暂停权限</h2>
+        <p>管理员可以立即暂停某位成员的权限，例如为了制止不良行为。管理员必须给出公开供成员查阅的理由。</p>
+        <ul>
+            <li>与此同时，系统会自动发起一项为期 7 天的决策：“是否维持此项暂停？”。</li>
+            <li>该决策需要达到常规的投票率且获得 60% 的赞成票。</li>
+            <li>如果决策未通过，或参与投票人数不足，暂停状态将自动解除。</li>
+            <li>管理员不能暂停自己，也不能暂停服务器的唯一所有者。只有所有者才能暂停另一位所有者。</li>
+        </ul>
+        <p>在全球社区中不设投票。暂停持续 7 天后自动解除，除非管理员提前解除。若想长期限制某人，管理员需再次暂停其权限，或直接注销其账户。</p>
+        <h2>管理员的职权范围</h2>
+        <p>你所在社区的服务器由所有者和管理员负责维护。</p>
+        <ul>
+            <li>管理员可以叫停进行中的决策，但必须附上书面理由。成员可以在该决策上查阅理由。</li>
+            <li>如果移除成员的决策已获通过并正处于 7 天等待期，管理员可以中止该决策，或促使其立即生效。</li>
+            <li>管理员可以授予成员为新人担保的权利。</li>
+            <li>管理员可以直接向成员授予信任徽章。这同时会赋予该成员该徽章所需的信任值，从而提升其信用额度上限。</li>
+            <li>管理员负责处理卡住的交易，但绝不能处理自己参与的交易。</li>
+        </ul>
+        <h2>投票（轻量问卷）</h2>
+        <ul>
+            <li>任何信用未被冻结的活跃成员都可以发起包含 2 到 4 个选项的投票。投票持续 3 天、7 天或 14 天。</li>
+            <li>你同一时间只能发起一项进行中的投票。你所在的社区最多可以同时存在 5 项进行中的投票。</li>
+            <li>发布到群组中的投票只能由该群组的成员和召集人参与。观察员可以查看但不能参与投票。</li>
+            <li>参与投票同样要求信用未被冻结。在投票截止前你可以修改自己的选项。发起人可以提前关闭投票。</li>
+            <li>投票默认为匿名：所有人仅能看到票数统计。发起人也可以将其设为<strong>公开投票</strong>，以便成员能够看到谁选择了什么。该选择在投票发起时确定，发布后无法修改。</li>
+            <li>在全球社区中，已结束的匿名投票还会注明其中有多少票来自新账户或 12 个助记词账户（若有）。每一票依然真实计入统计。</li>
+        </ul>
+        <h2>企业与管理者</h2>
+        <p>企业由其管理者共同运营。其中一人为主管理者。</p>
+        <ul>
+            <li><strong>加入：</strong>你申请成为管理者，并说明认捐多少赚得的信任值（可以为 0）。在所有企业中认捐的信任值总和不能超过你通过交易实际赚取的信任值。由主管理者批准或拒绝。</li>
+            <li><strong>在确认成员身份的社区中认捐：</strong>确认身份的成员还可以认捐自己已知信用额度的一部分（最多一半）。这部分额度会直接扣减其个人额度。</li>
+            <li><strong>异议期：</strong>当企业已有超过一位管理者时，主管理者的批准需等待 3 天。任何其他管理者均可在此期间提出异议，只要有一人提出异议即取消批准。</li>
+            <li><strong>移除管理者：</strong>主管理者可以移除普通管理者。同样有 3 天的异议期，任何其他管理者均可提出异议。</li>
+            <li><strong>社区管理员：</strong>若社区管理员不是该企业的管理者，可以直接批准某位管理者加入或立即移除普通管理者，无需经过 3 天异议期。这有助于帮助陷入停滞的企业恢复运作。</li>
+            <li><strong>辞职：</strong>任何管理者均可辞职。如果企业负债且需要你的认捐来偿债，你必须等到债务缩减或其他管理者认捐更多时方可退出。唯一的一位管理者不能直接辞职；他们必须先添加另一位管理者，或者解散清算该企业。</li>
+            <li><strong>你的认捐</strong>为企业的信用额度提供担保。对赚得信任值的认捐绝不会扣除你的个人余额或个人信用额度。</li>
+            <li><strong>长期不活跃的主管理者：</strong>如果主管理者连续 30 天未在应用中进行任何操作，其他管理者可以在他们之间推选新主管理者。投票持续最多 14 天，选项为赞成或反对。当超过半数的其他管理者投赞成票时即获通过。如果原主管理者重新出现并在应用中执行了任何操作，投票自动取消。当主管理者的账户被暂停期间，其任何操作均不视为重新活跃。管理者投票一旦投出无法更改。</li>
+            <li><strong>管理者内部投票：</strong>在拥有两位或更多管理者的企业中，任何管理者都可以提议从企业自有账户支出豆子（绝不能超过其实际持有量，绝不能转给自己，且向管理者支付只能从企业赚取的收益中支出，并需扣除 1.5% 交易费）、移除某位管理者，或者（在企业而非项目中）任命另一位管理者为主管理者。开启时在任的管理者参与投票；必须有超过半数的人投票；支出款项或移除人员需 60% 赞成，推选主管理者需超过半数赞成。投票持续 7 天，或者一旦结果无法改变便提前截止，随后自动执行。只有管理者能看到该投票。开启期间显示已有多少人投票；截止后显示赞成和反对票数。没有人能看到具体的投票人明细，但在人数极少的小组中，根据结果和已投票人数可能会推导出来。这些内部投票绝不涉及公共资金池，也不会改变任何人在社区中的身份信誉：那些属于全社区的决策。投票无法直接移除主管理者（请改为投票选出新主管理者），无法移除唯一的管理者，也无法移除其认捐正在用于抵债的管理者。管理者不能提议移除自己，应自行辞职。</li>
+            <li><strong>如果主管理者退出或被移除：</strong>任期最长的管理者立即接任为主管理者，其他管理者可以随即进行更换。如果不剩任何管理者，企业将暂停运作。</li>
+            <li><strong>解散清算：</strong>主管理者或唯一的管理者可以启动企业解散程序。社区管理员也可以启动。随后有 7 天等待期，在此期间任何管理者或社区管理员均可取消解散。负债的企业在债务清偿或社区注销债务之前无法关闭。没有任何机制会自动完成清算解散：7 天过后，主管理者、唯一的管理者或社区管理员必须手动确认完成关闭，且在仍有交易未完成时无法关闭。关闭时，残留的所有豆子将汇入公共资金池。</li>
+        </ul>
+        <h2>群组与召集人</h2>
+        <p>群组由其召集人运营，其中一人为<strong>首席召集人</strong>。创建群组的人即为第一任首席召集人。</p>
+        <ul>
+            <li>某些群组对所有人公开。某些需要召集人批准加入。某些则仅限受邀加入。</li>
+            <li><strong>任何召集人</strong>都可以批准并邀请成员、移除成员或观察员、更改成员或观察员的角色、任命某人为召集人、删除帖子和消息，以及编辑群组及其加入权限。</li>
+            <li><strong>只有首席召集人</strong>可以移除召集人，或免除某人的召集人职务。群组内部投票同样可以做到这一点。</li>
+            <li><strong>任何人都无法免除首席召集人的职务或剥夺其首席资格。</strong>其他召集人不能，社区管理员也不能 — 管理员在群组内部没有裁决权。除了首席主动移交职务之外，只有群组自有的内部投票才能推选新首席。</li>
+            <li><strong>被暂停权限的召集人：</strong>当召集人的账户被暂停时，他们不能行使任何召集人权力，其作为首席的权力也一并暂停。他们依然保留召集人身份，首席依然是首席；暂停期结束后各项权限即可恢复。其他召集人照常履行职责，成员继续交流发帖。被暂停权限的成员在暂停结束前也不能创建或加入群组。</li>
+            <li><strong>移交首席职务：</strong>首席可以将首席职务移交给其他人。可以是另一位召集人，也可以是一位成员（移交的同时成为召集人）。移交完成后，原首席无法撤销此操作。</li>
+            <li><strong>以首席身份退出群组：</strong>必须先移交首席职务。如果群组中已无其他成员，首席可以直接退出。</li>
+            <li>最后一任召集人不能辞职，且在群组仍有其他成员时无法被移除。如果群组中已无其他成员，他们可以直接退出。</li>
+            <li><strong>群组内部投票：</strong>群组成员和召集人可以就群组内部事务进行投票：推选新首席召集人、任命某人为召集人、将召集人降为普通成员、将某人移出群组、修改加入权限，或解散群组。任何成员或召集人均可发起提议；观察员可以旁观但不能投票。投票开启时已是成员或召集人的所有人均可参与投票。必须有超过半数的人投票。移除某人和解散群组需 60% 赞成；其余事项需超过半数赞成。投票持续 7 天，或者一旦结果无法改变便提前截止，随后应用会自动执行。投票为匿名进行且投出后无法更改。群组内部投票绝不涉及豆子流转，也绝不改变任何人在社区中的身份信誉，且管理员无法叫停。解散的群组不再接收新成员，不再接收新消息，其帖子和活动也将取消。聊天记录仍可阅读。你可以在群组页面的<strong>决策</strong>下方找到投票。若想在不改变任何现状的前提下了解群组成员的想法，请在群组中发布投票问卷。</li>
+            <li><strong>长期不活跃的首席召集人：</strong>如果群组的首席召集人连续 30 天未在应用中进行任何操作，群组可以推选新首席。由<strong>其他召集人</strong>投票 — 或者如果在首席最后活跃之日前没有任命其他召集人，则由<strong>普通成员</strong>投票。只有在当天就已经在群里的人才能参与：当天及之前加入群组的成员，或在当天及之前任命的召集人。在此之后加入或被任命为召集人的任何人均不能提议、被提议或投票，且不计入参与基数。如果你退出群组后重新加入，则从重新加入之日起算。如果没有当年的人员留在群里，则无法开启投票，群组界面会予以说明。符合条件的参与者均可提议其中一人（包括自己）。投票持续最多 14 天，投赞成或反对，匿名进行。当超过半数回复者投赞成票时即获通过。如果原首席重新出现并在应用中执行了任何操作，投票自动取消。当首席的账户被暂停期间，其任何操作均不视为重新活跃。选出的人将成为召集人及群组的首席。在由召集人投票的情况下，不活跃的原首席依然保留普通召集人身份；在由普通成员投票的情况下，原首席变为普通成员。你可以在群组界面的名册上方找到该项投票。</li>
+            <li><strong>违规不称职的首席召集人</strong>可以通过全社区决策予以移除。此功能将在后续更新中推出。</li>
+        </ul>
+        <h2>担保机制</h2>
+        <p>只有管理员，以及由管理员或社区决策指定的成员，才能为新人提供担保。担保会为新人开启一笔小额初始信用额度：25、50 或 100 颗豆子。信任徽章本身绝不赋予此项权利。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../proposing-a-decision.html"><strong>Proposing a Decision</strong><span>Ask the community to decide something binding.</span></a></li>
+            <li><a href="../polls.html"><strong>Polls</strong><span>Ask the community a quick question. Polls show opinion; they change nothing by themselves.</span></a></li>
+            <li><a href="../keepers.html"><strong>Keepers</strong><span>The people who run an enterprise and stand behind it. How to join, object, and step down.</span></a></li>
+            <li><a href="../groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.</span></a></li>
+            <li><a href="../people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

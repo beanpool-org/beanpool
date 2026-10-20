@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ഈ ഗൈഡ് — BeanPool members' guide</title>
+    <meta name="description" content="ഈ ഗൈഡ് എവിടെ കണ്ടെത്താം, എങ്ങനെ തിരയാം, ഇത് എപ്പോഴും അപ്‌ഡേറ്റായി തുടരുന്നത് എങ്ങനെ.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">തുടങ്ങാം</a></p>
+        <h1>ഈ ഗൈഡ്</h1>
+        <p class="lede">ഈ ഗൈഡ് എവിടെ കണ്ടെത്താം, എങ്ങനെ തിരയാം, ഇത് എപ്പോഴും അപ്‌ഡേറ്റായി തുടരുന്നത് എങ്ങനെ.</p>
+        <h2>ഇത് തുറക്കുന്നത് എങ്ങനെ</h2>
+        <p>ഫോണിൽ, സ്ക്രീനിന്റെ മുകളിൽ ഇടതുവശത്തുള്ള പയർ ഐക്കണിൽ ടാപ്പ് ചെയ്യുക. അല്ലെങ്കിൽ:</p>
+        <ul>
+            <li>സ്ക്രീനിന്റെ മുകളിലുള്ള സ്ലൈഡേഴ്സ് ബട്ടൺ ഉപയോഗിച്ച് <strong>ക്രമീകരണങ്ങൾ</strong> തുറക്കുക.</li>
+            <li><strong>BeanPool</strong> എന്നതിന് കീഴിൽ, <strong>സഹായവും പ്രവർത്തനരീതിയും</strong> ടാപ്പ് ചെയ്യുക.</li>
+        </ul>
+        <p>വെബ് ആപ്പിൽ, ഇത് അതേ സ്ഥലത്താണ് ഉള്ളത്: <strong>ക്രമീകരണങ്ങൾ</strong>, തുടർന്ന് <strong>BeanPool</strong> എന്നതിന് കീഴിൽ <strong>സഹായവും പ്രവർത്തനരീതിയും</strong>.</p>
+        <h2>ഇതിൽ എന്തൊക്കെയാണുള്ളത്</h2>
+        <ul>
+            <li><strong>നിങ്ങളുടെ കമ്മ്യൂണിറ്റി:</strong> അതിന്റെ പേര് (വെബ് ആപ്പിൽ അതിന്റെ വിലാസം), കൂടാതെ ഇപ്പോൾ അതിന്റെ സെർവറുമായി ബന്ധപ്പെടാൻ കഴിയുമോ എന്നത്. ഫോണിൽ, അതിന് കീഴിൽ, <strong>നിങ്ങളുടെ കമ്മ്യൂണിറ്റികൾ</strong>: ഒന്നിലേക്ക് മാറാൻ അതിൽ ടാപ്പ് ചെയ്യുക, അല്ലെങ്കിൽ <strong>ഒരു കമ്മ്യൂണിറ്റി ചേർക്കുക</strong> ടാപ്പ് ചെയ്യുക. <strong>ആഗോള കമ്മ്യൂണിറ്റി</strong> എപ്പോഴും വരികളിൽ ഒന്നായിരിക്കും, നിങ്ങൾ ഒരു അംഗമാണോ, ചേരാൻ കഴിയുമോ, അല്ലെങ്കിൽ ഇപ്പോൾ എന്തുകൊണ്ട് ഉപയോഗിക്കാൻ കഴിയില്ല എന്ന് വ്യക്തമാക്കുന്ന രണ്ടാമതൊരു വരിയോടൊപ്പം. &quot;ഒന്നിലധികം കമ്മ്യൂണിറ്റികൾ&quot; കാണുക.</li>
+            <li><strong>ഗൈഡുകൾ:</strong> BeanPool എങ്ങനെ പ്രവർത്തിക്കുന്നു, നിയമങ്ങളും തീരുമാനങ്ങൾ എങ്ങനെ എടുക്കുന്നു എന്നതും, പൊതുവായ ചോദ്യങ്ങളും.</li>
+            <li><strong>ആപ്പ് എങ്ങനെ ഉപയോഗിക്കാം:</strong> ഓരോ ടാസ്ക്കിനും ഓരോ ചെറിയ പേജ്, ആപ്പ് ക്രമീകരിച്ചിരിക്കുന്ന രീതിയിൽ ഗ്രൂപ്പ് ചെയ്‌തിരിക്കുന്നു: തുടങ്ങാം, മാർക്കറ്റ്, മാപ്പ്, ചാറ്റ്, പൾസ്, കോമൺസ്, ലെഡ്ജർ, ക്രമീകരണങ്ങളും സുരക്ഷയും.</li>
+            <li><strong>BeanPool പ്രോജക്റ്റ്:</strong> ഈ പതിപ്പിൽ എന്തൊക്കെ പുതിയതാണ്, ഒപ്പം beanpool.org എന്ന വെബ്‌സൈറ്റിലേക്കുള്ള ഒരു ലിങ്ക് (ഫോണിൽ, ഒരു സുഹൃത്തിന് അയയ്‌ക്കാനുള്ള <strong>പങ്കിടുക</strong> ബട്ടണോടെ).</li>
+        </ul>
+        <h2>തിരയൽ</h2>
+        <p><strong>ഗൈഡിൽ തിരയുക</strong> എന്നതിൽ ഒന്നോ രണ്ടോ വാക്കുകൾ ടൈപ്പ് ചെയ്യുക (വെബ് ആപ്പിൽ ഏറ്റവും മുകളിൽ; ഫോണിൽ <strong>നിങ്ങളുടെ കമ്മ്യൂണിറ്റികൾ</strong> എന്നതിന് താഴെ). നിങ്ങളുടെ എല്ലാ വാക്കുകളുമുള്ള ഓരോ പേജും ഇത് കാണിക്കുന്നു. ഇത് കണക്ഷൻ ഇല്ലാതെയും പ്രവർത്തിക്കും.</p>
+        <ul>
+            <li>ചെറിയ വാക്കുകൾ പ്രവർത്തിക്കും: &quot;vot&quot; എന്നത് &quot;vote&quot;, &quot;voting&quot; എന്നിവ കണ്ടെത്തുന്നു.</li>
+            <li>ഒന്നും വരുന്നില്ലെങ്കിൽ, &quot;gift&quot;, &quot;photo&quot; അല്ലെങ്കിൽ &quot;block&quot; പോലുള്ള ലളിതമായ ഒരു വാക്ക് പരീക്ഷിക്കുക.</li>
+        </ul>
+        <h2>എപ്പോഴും ലഭ്യമാണ്, ഏറ്റവും പുതിയതായി നിലനിർത്തുന്നു</h2>
+        <p>ഗൈഡ് ആപ്പിൽ തന്നെ നിർമ്മിച്ചിട്ടുള്ളതാണ്, അതിനാൽ ഒരു കണക്ഷനും ഇല്ലാതെ ഇത് പ്രവർത്തിക്കും. നിങ്ങൾ ഓൺലൈനിലായിരിക്കുമ്പോൾ, ആപ്പ് പുതിയ ഗൈഡിനായി beanpool.org പരിശോധിക്കുകയും അങ്ങനെയൊന്ന് ഉണ്ടെങ്കിൽ അത് ഉപയോഗിക്കുകയും ചെയ്യുന്നു. നിങ്ങൾ ഏത് പതിപ്പാണ് വായിക്കുന്നത് എന്ന് ഗൈഡിന്റെ താഴെ കാണിക്കുന്നു.</p>
+        <p>ഇതേ ഗൈഡ് beanpool.org/guide എന്ന വെബ്‌സൈറ്റിലും ലഭ്യമാണ്.</p>
+        <h2>വീഡിയോകൾ</h2>
+        <p>ചില പേജുകൾ <strong>കാണുക:</strong> എന്നും ഒരു വീഡിയോയുടെ പേരും കാണിച്ചേക്കാം. ആ പേജിനായി BeanPool ഒരു വീഡിയോ നിർമ്മിക്കുകയും നിങ്ങളുടെ കമ്മ്യൂണിറ്റിക്ക് അത് പൾസിൽ <strong>പഠിക്കുക</strong> എന്നതിന് കീഴിൽ (<strong>ഇത് എങ്ങനെ പ്രവർത്തിക്കുന്നു</strong> വെബ് ആപ്പിൽ) ലഭ്യമാവുകയും ചെയ്യുമ്പോൾ മാത്രമേ ആ ലിങ്ക് ദൃശ്യമാകൂ. അംഗങ്ങൾ പഠിക്കുക വിഭാഗത്തിലേക്ക് ചേർക്കുന്ന വീഡിയോകൾ ഒരിക്കലും ഒരു ഗൈഡ് പേജിൽ കാണിക്കില്ല. വീഡിയോ ഇല്ലാതെ തന്നെ ഓരോ പേജും പൂർണ്ണമാണ്.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="getting-help.html"><strong>സഹായം നേടൽ</strong><span>സംശയങ്ങളുണ്ടാകുമ്പോൾ എവിടെ നോക്കണം, ആരോട് ചോദിക്കണം.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool എങ്ങനെ പ്രവർത്തിക്കുന്നു</strong><span>പയർ, ഇടപാടുകൾ, ഓഫറുകളും ആവശ്യങ്ങളും, ക്രെഡിറ്റ് എന്നിവ ലളിതമായ വാക്കുകളിൽ.</span></a></li>
+            <li><a href="faq.html"><strong>ചോദ്യങ്ങൾ</strong><span>അംഗങ്ങൾ ഏറ്റവും കൂടുതൽ ചോദിക്കുന്ന ചോദ്യങ്ങൾക്ക് ലളിതമായ ഉത്തരങ്ങൾ.</span></a></li>
+            <li><a href="../whats-new.html"><strong>What's new</strong><span>What changed in the app, in plain words.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>മുകളിലെ ബാർ</strong><span>പയർ, നിങ്ങളുടെ ശ്രദ്ധ ആവശ്യമുള്ളപ്പോൾ കാണിക്കുന്ന ചെറിയ ഐക്കണുകൾ, മുകളിൽ വലതുവശത്തുള്ള ബട്ടണുകൾ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

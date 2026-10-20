@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cách BeanPool hoạt động — BeanPool members' guide</title>
+    <meta name="description" content="Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Về BeanPool</a></p>
+        <h1>Cách BeanPool hoạt động</h1>
+        <p class="lede">Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.</p>
+        <h2>Đậu</h2>
+        <p>Cộng đồng của bạn giao dịch bằng <strong>Đậu</strong>. Đậu không phải là tiền từ ngân hàng. Đậu là một bản ghi nhận về việc ai đã giúp ai.</p>
+        <p>Mọi người đều bắt đầu từ số 0. Khi bạn giúp đỡ ai đó, bạn nhận được Đậu. Khi ai đó giúp bạn, bạn chi tiêu Đậu.</p>
+        <p>Một gợi ý ước chừng: 40 Đậu tương đương khoảng một giờ thời gian của một người. Bạn và người kia sẽ tự thỏa thuận mức giá thực tế.</p>
+        <h2>Lời đề nghị và Nhu cầu</h2>
+        <p>Một <strong>Lời đề nghị</strong> là thứ bạn có thể làm hoặc trao tặng: ổ bánh mì, một chuyến đi nhờ, một giờ làm vườn, một công việc sửa chữa.</p>
+        <p>Một <strong>Nhu cầu</strong> là thứ bạn đang tìm kiếm.</p>
+        <p>Trong một cộng đồng có Đậu, trước khi bạn có thể đăng một Nhu cầu hoặc yêu cầu một Lời đề nghị của người khác, bạn phải đăng ít nhất một Lời đề nghị của chính mình. Mọi người đều đóng góp một điều gì đó. Ở nơi không có Đậu, chẳng hạn như trên cộng đồng toàn cầu, bài đăng đầu tiên của bạn có thể là một Nhu cầu.</p>
+        <h2>Cách một giao dịch vận hành</h2>
+        <ul>
+            <li>Bạn tìm thấy một Lời đề nghị bạn muốn và yêu cầu nó, hoặc ai đó tiếp nhận Nhu cầu của bạn.</li>
+            <li>Khi giao dịch được đồng thuận, số Đậu của người mua sẽ được giữ an toàn. Không ai có thể chi tiêu số Đậu đó trong khi giao dịch đang diễn ra.</li>
+            <li>Công việc được hoàn thành.</li>
+            <li>Người mua xác nhận công việc đã xong. Sau đó số Đậu sẽ chuyển đến người bán.</li>
+        </ul>
+        <p>Nếu một giao dịch bị bế tắc, một quản trị viên của cộng đồng bạn có thể can thiệp. Họ có thể thanh toán cho người bán, hoàn lại Đậu cho người mua, hoặc chia đều số Đậu. Quản trị viên không thể phân xử một giao dịch mà chính họ tham gia.</p>
+        <h2>Quà tặng</h2>
+        <p>Bạn cũng có thể gửi Đậu cho ai đó như một món quà tặng, không cần thông qua giao dịch.</p>
+        <ul>
+            <li>Quà tặng chỉ có thể lấy từ số Đậu bạn đang có. Quà tặng không bao giờ có thể khiến bạn xuống dưới mức 0.</li>
+            <li>Bạn có thể gửi quà tặng sau khi đã hoàn thành một giao dịch trên chợ. Một giao dịch chỉ 1 hoặc 2 Đậu là quá nhỏ để được tính.</li>
+            <li>Quà tặng không mất phí.</li>
+        </ul>
+        <h2>Vượt xuống dưới mức 0: hạn mức tín dụng của bạn</h2>
+        <p>Bạn có thể chi tiêu nhiều hơn một chút so với số Đậu bạn đang có, và số dư có thể xuống dưới mức 0. Đây là <strong>hạn mức tín dụng</strong> của bạn. Đó là một lời hứa sẽ giúp đỡ người khác sau này.</p>
+        <p>Hạn mức tín dụng của bạn bắt đầu từ số 0. Nó sẽ mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ 1 hoặc 2 Đậu là quá nhỏ để được tính). Người được cộng đồng chọn để chào đón thành viên mới cũng có thể hỗ trợ bạn một khởi đầu nhỏ bằng cách bảo lãnh cho bạn: 25, 50 hoặc 100 Đậu.</p>
+        <p>Hạn mức tín dụng của bạn sẽ tăng lên cùng với mức <strong>uy tín</strong> của bạn:</p>
+        <ul>
+            <li>Bạn nhận được uy tín bằng cách hoàn thành các giao dịch trên chợ. Quà tặng không mang lại uy tín.</li>
+            <li>Giao dịch với nhiều người khác nhau sẽ tạo dựng được nhiều uy tín hơn. Giao dịch với bất kỳ một người nào chỉ được tính tối đa 500 Đậu uy tín.</li>
+            <li>Uy tín ban đầu tăng nhanh, sau đó tăng chậm hơn.</li>
+            <li>Đánh giá bằng sao rất quan trọng. Nếu mọi người đánh giá bạn, điểm đánh giá trung bình sẽ nhân theo tỷ lệ với uy tín mà các giao dịch mang lại: 5 sao giữ trọn 100%, 1 sao giữ lại 60%.</li>
+            <li>Mức sâu nhất mà bất kỳ hạn mức tín dụng nào có thể chạm tới là 2.000 Đậu dưới mức 0. Một cộng đồng có xác nhận thành viên có thể cho phép nhiều hơn (xem bên dưới).</li>
+        </ul>
+        <h2>Lời đề nghị của bạn mở ra hạn mức tín dụng</h2>
+        <p>Uy tín quyết định mức sâu nhất bạn <strong>có thể</strong> chạm tới. Các Lời đề nghị đang hoạt động quyết định mức sâu nhất bạn <strong>được phép</strong> chạm tới lúc này. Bạn sẽ nhận mức nhỏ hơn trong hai mức đó.</p>
+        <ul>
+            <li>Không có Lời đề nghị đang hoạt động: bạn không thể xuống dưới mức 0.</li>
+            <li>1 Lời đề nghị: xuống đến −200.</li>
+            <li>2 Lời đề nghị: xuống đến −500.</li>
+            <li>3 Lời đề nghị: xuống đến −1.000.</li>
+            <li>4 Lời đề nghị: xuống đến −1.500.</li>
+            <li>5 Lời đề nghị: xuống đến −2.000.</li>
+        </ul>
+        <p>Nếu bạn gỡ bớt Lời đề nghị trong khi đang ở dưới mức 0, bạn có thể đang nợ nhiều hơn mức mà các Lời đề nghị hiện tại bao quát. Khi đó bạn không thể chi tiêu thêm cho đến khi quay lại trong giới hạn của mình. Bạn vẫn có thể nhận thêm Đậu, và không có gì bị thu hồi từ bạn.</p>
+        <p>Một số cộng đồng xác nhận danh tính thành viên của mình. Ở đó, một thành viên đã xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức: 1.000 Đậu, trừ khi cộng đồng chọn một mức khác. Một Lời đề nghị đang hoạt động sẽ mở toàn bộ hạn mức đó. Hạn mức sâu nhất ở đó có thể lên tới 5.000. Xem &quot;Hạn mức tín dụng&quot;.</p>
+        <h2>Huy hiệu tin cậy</h2>
+        <p>Mức uy tín của bạn hiển thị dưới dạng huy hiệu. Các huy hiệu gồm Người mới, Cư dân, Quản lý và Trưởng bối. Uy tín đằng sau huy hiệu của bạn là tổng của ba điều: mức khởi đầu do người bảo lãnh trao cho bạn, uy tín bạn kiếm được từ giao dịch, và uy tín do quản trị viên cấp cho bạn. Quản trị viên có thể trao huy hiệu trực tiếp cho thành viên mà không cần giao dịch. Trong một cộng đồng có xác nhận thành viên, hạn mức tín dụng mà thành viên đã xác nhận nhận được cũng được tính.</p>
+        <ul>
+            <li>Cư dân từ 200 uy tín.</li>
+            <li>Quản lý từ 600 uy tín.</li>
+            <li>Trưởng bối từ 1.400 uy tín.</li>
+        </ul>
+        <p>Huy hiệu chỉ là sự công nhận, không hơn. Huy hiệu không khóa hay mở khóa bất cứ quyền hạn nào. Mọi người đều có thể giao dịch, mời và bỏ phiếu, bất kể huy hiệu của họ là gì.</p>
+        <h2>Phí và Commons</h2>
+        <p>Cộng đồng của bạn có một quỹ Đậu chung gọi là <strong>Chung</strong>. Các khoản phí sẽ được chuyển vào quỹ này. Các thành viên cùng nhau quyết định cách chi tiêu quỹ.</p>
+        <ul>
+            <li><strong>Phí thị trường:</strong> 1,5% của mỗi khoản thanh toán trên chợ được chuyển vào Commons. Khoản phí này được trừ từ số Đậu người bán nhận được.</li>
+            <li><strong>Phí lưu thông:</strong> Đậu sinh ra là để luân chuyển, không phải để nằm yên. 200 Đậu đầu tiên bạn nắm giữ luôn hoàn toàn miễn phí. Trên mức đó, một khoản phí nhỏ hàng tháng sẽ được chuyển vào Commons: 1% mỗi tháng cho số Đậu từ 200 đến 500, 1,5% từ 500 đến 1.000, 2% từ 1.000 đến 2.000, và 2,5% trên 2.000.</li>
+            <li>Số dư dưới mức 0 không bao giờ phải trả phí lưu thông. Quà tặng không bao giờ mất phí.</li>
+        </ul>
+        <h2>Doanh nghiệp và nhóm</h2>
+        <p>Một <strong>doanh nghiệp</strong> hoạt động liên tục và giao dịch dưới tên riêng của nó: một tiệm bánh, một thư viện mượn đồ dùng, một quầy hàng ở chợ. Doanh nghiệp được điều hành bởi những <strong>người quản lý</strong>, đứng đầu là một <strong>người quản lý chính</strong>. Những người quản lý có thể cam kết một phần uy tín của chính mình để cấp cho doanh nghiệp một hạn mức tín dụng.</p>
+        <p>Một <strong>nhóm</strong> là một tập hợp các thành viên có phần chat và bài đăng riêng, được điều hành bởi một hoặc nhiều <strong>điều hành viên</strong>. Một trong số họ là <strong>trưởng ban điều hành</strong> — ban đầu là người đã tạo ra nhóm.</p>
+        <p>Bạn có thể đọc cách chọn người quản lý và điều hành viên trong &quot;Quy tắc và cách quyết định vận hành&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

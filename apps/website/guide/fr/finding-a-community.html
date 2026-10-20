@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trouver une communauté proche — BeanPool members' guide</title>
+    <meta name="description" content="Depuis la communauté globale, trouvez une communauté près de chez vous et demandez à la rejoindre, soyez prévenu quand une se crée ou lancez la vôtre.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Premiers pas</a></p>
+        <h1>Trouver une communauté proche</h1>
+        <p class="lede">Depuis la communauté globale, trouvez une communauté près de chez vous et demandez à la rejoindre, soyez prévenu quand une se crée ou lancez la vôtre.</p>
+        <h2>Pourquoi une communauté locale</h2>
+        <p>La communauté globale est le lieu où les personnes de partout se rencontrent. Une communauté locale est le lieu où les voisins échangent : elle a ses propres haricots, échanges et Communs. Sur la communauté globale, vous pouvez voir comment cela fonctionne, dans une communauté d'exemple marquée <strong>🏘️ Communauté locale</strong>, mais rien n'y fait gagner ou dépenser de haricots. Une annonce y précise donc dans sa description ce que la personne souhaiterait en retour : gratuit, un troc, ou à discuter. Voir « Haricots et communauté globale ».</p>
+        <p>La communauté globale est une communauté parmi d'autres. Votre propre communauté tourne sur son propre serveur et n'en a jamais besoin : la communauté globale vous aide seulement à la trouver.</p>
+        <p>Pas encore de communauté près de chez vous ? Vous pouvez en lancer une : voir « Rien près de chez vous » ci-dessous.</p>
+        <h2>Communautés près de chez vous</h2>
+        <p>Sur la communauté globale, la carte <strong>Trouvez votre communauté</strong> sur l'<strong>Accueil</strong> affiche les communautés les plus proches de vous. Pendant vos 30 premiers jours, elle reste près du haut de l'Accueil et ne peut être ni retirée ni déplacée ; après cela, vous pouvez la retirer comme n'importe quelle autre carte. Dans l'application web, chaque communauté sur la carte est un lien vers sa propre page. Si elle ne sait pas où vous êtes, touchez <strong>Partager ma zone</strong>, ou <strong>ou saisissez votre ville</strong> et choisissez votre ville. Les étapes ci-dessous concernent l'application mobile.</p>
+        <p>Pas encore dans la communauté globale ? Touchez le haricot en haut à gauche et, sous <strong>Vos communautés</strong>, touchez <strong>Communauté mondiale</strong>, puis rejoignez-la avec le compte que vous avez : voir « Plusieurs communautés ». Si vous n'avez pas encore de compte, touchez <strong>Découvrir BeanPool dans le monde</strong> sur le premier écran de l'application : voir « Rejoindre BeanPool ».</p>
+        <ul>
+            <li>Touchez <strong>Communautés près de chez vous</strong> pour voir la liste complète.</li>
+            <li>Les communautés sont listées de la plus proche à la plus éloignée lorsque l'application sait où vous êtes. Si elle ne le sait pas, touchez <strong>Utiliser ma position</strong>, ou cherchez par nom. Vous préférez ne pas partager votre position ? Touchez <strong>ou saisissez votre ville</strong>, commencez à taper et choisissez votre ville dans la liste : seul un point approximatif est conservé, et <strong>Modifier</strong> permet d'en choisir un autre.</li>
+            <li>Les communautés situées à peu près à la même distance de vous sont mélangées, de sorte qu'aucune communauté n'est systématiquement en tête.</li>
+            <li>Chacune indique à quelle distance elle se trouve et combien de membres elle compte, lorsque la communauté l'a indiqué.</li>
+        </ul>
+        <p>Une communauté qui n'a pas publié son adresse est répertoriée, mais on ne peut pas encore lui faire de demande depuis ici.</p>
+        <h2>Demander à rejoindre</h2>
+        <ul>
+            <li>Touchez <strong>Demander à rejoindre</strong> sur une communauté.</li>
+            <li>Vérifiez votre nom, et écrivez quelques mots sur vous, jusqu'à 280 caractères : où vous vivez, ce que vous aimeriez partager ou apprendre.</li>
+            <li>Touchez <strong>Envoyer</strong>.</li>
+        </ul>
+        <p>Votre demande va directement à cette communauté, sans passer par la communauté globale, avec votre nom, vos mots et votre photo. Seuls ses membres la voient. Là où la communauté ne permet qu'à ses administrateurs d'inviter, seuls ses propriétaires et administrateurs la voient. Un membre sur place peut vous faire entrer : il touche <strong>Inviter</strong>, et une invitation que seul votre compte peut utiliser est créée.</p>
+        <p>Pendant que vous attendez, la carte de la communauté indique <strong>Vous avez demandé à rejoindre. Pas encore de réponse</strong>. Les communautés répondent généralement en quelques jours. Vous pouvez avoir une seule demande en cours avec chaque communauté, et chaque communauté n'accepte que quelques demandes par jour depuis une même connexion Internet.</p>
+        <p>Si personne ne répond sous 30 jours, la carte indique <strong>Aucune réponse n'est parvenue. Vous pouvez renouveler votre demande.</strong></p>
+        <p>Si une communauté ne peut pas accepter votre demande, la carte affiche son propre message, par exemple que trop de demandes sont venues de votre réseau aujourd'hui, ou qu'elle n'accepte pas de demandes d'adhésion pour le moment.</p>
+        <h2>Quand ils acceptent</h2>
+        <p>La carte indique <strong>Un membre vous a invité</strong>. Touchez <strong>Rejoindre</strong> avec le nom de la communauté.</p>
+        <ul>
+            <li>Votre compte vous suit : la même clé et les mêmes 12 mots. Votre nom vous suit également. Si quelqu'un sur place le porte déjà, un chiffre est ajouté, comme « Sarah2 ». Vous pouvez le modifier à l'étape suivante.</li>
+            <li>Vos annonces, discussions et échanges restent dans chaque communauté. Sur la nouvelle, vous partez de zéro.</li>
+            <li>Ensuite, vous vérifiez votre nom et votre photo pour la nouvelle communauté.</li>
+            <li>Une connexion qui protège votre compte est conservée par chaque communauté. L'application vous demande de protéger votre compte dans la nouvelle communauté aussi : touchez <strong>Le protéger</strong>, ou <strong>Plus tard</strong>, et faites-le à tout moment dans les <strong>Paramètres</strong>.</li>
+        </ul>
+        <p>Vous restez membre de la communauté globale, et pouvez basculer de l'une à l'autre : voir « Plusieurs communautés ».</p>
+        <h2>Rien près de chez vous</h2>
+        <ul>
+            <li><strong>Me prévenir quand une communauté naît ici :</strong> vous recevez une notification lorsqu'une communauté commence près de l'endroit où vous êtes. Seule la zone est conservée, d'environ 10 km de large, jamais votre position exacte. Vous pouvez surveiller jusqu'à 3 lieux, et arrêter d'en surveiller un avec <strong>Arrêter</strong>.</li>
+            <li><strong>Créer une communauté :</strong> chaque communauté a son propre petit serveur, pris en charge par quelqu'un sur place. Cela demande un ordinateur disponible à la maison ou quelques dollars par mois, et environ une demi-heure : voir « Haricots et communauté globale ». L'application montre trois façons d'en héberger une : un ordinateur disponible à la maison, un petit serveur loué, ou demander de l'aide. Remplissez le nom, le lieu et comment vous joindre, puis touchez <strong>Copier les détails de ma communauté</strong> pour les coller dans les réglages de votre nouveau serveur. La façon de vous joindre reste en dehors du répertoire public sauf si vous l'y activez.</li>
+        </ul>
+        <h2>Si vous êtes membre d'une communauté locale</h2>
+        <p>Des personnes peuvent demander à rejoindre votre communauté depuis la communauté globale. Touchez <strong>Échanges</strong>, puis <strong>Membres</strong>, puis <strong>Invitations</strong> : les demandes sont listées sous <strong>Demande à rejoindre</strong>, avec leur nom, leurs mots et d'où elles viennent. Les demandes sont traitées dans l'application mobile : l'application web ne les liste pas.</p>
+        <ul>
+            <li><strong>Inviter :</strong> crée une invitation que seul leur compte peut utiliser. Leur application la trouve d'elle-même, et ils rejoignent en un geste.</li>
+            <li><strong>Pas maintenant :</strong> ils n'en sont pas informés. Ils continuent de voir « pas encore de réponse », et ne peuvent pas refaire de demande avant 30 jours.</li>
+        </ul>
+        <p>Tout membre peut répondre, quel que soit son badge de confiance, sauf si la communauté a choisi que seuls ses administrateurs invitent (<strong>Membres confirmés</strong>, sous <strong>Qui peut inviter</strong> dans les Paramètres du serveur communautaire). Dans ce cas, seuls ses propriétaires et administrateurs voient les demandes et y répondent. Les administrateurs d'une communauté peuvent désactiver les demandes d'adhésion.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>Rejoindre BeanPool</strong><span>Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.</span></a></li>
+            <li><a href="home.html"><strong>Accueil</strong><span>Ce qu'est l'Accueil, les cartes sur téléphone et sur le web, comment les ajouter, déplacer ou retirer, choisir vos centres d'intérêt et confidentialité à la déconnexion.</span></a></li>
+            <li><a href="communities.html"><strong>Plusieurs communautés</strong><span>Appartenir à plusieurs communautés avec un seul compte, basculer entre elles, suivre votre communauté vers une nouvelle adresse et voir ce que montre la communauté globale.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Haricots et communauté globale</strong><span>Le rôle de la communauté globale, une communauté parmi d'autres, et ce que vous y voyez : le repère 🏘️ Communauté locale, la communauté exemple Example Valley, l'attente des haricots et comment lancer ou trouver une communauté locale.</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

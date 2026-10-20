@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 주변 커뮤니티 찾기 — BeanPool members' guide</title>
+    <meta name="description" content="글로벌 커뮤니티에서 주변 커뮤니티를 찾아 가입을 요청하거나, 근처에 새 커뮤니티가 생길 때 알림을 받거나, 직접 커뮤니티를 시작해 보세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">시작하기</a></p>
+        <h1>내 주변 커뮤니티 찾기</h1>
+        <p class="lede">글로벌 커뮤니티에서 주변 커뮤니티를 찾아 가입을 요청하거나, 근처에 새 커뮤니티가 생길 때 알림을 받거나, 직접 커뮤니티를 시작해 보세요.</p>
+        <h2>로컬 커뮤니티가 필요한 이유</h2>
+        <p>글로벌 커뮤니티는 모든 곳의 사람들이 만나는 공간이에요. 지역 커뮤니티는 이웃들이 거래하는 공간으로, 자체 콩, 거래, 공유지를 갖추고 있어요. 글로벌 커뮤니티에서는 <strong>🏘️ 지역 커뮤니티</strong>로 표시된 예시 커뮤니티를 통해 이러한 기능이 어떻게 작동하는지 볼 수 있지만, 그곳에서는 콩을 벌거나 쓸 수 없어요. 따라서 글로벌 커뮤니티의 게시물은 무료, 물물교환, 또는 협의 등 대가로 원하는 내용을 설명란에 직접 적어야 해요. &quot;콩과 글로벌 커뮤니티&quot;를 참조하세요.</p>
+        <p>글로벌 커뮤니티는 수많은 커뮤니티 중 하나일 뿐이에요. 내 지역 커뮤니티는 자체 서버에서 실행되며 글로벌 커뮤니티가 전혀 필요하지 않아요. 글로벌 커뮤니티는 내 지역 커뮤니티를 찾는 것만 도와줘요.</p>
+        <p>아직 근처에 커뮤니티가 없나요? 직접 시작할 수 있어요: 아래의 &quot;주변에 커뮤니티가 없을 때&quot;를 참조하세요.</p>
+        <h2>내 주변 커뮤니티</h2>
+        <p>글로벌 커뮤니티의 <strong>홈</strong>에 있는 <strong>내 커뮤니티 찾기</strong> 카드는 나와 가장 가까운 커뮤니티들을 보여줘요. 가입 후 첫 30일 동안은 홈 상단 근처에 머무르며 제거하거나 이동할 수 없지만, 그 이후에는 다른 카드처럼 제거할 수 있어요. 웹 앱에서는 카드의 각 커뮤니티가 해당 커뮤니티의 고유 페이지로 연결되는 링크예요. 앱이 내 위치를 알지 못하는 경우 <strong>내 지역 공유</strong>를 탭하거나 <strong>또는 동네 이름 입력</strong>을 탭하고 동네를 선택하세요. 아래 단계는 휴대폰 앱 기준이에요.</p>
+        <p>아직 글로벌 커뮤니티에 참여하지 않으셨나요? 왼쪽 상단의 콩 아이콘을 탭하고 <strong>내 커뮤니티</strong> 아래에서 <strong>글로벌 커뮤니티</strong>를 탭한 다음 기존 계정으로 가입하세요: &quot;둘 이상의 커뮤니티&quot;를 참조하세요. 아직 계정이 없다면 앱의 첫 화면에서 <strong>전 세계 BeanPool 둘러보기</strong>를 탭하세요: &quot;BeanPool 가입하기&quot;를 참조하세요.</p>
+        <ul>
+            <li>전체 목록을 보려면 <strong>내 주변 커뮤니티</strong>를 탭하세요.</li>
+            <li>앱이 내 위치를 알고 있는 경우 가장 가까운 커뮤니티가 먼저 나열돼요. 위치를 모르는 경우 <strong>내 위치 사용</strong>을 탭하거나 이름으로 검색하세요. 위치를 공유하고 싶지 않으신가요? <strong>또는 동네 이름 입력</strong>을 탭하고 입력을 시작한 다음 목록에서 동네를 선택하세요: 대략적인 지점만 저장되며, <strong>변경</strong>을 눌러 다른 곳을 선택할 수 있어요.</li>
+            <li>나와 거의 같은 거리에 있는 커뮤니티들은 순서가 섞여 표시되므로 특정 커뮤니티가 항상 맨 위에 머무르지 않아요.</li>
+            <li>각 커뮤니티는 커뮤니티가 공개한 경우 나와의 거리와 멤버 수를 보여줘요.</li>
+        </ul>
+        <p>주소를 공개하지 않은 커뮤니티도 목록에 표시되지만 여기에서 바로 가입을 요청할 수는 없어요.</p>
+        <h2>가입 신청하기</h2>
+        <ul>
+            <li>커뮤니티에서 <strong>가입 신청</strong>을 탭하세요.</li>
+            <li>내 이름을 확인하고, 280자 이내로 거주 지역이나 나누고 싶거나 배우고 싶은 내용 등 자신에 대해 몇 마디 적으세요.</li>
+            <li><strong>보내기</strong>를 탭하세요.</li>
+        </ul>
+        <p>내 요청은 글로벌 커뮤니티를 거치지 않고 내 이름, 메시지, 사진과 함께 해당 커뮤니티로 직접 전송돼요. 그곳의 멤버들만 볼 수 있어요. 관리자만 초대할 수 있는 커뮤니티에서는 소유자와 관리자만 볼 수 있어요. 그곳의 멤버가 나를 가입시켜 줄 수 있어요: 상대방이 <strong>초대</strong>를 탭하면 내 계정만 사용할 수 있는 초대장이 생성돼요.</p>
+        <p>기다리는 동안 커뮤니티 카드에는 <strong>가입을 요청했어요. 아직 응답이 없어요</strong>라고 표시돼요. 커뮤니티는 보통 며칠 내에 응답해요. 각 커뮤니티당 하나의 요청을 열어둘 수 있으며, 각 커뮤니티는 하나의 인터넷 연결에서 하루에 몇 개의 요청만 받아요.</p>
+        <p>30일 이내에 아무도 응답하지 않으면 카드에 <strong>응답이 오지 않았어요. 다시 요청할 수 있어요.</strong>라고 표시돼요.</p>
+        <p>커뮤니티에서 요청을 받을 수 없는 경우, 오늘 내 네트워크에서 너무 많은 요청이 들어왔거나 현재 가입 요청을 받지 않는다는 등 자체 안내 문구가 카드에 표시돼요.</p>
+        <h2>가입이 승인되었을 때</h2>
+        <p>카드에 <strong>멤버가 나를 초대했어요</strong>라고 표시돼요. 커뮤니티 이름과 함께 <strong>참여</strong>를 탭하세요.</p>
+        <ul>
+            <li>내 계정이 그대로 이동해요: 동일한 키와 동일한 12개 단어예요. 내 이름도 그대로 유지돼요. 그곳에 이미 같은 이름을 쓰는 사람이 있다면 &quot;지민2&quot;와 같이 숫자가 붙어요. 다음 단계에서 변경할 수 있어요.</li>
+            <li>내 게시물, 대화, 거래는 각 커뮤니티에 남아요. 새 커뮤니티에서는 새로 시작하게 돼요.</li>
+            <li>다음으로 새 커뮤니티에서 사용할 이름과 사진을 확인해요.</li>
+            <li>계정을 보호하는 로그인은 커뮤니티마다 개별적으로 보관돼요. 앱은 새 커뮤니티에서도 계정을 보호할지 물어요: <strong>계정 보호하기</strong> 또는 <strong>나중에</strong>를 탭하고, 언제든지 <strong>설정</strong>에서 설정할 수 있어요.</li>
+        </ul>
+        <p>글로벌 커뮤니티의 멤버 자격도 유지되며 커뮤니티 간을 전환할 수 있어요: &quot;둘 이상의 커뮤니티&quot;를 참조하세요.</p>
+        <h2>주변에 커뮤니티가 없을 때</h2>
+        <ul>
+            <li><strong>여기서 커뮤니티가 시작되면 알림 받기:</strong> 내가 있는 곳 근처에서 커뮤니티가 시작되면 알림을 받아요. 정확한 위치가 아닌 직경 약 10km의 지역만 저장돼요. 최대 3개 장소를 주시할 수 있으며 <strong>중단</strong>으로 주시를 멈출 수 있어요.</li>
+            <li><strong>커뮤니티 시작하기:</strong> 모든 커뮤니티는 지역 주민이 관리하는 자체 소형 서버를 가지고 있어요. 집의 여분의 컴퓨터나 한 달에 몇 달러 정도의 비용, 그리고 약 30분의 시간이 필요해요: &quot;콩과 글로벌 커뮤니티&quot;를 참조하세요. 앱에 운영하는 세 가지 방법이 표시돼요: 집의 여분의 컴퓨터, 소형 임대 서버, 또는 도움 요청하기. 이름, 장소, 연락 방법을 입력하고 <strong>내 커뮤니티 정보 복사</strong>를 탭하여 새 서버 설정에 붙여넣으세요. 연락 방법은 공개 디렉터리 설정에서 켜지 않는 한 외부에 공개되지 않아요.</li>
+        </ul>
+        <h2>지역 커뮤니티 멤버인 경우</h2>
+        <p>사람들은 글로벌 커뮤니티에서 내 커뮤니티로 가입을 요청할 수 있어요. <strong>대화</strong>를 탭한 다음 <strong>사람 탐색</strong>, 그다음 <strong>초대</strong>를 탭하세요: 요청은 이름, 메시지, 출신 지역과 함께 <strong>가입 요청</strong> 아래에 나열돼요. 요청은 휴대폰 앱에서 응답해요: 웹 앱에는 나열되지 않아요.</p>
+        <ul>
+            <li><strong>초대:</strong> 상대방의 계정만 사용할 수 있는 초대를 생성해요. 상대방의 앱이 이를 자동으로 찾아내며 한 번의 탭으로 가입해요.</li>
+            <li><strong>나중에:</strong> 상대방에게 알림이 가지 않아요. 상대방에게는 계속 &quot;아직 응답 없음&quot;으로 표시되며 30일 동안 다시 요청할 수 없어요.</li>
+        </ul>
+        <p>커뮤니티가 관리자만 초대하도록 설정하지 않은 한(커뮤니티 서버 설정의 <strong>Who may invite</strong> 아래 <strong>Known</strong>), 신뢰 배지와 관계없이 모든 멤버가 응답할 수 있어요. 관리자만 초대하도록 설정된 경우 소유자와 관리자만 요청을 보고 응답할 수 있어요. 커뮤니티 관리자는 가입 요청 기능을 끌 수 있어요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>BeanPool 가입하기</strong><span>가입 방법 2가지: 멤버의 초대를 통한 커뮤니티 가입, 개방 시 12개 비밀 단어 또는 간편 로그인으로 글로벌 커뮤니티 가입. 가입 요청과 다른 사람 초대 방법이에요.</span></a></li>
+            <li><a href="home.html"><strong>홈</strong><span>홈의 구성, 휴대폰과 웹 앱에 표시되는 카드, 카드 추가·이동·삭제, 관심사 선택, 로그아웃 시 개인정보 보호 안내예요.</span></a></li>
+            <li><a href="communities.html"><strong>여러 커뮤니티 이용하기</strong><span>하나의 계정으로 여러 커뮤니티에 참여하고 전환하는 법, 새 주소로 이전한 커뮤니티를 따라가는 법과 글로벌 커뮤니티 표시 내용 안내예요.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>콩과 글로벌 커뮤니티</strong><span>글로벌 커뮤니티의 목적, 여러 커뮤니티와의 관계, 🏘️ 지역 커뮤니티 표시, 샘플 커뮤니티 Example Valley, 콩이 대기하는 이유와 로컬 커뮤니티 시작·찾기 안내예요.</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

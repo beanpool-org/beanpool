@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bar sa itaas — BeanPool members' guide</title>
+    <meta name="description" content="Ang munggo, ang maliliit na icon na nagpapakita kapag may kailangan sa iyo, at ang mga button sa kanang itaas.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Pagsisimula</a></p>
+        <h1>Bar sa itaas</h1>
+        <p class="lede">Ang munggo, ang maliliit na icon na nagpapakita kapag may kailangan sa iyo, at ang mga button sa kanang itaas.</p>
+        <h2>Kung ano ang nasa loob nito</h2>
+        <p>Sa telepono, ang bar sa itaas ng screen ay pareho sa bawat tab. Mula kaliwa pakanan:</p>
+        <ul>
+            <li><strong>Ang bean:</strong> ang iyong komunidad, at ang gabay na ito.</li>
+            <li><strong>Ang mga icon na &quot;kailangan ka&quot;:</strong> habang may naghihintay lamang sa iyo.</li>
+            <li><strong>Ang ? icon, ang icon ng imbitasyon, Mga Setting at ang iyong larawan.</strong></li>
+        </ul>
+        <p>Sa isang web browser, mas simple ang bar sa itaas. Mayroon itong katayuan ng koneksyon sa kaliwa, ang pangalan ng pahina, at ang iyong profile, ang <strong>?</strong> at Mga Setting sa kanan. Wala itong sheet ng bean, walang mga icon na &quot;kailangan ka&quot; at walang icon ng imbitasyon: ang <strong>Mga Imbitasyon</strong> ay nasa ilalim ng <strong>Mga Tao</strong>. Ang mga tab ay nasa ibaba, o pababa sa kaliwang bahagi sa isang malapad na screen.</p>
+        <h2>Ang bean</h2>
+        <p>I-tap ang bean sa itaas sa kaliwa upang buksan ang sheet ng <strong>BeanPool</strong>. Ipinapakita nito:</p>
+        <ul>
+            <li><strong>Iyong komunidad:</strong> ang pangalan nito sa itaas, at kung maabot ito sa ngayon.</li>
+            <li><strong>Iyong mga komunidad:</strong> i-tap ang isa upang lumipat dito, o i-tap ang <strong>Magdagdag ng komunidad</strong>. Ang <strong>Pandaigdigang komunidad</strong> ay palaging isa sa mga ito: sinasabi ng ikalawang linya nito kung maaari kang sumali rito.</li>
+            <li><strong>Maghanap sa gabay</strong>, pagkatapos ay <strong>Mga Gabay</strong> (kung paano gumagana ang BeanPool, ang mga tuntunin, mga karaniwang tanong), <strong>Paano gamitin ang app</strong> (ang gabay na ito, bawat seksyon) at <strong>Ang proyektong BeanPool</strong>, na may <strong>What's new</strong>.</li>
+            <li><strong>beanpool.org:</strong> ang pampublikong website, na may <strong>Ibahagi</strong> upang ipadala ito sa isang kaibigan.</li>
+        </ul>
+        <p>Sinasabi sa iyo ng maliit na tuldok sa bean kung ano ang kalagayan:</p>
+        <ul>
+            <li><strong>Berde:</strong> konektado, at miyembro ka rito.</li>
+            <li><strong>Amber:</strong> bumibisita ka bilang bisita.</li>
+            <li><strong>Pula:</strong> hindi maabot ang server ng iyong komunidad sa ngayon, o hindi pa nakakonekta sa isang komunidad ang teleponong ito.</li>
+        </ul>
+        <p>Ang isang mabagal na pagsusuri ay hindi nagiging dahilan para maging pula ang tuldok. Nagiging pula lamang ito pagkatapos mabigo ang mahigit sa isang pagsusuri nang magkakasunod.</p>
+        <h2>Ang mga icon na &quot;kailangan ka&quot;</h2>
+        <p>Sa pagitan ng bean at ng mga button sa kanan, lumalabas ang maliliit na icon habang may kailangan lamang sa iyo. Bawat isa ay isang uri ng bagay. I-tap ito upang direktang pumunta roon.</p>
+        <ul>
+            <li><strong>Isang pakikipagkamay:</strong> may deal na naghihintay sa iyo. May naghihintay sa iyo na tanggapin ang kanilang kahilingan, o ang isang deal na sinasalihan mo ay hindi pa tapos. Kung may isa, binubuksan ng tap ang deal na iyon. Kung may higit pa, binubuksan nito ang <strong>Aking mga Deal</strong>.</li>
+            <li><strong>Isang kahon ng balota:</strong> isang boto na hindi mo pa naibibigay. Binubuksan ng tap ang <strong>Komun</strong>, sa <strong>Magpasya</strong>. Kung ang unang boto ay sa isang grupo o boto ng mga tagapangalaga sa isang negosyo, binubuksan ng tap ang grupong iyon o negosyo sa halip. Ang botong hindi mo pa maibibigay ay hindi binibilang dito, halimbawa ang isa na nangangailangan munang tapusin mo ang isang kalakalan.</li>
+            <li><strong>Isang speech bubble:</strong> isang hindi pa nababasang mensahe mula sa isang tao. Kung mula ito sa isang tao, binubuksan ng tap ang chat na iyon. Kung mula sa ilang tao, binubuksan nito ang <strong>Usapan</strong>, sa <strong>Mga Mensahe</strong>, na ipinapakita lamang ang mga hindi pa nababasa.</li>
+            <li><strong>Isang grupo ng mga tao:</strong> mga bagong linya sa iyong mga grupo, mga chat sa negosyo o mga chat sa event. Ang mga chat na na-mute mo ay nananatiling tahimik dito. Binubuksan ng tap ang chat, o <strong>Usapan</strong>, sa <strong>Mga Grupo</strong>, kung may ilan.</li>
+            <li><strong>Isang kalasag:</strong> para lamang sa mga taong tumutulong sa pagpapatakbo ng iyong komunidad. Lumalabas ito habang may gawaing admin na naghihintay, tulad ng ulat na susuriin o naantalang kalakalan na nangangailangan ng desisyon. Humihingi ang tap ng screen lock ng iyong telepono, pagkatapos ay binubuksan ang mga setting ng iyong komunidad sa gawaing iyon. Kung gumagamit ng sign-in code ang mga setting ng iyong komunidad, hihingin din nito iyon.</li>
+        </ul>
+        <p>Nagsasalansan ang mga icon mula sa kanan. Ang pinakamahalaga ay nakaupo sa tabi ng ? icon, at pinapanatili ang pwesto nito habang dumarating at umaalis ang iba.</p>
+        <h3>Ang bilang at ang kulay</h3>
+        <ul>
+            <li>Ang isang maliit na numero sa isang icon ay nangangahulugang mahigit sa isa ng ganoong uri: halimbawa 3 tao na sumulat sa iyo. Nagpapakita ito ng <strong>9+</strong> kapag higit sa 9.</li>
+            <li>Nagiging <strong>amber</strong> ang isang icon kapag mas apurahan ito: isang deal na naghihintay sa iyo, gawaing admin, o isang boto na magsasara sa loob ng 2 araw. Walang nagiging pula.</li>
+        </ul>
+        <h3>Sa isang maliit na screen</h3>
+        <p>Kung walang sapat na espasyo para sa bawat icon, ang huling puwang ay nagpapakita ng <strong>•••</strong>. I-tap ito upang makita ang buong listahan, <strong>Kailangan ka</strong>, sa mga salita. I-tap ang isang linya upang pumunta roon.</p>
+        <h3>Magandang balita ang isang tahimik na bar</h3>
+        <p>Kapag walang kailangan sa iyo, wala talagang mga icon. Wala kang napalampas na anuman. Nag-a-update ang mga icon habang lumilibot ka sa app at kapag bumalik ka rito.</p>
+        <h2>Sumali o Kumonekta</h2>
+        <p>Sa halip na mga icon, maaari kang makakita ng button:</p>
+        <ul>
+            <li><strong>Sumali</strong> (amber): bumibisita ka bilang bisita. I-tap ito upang buksan ang <strong>Mga Imbitasyon</strong>. Sa isang lokal na komunidad sasali ka roon gamit ang isang imbitasyon. Sa pandaigdigang komunidad, i-tap ang <strong>Join with 12 words or a sign-in</strong> (<strong>Join with a sign-in</strong> kung saan tumatanggap lamang ng sign-in ang komunidad).</li>
+            <li><strong>Kumonekta</strong> (pula): hindi nakakonekta sa isang komunidad ang teleponong ito. I-tap ito upang buksan ang <strong>Mga Setting</strong>, kung saan maaari kang magdagdag ng isa.</li>
+        </ul>
+        <p>Habang ipinapakita ang isa sa mga ito, nakatago ang icon ng imbitasyon.</p>
+        <h2>Ang mga button sa kanan</h2>
+        <ul>
+            <li><strong>Ang ? icon</strong> (isang tandang pananong sa loob ng bilog): tulong para sa screen kung nasaan ka. Binubuksan nito ang isang maikling sheet na nagsasabi kung para saan ang screen na iyon, pagkatapos ay <strong>Read the guide page</strong>, <strong>Maghanap sa gabay</strong> at <strong>Ulitin ang tour</strong>. Nasa bawat tab ito, para sa mga miyembro at mga bisita. Sa web app nakapwesto ito sa pagitan ng iyong larawan at Mga Setting sa itaas, at sa tabi ng Mga Setting sa ibaba ng side bar sa isang malapad na screen.</li>
+            <li><strong>Ang icon ng imbitasyon</strong> (isang tao na may plus): binubuksan ang <strong>Mga Imbitasyon</strong>, upang mag-imbita ng isang tao o sumali sa isa pang komunidad. Tingnan ang &quot;Pagsali sa BeanPool&quot;.</li>
+            <li><strong>Mga Setting</strong> (ang mga slider): binubuksan ang <strong>Mga Setting</strong>. I-tap ito muli upang bumalik sa kung nasaan ka.</li>
+            <li><strong>Ang iyong larawan:</strong> binubuksan ang iyong sariling profile, gaya ng nakikita ng iba.</li>
+        </ul>
+        <h2>Mga mensahe ng update</h2>
+        <p>Kung minsan may berdeng bar na lumalabas sa ilalim ng bar sa itaas:</p>
+        <ul>
+            <li><strong>May available na update:</strong> may mas bagong bersyon ng app. I-tap ang <strong>Mag-upgrade</strong> upang makuha ito, o ang krus upang isara ang mensahe.</li>
+            <li><strong>Masyadong luma ang iyong app para sa komunidad na ito:</strong> kailangan mong mag-update bago gumana nang maayos ang app dito. Hindi maisasara ang isang ito. I-tap ang <strong>Mag-upgrade</strong>.</li>
+        </ul>
+        <h2>Ang mga tab</h2>
+        <p>Sa ilalim ng bar sa itaas ay ang mga tab: <strong>Home</strong>, <strong>Merkado</strong>, <strong>Mapa</strong>, <strong>Usapan</strong>, <strong>Komun</strong> at <strong>Talaan</strong>. Ang pangalan ng bawat tab ay nakalagay sa itaas ng icon nito. Sa telepono, ang isang lokal na komunidad na walang Munggo ay hindi nagpapakita ng <strong>Komun</strong> o <strong>Talaan</strong>. Ipinapakita ng pandaigdigang komunidad ang pareho, na may mga halimbawa mula sa isang lokal na komunidad. Tingnan ang &quot;Munggo at ang pandaigdigang komunidad&quot;.</p>
+        <p>Sa isang mahabang pahina, i-tap ang tab kung nasaan ka na upang tumalon pabalik sa itaas. Gumagana ito sa bawat tab maliban sa <strong>Mapa</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Home</strong><span>Ano ang Home, aling card ang ipinapakita sa telepono at web app, paano magdagdag, maglipat o mag-alis ng mga ito, pagpili ng iyong hilig, at privacy kapag nag-sign out ka.</span></a></li>
+            <li><a href="the-bean.html"><strong>Gabay na ito</strong><span>Saan mahahanap ang gabay na ito, paano ito hahanapin, at paano ito nananatiling bago.</span></a></li>
+            <li><a href="communities.html"><strong>Mahigit sa isang komunidad</strong><span>Maging kabilang sa ilang komunidad gamit ang iisang account, lumipat sa pagitan nila, sundan ang iyong komunidad sa bagong address, at tingnan ang ipinapakita ng pandaigdigang komunidad.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

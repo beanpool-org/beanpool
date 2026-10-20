@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool কীভাবে কাজ করে — BeanPool members' guide</title>
+    <meta name="description" content="শিম, লেনদেন, প্রস্তাব ও প্রয়োজন এবং ক্রেডিট, সহজ কথায়।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">BeanPool সম্পর্কে</a></p>
+        <h1>BeanPool কীভাবে কাজ করে</h1>
+        <p class="lede">শিম, লেনদেন, প্রস্তাব ও প্রয়োজন এবং ক্রেডিট, সহজ কথায়।</p>
+        <h2>শিম</h2>
+        <p>আপনার সম্প্রদায় <strong>শিম</strong>-এ লেনদেন করে। শিম কোনো ব্যাংকের টাকা নয়। সেগুলো কে কাকে সাহায্য করেছে তার একটি রেকর্ড।</p>
+        <p>প্রত্যেকে শূন্য থেকে শুরু করে। আপনি যখন কাউকে সাহায্য করেন, তখন আপনি শিম অর্জন করেন। কেউ যখন আপনাকে সাহায্য করে, তখন আপনি শিম খরচ করেন।</p>
+        <p>একটি আনুমানিক ধারণা: ৪০টি শিম হলো কারো সময়ের প্রায় এক ঘণ্টা। আপনি এবং অপর ব্যক্তি আসল মূল্য নির্ধারণ করেন।</p>
+        <h2>প্রস্তাবসমূহ ও প্রয়োজনসমূহ</h2>
+        <p>একটি <strong>প্রস্তাব</strong> হলো এমন কিছু যা আপনি করতে বা দিতে পারেন: রুটি, গাড়িতে লিফট, এক ঘণ্টার বাগান করা, কোনো কিছু মেরামত করা।</p>
+        <p>একটি <strong>প্রয়োজন</strong> হলো এমন কিছু যা আপনি খুঁজছেন।</p>
+        <p>শিম রয়েছে এমন একটি সম্প্রদায়ে, কোনো প্রয়োজন পোস্ট করার আগে, বা অন্য কারো প্রস্তাব চাওয়ার আগে, আপনাকে অবশ্যই নিজের অন্তত একটি প্রস্তাব পোস্ট করতে হবে। প্রত্যেকেই কিছু না কিছু নিয়ে আসে। যেখানে কোনো শিম নেই, যেমন বিশ্বব্যাপী সম্প্রদায়ে, সেখানে আপনার প্রথম পোস্ট একটি প্রয়োজন হতে পারে।</p>
+        <h2>একটি চুক্তি কীভাবে কাজ করে</h2>
+        <ul>
+            <li>আপনি আপনার পছন্দের একটি প্রস্তাব খুঁজে পান এবং সেটির অনুরোধ করেন, অথবা কেউ আপনার প্রয়োজনটি গ্রহণ করেন।</li>
+            <li>যখন লেনদেনটি সম্মত হয়, তখন ক্রেতার শিম নিরাপদে জমা রাখা হয়। লেনদেন চলাকালীন কেউই সেগুলো খরচ করতে পারে না।</li>
+            <li>কাজটি সম্পন্ন হয়।</li>
+            <li>ক্রেতা নিশ্চিত করেন যে কাজটি শেষ হয়েছে। তারপর শিমগুলো বিক্রেতার কাছে যায়।</li>
+        </ul>
+        <p>কোনো লেনদেন আটকে গেলে আপনার সম্প্রদায়ের একজন অ্যাডমিন এতে হস্তক্ষেপ করতে পারেন। তারা বিক্রেতাকে অর্থ প্রদান করতে পারেন, ক্রেতাকে শিম ফেরত দিতে পারেন, অথবা ভাগ করে দিতে পারেন। একজন অ্যাডমিন এমন কোনো লেনদেনের সিদ্ধান্ত নিতে পারেন না যার তিনি অংশ।</p>
+        <h2>উপহার</h2>
+        <p>আপনি কোনো লেনদেন ছাড়াই কাউকে উপহার হিসেবে শিম পাঠাতে পারেন।</p>
+        <ul>
+            <li>একটি উপহার কেবল আপনার কাছে থাকা শিম থেকেই আসতে পারে। এটি কখনই আপনাকে শূন্যের নিচে নিতে পারে না।</li>
+            <li>বাজারে একবার একটি লেনদেন সম্পন্ন করার পর আপনি উপহার পাঠাতে পারেন। মাত্র ১ বা ২টি শিমের লেনদেন গণনার জন্য অত্যন্ত ছোট।</li>
+            <li>উপহারের কোনো ফি নেই।</li>
+        </ul>
+        <h2>শূন্যের নিচে যাওয়া: আপনার ক্রেডিট সীমা</h2>
+        <p>আপনার কাছে যা আছে তার চেয়ে কিছুটা বেশি আপনি খরচ করতে পারেন, এবং শূন্যের নিচে যেতে পারেন। এটি আপনার <strong>ক্রেডিট সীমা</strong>। এটি পরবর্তীতে অন্যদের সাহায্য করার একটি প্রতিশ্রুতি।</p>
+        <p>আপনার ক্রেডিট সীমা শূন্য থেকে শুরু হয়। বাজারে আপনার প্রথম লেনদেন সম্পন্ন করার সময় এটি চালু হয় (মাত্র ১ বা ২টি শিমের লেনদেন গণনার জন্য অত্যন্ত ছোট)। নবাগতদের স্বাগত জানানোর জন্য আপনার সম্প্রদায় যাকে বেছে নিয়েছে এমন কেউ আপনার জন্য সুপারিশ করে আপনাকে একটি ছোট সূচনাও দিতে পারেন: ২৫, ৫০ বা ১০০টি শিম।</p>
+        <p>আপনার ক্রেডিট সীমা আপনার <strong>আস্থা</strong>-র সাথে বৃদ্ধি পায়:</p>
+        <ul>
+            <li>বাজারে লেনদেন সম্পন্ন করে আপনি আস্থা অর্জন করেন। উপহার কোনো আস্থা অর্জন করে না।</li>
+            <li>অনেক ভিন্ন মানুষের সাথে লেনদেন করলে বেশি আস্থা তৈরি হয়। যেকোনো একজন ব্যক্তির সাথে লেনদেন ৫০০টি শিম পর্যন্ত গণ্য হয়।</li>
+            <li>আস্থা প্রথমে দ্রুত বৃদ্ধি পায়, তারপর আরও ধীরে ধীরে।</li>
+            <li>স্টার রেটিং গুরুত্বপূর্ণ। মানুষ আপনাকে রেটিং দিলে আপনার গড় রেটিং আপনার লেনদেনের অর্জিত আস্থাকে পরিমাপ করে: ৫ স্টার পুরোটা বজায় রাখে, ১ স্টার ৬০% বজায় রাখে।</li>
+            <li>যেকোনো ক্রেডিট সীমা শূন্যের নিচে সর্বোচ্চ ২,০০০ শিম পর্যন্ত যেতে পারে। যে সম্প্রদায় তার সদস্যদের পরিচয় নিশ্চিত করে তারা আরও বেশি অনুমতি দিতে পারে (নিচে দেখুন)।</li>
+        </ul>
+        <h2>আপনার প্রস্তাবসমূহ আপনার ক্রেডিট চালু করে</h2>
+        <p>আস্থা নির্ধারণ করে আপনি কতটা নিচে যেতে <strong>পারেন</strong>। আপনার সক্রিয় প্রস্তাবসমূহ নির্ধারণ করে এই মুহূর্তে আপনি কতটা নিচে যেতে <strong>অনুমোদিত</strong>। আপনি এই দুটির মধ্যে যেটি ছোট সেটি পান।</p>
+        <ul>
+            <li>কোনো সক্রিয় প্রস্তাব নেই: আপনি শূন্যের নিচে যেতে পারবেন না।</li>
+            <li>১টি প্রস্তাব: শূন্যের নিচে ২০০ পর্যন্ত।</li>
+            <li>২টি প্রস্তাব: ৫০০ পর্যন্ত নিচে।</li>
+            <li>৩টি প্রস্তাব: ১,০০০ পর্যন্ত নিচে।</li>
+            <li>৪টি প্রস্তাব: ১,৫০০ পর্যন্ত নিচে।</li>
+            <li>৫টি প্রস্তাব: ২,০০০ পর্যন্ত নিচে।</li>
+        </ul>
+        <p>আপনি শূন্যের নিচে থাকা অবস্থায় প্রস্তাবগুলো তুলে নিলে, আপনার প্রস্তাবগুলো এখন যা কভার করে তার চেয়ে আপনার বেশি ঋণ থাকতে পারে। তখন আপনি আপনার সীমার মধ্যে ফিরে না আসা পর্যন্ত আর খরচ করতে পারবেন না। আপনি তখনও শিম উপার্জন করতে পারেন, এবং আপনার কাছ থেকে কিছুই নেওয়া হবে না।</p>
+        <p>কিছু সম্প্রদায় নিশ্চিত করে তাদের সদস্যরা কারা। সেখানে একজন নিশ্চিত সদস্য সাথে সাথে একটি ক্রেডিট সীমা পান: ১,০০০ শিম, যদি না সম্প্রদায় অন্য কোনো পরিমাণ বেছে নেয়। একটি সক্রিয় প্রস্তাব এর সম্পূর্ণ অংশ চালু করে। সেখানে সর্বোচ্চ সীমা ৫,০০০ পর্যন্ত হতে পারে। &quot;আপনার ক্রেডিট সীমা&quot; দেখুন।</p>
+        <h2>আস্থার ব্যাজ</h2>
+        <p>আপনার আস্থা একটি ব্যাজ হিসেবে প্রকাশ পায়। ব্যাজগুলো হলো নবাগত, বাসিন্দা, পরিচালক এবং প্রবীণ। আপনার ব্যাজের পেছনের আস্থা তিনটি বিষয়কে একত্রিত করে: একটি সুপারিশ আপনাকে যে সূচনা দিয়েছিল, লেনদেনের মাধ্যমে আপনি যে আস্থা অর্জন করেছেন, এবং একজন অ্যাডমিন আপনাকে যে আস্থা প্রদান করেছেন। একজন অ্যাডমিন কোনো লেনদেন ছাড়াই একজন সদস্যকে সরাসরি একটি ব্যাজ দিতে পারেন। যে সম্প্রদায় তার সদস্যদের নিশ্চিত করে, সেখানে একজন নিশ্চিত সদস্যের প্রাপ্ত ক্রেডিট সীমাও গণ্য হয়।</p>
+        <ul>
+            <li>২০০ আস্থা থেকে বাসিন্দা।</li>
+            <li>৬০০ আস্থা থেকে পরিচালক।</li>
+            <li>১,৪০০ আস্থা থেকে প্রবীণ।</li>
+        </ul>
+        <p>একটি ব্যাজ কেবল একটি স্বীকৃতি, অন্য কিছু নয়। এটি কোনো কিছু চালু বা আনলক করে না। প্রত্যেকেরই ব্যাজ যাই হোক না কেন তারা লেনদেন করতে, আমন্ত্রণ জানাতে এবং ভোট দিতে পারেন।</p>
+        <h2>ফি এবং যৌথ তহবিল</h2>
+        <p>আপনার সম্প্রদায়ের <strong>যৌথ তহবিল</strong> নামে শিমের একটি যৌথ পুল রয়েছে। ফি সেটিতে জমা হয়। সদস্যরা একসাথে সিদ্ধান্ত নেন এটি কীভাবে খরচ করা হবে।</p>
+        <ul>
+            <li><strong>বাজারের ফি:</strong> প্রতিটি বাজার পরিশোধের ১.৫% যৌথ তহবিলে যায়। এটি বিক্রেতার প্রাপ্ত অর্থ থেকে নেওয়া হয়।</li>
+            <li><strong>সঞ্চালন ফি:</strong> শিম সচল রাখার উদ্দেশ্যে, স্থির রাখার জন্য নয়। আপনার কাছে থাকা প্রথম ২০০টি শিম সর্বদা বিনামূল্যে। এর উপরে, একটি ছোট মাসিক ফি যৌথ তহবিলে যায়: ২০০ থেকে ৫০০-এর মধ্যবর্তী শিমে মাসে ১%, ৫০০ থেকে ১,০০০-এর মধ্যে ১.৫%, ১,০০০ থেকে ২,০০০-এর মধ্যে ২%, এবং ২,০০০-এর উপরে ২.৫%।</li>
+            <li>শূন্যের নিচের ব্যালেন্সে কখনই সঞ্চালন ফি দিতে হয় না। উপহারে কখনই কোনো ফি দিতে হয় না।</li>
+        </ul>
+        <h2>উদ্যোগ ও গ্রুপ</h2>
+        <p>একটি <strong>উদ্যোগ</strong> চলমান থাকে এবং তার নিজস্ব নামে লেনদেন করে: একটি বেকারি, একটি সরঞ্জামের লাইব্রেরি, একটি বাজারের স্টল। এটি <strong>কিপারদের</strong> দ্বারা পরিচালিত হয়, যার নেতৃত্বে থাকেন একজন <strong>প্রধান কিপার</strong>। উদ্যোগটিকে একটি ক্রেডিট সীমা দেওয়ার জন্য কিপাররা তাদের নিজস্ব আস্থার কিছু অংশ অঙ্গীকার করতে পারেন।</p>
+        <p>একটি <strong>গ্রুপ</strong> হলো সদস্যদের একটি দল যার নিজস্ব চ্যাট এবং পোস্ট রয়েছে, যা এক বা একাধিক <strong>সমন্বয়কারী</strong> দ্বারা পরিচালিত হয়। তাদের মধ্যে একজন হলেন এর <strong>প্রধান সমন্বয়কারী</strong> — শুরুতে যিনি গ্রুপটি তৈরি করেছেন।</p>
+        <p>কিপার এবং সমন্বয়কারীদের কীভাবে বেছে নেওয়া হয় তা আপনি &quot;নিয়ম ও কীভাবে সিদ্ধান্ত নেওয়া হয়&quot;-এ পড়তে পারেন।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../posting.html"><strong>Posting an Offer or a Need</strong><span>Put up something you can do or give, or something you are looking for.</span></a></li>
+            <li><a href="../a-deal-step-by-step.html"><strong>A deal, step by step</strong><span>From asking to getting paid, for an Offer and for a Need, and leaving a review.</span></a></li>
+            <li><a href="../credit-line.html"><strong>Your credit line</strong><span>How far below zero you can go, and how it grows.</span></a></li>
+            <li><a href="../gifts.html"><strong>Sending a gift</strong><span>Send beans to someone, with no trade.</span></a></li>
+            <li><a href="../circulation-fee.html"><strong>The circulation fee</strong><span>A small monthly fee on large balances, so beans keep moving. The first 200 are free.</span></a></li>
+            <li><a href="../trust-badges.html"><strong>Trust badges</strong><span>Newcomer, Resident, Steward and Elder. What they mean, and why they unlock nothing.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

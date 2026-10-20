@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kurallar ve karar alma süreci — BeanPool members' guide</title>
+    <meta name="description" content="Oylama, katılım, gizli oylama, kimlerin oy verebileceği, askıya alma, üye çıkarma, sorumlular ve kolaylaştırıcılar.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">BeanPool Hakkında</a></p>
+        <h1>Kurallar ve karar alma süreci</h1>
+        <p class="lede">Oylama, katılım, gizli oylama, kimlerin oy verebileceği, askıya alma, üye çıkarma, sorumlular ve kolaylaştırıcılar.</p>
+        <h2>Topluluğa sormanın iki yolu</h2>
+        <ul>
+            <li>Bir <strong>Anket</strong>, akışta yer alan &quot;Pazar Pazar günü olsun mu?&quot; gibi bir sorudur. İnsanların ne düşündüğünü gösterir. Kendi başına hiçbir şeyi asla değiştirmez.</li>
+            <li>Bir <strong>Karar</strong> bağlayıcıdır. Kabul edilirse topluluğunuzun sunucusu bunu kendiliğinden yürütür. Hiç kimsenin bir düğmeye basması gerekmez ve hiç kimse bunu sessizce görmezden gelemez.</li>
+        </ul>
+        <p>Küresel toplulukta Anketler vardır ancak Kararlar yoktur: herkes 12 kelimeyle veya bir girişle katılabilir; bu nedenle birden fazla hesabı olan bir kişi oylamayı etkileyebilir. Aşağıda Kararlar hakkında yer alan her şey yerel topluluklar hakkındadır.</p>
+        <h2>Bir Karar neleri yapabilir</h2>
+        <p>Bir üye hakkında:</p>
+        <ul>
+            <li>Bir üyeyi askıya alabilir veya askıya almayı kaldırabilir.</li>
+            <li>Bir üyenin kredisini dondurabilir veya çözebilir.</li>
+            <li>Bir üyeye yeni gelenlere kefil olma hakkı verebilir veya bu hakkı geri alabilir.</li>
+            <li>Bir girişimden bir baş sorumluyu veya bir projeden bir lideri görevden alabilir.</li>
+            <li>Bir üyeyi topluluktan çıkarabilir veya geri kabul edebilir.</li>
+        </ul>
+        <p>Ortak Alan hakkında:</p>
+        <ul>
+            <li>Ortak Alandan bir projeye veya girişime fasulye verebilir.</li>
+            <li>Ortak Alandan bir üyeye zor durum hibesi verebilir.</li>
+            <li>Bir projenin veya girişimin borcunu Ortak Alandan ödeyebilir.</li>
+            <li>Ayrılan bir üyenin Ortak Alana olan borcunu bağışlayabilir. Hiçbir fasulye hareket etmez. Kayıt, bağışlanmış olarak işaretli kalır. Bir topluluğun İsim listesi tuttuğu yerlerde bu oradan başlatılır.</li>
+        </ul>
+        <p>Bir hibe, Ortak Alanın şu anda tuttuğu miktar ile son 30 gün içinde giren miktarın toplamından fazla olamaz. Daha büyük bir hibe başlattığınızda reddedilir.</p>
+        <h2>Kimler bir Karar başlatabilir</h2>
+        <p>Kredisi dondurulmamış ve pazarda takas yapmış veya bir yönetici tarafından güven rozeti verilmiş herhangi bir aktif üye. Tek başına kefalet yeterli değildir. Yöneticiler de başlatabilir. Aynı anda açık bir Kararınız olabilir. Nedenini en az 10 karakterle açıklamanız gerekir.</p>
+        <h2>Kimler oy verebilir</h2>
+        <p>Kredisi dondurulmamış ve Karar açılmadan <strong>önce</strong> katılmış olan herhangi bir aktif üye. Bir oylama sırasında katılan kişiler bu oylamada oy kullanamaz. Girişim hesapları oy kullanamaz.</p>
+        <h2>Oylar nasıl sayılır</h2>
+        <ul>
+            <li>Bir üye hakkındaki Kararlar: <strong>bir üye, bir oy</strong>. Evet veya Hayır.</li>
+            <li>Ortak Alan fasulyeleri hakkındaki Kararlar: oylar takas ile ağırlıklandırılır. Birden fazla oy kullanabilirsiniz ancak maliyeti artar: 1 oy 1 oy kredisine, 2 oy 4 krediye, 3 oy 9 krediye mal olur. Oy kredileriniz, tamamlanan takaslarınızdan gelir ve takas ortağı başına 500 fasulyeye kadar sayılır. Her Kararda tam oy kredinizi tekrar alırsınız. Asla tükenmezler.</li>
+            <li>Hiç takas tamamlamadıysanız henüz Ortak Alan fasulyeleri hakkında oy kullanamazsınız.</li>
+            <li>Oylama kapanana kadar oyunuzu istediğiniz zaman değiştirebilirsiniz.</li>
+        </ul>
+        <h2>Gizli oylama</h2>
+        <p>Uygulama yöneticiler dahil hiç kimseye nasıl oy kullandığınızı göstermez. Herkes toplamları görür ve siz kendi oyunuzu görürsünüz. Oyunuz, sayılabilmesi ve kontrol edilebilmesi için hesabınızla birlikte topluluğunuzun sunucusunda saklanır. Sunucuyu işleten sahipler ve yöneticiler dosyaların bir kopyasını alabilir ve orada oyunuzu inceleyebilir.</p>
+        <p>Anketi başlatan kişi onu bir <strong>açık oylama</strong> yapmadığı sürece Anketler de anonimdir: bu durumda üyeler kimin neyi seçtiğini görebilir. Anket hangisi olduğunu belirtir.</p>
+        <h2>Bir oylama ne kadar sürer</h2>
+        <p>Her Karar tam olarak 7 gün sürer. Oylama hemen açılır. 7 gün dolduğunda topluluğunuzun sunucusu oyları sayar ve sonuca göre hareket eder.</p>
+        <h2>Katılım oranı</h2>
+        <p>Bir oylama yalnızca yeterli sayıda kişi katılırsa geçerli sayılır.</p>
+        <ul>
+            <li>Yeterli insan, oy kullanabilecek ve son 30 gün içinde aktif olan üyelerin %30'u anlamına gelir. Asla 3 kişiden az olamaz.</li>
+            <li>Bir üyeyi çıkarmak için bu oran %25'tir.</li>
+            <li>&quot;Aktif&quot;, uygulamanızın bu 30 gün içinde topluluğunuzun sunucusuna bir şey gönderdiği anlamına gelir: bir gönderi, bir takas, bir oy, bir mesaj. Telefonda, uygulamanın her açılışında uyarılar için oturum açması nedeniyle genellikle yalnızca uygulamayı açmak da sayılır.</li>
+            <li>Katılım oranı oyların ağırlığını değil, kişileri sayar.</li>
+        </ul>
+        <p>Çok az kişi oy kullanırsa hiçbir şey olmaz. Karar &quot;sonuçlanmadı&quot; olarak kapanır.</p>
+        <h2>Ne kadar Evet oyu gerekir</h2>
+        <ul>
+            <li>Çoğu Karar: %60 Evet.</li>
+            <li>Bir üyeyi çıkarma: %66 Evet.</li>
+            <li>Bir şeyi geri alma (askıya almayı kaldırma, krediyi çözme, üyeyi geri kabul etme): yarıdan fazlası.</li>
+            <li>Eşitlik her zaman başarısız sayılır.</li>
+        </ul>
+        <h2>Bir Karar kabul edildiğinde</h2>
+        <ul>
+            <li>Topluluğunuzun sunucusu bunun hâlâ geçerli olduğunu kontrol eder: üye hâlâ mevcuttur, Ortak Alanda yeterli fasulye vardır. Ardından harekete geçer.</li>
+            <li>Bir hibe için Ortak Alanda fasulye yetersizse hibe yeterli miktar olana kadar bekler. 90 gün sonra vazgeçer.</li>
+            <li>Aynı anda yalnızca bir hibe bekleyebilir. Ortak Alan hâlâ yetersizken ikinci bir hibe kabul edilirse beklemez: tamamen kapanır ve topluluk tekrar oylamalıdır.</li>
+            <li>Kişi veya girişim zaten ayrılmışsa Karar hiçbir şey yapmadan kapanır.</li>
+        </ul>
+        <h2>Bir üyeyi çıkarma</h2>
+        <ul>
+            <li>Bir çıkarma kabul edilirse üye derhal askıya alınır ve kredisi dondurulur.</li>
+            <li>7 gün daha geçtikten sonra tamamen çıkarılırlar. Bu 7 gün içinde onları geri kabul etmeye yönelik bir Karar çıkarmayı iptal eder.</li>
+            <li>Kendi hesabını silen bir üye, bir çıkarmanın ardından bile olsa geri kabul edilemez. Yeni bir davetle tekrar katılabilirler.</li>
+            <li>Bir üye çıkarıldığında gönderileri kaldırılır. Fasulye borçları varsa Ortak Alan borcu öder. Fasulyeleri varsa o fasulyeler Ortak Alana geçer.</li>
+            <li>Topluluk, topluluğunuzun sunucusunun bir sahibi veya yöneticisi dışındaki herhangi bir üyeyi çıkarmak veya askıya almak için oy kullanabilir. Sunucunun kendisini onlar çalıştırır, bu nedenle bir oylama bunu ellerinden alamaz; denerseniz uygulama bunu belirtir. Bir sahip önce yöneticinin rolünü alabilir ve bundan sonra diğerleri gibi bir üye olurlar.</li>
+        </ul>
+        <h2>Acil askıya alma</h2>
+        <p>Bir yönetici, örneğin zararı durdurmak için bir üyeyi derhal askıya alabilir. Üyelerin okuyabileceği bir gerekçe belirtmelidirler.</p>
+        <ul>
+            <li>Aynı anda 7 günlük bir Karar açılır: &quot;Bu askıya alma korunsun mu?&quot;.</li>
+            <li>Olağan katılım oranına ve %60 Evet oyuna ihtiyaç duyar.</li>
+            <li>Kabul edilmezse veya çok az kişi oy kullanırsa askıya alma kendiliğinden kalkar.</li>
+            <li>Bir yönetici kendisini askıya alamaz ve sunucunun tek sahibini askıya alamaz. Yalnızca bir sahip başka bir sahibi askıya alabilir.</li>
+        </ul>
+        <p>Küresel toplulukta oylama yoktur. Bir yönetici daha önce kaldırmadığı sürece askıya alma 7 gün sürer ve ardından kendiliğinden kalkar. Birini daha uzun süre dışarıda tutmak için yöneticiler onu tekrar askıya alır veya hesabını kaldırır.</p>
+        <h2>Yöneticilerin yapabilecekleri ve yapamayacakları</h2>
+        <p>Topluluğunuzun sunucusunun sahipleri ve yöneticileri vardır. Ona bakarlar.</p>
+        <ul>
+            <li>Bir yönetici açık bir Kararı durdurabilir ancak yazılı bir gerekçe belirtmelidir. Üyeler bunu Karar üzerinde okuyabilir.</li>
+            <li>Bir çıkarma kabul edilmişse ve 7 günlük bekleme süresindeyse bir yönetici onu durdurabilir veya derhal gerçekleşmesini sağlayabilir.</li>
+            <li>Yöneticiler üyelere yeni gelenlere kefil olma hakkı verebilir.</li>
+            <li>Yöneticiler bir üyeye güven rozeti verebilir. Bu ayrıca o üyeye o rozetin gerektirdiği güveni verir, böylece kredi limitlerini derinleştirir.</li>
+            <li>Yöneticiler tıkanmış takasları çözer ancak parçası oldukları bir takası asla çözemezler.</li>
+        </ul>
+        <h2>Anketler</h2>
+        <ul>
+            <li>Kredisi dondurulmamış herhangi bir aktif üye 2 ila 4 yanıtlı bir Anket başlatabilir. 3, 7 veya 14 gün sürer.</li>
+            <li>Aynı anda açık bir Anketiniz olabilir. Topluluğunuz aynı anda 5 açık Ankete sahip olabilir.</li>
+            <li>Bir gruba paylaşılan bir Anket yalnızca o grubun üyeleri ve koordinatörleri tarafından yanıtlanabilir. Gözlemciler okuyabilir ancak yanıtlayamaz.</li>
+            <li>Bir Anketi yanıtlamak için de kredinin dondurulmamış olması gerekir. Anket kapanana kadar yanıtınızı değiştirebilirsiniz. Başlatan kişi erken kapatabilir.</li>
+            <li>Bir Anket anonimdir: herkes yalnızca toplamları görür. Başlatan kişi bunun yerine üyelerin kimin neyi seçtiğini görmesi için <strong>açık oylama</strong> yapabilir. Bu seçim Anket başladığında yapılır ve Anket paylaşıldıktan sonra değiştirilemez.</li>
+            <li>Küresel toplulukta kapalı bir anonim Anket, varsa oylarının kaç tanesinin yeni veya 12 kelimelik hesaplardan geldiğini de söyler. Yine de her oy sayılır.</li>
+        </ul>
+        <h2>Girişimler ve sorumlular</h2>
+        <p>Bir girişim sorumluları tarafından yönetilir. Bunlardan biri baş sorumludur.</p>
+        <ul>
+            <li><strong>Katılma:</strong> sorumlu olmak istersiniz ve kazandığınız güvenin ne kadarını taahhüt ettiğinizi söylersiniz (0 olabilir). Tüm girişimlerinizde takas yaparak kazandığınızdan daha fazla güven taahhüt edemezsiniz. Baş sorumlu onaylar veya reddeder.</li>
+            <li><strong>Üyelerini teyit eden bir toplulukta taahhüt:</strong> teyit edilmiş bir üye, bilinen kredi limitinin bir kısmını (en fazla yarısını) da taahhüt edebilir. Bu kısım kendi limitlerinden düşer.</li>
+            <li><strong>İtiraz süresi:</strong> bir girişimin halihazırda birden fazla sorumlusu olduğunda baş sorumlunun onayı 3 gün bekler. Diğer herhangi bir sorumlu bu süre içinde itiraz edebilir ve tek bir itiraz bunu iptal eder.</li>
+            <li><strong>Bir sorumluyu çıkarma:</strong> baş sorumlu sıradan bir sorumluyu çıkarabilir. Aynı 3 günlük süre geçerlidir ve diğer herhangi bir sorumlu itiraz edebilir.</li>
+            <li><strong>Topluluk yöneticileri:</strong> topluluğunuzun girişimin bir sorumlusu olmayan bir yöneticisi, 3 günlük süre olmadan bir sorumluyu derhal onaylayabilir veya sıradan bir sorumluyu derhal çıkarabilir. Bu, tıkanmış bir girişime yardım edilebilmesi içindir.</li>
+            <li><strong>Görevden çekilme:</strong> herhangi bir sorumlu görevden çekilebilir. Girişim borçtaysa ve bunu karşılamak için taahhüdünüze ihtiyaç varsa borç küçülene veya diğer sorumlular daha fazla taahhütte bulunana kadar beklemeniz gerekir. Tek sorumlu görevden çekilemez; önce başka bir sorumlu ekler veya girişimi tasfiye eder.</li>
+            <li><strong>Taahhüdünüz</strong> girişimin kredi limitini destekler. Kazandığınız güvene ait bir taahhüt kendi bakiyenizden veya kendi kredi limitinizden asla alınmaz.</li>
+            <li><strong>Sessiz bir baş sorumlu:</strong> baş sorumlu 30 gün boyunca uygulamada hiçbir şey yapmadıysa diğer sorumlular kendi aralarından yeni bir baş sorumlu seçebilir. Oylama Evet ve Hayır seçenekleriyle 14 güne kadar sürer. Diğer sorumluların yarıdan fazlası Evet dediğinde kabul edilir. Baş sorumlu geri gelip uygulamada herhangi bir şey yaparsa oylama iptal edilir. Baş sorumlunun hesabı askıya alınmışken yaptığı hiçbir şey geri gelme sayılmaz. Sorumlu oyları değiştirilemez.</li>
+            <li><strong>Sorumlular arasındaki oylamalar:</strong> iki veya daha fazla sorumlusu olan bir girişimde herhangi bir sorumlu, girişimin kendi hesabından Fasulye ödenmesini (asla tuttuğundan fazla değil, asla kendilerine değil ve bir sorumluya yalnızca %1,5 takas ücretiyle kazandıklarından), bir sorumlunun çıkarılmasını veya bir projede değil ama bir girişimde başka bir sorumlunun baş sorumlu yapılmasını önerebilir. Açıldığı andaki sorumlular oy kullanır; yarıdan fazlası oy kullanmalıdır; ödeme yapmak veya çıkarmak için %60 Evet, bir baş sorumlu seçmek için yarıdan fazlası gerekir. 7 gün sürer veya yanıt değişemez hale geldiğinde daha erken biter ve kendiliğinden yürütülür. Yalnızca sorumlular görür. Açıkken kaç kişinin oy kullandığını gösterir; Evet ve Hayır kapandığında gösterilir. Kimin nasıl oy kullandığını kimse görmez ancak çok küçük bir grupta sonuç ve kimlerin oy kullandığı bunu belli edebilir. Bu oylamalar Ortak Alana veya birinin topluluktaki konumuna asla dokunmaz: bunlar topluluk Kararlarıdır. Bir oylama baş sorumluyu (bunun yerine yeni bir baş sorumlu için oy kullanın), tek sorumluyu veya taahhüdü bir borcu karşılayan bir sorumluyu çıkaramaz. Bir sorumlu kendi çıkarılmasını öneremez; bunun yerine görevden çekilir.</li>
+            <li><strong>Baş sorumlu ayrılır veya çıkarılırsa,</strong> en uzun süredir görev yapan sorumlu derhal baş sorumlu olur ve diğer sorumlular onu hemen değiştirebilir. Hiç sorumlu kalmazsa girişim duraklatılır.</li>
+            <li><strong>Tasfiye:</strong> baş sorumlu veya tek sorumlu bir girişimi kapatmayı başlatabilir. Bir topluluk yöneticisi de yapabilir. Ardından 7 günlük bir bekleme süresi vardır ve herhangi bir sorumlu veya bir topluluk yöneticisi bunu iptal edebilir. Borçlu bir girişim, borç ödenene veya topluluk borcu silene kadar kapanamaz. Hiçbir şey bir tasfiyeyi kendiliğinden tamamlamaz: 7 günün ardından baş sorumlu, tek sorumlu veya bir topluluk yöneticisi kapatma işlemini tamamlamalıdır ve bir takas hâlâ açıkken tamamlanamaz. Kapandığında kalan fasulyeler Ortak Alana gider.</li>
+        </ul>
+        <h2>Gruplar ve koordinatörler</h2>
+        <p>Bir grup koordinatörleri tarafından yönetilir ve bunlardan biri grubun <strong>baş koordinatörüdür</strong>. Grubu oluşturan kişi ilk baş koordinatördür.</p>
+        <ul>
+            <li>Bazı gruplar herkese açıktır. Bazıları sizi bir koordinatörün onaylamasına ihtiyaç duyar. Bazıları yalnızca davetiyelidir.</li>
+            <li><strong>Herhangi bir koordinatör</strong> üyeleri onaylayabilir ve davet edebilir, bir üyeyi veya gözlemciyi çıkarabilir, bir üyenin veya gözlemcinin rolünü değiştirebilir, birini koordinatör yapabilir, gönderileri ve mesajları kaldırabilir ve grubu ile kimlerin katılabileceğini düzenleyebilir.</li>
+            <li><strong>Yalnızca baş koordinatör</strong> bir koordinatörü çıkarabilir veya birinden koordinatör rolünü alabilir. Grubun kendi oylaması da bunu yapabilir.</li>
+            <li><strong>Hiç kimse baş koordinatörü çıkaramaz veya liderliği ondan alamaz.</strong> Ne başka bir koordinatör ne de bir topluluk yöneticisi — yöneticilerin bir grubun içinde söz hakkı yoktur. Baş koordinatörün görevi devretmesi dışında yalnızca grubun kendi oylaması yeni bir lider seçebilir.</li>
+            <li><strong>Askıya alınan bir koordinatör:</strong> bir koordinatörün hesabı askıya alınmışken hiçbir koordinatörlük yetkisini kullanamaz ve lider olarak kendi yetkileri de bekler. Koordinatör olarak kalır ve lider lider olarak kalır; askıya alma bittiğinde hepsi tekrar çalışır. Diğer koordinatörler her zamanki gibi devam eder ve üyeler sohbet etmeye ve paylaşım yapmaya devam eder. Askıya alınan bir üye de askıya alma bitene kadar bir grup başlatamaz veya bir gruba katılamaz.</li>
+            <li><strong>Liderliği devretme:</strong> baş koordinatör başka birini lider yapabilir. Başka bir koordinatör veya aynı anda koordinatör olan bir üye olabilir. Yapıldıktan sonra lider bunu geri alamaz.</li>
+            <li><strong>Lider olarak ayrılma:</strong> önce liderliği devredin. Grupta başka kimse yoksa lider doğrudan ayrılabilir.</li>
+            <li>Son koordinatör görevden çekilemez ve grup hâlâ başka üyelere sahipken çıkarılamaz. Grupta başka kimse yoksa doğrudan ayrılabilir.</li>
+            <li><strong>Grubun kendi oylaması.</strong> Bir grubun üyeleri ve koordinatörleri grubun kendi meseleleri hakkında oy kullanabilir: yeni bir baş koordinatör seçmek, birini koordinatör yapmak, bir koordinatörü üye yapmak, birini gruptan çıkarmak, kimlerin katılabileceğini değiştirmek veya grubu kapatmak. Herhangi bir üye veya koordinatör bir öneride bulunabilir; gözlemciler izler ancak oy kullanmaz. Açıldığı sırada üye veya koordinatör olan herkes oy kullanabilir. Bunların yarıdan fazlası oy kullanmalıdır. Birini çıkarmak ve grubu kapatmak %60 Evet gerektirir; geri kalanı yarıdan fazlasını gerektirir. 7 gün sürer veya yanıt değişemez hale geldiğinde daha erken biter ve ardından uygulama bunu kendiliğinden yürütür. Oylar gizlidir ve değiştirilemez. Bir grubun oylaması hiçbir zaman Fasulye hareket ettirmez ve hiç kimsenin topluluktaki konumunu değiştirmez ve yöneticiler bunu durduramaz. Kapatılan bir grup yeni üye ve yeni mesaj kabul etmez; gönderileri ve etkinlikleri iptal edilir. Sohbeti okunabilir kalır. Oylamayı grubun sayfasında <strong>Kararlar</strong> altında bulabilirsiniz. Bir gruba hiçbir şeyi değiştirmeden ne düşündüğünü sormak için gruba bir Anket paylaşın.</li>
+            <li><strong>Sessiz bir baş koordinatör:</strong> bir grubun baş koordinatörü 30 gün boyunca uygulamada hiçbir şey yapmadıysa grup yeni birini seçebilir. <strong>Diğer koordinatörleri</strong> oy kullanır — veya diğer koordinatörlerden hiçbiri liderin son aktif olduğu güne kadar koordinatör yapılmadıysa <strong>üyeleri</strong> oy kullanır. Yalnızca o gün zaten orada olan kişiler katılır: o zamana kadar gruba katılmış olan üyeler veya o zamana kadar koordinatör yapılmış olan koordinatörler. Bundan sonra katılan veya koordinatör yapılan hiç kimse öneremez, önerilemez veya oy kullanamaz ve sayılmaz. Gruptan ayrılıp tekrar katılırsanız tekrar katıldığınız andan itibaren sayılırsınız. Orada bulunanlardan hiç kimse kalmadıysa hiçbir oylama açılamaz ve grubun ekranı bunu belirtir. Katılanlardan herhangi biri kendileri dahil aralarından birini önerebilir. Oylama gizli olarak, Evet veya Hayır şeklinde 14 güne kadar sürer. Yanıt verenlerin yarıdan fazlası Evet dediğinde kabul edilir. Baş koordinatör geri gelip uygulamada herhangi bir şey yaparsa oylama iptal edilir. Liderin hesabı askıya alınmışken yaptığı hiçbir şey geri gelme sayılmaz. Seçilen kişi koordinatör ve grubun lideri olur. Sessiz lider, oy kullananlar koordinatörler olduğunda koordinatör olarak kalır; üyeler olduğunda ise sıradan bir üye olur. Oylamayı grubun kendi ekranında, listenin üzerinde bulabilirsiniz.</li>
+            <li><strong>Kötü niyetli bir baş koordinatör</strong> bir topluluk Kararı ile görevden alınabilir. Bu özellik sonraki bir güncellemede gelecektir.</li>
+        </ul>
+        <h2>Kefil olma</h2>
+        <p>Yalnızca yöneticiler ve bir yönetici tarafından veya bir topluluk Kararı ile seçilen üyeler yeni gelenlere kefil olabilir. Bir kefalet, yeni gelene başlaması için küçük bir kredi limiti verir: 25, 50 veya 100 fasulye. Güven rozetleri bu hakkı asla vermez.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../proposing-a-decision.html"><strong>Proposing a Decision</strong><span>Ask the community to decide something binding.</span></a></li>
+            <li><a href="../polls.html"><strong>Polls</strong><span>Ask the community a quick question. Polls show opinion; they change nothing by themselves.</span></a></li>
+            <li><a href="../keepers.html"><strong>Keepers</strong><span>The people who run an enterprise and stand behind it. How to join, object, and step down.</span></a></li>
+            <li><a href="../groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.</span></a></li>
+            <li><a href="../people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

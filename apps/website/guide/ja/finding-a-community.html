@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>近くのコミュニティを探す — BeanPool members' guide</title>
+    <meta name="description" content="グローバルコミュニティから近くのコミュニティを探して参加申請したり、近隣で新しいコミュニティが始まった際に通知を受け取ったり、自分で立ち上げることができます。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">はじめに</a></p>
+        <h1>近くのコミュニティを探す</h1>
+        <p class="lede">グローバルコミュニティから近くのコミュニティを探して参加申請したり、近隣で新しいコミュニティが始まった際に通知を受け取ったり、自分で立ち上げることができます。</p>
+        <h2>なぜローカルコミュニティなのか</h2>
+        <p>グローバルコミュニティは、世界中の人々が出会う場所です。地域のローカルコミュニティは、ご近所同士が取引を行う場所であり、独自の豆、取引、コモンズを備えています。グローバルコミュニティでは、<strong>🏘️ ローカルコミュニティ</strong>の印が付いたサンプルコミュニティでそれらの仕組みを確認できますが、そこで豆を獲得したり消費したりすることはできません。そのため、グローバルコミュニティの投稿では、見返りとして何を希望するか（無料、交換、相談）が説明欄に記載されます。「豆とグローバルコミュニティ」を参照してください。</p>
+        <p>グローバルコミュニティは、数あるコミュニティの中の1つに過ぎません。あなた自身のコミュニティは独自のサーバーで稼働しており、グローバルコミュニティを必要としません。グローバルコミュニティはそれを見つける手助けをするだけです。</p>
+        <p>近くにまだコミュニティがありませんか？自分で立ち上げることもできます。後述の「近くにコミュニティがない場合」を参照してください。</p>
+        <h2>近くのコミュニティ</h2>
+        <p>グローバルコミュニティでは、<strong>ホーム</strong>の<strong>コミュニティを見つける</strong>カードにお客さまの最寄りのコミュニティが表示されます。参加後30日間はホームの最上部付近に固定され、削除や移動はできません。30日を過ぎると、他のカードと同様に削除できます。Webアプリでは、カード上の各コミュニティがそれぞれのページへのリンクになっています。現在地が不明な場合は、<strong>自分のエリアを共有</strong>をタップするか、<strong>または市区町村を入力</strong>をタップして市区町村を選んでください。以下の手順はスマートフォンアプリ向けのものです。</p>
+        <p>グローバルコミュニティにまだ参加していませんか？左上の豆をタップし、<strong>あなたのコミュニティ一覧</strong>の下で<strong>グローバルコミュニティ</strong>をタップして、お持ちのアカウントで参加してください（「複数のコミュニティ」参照）。まだアカウントをお持ちでない場合は、アプリの最初の画面で<strong>世界のBeanPoolを見る</strong>をタップしてください（「BeanPoolへの参加」参照）。</p>
+        <ul>
+            <li><strong>近くのコミュニティ</strong>をタップすると、全一覧が表示されます。</li>
+            <li>アプリがお客さまの現在地を把握している場合は、最も近い順にコミュニティが並びます。把握していない場合は、<strong>現在地を使用</strong>をタップするか、名前で検索してください。現在地を共有したくない場合は、<strong>または市区町村を入力</strong>をタップして入力を開始し、一覧からお住まいの市区町村を選択してください。大体の地点のみが保持され、<strong>変更</strong>で別の場所を選び直すことができます。</li>
+            <li>あなたからほぼ同じ距離にあるコミュニティはランダムに並び替えられるため、特定の1つのコミュニティが常に最上位に来ることはありません。</li>
+            <li>コミュニティが公開を設定している場合、各コミュニティの距離とメンバー数が表示されます。</li>
+        </ul>
+        <p>アドレスを公開していないコミュニティも一覧には掲載されますが、ここから参加申請を送ることはまだできません。</p>
+        <h2>参加を申請する</h2>
+        <ul>
+            <li>コミュニティの<strong>参加を申請</strong>をタップします。</li>
+            <li>お名前を確認し、ご自身についての簡単な自己紹介（最大280文字：お住まいの地域、共有したいことや学びたいことなど）を記入します。</li>
+            <li><strong>送信</strong>をタップします。</li>
+        </ul>
+        <p>申請はグローバルコミュニティを経由せず、お名前、自己紹介文、写真とともにそのコミュニティに直接届きます。確認できるのはそのコミュニティのメンバーだけです。管理者のみが招待できるコミュニティでは、オーナーと管理者のみが確認できます。そこのメンバーがあなたを招き入れることができます。相手が<strong>招待</strong>をタップすると、あなたのアカウントだけが使える招待が作成されます。</p>
+        <p>返答を待つ間、コミュニティのカードには<strong>参加を申請しました。まだ返答はありません</strong>と表示されます。通常、コミュニティは数日以内に返答します。各コミュニティに対して送信できる申請は一度に1件のみであり、各コミュニティが1つのインターネット接続から受け付ける申請数にも1日あたりの上限があります。</p>
+        <p>30日以内に誰も返答しなかった場合、カードには<strong>返答がありませんでした。もう一度申請できます。</strong>と表示されます。</p>
+        <p>コミュニティが申請を受け付けられない場合、カードにはコミュニティからの案内が表示されます（例：本日このネットワークからの申請が多すぎる、現在は参加申請を受け付けていないなど）。</p>
+        <h2>承認されたとき</h2>
+        <p>カードに<strong>メンバーから招待されました</strong>と表示されます。コミュニティ名が書かれた<strong>参加</strong>をタップしてください。</p>
+        <ul>
+            <li>あなたのアカウント（同じ鍵と同じ12個の単語）がそのまま引き継がれます。お名前も引き継がれます。すでにそのコミュニティに同じ名前の人がいる場合は、「Sarah2」のように数字が付加されます。次のステップで変更できます。</li>
+            <li>投稿、チャット、取引は各コミュニティ内にとどまります。新しいコミュニティでは最初から始まります。</li>
+            <li>次に、新しいコミュニティ用のお名前と写真を確認します。</li>
+            <li>アカウントを保護するサインインは各コミュニティごとに保持されます。アプリは新しいコミュニティでもアカウントを保護するよう促します。<strong>保護する</strong>または<strong>後で</strong>をタップしてください。<strong>設定</strong>からいつでも設定できます。</li>
+        </ul>
+        <p>グローバルコミュニティのメンバー資格も維持され、コミュニティ間を切り替えることができます。「複数のコミュニティ」を参照してください。</p>
+        <h2>近くにコミュニティがない場合</h2>
+        <ul>
+            <li><strong>ここで始まったら通知する:</strong> お客さまの現在地近くでコミュニティが立ち上がったときに通知を受け取ることができます。約10 km四方の地域情報のみが保持され、正確な現在地が保持されることは決してありません。最大3か所まで登録でき、<strong>停止</strong>で登録を解除できます。</li>
+            <li><strong>コミュニティを立ち上げる:</strong> すべてのコミュニティは、地元の誰かが管理する独自の小さなサーバーを持っています。自宅の予備パソコン、または月額数百円程度の費用と、約30分の時間で立ち上げられます。「豆とグローバルコミュニティ」を参照してください。アプリには3つの運営方法（自宅の予備パソコン、小規模なレンタルサーバー、または協力を募る）が表示されます。名前、場所、連絡方法を入力し、<strong>コミュニティの情報をコピー</strong>をタップして、新しいサーバーの設定に貼り付けます。連絡方法は、公開ディレクトリで有効化しない限り非公開のままです。</li>
+        </ul>
+        <h2>ローカルコミュニティのメンバーである場合</h2>
+        <p>グローバルコミュニティから、あなたのコミュニティへの参加申請が届くことがあります。<strong>トーク</strong>、<strong>仲間</strong>、<strong>招待</strong>の順にタップします。申請は<strong>参加申請</strong>の下に、相手の名前、メッセージ、出身地とともに一覧表示されます。申請への返答はスマートフォンアプリで行います。Webアプリには一覧表示されません。</p>
+        <ul>
+            <li><strong>招待:</strong> その人のアカウントだけが使える招待を作成します。相手のアプリが自動的に見つけるため、相手は1タップで参加できます。</li>
+            <li><strong>今はしない:</strong> 相手には通知されません。相手には「まだ返答はありません」と表示され続け、30日間は再申請できません。</li>
+        </ul>
+        <p>コミュニティが管理者のみ招待可能に設定していない限り（コミュニティサーバーの設定の<strong>Who may invite</strong>内の<strong>Known</strong>）、トラストバッジに関係なくどのメンバーでも返答できます。管理者のみの設定の場合、オーナーと管理者のみが申請を確認し返答できます。コミュニティの管理者は参加申請機能をオフにすることもできます。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>BeanPoolへの参加</strong><span>参加方法は2つあります。メンバーからの招待によるコミュニティ参加、または公開されているグローバルコミュニティへの12個の秘密の単語か1つのサインインによる参加です。参加申請や他者の招待方法も説明します。</span></a></li>
+            <li><a href="home.html"><strong>ホーム</strong><span>ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。</span></a></li>
+            <li><a href="communities.html"><strong>複数のコミュニティ</strong><span>1つのアカウントで複数のコミュニティに参加し、切り替えたり、コミュニティの移転先に追従したり、グローバルコミュニティの表示内容を確認する方法を説明します。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆とグローバルコミュニティ</strong><span>グローバルコミュニティの目的、多数のコミュニティの1つとしての位置付け、表示内容（🏘️ コミュニティマーカー、サンプルコミュニティExample Valley、豆がそこで待機する理由、ローカルコミュニティの探し方や立ち上げ方）を説明します。</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

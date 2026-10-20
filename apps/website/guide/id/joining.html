@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bergabung ke BeanPool — BeanPool members' guide</title>
+    <meta name="description" content="Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Memulai</a></p>
+        <h1>Bergabung ke BeanPool</h1>
+        <p class="lede">Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.</p>
+        <h2>Dua cara masuk</h2>
+        <ul>
+            <li><strong>Dengan undangan</strong>, kamu bergabung ke komunitas: orang-orang di dekatmu, dengan Kacang, transaksi, dan Sarana Bersama miliknya sendiri. Anggota dari komunitas tersebut mengundangmu.</li>
+            <li><strong>Tanpa undangan</strong>, kamu bisa bergabung dengan <strong>komunitas global</strong> saat dibuka: orang-orang dari mana saja, tempat kamu bisa memposting, berkirim pesan, dan menemukan komunitas di dekatmu. Tidak ada Kacang dan tidak ada pemungutan suara komunitas di sana. Kacang, kredit, Sarana Bersama, dan Keputusannya berada di komunitas lokal. Komunitas global menunjukkan cara kerjanya, dalam sebuah komunitas contoh. Lihat &quot;Kacang dan komunitas global&quot;.</li>
+        </ul>
+        <p>Tidak punya undangan, tapi ada komunitas di dekatmu? Bergabunglah dengan komunitas global, lalu minta komunitas itu untuk mengizinkanmu masuk: setiap anggotanya bisa mengizinkanmu, atau, di komunitas yang hanya adminnya yang mengundang, adminnya yang bisa mengizinkanmu. Lihat &quot;Finding a community near you&quot;.</p>
+        <p>Apa pun caranya, akunmu adalah kunci yang disimpan di ponselmu, dengan 12 kata bahasa Inggris yang memulihkannya kembali. Tidak ada kata sandi.</p>
+        <h2>Bergabung dengan undangan</h2>
+        <p>Sebuah undangan berupa tautan, kode QR, atau kode. Kode terlihat seperti <strong>INV-</strong> diikuti huruf-huruf, atau kode panjang yang diawali dengan <strong>BP-</strong>.</p>
+        <ul>
+            <li>Sebuah undangan berfungsi <strong>sekali</strong>.</li>
+            <li>Sebuah undangan berlaku <strong>30 hari</strong>. Setelah itu, minta undangan baru.</li>
+        </ul>
+        <p>Untuk bergabung:</p>
+        <ul>
+            <li>Pasang BeanPool dan buka aplikasinya. Jika kamu mengetuk tautan undangan terlebih dahulu, aplikasi akan mendeteksi undangan tersebut secara otomatis, bahkan langsung setelah memasangnya dari Google Play.</li>
+            <li>Di layar pertama, ketuk <strong>Gabung dengan undangan</strong>. Jika undangan ada di papan klipmu, kamu bisa mengetuk <strong>Tempel</strong> sebagai gantinya. Di Android tombolnya berbunyi <strong>Been sent an invite? Tap to check your clipboard</strong>. Di web app, tombolnya berbunyi <strong>Saya Baru di Sini</strong>.</li>
+            <li>Tempel tautan atau kode undangan. Jika kamu hanya memiliki kode, ketik juga nama atau alamat komunitasnya. Orang yang mengundangmu bisa memberi tahukannya.</li>
+            <li>Pilih nama yang akan dilihat orang lain. Panjangnya minimal 2 karakter. Buatlah tetap pendek: saat kamu bergabung, nama yang lebih dari 20 karakter akan dipotong.</li>
+            <li>Ketuk <strong>Lanjut</strong>. Aplikasi akan memeriksa undangan dan namanya. Jika seseorang sudah memiliki nama itu, aplikasi akan menyarankan nama lain. Sampai selesai, <strong>← Kembali ke Beranda</strong> dan <strong>Pulihkan identitas yang ada</strong> tidak dapat digunakan.</li>
+            <li>Di beberapa komunitas, layar yang sama juga menampilkan <strong>Yang bisa dilihat admin komunitas ini</strong>, dengan kotak pilihan opsional <strong>Saya setuju</strong>. Kamu tetap bergabung dengan cara apa pun. Lihat &quot;What the admins can see&quot;.</li>
+        </ul>
+        <h2>Bergabung dengan komunitas global</h2>
+        <p>Kamu dapat bergabung di aplikasi ponsel atau di browser web. Di browser, buka global.beanpool.org dan ketuk <strong>Gabung</strong>: lihat &quot;Using BeanPool in a web browser&quot; untuk langkah-langkahnya. Di aplikasi ponsel:</p>
+        <ul>
+            <li>Di layar pertama, ketuk <strong>Jelajahi BeanPool di seluruh dunia</strong>, tepat di bawah <strong>Gabung dengan undangan</strong>. Tombol ini selalu ada di sana. Ketika komunitas global tidak dapat menerimamu saat ini, sebuah baris di bawahnya menjelaskan alasannya: <strong>Komunitas global tidak bisa dijangkau sekarang. Coba lagi, atau gabung dengan undangan.</strong>, <strong>Sedang tidak menerima anggota baru.</strong>, atau <strong>Komunitas ini sedang dalam pratinjau pribadi. Minta undangan dari pemiliknya.</strong> Mengetuknya akan meminta lagi.</li>
+            <li>Pilih salah satu dari dua cara masuk. <strong>Buat akun dengan 12 kata rahasia</strong> adalah yang pertama. Ini tidak memerlukan akun Google, Apple, atau Facebook: 12 kata bahasa Inggrismu adalah satu-satunya cara untuk kembali masuk.</li>
+            <li><strong>Atau masuk</strong> sekali dengan Google, Apple (di iPhone), atau Facebook. Akun masuk itu juga menjadi cara kembali jika kamu kehilangan ponselmu. BeanPool tidak pernah melihat kata sandimu dan tidak pernah memposting apa pun atas namamu.</li>
+            <li>Pilih nama yang akan dilihat orang lain, hingga 20 karakter, dan ketuk <strong>Gabung</strong>. Jika seseorang sudah memiliki nama itu, aplikasi menyarankan nama lain.</li>
+        </ul>
+        <p><strong>Dari situs web, di ponsel.</strong> Di beanpool.org/global, <strong>Buka di aplikasi BeanPool</strong> membuka aplikasi tepat pada cara masuk ini: dua cara di atas pada ponsel yang belum memiliki akun, atau <strong>Bergabung dengan komunitas global</strong> dengan akun yang sudah dimiliki ponsel (lihat &quot;Sudah punya akun?&quot; di bawah). Jika akun tersebut sudah menjadi anggota di sana, aplikasi akan membuka lembar <strong>BEANPOOL</strong> sebagai gantinya, di mana <strong>Komunitas global</strong> di bawah <strong>KOMUNITASMU</strong> akan beralih ke sana. Jika komunitas global telah menutup akun itu, aplikasi hanya terbuka biasa. Di Android, jika aplikasi belum terpasang, Google Play akan terbuka; setelah memasang, saat pertama kali kamu membuka BeanPool, aplikasi akan langsung menuju ke cara masuk ini. Di iPhone, App Store akan terbuka; setelah memasang, ketuk <strong>Jelajahi BeanPool di seluruh dunia</strong>. Tautan hanya membuka layar: tidak ada yang bergabung sampai kamu mengetuknya. Saat membuka lembar <strong>BEANPOOL</strong>, lembar tersebut akan memeriksa, seperti biasa, apakah akun ponsel ini adalah anggota dari setiap komunitas yang dicantumkannya. Undangan didahulukan: jika kamu dikirimi undangan, aplikasi akan membuka undangan tersebut, dan jika kamu sedang di tengah proses bergabung, aplikasi akan melanjutkannya.</p>
+        <p>Dengan 12 kata, ponselmu juga melakukan pemrosesan singkat untuk menyiapkan akun. Proses ini dimulai segera setelah kedua cara ditampilkan (ketika tautan situs web membukanya, segera setelah kamu mengetuk salah satunya), saat kamu membaca dan mengetik namamu, sehingga kebanyakan orang tidak pernah menunggunya. Jika kamu mengetuk <strong>Gabung</strong> sebelum proses selesai, aplikasi bertuliskan <strong>Menyiapkan akunmu…</strong> dengan bilah proses, dan <strong>← Kembali</strong> masih berfungsi. Ketika banyak orang bergabung dari jaringanmu, aplikasi akan memberi tahu demikian, beserta perkiraan waktu yang diperlukan di ponselmu, dan kamu bisa masuk menggunakan akun sebagai gantinya untuk langsung bergabung. Pilihan masuk menggunakan akun hanya diminta melakukan pemrosesan ini pada jaringan yang sangat sibuk, dan aplikasi melakukannya sendiri. <strong>Pilih cara lain</strong> menghentikan waktu tunggu dan membawamu kembali ke kedua cara tersebut. Jika kamu memilih masuk dengan akun, penyiapan 12 kata akan berhenti untuk menghemat bateraimu, dan <strong>Pilih cara lain</strong> memulainya kembali.</p>
+        <p>Jika komunitas memintamu menunggu (terlalu banyak orang yang bergabung dari jaringanmu), aplikasi akan menyebutkan berapa lama. Mengetuk <strong>Gabung</strong> sebelum waktu tersebut hanya akan menampilkan pesan itu lagi beserta sisa waktunya; setelah waktu tunggu berakhir, atau setelah satu menit jika tunggunya lebih lama, <strong>Gabung</strong> akan meminta lagi. Jika tanggal dan waktu ponselmu salah, aplikasi bertuliskan <strong>Check them in your phone's settings (set them to automatic)</strong>, lalu coba lagi. Jika komunitas telah menutup akunmu (kamu menghapusnya, atau kamu dikeluarkan), aplikasi bertuliskan <strong>Keanggotaan akun ini di komunitas global telah ditutup, jadi tidak bisa bergabung lagi.</strong> dan tidak menawarkan pintu masuk ke sana lagi.</p>
+        <p>Jika proses bergabung dengan 12 kata, di aplikasi ponsel atau di browser web, menyatakan bahwa komunitas tidak dapat menerimanya karena <strong>your date and time look wrong</strong>, jam di ponsel atau komputer tersebut berselisih lebih dari beberapa menit. Atur tanggal dan waktunya ke otomatis di pengaturannya, lalu coba lagi. Tidak ada yang disimpan, dan mencoba masuk kembali tidak akan membantu. Pesan yang sama muncul jika menambahkan akun masuk atau memulihkan akunmu di browser ditolak karena alasan yang sama.</p>
+        <p>Jika kamu masuk dengan akun, komunitas hanya menyimpan referensi acak ke akun masukmu, dan tidak pernah menyimpan emailmu. Akun masuk itu juga menjadi cara kembali ke akunmu jika kamu kehilangan ponsel, jadi kamu tidak diminta masuk lagi pada <strong>Cadangan aman</strong>. Untuk keperluan tersebut, komunitas menyimpan salinan akunmu yang terkunci. Pengelola servernya dapat membuka salinan itu: lihat &quot;Getting your account back&quot;. Setelah bergabung, kamu tidak perlu masuk dengan akun untuk membuka aplikasi: akunmu adalah kunci di ponselmu, sama seperti yang lainnya.</p>
+        <p>Jika kamu bergabung dengan 12 kata, tidak ada informasi tentang dirimu yang sampai ke komunitas selain kuncimu dan namamu, dan 12 kata bahasa Inggrismu adalah satu-satunya caramu untuk kembali: tidak ada yang bisa menyetel ulangnya, baik BeanPool maupun komunitas. <strong>Cadangan aman</strong> menyatakan demikian, dan menawarkan <strong>Tambahkan akun masuk sebagai cara kedua untuk kembali</strong>. Setelah bergabung, sebuah kartu di <strong>Beranda</strong> bertuliskan <strong>Akunmu memiliki satu cara untuk kembali: 12 katamu. Periksa apakah kamu masih memilikinya, atau tambahkan akun masuk.</strong> Ketuk <strong>✕</strong> untuk menutupnya: kartu ini muncul kembali sekali setelah postingan pertamamu dan sekali lagi setelah seminggu, lalu tetap ada di <strong>Pengaturan</strong>, di bawah <strong>Perlindungan Akun</strong>, sampai kamu menambahkan akun masuk atau mengetuk <strong>Saya masih memiliki 12 kataku</strong>. Akun yang dibuat dengan 12 kata juga memiliki batasan lebih kecil selama 7 hari pertamanya, dan sampai 3 postingannya tetap aktif: 2 postingan, 4 foto, dan 3 orang baru untuk dikirimi pesan per hari, dan satu laporan langsung menyembunyikan postingannya selama masih baru. Menambahkan akun masuk, kapan saja, akan mengangkat batasan tersebut ke batas wajar akun baru. Kamu dapat menambahkannya dari ponsel mana pun tempat kamu masuk ke akunmu, bukan hanya ponsel tempat kamu mendaftar. Jika brankas kunci BeanPool sudah menyimpan salinan akunmu, kartu tidak ditampilkan, dan <strong>Pengaturan</strong> menawarkan <strong>Tambahkan akun masuk</strong> secara hening.</p>
+        <p><strong>Sudah punya akun?</strong> Bergabunglah ke komunitas global dengan akun tersebut, bukan dengan akun kedua. Ketuk ikon kacang di kiri atas dan, di bawah <strong>KOMUNITASMU</strong>, ketuk <strong>Komunitas global</strong>: menu ini selalu ada, dan saat kamu bisa bergabung dengannya, baris keduanya bertuliskan <strong>Gabung dengan akun ini: 12 kata atau login</strong> (atau <strong>…: a sign-in</strong>). Jika kamu mengunjungi komunitas global sebagai tamu, ketuk <strong>Gabung</strong> di bagian atas, di samping <strong>?</strong>, lalu <strong>Join with 12 words or a sign-in</strong> (<strong>Join with a sign-in</strong> jika komunitas hanya menerima akun masuk). Jika aplikasi menampilkan pesan <strong>Anda belum menjadi anggota di sini</strong> tentang komunitas global, ketuk <strong>Gabung dengan akun ini</strong>. Di ponsel, tautan beanpool.org/global juga membuka <strong>Bergabung dengan komunitas global</strong> dengan akunmu (lihat &quot;Dari situs web, di ponsel&quot;, di atas). Kamu bergabung dengan 12 katamu atau masuk sekali dengan akun, periksa namamu, lalu ketuk <strong>Gabung</strong>. Kunci dan 12 katamu tetap sama, dan tidak ada yang berubah di komunitasmu yang lain. Lihat &quot;More than one community&quot;.</p>
+        <p><strong>Sudah bergabung sebelumnya, di browser web atau di ponsel lain?</strong> Jangan bergabung lagi di ponsel yang belum memiliki akun: itu akan membuat akun kedua, dan dua akun tidak akan pernah bisa digabungkan menjadi satu. Bawa akun yang kamu miliki: di layar pertama, ketuk <strong>Sudah jadi anggota? Pulihkan akun</strong>, lalu <strong>Pulihkan dengan 12 Kata</strong>. Ketik 12 katamu dan, di bawah <strong>Komunitas yang mana?</strong>, ketuk <strong>Komunitas global</strong>. Jika kamu bergabung dengan akun masuk, <strong>Recover with Social</strong> juga berfungsi. Lihat &quot;Getting your account back&quot;.</p>
+        <h2>Langkah-langkahnya</h2>
+        <p>Bilah di bagian atas menampilkan <strong>Namamu</strong>, <strong>Fotomu</strong>, <strong>Cadangan aman</strong>, dan <strong>Cara kerja</strong>. Di browser web pada komunitas global ada satu langkah lagi, <strong>Areamu</strong>, setelah <strong>Fotomu</strong>. Proses bergabung pertama kali pada komunitas global di aplikasi ponsel tidak memiliki langkah area: atur di <strong>Pengaturan</strong>, di bawah <strong>Wilayahmu</strong>.</p>
+        <ul>
+            <li><strong>Fotomu:</strong> pilih foto atau salah satu gambar yang sudah disediakan, atau lewati dan tambahkan nanti dari profilmu. Beberapa komunitas meminta gambar sebelum postingan pertamamu. Orang-orang bertransaksi lebih mudah dengan wajah atau gambar yang mereka kenali.</li>
+            <li>Setelah undangan, <strong>← Kembali</strong> pada <strong>Fotomu</strong> membawamu kembali ke namamu, untuk mengubahnya. Akunnya tetap sama: ketuk <strong>Lanjut</strong> dan kamu melanjutkan ke <strong>Fotomu</strong> dan <strong>Cadangan aman</strong> dengan nama baru. Jika seseorang sudah menggunakannya, aplikasi menyarankan nama lain. Di komunitas global tidak ada <strong>← Kembali</strong> di sini: kamu sudah bergabung.</li>
+            <li><strong>Areamu</strong> (di browser web pada komunitas global, dan di aplikasi ponsel saat kamu bergabung dengan komunitas global menggunakan akun yang sudah kamu miliki): <strong>Kira-kira kamu di mana?</strong> Komunitas global menunjukkan apa yang ditawarkan di dekatmu: 500 iklan terdekat dalam radius 250 km. Ketuk <strong>Gunakan lokasiku</strong>, atau <strong>Ketik nama kota atau daerah</strong>. Areamu disimpan dengan perkiraan sekitar 10 km, tidak pernah lokasi persismu: ponsel atau browsermu membulatkannya sebelum dikirim. Anggota lain melihat seberapa jauh jarakmu, dan jajak pendapat yang kamu buat ditampilkan di areamu. <strong>Lewati untuk sekarang</strong> tidak mengirimkan apa pun dan tidak meminta apa pun; kamu tetap bisa masuk, dan kamu melihat iklan terbaru di seluruh dunia sampai kamu mengaturnya. Kamu dapat mengubah atau menghapusnya kapan saja di <strong>Pengaturan</strong>, di bawah <strong>Wilayahmu</strong>.</li>
+            <li><strong>Cadangan aman:</strong> aplikasi menampilkan 12 katamu (dalam bahasa Inggris). Tuliskan di atas kertas dan simpan dengan aman. Kotak centang <strong>Saya sudah menyimpan kata-kata ini</strong> (di browser web, <strong>Saya sudah menuliskan kata-kata ini di tempat yang aman</strong>) ada untuk mengingatkanmu. Tidak ada yang melarangmu jika kamu melewatinya, tetapi segera baca &quot;12 katamu&quot;. Jika kamu bergabung dengan komunitas global menggunakan akun masuk di aplikasi ponsel, langkah ini menunjukkan akun masukmu yang melindungi akunmu, dan kata-katamu dapat diakses dengan satu ketukan di bawah <strong>Lebih suka mencatat 12 kata?</strong>. Jika kamu bergabung dengannya menggunakan 12 kata, langkah ini pertama-tama menjelaskan bahwa 12 kata ini adalah akunmu, dan menawarkan <strong>Tambahkan akun masuk sebagai cara kedua untuk kembali</strong>: kamu juga bisa melewati ini.</li>
+            <li><strong>Cara kerja:</strong> tur singkat. Ketuk <strong>Let's Begin!</strong> untuk memulai.</li>
+        </ul>
+        <p>Jika kamu menutup aplikasi di tengah jalan, aplikasi akan melanjutkan dari langkah yang sama pada kesempatan berikutnya.</p>
+        <h2>Jika undangan tidak berfungsi</h2>
+        <ul>
+            <li><strong>Already used:</strong> setiap undangan hanya berlaku tepat satu kali. Minta yang baru. Jika itu undanganmu dan kamu sudah menjadi anggota, gunakan <strong>Recover an existing account</strong> sebagai gantinya.</li>
+            <li><strong>Kedaluwarsa:</strong> undangan berlaku 30 hari. Minta yang baru.</li>
+            <li><strong>Not recognised:</strong> pastikan kamu menyalin seluruhnya, dan periksa bahwa nama atau alamat komunitas sudah benar.</li>
+            <li><strong>Made by a member, and only the admins bring people in now:</strong> komunitas telah menetapkan bahwa hanya adminnya yang dapat mengundang, dan tiket yang dibuat anggota tanpa koneksi internet tidak lagi berlaku. Minta undangan baru kepada admin.</li>
+            <li><strong>Failed to register identity</strong> (setelah kamu mengetuk <strong>Lanjut</strong>): biasanya karena tidak ada koneksi, atau tidak ada jawaban tepat waktu. Periksa koneksimu dan ketuk <strong>Lanjut</strong> lagi. Jika percobaan pertamamu berhasil terkirim, aplikasi melanjutkan ke <strong>Fotomu</strong> dan <strong>Cadangan aman</strong> dengan akun yang sama.</li>
+        </ul>
+        <h2>Jika bergabung ke komunitas global tidak berfungsi</h2>
+        <ul>
+            <li><strong>Can't reach the global community right now</strong> (baris di bawah <strong>Jelajahi BeanPool di seluruh dunia</strong>): periksa koneksimu, lalu ketuk tombolnya: aplikasi akan meminta kembali. Kamu tetap bisa bergabung ke suatu komunitas dengan undangan.</li>
+            <li><strong>Can't reach the global community:</strong> periksa koneksimu dan ketuk <strong>Coba lagi</strong>. Kamu tetap bisa bergabung ke suatu komunitas dengan undangan.</li>
+            <li><strong>The global community didn't answer in time</strong> (setelah kamu mengetuk <strong>Gabung</strong>): namamu belum diperiksa dan belum ada yang dikirim. Periksa koneksimu dan ketuk <strong>Gabung</strong> lagi, atau kembali. Saat aplikasi sedang memeriksa namamu, <strong>Pilih cara lain</strong> dan <strong>← Kembali ke Beranda</strong> masih berfungsi.</li>
+            <li><strong>This sign-in already has a BeanPool identity:</strong> kamu sudah pernah bergabung sebelumnya, mungkin di ponsel lain. Ketuk <strong>Restore my account</strong>, lalu gunakan 12 katamu atau akun masuk yang sama.</li>
+            <li><strong>This sign-in already joined the global community with a different BeanPool account</strong> (bergabung dari akun di ponselmu): akun masuk itu memiliki akun tersendiri di sana. Ketuk <strong>Gunakan akun masuk lain</strong>.</li>
+            <li><strong>This community can't check sign-ins right now:</strong> komunitas global telah berpindah ke server lain dan belum dapat membedakan akun yang kembali dari akun baru, sehingga untuk saat ini tidak menerima siapa pun yang baru melalui cara ini. Tidak ada yang disimpan. Coba lagi nanti.</li>
+            <li><strong>Too many new accounts from this network:</strong> ada batasan untuk akun baru dari satu koneksi internet. Semua orang di jaringan yang sama dihitung bersama-sama, jadi di kampus, kantor, atau acara kumpul-kumpul mungkin orang lain yang sedang bergabung, bukan kamu. Coba lagi nanti.</li>
+            <li><strong>Not taking new members right now:</strong> bergabunglah ke suatu komunitas dengan undangan sebagai gantinya.</li>
+        </ul>
+        <h2>Mengundang seseorang</h2>
+        <p>Setiap anggota dapat mengundang orang lain, kecuali jika komunitas telah menetapkan bahwa hanya admin yang dapat melakukannya (lihat di bawah). Lencana kepercayaanmu tidak berpengaruh pada hal ini.</p>
+        <ul>
+            <li>Ketuk ikon undangan (orang dengan tanda plus) di kanan atas layar. Ini membuka <strong>Invites</strong>.</li>
+            <li>Jika mau, tuliskan untuk siapa undangan tersebut, hanya untuk catatan pribadimu sendiri.</li>
+            <li>Ketuk <strong>Generate Ticket</strong>. Tanpa koneksi internet, tombol berbunyi <strong>Generate Offline Ticket</strong>, dan itu juga berfungsi.</li>
+            <li>Tunjukkan kode QR kepada mereka, atau ketuk <strong>Share Invite</strong> untuk mengirimkan tautan dan kodenya.</li>
+            <li>Di web app, buka <strong>Orang</strong>, lalu <strong>Invites</strong>, dan ketuk <strong>Generate New Invite</strong>. Lalu <strong>Salin</strong> atau <strong>Bagikan</strong>.</li>
+            <li>Undangan yang belum digunakan siapa pun dicantumkan di bawah <strong>MENUNGGU</strong>, masing-masing dengan tombol <strong>Bagikan</strong> untuk mengirimkannya lagi.</li>
+            <li>Kamu dapat membuat 20 undangan per hari, dan memiliki 50 undangan yang belum digunakan siapa pun. Undangan yang tidak digunakan siapa pun akan dihapus setelah 30 hari, dan keluar dari <strong>MENUNGGU</strong>.</li>
+        </ul>
+        <p>Admin komunitas dapat menonaktifkan undangan untuk seluruh komunitas.</p>
+        <p><strong>Jika hanya admin yang mengundang.</strong> Suatu komunitas dapat menetapkan bahwa hanya pemilik dan adminnya yang membawa orang masuk. Di sana, jika kamu bukan salah satu dari mereka, <strong>Invites</strong> menampilkan <strong>Bring someone here</strong> alih-alih <strong>Generate Ticket</strong>, dan memberi tahu untuk meminta kepada admin. Di web app <strong>Tree</strong> tetap ada, begitu juga kode yang kamu buat sebelumnya: kode tersebut tetap berfungsi sampai kedaluwarsa. Pemilik atau admin tanpa sinyal tetap dapat membuat tiket kertas, berdasarkan peran terakhir yang diberikan komunitas kepada mereka. Jika komunitas menerima permintaan untuk bergabung, <strong>Share the link</strong> mengirimkan alamatnya: orang tersebut membukanya di aplikasi BeanPool, meminta bergabung, dan admin akan menjawabnya. Menjadi admin adalah tugas yang diberikan komunitas kepada seseorang, bukan lencana kepercayaan.</p>
+        <ul>
+            <li>Kode undangan yang kamu buat sebelum komunitas memilih pengaturan ini tetap berfungsi sampai masa 30 harinya habis.</li>
+            <li>Tiket yang kamu buat tanpa koneksi internet tidak berlaku: siapa pun yang memilikinya akan diminta untuk mendapatkan undangan baru dari admin.</li>
+        </ul>
+        <p>Komunitas global tidak memiliki undangan: siapa pun dapat bergabung dengannya di aplikasi BeanPool, dengan 12 kata rahasia atau akun masuk. Di sana, ikon undangan membuka <strong>Bring someone here</strong>, dengan <strong>Share the link</strong> untuk mengirimkan alamat komunitas global. Tidak ada yang perlu dibuat, dan kode undangan yang dibuat untuknya tidak akan berfungsi.</p>
+        <h2>Permintaan untuk bergabung</h2>
+        <p>Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketika ada yang memintanya, <strong>Invites</strong> menampilkan jumlahnya, dan permintaan tersebut dicantumkan di bagian atas di bawah <strong>Wants to join</strong>. Permintaan dijawab di aplikasi ponsel: web app tidak mencantumkannya.</p>
+        <ul>
+            <li><strong>Undang</strong> membuat undangan yang hanya dapat digunakan oleh akun mereka. Aplikasi mereka menemukannya dengan sendirinya, jadi kamu tidak perlu mengirimkan apa pun kepada mereka, dan mereka bergabung dengan satu ketukan.</li>
+            <li><strong>Nanti saja</strong> tidak memberi tahu apa pun kepada mereka selain &quot;belum ada jawaban&quot;.</li>
+        </ul>
+        <p>Setiap anggota dapat menjawab. Di komunitas yang hanya adminnya yang mengundang, hanya pemilik dan adminnya yang dapat melihat permintaan dan menjawabnya. Lihat &quot;Finding a community near you&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Beranda</strong><span>Apa itu Beranda, kartu apa saja yang muncul di ponsel dan web app, cara menambah, memindah, atau menghapusnya, memilih minatmu, dan privasi saat keluar.</span></a></li>
+            <li><a href="finding-a-community.html"><strong>Menemukan komunitas di dekatmu</strong><span>Dari komunitas global, temukan komunitas di dekatmu dan minta bergabung, dapatkan kabar saat ada yang baru dibuka, atau buat sendiri.</span></a></li>
+            <li><a href="your-12-words.html"><strong>12 katamu</strong><span>12 kata adalah kunci akunmu. Mengapa penting, di mana menemukannya, cara menyimpannya dengan aman, dan menambahkan akun masuk sebagai cadangan.</span></a></li>
+            <li><a href="your-profile.html"><strong>Profilmu</strong><span>Nama, foto, beberapa patah kata tentangmu, dan siapa yang bisa melihat rincian kontakmu.</span></a></li>
+            <li><a href="communities.html"><strong>Lebih dari satu komunitas</strong><span>Bergabung di beberapa komunitas dengan satu akun, berpindah antar komunitas, mengikuti komunitas saat pindah alamat, dan melihat apa yang ditampilkan komunitas global.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cara kerja BeanPool</strong><span>Kacang, perdagangan, penawaran dan permintaan, serta kredit, secara sederhana.</span></a></li>
+            <li><a href="web-app.html"><strong>BeanPool di browser web</strong><span>Web app menyediakan sebagian besar fungsi aplikasi ponsel. Bergabung ke komunitas global di browser, memulihkan akun dengan akun masuk, membuka akun di ponsel, dan letak tombol yang berbeda nama.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

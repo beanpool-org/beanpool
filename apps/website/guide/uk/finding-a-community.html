@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пошук спільноти поблизу — BeanPool members' guide</title>
+    <meta name="description" content="У глобальній спільноті знайдіть спільноту поблизу та подайте запит на приєднання, дізнавайтеся про появу нових або створіть власну.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Початок роботи</a></p>
+        <h1>Пошук спільноти поблизу</h1>
+        <p class="lede">У глобальній спільноті знайдіть спільноту поблизу та подайте запит на приєднання, дізнавайтеся про появу нових або створіть власну.</p>
+        <h2>Чому варто обрати місцеву спільноту</h2>
+        <p>Глобальна спільнота — це місце зустрічі людей звідусіль. Місцева спільнота — це місце, де сусіди обмінюються між собою: вона має власні боби, обміни та Спільне. У глобальній спільноті ви можете побачити, як це працює, на прикладі демонстраційної спільноти з позначкою <strong>🏘️ Місцева спільнота</strong>, але ніщо там не приносить і не витрачає бобів. Тому в описі дописів там зазначають, що людина хотіла б отримати натомість: задарма, обмін або домовленість. Дивіться «Боби та всесвітня спільнота».</p>
+        <p>Глобальна спільнота є лише однією серед багатьох. Ваша власна спільнота працює на окремому власному сервері й ніколи від неї не залежить: глобальна спільнота лише допомагає знайти її.</p>
+        <p>Поруч із вами ще немає спільноти? Ви можете заснувати власну: дивіться розділ «Якщо поруч нічого немає» нижче.</p>
+        <h2>Спільноти поруч із вами</h2>
+        <p>У глобальній спільноті картка <strong>Знайти свою спільноту</strong> на вкладці <strong>Головна</strong> показує найближчі до вас спільноти. Протягом перших 30 днів вона залишається у верхній частині Головної, її не можна видалити чи перемістити; після цього її можна видалити, як і будь-яку іншу картку. У вебдодатку кожна спільнота на картці є посиланням на її власну сторінку. Якщо додаток не знає вашого місця, торкніться <strong>Поділитися місцевістю</strong> або <strong>або введіть місто</strong> і виберіть своє місто. Наведені нижче кроки стосуються додатка для телефону.</p>
+        <p>Ще не в глобальній спільноті? Торкніться значка боба у верхньому лівому куті та в розділі <strong>Your communities</strong> виберіть <strong>Глобальна спільнота</strong>, а потім приєднайтеся з наявним обліковим записом: дивіться «Більше ніж одна спільнота». Якщо у вас ще немає облікового запису, торкніться <strong>Дослідити BeanPool у світі</strong> на першому екрані додатка: дивіться «Приєднання до BeanPool».</p>
+        <ul>
+            <li>Торкніться <strong>Спільноти поруч із вами</strong>, щоб переглянути весь список.</li>
+            <li>Спільноти перелічені за відстанню — найближчі попереду, якщо додаток знає, де ви знаходитесь. Якщо ні, торкніться <strong>Моє місцезнаходження</strong> або шукайте за назвою. Бажаєте не ділитися точним місцезнаходженням? Торкніться <strong>або введіть місто</strong>, почніть вводити назву й оберіть своє місто зі списку: зберігається лише приблизна точка, а посилання <strong>змінити</strong> дозволяє обрати іншу.</li>
+            <li>Спільноти на приблизно однаковій відстані від вас перемішуються, щоб жодна спільнота не була завжди першою.</li>
+            <li>Для кожної спільноти зазначено відстань до неї та кількість учасників, якщо спільнота відкрила ці дані.</li>
+        </ul>
+        <p>Спільнота, яка ще не опублікувала свою адресу, відображається в списку, але подати запит на вступ до неї звідси поки не можна.</p>
+        <h2>Подання запиту на вступ</h2>
+        <ul>
+            <li>Торкніться <strong>Подати запит на вступ</strong> біля назви спільноти.</li>
+            <li>Перевірте своє ім'я та напишіть кілька слів про себе (до 280 символів): де ви живете, чим хотіли б поділитися або чого навчитися.</li>
+            <li>Торкніться <strong>Надіслати</strong>.</li>
+        </ul>
+        <p>Ваш запит вирушає безпосередньо до цієї спільноти, а не через глобальну спільноту, разом із вашим ім'ям, повідомленням і фотографією. Його бачать лише її учасники. Якщо спільнота дозволяє запрошувати лише своїм адміністраторам, запит бачать лише її власники та адміністратори. Будь-хто з учасників може прийняти вас: вони натискають <strong>Запросити</strong>, і створюється запрошення, яким може скористатися лише ваш обліковий запис.</p>
+        <p>Поки ви чекаєте, картка спільноти повідомляє: <strong>Ви надіслали запит на вступ. Відповіді поки немає</strong>. Зазвичай спільноти відповідають протягом кількох днів. Ви можете мати один відкритий запит до кожної спільноти, а кожна спільнота приймає лише кілька запитів на день з одного інтернет-підключення.</p>
+        <p>Якщо ніхто не відповів протягом 30 днів, картка повідомляє: <strong>Відповідь не надійшла. Ви можете надіслати запит знову.</strong>.</p>
+        <p>Якщо спільнота не може прийняти ваш запит, на картці з'являється відповідне повідомлення: наприклад, що сьогодні з вашої мережі надійшло забагато запитів, або що вона наразі не приймає запити на вступ.</p>
+        <h2>Коли вашу заявку схвалено</h2>
+        <p>Картка повідомляє: <strong>A member invited you</strong>. Торкніться <strong>Приєднатися</strong> поруч із назвою спільноти.</p>
+        <ul>
+            <li>Ваш обліковий запис переходить разом із вами: той самий ключ і ті самі 12 слів (вони є англійськими словами). Ваше ім'я також переходить. Якщо хтось там уже має таке ім'я, додається цифра, наприклад «Sarah2». Ви зможете змінити його на наступному кроці.</li>
+            <li>Ваші публікації, чати та обміни залишаються в кожній спільноті окремо. У новій спільноті ви починаєте з чистого аркуша.</li>
+            <li>Далі ви перевіряєте своє ім'я та фотографію для нової спільноти.</li>
+            <li>Спосіб входу, який захищає ваш обліковий запис, зберігається в кожній спільноті окремо. Додаток запропонує захистити обліковий запис і в новій спільноті: торкніться <strong>Захистити його</strong> або <strong>Пізніше</strong>, або зробіть це будь-коли в меню <strong>Налаштування</strong>.</li>
+        </ul>
+        <p>Ви залишаєтеся учасником глобальної спільноти й можете перемикатися між ними: дивіться «Більше ніж одна спільнота».</p>
+        <h2>Якщо поруч нічого немає</h2>
+        <ul>
+            <li><strong>Повідомити, коли з'явиться поруч:</strong> ви отримаєте сповіщення, коли поруч із вами з'явиться нова спільнота. Зберігається лише приблизна зона діаметром близько 10 км, ніколи не точне місцезнаходження. Ви можете відстежувати до 3 місць і припинити відстеження за допомогою кнопки <strong>Зупинити</strong>.</li>
+            <li><strong>Створити спільноту:</strong> кожна спільнота має власний невеликий сервер, за яким доглядає хтось із місцевих. Для цього потрібен вільний комп'ютер удома або кілька доларів на місяць і близько пів години часу: дивіться «Боби та всесвітня спільнота». Додаток показує три варіанти запуску: вільний домашній комп'ютер, невеликий орендований сервер або пошук допомоги. Вкажіть назву, місце та спосіб зв'язку з вами, і торкніться <strong>Скопіювати дані моєї спільноти</strong>, щоб вставити їх у налаштування нового сервера. Ваші контактні дані не публікуються у відкритому каталозі, якщо ви самі не увімкнете це в налаштуваннях.</li>
+        </ul>
+        <h2>Якщо ви вже є учасником місцевої спільноти</h2>
+        <p>Люди можуть надсилати запити на вступ до вашої спільноти з глобальної спільноти. Відкрийте <strong>Чат</strong>, потім <strong>Люди</strong>, потім <strong>Invites</strong>: запити перелічені в розділі <strong>Wants to join</strong> із зазначенням імені, супровідного тексту та звідки надійшов запит. Відповідати на запити можна в додатку на телефоні: вебдодаток їх не відображає.</p>
+        <ul>
+            <li><strong>Запросити:</strong> створює запрошення, яким може скористатися лише обліковий запис запитувача. Їхній додаток підхоплює його автоматично, і вони приєднуються в один дотик.</li>
+            <li><strong>Не зараз:</strong> запитувачу нічого не повідомляється. Він продовжує бачити «відповіді поки немає» і не може надіслати повторний запит протягом 30 днів.</li>
+        </ul>
+        <p>Будь-який учасник може відповісти незалежно від значка довіри, якщо спільнота не встановила правило, що запрошувати можуть лише адміністратори (<strong>Known</strong> у розділі <strong>Who may invite</strong> у налаштуваннях сервера спільноти). У такому разі запити бачать і відповідають на них лише її власники та адміністратори. Адміністратори спільноти можуть повністю вимкнути прийом запитів на вступ.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>Приєднання до BeanPool</strong><span>Два шляхи: спільнота за запрошенням від учасника або глобальна спільнота, коли вона відкрита, за 12 секретними словами чи одним входом. Запит на вступ і запрошення інших.</span></a></li>
+            <li><a href="home.html"><strong>Головна</strong><span>Що таке Головна, які картки вона показує в телефоні та вебдодатку, як їх додавати, переміщувати чи видаляти, вибір інтересів і конфіденційність під час виходу.</span></a></li>
+            <li><a href="communities.html"><strong>Кілька спільнот</strong><span>Належати до кількох спільнот з одним обліковим записом, перемикатися між ними, переходити за спільнотою на нову адресу та бачити інформацію з глобальної спільноти.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Боби та глобальна спільнота</strong><span>Для чого потрібна глобальна спільнота, одна серед багатьох, і що ви там бачите: позначку 🏘️ Місцева спільнота, приклад Example Valley, чому Боби очікують там, і як почати або знайти місцеву спільноту.</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yakınınızda bir topluluk bulma — BeanPool members' guide</title>
+    <meta name="description" content="Küresel topluluktan yakınınızdaki bir topluluğu bulup katılma isteği gönderin, yakınınızda yeni bir topluluk başladığında bildirim alın veya kendiniz başlatın.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Başlarken</a></p>
+        <h1>Yakınınızda bir topluluk bulma</h1>
+        <p class="lede">Küresel topluluktan yakınınızdaki bir topluluğu bulup katılma isteği gönderin, yakınınızda yeni bir topluluk başladığında bildirim alın veya kendiniz başlatın.</p>
+        <h2>Neden yerel bir topluluk</h2>
+        <p>Küresel topluluk her yerden insanların buluştuğu yerdir. Yerel bir topluluk ise komşuların takas yaptığı yerdir: kendi Fasulyeleri, takasları ve Ortak Alanı vardır. Küresel toplulukta bunların nasıl çalıştığını <strong>🏘️ Yerel topluluk</strong> olarak işaretlenmiş örnek bir toplulukta görebilirsiniz, ancak oradaki hiçbir şey Fasulye kazandırmaz veya harcatmaz. Bu nedenle oradaki bir gönderi açıklamasında kişinin karşılığında ne istediğini söyler: ücretsiz, takas veya kendilerine sorma. &quot;Fasulye ve küresel topluluk&quot; bölümüne bakın.</p>
+        <p>Küresel topluluk birçok topluluktan biridir. Kendi topluluğunuz kendi sunucusunda çalışır ve küresel topluluğa asla ihtiyaç duymaz: küresel topluluk yalnızca onu bulmanıza yardımcı olur.</p>
+        <p>Yakınınızda henüz bir topluluk yok mu? Bir tane başlatabilirsiniz: aşağıdaki &quot;Yakınınızda hiçbir şey yoksa&quot; bölümüne bakın.</p>
+        <h2>Yakınınızdaki topluluklar</h2>
+        <p>Küresel toplulukta, <strong>Ana Sayfa</strong>'daki <strong>Topluluğunu bul</strong> kartı size en yakın toplulukları gösterir. İlk 30 gününüz boyunca Ana Sayfa'nın üst kısmına yakın durur ve kaldırılamaz veya taşınamaz; bundan sonra diğer kartlar gibi kaldırabilirsiniz. Web uygulamasında karttaki her topluluk kendi sayfasına bir bağlantıdır. Nerede olduğunuzu bilmiyorsa <strong>Bölgemi paylaş</strong>'a veya <strong>veya kasabanı yaz</strong>'a dokunup kasabanızı seçin. Aşağıdaki adımlar telefon uygulaması içindir.</p>
+        <p>Henüz küresel toplulukta değil misiniz? Sol üstteki fasulyeye dokunun ve <strong>Topluluklarınız</strong> altında <strong>Küresel topluluk</strong>'a dokunun, ardından sahip olduğunuz hesapla katılın: &quot;Birden fazla topluluk&quot; bölümüne bakın. Henüz bir hesabınız yoksa uygulamanın ilk ekranında <strong>BeanPool'u dünya çapında keşfet</strong> seçeneğine dokunun: &quot;BeanPool'a katılma&quot; bölümüne bakın.</p>
+        <ul>
+            <li>Tüm listeyi görmek için <strong>Yakınındaki topluluklar</strong> seçeneğine dokunun.</li>
+            <li>Uygulama nerede olduğunuzu bildiğinde topluluklar en yakından başlayarak listelenir. Bilmiyorsa <strong>Konumumu kullan</strong> seçeneğine dokunun veya ada göre arayın. Konumunuzu paylaşmamayı mı tercih edersiniz? <strong>veya kasabanı yaz</strong> seçeneğine dokunun, yazmaya başlayın ve listeden kasabanızı seçin: yalnızca yaklaşık bir nokta tutulur ve <strong>değiştir</strong> başka birini seçer.</li>
+            <li>Size yaklaşık olarak aynı mesafedeki topluluklar karıştırılır, böylece hiçbir topluluk her zaman en üstte kalmaz.</li>
+            <li>Topluluk belirttiğinde her biri ne kadar uzakta olduğunu ve kaç üyesi olduğunu gösterir.</li>
+        </ul>
+        <p>Adresini yayınlamayan bir topluluk listelenir ancak buradan henüz katılım istenemez.</p>
+        <h2>Katılma isteği gönderme</h2>
+        <ul>
+            <li>Bir topluluk üzerinde <strong>Katılmak iste</strong> seçeneğine dokunun.</li>
+            <li>Adınızı kontrol edin ve kendiniz hakkında 280 karaktere kadar birkaç kelime yazın: nerede yaşadığınız, ne paylaşmak veya öğrenmek istediğiniz.</li>
+            <li><strong>Gönder</strong>'e dokunun.</li>
+        </ul>
+        <p>İsteğiniz küresel topluluk üzerinden değil, adınız, sözleriniz ve resminizle birlikte doğrudan o topluluğa gider. Yalnızca üyeleri görür. Topluluğun yalnızca yöneticilerinin davet etmesine izin verdiği yerlerde yalnızca mülk sahipleri ve yöneticileri görür. Oradaki bir üye sizi içeri alabilir: <strong>Davet et</strong> seçeneğine dokunurlar ve yalnızca sizin hesabınızın kullanabileceği bir davet oluşturulur.</p>
+        <p>Siz beklerken topluluk kartı <strong>Katılma isteği gönderdiniz. Henüz yanıt yok</strong> der. Topluluklar genellikle birkaç gün içinde yanıt verir. Her toplulukta açık bir isteğiniz olabilir ve her topluluk tek bir internet bağlantısından günde yalnızca birkaç istek alır.</p>
+        <p>30 gün içinde kimse yanıt vermezse kart <strong>Yanıt gelmedi. Tekrar istek gönderebilirsiniz.</strong> der.</p>
+        <p>Bir topluluk isteğinizi kabul edemezse kart kendi sözlerini gösterir; örneğin bugün ağınızdan çok fazla istek geldiği veya şu anda katılma isteklerini kabul etmediği gibi.</p>
+        <h2>Evet dediklerinde</h2>
+        <p>Kartta <strong>Bir üye sizi davet etti</strong> yazar. Topluluğun adıyla birlikte <strong>Katıl</strong>'a dokunun.</p>
+        <ul>
+            <li>Hesabınız sizinle gelir: aynı anahtar ve aynı 12 kelime (İngilizce kelimelerdir). Adınız da gelir. Orada birisi bu ada zaten sahipse &quot;Ayşe2&quot; gibi bir sayı eklenir. Bir sonraki adımda değiştirebilirsiniz.</li>
+            <li>Gönderileriniz, sohbetleriniz ve takaslarınız her toplulukta kalır. Yenisinde tertemiz başlarsınız.</li>
+            <li>Ardından yeni topluluk için adınızı ve fotoğrafınızı kontrol edersiniz.</li>
+            <li>Hesabınızı koruyan bir oturum açma yöntemi her topluluk tarafından tutulur. Uygulama yeni toplulukta da hesabınızı korumanızı ister: <strong>Hesabı koru</strong> veya <strong>Daha sonra</strong>'ya dokunun ve bunu istediğiniz zaman <strong>Ayarlar</strong>'da yapın.</li>
+        </ul>
+        <p>Küresel topluluğun bir üyesi olarak kalırsınız ve aralarında geçiş yapabilirsiniz: &quot;Birden fazla topluluk&quot; bölümüne bakın.</p>
+        <h2>Yakınınızda hiçbir şey yoksa</h2>
+        <ul>
+            <li><strong>Burada bir topluluk başladığında bana haber ver:</strong> bulunduğunuz yere yakın bir topluluk başladığında bir bildirim alırsınız. Yalnızca yaklaşık 10 km genişliğindeki bölge tutulur, tam olarak nerede olduğunuz asla tutulmaz. En fazla 3 yeri izleyebilir ve birini izlemeyi <strong>Durdur</strong> ile durdurabilirsiniz.</li>
+            <li><strong>Bir topluluk başlat:</strong> her topluluğun yöreden birinin ilgilendiği kendi küçük sunucusu vardır. Evde yedek bir bilgisayar veya ayda birkaç dolar ve yaklaşık yarım saat sürer: &quot;Fasulye ve küresel topluluk&quot; bölümüne bakın. Uygulama bir topluluk çalıştırmanın üç yolunu gösterir: evde yedek bir bilgisayar, küçük bir kiralık sunucu veya yardım istemek. Adı, yeri ve insanların size nasıl ulaşabileceğini doldurun ve yeni sunucunuzun ayarlarına yapıştırmak için <strong>Topluluğumun ayrıntılarını kopyala</strong> seçeneğine dokunun. İnsanların size nasıl ulaşabileceği, orada açmadığınız sürece genel dizinin dışında kalır.</li>
+        </ul>
+        <h2>Yerel bir topluluğun üyesiyseniz</h2>
+        <p>İnsanlar küresel topluluktan topluluğunuza katılma talebinde bulunabilir. <strong>Sohbet</strong>'e, ardından <strong>Kişiler</strong>'e, sonra <strong>Davetler</strong>'e dokunun: istekler adları, sözleri ve nereden geldikleriyle birlikte <strong>Katılmak istiyor</strong> altında listelenir. İstekler telefon uygulamasında yanıtlanır: web uygulaması bunları listelemez.</p>
+        <ul>
+            <li><strong>Davet et:</strong> yalnızca onların hesabının kullanabileceği bir davet oluşturur. Uygulamaları bunu kendiliğinden bulur ve tek bir dokunuşla katılırlar.</li>
+            <li><strong>Şimdi değil:</strong> onlara söylenmez. &quot;Henüz yanıt yok&quot; görmeye devam ederler ve 30 gün boyunca tekrar soramazlar.</li>
+        </ul>
+        <p>Topluluk yalnızca yöneticilerinin davet etmesini seçmediği sürece (topluluk sunucusunun Ayarlar'ında <strong>Kimler davet edebilir</strong> altında <strong>Bilinen</strong>), güven rozeti ne olursa olsun herhangi bir üye yanıt verebilir. Bu durumda istekleri yalnızca mülk sahipleri ve yöneticileri görür ve yanıtlar. Bir topluluğun yöneticileri katılma isteklerini kapatabilir.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="joining.html"><strong>BeanPool'a katılma</strong><span>Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.</span></a></li>
+            <li><a href="home.html"><strong>Ana Sayfa</strong><span>Ana Sayfa nedir, telefonda ve web uygulamasında hangi kartları gösterir, nasıl eklenir, taşınır veya kaldırılır, ilgi alanları seçimi ve çıkışta gizlilik.</span></a></li>
+            <li><a href="communities.html"><strong>Birden fazla topluluk</strong><span>Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Fasulye ve küresel topluluk</strong><span>Küresel topluluğun amacı, birçok topluluktan biri olması, orada gördükleriniz: 🏘️ Yerel topluluk işareti, örnek topluluk Example Valley, Fasulyelerin neden beklediği ve yerel topluluk başlatma veya bulma.</span></a></li>
+            <li><a href="../near-you.html"><strong>Finding things near you</strong><span>Show only posts within a distance of you, or of any place you choose.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

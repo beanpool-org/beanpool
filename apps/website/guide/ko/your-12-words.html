@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 12개 단어 — BeanPool members' guide</title>
+    <meta name="description" content="12개 단어는 계정의 열쇠예요. 중요한 이유, 확인 위치, 안전하게 보관하는 법, 보조 복구 수단으로 간편 로그인을 추가하는 방법이에요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">시작하기</a></p>
+        <h1>내 12개 단어</h1>
+        <p class="lede">12개 단어는 계정의 열쇠예요. 중요한 이유, 확인 위치, 안전하게 보관하는 법, 보조 복구 수단으로 간편 로그인을 추가하는 방법이에요.</p>
+        <h2>12개 단어가 중요한 이유</h2>
+        <p>내 계정은 다른 누군가가 보관하는 비밀번호가 아니에요. 휴대폰에 보관되는 키예요. 내 <strong>12개 단어</strong>는 그 키를 단어로 적어둔 것이에요. 12개 단어는 모두 영어 단어예요.</p>
+        <ul>
+            <li>12개 단어가 있으면 새 휴대폰에서 계정을 복구할 수 있어요: 내 이름, 콩, 신뢰도가 복구돼요.</li>
+            <li>이 단어가 없으면 휴대폰을 분실하거나 고장 났을 때 계정을 잃어버릴 수 있어요.</li>
+            <li>키는 해당 키를 보관하고 있는 휴대폰에 머물러요. 휴대폰 백업에는 복사되지 않으므로, 이전 휴대폰의 백업으로 복원한 iPhone이라 하더라도 새 휴대폰에서는 12개 단어나 연결된 간편 로그인 계정이 필요해요(&quot;계정 복구하기&quot; 참조).</li>
+            <li>내 12개 단어를 가진 사람은 누구나 내 계정을 사용할 수 있어요. 절대 공유하지 마세요. BeanPool 앱이나 내 커뮤니티의 BeanPool 웹 앱 외에는 어디에도 입력하지 말고, 메시지로도 절대 보내지 마세요. BeanPool이나 커뮤니티 관계자 누구도 이 단어를 묻지 않아요.</li>
+        </ul>
+        <h2>종이에 적어두기</h2>
+        <ul>
+            <li>영어로 된 12개 단어를 순서대로 종이에 적고 철자를 확인하세요.</li>
+            <li>휴대폰과 떨어진 안전한 곳에 종이를 보관하세요.</li>
+            <li>단어를 사진이나 스크린샷으로 찍어두면 다른 사람이 쉽게 찾아낼 수 있어요. 종이가 더 안전해요.</li>
+            <li>휴대폰 앱에서 12개 단어를 보여주거나 입력하는 동안에는 해당 화면의 스크린샷과 화면 녹화가 차단돼요: 휴대폰에서 스크린샷을 거부하거나 빈 화면으로 저장돼요. 다른 휴대폰으로 화면을 직접 촬영하는 것은 막을 수 없어요.</li>
+            <li><strong>단어 복사</strong>(가입 중 및 웹 앱에서는 <strong>모든 단어 복사</strong>)는 1분 동안 휴대폰 클립보드에 단어를 복사해요. 그 후 클립보드에 단어가 남아 있다면 앱이 이를 지워요. 앱을 먼저 벗어나면 앱으로 돌아올 때 지워져요. 그사이에 복사한 다른 내용은 그대로 유지돼요. 키보드의 클립보드 기록이나 다른 기기와 공유되는 클립보드에는 앱이 지울 수 없는 사본이 남을 수 있어요.</li>
+            <li>웹 앱에서는 해당 화면에 머무르면 1분 후에 복사본이 지워져요. iPhone 또는 iPad의 Safari나 Firefox에서는 화면을 탭하거나 키를 누를 때만 브라우저가 앱의 클립보드 지우기를 허용하므로, 1분이 지난 후 화면을 처음 탭하거나 키를 누를 때 지워져요. 해당 화면을 벗어나거나 다른 앱 또는 탭으로 먼저 전환하면 다른 내용을 복사했는지 앱이 알 수 없으므로 클립보드를 건드리지 않아요: 단어 위에 다른 내용을 복사해 덮어쓰세요.</li>
+            <li>휴대폰에 화면 잠금이 설정되어 있지 않으면 누구든 휴대폰을 들고 내 12개 단어를 열어볼 수 있으며, 단어 아래에 앱이 이를 안내해요. 휴대폰 설정에서 PIN, 패턴, 비밀번호, 지문 또는 얼굴 인식을 설정하면 훨씬 안전하게 지킬 수 있어요.</li>
+        </ul>
+        <h2>내 복구 키트</h2>
+        <p>복구 키트는 인쇄할 수 있는 1페이지짜리 문서예요: 영어로 된 12개 단어가 순서대로 적혀 있고 커뮤니티 이름과 주소, 생성 날짜, 휴대폰 및 웹 브라우저에서 다시 로그인하는 단계가 포함돼요. 누구의 계정인지는 적혀 있지 않아요. 선택 사항이므로 이 키트 없이도 계속 진행할 수 있어요.</p>
+        <ul>
+            <li><strong>휴대폰에서</strong>: 12개 단어 옆에서(가입 시 백업 화면 및 설정에서) <strong>복구 키트 인쇄</strong>를 탭하여 인쇄하거나, <strong>PDF로 저장</strong>을 탭하여 PDF를 만들고 저장할 위치를 선택하세요. 저장하기 전에 앱이 경고해요: &quot;이 파일을 클라우드 백업이나 대화방에 보관하지 마세요. 이 파일을 가진 사람은 누구나 회원님으로 로그인할 수 있습니다.&quot; 저장이 끝나면 휴대폰은 자체 PDF 사본을 삭제해요.</li>
+            <li><strong>웹 앱에서</strong>: 12개 단어 옆에서(가입 시 및 설정의 <strong>복구 문구 보기</strong> 아래에서) <strong>복구 키트 인쇄 또는 저장</strong>을 클릭하세요. 앱이 경고해요: &quot;이 페이지나 파일을 클라우드 백업이나 대화방에 보관하지 마세요. 이 파일을 가진 사람은 누구나 회원님으로 로그인할 수 있습니다.&quot; 브라우저의 인쇄 대화상자를 열려면 <strong>계속</strong>을 클릭하세요. 종이 대신 PDF로 보관하려면 거기서 <strong>PDF로 저장</strong>을 선택하세요.</li>
+            <li>단어를 보관하듯이 이 페이지를 잘 보관하세요: 이 문서를 가진 사람은 누구나 나로 로그인할 수 있어요.</li>
+        </ul>
+        <h2>단어를 다시 확인하는 위치</h2>
+        <p>화면 상단의 슬라이더 버튼으로 <strong>설정</strong>을 여세요. 그런 다음 둘 중 하나를 진행하세요:</p>
+        <ul>
+            <li><strong>계정 및 신원</strong> 아래에서 <strong>복구 문구 보기</strong>를 탭하세요. <strong>CONFIRM</strong>을 입력하고 <strong>복구 문구 보기</strong>를 탭한 다음 휴대폰의 잠금 화면 확인을 통과하세요.</li>
+            <li>또는 <strong>계정 보호</strong>를 탭한 다음 <strong>내 12개 복구 단어 보기</strong>를 탭하고 휴대폰의 잠금 화면 확인을 통과하세요. 확인이 끝나면 <strong>숨기기</strong>를 탭하세요.</li>
+        </ul>
+        <p>어느 쪽이든 해당 화면을 벗어나거나 앱을 15초 이상 벗어나면 단어가 다시 숨겨지며 다음번에 휴대폰이 다시 잠금 해제를 요구해요. 2분 이상 걸리는 잠금 화면 확인은 아무것도 표시하지 않으므로 다시 탭해야 해요.</p>
+        <p>웹 앱에서는 <strong>계정 및 신원</strong> 아래의 <strong>복구 문구 보기</strong>에서 바로 확인할 수 있어요.</p>
+        <p>간편 로그인 계정으로 복원된 휴대폰은 단어가 들어 있던 휴대폰에서 최신 앱을 통해 연결한 경우에만 12개 단어를 다시 가져와요. 그렇지 않으면 휴대폰에 사본이 없어요: 로그인 정보만으로는 단어를 다시 만들어낼 수 없어요. <strong>복구 문구 보기</strong>는 여전히 표시되지만 <strong>이 휴대폰에는 아직 사본이 없습니다</strong>라고 표시돼요. 해당 휴대폰에서는 연결된 간편 로그인 계정이 복구 방법이 되므로 <strong>계정 보호</strong> 아래에 항상 연결 상태를 유지하세요.</p>
+        <h2>이 휴대폰에 12개 단어 다시 등록하기</h2>
+        <p>이 휴대폰에 12개 단어의 사본이 없고 종이에 적어둔 단어가 있다면 다시 추가할 수 있어요:</p>
+        <ul>
+            <li><strong>설정</strong>을 여세요. <strong>계정 및 신원</strong> 아래에서 <strong>복구 문구 보기</strong>를 탭하세요. (또는 <strong>계정 보호</strong>에서 <strong>내 12개 복구 단어 보기</strong>를 탭하세요.) 사본이 없는 휴대폰에서는 둘 중 어느 것을 눌러도 <strong>이 휴대폰에 12개 단어 추가</strong>가 열려요.</li>
+            <li>영어로 된 12개 단어를 순서대로 입력하거나 <strong>붙여넣기</strong>를 탭하세요. 대소문자나 여분의 공백은 상관없어요. 복구 단어 목록에 없는 단어는 입력할 때 표시돼요.</li>
+            <li><strong>이 단어들 추가</strong>를 탭하세요.</li>
+        </ul>
+        <p>휴대폰은 단어가 내 계정에 속하는지 확인해요. 소유자를 위한 <strong>12개 단어 확인</strong>과 동일한 검사예요. 어디로도 전송되지 않아요. 다른 계정의 단어라면 아무것도 변경되지 않으며 앱이 이를 알려줘요. 추가되고 나면 이 휴대폰의 모든 커뮤니티에서 <strong>복구 문구 보기</strong>에 단어가 표시돼요.</p>
+        <h2>글로벌 커뮤니티에 12개 단어로 가입한 경우</h2>
+        <p>Google, Apple, Facebook 계정 없이 영어로 된 12개 비밀 단어만으로 글로벌 커뮤니티에 가입할 수 있어요(&quot;BeanPool 가입하기&quot; 참조). 이를 통해 새 계정을 만든 경우 12개 단어가 유일한 복구 방법이에요. 휴대폰 외에는 어디에도 계정 사본이 보관되지 않으며, BeanPool이나 커뮤니티 그 누구도 단어를 재설정할 수 없어요. 단어와 휴대폰을 모두 잃어버리면 계정은 영구적으로 사라져요. (이미 가지고 있던 계정으로 가입한 경우, 다른 커뮤니티에서 연결해 둔 로그인이 여전히 그곳에서 계정을 복원해 줘요.)</p>
+        <p>앱의 <strong>백업</strong> 단계에서 이 점을 안내해요. 가입 후에는 휴대폰과 웹 앱의 <strong>홈</strong> 카드에서 다시 한번 알려줘요: <strong>계정을 복구하는 방법은 12개 단어뿐이에요. 단어를 잘 보관하고 있는지 확인하거나 로그인을 추가하세요.</strong> 어떤 작업도 가로막지 않아요. 휴대폰에서는:</p>
+        <ul>
+            <li><strong>✕</strong>를 누르면 카드가 닫혀요. 첫 게시물을 작성한 후 한 번, 1주일 후 한 번 다시 표시된 뒤에는 <strong>설정</strong>의 <strong>계정 보호</strong> 아래에만 남아 있어요.</li>
+            <li><strong>내 12개 단어 보기</strong>를 누르면 <strong>계정 보호</strong>가 열려 단어를 다시 볼 수 있어요.</li>
+            <li><strong>계정 보호</strong>에서 <strong>12개 단어를 아직 가지고 있어요</strong>를 탭하면 카드가 완전히 사라져요. <strong>로그인 추가</strong>는 그대로 유지돼요.</li>
+        </ul>
+        <p>웹 앱에서는 카드가 <strong>복구 방법 한 가지</strong>라는 제목으로 표시되며 <strong>내 12개 단어 보기</strong>와 <strong>로그인 추가</strong>가 함께 있어요. <strong>✕</strong>를 누르면 닫혀요: 작성한 게시물이 유지된 후 한 번, 첫 1주일이 지난 후 한 번 다시 나타나요. <strong>홈</strong> 카드에서 <strong>내 12개 단어 보기</strong>를 탭하면 단어가 표시되고 카드도 더 이상 홈에 나타나지 않아요. 로그인을 추가할 때까지 <strong>설정</strong> 상단에 남아 있어요.</p>
+        <p>12개 단어로 생성된 계정은 첫 1주일 동안 로그인으로 생성된 계정보다 시작 한도가 낮아요. 한도와 그 이유에 대해서는 &quot;문제 신고하기&quot;를 참조하세요.</p>
+        <h3>나중에 로그인 추가하기</h3>
+        <p>가입한 휴대폰뿐만 아니라 내 계정으로 로그인되어 있는 어떤 휴대폰이나 브라우저에서든 나중에 로그인을 추가할 수 있어요. 12개 단어로 계정을 복원한 휴대폰의 경우 앱에서 글로벌 커뮤니티를 여세요: 커뮤니티가 내 계정에 12개 단어만 있다고 안내하며 카드와 <strong>로그인 추가</strong>가 나타나요(잠시 걸릴 수 있어요). 계정이 정지된 상태이거나 커뮤니티에서 계정을 폐쇄한 경우에는 추가할 수 없어요(앱이 이를 안내하며 아무것도 변경되지 않아요). 로그인은 두 번째 복구 방법이 되며, 12개 단어 한도가 즉시 해제돼요.</p>
+        <p>BeanPool 키 보관소에 이미 계정 사본이 보관되어 있다면 그 사본 역시 복구 방법이 돼요. 이 경우 앱에 복구 방법 한 가지 카드가 표시되지 않아요. 그래도 12개 단어 한도를 해제해 주기 때문에 <strong>설정</strong>의 <strong>계정 보호</strong>에서 조용히 <strong>로그인 추가</strong>가 제공돼요.</p>
+        <ul>
+            <li>카드의 <strong>로그인 추가</strong> 또는 <strong>설정</strong>의 <strong>계정 보호</strong> 아래에서 <strong>로그인 추가</strong>를 탭하세요. <strong>백업</strong> 단계에서는 이 버튼이 <strong>보조 복구 수단으로 로그인 추가</strong>로 표시돼요.</li>
+            <li><strong>Google로 계속하기</strong>, <strong>Facebook으로 계속하기</strong>, 또는 iPhone의 경우 <strong>Apple로 계속하기</strong>를 탭하고 한 번 로그인하세요. 앱에서 먼저 휴대폰 화면 잠금 해제를 요구할 수 있어요.</li>
+            <li><strong>로그인 추가됨</strong>이 표시되면 성공한 것이에요. 이제 계정에 일반적인 신규 계정 한도가 적용되며, 해당 로그인은 처음부터 로그인으로 가입한 사람과 마찬가지로 휴대폰을 분실했을 때 계정을 복구해 줘요. 이를 위해 보관되는 사본을 누가 열 수 있는지는 &quot;계정 복구하기&quot;를 참조하세요.</li>
+        </ul>
+        <p>계정 사본을 즉시 저장할 수 없는 경우라도 로그인은 추가되고 한도는 해제되지만, 12개 단어가 여전히 유일한 복구 방법으로 남아요. 앱이 이를 안내해요. 글로벌 커뮤니티에 이미 다른 BeanPool 계정이 있는 로그인 계정이거나, 커뮤니티에서 제명된 계정에 속했던 로그인 계정은 추가할 수 없으며 아무것도 변경되지 않아요.</p>
+        <p><strong>계정 보호</strong>의 <strong>로그인 복구 제공자 (N개 중 1개)</strong> 아래쪽에 있는 <strong>Protect with</strong>도 로그인을 복구 방법으로 연결하지만, 12개 단어 한도와 카드는 그대로 유지돼요. 둘 다 적용하려면 <strong>로그인 추가</strong>를 사용하세요.</p>
+        <h2>두 번째 복구 방법: 간편 로그인 계정</h2>
+        <p>휴대폰 앱에서는 Google이나 Facebook 계정(iPhone에서는 Apple 계정)을 연결할 수도 있어요. 휴대폰을 분실한 경우 커뮤니티 서버를 통해 해당 계정으로 새 휴대폰에서 계정을 복원할 수 있어요. 커뮤니티 서버가 이를 위해 잠긴 사본을 보관해요. 해당 서버를 운영하는 사람들이 그 사본을 열 수 있어요. &quot;계정 복구하기&quot;를 참조하세요.</p>
+        <p>12개 단어가 있는 휴대폰에서 연결한 로그인 계정은 단어도 함께 보관하므로, 해당 계정으로 복원하면 단어도 다시 가져와요. 구버전 앱에서 연결한 계정은 단어 없이 계정만 복원해요: <strong>계정 보호</strong> 아래에서 해당 계정 옆의 <strong>다시 연결</strong>을 탭하고 휴대폰의 잠금 화면 확인을 통과하여 단어를 포함시키세요. 종이에 적은 단어도 계속 잘 보관하세요.</p>
+        <h2>웹 브라우저에서</h2>
+        <p>글로벌 커뮤니티에서는 브라우저에서 가입할 때 사용한 로그인이 두 번째 복구 방법으로 유지돼요: 설정에 <strong>로그인 복구: 연결됨</strong>이 표시돼요. 데이터가 지워졌거나 새 브라우저인 경우 <strong>이미 BeanPool을 사용 중이신가요?</strong>를 탭한 다음 <strong>내 로그인 사용</strong>을 탭하면 영어로 된 12개 단어와 함께 계정이 복원돼요(&quot;웹 브라우저에서 BeanPool 사용하기&quot; 참조). 대신 12개 단어로 가입한 경우 로그인을 추가할 때까지 그 단어들이 유일한 복구 방법이에요: 가입 후 및 설정에서 <strong>복구 방법 한 가지</strong>라는 카드가 <strong>내 12개 단어 보기</strong>와 <strong>로그인 추가</strong>와 함께 표시돼요. 다른 커뮤니티에서는 웹 앱에 로그인 복구가 없으므로 12개 단어가 유일한 복구 방법이에요. 브라우저는 저장된 데이터를 지울 수도 있으므로 웹 앱에 의존하기 전에 반드시 단어를 종이에 적어두세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool 가입하기</strong><span>가입 방법 2가지: 멤버의 초대를 통한 커뮤니티 가입, 개방 시 12개 비밀 단어 또는 간편 로그인으로 글로벌 커뮤니티 가입. 가입 요청과 다른 사람 초대 방법이에요.</span></a></li>
+            <li><a href="communities.html"><strong>여러 커뮤니티 이용하기</strong><span>하나의 계정으로 여러 커뮤니티에 참여하고 전환하는 법, 새 주소로 이전한 커뮤니티를 따라가는 법과 글로벌 커뮤니티 표시 내용 안내예요.</span></a></li>
+            <li><a href="faq.html"><strong>자주 묻는 질문</strong><span>멤버들이 가장 자주 묻는 질문에 대한 간단한 답변이에요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

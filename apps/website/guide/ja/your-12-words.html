@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>あなたの12個の単語 — BeanPool members' guide</title>
+    <meta name="description" content="12個の単語はアカウントの鍵です。その重要性、確認場所、安全な保管方法、復元のバックアップ手段としてサインインを追加する方法を説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">はじめに</a></p>
+        <h1>あなたの12個の単語</h1>
+        <p class="lede">12個の単語はアカウントの鍵です。その重要性、確認場所、安全な保管方法、復元のバックアップ手段としてサインインを追加する方法を説明します。</p>
+        <h2>なぜ大切なのか</h2>
+        <p>アカウントは、他の誰かが預かるパスワードではありません。お手元のスマートフォンの中に保持される鍵です。<strong>12個の単語</strong>は、その鍵を単語（英単語）として書き表したものです。</p>
+        <ul>
+            <li>12個の単語があれば、新しいスマートフォンでアカウント（名前、豆、信頼の記録）を取り戻すことができます。</li>
+            <li>単語がない場合、スマートフォンの紛失や故障がアカウントの完全な喪失を意味します。</li>
+            <li>鍵はそれを保持しているスマートフォンの中にとどまります。スマートフォンのバックアップにはコピーされないため、新しいスマートフォン（古い端末のバックアップから復元したiPhoneを含む）には、12個の単語または連携済みのサインインアカウントが必要です（「アカウントの復元」参照）。</li>
+            <li>あなたの12個の単語を知っている人は誰でも、あなたのアカウントを使用できてしまいます。絶対に他人に教えたり、BeanPoolアプリや自分のコミュニティのBeanPool Webアプリ以外の場所に入力したり、メッセージで送信したりしないでください。BeanPoolの関係者やコミュニティの運営者が単語を尋ねることは決してありません。</li>
+        </ul>
+        <h2>紙に書き留める</h2>
+        <ul>
+            <li>12個の単語（英単語）を順番どおりに紙に書き留め、スペルを確認してください。</li>
+            <li>その紙をスマートフォンから離れた安全な場所に保管してください。</li>
+            <li>単語の写真やスクリーンショットは、他人に簡単に見つかってしまいます。紙に書くほうが安全です。</li>
+            <li>スマートフォンアプリで12個の単語が表示されている間、または入力している間は、その画面のスクリーンショットや画面録画がブロックされます（スマートフォンが撮影を拒否するか、画像が真っ黒になります）。ただし、別のスマートフォンを使って画面を撮影することは防げません。</li>
+            <li><strong>単語をコピー</strong>（参加手続き中およびWebアプリでは<strong>すべての単語をコピー</strong>）をタップすると、スマートフォンのクリップボードに単語が1分間コピーされます。クリップボードにまだ残っている場合、1分後にアプリが自動的に消去します。先にアプリを離れた場合は、戻ってきたときに消去されます。コピー後に別のものをコピーした場合は、その内容がそのまま残ります。キーボードのクリップボード履歴や他の端末と共有されているクリップボードには、アプリが消去できないコピーが残る場合があります。</li>
+            <li>Webアプリでは、その画面に留まっている場合、1分後にコピーが消去されます。iPhoneやiPadのSafariまたはFirefoxでは、画面をタップするかキーを押したときにのみブラウザがアプリによる消去を許可するため、1分経過後の最初のタップまたはキー入力時に消去されます。先にその画面を離れたり別のアプリやタブに切り替えたりした場合、アプリ側で別のものがコピーされたか判別できないためクリップボードはそのままになります。単語の上に別の内容を上書きコピーしてください。</li>
+            <li>スマートフォンに画面ロックが設定されていない場合、その端末を手にした人なら誰でも12個の単語を開くことができてしまいます。その場合、アプリは単語の下に警告を表示します。スマートフォンの設定でPIN、パターン、パスワード、指紋、顔認証ロックを設定すると、より安全に保護できます。</li>
+        </ul>
+        <h2>リカバリーキット</h2>
+        <p>リカバリーキットは、印刷可能な1ページの書類です。順番どおりの12個の単語（英単語）、コミュニティの名前とアドレス、作成日、スマートフォンやWebブラウザでアカウントを取り戻す手順が記載されます。誰のアカウントかは記載されません。これは任意のものであり、作成しなくても問題ありません。</p>
+        <ul>
+            <li><strong>スマートフォンでは</strong>：12個の単語の横（参加時の「バックアップ」画面、および「設定」内）で、<strong>リカバリーキットを印刷</strong>をタップして印刷するか、<strong>PDFとして保存</strong>をタップしてPDFを作成し保存先を選びます。保存する前に、アプリは「このファイルをクラウドバックアップやチャットに保存しないでください。これを持っている人は誰でもあなたとしてサインインできます。」と警告します。保存後、スマートフォンは端末内のPDFコピーを削除します。</li>
+            <li><strong>Webアプリでは</strong>：12個の単語の横（参加時、および「設定」の<strong>復元フレーズを表示</strong>内）で、<strong>リカバリーキットを印刷または保存</strong>をクリックします。アプリは「このページやファイルをクラウドバックアップやチャットに保存しないでください。これを持っている人は誰でもあなたとしてサインインできます。」と警告します。<strong>次へ</strong>をクリックしてブラウザの印刷画面を開きます。紙の代わりにPDFを保存したい場合は、そこで<strong>PDFとして保存</strong>を選んでください。</li>
+            <li>単語そのものと同じように、この書類を大切に保管してください。これを持っている人は誰でもあなたとしてサインインできてしまいます。</li>
+        </ul>
+        <h2>単語を再確認できる場所</h2>
+        <p>画面上部のスライダーボタンから<strong>設定</strong>を開きます。その後、以下のいずれかを行います。</p>
+        <ul>
+            <li><strong>アカウントとID</strong>の下にある<strong>復元フレーズを表示</strong>をタップします。<strong>CONFIRM</strong>と入力し、<strong>復元フレーズを表示</strong>をタップして、スマートフォンの画面ロック認証を通過します。</li>
+            <li>または、<strong>アカウント保護</strong>をタップし、<strong>12個の復元用単語を表示</strong>をタップして、スマートフォンの画面ロック認証を通過します。確認が終わったら<strong>隠す</strong>をタップします。</li>
+        </ul>
+        <p>いずれの方法でも、その画面を離れるかアプリを15秒以上離れると単語は再び非表示になり、次回はスマートフォンが再度認証を求めます。画面ロック認証に2分以上かかった場合は何も表示されません。もう一度タップしてください。</p>
+        <p>Webアプリでは、<strong>アカウントとID</strong>の下にある<strong>復元フレーズを表示</strong>からすぐに確認できます。</p>
+        <p>サインインアカウントで復元されたスマートフォンに12個の単語が戻ってくるのは、そのサインインアカウントが最新のアプリ上で、単語を保持していたスマートフォンから連携されていた場合のみです。それ以外の場合、そのスマートフォンには単語のコピーがありません（サインインから単語を再生成することはできません）。その場合も<strong>復元フレーズを表示</strong>は残っており、<strong>この端末にはまだコピーがありません</strong>と表示されます。そのスマートフォンでは連携済みサインインアカウントが復元手段となるため、<strong>アカウント保護</strong>の下でサインインの連携を維持してください。</p>
+        <h2>この端末に12個の単語を戻す</h2>
+        <p>このスマートフォンに12個の単語のコピーがなく、紙に書き留めた単語がある場合は、単語を追加できます。</p>
+        <ul>
+            <li><strong>設定</strong>を開きます。<strong>アカウントとID</strong>の下で、<strong>復元フレーズを表示</strong>をタップします（または、<strong>アカウント保護</strong>内で<strong>12個の復元用単語を表示</strong>をタップします）。コピーがないスマートフォンでは、どちらをタップしても<strong>この端末に12個の単語を追加</strong>が開きます。</li>
+            <li>12個の単語（英単語）を順番どおりに入力するか、<strong>貼り付け</strong>をタップします。大文字・小文字や余分なスペースは無視されます。復元用単語リスト（英単語）にない単語は、入力中に入力欄で指摘されます。</li>
+            <li><strong>これらの単語を追加</strong>をタップします。</li>
+        </ul>
+        <p>スマートフォンは、その単語がお客さまのアカウントのものであるかを確認します（オーナー向けの<strong>12個の単語を確認</strong>と同じ確認です）。単語がどこかに送信されることはありません。別のアカウントのものであった場合は何も変更されず、アプリがその旨を表示します。追加が完了すると、このスマートフォンのすべてのコミュニティで<strong>復元フレーズを表示</strong>から単語を確認できるようになります。</p>
+        <h2>12個の単語でグローバルコミュニティに参加した場合</h2>
+        <p>Google、Apple、Facebookのアカウントを使わず、12個の秘密の単語（英単語）だけでグローバルコミュニティに参加できます（「BeanPoolへの参加」参照）。それによって新しいアカウントを作成した場合、12個の単語が唯一の復元手段となります。お手元のスマートフォン以外にはアカウントのコピーは一切保存されず、BeanPoolもコミュニティも単語をリセットすることはできません。単語とスマートフォンの両方を紛失した場合、アカウントは完全に失われます（すでにお持ちのアカウントで参加した場合、他のコミュニティで連携したサインインを使えばそこでも復元できます）。</p>
+        <p>アプリの<strong>バックアップ</strong>画面でもその旨が表示されます。参加後、スマートフォンでもWebアプリでも、<strong>ホーム</strong>のカードに<strong>アカウントの復元方法は1つ（12個の単語）のみです。手元にあるか確認するか、サインインを追加してください。</strong>と再度表示されます。このカードによって操作が制限されることはありません。スマートフォンでは：</p>
+        <ul>
+            <li><strong>✕</strong>をタップするとカードが非表示になります。最初の投稿後と1週間後にそれぞれ1回再表示され、その後は<strong>設定</strong>の<strong>アカウント保護</strong>の下にのみ残ります。</li>
+            <li><strong>自分の12個の単語を表示</strong>をタップすると<strong>アカウント保護</strong>が開き、単語を再確認できます。</li>
+            <li><strong>アカウント保護</strong>で<strong>12個の単語を手元に保管しています</strong>をタップすると、カードは完全に非表示になります。<strong>サインイン方法を追加</strong>はそこに残ります。</li>
+        </ul>
+        <p>Webアプリでは、カードの見出しは<strong>復元方法は1つ</strong>となり、<strong>自分の12個の単語を確認</strong>と<strong>サインイン方法を追加</strong>が表示されます。<strong>✕</strong>をタップすると消えます。投稿の1つが維持された後と最初の1週間が経過した後にそれぞれ1回再表示されます。<strong>ホーム</strong>のカードで<strong>自分の12個の単語を確認</strong>をタップして単語を確認すると、ホームには再表示されなくなります。サインインを追加するまで、<strong>設定</strong>の最上部に留まります。</p>
+        <p>12個の単語で作成されたアカウントは、最初の1週間はサインインで作成されたアカウントよりも動作制限が厳しくなります。制限の内容と理由については「問題の報告」を参照してください。</p>
+        <h3>後からサインインを追加する</h3>
+        <p>参加した端末だけでなく、自分のアカウントにログインしている任意のスマートフォンやブラウザから、後でサインインを追加できます。12個の単語を使ってアカウントを復元したスマートフォンで、アプリ内のグローバルコミュニティを開いてください。アカウントに12個の単語しかないことがコミュニティに伝わり、カードと<strong>サインイン方法を追加</strong>が表示されます（少し時間がかかることがあります）。アカウントが停止されている間や、コミュニティによってアカウントが閉鎖された場合は追加できません（アプリがその旨を表示し、何も変更されません）。追加すると2つ目の復元手段となり、12個の単語による制限が直ちに解除されます。</p>
+        <p>BeanPoolの鍵保管庫にすでにアカウントのコピーが保管されている場合、そのコピーも復元手段となります。その場合、復元方法が1つだけである旨のカードは表示されません。ただし、12個の単語による制限を解除できるため、<strong>設定</strong>の<strong>アカウント保護</strong>に<strong>サインイン方法を追加</strong>が控えめに表示され続けます。</p>
+        <ul>
+            <li><strong>サインイン方法を追加</strong>をタップします（カード上、または<strong>設定</strong>の<strong>アカウント保護</strong>内）。<strong>バックアップ</strong>画面では、ボタンには<strong>戻る手段をもう1つ増やすため、サインインを追加</strong>と表示されます。</li>
+            <li><strong>Googleで続ける</strong>、<strong>Facebookで続ける</strong>、またはiPhoneでは<strong>Appleで続ける</strong>をタップし、1回サインインします。アプリは先にスマートフォンのロック解除を求める場合があります。</li>
+            <li><strong>サインインを追加しました</strong>と表示されれば成功です。アカウントは通常の新規アカウント制限に緩和され、スマートフォンを紛失した際も、最初からサインインで参加した人と同様にそのサインインで復元できます。保管されるコピーを開くことができる権限については、「アカウントの復元」を参照してください。</li>
+        </ul>
+        <p>その時点でアカウントのコピーを保管できなかった場合でも、サインインは追加され制限も解除されますが、復元手段は12個の単語のままとなります。アプリがその旨を表示します。グローバルコミュニティですでに別のBeanPoolアカウントに紐付いているサインインアカウントや、コミュニティから除名されたアカウントに属していたサインインアカウントは追加できず、何も変更されません。</p>
+        <p><strong>アカウント保護</strong>の下方にある<strong>サインイン復元プロバイダー</strong>内の<strong>〜で保護</strong>からもサインインを復元手段として連携できますが、12個の単語による制限やカードはそのまま残ります。両方を解決するには<strong>サインイン方法を追加</strong>を使用してください。</p>
+        <h2>2つ目の復元方法：サインインアカウント</h2>
+        <p>スマートフォンアプリでは、GoogleやFacebookのアカウント（iPhoneではAppleも）を連携することもできます。スマートフォンを紛失した場合、コミュニティのサーバーを通じて新しいスマートフォンでアカウントを復元できます。サーバーにはそのための暗号化されたコピーが保管されます。そのサーバーを運営する人はそのコピーを開くことができます。「アカウントの復元」を参照してください。</p>
+        <p>12個の単語を保持しているスマートフォンから連携したサインインアカウントは単語も保持するため、そのサインインで復元すれば単語も戻ってきます。古いバージョンのアプリで連携したサインインアカウントは、単語なしでアカウントを復元します。単語を含めるには、<strong>アカウント保護</strong>の下で該当サインインの横にある<strong>再連携</strong>をタップし、スマートフォンの画面ロック認証を通過してください。紙のメモも大切に保管しておいてください。</p>
+        <h2>Webブラウザでの利用</h2>
+        <p>グローバルコミュニティでは、ブラウザで参加する際に使用したサインインは2つ目の復元手段として保管されます。設定には<strong>サインイン復元：連携中</strong>と表示されます。データを消去したブラウザや新しいブラウザでは、<strong>すでにBeanPoolをお使いですか？</strong>をタップし、<strong>サインインを使用</strong>を選ぶと、12個の単語とともにアカウントが復元されます（「WebブラウザでBeanPoolを使用する」参照）。代わりに12個の単語で参加した場合、サインインを追加するまで単語が唯一の復元手段となります。参加後および設定画面に、<strong>復元方法は1つ</strong>というカードが表示され、<strong>自分の12個の単語を確認</strong>と<strong>サインイン方法を追加</strong>が用意されます。他のコミュニティではWebアプリにサインイン復元機能はなく、12個の単語が復元手段となります。ブラウザは保存されたデータを消去することがあるため、Webアプリを使い続ける前に必ず単語を紙に書き留めてください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPoolへの参加</strong><span>参加方法は2つあります。メンバーからの招待によるコミュニティ参加、または公開されているグローバルコミュニティへの12個の秘密の単語か1つのサインインによる参加です。参加申請や他者の招待方法も説明します。</span></a></li>
+            <li><a href="communities.html"><strong>複数のコミュニティ</strong><span>1つのアカウントで複数のコミュニティに参加し、切り替えたり、コミュニティの移転先に追従したり、グローバルコミュニティの表示内容を確認する方法を説明します。</span></a></li>
+            <li><a href="faq.html"><strong>よくある質問</strong><span>メンバーから最も多く寄せられる質問への簡潔な回答です。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

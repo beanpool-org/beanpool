@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Règles et décisions — BeanPool members' guide</title>
+    <meta name="description" content="Vote, participation, vote secret, qui peut voter, suspension, exclusion d'un membre, gestionnaires, coordinateurs et coordinateurs principaux.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Découvrir BeanPool</a></p>
+        <h1>Règles et décisions</h1>
+        <p class="lede">Vote, participation, vote secret, qui peut voter, suspension, exclusion d'un membre, gestionnaires, coordinateurs et coordinateurs principaux.</p>
+        <h2>Deux façons d'interroger la communauté</h2>
+        <ul>
+            <li>Un <strong>Sondage</strong> est une question dans le fil, comme « Marché ce dimanche ? ». Il montre ce que pensent les gens. Il ne change jamais rien de lui-même.</li>
+            <li>Une <strong>Décision</strong> est contraignante. Si elle est adoptée, le serveur de votre communauté l'applique de lui-même. Personne n'a besoin d'appuyer sur un bouton, et personne ne peut l'ignorer discrètement.</li>
+        </ul>
+        <p>La communauté globale dispose de Sondages mais pas de Décisions : tout le monde peut la rejoindre, avec 12 mots ou une connexion, donc une personne possédant plusieurs comptes pourrait faire basculer un vote. Tout ce qui suit concernant les Décisions porte sur les communautés locales.</p>
+        <h2>Ce qu'une Décision peut faire</h2>
+        <p>À propos d'un membre :</p>
+        <ul>
+            <li>Suspendre un membre, ou lever une suspension.</li>
+            <li>Bloquer le crédit d'un membre, ou le débloquer.</li>
+            <li>Donner à un membre le droit de parrainer les nouveaux arrivants, ou le lui retirer.</li>
+            <li>Retirer un gestionnaire principal d'une entreprise, ou un responsable d'un projet.</li>
+            <li>Exclure un membre de la communauté, ou le réintégrer.</li>
+        </ul>
+        <p>À propos des Communs :</p>
+        <ul>
+            <li>Attribuer des haricots des Communs à un projet ou à une entreprise.</li>
+            <li>Accorder une aide d'urgence issue des Communs à un membre.</li>
+            <li>Régler la dette d'un projet ou d'une entreprise depuis les Communs.</li>
+            <li>Effacer une dette qu'un membre qui est parti devait aux Communs. Aucun haricot ne se déplace. L'enregistrement subsiste, marqué comme effacé. Là où une communauté tient une liste des noms, cela démarre depuis celle-ci.</li>
+        </ul>
+        <p>Une aide ne peut dépasser ce que détiennent les Communs actuellement plus ce qui y est entré au cours des 30 derniers jours. Une aide plus importante est refusée dès que vous la proposez.</p>
+        <h2>Qui peut proposer une Décision</h2>
+        <p>Tout membre actif dont le crédit n'est pas bloqué, et qui a réalisé des échanges sur le marché ou reçu un badge de confiance d'un administrateur. Un parrainage seul ne suffit pas. Les administrateurs le peuvent aussi. Vous pouvez avoir une seule Décision ouverte à la fois. Vous devez en expliquer la raison, en au moins 10 caractères.</p>
+        <h2>Qui peut voter</h2>
+        <p>Tout membre actif dont le crédit n'est pas bloqué, et qui a rejoint <strong>avant</strong> l'ouverture de la Décision. Les personnes qui rejoignent pendant un vote ne peuvent pas voter dessus. Les comptes d'entreprise ne peuvent pas voter.</p>
+        <h2>Comment les voix sont comptées</h2>
+        <ul>
+            <li>Décisions concernant un membre : <strong>un membre, une voix</strong>. Oui ou Non.</li>
+            <li>Décisions concernant les haricots des Communs : les votes sont pondérés par les échanges. Vous pouvez exprimer plusieurs voix, mais cela coûte de plus en plus cher : 1 voix coûte 1 crédit de vote, 2 voix coûtent 4 crédits, 3 voix coûtent 9 crédits. Vos crédits de vote proviennent de vos échanges réalisés, comptabilisés jusqu'à 500 haricots par partenaire d'échange. Vous récupérez l'intégralité de vos crédits de vote à chaque Décision. Ils ne s'épuisent jamais.</li>
+            <li>Si vous n'avez jamais réalisé d'échange, vous ne pouvez pas encore voter sur les haricots des Communs.</li>
+            <li>Vous pouvez modifier votre vote à tout moment jusqu'à la clôture du vote.</li>
+        </ul>
+        <h2>Vote secret</h2>
+        <p>L'application ne montre jamais à quiconque votre vote, administrateurs inclus. Tout le monde voit les totaux, et vous voyez votre propre vote. Votre vote est stocké sur le serveur de votre communauté avec votre compte, afin de pouvoir être compté et vérifié. Les propriétaires et administrateurs qui gèrent le serveur peuvent extraire une copie de ses fichiers, et pourraient y retrouver votre vote.</p>
+        <p>Les sondages sont anonymes également, sauf si la personne qui en lance un en fait un <strong>vote public</strong> : les membres peuvent alors voir qui a choisi quoi. Le sondage indique dans quel mode il se trouve.</p>
+        <h2>Durée d'un vote</h2>
+        <p>Chaque Décision dure exactement 7 jours. Le vote s'ouvre immédiatement. Au bout des 7 jours, le serveur de votre communauté compte les votes et applique le résultat.</p>
+        <h2>Participation</h2>
+        <p>Un vote ne compte que si suffisamment de personnes y participent.</p>
+        <ul>
+            <li>« Suffisamment de personnes » signifie 30 % des membres pouvant voter et qui étaient actifs au cours des 30 derniers jours. Ce n'est jamais moins de 3 personnes.</li>
+            <li>Pour exclure un membre, le seuil est de 25 %.</li>
+            <li>« Actif » signifie que votre application a envoyé quelque chose au serveur de votre communauté au cours de ces 30 jours : une publication, un échange, un vote, un message. Sur le téléphone, ouvrir simplement l'application compte généralement aussi, car elle s'identifie pour les alertes à chaque démarrage.</li>
+            <li>La participation compte les personnes, pas le poids de leurs votes.</li>
+        </ul>
+        <p>Si trop peu de personnes votent, rien ne se passe. La Décision se clôture comme « non résolue ».</p>
+        <h2>Part de Oui nécessaire</h2>
+        <ul>
+            <li>La plupart des Décisions : 60 % de Oui.</li>
+            <li>Exclusion d'un membre : 66 % de Oui.</li>
+            <li>Annuler une mesure (lever une suspension, débloquer le crédit, réintégrer un membre) : plus de la moitié.</li>
+            <li>Une égalité équivaut toujours à un rejet.</li>
+        </ul>
+        <h2>Quand une Décision est adoptée</h2>
+        <ul>
+            <li>Le serveur de votre communauté vérifie qu'elle a toujours du sens : le membre existe toujours, les Communs ont assez de haricots. Puis il l'applique.</li>
+            <li>Si les Communs manquent de haricots pour une aide, l'aide patiente jusqu'à ce qu'il y en ait assez. Elle est abandonnée au bout de 90 jours.</li>
+            <li>Une seule aide peut être en attente à la fois. Si une deuxième aide est adoptée pendant que les Communs sont encore à court, elle ne patiente pas : elle est définitivement rejetée, et la communauté doit revoter.</li>
+            <li>Si la personne ou l'entreprise n'existe plus, la Décision se clôture sans rien faire.</li>
+        </ul>
+        <h2>Exclusion d'un membre</h2>
+        <ul>
+            <li>Si une exclusion est adoptée, le membre est suspendu et son crédit bloqué immédiatement.</li>
+            <li>Au bout de 7 jours de plus, il est exclu pour de bon. Durant ces 7 jours, une Décision visant à le réintégrer annule l'exclusion.</li>
+            <li>Un membre qui supprime son propre compte ne peut pas être réintégré, même après une exclusion. Il peut rejoindre à nouveau avec une nouvelle invitation.</li>
+            <li>Lorsqu'un membre est exclu, ses annonces sont retirées. S'il devait des haricots, les Communs remboursent la dette. S'il avait des haricots, ces haricots reviennent aux Communs.</li>
+            <li>La communauté peut voter pour exclure ou suspendre tout membre, sauf un propriétaire ou un administrateur du serveur de votre communauté. Ils gèrent le serveur lui-même, un vote ne peut donc pas leur retirer cela ; l'application vous en informe si vous essayez. Un propriétaire peut d'abord retirer le rôle d'un administrateur, après quoi celui-ci devient un membre comme les autres.</li>
+        </ul>
+        <h2>Suspension d'urgence</h2>
+        <p>Un administrateur peut suspendre un membre immédiatement, par exemple pour empêcher un préjudice. Il doit donner une raison consultable par les membres.</p>
+        <ul>
+            <li>Au même moment, une Décision de 7 jours s'ouvre : « Maintenir cette suspension ? ».</li>
+            <li>Elle nécessite la participation habituelle et 60 % de Oui.</li>
+            <li>Si elle n'est pas adoptée, ou si trop peu de personnes votent, la suspension est levée automatiquement.</li>
+            <li>Un administrateur ne peut pas se suspendre lui-même, ni suspendre l'unique propriétaire du serveur. Seul un propriétaire peut suspendre un autre propriétaire.</li>
+        </ul>
+        <p>Sur la communauté globale, il n'y a pas de vote. La suspension dure 7 jours puis est levée automatiquement, sauf si un administrateur la lève plus tôt. Pour maintenir quelqu'un à l'écart plus longtemps, les administrateurs le suspendent de nouveau, ou suppriment son compte.</p>
+        <h2>Ce que les admins peuvent et ne peuvent pas faire</h2>
+        <p>Le serveur de votre communauté a des propriétaires et des administrateurs. Ils s'en occupent.</p>
+        <ul>
+            <li>Un administrateur peut arrêter une Décision en cours, mais doit donner une raison écrite. Les membres peuvent la lire sur la Décision.</li>
+            <li>Si une exclusion a été adoptée et est dans son délai d'attente de 7 jours, un administrateur peut l'interrompre, ou l'exécuter sur-le-champ.</li>
+            <li>Les administrateurs peuvent donner aux membres le droit de parrainer les nouveaux arrivants.</li>
+            <li>Les administrateurs peuvent attribuer un badge de confiance à un membre. Cela donne également à ce membre la confiance requise par ce badge, ce qui augmente sa ligne de crédit.</li>
+            <li>Les administrateurs débloquent les échanges interrompus, mais jamais un échange auquel ils prennent part.</li>
+        </ul>
+        <h2>Sondages</h2>
+        <ul>
+            <li>Tout membre actif dont le crédit n'est pas bloqué peut lancer un Sondage avec 2 à 4 réponses. Il dure 3, 7 ou 14 jours.</li>
+            <li>Vous pouvez avoir un seul Sondage ouvert à la fois. Votre communauté peut avoir 5 Sondages ouverts simultanément.</li>
+            <li>Un Sondage publié dans un groupe ne peut recevoir de réponses que de la part des membres et des coordinateurs de ce groupe. Les observateurs peuvent le lire mais pas y répondre.</li>
+            <li>Répondre à un Sondage nécessite également un crédit non bloqué. Vous pouvez modifier votre réponse jusqu'à la clôture du Sondage. La personne qui l'a lancé peut le clôturer de manière anticipée.</li>
+            <li>Un Sondage est anonyme : tout le monde ne voit que les totaux. La personne qui le lance peut en faire un <strong>vote public</strong> à la place, afin que les membres voient qui a choisi quoi. Ce choix se fait lors du lancement du Sondage et ne peut pas être modifié une fois le Sondage publié.</li>
+            <li>Sur la communauté globale, un Sondage anonyme clôturé indique également combien de ses votes proviennent de comptes récents ou à 12 mots, le cas échéant. Chaque vote compte de la même façon.</li>
+        </ul>
+        <h2>Entreprises et gestionnaires</h2>
+        <p>Une entreprise est gérée par ses gestionnaires. L'un d'eux est le gestionnaire principal.</p>
+        <ul>
+            <li><strong>Rejoindre :</strong> vous demandez à devenir gestionnaire et indiquez combien de votre confiance acquise vous engagez (cela peut être 0). Vous ne pouvez pas engager plus de confiance que vous n'en avez gagné en échangeant, sur l'ensemble de vos entreprises. Le gestionnaire principal accepte ou refuse.</li>
+            <li><strong>Engager dans une communauté qui confirme ses membres :</strong> un membre confirmé peut également engager une partie de sa ligne de crédit connue, jusqu'à la moitié de celle-ci. Cette part est alors déduite de sa propre ligne.</li>
+            <li><strong>Délai d'objection :</strong> lorsqu'une entreprise compte déjà plus d'un gestionnaire, l'approbation du responsable attend 3 jours. Tout autre gestionnaire peut s'y opposer durant ce délai, et une seule objection l'annule.</li>
+            <li><strong>Retirer un gestionnaire :</strong> le responsable peut retirer un gestionnaire ordinaire. Le même délai de 3 jours s'applique, et tout autre gestionnaire peut s'y opposer.</li>
+            <li><strong>Administrateurs de la communauté :</strong> un administrateur de votre communauté qui n'est pas gestionnaire de l'entreprise peut approuver un gestionnaire, ou retirer un gestionnaire ordinaire, immédiatement, sans délai de 3 jours. Cela permet de débloquer une entreprise paralysée.</li>
+            <li><strong>Quitter ses fonctions :</strong> tout gestionnaire peut quitter ses fonctions. Si l'entreprise est endettée et que votre engagement est nécessaire pour couvrir cette dette, vous devez attendre que la dette diminue ou que d'autres gestionnaires s'engagent davantage. L'unique gestionnaire ne peut pas quitter ses fonctions ; il doit d'abord ajouter un autre gestionnaire, ou clôturer l'entreprise.</li>
+            <li><strong>Votre engagement</strong> soutient la ligne de crédit de l'entreprise. Un engagement de la confiance que vous avez acquise n'est jamais prélevé sur votre propre solde ni sur votre propre ligne de crédit.</li>
+            <li><strong>Un responsable inactif :</strong> si le gestionnaire principal n'a rien fait dans l'application pendant 30 jours, les autres gestionnaires peuvent désigner un nouveau responsable parmi eux. Le vote dure jusqu'à 14 jours, avec Oui et Non. Il est adopté lorsque plus de la moitié des autres gestionnaires disent Oui. Si le responsable revient et effectue une action dans l'application, le vote est annulé. Tant que le compte du responsable est suspendu, rien de ce qu'il fait ne compte comme un retour. Les votes des gestionnaires ne peuvent pas être modifiés.</li>
+            <li><strong>Votes entre gestionnaires :</strong> dans une entreprise avec deux gestionnaires ou plus, tout gestionnaire peut proposer de verser des haricots depuis le compte de l'entreprise (jamais plus que ce qu'il contient, jamais à lui-même, et à un gestionnaire uniquement sur ce qu'elle a gagné, avec les frais d'échange de 1,5 %), de retirer un gestionnaire ou, dans une entreprise mais pas dans un projet, de nommer un autre gestionnaire comme responsable. Les personnes gestionnaires au moment de l'ouverture votent ; plus de la moitié doivent voter ; 60 % de Oui pour un versement ou un retrait, plus de la moitié pour désigner un responsable. Le vote dure 7 jours ou prend fin plus tôt dès que l'issue ne peut plus changer, et s'exécute de lui-même. Seuls les gestionnaires le voient. Tant qu'il est ouvert, il indique combien ont voté ; le Oui et le Non apparaissent une fois clôturé. Personne ne voit qui a voté comment, mais dans un très petit groupe le résultat et la participation peuvent le laisser deviner. Ces votes ne touchent jamais aux Communs ni à la réputation de quiconque dans la communauté : ce sont des Décisions communautaires. Un vote ne peut pas retirer le responsable (votez plutôt pour un nouveau responsable), l'unique gestionnaire, ni un gestionnaire dont l'engagement couvre une dette. Un gestionnaire ne peut pas proposer son propre retrait ; il quitte ses fonctions à la place.</li>
+            <li><strong>Si le responsable part ou est retiré,</strong> le gestionnaire en poste depuis le plus longtemps devient responsable sur-le-champ, et les autres gestionnaires peuvent le remplacer immédiatement. S'il ne reste aucun gestionnaire, l'entreprise est suspendue.</li>
+            <li><strong>Clôture :</strong> le gestionnaire principal, ou l'unique gestionnaire, peut lancer la fermeture d'une entreprise. Un administrateur de la communauté le peut aussi. Il y a ensuite une période d'attente de 7 jours, et tout gestionnaire ou administrateur de la communauté peut l'annuler. Une entreprise endettée ne peut pas fermer tant que la dette n'est pas réglée ou que la communauté ne l'efface pas. Rien ne finalise une clôture tout seul : après les 7 jours, le gestionnaire principal, l'unique gestionnaire ou un administrateur de la communauté doit finaliser la fermeture, et cela ne peut être fait tant qu'un échange est encore en cours. Lors de la fermeture, tous les haricots restants vont aux Communs.</li>
+        </ul>
+        <h2>Groupes et coordinateurs</h2>
+        <p>Un groupe est dirigé par ses coordinateurs, et l'un d'eux est son <strong>coordinateur principal</strong>. La personne qui crée un groupe en est le premier coordinateur principal.</p>
+        <ul>
+            <li>Certains groupes sont ouverts à tous. Certains nécessitent la validation d'un coordinateur. D'autres sont sur invitation uniquement.</li>
+            <li><strong>Tout coordinateur</strong> peut valider et inviter des membres, retirer un membre ou un observateur, changer le rôle d'un membre ou d'un observateur, nommer quelqu'un coordinateur, retirer des publications et des messages, et modifier le groupe ainsi que les conditions d'accès.</li>
+            <li><strong>Seul le coordinateur principal</strong> peut retirer un coordinateur, ou lui enlever son rôle. Le vote interne du groupe peut également le faire.</li>
+            <li><strong>Personne ne peut retirer le coordinateur principal, ni lui enlever son rôle de responsable.</strong> Ni un autre coordinateur, ni un administrateur de la communauté — les administrateurs n'ont aucun pouvoir à l'intérieur d'un groupe. En dehors d'une transmission volontaire par le responsable, seul le vote interne du groupe peut choisir un nouveau coordinateur principal.</li>
+            <li><strong>Un coordinateur suspendu :</strong> tant que le compte d'un coordinateur est suspendu, il ne peut utiliser aucun pouvoir de coordinateur, et ses pouvoirs de responsable attendent également. Il reste coordinateur, et le responsable reste responsable ; tout redevient actif lorsque la suspension prend fin. Les autres coordinateurs continuent normalement, et les membres continuent d'échanger et de publier. Un membre suspendu ne peut pas non plus créer ni rejoindre de groupe tant que dure la suspension.</li>
+            <li><strong>Transmettre la coordination principale :</strong> le responsable peut nommer quelqu'un d'autre coordinateur principal. Il peut s'agir d'un autre coordinateur, ou d'un membre, qui devient coordinateur en même temps. Une fois l'opération effectuée, le responsable ne peut pas revenir en arrière.</li>
+            <li><strong>Quitter le groupe en tant que responsable :</strong> transmettez d'abord la coordination principale. S'il n'y a personne d'autre dans le groupe, le responsable peut simplement partir.</li>
+            <li>Le dernier coordinateur ne peut pas démissionner, et ne peut pas être retiré tant que le groupe compte d'autres membres. S'il n'y a personne d'autre dans le groupe, il peut simplement partir.</li>
+            <li><strong>Le vote interne du groupe.</strong> Les membres et coordinateurs d'un groupe peuvent voter sur les décisions internes au groupe : choisir un nouveau coordinateur principal, nommer quelqu'un coordinateur, rétrograder un coordinateur au statut de membre, retirer quelqu'un du groupe, modifier les conditions d'accès, ou fermer le groupe. Tout membre ou coordinateur peut en proposer un ; les observateurs regardent mais ne votent pas. Toute personne qui était membre ou coordinateur à l'ouverture peut voter. Plus de la moitié d'entre eux doivent voter. Retirer quelqu'un et fermer le groupe demandent 60 % de Oui ; le reste demande plus de la moitié. Le vote dure 7 jours, ou prend fin plus tôt dès que l'issue ne peut plus changer, puis l'application l'exécute d'elle-même. Les votes sont secrets et ne peuvent pas être modifiés. Le vote d'un groupe ne déplace jamais de haricots et ne modifie jamais la réputation de quiconque dans la communauté, et les administrateurs ne peuvent pas l'arrêter. Un groupe fermé n'accepte aucun nouveau membre ni aucun nouveau message, et ses publications et événements sont annulés. Ses échanges restent consultables. Vous trouverez le vote sur la page du groupe, sous <strong>Décisions</strong>. Pour demander l'avis d'un groupe sans rien changer, publiez un Sondage dans le groupe.</li>
+            <li><strong>Un coordinateur principal inactif :</strong> si le coordinateur principal d'un groupe n'a rien fait dans l'application pendant 30 jours, le groupe peut en choisir un nouveau. Ses <strong>autres coordinateurs</strong> votent — ou ses <strong>membres</strong>, si aucun des autres coordinateurs n'a été nommé coordinateur avant le jour où le responsable a été actif pour la dernière fois. Seules les personnes qui étaient déjà là ce jour-là participent : les membres qui avaient déjà rejoint le groupe à cette date, ou les coordinateurs déjà nommés à cette date. Toute personne ayant rejoint ou ayant été nommée coordinateur après cela ne peut pas proposer, être proposée ni voter, et n'est pas comptabilisée. Si vous quittez le groupe et le rejoignez à nouveau, vous comptez à partir de votre nouvelle adhésion. S'il ne reste personne qui était présent à cette date, aucun vote ne peut s'ouvrir, et l'écran du groupe l'indique. Chacun des participants peut proposer quelqu'un parmi eux, y compris lui-même. Le vote dure jusqu'à 14 jours, par Oui ou par Non, à bulletin secret. Il est adopté lorsque plus de la moitié de ceux qui répondent disent Oui. Si le responsable revient et fait quoi que ce soit dans l'application, le vote est annulé. Tant que le compte du responsable est suspendu, rien de ce qu'il fait ne compte comme un retour. La personne choisie devient coordinateur et responsable du groupe. Le responsable inactif reste coordinateur lorsque ce sont les coordinateurs qui ont voté, et devient un membre ordinaire lorsque ce sont les membres qui ont voté. Vous trouverez le vote sur l'écran du groupe, au-dessus de la liste des membres.</li>
+            <li><strong>Un coordinateur principal malveillant</strong> peut être retiré par une Décision communautaire. Cela arrivera dans une prochaine mise à jour.</li>
+        </ul>
+        <h2>Parrainage</h2>
+        <p>Seuls les administrateurs, et les membres choisis par un administrateur ou par une Décision communautaire, peuvent parrainer les nouveaux arrivants. Un parrainage donne au nouvel arrivant une petite ligne de crédit pour commencer : 25, 50 ou 100 haricots. Les badges de mérite ne confèrent jamais ce droit.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../proposing-a-decision.html"><strong>Proposing a Decision</strong><span>Ask the community to decide something binding.</span></a></li>
+            <li><a href="../polls.html"><strong>Polls</strong><span>Ask the community a quick question. Polls show opinion; they change nothing by themselves.</span></a></li>
+            <li><a href="../keepers.html"><strong>Keepers</strong><span>The people who run an enterprise and stand behind it. How to join, object, and step down.</span></a></li>
+            <li><a href="../groups.html"><strong>Groups</strong><span>Your groups and their chats, talking in them, starting a group, inviting people, joining by invitation, and the group's own votes.</span></a></li>
+            <li><a href="../people.html"><strong>People and friends</strong><span>Find members of your community, add friends, and vouch for someone.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

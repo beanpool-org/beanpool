@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool di browser web — BeanPool members' guide</title>
+    <meta name="description" content="Web app menyediakan sebagian besar fungsi aplikasi ponsel. Bergabung ke komunitas global di browser, memulihkan akun dengan akun masuk, membuka akun di ponsel, dan letak tombol yang berbeda nama.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Memulai</a></p>
+        <h1>BeanPool di browser web</h1>
+        <p class="lede">Web app menyediakan sebagian besar fungsi aplikasi ponsel. Bergabung ke komunitas global di browser, memulihkan akun dengan akun masuk, membuka akun di ponsel, dan letak tombol yang berbeda nama.</p>
+        <h2>Akun yang sama, layar yang berbeda</h2>
+        <p>Komunitasmu juga dapat digunakan di browser web, di komputer atau ponsel. Panduan ini ditulis untuk aplikasi ponsel. Web app berfungsi dengan cara yang sama, tetapi beberapa hal diberi nama atau diletakkan secara berbeda.</p>
+        <p>Gunakan satu akun di keduanya. Bergabung di browser? Pasang akun yang sama di ponselmu: lihat &quot;Memasang akun web Anda di ponsel&quot;, di bawah. Bergabung di ponsel? Bawa akun tersebut ke browser: lihat &quot;Menggunakan akun ponsel Anda di komputer&quot;. Bergabung lagi akan membuat akun kedua, dan dua akun tidak akan pernah bisa digabungkan menjadi satu.</p>
+        <h2>Bergabung ke global.beanpool.org di browser</h2>
+        <p>Komunitas global di global.beanpool.org terbuka untuk siapa saja, dan kamu dapat bergabung langsung di sana melalui browser web. Kamu tidak memerlukan undangan dan tidak memerlukan aplikasi ponsel.</p>
+        <p>Sebelum kamu bergabung, halaman menampilkan <strong>Beranda</strong>, <strong>Pasar</strong>, <strong>Peta</strong>, dan <strong>Buku kas</strong> (contoh dari komunitas lokal) sebagaimana yang dilihat oleh pengunjung: kartu publik, iklan, foto, dan perkiraan lokasinya, tetapi tanpa nama, tanpa wajah, dan tanpa lokasi persis. Tidak ada yang memungkinkanmu memposting atau membalas sampai kamu bergabung. Tombol <strong>Gabung</strong> berada di bagian atas halaman dan di kartu di atas daftar iklan.</p>
+        <p>Di browser ponsel, kartu tersebut menawarkan <strong>Buka di aplikasi BeanPool</strong> terlebih dahulu. Tombol ini membuka aplikasi BeanPool pada cara masuk komunitas global, atau toko aplikasi ponselmu jika aplikasi belum terpasang, sehingga akunmu berada di dalam aplikasi sejak awal. Jika aplikasi sudah memiliki akun, tombol membuka <strong>Bergabung dengan komunitas global</strong> dengan akun tersebut, atau lembar <strong>BEANPOOL</strong> jika akun tersebut sudah menjadi anggota di sana. Lihat &quot;Joining BeanPool&quot;. Di bawahnya, <strong>atau gabung di sini lewat browser</strong> memungkinkan bergabung langsung di sini, seperti di bawah ini. Di komputer kartu menampilkan <strong>Gabung</strong>.</p>
+        <p>Selama komunitas global hanya memiliki sedikit iklan, <strong>Pasar</strong> juga menampilkan beberapa kartu yang ditandai <strong>Contoh</strong>. Kartu-kartu tersebut fiktif, dibuat untuk menunjukkan apa yang diposting orang, dan tidak dapat dibuka. Kartu-kartu itu akan hilang begitu ada cukup iklan nyata.</p>
+        <p>Jika kamu datang dari tautan yang dibagikan seseorang ke sebuah iklan atau acara, halaman tersebut akan terbuka terlebih dahulu. Bergabunglah dari halaman tersebut, dan setelah kamu masuk, halaman akan terbuka lagi, kali ini disertai informasi siapa yang mempostingnya.</p>
+        <ul>
+            <li>Ketuk <strong>Gabung</strong>, lalu <strong>Saya baru di BeanPool</strong>.</li>
+            <li>Pilih nama yang akan dilihat orang lain. Panjangnya minimal 2 huruf, dan maksimal 20 huruf.</li>
+            <li>Pilih cara bergabung. <strong>Buat akun dengan 12 kata rahasia</strong> tidak memerlukan akun lain. Atau, di bawah <strong>Atau masuk</strong>, masuklah sekali dengan salah satu akun yang ditampilkan halaman: <strong>Google</strong>, <strong>Apple</strong>, atau <strong>Facebook</strong>. Halaman ini akan membawamu ke halaman masuk perusahaan tersebut dan membawamu kembali. Jika komunitas hanya menerima akun masuk, halaman hanya menampilkan pilihan akun masuk saja.</li>
+            <li>Kemudian lakukan langkah-langkah yang sama seperti yang lain: foto, perkiraan lokasimu, 12 kata bahasa Inggrismu, dan tur singkat. Bilah di bagian atas bertuliskan <strong>Masuk</strong> (atau <strong>Namamu</strong>, saat kamu bergabung dengan 12 kata), <strong>Fotomu</strong>, <strong>Areamu</strong>, <strong>Cadangan aman</strong>, dan <strong>Cara kerja</strong>. Pada <strong>Areamu</strong>, <strong>Gunakan lokasiku</strong> meminta izin browsermu sekali dan membulatkan jawabannya ke sekitar 10 km sebelum dikirim; <strong>Ketik nama kota atau daerah</strong> mencari lokasi berdasarkan nama; <strong>Lewati untuk sekarang</strong> tidak mengirimkan apa pun. Browser tidak akan dimintai lokasimu lagi di akhir proses. Lihat &quot;Joining BeanPool&quot;.</li>
+        </ul>
+        <p><strong>Bergabung dengan 12 kata.</strong> Tidak diperlukan akun Google, Apple, atau Facebook, dan komunitas tidak menyimpan apa pun tentangmu selain namamu dan, selama satu hari, referensi acak ke jaringan tempat kamu bergabung. Saat kamu mengetik namamu, halaman melakukan pemrosesan kecil untuk komunitas di latar belakang, sehingga tidak ada yang dapat membuat akun secara terus-menerus tanpa henti. Kamu tidak perlu menunggunya: jika kamu mengetuk sebelum proses selesai, halaman bertuliskan <strong>Menyiapkan akunmu…</strong> dengan bilah 8 langkah. Ketika banyak orang yang bergabung, prosesnya memakan waktu lebih lama, dan halaman memberi tahu perkiraan waktu di browser ini: masuk dengan akun lebih cepat pada saat itu. <strong>← Pilih cara lain</strong> kembali ke kedua cara masuk, dengan pemrosesan yang tetap berjalan. 12 kata bahasa Inggrismu kemudian menjadi satu-satunya caramu untuk kembali masuk. Tidak ada yang bisa menyetel ulangnya, bukan kami dan bukan komunitas: <strong>Cadangan aman</strong> menyatakan demikian, dan menawarkan <strong>Tambahkan akun masuk sebagai cara kedua untuk kembali</strong>: kamu memilih akun masuk di akhir tur singkat, setelah fotomu disimpan (lihat &quot;Menambahkan akun masuk nanti&quot; di bawah). Keduanya terserah padamu.</p>
+        <p><strong>Bergabung dengan akun masuk.</strong> Komunitas hanya menyimpan referensi acak ke akun tersebut, tidak pernah emailmu atau namamu dari akun itu. Satu akun masuk hanya dapat bergabung satu kali.</p>
+        <p>Akun masuk yang sama juga disimpan sebagai cara kembali ke akunmu. Saat halaman bertuliskan <strong>Mengamankan akunmu…</strong>, halaman mengunci salinan akunmu, beserta 12 katanya, dan proses bergabung menyerahkannya ke komunitas. Akun masuk tersebut dapat membukanya. Pengelola server juga dapat membukanya, karena server mereka memeriksa akun masukmu, sama seperti akun masuk yang ditautkan di aplikasi ponsel: lihat &quot;Recovery&quot;. Pengaturan kemudian menampilkan <strong>Pemulihan akun masuk: terhubung</strong> dan akun mana yang digunakan. Jika salinan tidak dapat dibuat atau disimpan, kamu tetap bergabung, dan Pengaturan menampilkan <strong>Pemulihan akun masuk: tidak terhubung</strong>: 12 katamu kemudian menjadi satu-satunya caramu untuk kembali.</p>
+        <p>Jika kamu lebih suka komunitas tidak menyimpan salinan tersebut, web app belum dapat menghapusnya saat ini. Aplikasi ponsel dapat melakukannya, jika akunmu juga ada di ponselmu: dengan komunitas global terbuka, buka <strong>Pengaturan</strong>, ketuk <strong>Perlindungan Akun</strong>, lalu <strong>Putuskan sambungan</strong> di samping akun masuk. Apa pun pilihannya, simpan 12 katamu dengan aman: kata-kata tersebut adalah cara kembali yang sepenuhnya milikmu sendiri.</p>
+        <p>Jika orang lain di sini sudah memiliki nama yang kamu pilih, kamu mendapatkannya dengan tambahan angka. Kamu bisa mengubahnya di Pengaturan.</p>
+        <p><strong>Sudah menggunakan BeanPool?</strong> Jangan membuat akun kedua. Setelah <strong>Gabung</strong>, pilih <strong>Saya memakai BeanPool di ponsel</strong> untuk menautkan dari aplikasi ponsel, atau <strong>Saya memiliki 12 kata saya</strong>. Jika akun tersebut belum bergabung ke komunitas global, halaman menawarkan cara masuk yang sama (12 katamu, atau masuk sekali dengan akun), dan akun tersebut bergabung sebagai akun yang sudah kamu miliki. Jika kamu bergabung ke komunitas global sebelumnya dengan akun masuk, pilih <strong>Saya pernah bergabung dengan akun masuk sebelumnya</strong> (lihat di bawah).</p>
+        <p>Jika kamu menutup halaman di tengah jalan, buka kembali dalam waktu 10 menit dan proses akan berlanjut dengan nama yang sama.</p>
+        <p><strong>Satu akun per browser.</strong> Jika kamu bergabung di dua tab sekaligus, tab kedua bertuliskan <strong>Browser ini sudah punya akun</strong> dan menawarkan <strong>Buka</strong> dengan nama akun tersebut. Tidak ada yang menggantikannya. Jika proses bergabung pada tab kedua juga sudah berhasil, akun tersebut juga disimpan di browser ini, dan <strong>Tampilkan</strong> (namanya) <strong>12 kata</strong> menampilkan kata-katanya: catat kata-kata tersebut jika kamu ingin menyimpannya. Untuk menggunakannya, keluar di Pengaturan (<strong>Hapus dari Perangkat Ini Saja</strong>), lalu pulihkan dengan kata-kata tersebut.</p>
+        <p><strong>Proses bergabung yang sudah terkirim didahulukan.</strong> Jika browser ini mengirimkan permintaan bergabung yang mungkin sudah berhasil diproses, halaman akan menanyakannya ke komunitas sebelum hal lain, bahkan sebelum undangan atau pemulihan akun lain. Jika kamu sudah masuk, kamu bisa melanjutkan. Jika masih dalam proses, halaman memintamu menunggu beberapa menit, lalu <strong>Periksa lagi</strong>. Aturan ini tetap berlaku bahkan saat komunitas telah berhenti menerima anggota baru.</p>
+        <p>Jika terjadi masalah di halaman setelah pendaftaranmu terkirim, halaman akan memberi tahu demikian dan menawarkan <strong>Muat ulang halaman</strong>. Pendaftaranmu disimpan di browser ini, dan muat ulang akan memeriksa apakah kamu sudah masuk.</p>
+        <p><strong>Banyak orang bergabung dari satu jaringan:</strong> ketika banyak akun baru datang dari satu koneksi internet, proses bergabung meminta sedikit lebih banyak pemrosesan dari browser alih-alih menolak orang. Semua orang di jaringan yang sama dihitung bersama-sama, jadi di kampus, kantor, atau tempat pertemuan mungkin orang lain yang sedang bergabung, bukan kamu. Hanya jika melampaui jumlah yang sangat besar barulah halaman menolak untuk sementara, dan memberi tahu berapa menit harus menunggu. Ketika pesan itu muncul untuk akun 12 kata, bergabung dengan akun masuk masih bisa dilakukan.</p>
+        <h2>Batasan akun baru</h2>
+        <p>Di komunitas global, akun baru memiliki beberapa batasan harian untuk 3 hari pertamanya, dan sampai 3 postingannya tetap aktif: 3 postingan, 5 foto, dan 10 orang baru untuk dikirimi pesan dalam rentang waktu 24 jam. Akun yang dibuat hanya dengan 12 kata memiliki batasan yang lebih ketat, untuk 7 hari pertamanya dan sampai 3 postingannya tetap aktif: 2 postingan, 4 foto, dan 3 orang baru untuk dikirimi pesan. Menambahkan akun masuk akan langsung memindahkannya ke batasan wajar seketika. Membalas seseorang yang menulis pesan kepadamu terlebih dahulu tidak pernah dibatasi. Lihat &quot;Reporting a problem&quot; untuk alasannya.</p>
+        <ul>
+            <li>Setelah bergabung, kartu bernama <strong>Akunmu masih baru</strong> menunjukkan berapa banyak kuota yang tersisa dan kapan kuota bertambah kembali. Ketuk <strong>✕</strong> untuk menutupnya. Kartu ini tetap ada di <strong>Pengaturan</strong> sampai batasan berakhir.</li>
+            <li>Jika kamu mencapai batasan, <strong>Postingan Baru</strong> atau obrolan akan menyebutkan batasan yang mana dan kapan berakhir, dan <strong>Postingan Baru</strong> menampilkan kartu yang sama.</li>
+            <li>Jika moderator menjeda aktivitas postingmu, <strong>Postingan Baru</strong> dan obrolan akan memberi tahu demikian, dan kartu bernama <strong>Pembuatan postingan dijeda</strong> menyebutkan sampai kapan. Kartu ini tetap ada sampai masa jeda berakhir.</li>
+            <li>Jika moderator menyembunyikan atau menghapus salah satu postinganmu, atau menjeda aktivitas postingmu saat web app ditutup, web app menampilkan pemberitahuan tersebut saat kamu membukanya berikutnya, hingga 60 hari. Setiap pemberitahuan tetap ada sampai kamu mengetuk <strong>Pahami</strong>, dan setelah itu tidak akan muncul kembali. Jika ada beberapa yang menunggu, <strong>Close all</strong> akan menutup semuanya. Jika akunmu juga ada di ponselmu, web app dapat menampilkan pemberitahuan yang sudah kamu lihat di sana.</li>
+        </ul>
+        <p>Komunitas lokalmu sendiri tidak memiliki batasan-batasan ini.</p>
+        <h2>Memulihkan akunmu dengan akun masuk</h2>
+        <p>Di komunitas global, akun masuk yang kamu gunakan untuk bergabung dapat memulihkan akunmu ke browser: browser yang data tersimpannya telah dibersihkan, atau browser baru di komputer lain. Kamu mendapatkan akun yang sama, tidak pernah akun kedua.</p>
+        <ul>
+            <li>Ketuk <strong>Sudah punya BeanPool?</strong>, lalu <strong>Gunakan akun masuk saya</strong>. (Setelah <strong>Gabung</strong>, <strong>Saya pernah bergabung dengan akun masuk sebelumnya</strong> melakukan hal yang sama.)</li>
+            <li>Browser yang terlalu lama untuk menyimpan akun BeanPool akan memberi tahu demikian di sini alih-alih menawarkan pilihan ini, sebagaimana yang dilakukannya di tempat tombol <strong>Gabung</strong>. Gunakan Chrome, Firefox, Safari, atau Edge versi terbaru.</li>
+            <li>Ketik namamu di sini. Ketuk akunmu saat muncul.</li>
+            <li>Pilih akun masuk yang kamu gunakan untuk bergabung: <strong>Google</strong>, <strong>Apple</strong>, atau <strong>Facebook</strong>. Seperti saat bergabung, halaman membawamu ke halaman masuk perusahaan tersebut dan membawamu kembali.</li>
+            <li>Halaman membuka salinan terkunci akunmu di browser, dan memeriksa apakah itu benar-benar akun yang kamu ketuk. Jika tidak, halaman bertuliskan <strong>That isn't</strong> (namanya) dan tidak menyimpan apa pun.</li>
+            <li>Kamu berhasil masuk, beserta 12 katamu jika salinan menyimpannya: akun yang bergabung di browser selalu memilikinya. Jika salinan tidak menyimpannya, browser ini tidak memilikinya, dan Pengaturan memberi tahu demikian (lihat &quot;Simpan 12 katamu&quot; di bawah).</li>
+        </ul>
+        <p>Perangkat-perangkat akunmu akan diberi tahu bahwa akun sedang dipulihkan, untuk berjaga-jaga jika itu bukan kamu.</p>
+        <p>Jika kamu bergabung dengan GitHub, cara ini tidak dapat memulihkan akunmu: BeanPool tidak lagi menggunakan GitHub (lihat &quot;Recovery&quot;). Gunakan 12 katamu sebagai gantinya.</p>
+        <p>Jika kamu masuk dengan akun yang bukan akun yang kamu gunakan saat bergabung, halaman memberi tahu demikian dan memungkinkanmu memilih lagi. Jika kamu mengetuk <strong>Gabung</strong> dan masuk dengan akun yang sudah pernah bergabung, halaman bertuliskan <strong>Kamu sudah berada di sini</strong> dan menawarkan <strong>Restore with</strong> (akun masuk tersebut).</p>
+        <p><strong>Satu akun per browser</strong> berlaku di sini juga. Jika browser ini sudah memiliki akun lain, tidak ada yang menggantikannya: halaman bertuliskan <strong>Browser ini sudah punya akun</strong> dan menawarkan untuk membukanya. Untuk membawa akunmu ke sini, keluarlah dari akun tersebut terlebih dahulu. Jika browser ini sudah memiliki akunmu, halaman menyatakan bahwa akun sudah ada di sini.</p>
+        <h2>Menambahkan akun masuk nanti</h2>
+        <p>Jika kamu bergabung ke komunitas global dengan 12 kata, kata-kata tersebut adalah satu-satunya caramu untuk kembali. Setelah bergabung, kartu bernama <strong>Satu cara kembali</strong> menyatakan demikian, dengan <strong>Lihat 12 kataku</strong> dan <strong>Tambahkan akun masuk</strong>. Ketuk <strong>✕</strong> untuk menutupnya: kartu ini muncul kembali sekali setelah salah satu postinganmu tetap aktif, dan sekali ketika minggu pertamamu selesai. Kartu ini tetap berada di <strong>Pengaturan</strong> sampai kamu menambahkan akun masuk.</p>
+        <ul>
+            <li>Ketuk <strong>Tambahkan akun masuk</strong>, lalu <strong>Google</strong>, <strong>Apple</strong>, atau <strong>Facebook</strong>. Seperti saat bergabung, halaman membawamu ke halaman masuk perusahaan tersebut dan membawamu kembali.</li>
+            <li><strong>Pengaturan</strong> terbuka dan menyatakan apakah akun berhasil ditambahkan. Sejak saat itu akun masuk tersebut juga dapat memulihkan akunmu: komunitas menyimpan salinan terkunci akunmu untuk akun masuk tersebut, seperti saat kamu bergabung dengan akun masuk, dan pengelola servernya dapat membuka salinan itu. Batasan akun barumu langsung berubah menjadi batasan wajar seketika.</li>
+            <li>Akun masuk yang sudah memiliki akun BeanPool lain di sini, atau milik akun yang dihapus oleh komunitas, tidak dapat ditambahkan: halaman memberi tahu demikian, dan tidak ada yang berubah.</li>
+        </ul>
+        <h2>Nama dan letak tombol yang berbeda</h2>
+        <ul>
+            <li><strong>Bergabung dengan undangan:</strong> tombol langkah pertama berbunyi <strong>Buat Identitas &amp; Gabung →</strong>. Jika seseorang di sini sudah memiliki nama yang kamu pilih, kamu mendapatkannya dengan tambahan angka. <strong>← Kembali</strong> pada <strong>Fotomu</strong> menampilkan namamu saja, dengan <strong>Lanjut →</strong>: ubah (hingga 20 karakter) atau pertahankan, pada akun yang sama. Jika seseorang sudah memiliki nama baru tersebut, halaman memberi tahu demikian dan menyarankan nama lain.</li>
+            <li><strong>Tab-tab:</strong> web app memiliki <strong>Beranda</strong>, <strong>Pasar</strong>, <strong>Peta</strong>, <strong>Sarana Bersama</strong>, <strong>Obrolan</strong>, <strong>Orang</strong>, dan <strong>Buku kas</strong>. Apa yang disebut aplikasi ponsel sebagai <strong>Obrolan</strong> (Talk) adalah <strong>Obrolan</strong> (Chat) di web, dan <strong>Orang</strong> memiliki tab tersendiri.</li>
+            <li><strong>Pengaturan dan profilmu:</strong> tombol-tombol kecil di kanan atas: profilmu, tanda <strong>?</strong>, lalu Pengaturan. Pada layar lebar tombol-tombol ini berada di bagian bawah menu di sebelah kiri.</li>
+            <li><strong>Memposting Penawaran atau Permintaan:</strong> gunakan <strong>Postingan Baru</strong> pada halaman <strong>Peta</strong>.</li>
+            <li><strong>Tampilan:</strong> pilihannya bernama <strong>Sama seperti perangkat</strong>, bukan &quot;Sama seperti ponsel&quot;.</li>
+            <li><strong>Memblokir:</strong> Pengaturan berbunyi <strong>Kelola Anggota yang Diblokir</strong>. Komunitasmu menyimpan daftar blokirmu bersama akunmu, sehingga daftar ini kembali saat kamu masuk di browser mana pun, dan keluar tidak meninggalkan apa pun tentangnya di komputer. Pengelola server komunitasmu dapat melihat siapa yang kamu blokir. Memblokir dan membuka blokir memerlukan koneksi internet: tanpanya, web app memberi tahu demikian dan tidak ada yang berubah. Pemblokiran yang dilakukan di aplikasi ponsel tetap berada di ponsel dan tidak muncul di sini.</li>
+            <li><strong>Obrolan:</strong> obrolan web memiliki tombol <strong>Laporkan</strong> dan <strong>Blokir</strong> di bagian atas.</li>
+            <li><strong>Areamu:</strong> di komunitas global Pengaturan web app memiliki <strong>Wilayahmu</strong> juga, dan Pasar serta Petanya dimulai dari area tersebut. Lihat &quot;Wilayahmu&quot;.</li>
+            <li><strong>Komunitas global:</strong> di komunitas lokal, Pengaturan memiliki baris <strong>Komunitas global</strong> di bawah <strong>BEANPOOL</strong>, dengan alamatnya dan pesan <strong>Komunitas global adalah salah satu komunitas dari banyak komunitas. Komunitas Anda berjalan di server sendiri dan tidak bergantung padanya.</strong> Baris ini membuka komunitas dunia yang dicantumkan server komunitasmu, di tab baru. Akunmu belum ada di sana sampai kamu membawanya: di tab tersebut, pilih <strong>Gabung</strong>, lalu <strong>Saya memiliki 12 kata saya</strong>. Jika komunitasmu tidak mencantumkan apa pun, baris ini tidak ada.</li>
+        </ul>
+        <h2>Apa yang tidak dimiliki web app</h2>
+        <ul>
+            <li>Memulihkan akunmu dengan akun masuk di komunitas selain komunitas global. Di komunitas lain, 12 katamu yang memulihkannya, atau penautan dari aplikasi ponsel jika akunmu juga ada di ponselmu.</li>
+            <li>Jalur <strong>Belajar</strong> di Kabar.</li>
+            <li>Kunci aplikasi ponsel.</li>
+            <li>Masuk ke Pengaturan komunitasmu dengan kuncimu sendiri, bagi pemilik dan admin. Tautan <strong>Kelola</strong> di web app membuka Pengaturan, tetapi browser tidak memiliki kunci layarnya sendiri. Di komputer, pilih <strong>Sign in with your phone</strong> di Pengaturan dan pindai kodenya dengan aplikasi ponsel (<strong>Pengaturan</strong>, lalu <strong>Kelola komunitas ini dari komputer</strong>; aplikasi lama: <strong>Sign in on a computer</strong>).</li>
+        </ul>
+        <h2>Memasang akun web Anda di ponsel</h2>
+        <p>Jika kamu bergabung di browser, bawalah akun yang sama ke aplikasi ponsel. Jangan bergabung lagi di ponsel: itu akan membuat akun kedua, dan dua akun tidak akan pernah bisa digabungkan menjadi satu. <strong>Cadangan aman</strong>, di samping 12 katamu, dan kartu <strong>Sign-in recovery</strong> di Pengaturan menjelaskan caranya:</p>
+        <ul>
+            <li>Pasang aplikasi BeanPool dan buka aplikasinya.</li>
+            <li>Ketuk <strong>Sudah jadi anggota? Pulihkan akun</strong>, lalu <strong>Pulihkan dengan 12 Kata</strong>.</li>
+            <li>Ketik 12 katamu, lalu di bawah <strong>Komunitas yang mana?</strong> ketuk <strong>Komunitas global</strong>. Pada aplikasi tanpa pilihan tersebut, ketikkan alamat komunitas global, global.beanpool.org. Untuk komunitas lain, ketik alamat komunitas tersebut: web app menampilkannya dalam kalimat yang sama.</li>
+            <li>Jika kamu bergabung dengan akun masuk, <strong>Recover with Social</strong> juga berfungsi, dengan akun masuk yang sama. Lihat &quot;Recovery&quot;.</li>
+        </ul>
+        <p>Layar 1 saat bergabung di browser menyatakan hal yang sama secara terbalik: jika kamu sudah menggunakan BeanPool, di ponsel atau komputer mana pun, bawa akun tersebut alih-alih memulai yang baru.</p>
+        <h2>Menggunakan akun ponsel Anda di komputer</h2>
+        <ul>
+            <li>Di web app pada komputer, pilih untuk menautkan dengan aplikasi seluler. Layar menampilkan kode QR.</li>
+            <li>Di ponsel, buka <strong>Pengaturan</strong> dan ketuk <strong>Tautkan perangkat</strong> (aplikasi lama: <strong>Use your account on another device</strong>).</li>
+            <li>Arahkan kamera ponsel ke kode QR, ketuk <strong>Konfirmasi &amp; Tautkan Perangkat</strong>, dan lewati pemeriksaan layar kunci ponselmu.</li>
+            <li>Ponsel kemudian menampilkan <strong>empat digit angka</strong>. Ketikkan angka tersebut di komputer dan tekan <strong>Konfirmasi</strong>. Akunmu berpindah ke komputer hanya setelah proses itu. Tiga kali percobaan salah dan tidak ada yang dikirim: buat kode baru. Jangan pernah membacakan angka-angka tersebut dengan keras atau mengirimkannya kepada siapa pun.</li>
+            <li>Jika ponsel menyatakan aplikasinya terlalu usang, perbarui aplikasi BeanPool di ponsel, lalu pindai kode baru.</li>
+        </ul>
+        <h2>Memasangnya</h2>
+        <p>Web app mungkin menawarkan <strong>Pasang BeanPool</strong> sehingga dapat dibuka dari layar utama seperti sebuah aplikasi. Jika browsermu tidak dapat melakukannya, ketuk <strong>Bagaimana caranya?</strong> untuk melihat langkah-langkatnya.</p>
+        <h2>Simpan 12 katamu</h2>
+        <p>Browser terkadang membersihkan data yang tersimpan, misalnya Safari setelah seminggu tanpa kunjungan. Sampai kamu melihat 12 katamu, Pengaturan web app menampilkan peringatan dengan <strong>Lihat &amp; Simpan Frasa Pemulihan</strong>. Lakukanlah, dan catat kata-kata tersebut di kertas.</p>
+        <p>Browser yang memulihkan akunmu dengan akun masuk yang salinannya tidak menyimpan 12 katamu tidak memiliki kata-kata tersebut, sehingga tidak menampilkan peringatan seperti itu. Di sana, <strong>Lihat Frasa Pemulihan</strong> bertuliskan <strong>Tidak disimpan di browser ini</strong>, dan membuka halaman yang menjelaskan apa yang dapat memulihkan akunmu sebagai gantinya: 12 katamu, jika kamu mencatatnya di kertas, atau akun masuk yang ditampilkan Pengaturan sebagai terhubung. Jika tidak memiliki keduanya, hanya aplikasi ponsel yang dapat melakukannya, jika akunmu juga ada di ponselmu. <strong>Hapus dari Perangkat Ini Saja</strong> mengatakan hal yang sama sebelum kamu keluar.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Beranda</strong><span>Apa itu Beranda, kartu apa saja yang muncul di ponsel dan web app, cara menambah, memindah, atau menghapusnya, memilih minatmu, dan privasi saat keluar.</span></a></li>
+            <li><a href="the-bean.html"><strong>Panduan ini</strong><span>Di mana menemukan panduan ini, cara mencarinya, dan bagaimana panduan selalu diperbarui.</span></a></li>
+            <li><a href="your-12-words.html"><strong>12 katamu</strong><span>12 kata adalah kunci akunmu. Mengapa penting, di mana menemukannya, cara menyimpannya dengan aman, dan menambahkan akun masuk sebagai cadangan.</span></a></li>
+            <li><a href="joining.html"><strong>Bergabung ke BeanPool</strong><span>Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../reporting.html"><strong>Reporting a problem</strong><span>Tell your community's moderators about a post, an event, a Pulse post, a project or an enterprise.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

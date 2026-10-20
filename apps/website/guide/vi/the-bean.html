@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hướng dẫn này — BeanPool members' guide</title>
+    <meta name="description" content="Nơi tìm thấy hướng dẫn này, cách tìm kiếm và cách hướng dẫn luôn được cập nhật.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Bắt đầu</a></p>
+        <h1>Hướng dẫn này</h1>
+        <p class="lede">Nơi tìm thấy hướng dẫn này, cách tìm kiếm và cách hướng dẫn luôn được cập nhật.</p>
+        <h2>Mở hướng dẫn</h2>
+        <p>Trên điện thoại, nhấn vào hạt đậu ở trên cùng bên trái màn hình. Hoặc:</p>
+        <ul>
+            <li>Mở <strong>Cài đặt</strong> bằng nút có biểu tượng thanh trượt ở trên cùng màn hình.</li>
+            <li>Dưới mục <strong>BeanPool</strong>, nhấn <strong>Trợ giúp &amp; cách hoạt động</strong>.</li>
+        </ul>
+        <p>Trong ứng dụng web, mục này cũng nằm ở vị trí tương tự: <strong>Cài đặt</strong>, sau đó chọn <strong>Trợ giúp &amp; cách hoạt động</strong> dưới mục <strong>BeanPool</strong>.</p>
+        <h2>Những nội dung trong hướng dẫn</h2>
+        <ul>
+            <li><strong>Cộng đồng của bạn:</strong> tên của cộng đồng (địa chỉ của cộng đồng trong ứng dụng web), và trạng thái máy chủ của nó có thể kết nối được lúc này hay không. Trên điện thoại, bên dưới mục đó là <strong>Cộng đồng của bạn</strong>: nhấn vào một cộng đồng để chuyển sang cộng đồng đó, hoặc nhấn <strong>Thêm một cộng đồng</strong>. <strong>Cộng đồng toàn cầu</strong> luôn là một trong các hàng, với dòng thứ hai cho biết bạn đã là thành viên, có thể tham gia, hoặc lý do tại sao hiện chưa thể sử dụng. Xem &quot;Nhiều hơn một cộng đồng&quot;.</li>
+            <li><strong>Hướng dẫn:</strong> cách BeanPool hoạt động, các quy tắc và cách đưa ra quyết định, cùng các câu hỏi thường gặp.</li>
+            <li><strong>Cách sử dụng ứng dụng:</strong> một trang ngắn cho mỗi tác vụ, được phân nhóm theo cấu trúc của ứng dụng: Bắt đầu, Chợ, Bản đồ, Trò chuyện, Nhịp đập, Commons, Sổ cái và Cài đặt &amp; an toàn.</li>
+            <li><strong>Dự án BeanPool:</strong> những điểm mới trong phiên bản này, và liên kết đến trang web beanpool.org (trên điện thoại có thêm nút <strong>Chia sẻ</strong> để gửi cho bạn bè).</li>
+        </ul>
+        <h2>Tìm kiếm</h2>
+        <p>Nhập một hoặc hai từ vào ô <strong>Tìm kiếm trong phần hướng dẫn</strong> (ở trên cùng trong ứng dụng web; dưới mục <strong>Cộng đồng của bạn</strong> trên điện thoại). Ô tìm kiếm sẽ hiển thị mọi trang có chứa tất cả các từ của bạn. Tính năng hoạt động mà không cần kết nối mạng.</p>
+        <ul>
+            <li>Các từ ngắn vẫn hoạt động: ví dụ từ tiếng Anh &quot;vot&quot; sẽ tìm thấy &quot;vote&quot; và &quot;voting&quot;.</li>
+            <li>Nếu không có kết quả nào xuất hiện, hãy thử một từ đơn giản hơn, chẳng hạn như &quot;gift&quot;, &quot;photo&quot; hoặc &quot;block&quot;.</li>
+        </ul>
+        <h2>Luôn sẵn sàng và được cập nhật</h2>
+        <p>Hướng dẫn được tích hợp sẵn trong ứng dụng, vì vậy bạn có thể xem mà không cần bất kỳ kết nối mạng nào. Khi bạn trực tuyến, ứng dụng sẽ kiểm tra beanpool.org để xem có bản hướng dẫn mới hơn hay không và sử dụng bản mới nếu có. Phần dưới cùng của hướng dẫn cho biết bạn đang đọc phiên bản nào.</p>
+        <p>Bản hướng dẫn tương tự cũng có trên trang web tại beanpool.org/guide.</p>
+        <h2>Video</h2>
+        <p>Một số trang có thể hiển thị <strong>Watch:</strong> và tên video. Liên kết đó chỉ xuất hiện khi BeanPool đã tạo một video cho trang đó và cộng đồng của bạn có video đó trong Nhịp đập, dưới mục <strong>Tìm hiểu</strong> (<strong>Cách thức hoạt động</strong> trong ứng dụng web). Các video do thành viên thêm vào Tìm hiểu không bao giờ hiển thị trên một trang hướng dẫn. Mỗi trang đều đầy đủ nội dung ngay cả khi không có video.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="getting-help.html"><strong>Nhận trợ giúp</strong><span>Tìm ở đâu khi bạn gặp khó khăn và nên hỏi ai.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cách BeanPool hoạt động</strong><span>Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.</span></a></li>
+            <li><a href="faq.html"><strong>Câu hỏi</strong><span>Câu trả lời ngắn gọn cho những câu hỏi thành viên thường thắc mắc nhất.</span></a></li>
+            <li><a href="../whats-new.html"><strong>What's new</strong><span>What changed in the app, in plain words.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Thanh trên cùng</strong><span>Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

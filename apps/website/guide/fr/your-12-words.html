@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vos 12 mots — BeanPool members' guide</title>
+    <meta name="description" content="Les 12 mots sont la clé de votre compte. Leur importance, où les trouver, comment les garder en sûreté et associer un compte de connexion en secours.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Premiers pas</a></p>
+        <h1>Vos 12 mots</h1>
+        <p class="lede">Les 12 mots sont la clé de votre compte. Leur importance, où les trouver, comment les garder en sûreté et associer un compte de connexion en secours.</p>
+        <h2>Pourquoi ils sont importants</h2>
+        <p>Votre compte n'est pas un mot de passe conservé par quelqu'un d'autre. C'est une clé conservée sur votre téléphone. Vos <strong>12 mots</strong> sont cette clé, écrite sous forme de mots (ce sont des mots en anglais).</p>
+        <ul>
+            <li>Avec les 12 mots, vous pouvez récupérer votre compte sur un nouveau téléphone : votre nom, vos haricots et votre confiance.</li>
+            <li>Sans eux, un téléphone perdu ou cassé peut signifier un compte perdu.</li>
+            <li>La clé reste sur le téléphone qui la détient. Elle n'est pas copiée dans les sauvegardes de votre téléphone, donc un nouveau téléphone, même un iPhone restauré à partir d'une sauvegarde de l'ancien, nécessite vos 12 mots ou un compte de connexion associé (voir « Récupérer votre compte »).</li>
+            <li>Quiconque possède vos 12 mots peut utiliser votre compte. Ne les partagez jamais, ne les saisissez jamais ailleurs que dans l'application BeanPool ou l'application web BeanPool de votre propre communauté, et ne les envoyez jamais dans un message. Personne de BeanPool ou de votre communauté ne vous les demandera jamais.</li>
+        </ul>
+        <h2>Notez-les par écrit</h2>
+        <ul>
+            <li>Écrivez les 12 mots sur papier, dans l'ordre, et vérifiez l'orthographe (ce sont des mots en anglais).</li>
+            <li>Gardez le papier dans un endroit sûr, à l'écart de votre téléphone.</li>
+            <li>Une photo ou une capture d'écran des mots est facile à trouver pour quelqu'un d'autre. Le papier est plus sûr.</li>
+            <li>Pendant que l'application mobile affiche vos 12 mots, ou pendant que vous les saisissez, elle bloque les captures d'écran et les enregistrements vidéo de cet écran : le téléphone refuse la capture, ou l'image obtenue est noire. Rien n'empêche une photo de l'écran prise avec un autre téléphone.</li>
+            <li><strong>Copier les mots</strong> (<strong>Copier tous les mots</strong> lors de votre inscription, et dans l'application web) place les mots dans le presse-papiers de votre téléphone pendant une minute. Ensuite, l'application les efface, si le presse-papiers les contient encore. Si vous quittez l'application avant, elle les efface à votre retour. Ce que vous avez copié entre-temps n'est pas touché. L'historique du presse-papiers d'un clavier, ou un presse-papiers partagé avec vos autres appareils, peut conserver une copie que l'application ne peut pas effacer.</li>
+            <li>Dans l'application web, la copie s'efface au bout d'une minute si vous restez sur cet écran. Sur un iPhone ou un iPad, dans Safari ou dans Firefox, le navigateur ne permet à l'application de l'effacer que lorsque vous touchez ou appuyez sur une touche, elle s'efface donc dès votre premier appui ou touche après cette minute. Si vous quittez cet écran ou basculez vers une autre application ou un autre onglet avant, l'application ne peut pas savoir si vous avez copié autre chose, elle ne touche donc pas à votre presse-papiers : copiez autre chose par-dessus les mots.</li>
+            <li>Si votre téléphone n'a pas de verrouillage d'écran, quiconque le tient en main peut ouvrir vos 12 mots, et l'application le signale en dessous. Un code PIN, un schéma, un mot de passe, une empreinte digitale ou la reconnaissance faciale, configuré dans les paramètres de votre téléphone, les garde plus en sécurité.</li>
+        </ul>
+        <h2>Votre kit de récupération</h2>
+        <p>Le kit de récupération est une page imprimable : vos 12 mots dans l'ordre, le nom et l'adresse de votre communauté, la date de création, et les étapes pour revenir sur un téléphone et dans un navigateur web. Il n'indique pas à qui appartient le compte. Il est facultatif : vous pouvez continuer sans lui.</p>
+        <ul>
+            <li><strong>Sur le téléphone</strong> : à côté de vos 12 mots (sur l'écran Sécurité lors de votre inscription, et dans les Paramètres), touchez <strong>Imprimer votre kit de récupération</strong> pour l'imprimer, ou <strong>Enregistrer au format PDF</strong> pour créer un PDF et choisir où l'enregistrer. Avant d'enregistrer, l'application avertit : « Éloignez ce fichier des sauvegardes dans le cloud et des discussions. Quiconque le possède peut se connecter sous votre identité. » Le téléphone supprime sa propre copie du PDF par la suite.</li>
+            <li><strong>Dans l'application web</strong> : à côté de vos 12 mots (lors de votre inscription, et dans les Paramètres sous <strong>Afficher la phrase de récupération</strong>), cliquez sur <strong>Imprimer ou enregistrer votre kit de récupération</strong>. L'application avertit : « Éloignez cette page ou ce fichier des sauvegardes dans le cloud et des discussions. Quiconque le possède peut se connecter sous votre identité. » Cliquez sur <strong>Continuer</strong> pour ouvrir la boîte de dialogue d'impression de votre navigateur. Pour conserver un PDF au lieu du papier, choisissez <strong>Enregistrer au format PDF</strong> à cet endroit.</li>
+            <li>Conservez cette page comme vous le feriez pour les mots : quiconque la détient peut se connecter sous votre identité.</li>
+        </ul>
+        <h2>Où les revoir</h2>
+        <p>Ouvrez les <strong>Paramètres</strong> avec le bouton des curseurs en haut de l'écran. Ensuite, au choix :</p>
+        <ul>
+            <li>Sous <strong>COMPTE ET IDENTITÉ</strong>, touchez <strong>Afficher la phrase de récupération</strong>. Tapez <strong>CONFIRM</strong>, touchez <strong>Afficher la phrase de récupération</strong>, et passez le contrôle de verrouillage de l'écran de votre téléphone.</li>
+            <li>Ou touchez <strong>Protection du compte</strong>, puis <strong>Afficher mes 12 mots de récupération</strong>, et passez le contrôle de l'écran de verrouillage de votre téléphone. Touchez <strong>Masquer</strong> lorsque vous avez terminé.</li>
+        </ul>
+        <p>Dans les deux cas, les mots se masquent également lorsque vous quittez cet écran, ou quittez l'application pendant 15 secondes ou plus, et le téléphone demande à nouveau la fois suivante. Un contrôle de l'écran de verrouillage qui prend plus de deux minutes n'affiche rien : touchez à nouveau.</p>
+        <p>Dans l'application web, <strong>Afficher la phrase de récupération</strong> sous <strong>COMPTE ET IDENTITÉ</strong> les affiche immédiatement.</p>
+        <p>Un téléphone restauré à l'aide d'un compte de connexion ne récupère vos 12 mots que si ce compte de connexion a été associé depuis un téléphone qui les possédait, sur une version à jour de l'application. Sinon, le téléphone n'en conserve aucune copie : ils ne peuvent pas être reconstruits à partir d'une connexion. <strong>Afficher la phrase de récupération</strong> est toujours présent, et indique <strong>Aucune copie sur ce téléphone pour l'instant</strong>. Sur ce téléphone, un compte de connexion associé est le moyen de revenir, alors gardez-en un associé sous <strong>Protection du compte</strong>.</p>
+        <h2>Remettre vos 12 mots sur ce téléphone</h2>
+        <p>Si ce téléphone n'a pas de copie de vos 12 mots, et que vous les avez notés par écrit, vous pouvez les ajouter :</p>
+        <ul>
+            <li>Ouvrez les <strong>Paramètres</strong>. Sous <strong>COMPTE ET IDENTITÉ</strong>, touchez <strong>Afficher la phrase de récupération</strong>. (Ou, dans <strong>Protection du compte</strong>, touchez <strong>Afficher mes 12 mots de récupération</strong>.) Sur un téléphone sans copie, l'un ou l'autre ouvre <strong>Ajouter vos 12 mots à ce téléphone</strong>.</li>
+            <li>Saisissez les 12 mots dans l'ordre (ce sont des mots en anglais), ou touchez <strong>Coller</strong>. Les majuscules et les espaces superflus n'ont pas d'importance. Un mot qui ne figure pas sur la liste des mots de récupération anglais est signalé à mesure que vous écrivez.</li>
+            <li>Touchez <strong>Ajouter ces mots</strong>.</li>
+        </ul>
+        <p>Votre téléphone vérifie que les mots appartiennent à votre compte, le même contrôle que <strong>Vérifier vos 12 mots</strong> pour les propriétaires. Ils ne sont envoyés nulle part. S'ils appartiennent à un compte différent, rien ne change et l'application vous en avertit. Une fois ajoutés, <strong>Afficher la phrase de récupération</strong> les affiche, dans chaque communauté sur ce téléphone.</p>
+        <h2>Si vous avez rejoint la communauté globale avec 12 mots</h2>
+        <p>Vous pouvez rejoindre la communauté globale avec 12 mots secrets seuls, sans compte Google, Apple ou Facebook (voir « Rejoindre BeanPool »). Si cela vous a créé un nouveau compte, vos 12 mots sont votre seul moyen de revenir. Aucune copie de votre compte n'est conservée ailleurs que sur votre téléphone, et personne ne peut les réinitialiser : ni BeanPool, ni la communauté. Si vous les perdez ainsi que votre téléphone, le compte est perdu pour de bon. (Si vous avez rejoint avec le compte que vous possédiez déjà, une connexion associée dans une autre communauté permet toujours de le récupérer là-bas.)</p>
+        <p>L'application l'indique à l'étape <strong>Sécurité</strong>. Après votre inscription, une carte sur l'<strong>Accueil</strong> le répète, sur le téléphone et dans l'application web : <strong>Votre compte n'a qu'un seul moyen de récupération : vos 12 mots. Vérifiez que vous les avez toujours, ou ajoutez une connexion.</strong> Elle ne vous empêche jamais de faire quoi que ce soit. Sur le téléphone :</p>
+        <ul>
+            <li><strong>✕</strong> masque la carte. Elle revient une fois après votre première annonce et une fois après une semaine, puis reste uniquement dans les <strong>Paramètres</strong>, sous <strong>Protection du compte</strong>.</li>
+            <li><strong>Afficher mes 12 mots</strong> ouvre <strong>Protection du compte</strong>, où vous pouvez les revoir.</li>
+            <li>Dans <strong>Protection du compte</strong>, <strong>J'ai toujours mes 12 mots</strong> fait disparaître la carte pour de bon. <strong>Ajouter une connexion</strong> y reste.</li>
+        </ul>
+        <p>Dans l'application web, la carte s'intitule <strong>Un seul moyen de récupération</strong>, avec <strong>Consulter mes 12 mots</strong> et <strong>Ajouter une connexion</strong>. <strong>✕</strong> la masque : elle revient une fois après qu'une de vos annonces est restée en ligne, et une fois votre première semaine terminée. Toucher <strong>Consulter mes 12 mots</strong> sur la carte de l'<strong>Accueil</strong> les affiche, et la carte n'y revient plus. Elle reste en haut des <strong>Paramètres</strong> jusqu'à ce que vous ajoutiez une connexion.</p>
+        <p>Un compte créé avec 12 mots démarre également plus lentement qu'un compte créé avec une connexion, durant sa première semaine. Voir « Signaler un problème » pour ses limites, et pourquoi.</p>
+        <h3>Ajouter une connexion plus tard</h3>
+        <p>Vous pouvez ajouter une connexion plus tard, depuis n'importe quel téléphone ou navigateur où vous êtes sur votre compte, pas seulement celui avec lequel vous avez rejoint. Sur un téléphone sur lequel vous avez restauré votre compte à l'aide de vos 12 mots, ouvrez la communauté globale dans l'application : la communauté indique que votre compte ne dispose que de ses 12 mots, et la carte ainsi qu'<strong>Ajouter une connexion</strong> apparaissent (cela peut prendre un instant). Vous ne pouvez pas en ajouter tant que votre compte est suspendu, ou si la communauté a fermé votre compte (l'application le signale, et rien ne change). Cela devient un deuxième moyen de retour, et cela lève immédiatement les limites des 12 mots.</p>
+        <p>Si le coffre-fort de clés de BeanPool conserve déjà une copie de votre compte, cette copie constitue également un moyen de retour. L'application n'affiche alors pas la carte d'accès unique. <strong>Ajouter une connexion</strong> est toujours proposé, discrètement, dans <strong>Protection du compte</strong> dans les <strong>Paramètres</strong>, car cela lève les limites des 12 mots.</p>
+        <ul>
+            <li>Touchez <strong>Ajouter une connexion</strong> : sur la carte, ou dans les <strong>Paramètres</strong> sous <strong>Protection du compte</strong>. À l'étape <strong>Sécurité</strong>, le bouton indique <strong>Ajouter une connexion comme second moyen d'accès</strong>.</li>
+            <li>Touchez <strong>Continuer avec Google</strong>, <strong>Continuer avec Facebook</strong> ou, sur un iPhone, <strong>Continuer avec Apple</strong>, et connectez-vous une fois. L'application peut d'abord vous demander le verrouillage de votre téléphone.</li>
+            <li><strong>Connexion ajoutée</strong> confirme que cela a fonctionné. Votre compte bénéficie désormais des limites habituelles des nouveaux comptes, et cette connexion permet de le récupérer si vous perdez votre téléphone, comme pour quelqu'un qui a rejoint avec celle-ci. Voir « Récupérer votre compte » pour savoir qui peut ouvrir la copie conservée.</li>
+        </ul>
+        <p>Si la copie de votre compte ne peut pas être conservée à ce moment-là, la connexion est tout de même ajoutée et vos limites sont levées, mais vos 12 mots restent votre moyen de retour. L'application vous en avertit. Un compte de connexion qui possède déjà un autre compte BeanPool dans la communauté globale, ou qui appartenait à un compte supprimé par la communauté, ne peut pas être ajouté, et rien ne change.</p>
+        <p><strong>Protéger avec</strong>, plus bas dans <strong>Protection du compte</strong> sous <strong>Fournisseurs de récupération par connexion</strong>, associe également une connexion comme moyen de retour, mais laisse les limites des 12 mots et la carte telles quelles. Utilisez <strong>Ajouter une connexion</strong> pour faire les deux.</p>
+        <h2>Un deuxième moyen de retour : un compte de connexion</h2>
+        <p>Sur l'application mobile, vous pouvez également associer un compte Google ou Facebook (et Apple sur un iPhone). Si vous perdez votre téléphone, ce compte peut restaurer votre compte sur un nouveau téléphone, par l'intermédiaire du serveur de votre communauté, qui conserve une copie verrouillée pour cela. Les personnes qui gèrent ce serveur peuvent ouvrir cette copie. Voir « Récupérer votre compte ».</p>
+        <p>Un compte de connexion que vous associez depuis un téléphone qui possède vos 12 mots les conserve également, de sorte que la restauration à l'aide de celui-ci vous les redonne. Un compte associé sur une ancienne version de l'application restaure votre compte sans eux : sous <strong>Protection du compte</strong>, touchez <strong>Associer à nouveau</strong> à côté et passez le contrôle de l'écran de verrouillage de votre téléphone pour les inclure. Gardez également le papier.</p>
+        <h2>Dans un navigateur web</h2>
+        <p>Sur la communauté globale, une connexion avec laquelle vous rejoignez dans un navigateur est conservée comme deuxième moyen de retour : les Paramètres indiquent <strong>Récupération par connexion : associée</strong>. Dans un navigateur vidé ou nouveau, touchez <strong>Vous utilisez déjà BeanPool ?</strong>, puis <strong>Utiliser ma connexion</strong>, et cela restaure votre compte, avec ses 12 mots (voir « Utiliser BeanPool dans un navigateur web »). Si vous y rejoignez plutôt avec 12 mots, ils sont votre unique moyen de retour jusqu'à ce que vous ajoutiez une connexion : une carte intitulée <strong>Un seul moyen de récupération</strong> le signale, avec <strong>Consulter mes 12 mots</strong> et <strong>Ajouter une connexion</strong>, après votre inscription et dans les Paramètres. Sur les autres communautés, l'application web ne dispose pas de la récupération par connexion, et vos 12 mots constituent le moyen de retour. Les navigateurs peuvent également effacer les données enregistrées, notez donc les mots par écrit avant de compter sur l'application web.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="joining.html"><strong>Rejoindre BeanPool</strong><span>Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.</span></a></li>
+            <li><a href="communities.html"><strong>Plusieurs communautés</strong><span>Appartenir à plusieurs communautés avec un seul compte, basculer entre elles, suivre votre communauté vers une nouvelle adresse et voir ce que montre la communauté globale.</span></a></li>
+            <li><a href="faq.html"><strong>Questions</strong><span>Réponses courtes aux questions les plus posées par les membres.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

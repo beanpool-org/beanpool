@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Preguntas — BeanPool members' guide</title>
+    <meta name="description" content="Respuestas breves a las preguntas más frecuentes de los miembros.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Acerca de BeanPool</a></p>
+        <h1>Preguntas</h1>
+        <p class="lede">Respuestas breves a las preguntas más frecuentes de los miembros.</p>
+        <h2>¿Quién administra mi comunidad?</h2>
+        <p>Tu comunidad se administra a sí misma. Su servidor está a cargo de personas que tu comunidad eligió: sus propietarios y administradores. Tus tratos, publicaciones y votos se conservan en ese servidor. El proyecto BeanPool crea la app, y cualquiera puede usarla para iniciar una comunidad.</p>
+        <h2>¿Hay intereses sobre la deuda?</h2>
+        <p>No. Tener un saldo negativo no cuesta nada. Solo los frijoles que tienes por encima de 200 pagan la pequeña comisión de circulación.</p>
+        <h2>¿Puedo comprar o vender frijoles por dinero?</h2>
+        <p>La app no tiene ninguna forma de comprar o vender frijoles por dinero. Los frijoles se ganan ayudando a las personas.</p>
+        <h2>¿Por qué no puedo enviar un regalo?</h2>
+        <p>Un regalo necesita dos cosas. Debes haber completado un trato en el mercado (1 o 2 frijoles es demasiado poco para contar), y solo puedes dar frijoles que tienes. Un regalo nunca puede dejarte con saldo negativo.</p>
+        <h2>¿Por qué no puedo tener saldo negativo?</h2>
+        <p>Dos cosas determinan qué tan negativo puede ser tu saldo. Tu confianza obtenida al comerciar define lo máximo a lo que podrías llegar. Tus Ofertas activas definen cuánto de eso puedes usar en este momento. Sin Ofertas activas, no puedes tener saldo negativo en absoluto. La mayoría de la gente empieza vendiendo: publica una Oferta, y cuando alguien la acepte, ganas frijoles y tu primera confianza.</p>
+        <h2>Mi insignia dice Cuidador. ¿Por qué puedo gastar tan poco?</h2>
+        <p>Tu insignia muestra tu confianza. Lo que puedes gastar en este momento también depende de cuántas Ofertas activas tengas. Las insignias nunca habilitan nada por sí solas.</p>
+        <h2>¿Puedo cambiar mi voto?</h2>
+        <p>En una Decisión o en una Encuesta, sí, hasta que la votación se cierre. En una votación de custodios, una votación propia de un grupo o una votación para un nuevo coordinador principal, no.</p>
+        <h2>¿Alguien puede ver cómo voté?</h2>
+        <p>En una Decisión, la app muestra únicamente los totales, y a ti tu propio voto. Tu voto se almacena en el servidor de tu comunidad. Los propietarios y administradores que gestionan el servidor pueden hacer una copia de sus archivos y podrían consultarlo allí. Una Encuesta es anónima de la misma manera, a menos que la persona que la inició haya elegido una <strong>votación abierta</strong>: en ese caso, los miembros pueden ver quién eligió qué. La encuesta indica de qué tipo es antes de votar.</p>
+        <h2>¿Otros miembros pueden ver mi saldo?</h2>
+        <p>No. Los demás miembros nunca ven tu saldo. En el teléfono, en una comunidad con Frijoles, ven tu insignia de confianza y cuántos tratos has realizado. Un trato solo se muestra a sus dos participantes. Si la comunidad vota para removerte, los miembros que pueden votar ven tu saldo y cualquier deuda, únicamente en esa votación. Los administradores pueden ver más en algunos casos, y esas consultas quedan registradas: consulta &quot;Qué ven los administradores&quot;.</p>
+        <h2>Perdí mi teléfono. ¿Perdí mi cuenta?</h2>
+        <p>No, si conservaste tu frase de recuperación de 12 palabras. Instala la app y restaura tu cuenta con esas 12 palabras. Si vinculaste una cuenta de inicio de sesión en Protección de la cuenta, también puedes usarla. Guarda tus 12 palabras en un lugar seguro y privado. Cualquiera que las tenga puede usar tu cuenta.</p>
+        <p>¿También perdiste tus 12 palabras? Un administrador de tu comunidad puede transferir tu cuenta a un teléfono nuevo, en persona: consulta &quot;Perdiste tu teléfono y tus 12 palabras&quot; en &quot;Recuperar tu cuenta&quot;.</p>
+        <h2>¿Necesito una cuenta de Google, Apple o Facebook?</h2>
+        <p>No. Una comunidad local te permite entrar con una invitación de uno de sus miembros. La comunidad global permite la entrada de cualquier persona con 12 palabras secretas, o con un inicio de sesión si lo prefieres. Si te unes solo con 12 palabras, son tu única vía para volver a entrar a tu cuenta, y una cuenta nueva creada de esa forma comienza con más restricciones durante su primera semana. Puedes añadir un inicio de sesión más tarde, desde cualquier teléfono o navegador donde tengas la sesión iniciada en tu cuenta, excepto mientras tu cuenta esté suspendida. Consulta &quot;Unirse a BeanPool&quot; y &quot;Tus 12 palabras&quot;.</p>
+        <h2>¿Por qué no hay Frijoles en la comunidad global?</h2>
+        <p>Los frijoles son una promesa entre personas a las que se puede volver a encontrar. Cualquiera puede unirse a la comunidad global con 12 palabras, por lo que nadie allí puede aún responder por quién es quién. Los frijoles, tratos, emprendimientos y Decisiones pertenecen a las comunidades locales. La comunidad global los muestra a partir de una comunidad de ejemplo, Example Valley, marcada como <strong>🏘️ Comunidad local</strong>. Consulta &quot;Frijoles y la comunidad global&quot;.</p>
+        <h2>¿Cómo creo una comunidad?</h2>
+        <p>Toca <strong>Crear una comunidad</strong> en la app. Una comunidad funciona en su propio servidor pequeño: una computadora disponible en casa o una alquilada por unos pocos dólares al mes. El software es gratuito y la comunidad no necesita de beanpool.org. Consulta &quot;Frijoles y la comunidad global&quot;.</p>
+        <h2>¿Puedo pertenecer a más de una comunidad?</h2>
+        <p>Sí. En el teléfono puedes guardar varias comunidades y alternar entre ellas, usando la misma identidad en cada una. En la app web, cada comunidad se abre en su propia dirección. Cada comunidad tiene sus propios frijoles, reglas y miembros.</p>
+        <h2>¿Puedo unirme a otra comunidad a la que cualquiera puede unirse?</h2>
+        <p>Sí, con la cuenta que ya tienes. Algunas comunidades permiten que cualquiera se una, como lo hace la comunidad global, y su propia gente las administra en sus propias direcciones. Cuando tu teléfono se conecta a una en la que aún no eres miembro, muestra <strong>Aún no eres miembro aquí</strong> y ofrece <strong>Unirte a ‹su nombre› con esta cuenta</strong>. Te unes de la misma forma que a la comunidad global: con las 12 palabras que ya están en tu teléfono, o con un inicio de sesión si te lo solicita. Se encuentra bajo el propio nombre de esa comunidad y se muestra su dirección, para que puedas ver a dónde te estás uniendo. Tu clave y tus 12 palabras siguen siendo las mismas, y nada cambia en tus otras comunidades. Un enlace solo abre esa pantalla y nadie se une hasta que toques la opción. Para mostrarla, tu teléfono le pide a esa comunidad su nombre y si permite que la gente se una, por lo que quien administre esa dirección puede ver que alguien abrió el enlace (no se envía nada sobre tu cuenta).</p>
+        <h2>Voy a salir de viaje. ¿Qué debería hacer?</h2>
+        <p>Activa el Modo vacaciones en Ajustes. Tus Ofertas se ocultan y nadie puede enviarte nuevas solicitudes. Termina o cancela primero cualquier trato abierto, porque el Modo vacaciones no se puede activar mientras haya un trato abierto.</p>
+        <h2>¿Cómo salgo de la comunidad?</h2>
+        <p>Puedes eliminar tu cuenta en Ajustes. Primero completa o cancela cualquier trato abierto. Cuando eliminas tu cuenta, cualquier frijol que tengas va a los Bienes comunes de tu comunidad, y si tienes saldo negativo, los Bienes comunes lo cubren. Esto no se puede deshacer, ni siquiera con tus 12 palabras. Solo elimina tu cuenta en la comunidad que estás utilizando. Si otra comunidad en el teléfono todavía te tiene registrado, el teléfono conserva tu clave para ella; la clave se elimina únicamente cuando eliminas tu cuenta en la última.</p>
+        <h2>Algo anda mal o podría ser mejor. ¿A quién le aviso?</h2>
+        <p>Para problemas con una persona o un trato, habla con los administradores de tu comunidad. Para reportar una publicación, un evento o una publicación del Pulso, toca su bandera <strong>🚩 Reportar</strong> (en el teléfono, el botón de una publicación dice <strong>Reportar publicación</strong>). En la app web, un chat individual también tiene un botón <strong>Reportar</strong>. Se avisa a los administradores de tu comunidad. Elige <strong>Seguridad infantil</strong> si un menor pudiera estar en riesgo. Consulta &quot;Reportar un problema&quot;. Para sugerencias sobre la app en sí, visita beanpool.org.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Tus 12 palabras</strong><span>Las 12 palabras son la llave de tu cuenta. Por qué importan, dónde encontrarlas, cómo protegerlas y cómo vincular un inicio de sesión como alternativa.</span></a></li>
+            <li><a href="../recovery.html"><strong>Getting your account back</strong><span>Restore your account on a new phone, and protect it with a sign-in account.</span></a></li>
+            <li><a href="communities.html"><strong>Más de una comunidad</strong><span>Pertenecer a varias comunidades con una sola cuenta, cambiar entre ellas, seguir a tu comunidad a una nueva dirección y ver qué te muestra la comunidad global.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Frijoles y la comunidad global</strong><span>Para qué sirve la comunidad global, una entre muchas, y qué ves allí: el marcador 🏘️ Comunidad local, la comunidad de muestra Example Valley, por qué los frijoles esperan allí y cómo iniciar o buscar una comunidad local.</span></a></li>
+            <li><a href="../holiday-mode.html"><strong>Going away</strong><span>Holiday Mode hides your Offers and pauses new requests while you are away.</span></a></li>
+            <li><a href="../leaving-or-deleting.html"><strong>Leaving or deleting your account</strong><span>Sign out of this phone, or delete your account for good, and what happens to your beans.</span></a></li>
+            <li><a href="getting-help.html"><strong>Obtener ayuda</strong><span>A dónde acudir si tienes dudas y a quién preguntar.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

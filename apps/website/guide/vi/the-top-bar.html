@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thanh trên cùng — BeanPool members' guide</title>
+    <meta name="description" content="Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Bắt đầu</a></p>
+        <h1>Thanh trên cùng</h1>
+        <p class="lede">Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.</p>
+        <h2>Những nội dung trên thanh trên cùng</h2>
+        <p>Trên điện thoại, thanh ở trên cùng màn hình giống nhau trên mọi tab. Từ trái sang phải gồm:</p>
+        <ul>
+            <li><strong>Hạt đậu:</strong> cộng đồng của bạn, và hướng dẫn này.</li>
+            <li><strong>Các biểu tượng &quot;cần bạn xử lý&quot;:</strong> chỉ hiển thị khi có việc đang chờ bạn.</li>
+            <li><strong>Biểu tượng ?, biểu tượng lời mời, Cài đặt và ảnh đại diện của bạn.</strong></li>
+        </ul>
+        <p>Trong trình duyệt web, thanh trên cùng đơn giản hơn. Thanh có trạng thái kết nối ở bên trái, tên của trang, cùng hồ sơ của bạn, biểu tượng <strong>?</strong> và Cài đặt ở bên phải. Không có bảng hạt đậu, không có biểu tượng &quot;cần bạn xử lý&quot; và không có biểu tượng lời mời: mục <strong>Invites</strong> nằm dưới <strong>Mọi người</strong>. Các tab nằm dọc theo phía dưới cùng, hoặc ở cạnh bên trái trên màn hình rộng.</p>
+        <h2>Hạt đậu</h2>
+        <p>Nhấn vào hạt đậu ở trên cùng bên trái để mở bảng <strong>BeanPool</strong>. Bảng hiển thị:</p>
+        <ul>
+            <li><strong>Cộng đồng của bạn:</strong> tên cộng đồng ở trên cùng, và trạng thái có thể kết nối được lúc này hay không.</li>
+            <li><strong>Cộng đồng của bạn:</strong> nhấn vào một cộng đồng để chuyển sang cộng đồng đó, hoặc nhấn <strong>Thêm một cộng đồng</strong>. <strong>Cộng đồng toàn cầu</strong> luôn là một trong các hàng đó: dòng thứ hai cho biết bạn có thể tham gia hay không.</li>
+            <li><strong>Tìm kiếm trong phần hướng dẫn</strong>, sau đó là <strong>Hướng dẫn</strong> (cách BeanPool hoạt động, quy tắc, câu hỏi thường gặp), <strong>Cách sử dụng ứng dụng</strong> (hướng dẫn này, theo từng phần) và <strong>Dự án BeanPool</strong>, cùng mục <strong>Có gì mới</strong>.</li>
+            <li><strong>beanpool.org:</strong> trang web công khai, có nút <strong>Chia sẻ</strong> để gửi cho bạn bè.</li>
+        </ul>
+        <p>Chấm tròn nhỏ trên hạt đậu cho bạn biết tình trạng:</p>
+        <ul>
+            <li><strong>Màu xanh lá:</strong> đã kết nối, và bạn là thành viên ở đây.</li>
+            <li><strong>Màu hổ phách:</strong> bạn đang ghé thăm với tư cách khách.</li>
+            <li><strong>Màu đỏ:</strong> máy chủ của cộng đồng bạn hiện không thể kết nối được, hoặc điện thoại này chưa được kết nối với một cộng đồng.</li>
+        </ul>
+        <p>Một lần kiểm tra chậm đơn lẻ không làm chấm đổi sang màu đỏ. Chấm chỉ chuyển sang màu đỏ sau khi kiểm tra thất bại nhiều lần liên tiếp.</p>
+        <h2>Các biểu tượng &quot;cần bạn xử lý&quot;</h2>
+        <p>Nằm giữa hạt đậu và các nút ở bên phải, những biểu tượng nhỏ chỉ xuất hiện khi có điều gì đó cần bạn xử lý. Mỗi biểu tượng đại diện cho một loại công việc. Nhấn vào đó để đi thẳng đến mục tương ứng.</p>
+        <ul>
+            <li><strong>Bắt tay:</strong> một thỏa thuận đang chờ bạn. Ai đó đang chờ bạn chấp nhận yêu cầu của họ, hoặc một thỏa thuận bạn tham gia vẫn chưa hoàn tất. Nếu có một việc, nhấn vào sẽ mở thỏa thuận đó. Nếu có nhiều việc hơn, nhấn vào sẽ mở <strong>Giao dịch của tôi</strong>.</li>
+            <li><strong>Hòm phiếu:</strong> một cuộc bỏ phiếu bạn chưa tham gia. Nhấn vào sẽ mở <strong>Chung</strong>, tại mục <strong>Quyết định</strong>. Nếu cuộc bỏ phiếu đầu tiên nằm trong một nhóm hoặc cuộc bỏ phiếu của người quản lý trong một doanh nghiệp, nhấn vào sẽ mở nhóm hoặc doanh nghiệp đó thay thế. Một cuộc bỏ phiếu mà bạn chưa thể tham gia sẽ không được tính ở đây, ví dụ một cuộc bỏ phiếu yêu cầu bạn phải hoàn tất một giao dịch trước.</li>
+            <li><strong>Bong bóng trò chuyện:</strong> một tin nhắn chưa đọc từ một người. Nếu từ một người, nhấn vào sẽ mở cuộc trò chuyện đó. Nếu từ nhiều người, nhấn vào sẽ mở <strong>Trò chuyện</strong>, tại mục <strong>Tin nhắn</strong>, chỉ hiển thị những tin chưa đọc.</li>
+            <li><strong>Nhóm người:</strong> các dòng tin nhắn mới trong nhóm của bạn, cuộc trò chuyện doanh nghiệp hoặc trò chuyện sự kiện. Các đoạn chat bạn đã tắt thông báo sẽ giữ yên lặng ở đây. Nhấn vào sẽ mở đoạn chat, hoặc mở <strong>Trò chuyện</strong>, tại mục <strong>Nhóm</strong>, nếu có nhiều đoạn chat.</li>
+            <li><strong>Chiếc khiên:</strong> chỉ dành cho những người tham gia vận hành cộng đồng của bạn. Biểu tượng hiển thị khi có công việc quản trị đang chờ, chẳng hạn như báo cáo cần xem xét hoặc một giao dịch bị đình trệ cần phân xử. Nhấn vào sẽ yêu cầu mở khóa màn hình điện thoại của bạn, sau đó mở phần cài đặt của cộng đồng tại công việc đó. Nếu cài đặt cộng đồng của bạn sử dụng mã đăng nhập, ứng dụng cũng sẽ yêu cầu nhập mã đó.</li>
+        </ul>
+        <p>Các biểu tượng xếp chồng lên nhau từ bên phải. Biểu tượng quan trọng nhất nằm cạnh biểu tượng ?, và giữ nguyên vị trí khi các biểu tượng khác xuất hiện hoặc biến mất.</p>
+        <h3>Con số và màu sắc</h3>
+        <ul>
+            <li>Một con số nhỏ trên biểu tượng thể hiện có nhiều hơn một việc thuộc loại đó: chẳng hạn 3 người đã nhắn tin cho bạn. Biểu tượng hiển thị <strong>9+</strong> khi vượt quá 9.</li>
+            <li>Biểu tượng chuyển sang <strong>màu hổ phách</strong> khi sự việc cấp bách hơn: một thỏa thuận đang chờ bạn xử lý, công việc quản trị, hoặc một cuộc bỏ phiếu sẽ kết thúc trong vòng 2 ngày. Không có biểu tượng nào chuyển sang màu đỏ.</li>
+        </ul>
+        <h3>Trên màn hình nhỏ</h3>
+        <p>Nếu không đủ chỗ cho mọi biểu tượng, vị trí cuối cùng sẽ hiển thị <strong>•••</strong>. Nhấn vào đó để xem toàn bộ danh sách, <strong>Cần bạn xử lý</strong>, bằng chữ. Nhấn vào một dòng để chuyển đến đó.</p>
+        <h3>Thanh yên tĩnh là tin tốt</h3>
+        <p>Khi không có việc gì cần bạn xử lý, sẽ không có biểu tượng nào xuất hiện. Bạn không bỏ lỡ bất cứ điều gì. Các biểu tượng sẽ cập nhật khi bạn di chuyển trong ứng dụng và khi bạn quay lại ứng dụng.</p>
+        <h2>Tham gia hoặc Kết nối</h2>
+        <p>Thay vì các biểu tượng, bạn có thể thấy một nút:</p>
+        <ul>
+            <li><strong>Tham gia</strong> (màu hổ phách): bạn đang ghé thăm với tư cách khách. Nhấn vào đó để mở <strong>Invites</strong>. Trong một cộng đồng địa phương, bạn tham gia tại đó bằng một lời mời. Trong cộng đồng toàn cầu, nhấn <strong>Tham gia bằng 12 từ hoặc đăng nhập</strong> (<strong>Tham gia bằng đăng nhập</strong> ở nơi cộng đồng chỉ chấp nhận đăng nhập).</li>
+            <li><strong>Kết nối</strong> (màu đỏ): điện thoại này chưa được kết nối với một cộng đồng. Nhấn vào đó để mở <strong>Cài đặt</strong>, nơi bạn có thể thêm một cộng đồng.</li>
+        </ul>
+        <p>Trong khi một trong các nút này hiển thị, biểu tượng lời mời sẽ bị ẩn đi.</p>
+        <h2>Các nút ở bên phải</h2>
+        <ul>
+            <li><strong>Biểu tượng ?</strong> (dấu chấm hỏi trong vòng tròn): trợ giúp cho màn hình bạn đang mở. Biểu tượng mở một bảng ngắn giới thiệu công dụng của màn hình đó, sau đó có các mục <strong>Đọc trang hướng dẫn</strong>, <strong>Tìm kiếm trong phần hướng dẫn</strong> và <strong>Xem lại phần giới thiệu</strong>. Biểu tượng xuất hiện trên mọi tab, dành cho cả thành viên và khách. Trong ứng dụng web, biểu tượng nằm giữa ảnh đại diện của bạn và Cài đặt ở trên cùng, và bên cạnh Cài đặt ở cuối thanh bên trên màn hình rộng.</li>
+            <li><strong>Biểu tượng lời mời</strong> (hình người có dấu cộng): mở mục <strong>Invites</strong>, để mời ai đó hoặc tham gia một cộng đồng khác. Xem &quot;Tham gia BeanPool&quot;.</li>
+            <li><strong>Cài đặt</strong> (thanh trượt): mở phần <strong>Cài đặt</strong>. Nhấn lại lần nữa để quay lại nơi bạn vừa ở.</li>
+            <li><strong>Ảnh của bạn:</strong> mở hồ sơ cá nhân của chính bạn, như cách người khác nhìn thấy.</li>
+        </ul>
+        <h2>Tin nhắn cập nhật</h2>
+        <p>Đôi khi một thanh màu xanh lá sẽ hiển thị dưới thanh trên cùng:</p>
+        <ul>
+            <li><strong>Update available:</strong> phiên bản mới hơn của ứng dụng đã phát hành. Nhấn <strong>Nâng cấp</strong> để cập nhật, hoặc nhấn dấu nhân để đóng tin nhắn.</li>
+            <li><strong>Your app is too old for this community:</strong> bạn cần cập nhật trước khi ứng dụng có thể hoạt động bình thường ở đây. Thông báo này không thể đóng lại được. Nhấn <strong>Nâng cấp</strong>.</li>
+        </ul>
+        <h2>Các tab</h2>
+        <p>Bên dưới thanh trên cùng là các tab: <strong>Trang chủ</strong>, <strong>Chợ</strong>, <strong>Bản đồ</strong>, <strong>Trò chuyện</strong>, <strong>Chung</strong> và <strong>Sổ cái</strong>. Tên của mỗi tab nằm phía trên biểu tượng của tab đó. Trên điện thoại, một cộng đồng địa phương không sử dụng Đậu sẽ không hiển thị tab <strong>Chung</strong> hoặc <strong>Sổ cái</strong>. Cộng đồng toàn cầu hiển thị cả hai, với các ví dụ mẫu từ một cộng đồng địa phương. Xem &quot;Đậu và cộng đồng toàn cầu&quot;.</p>
+        <p>Trên một trang dài, nhấn vào chính tab bạn đang mở để nhảy nhanh trở lại đầu trang. Thao tác này hoạt động trên mọi tab ngoại trừ tab <strong>Bản đồ</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Trang chủ</strong><span>Trang chủ là gì, các thẻ hiển thị trên điện thoại và web, cách thêm, di chuyển hoặc xóa thẻ, chọn sở thích và quyền riêng tư khi đăng xuất.</span></a></li>
+            <li><a href="the-bean.html"><strong>Hướng dẫn này</strong><span>Nơi tìm thấy hướng dẫn này, cách tìm kiếm và cách hướng dẫn luôn được cập nhật.</span></a></li>
+            <li><a href="communities.html"><strong>Nhiều hơn một cộng đồng</strong><span>Thuộc về nhiều cộng đồng với một tài khoản, chuyển đổi qua lại, theo dõi cộng đồng đến địa chỉ mới và xem những gì cộng đồng toàn cầu hiển thị.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

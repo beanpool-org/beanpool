@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>頂端列 — BeanPool members' guide</title>
+    <meta name="description" content="豆子圖示、有待處理事項時顯示的小圖示，以及右上角的按鈕。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">開始使用</a></p>
+        <h1>頂端列</h1>
+        <p class="lede">豆子圖示、有待處理事項時顯示的小圖示，以及右上角的按鈕。</p>
+        <h2>包含哪些內容</h2>
+        <p>在手機上，螢幕頂端的橫列在每個分頁上都是相同的。從左到右依序為：</p>
+        <ul>
+            <li><strong>豆子圖示：</strong>你的社群以及本指南。</li>
+            <li><strong>「需要你」小圖示：</strong>僅在有事項等待你處理時顯示。</li>
+            <li><strong>? 圖示、邀請圖示、「設定」以及你的大頭貼照。</strong></li>
+        </ul>
+        <p>在網頁瀏覽器中，頂端列較為簡潔。其左側為連線狀態與頁面名稱，右側則有你的個人檔案、<strong>?</strong> 與「設定」。它沒有豆子工作表，沒有「需要你」小圖示，也沒有邀請圖示：<strong>邀請</strong>位於<strong>成員</strong>下方。分頁則位於螢幕底部，或在寬螢幕上位於左側。</p>
+        <h2>豆子圖示</h2>
+        <p>點擊左上角的豆子圖示可開啟 <strong>BeanPool</strong> 工作表。它顯示：</p>
+        <ul>
+            <li><strong>你的社群：</strong>頂端顯示其名稱，以及目前是否能連線至該社群。</li>
+            <li><strong>你的社群：</strong>點擊其中一個即可切換至該社群，或點擊<strong>新增社群</strong>。<strong>全球社群</strong>始終是其中一員：其第二行會說明你是否可以加入。</li>
+            <li><strong>搜尋指南</strong>，接著是<strong>各項指南</strong>（BeanPool 的運作方式、規則、常見問題）、<strong>如何使用應用程式</strong>（本指南的分節內容）以及 <strong>BeanPool 專案</strong>（包含<strong>最新動態</strong>）。</li>
+            <li><strong>beanpool.org：</strong>官方公開網站，並附有<strong>分享</strong>以傳送給朋友。</li>
+        </ul>
+        <p>豆子圖示上的小圓點代表當前的連線狀態：</p>
+        <ul>
+            <li><strong>綠色：</strong>已連線，且你是該處的成員。</li>
+            <li><strong>琥珀色：</strong>你目前以訪客身分瀏覽。</li>
+            <li><strong>紅色：</strong>目前無法連線至你社群的伺服器，或此手機尚未連線至任何社群。</li>
+        </ul>
+        <p>單次緩慢的連線檢查不會讓圓點變紅。只有在連續多次檢查均失敗後才會變紅。</p>
+        <h2>「需要你」小圖示</h2>
+        <p>在豆子圖示與右側按鈕之間，僅在有事項需要你關注時才會出現小型圖示。每個圖示代表一種事項。點擊它可直接前往該處。</p>
+        <ul>
+            <li><strong>握手圖示：</strong>有一筆交易等待你處理。有人正在等待你接受其請求，或你參與的交易尚未完成。若只有一筆，點擊會開啟該筆交易。若有多筆，則會開啟<strong>我的交易</strong>。</li>
+            <li><strong>投票箱圖示：</strong>你尚未參與的投票。點擊會開啟<strong>公共板塊</strong>中的<strong>決策</strong>。若第一張選票屬於群組投票或事業中的管理人投票，則點擊會改為開啟該群組或事業。你目前尚無權參與的投票不會計入此處，例如需要你先完成一筆交易才能參與的投票。</li>
+            <li><strong>對話氣泡圖示：</strong>來自他人的未讀訊息。若來自單一人員，點擊會開啟該聊天室。若來自多個人員，則會開啟<strong>聊天</strong>中的<strong>訊息</strong>，並僅列出未讀訊息。</li>
+            <li><strong>人群圖示：</strong>你所在群組、事業聊天室或活動聊天室中的新發言。你已靜音的聊天室不會在此提示。點擊會開啟該聊天室；若有多個，則會開啟<strong>聊天</strong>中的<strong>群組</strong>。</li>
+            <li><strong>盾牌圖示：</strong>僅對協助營運社群的成員顯示。當有待處理的管理工作時出現，例如待審核的檢舉或需要裁決的停滯交易。點擊會要求驗證手機的螢幕鎖定，然後在該項工作處開啟社群的「設定」。若你社群的「設定」使用登入代碼，也會要求輸入該代碼。</li>
+        </ul>
+        <p>這些圖示從右側向左排列。最重要的事項位於 ? 圖示旁邊，當其他圖示出現或消失時，其位置保持不變。</p>
+        <h3>數字與顏色</h3>
+        <ul>
+            <li>圖示上的小數字表示該類事項有多個：例如有 3 個人向你傳送了訊息。超過 9 個時顯示 <strong>9+</strong>。</li>
+            <li>當事項較為緊急時，圖示會變成<strong>琥珀色</strong>：例如等待你處理的交易、管理工作，或在 2 天內即將截止的投票。圖示絕不會變成紅色。</li>
+        </ul>
+        <h3>在小螢幕上</h3>
+        <p>如果空間不足以容納所有圖示，最後一個位置會顯示 <strong>•••</strong>。點擊它可查看以文字形式列出的完整<strong>需要你</strong>清單。點擊其中一行即可前往該處。</p>
+        <h3>橫列安靜是個好消息</h3>
+        <p>當沒有任何事項需要你處理時，完全不會顯示任何圖示。你沒有遺漏任何內容。當你在應用程式中切換頁面或返回應用程式時，圖示會隨之更新。</p>
+        <h2>加入或連線</h2>
+        <p>取代這些小圖示的，有時會是一個按鈕：</p>
+        <ul>
+            <li><strong>加入</strong>（琥珀色）：你目前以訪客身分瀏覽。點擊它可開啟<strong>邀請</strong>。在地社群中你可以在該處憑邀請加入。在全球社群中，點擊<strong>憑 12 個助記詞或登入加入</strong>（在只接受登入的社群中為<strong>透過登入加入</strong>）。</li>
+            <li><strong>連線</strong>（紅色）：此手機尚未連線至社群。點擊它可開啟<strong>設定</strong>，你在該處可以新增社群。</li>
+        </ul>
+        <p>當顯示其中一個按鈕時，邀請圖示會被隱藏。</p>
+        <h2>右側的按鈕</h2>
+        <ul>
+            <li><strong>? 圖示</strong>（圓圈內的問號）：提供當前所在畫面的協助。點擊會開啟簡短工作表，說明該畫面的用途，並提供<strong>閱讀指南頁面</strong>、<strong>搜尋指南</strong>以及<strong>重新體驗導覽</strong>。它存在於每個分頁上，成員與訪客皆可使用。在網頁版應用程式中，它位於頂端大頭貼照與「設定」之間，在寬螢幕上則位於側邊欄底部的「設定」旁邊。</li>
+            <li><strong>邀請圖示</strong>（帶加號的人物圖示）：開啟<strong>邀請</strong>，用於邀請他人或加入其他社群。參見「加入 BeanPool」。</li>
+            <li><strong>設定</strong>（滑桿圖示）：開啟<strong>設定</strong>。再次點擊可返回你原本所在的畫面。</li>
+            <li><strong>你的大頭貼照：</strong>開啟你自己的個人檔案，呈現他人所看到的樣貌。</li>
+        </ul>
+        <h2>更新訊息</h2>
+        <p>有時頂端列下方會出現綠色橫條：</p>
+        <ul>
+            <li><strong>有可用更新：</strong>應用程式發布了較新版本。點擊<strong>升級</strong>以取得新版，或點擊叉號關閉訊息。</li>
+            <li><strong>你的應用程式版本過舊，無法用於本社群：</strong>你需要先更新應用程式，才能在該社群中正常運作。此提示無法關閉。點擊<strong>升級</strong>。</li>
+        </ul>
+        <h2>各個分頁</h2>
+        <p>頂端列下方是各個分頁：<strong>首頁</strong>、<strong>市集</strong>、<strong>地圖</strong>、<strong>聊天</strong>、<strong>公共板塊</strong>與<strong>帳本</strong>。每個分頁的名稱位於其圖示上方。在手機上，未啟用豆子的在地社群不會顯示<strong>公共板塊</strong>或<strong>帳本</strong>。全球社群則兩者皆顯示，並帶有來自在地社群的範例。參見「豆子與全球社群」。</p>
+        <p>在較長的頁面上，點擊你當前所在的分頁可快速返回頂端。除<strong>地圖</strong>外，此功能在所有分頁上均有效。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>首頁</strong><span>首頁是什麼、在手機與網頁版上顯示的卡片、如何新增、移動或移除卡片、選擇興趣偏好以及登出時的隱私保護。</span></a></li>
+            <li><a href="the-bean.html"><strong>本指南</strong><span>在哪裡找到本指南、如何搜尋內容以及指南如何保持最新。</span></a></li>
+            <li><a href="communities.html"><strong>加入多個社群</strong><span>用一個帳號加入多個社群、在它們之間切換、跟隨你的社群遷移到新位址，以及查看全球社群向你展示的內容。</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

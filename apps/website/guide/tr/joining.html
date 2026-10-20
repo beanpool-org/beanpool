@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool'a katılma — BeanPool members' guide</title>
+    <meta name="description" content="Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Başlarken</a></p>
+        <h1>BeanPool'a katılma</h1>
+        <p class="lede">Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.</p>
+        <h2>İki giriş yolu</h2>
+        <ul>
+            <li><strong>Bir davetle</strong>, bir topluluğa katılırsınız: yakınınızdaki insanlar, kendi Fasulyeleri, takasları ve Ortak Alanı ile. O topluluğun bir üyesi sizi davet eder.</li>
+            <li><strong>Davet olmadan</strong>, açık olduğunda <strong>küresel topluluğa</strong> katılabilirsiniz: her yerden insanlar, gönderi paylaşabileceğiniz, insanlara mesaj atabileceğiniz ve yakınınızda bir topluluk bulabileceğiniz yerdir. Orada Fasulye ve topluluk oylamaları yoktur. Fasulye, kredi, Ortak Alan ve Kararları yerel topluluklarda yaşar. Küresel topluluk, bunların nasıl çalıştığını örnek bir toplulukta gösterir. &quot;Fasulye ve küresel topluluk&quot; bölümüne bakın.</li>
+        </ul>
+        <p>Davetiniz yok ama yakınınızda bir topluluk mu var? Küresel topluluğa katılın, ardından o topluluktan sizi içeri almasını isteyin: üyelerinden herhangi biri veya yalnızca yöneticilerin davet ettiği bir toplulukta yöneticileri alabilir. &quot;Yakınınızda bir topluluk bulma&quot; bölümüne bakın.</p>
+        <p>Her iki durumda da hesabınız, onu geri getiren 12 kelimeyle birlikte telefonunuzda tutulan bir anahtardır. Parola yoktur.</p>
+        <h2>Bir davetle katılma</h2>
+        <p>Bir davet, bir bağlantı, bir QR kodu veya bir koddur. Bir kod, harflerin takip ettiği <strong>INV-</strong> veya <strong>BP-</strong> ile başlayan uzun bir koda benzer.</p>
+        <ul>
+            <li>Bir davet <strong>bir kez</strong> çalışır.</li>
+            <li>Bir davet <strong>30 gün</strong> sürer. Bundan sonra yenisini isteyin.</li>
+        </ul>
+        <p>Katılmak için:</p>
+        <ul>
+            <li>BeanPool'u yükleyin ve açın. Önce bir davet bağlantısına dokunursanız uygulama, doğrudan Google Play'den yükledikten sonra bile daveti kendiliğinden algılar.</li>
+            <li>İlk ekranda <strong>Davetle katıl</strong> seçeneğine dokunun. Davet panonuzdaysa bunun yerine <strong>Yapıştır</strong> seçeneğine dokunabilirsiniz. Android'de düğmede <strong>Sana davet mi gönderildi? Açmak için Yapıştır'a dokun</strong> yazar. Web uygulamasında düğmede <strong>Buraya Yeni Geldim</strong> yazar.</li>
+            <li>Davet bağlantısını veya kodunu yapıştırın. Yalnızca bir kodunuz varsa, topluluğun adını veya adresini de yazın. Sizi davet eden kişi bunu size söyleyebilir.</li>
+            <li>İnsanların göreceği adı seçin. En az 2 karakter olmalıdır. Kısa tutun: katıldığınızda 20 karakterden uzun adlar kısaltılır.</li>
+            <li><strong>İleri</strong>'ye dokunun. Uygulama daveti ve adı kontrol eder. Birisi bu ada zaten sahipse başkalarını önerir. İşlem tamamlanana kadar <strong>← Ana sayfaya dön</strong> ve <strong>Var olan kimliği geri yükle</strong> çalışmaz.</li>
+            <li>Bazı topluluklarda aynı ekranda isteğe bağlı bir <strong>Kabul ediyorum</strong> kutusuyla birlikte <strong>Bu topluluğun yöneticilerinin neleri görebildiği</strong> de gösterilir. Her iki durumda da katılırsınız. &quot;Yöneticilerin neleri görebildiği&quot; bölümüne bakın.</li>
+        </ul>
+        <h2>Küresel topluluğa katılma</h2>
+        <p>Telefon uygulamasında veya bir web tarayıcısında katılabilirsiniz. Bir tarayıcıda global.beanpool.org adresini açın ve <strong>Katıl</strong>'a dokunun: adımlar için &quot;BeanPool'u web tarayıcısında kullanma&quot; bölümüne bakın. Telefon uygulamasında:</p>
+        <ul>
+            <li>İlk ekranda, <strong>Davetle katıl</strong>'ın hemen altındaki <strong>BeanPool'u dünya çapında keşfet</strong>'e dokunun. Her zaman oradadır. Küresel topluluk sizi şu anda alamadığında, altındaki bir satır nedenini söyler: <strong>Küresel topluluğa şu anda ulaşılamıyor. Yeniden dene ya da bir davetle katıl.</strong>, <strong>Şu anda yeni üye almıyor.</strong> veya <strong>Bu topluluk özel önizlemede. Sahibinden bir davet iste.</strong> Dokunmak tekrar sorar.</li>
+            <li>İki giriş yolundan birini seçin. <strong>12 gizli kelimeyle hesap oluşturun</strong> ilktir. Google, Apple veya Facebook hesabı gerektirmez: 12 kelimeniz tek geri dönüş yoludur.</li>
+            <li><strong>Veya giriş yapın</strong> (Google, bir iPhone'da Apple veya Facebook ile bir kez). Bu giriş, telefonunuzu kaybetmeniz durumunda da bir geri dönüş yoludur. BeanPool parolanızı asla görmez ve sizin adınıza asla hiçbir şey paylaşmaz.</li>
+            <li>İnsanların göreceği adı 20 karaktere kadar seçin ve <strong>Katıl</strong>'a dokunun. Birisi bu ada zaten sahipse, uygulama başkalarını önerir.</li>
+        </ul>
+        <p><strong>Web sitesinden, bir telefonda.</strong> beanpool.org/global adresinde <strong>BeanPool uygulamasında aç</strong>, uygulamayı doğrudan bu giriş yolunda açar: henüz hesabı olmayan bir telefonda yukarıdaki iki yol veya telefonun halihazırda sahip olduğu hesapla <strong>Küresel topluluğa katılın</strong> (aşağıdaki &quot;Zaten bir hesabınız var mı?&quot; bölümüne bakın). Bu hesap orada zaten bir üyeyse, bunun yerine <strong>Topluluklarınız</strong> altındaki <strong>Küresel topluluk</strong> seçeneğinin ona geçiş yaptığı <strong>BeanPool</strong> sayfasını açar. Küresel topluluk bu hesabı kapattıysa, uygulama yalnızca açılır. Android'de uygulama yüklü değilse Google Play açılır; yükledikten sonra BeanPool'u ilk açtığınızda doğrudan bu giriş yoluna gider. Bir iPhone'da App Store açılır; yükledikten sonra <strong>BeanPool'u dünya çapında keşfet</strong> seçeneğine dokunun. Bağlantı yalnızca bir ekran açar: siz dokunana kadar kimse katılmaz. <strong>BeanPool</strong> sayfasını açtığında sayfa, her zaman yaptığı gibi bu telefonun hesabının listelediği her topluluğun bir üyesi olup olmadığını kontrol eder. Önce bir davet gelir: size bir davet gönderilmişse, uygulama bunun yerine daveti açar ve katılımın yarısındaysanız buna devam eder.</p>
+        <p>12 kelimeyle telefonunuz, hesabı kurmak için kısa bir işlem de yapar. İki yol gösterilir gösterilmez başlar (web sitesinin bağlantısı onları açtığında birine dokunduğunuz anda), siz okurken ve adınızı yazarken gerçekleşir, bu yüzden çoğu insan bunu hiç beklemez. Tamamlanmadan önce <strong>Katıl</strong>'a dokunursanız, uygulama bir çubukla birlikte <strong>Hesabınız kuruluyor…</strong> der ve <strong>← Geri</strong> çalışmaya devam eder. Ağınızdan çok sayıda kişi katılıyorsa, uygulama telefonunuzda bunun ne kadar süreceğini belirterek bunu söyler ve hemen katılmak için bunun yerine giriş yapabilirsiniz. Giriş yaparak katılma durumunda bu işlem yalnızca çok meşgul bir ağda istenir ve uygulama bunu kendiliğinden yapar. <strong>Başka bir yol seç</strong>, beklemeyi durdurur ve sizi iki yola geri götürür. Bunun yerine giriş yaparsanız, pilinizi korumak için 12 kelimelik kurulum durur ve <strong>Başka bir yol seç</strong> onu yeniden başlatır.</p>
+        <p>Topluluk beklemenizi söylerse (ağınızdan çok fazla kişi katılıyor), uygulama ne kadar süreceğini belirtir. Bundan önce <strong>Katıl</strong>'a dokunmak yalnızca kalan süreyle birlikte bunu tekrar söyler; beklemeden sonra veya bekleme daha uzunsa bir dakika sonra <strong>Katıl</strong> tekrar sorar. Telefonunuzun tarihi ve saati yanlışsa uygulama <strong>Telefonunun ayarlarından kontrol et (otomatike ayarla)</strong>, sonra tekrar dene der. Topluluk hesabınızı kapattıysa (sildiyseniz veya çıkarıldıysanız), uygulama <strong>Bu hesabın küresel topluluktaki yeri kapatıldı, bu nedenle tekrar katılamaz.</strong> der ve kapısını bir daha sunmaz.</p>
+        <p>Telefon uygulamasında veya bir web tarayıcısında 12 kelimeyle katılma, <strong>tarihiniz ve saatiniz yanlış görünüyor</strong> gerekçesiyle topluluğun bunu kabul edemediğini söylüyorsa, o telefondaki veya bilgisayardaki saat birkaç dakikadan fazla sapmıştır. Ayarlarından tarihini ve saatini otomatiğe ayarlayın, ardından tekrar deneyin. Hiçbir şey kaydedilmemiştir ve yeniden giriş yapmak yardımcı olmaz. Bir tarayıcıda oturum açma yöntemi ekleme veya hesabınızı geri alma aynı nedenle reddedildiğinde de aynı sözler görünür.</p>
+        <p>Giriş yaparsanız, topluluk giriş hesabınıza ait yalnızca şifrelenmiş bir referansı tutar, e-postanızı asla tutmaz. Bu giriş, telefonunuzu kaybetmeniz durumunda hesabınıza geri dönüş yolu da olur, bu nedenle <strong>Yedek</strong> adımında tekrar giriş yapmanız istenmez. Bunun için topluluk hesabınızın kilitli bir kopyasını tutar. Sunucusunu işleten kişiler bu kopyayı açabilir: &quot;Hesabınızı geri alma&quot; bölümüne bakın. Katıldıktan sonra uygulamayı açmak için giriş yapmazsınız: hesabınız, diğerleri gibi telefonunuzdaki anahtardır.</p>
+        <p>12 kelimeyle katılırsanız, anahtarınız ve adınız dışında hakkınızda hiçbir şey topluluğa ulaşmaz ve 12 kelimeniz tek geri dönüş yolunuzdur: onları hiç kimse sıfırlayamaz, ne BeanPool ne de topluluk. <strong>Yedek</strong> bunu belirtir ve <strong>Geri dönmek için ikinci bir yol olarak giriş ekleyin</strong> seçeneğini sunar. Katıldıktan sonra <strong>Ana Sayfa</strong>'daki bir kart <strong>Hesabınızın tek bir geri dönüş yolu var: 12 kelimeniz. Onlara hâlâ sahip olduğunuzu kontrol edin veya bir oturum açma yöntemi ekleyin.</strong> der. Kapatmak için <strong>✕</strong> işaretine dokunun: ilk gönderinizden sonra bir kez ve bir hafta sonra bir kez tekrar gelir, ardından bir giriş yöntemi ekleyene veya <strong>12 kelimem hâlâ duruyor</strong> seçeneğine dokunana kadar <strong>Ayarlar</strong>'da, <strong>Hesap Koruması</strong> altında kalır. 12 kelimeyle oluşturulan bir hesabın ilk 7 günü boyunca ve 3 gönderisi yayında kalana kadar daha küçük limitleri de vardır: günde 2 gönderi, 4 fotoğraf ve mesaj atılacak 3 yeni kişi; ayrıca yeni olduğu sürece tek bir şikayet gönderisini gizler. İstediğiniz zaman bir giriş yöntemi eklemek, hesabı olağan yeni hesap limitlerine yükseltir. Yalnızca katıldığınız telefondan değil, hesabınızda olduğunuz herhangi bir telefondan ekleyebilirsiniz. BeanPool'un anahtar kasası hesabınızın bir kopyasını zaten tutuyorsa kart gösterilmez ve <strong>Ayarlar</strong> sessizce <strong>Giriş ekle</strong> seçeneğini sunar.</p>
+        <p><strong>Zaten bir hesabınız var mı?</strong> İkinci bir hesapla değil, onunla küresel topluluğa katılın. Sol üstteki fasulyeye dokunun ve <strong>Topluluklarınız</strong> altında <strong>Küresel topluluk</strong> seçeneğine dokunun: her zaman oradadır ve katılabileceğinizde ikinci satırında <strong>Bu hesapla katıl: 12 sözcük veya oturum açma</strong> (veya <strong>…: oturum açma</strong>) yazar. Küresel topluluğu misafir olarak ziyaret ediyorsanız, üstteki <strong>?</strong> işaretinin yanındaki <strong>Katıl</strong>'a dokunun, ardından <strong>12 kelime veya bir girişle katılın</strong> seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde <strong>Girişle katılın</strong>). Uygulama küresel topluluk hakkında <strong>Henüz burada üye değilsin</strong> derse, <strong>Bu hesapla katıl</strong> seçeneğine dokunun. Bir telefonda, beanpool.org/global bağlantısı da hesabınızla <strong>Küresel topluluğa katılın</strong> ekranını açar (yukarıdaki &quot;Web sitesinden, bir telefonda&quot; bölümüne bakın). 12 kelimenizle katılırsınız veya bir kez giriş yaparsınız, adınızı kontrol edip <strong>Katıl</strong>'a dokunursunuz. Anahtarınız ve 12 kelimeniz aynı kalır ve diğer topluluklarınızda hiçbir şey değişmez. &quot;Birden fazla topluluk&quot; bölümüne bakın.</p>
+        <p><strong>Bir web tarayıcısında veya başka bir telefonda zaten katıldınız mı?</strong> Henüz hesabı olmayan bir telefonda tekrar katılmayın: bu ikinci bir hesap oluşturur ve iki hesap asla tek bir hesapta birleştirilemez. Sahip olduğunuz hesabı getirin: ilk ekranda <strong>Zaten üye misin? Hesabını geri yükle</strong>'ye, ardından <strong>12 Kelime ile Kurtar</strong>'a dokunun. 12 kelimenizi yazın ve <strong>Hangi topluluk?</strong> altında <strong>Küresel topluluk</strong>'a dokunun. Bir girişle katıldıysanız <strong>Sosyal Hesapla Kurtar</strong> da çalışır. &quot;Hesabınızı geri alma&quot; bölümüne bakın.</p>
+        <h2>Adımlar</h2>
+        <p>Üstteki çubuk <strong>Adın</strong>, <strong>Fotoğraf</strong>, <strong>Yedek</strong> ve <strong>Nasıl işler</strong> adımlarını gösterir. Küresel toplulukta bir web tarayıcısında, <strong>Fotoğraf</strong> adımından sonra bir tane daha vardır: <strong>Bölgeniz</strong>. Telefon uygulamasının küresel topluluğa ilk katılımında bölge adımı yoktur: bunu <strong>Ayarlar</strong>'da, <strong>Bölgen</strong> altında ayarlayın.</p>
+        <ul>
+            <li><strong>Fotoğraf:</strong> bir fotoğraf veya hazır resimlerden birini seçin ya da bunu atlayıp daha sonra profilinizden bir tane ekleyin. Bazı topluluklar ilk gönderinizden önce bir resim ister. İnsanlar tanıdıkları bir yüz veya resimle daha kolay takas yaparlar.</li>
+            <li>Bir davetten sonra, <strong>Fotoğraf</strong> üzerindeki <strong>← Geri</strong>, adınızı değiştirmek için sizi adınıza geri götürür. Hâlâ aynı hesaptır: <strong>İleri</strong>'ye dokunun ve yeni adla <strong>Fotoğraf</strong> ve <strong>Yedek</strong> adımlarına devam edin. Birisi bu ada zaten sahipse, uygulama başkalarını önerir. Küresel toplulukta burada <strong>← Geri</strong> yoktur: zaten katılmışsınızdır.</li>
+            <li><strong>Bölgeniz</strong> (küresel toplulukta bir web tarayıcısında ve telefon uygulamasında küresel topluluğa halihazırda sahip olduğunuz bir hesapla katıldığınızda): <strong>Kabaca neredesiniz?</strong> Küresel topluluk size yakınınızda neler sunulduğunu gösterir: 250 km içindeki en yakın 500 ilan. <strong>Konumumu kullan</strong>'a veya <strong>Bir kasaba veya semt yazın</strong>'a dokunun. Bölgeniz yaklaşık 10 km olarak tutulur, asla tam noktanız tutulmaz: telefonunuz veya tarayıcınız gönderilmeden önce bunu yuvarlar. Diğer üyeler ne kadar uzakta olduğunuzu görür ve yaptığınız bir anket bölgenizde gösterilir. <strong>Şimdilik atla</strong> hiçbir şey göndermez ve hiçbir şey istemez; yine de içeri girersiniz ve siz ayarlayana kadar dünya çapındaki en yeni ilanları görürsünüz. İstediğiniz zaman <strong>Ayarlar</strong>'da, <strong>Bölgen</strong> altında değiştirebilir veya temizleyebilirsiniz.</li>
+            <li><strong>Yedek:</strong> uygulama 12 kelimenizi gösterir. Bunları kağıda yazın ve güvende tutun. <strong>Bu kelimeleri kaydettim</strong> onay kutusu (bir web tarayıcısında <strong>Bu kelimeleri güvenli bir yere yazdım</strong>) size hatırlatmak içindir. Atlarsanız sizi hiçbir şey durdurmaz, ancak yakında &quot;12 kelimeniz&quot; bölümünü okuyun. Telefon uygulamasında küresel topluluğa bir girişle katıldıysanız, bu adım hesabınızı koruyan girişinizi gösterir ve kelimeleriniz <strong>Bunun yerine 12 kelime yazmak ister misiniz?</strong> altında bir dokunuş uzağınızdadır. 12 kelimeyle katıldıysanız, önce bu 12 kelimenin hesabınız olduğunu söyler ve <strong>Geri dönmek için ikinci bir yol olarak giriş ekleyin</strong> seçeneğini sunar: bunu da atlayabilirsiniz.</li>
+            <li><strong>Nasıl işler:</strong> kısa bir tur. Başlamak için <strong>Hadi Başlayalım!</strong>'a dokunun.</li>
+        </ul>
+        <p>Uygulamayı yarıda kapatırsanız, bir sonraki sefer aynı adımdan devam eder.</p>
+        <h2>Davet çalışmazsa</h2>
+        <ul>
+            <li><strong>Zaten kullanılmış:</strong> her davet tam olarak bir kez çalışır. Yenisini isteyin. Size aitse ve zaten üyeyseniz, bunun yerine <strong>Var olan hesabı kurtarma ifadesiyle geri yükle</strong>'yi kullanın.</li>
+            <li><strong>Süresi dolmuş:</strong> davetler 30 gün geçerlidir. Yenisini isteyin.</li>
+            <li><strong>Tanınmadı:</strong> tamamını kopyaladığınızı ve topluluk adının veya adresinin doğru olduğunu kontrol edin.</li>
+            <li><strong>Bir üye tarafından oluşturulmuş ve artık insanları yalnızca yöneticiler dahil ediyor:</strong> topluluk yalnızca yöneticilerinin davet etmesini seçmiştir ve bir üyenin bağlantı olmadan oluşturduğu bilet artık çalışmaz. Bir yöneticiden yeni bir davet isteyin.</li>
+            <li><strong>Kimlik kaydedilemedi</strong> (<strong>İleri</strong>'ye dokunduktan sonra): genellikle bağlantı yoktur veya zamanında yanıt gelmemiştir. Bağlantınızı kontrol edin ve tekrar <strong>İleri</strong>'ye dokunun. İlk denemeniz ulaştıysa, uygulama aynı hesapla <strong>Fotoğraf</strong> ve <strong>Yedek</strong> adımlarına devam eder.</li>
+        </ul>
+        <h2>Küresel topluluğa katılma çalışmazsa</h2>
+        <ul>
+            <li><strong>Küresel topluluğa şu anda ulaşılamıyor</strong> (<strong>BeanPool'u dünya çapında keşfet</strong> altındaki satır): bağlantınızı kontrol edin, ardından düğmeye dokunun: tekrar sorar. Yine de bir davetle bir topluluğa katılabilirsiniz.</li>
+            <li><strong>Küresel topluluğa ulaşılamıyor:</strong> bağlantınızı kontrol edin ve <strong>Tekrar dene</strong>'ye dokunun. Yine de bir davetle bir topluluğa katılabilirsiniz.</li>
+            <li><strong>Küresel topluluk zamanında yanıt vermedi</strong> (<strong>Katıl</strong>'a dokunduktan sonra): adınız kontrol edilmedi ve hiçbir şey gönderilmedi. Bağlantınızı kontrol edin ve tekrar <strong>Katıl</strong>'a dokunun ya da geri dönün. Uygulama adınızı kontrol ederken <strong>Başka bir yol seç</strong> ve <strong>← Ana sayfaya dön</strong> çalışmaya devam eder.</li>
+            <li><strong>Bu girişin zaten bir BeanPool kimliği var:</strong> daha önce, belki başka bir telefonda katıldınız. <strong>Hesabımı geri yükle</strong>'ye dokunun, ardından 12 kelimenizi veya aynı girişi kullanın.</li>
+            <li><strong>Bu giriş bilgisi başka bir BeanPool hesabıyla zaten küresel topluluğa katılmış</strong> (telefonunuzdaki hesaptan katılırken): bu girişin orada kendi hesabı vardır. <strong>Farklı bir giriş yöntemi kullan</strong>'a dokunun.</li>
+            <li><strong>Bu topluluk şu anda girişleri kontrol edemiyor:</strong> küresel topluluk başka bir sunucuya taşındı ve geri dönen bir hesabı henüz yeni bir hesaptan ayırt edemiyor, bu nedenle şimdilik bu yolla yeni kimseyi almıyor. Hiçbir şey kaydedilmedi. Daha sonra tekrar deneyin.</li>
+            <li><strong>Bu ağdan çok fazla yeni hesap:</strong> tek bir internet bağlantısından yeni hesaplar için bir sınır vardır. Aynı ağdaki herkes birlikte sayılır, bu nedenle bir kampüste, ofiste veya buluşmada katılanlar siz değil başkaları olabilir. Daha sonra tekrar deneyin.</li>
+            <li><strong>Şu anda yeni üye almıyor:</strong> bunun yerine bir davetle bir topluluğa katılın.</li>
+        </ul>
+        <h2>Birini davet etme</h2>
+        <p>Topluluk yalnızca yöneticilerinin bunu yapmasını seçmediği sürece herhangi bir üye insanları davet edebilir (aşağıya bakın). Güven rozetinizin bir önemi yoktur.</p>
+        <ul>
+            <li>Ekranın sağ üst köşesindeki davet simgesine (artı işaretli kişi) dokunun. Bu, <strong>Davetler</strong>'i açar.</li>
+            <li>İsterseniz yalnızca kendi kayıtlarınız için davetin kimin için olduğunu yazın.</li>
+            <li><strong>Bilet Oluştur</strong>'a dokunun. Bağlantı olmadan düğmede <strong>Çevrimdışı Bilet Oluştur</strong> yazar ve bu da işe yarar.</li>
+            <li>Onlara QR kodunu gösterin veya bağlantıyı ve kodu göndermek için <strong>Daveti Paylaş</strong>'a dokunun.</li>
+            <li>Web uygulamasında <strong>Kişiler</strong>'i, ardından <strong>Davetler</strong>'i açın ve <strong>Yeni Davetiye Oluştur</strong>'a dokunun. Ardından <strong>Kopyala</strong> veya <strong>Paylaş</strong>'a dokunun.</li>
+            <li>Henüz kimsenin kullanmadığı davetler <strong>Bekleyenler</strong> altında listelenir ve her birinde tekrar göndermek için <strong>Paylaş</strong> bulunur.</li>
+            <li>Günde 20 davet oluşturabilir ve henüz kimsenin kullanmadığı 50 davete sahip olabilirsiniz. Kimsenin kullanmadığı bir davet 30 gününün ardından silinir ve <strong>Bekleyenler</strong>'den ayrılır.</li>
+        </ul>
+        <p>Bir topluluğun yöneticileri tüm topluluk için davetleri kapatabilir.</p>
+        <p><strong>Yalnızca yöneticilerin davet ettiği yerlerde.</strong> Bir topluluk yalnızca mülk sahiplerinin ve yöneticilerinin insanları dahil etmesini seçebilir. Orada, onlardan biri değilseniz, <strong>Davetler</strong> bölümü <strong>Bilet Oluştur</strong> yerine <strong>Buraya birini getir</strong> gösterir ve bir yöneticiye sormanızı söyler. Web uygulamasında <strong>Ağaç</strong> kalır ve daha önce oluşturduğunuz kodlar da kalır: süreleri dolana kadar çalışmaya devam ederler. Sinyali olmayan bir sahip veya yönetici, topluluğun kendilerine verdiği son rolden yola çıkarak yine de basılı bir bilet oluşturabilir. Topluluk katılım isteklerini kabul ediyorsa, <strong>Bağlantıyı paylaş</strong> topluluğun adresini gönderir: kişi bunu BeanPool uygulamasında açar, katılma talebinde bulunur ve bir yönetici yanıtlar. Yönetici olmak topluluğun birine verdiği bir görevdir, bir güven rozeti değildir.</p>
+        <ul>
+            <li>Topluluk bunu seçmeden önce oluşturduğunuz davet kodları 30 günlük süreleri dolana kadar çalışmaya devam eder.</li>
+            <li>Bağlantı olmadan oluşturduğunuz bir bilet çalışmaz: buna sahip olan kişiden bir yöneticiden yeni bir davet alması istenir.</li>
+        </ul>
+        <p>Küresel topluluğun davetleri yoktur: herkes BeanPool uygulamasında 12 gizli kelimeyle veya bir oturum açma yöntemiyle katılır. Orada davet simgesi, küresel topluluğun adresini göndermek için <strong>Bağlantıyı paylaş</strong> ile birlikte <strong>Buraya birini getir</strong> seçeneğini açar. Oluşturulacak bir şey yoktur ve onun için oluşturulmuş bir davet kodu çalışmaz.</p>
+        <h2>Katılma istekleri</h2>
+        <p>İnsanlar küresel topluluktan topluluğunuza katılma talebinde bulunabilir. Biri talepte bulunduğunda, <strong>Davetler</strong> bir sayı gösterir ve istekler en üstte <strong>Katılmak istiyor</strong> altında listelenir. İstekler telefon uygulamasında yanıtlanır: web uygulaması bunları listelemez.</p>
+        <ul>
+            <li><strong>Davet et</strong>, yalnızca onların hesabının kullanabileceği bir davet oluşturur. Uygulamaları bunu kendiliğinden bulur, bu yüzden onlara hiçbir şey göndermezsiniz ve tek bir dokunuşla katılırlar.</li>
+            <li><strong>Şimdi değil</strong>, onlara &quot;henüz yanıt yok&quot;tan başka bir şey söylemez.</li>
+        </ul>
+        <p>Herhangi bir üye yanıt verebilir. Yalnızca yöneticilerin davet ettiği bir toplulukta yalnızca mülk sahipleri ve yöneticileri istekleri görür ve yanıtlar. &quot;Yakınınızda bir topluluk bulma&quot; bölümüne bakın.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Ana Sayfa</strong><span>Ana Sayfa nedir, telefonda ve web uygulamasında hangi kartları gösterir, nasıl eklenir, taşınır veya kaldırılır, ilgi alanları seçimi ve çıkışta gizlilik.</span></a></li>
+            <li><a href="finding-a-community.html"><strong>Yakınınızda bir topluluk bulma</strong><span>Küresel topluluktan yakınınızdaki bir topluluğu bulup katılma isteği gönderin, yakınınızda yeni bir topluluk başladığında bildirim alın veya kendiniz başlatın.</span></a></li>
+            <li><a href="your-12-words.html"><strong>12 kelimeniz</strong><span>12 kelime hesabınızın anahtarıdır. Neden önemli oldukları, nerede bulunacakları, nasıl güvende tutulacakları ve ikinci bir kurtarma yolu olarak giriş hesabı ekleme.</span></a></li>
+            <li><a href="your-profile.html"><strong>Profiliniz</strong><span>Adınız, fotoğrafınız, hakkınızda birkaç kelime ve iletişim bilgilerinizi kimlerin görebileceği.</span></a></li>
+            <li><a href="communities.html"><strong>Birden fazla topluluk</strong><span>Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool nasıl çalışır</strong><span>Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.</span></a></li>
+            <li><a href="web-app.html"><strong>Web tarayıcısında BeanPool kullanımı</strong><span>Web uygulaması mobil uygulamanın yaptıklarının çoğunu yapar. Tarayıcıda küresel topluluğa katılma, girişle hesabı kurtarma, aynı hesabı telefona bağlama ve farklı düğme adları.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

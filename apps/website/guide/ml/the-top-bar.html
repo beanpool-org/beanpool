@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>മുകളിലെ ബാർ — BeanPool members' guide</title>
+    <meta name="description" content="പയർ, നിങ്ങളുടെ ശ്രദ്ധ ആവശ്യമുള്ളപ്പോൾ കാണിക്കുന്ന ചെറിയ ഐക്കണുകൾ, മുകളിൽ വലതുവശത്തുള്ള ബട്ടണുകൾ.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">തുടങ്ങാം</a></p>
+        <h1>മുകളിലെ ബാർ</h1>
+        <p class="lede">പയർ, നിങ്ങളുടെ ശ്രദ്ധ ആവശ്യമുള്ളപ്പോൾ കാണിക്കുന്ന ചെറിയ ഐക്കണുകൾ, മുകളിൽ വലതുവശത്തുള്ള ബട്ടണുകൾ.</p>
+        <h2>ഇതിൽ എന്തൊക്കെയാണുള്ളത്</h2>
+        <p>ഫോണിൽ, സ്ക്രീനിന്റെ മുകളിലുള്ള ബാർ ഓരോ ടാബിലും ഒരേപോലെയാണ്. ഇടത്തുനിന്ന് വലത്തോട്ട്:</p>
+        <ul>
+            <li><strong>പയർ:</strong> നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയും ഈ ഗൈഡും.</li>
+            <li><strong>&quot;നിങ്ങളെ ആവശ്യമുണ്ട്&quot; ഐക്കണുകൾ:</strong> നിങ്ങൾക്കായി എന്തെങ്കിലും കാത്തിരിക്കുമ്പോൾ മാത്രം.</li>
+            <li><strong>? ഐക്കൺ, ക്ഷണ ഐക്കൺ, ക്രമീകരണങ്ങൾ, നിങ്ങളുടെ ചിത്രം.</strong></li>
+        </ul>
+        <p>ഒരു വെബ് ബ്രൗസറിൽ മുകളിലെ ബാർ കൂടുതൽ ലളിതമാണ്. ഇതിൽ ഇടതുവശത്ത് കണക്ഷൻ നിലയും പേജിന്റെ പേരും, വലതുവശത്ത് നിങ്ങളുടെ പ്രൊഫൈലും <strong>?</strong> ഉം ക്രമീകരണങ്ങളും ഉണ്ട്. ഇതിൽ ബീൻ ഷീറ്റോ &quot;നിങ്ങളെ ആവശ്യമുണ്ട്&quot; ഐക്കണുകളോ ക്ഷണ ഐക്കണോ ഇല്ല: <strong>Invites</strong> എന്നത് <strong>ആളുകൾ</strong> എന്നതിന് കീഴിലാണ്. ടാബുകൾ താഴെയോ, അല്ലെങ്കിൽ വിശാലമായ സ്ക്രീനിൽ ഇടതുവശത്തോ ആണ്.</p>
+        <h2>പയർ</h2>
+        <p><strong>BeanPool</strong> ഷീറ്റ് തുറക്കാൻ മുകളിൽ ഇടതുവശത്തുള്ള പയർ ഐക്കണിൽ ടാപ്പ് ചെയ്യുക. ഇത് കാണിക്കുന്നത്:</p>
+        <ul>
+            <li><strong>നിങ്ങളുടെ കമ്മ്യൂണിറ്റി:</strong> മുകളിൽ അതിന്റെ പേരും, ഇപ്പോൾ അതിലേക്ക് കണക്റ്റ് ചെയ്യാൻ കഴിയുമോ എന്നതും.</li>
+            <li><strong>നിങ്ങളുടെ കമ്മ്യൂണിറ്റികൾ:</strong> ഒന്നിലേക്ക് മാറാൻ അതിൽ ടാപ്പ് ചെയ്യുക, അല്ലെങ്കിൽ <strong>ഒരു കമ്മ്യൂണിറ്റി ചേർക്കുക</strong> ടാപ്പ് ചെയ്യുക. <strong>ആഗോള കമ്മ്യൂണിറ്റി</strong> എപ്പോഴും അവയിൽ ഒന്നായിരിക്കും: നിങ്ങൾക്ക് ഇതിൽ ചേരാൻ കഴിയുമോ എന്ന് അതിന്റെ രണ്ടാമത്തെ വരി വ്യക്തമാക്കുന്നു.</li>
+            <li><strong>ഗൈഡിൽ തിരയുക</strong>, തുടർന്ന് <strong>ഗൈഡുകൾ</strong> (BeanPool എങ്ങനെ പ്രവർത്തിക്കുന്നു, നിയമങ്ങൾ, പൊതുവായ ചോദ്യങ്ങൾ), <strong>ആപ്പ് എങ്ങനെ ഉപയോഗിക്കാം</strong> (ഈ ഗൈഡ്, ഓരോ വിഭാഗമായി), കൂടാതെ <strong>What's new</strong> ഉൾപ്പെടുന്ന <strong>BeanPool പ്രോജക്റ്റ്</strong>.</li>
+            <li><strong>beanpool.org:</strong> ഒരു സുഹൃത്തിന് അയയ്ക്കാനുള്ള <strong>പങ്കിടുക</strong> ബട്ടണോടുകൂടിയ പബ്ലിക് വെബ്‌സൈറ്റ്.</li>
+        </ul>
+        <p>പയറിലെ ചെറിയ ഡോട്ട് കാര്യങ്ങൾ എങ്ങനെയാണെന്ന് നിങ്ങളോട് പറയുന്നു:</p>
+        <ul>
+            <li><strong>പച്ച:</strong> കണക്റ്റ് ചെയ്‌തിരിക്കുന്നു, നിങ്ങൾ ഇവിടെ ഒരംഗവുമാണ്.</li>
+            <li><strong>മഞ്ഞ (ആംബർ):</strong> നിങ്ങൾ ഒരു അതിഥിയായി സന്ദർശിക്കുകയാണ്.</li>
+            <li><strong>ചുവപ്പ്:</strong> നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിലേക്ക് ഇപ്പോൾ എത്തിച്ചേരാനാകില്ല, അല്ലെങ്കിൽ ഈ ഫോൺ ഇതുവരെ ഒരു കമ്മ്യൂണിറ്റിയുമായി ബന്ധിപ്പിച്ചിട്ടില്ല.</li>
+        </ul>
+        <p>ഒറ്റത്തവണയുള്ള വേഗത കുറഞ്ഞ പരിശോധന ഡോട്ടിനെ ചുവപ്പാക്കില്ല. തുടർച്ചയായി ഒന്നിലധികം പരിശോധനകൾ പരാജയപ്പെടുമ്പോൾ മാത്രമേ ഇത് ചുവപ്പായി മാറുകയുള്ളൂ.</p>
+        <h2>&quot;നിങ്ങളെ ആവശ്യമുണ്ട്&quot; ഐക്കണുകൾ</h2>
+        <p>പയറിനും വലതുവശത്തുള്ള ബട്ടണുകൾക്കും ഇടയിൽ, എന്തെങ്കിലും നിങ്ങളുടെ ശ്രദ്ധ ആവശ്യമുള്ളപ്പോൾ മാത്രം ചെറിയ ഐക്കണുകൾ പ്രത്യക്ഷപ്പെടും. ഓരോന്നും ഓരോ തരത്തിലുള്ള കാര്യങ്ങളാണ്. അങ്ങോട്ട് നേരിട്ട് പോകാൻ അതിൽ ടാപ്പ് ചെയ്യുക.</p>
+        <ul>
+            <li><strong>ഒരു ഹസ്തദാനം:</strong> ഒരു ഇടപാട് നിങ്ങൾക്കായി കാത്തിരിക്കുന്നു. നിങ്ങളുടെ അഭ്യർത്ഥന സ്വീകരിക്കാൻ ആരെങ്കിലും കാത്തിരിക്കുന്നു, അല്ലെങ്കിൽ നിങ്ങൾ ഉൾപ്പെട്ട ഒരു ഇടപാട് ഇതുവരെ പൂർത്തിയായിട്ടില്ല. ഒന്നാണെങ്കിൽ, ടാപ്പ് ചെയ്യുന്നത് ആ ഇടപാട് തുറക്കുന്നു. ഒന്നിൽ കൂടുതലുണ്ടെങ്കിൽ, അത് <strong>എന്റെ ഇടപാടുകൾ</strong> തുറക്കുന്നു.</li>
+            <li><strong>ഒരു ബാലറ്റ് ബോക്സ്:</strong> നിങ്ങൾ ഇതുവരെ രേഖപ്പെടുത്താത്ത ഒരു വോട്ട്. ടാപ്പ് ചെയ്യുന്നത് <strong>കോമൺസ്</strong> എന്നതിലെ <strong>തീരുമാനിക്കുക</strong> തുറക്കുന്നു. ആദ്യത്തെ വോട്ട് ഒരു ഗ്രൂപ്പിലേതോ അല്ലെങ്കിൽ ഒരു സംരംഭത്തിലെ സൂക്ഷിപ്പുകാരുടെ വോട്ടോ ആണെങ്കിൽ, ടാപ്പ് ചെയ്യുന്നത് പകരം ആ ഗ്രൂപ്പോ സംരംഭമോ തുറക്കുന്നു. നിങ്ങൾക്ക് ഇതുവരെ രേഖപ്പെടുത്താൻ കഴിയാത്ത ഒരു വോട്ട് ഇവിടെ കണക്കാക്കില്ല, ഉദാഹരണത്തിന് ആദ്യം ഒരു ഇടപാട് പൂർത്തിയാക്കാൻ നിങ്ങളോട് ആവശ്യപ്പെടുന്ന ഒന്ന്.</li>
+            <li><strong>ഒരു സംഭാഷണ കുമിള (സ്പീച്ച് ബബിൾ):</strong> ഒരാളിൽ നിന്നുള്ള വായിക്കാത്ത സന്ദേശം. ഇത് ഒരാളിൽ നിന്നാണെങ്കിൽ, ടാപ്പ് ചെയ്യുന്നത് ആ ചാറ്റ് തുറക്കുന്നു. ഇത് നിരവധി ആളുകളിൽ നിന്നാണെങ്കിൽ, വായിക്കാത്തവ മാത്രം കാണിച്ച് ഇത് <strong>ചാറ്റ്</strong> എന്നതിലെ <strong>സന്ദേശങ്ങൾ</strong> തുറക്കുന്നു.</li>
+            <li><strong>ആളുകളുടെ കൂട്ടം:</strong> നിങ്ങളുടെ ഗ്രൂപ്പുകളിലോ സംരംഭ ചാറ്റുകളിലോ ഇവന്റ് ചാറ്റുകളിലോ ഉള്ള പുതിയ വരികൾ. നിങ്ങൾ മ്യൂട്ട് ചെയ്ത ചാറ്റുകൾ ഇവിടെ ശബ്ദിക്കാതെ തുടരും. ടാപ്പ് ചെയ്യുന്നത് ആ ചാറ്റ് തുറക്കുന്നു, അല്ലെങ്കിൽ പലതുണ്ടെങ്കിൽ <strong>ചാറ്റ്</strong> എന്നതിലെ <strong>ഗ്രൂപ്പുകൾ</strong> തുറക്കുന്നു.</li>
+            <li><strong>ഒരു പരിച (ഷീൽഡ്):</strong> നിങ്ങളുടെ കമ്മ്യൂണിറ്റി നടത്താൻ സഹായിക്കുന്ന ആളുകൾക്ക് മാത്രം. അവലോകനം ചെയ്യേണ്ട ഒരു റിപ്പോർട്ട് അല്ലെങ്കിൽ ഒരു തീരുമാനം ആവശ്യമുള്ള മുടങ്ങിക്കിടക്കുന്ന ഇടപാട് പോലുള്ള അഡ്മിൻ ജോലികൾ കാത്തിരിക്കുമ്പോൾ ഇത് കാണിക്കുന്നു. ടാപ്പ് ചെയ്യുന്നത് നിങ്ങളുടെ ഫോണിന്റെ സ്ക്രീൻ ലോക്ക് ആവശ്യപ്പെടുകയും തുടർന്ന് ആ ജോലിയിലെ നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ ക്രമീകരണങ്ങൾ തുറക്കുകയും ചെയ്യുന്നു. നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ ക്രമീകരണങ്ങൾ ഒരു സൈൻ-ഇൻ കോഡ് ഉപയോഗിക്കുന്നുണ്ടെങ്കിൽ, അത് അതിനെയും ചോദിക്കുന്നു.</li>
+        </ul>
+        <p>ഐക്കണുകൾ വലതുവശത്ത് നിന്ന് അടുക്കിവെക്കുന്നു. ഏറ്റവും പ്രധാനപ്പെട്ട ഒന്ന് ? ഐക്കണിന് അടുത്തായി ഇരിക്കുകയും മറ്റുള്ളവ വരുമ്പോഴും പോകുമ്പോഴും അതിന്റെ സ്ഥാനം നിലനിർത്തുകയും ചെയ്യുന്നു.</p>
+        <h3>സംഖ്യയും നിറവും</h3>
+        <ul>
+            <li>ഒരു ഐക്കണിലെ ചെറിയ സംഖ്യ ആ തരത്തിലുള്ള ഒന്നിലധികം കാര്യങ്ങളെ അർത്ഥമാക്കുന്നു: ഉദാഹരണത്തിന് നിങ്ങൾക്ക് എഴുതിയ 3 ആളുകൾ. 9-ന് മുകളിൽ ഇത് <strong>9+</strong> എന്ന് കാണിക്കുന്നു.</li>
+            <li>കൂടുതൽ അടിയന്തിരമായി വരുമ്പോൾ ഒരു ഐക്കൺ <strong>മഞ്ഞ (ആംബർ)</strong> ആയി മാറുന്നു: നിങ്ങൾ പൂർത്തിയാക്കേണ്ട ഒരു ഇടപാട്, അഡ്മിൻ ജോലി, അല്ലെങ്കിൽ 2 ദിവസത്തിനുള്ളിൽ അവസാനിക്കുന്ന ഒരു വോട്ട്. ഒന്നും ചുവപ്പായി മാറില്ല.</li>
+        </ul>
+        <h3>ഒരു ചെറിയ സ്ക്രീനിൽ</h3>
+        <p>എല്ലാ ഐക്കണുകൾക്കും ഇടമില്ലെങ്കിൽ, അവസാനത്തെ സ്ഥലം <strong>•••</strong> എന്ന് കാണിക്കുന്നു. മുഴുവൻ ലിസ്റ്റും വാക്കുകളിൽ കാണാൻ അതിൽ ടാപ്പ് ചെയ്യുക: <strong>നിങ്ങളെ ആവശ്യമുണ്ട്</strong>. അങ്ങോട്ട് പോകാൻ ഒരു വരിയിൽ ടാപ്പ് ചെയ്യുക.</p>
+        <h3>ശാന്തമായ ബാർ ഒരു നല്ല വാർത്തയാണ്</h3>
+        <p>നിങ്ങളെ ആവശ്യമുള്ള കാര്യങ്ങളൊന്നുമില്ലെങ്കിൽ, ഐക്കണുകൾ ഒന്നും ഉണ്ടാകില്ല. നിങ്ങൾക്ക് ഒന്നും നഷ്ടപ്പെട്ടിട്ടില്ല. നിങ്ങൾ ആപ്പിൽ അങ്ങോട്ടുമിങ്ങോട്ടും നീങ്ങുമ്പോഴും അതിലേക്ക് തിരികെ വരുമ്പോഴും ഐക്കണുകൾ അപ്‌ഡേറ്റ് ചെയ്യപ്പെടുന്നു.</p>
+        <h2>ചേരുക അല്ലെങ്കിൽ ബന്ധിപ്പിക്കുക</h2>
+        <p>ഐക്കണുകൾക്ക് പകരം, നിങ്ങൾ ഒരു ബട്ടൺ കണ്ടേക്കാം:</p>
+        <ul>
+            <li><strong>ചേരുക</strong> (മഞ്ഞ): നിങ്ങൾ ഒരു അതിഥിയായി സന്ദർശിക്കുകയാണ്. <strong>Invites</strong> തുറക്കാൻ അതിൽ ടാപ്പ് ചെയ്യുക. ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിൽ ഒരു ക്ഷണം ഉപയോഗിച്ച് നിങ്ങൾ അവിടെ ചേരുന്നു. ആഗോള കമ്മ്യൂണിറ്റിയിൽ, <strong>12 വാക്കുകളോ ഒരു സൈൻ-ഇന്നോ ഉപയോഗിച്ച് ചേരുക</strong> ടാപ്പ് ചെയ്യുക (കമ്മ്യൂണിറ്റി സൈൻ-ഇന്നുകൾ മാത്രം സ്വീകരിക്കുന്നിടത്ത് <strong>ഒരു സൈൻ-ഇൻ ഉപയോഗിച്ച് ചേരുക</strong>).</li>
+            <li><strong>ബന്ധിപ്പിക്കുക</strong> (ചുവപ്പ്): ഈ ഫോൺ ഒരു കമ്മ്യൂണിറ്റിയുമായി ബന്ധിപ്പിച്ചിട്ടില്ല. <strong>ക്രമീകരണങ്ങൾ</strong> തുറക്കാൻ അതിൽ ടാപ്പ് ചെയ്യുക, അവിടെ നിങ്ങൾക്ക് ഒരെണ്ണം ചേർക്കാം.</li>
+        </ul>
+        <p>ഇവയിലൊന്ന് കാണിക്കുമ്പോൾ, ക്ഷണ ഐക്കൺ മറഞ്ഞിരിക്കും.</p>
+        <h2>വലതുവശത്തുള്ള ബട്ടണുകൾ</h2>
+        <ul>
+            <li><strong>? ഐക്കൺ</strong> (വൃത്തത്തിലുള്ള ചോദ്യചിഹ്നം): നിങ്ങൾ നിൽക്കുന്ന സ്ക്രീനിനായുള്ള സഹായം. ആ സ്ക്രീൻ എന്തിനാണെന്ന് പറയുന്ന ഒരു ചെറിയ ഷീറ്റ് ഇത് തുറക്കുന്നു, തുടർന്ന് <strong>ഗൈഡ് പേജ് വായിക്കുക</strong>, <strong>ഗൈഡിൽ തിരയുക</strong>, <strong>ടൂർ വീണ്ടും കാണുക</strong> എന്നിവയും കാണിക്കുന്നു. അംഗങ്ങൾക്കും അതിഥികൾക്കുമായി ഇത് ഓരോ ടാബിലും ഉണ്ട്. വെബ് ആപ്പിൽ ഇത് മുകളിൽ നിങ്ങളുടെ ചിത്രത്തിനും ക്രമീകരണങ്ങൾക്കും ഇടയിലും, വിശാലമായ സ്ക്രീനിൽ സൈഡ് ബാറിന്റെ താഴെ ക്രമീകരണങ്ങൾക്ക് അടുത്തായും സ്ഥിതിചെയ്യുന്നു.</li>
+            <li><strong>ക്ഷണ ഐക്കൺ</strong> (പ്ലസ് അടയാളമുള്ള വ്യക്തി): ആരെയെങ്കിലും ക്ഷണിക്കുന്നതിനോ മറ്റൊരു കമ്മ്യൂണിറ്റിയിൽ ചേരുന്നതിനോ <strong>Invites</strong> തുറക്കുന്നു. &quot;BeanPool-ൽ ചേരൽ&quot; കാണുക.</li>
+            <li><strong>ക്രമീകരണങ്ങൾ</strong> (സ്ലൈഡറുകൾ): <strong>ക്രമീകരണങ്ങൾ</strong> തുറക്കുന്നു. നിങ്ങൾ ഉണ്ടായിരുന്നിടത്തേക്ക് മടങ്ങാൻ ഇത് വീണ്ടും ടാപ്പ് ചെയ്യുക.</li>
+            <li><strong>നിങ്ങളുടെ ചിത്രം:</strong> മറ്റുള്ളവർ കാണുന്നതുപോലെ നിങ്ങളുടെ സ്വന്തം പ്രൊഫൈൽ തുറക്കുന്നു.</li>
+        </ul>
+        <h2>അപ്‌ഡേറ്റ് സന്ദേശങ്ങൾ</h2>
+        <p>ചിലപ്പോൾ മുകളിലെ ബാറിന് താഴെ ഒരു പച്ച ബാർ കാണിക്കും:</p>
+        <ul>
+            <li><strong>അപ്‌ഡേറ്റ് ലഭ്യമാണ്:</strong> ആപ്പിന്റെ പുതിയ പതിപ്പ് പുറത്തിറങ്ങിയിട്ടുണ്ട്. അത് ലഭിക്കാൻ <strong>അപ്‌ഗ്രേഡ് ചെയ്യുക</strong> ടാപ്പ് ചെയ്യുക, അല്ലെങ്കിൽ സന്ദേശം ക്ലോസ് ചെയ്യാൻ ഗുണനചിഹ്നം ടാപ്പ് ചെയ്യുക.</li>
+            <li><strong>ഈ കമ്മ്യൂണിറ്റിക്ക് നിങ്ങളുടെ ആപ്പ് വളരെ പഴയതാണ്:</strong> ഇവിടെ ആപ്പ് ശരിയായി പ്രവർത്തിക്കുന്നതിന് മുമ്പ് നിങ്ങൾ അപ്‌ഡേറ്റ് ചെയ്യേണ്ടതുണ്ട്. ഇത് ക്ലോസ് ചെയ്യാൻ കഴിയില്ല. <strong>അപ്‌ഗ്രേഡ് ചെയ്യുക</strong> ടാപ്പ് ചെയ്യുക.</li>
+        </ul>
+        <h2>ടാബുകൾ</h2>
+        <p>മുകളിലെ ബാറിന് താഴെ ടാബുകൾ ഉണ്ട്: <strong>ഹോം</strong>, <strong>മാർക്കറ്റ്</strong>, <strong>മാപ്പ്</strong>, <strong>ചാറ്റ്</strong>, <strong>കോമൺസ്</strong>, <strong>ലെഡ്ജർ</strong>. ഓരോ ടാബിന്റെയും പേര് അതിന്റെ ഐക്കണിന് മുകളിലാണ്. ഫോണിൽ, പയർ ഇല്ലാത്ത ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റി <strong>കോമൺസ്</strong> അല്ലെങ്കിൽ <strong>ലെഡ്ജർ</strong> കാണിക്കില്ല. ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിൽ നിന്നുള്ള ഉദാഹരണങ്ങളോടെ ആഗോള കമ്മ്യൂണിറ്റി രണ്ടും കാണിക്കുന്നു. &quot;പയറും ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയും&quot; കാണുക.</p>
+        <p>ഒരു നീണ്ട പേജിൽ, മുകളിലേക്ക് തിരികെ പോകാൻ നിങ്ങൾ നിൽക്കുന്ന ടാബിൽ തന്നെ വീണ്ടും ടാപ്പ് ചെയ്യുക. <strong>മാപ്പ്</strong> ഒഴികെയുള്ള എല്ലാ ടാബിലും ഇത് പ്രവർത്തിക്കും.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>ഹോം</strong><span>ഹോം എന്താണ്, ഫോണിലും വെബ് ആപ്പിലും കാണിക്കുന്ന കാർഡുകൾ, അവ ചേർക്കൽ, നീക്കൽ അല്ലെങ്കിൽ നീക്കം ചെയ്യൽ, താൽപ്പര്യങ്ങൾ തിരഞ്ഞെടുക്കൽ, സൈൻ ഔട്ട് ചെയ്യുമ്പോഴുള്ള സ്വകാര്യത.</span></a></li>
+            <li><a href="the-bean.html"><strong>ഈ ഗൈഡ്</strong><span>ഈ ഗൈഡ് എവിടെ കണ്ടെത്താം, എങ്ങനെ തിരയാം, ഇത് എപ്പോഴും അപ്‌ഡേറ്റായി തുടരുന്നത് എങ്ങനെ.</span></a></li>
+            <li><a href="communities.html"><strong>ഒന്നിലധികം കമ്മ്യൂണിറ്റികൾ</strong><span>ഒറ്റ അക്കൗണ്ട് ഉപയോഗിച്ച് പല കമ്മ്യൂണിറ്റികളിൽ പ്രവർത്തിക്കുക, അവയ്ക്കിടയിൽ മാറുക, പുതിയ വിലാസത്തിലേക്ക് കമ്മ്യൂണിറ്റിയെ പിന്തുടരുക, ഗ്ലോബൽ കമ്മ്യൂണിറ്റി കാണിക്കുന്നത് കാണുക.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

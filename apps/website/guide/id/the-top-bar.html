@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bilah atas — BeanPool members' guide</title>
+    <meta name="description" content="Ikon kacang, ikon kecil saat ada hal penting, dan tombol di kanan atas.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#getting-started">Memulai</a></p>
+        <h1>Bilah atas</h1>
+        <p class="lede">Ikon kacang, ikon kecil saat ada hal penting, dan tombol di kanan atas.</p>
+        <h2>Apa isinya</h2>
+        <p>Di ponsel, bilah di bagian atas layar sama pada setiap tab. Dari kiri ke kanan:</p>
+        <ul>
+            <li><strong>Ikon kacang:</strong> komunitasmu, dan panduan ini.</li>
+            <li><strong>Ikon &quot;membutuhkanmu&quot;:</strong> hanya muncul saat ada sesuatu yang menunggumu.</li>
+            <li><strong>Ikon ?, ikon undangan, Pengaturan, dan fotomu.</strong></li>
+        </ul>
+        <p>Di browser web bilah atas lebih sederhana. Bilah tersebut memiliki status koneksi di sebelah kiri, nama halaman, serta profilmu, tanda <strong>?</strong>, dan Pengaturan di sebelah kanan. Browser web tidak memiliki lembar kacang, tidak ada ikon &quot;membutuhkanmu&quot;, dan tidak ada ikon undangan: <strong>Invites</strong> berada di bawah <strong>Orang</strong>. Tab-tab berada di sepanjang bagian bawah, atau di sisi kiri pada layar lebar.</p>
+        <h2>Ikon kacang</h2>
+        <p>Ketuk ikon kacang di kiri atas untuk membuka lembar <strong>BEANPOOL</strong>. Lembar ini menampilkan:</p>
+        <ul>
+            <li><strong>Komunitas Anda:</strong> namanya di bagian atas, dan apakah servernya dapat dijangkau saat ini.</li>
+            <li><strong>KOMUNITASMU:</strong> ketuk salah satu untuk beralih ke sana, atau ketuk <strong>Tambah komunitas</strong>. <strong>Komunitas global</strong> selalu menjadi salah satunya: baris keduanya menyatakan apakah kamu dapat bergabung dengannya.</li>
+            <li><strong>Cari di panduan</strong>, lalu <strong>Panduan</strong> (cara kerja BeanPool, aturan, pertanyaan umum), <strong>Cara menggunakan aplikasi</strong> (panduan ini, bagian demi bagian), dan <strong>Proyek BeanPool</strong>, dengan <strong>What's new</strong>.</li>
+            <li><strong>beanpool.org:</strong> situs web publik, dengan <strong>Bagikan</strong> untuk mengirimkannya ke teman.</li>
+        </ul>
+        <p>Titik kecil pada ikon kacang memberi tahumu bagaimana keadaannya:</p>
+        <ul>
+            <li><strong>Hijau:</strong> terhubung, dan kamu adalah anggota di sini.</li>
+            <li><strong>Kuning:</strong> kamu berkunjung sebagai tamu.</li>
+            <li><strong>Merah:</strong> server komunitasmu tidak dapat dijangkau saat ini, atau ponsel ini belum terhubung ke suatu komunitas.</li>
+        </ul>
+        <p>Satu kali pemeriksaan lambat tidak mengubah titik menjadi merah. Titik hanya berubah menjadi merah setelah lebih dari satu kali pemeriksaan gagal berturut-turut.</p>
+        <h2>Ikon-ikon &quot;membutuhkanmu&quot;</h2>
+        <p>Di antara ikon kacang dan tombol-tombol di sebelah kanan, ikon-ikon kecil muncul hanya saat ada sesuatu yang membutuhkanmu. Setiap ikon mewakili suatu jenis hal. Ketuk ikon untuk langsung menuju ke sana.</p>
+        <ul>
+            <li><strong>Jabat tangan:</strong> sebuah kesepakatan menunggumu. Seseorang sedang menunggumu menerima permintaan mereka, atau kesepakatan yang sedang kamu jalani belum selesai. Jika hanya ada satu, ketukan akan membuka kesepakatan tersebut. Jika ada lebih banyak, ketukan akan membuka <strong>Kesepakatan Saya</strong>.</li>
+            <li><strong>Kotak suara:</strong> pemungutan suara yang belum kamu berikan suara. Ketukan akan membuka <strong>Sarana Bersama</strong>, pada <strong>Keputusan</strong>. Jika pemungutan suara pertama adalah pemungutan suara dalam grup atau pemungutan suara pengurus dalam suatu usaha, ketukan akan membuka grup atau usaha tersebut sebagai gantinya. Pemungutan suara yang belum bisa kamu ikuti tidak dihitung di sini, misalnya yang mengharuskanmu menyelesaikan transaksi terlebih dahulu.</li>
+            <li><strong>Gelembung percakapan:</strong> pesan yang belum dibaca dari seseorang. Jika berasal dari satu orang, ketukan akan membuka obrolan tersebut. Jika berasal dari beberapa orang, ketukan akan membuka <strong>Obrolan</strong>, pada <strong>Pesan</strong>, yang hanya menampilkan pesan yang belum dibaca.</li>
+            <li><strong>Sekelompok orang:</strong> baris pesan baru di grupmu, obrolan usaha, atau obrolan acara. Obrolan yang telah kamu bisukan tetap senyap di sini. Ketukan akan membuka obrolan tersebut, atau <strong>Obrolan</strong>, pada <strong>Grup</strong>, jika ada beberapa obrolan.</li>
+            <li><strong>Perisai:</strong> hanya untuk orang-orang yang membantu mengelola komunitasmu. Ikon ini muncul saat ada tugas admin yang menunggu, seperti laporan yang harus ditinjau atau transaksi terhenti yang memerlukan keputusan. Ketukan akan meminta kunci layar ponselmu, lalu membuka pengaturan komunitasmu pada tugas tersebut. Jika pengaturan komunitasmu menggunakan kode masuk, itu juga akan diminta.</li>
+        </ul>
+        <p>Ikon-ikon bertumpuk dari sebelah kanan. Yang paling penting berada di sebelah ikon ?, dan mempertahankan posisinya saat ikon lain datang dan pergi.</p>
+        <h3>Angka dan warna</h3>
+        <ul>
+            <li>Angka kecil pada ikon berarti lebih dari satu hal dari jenis tersebut: misalnya 3 orang yang menulis pesan kepadamu. Ikon menampilkan <strong>9+</strong> di atas 9.</li>
+            <li>Ikon berubah menjadi <strong>kuning</strong> saat lebih mendesak: kesepakatan yang menunggumu, pekerjaan admin, atau pemungutan suara yang ditutup dalam 2 hari. Tidak ada yang berubah menjadi merah.</li>
+        </ul>
+        <h3>Pada layar kecil</h3>
+        <p>Jika tidak ada cukup ruang untuk setiap ikon, ruang terakhir menampilkan <strong>•••</strong>. Ketuk untuk melihat seluruh daftarnya, <strong>Membutuhkanmu</strong>, dalam kata-kata. Ketuk satu baris untuk menuju ke sana.</p>
+        <h3>Bilah yang sepi adalah kabar baik</h3>
+        <p>Ketika tidak ada yang membutuhkanmu, tidak ada ikon sama sekali. Kamu tidak melewatkan apa pun. Ikon-ikon diperbarui saat kamu bernavigasi di dalam aplikasi dan saat kamu kembali ke aplikasi.</p>
+        <h2>Gabung atau Hubungkan</h2>
+        <p>Alih-alih ikon, kamu mungkin melihat tombol:</p>
+        <ul>
+            <li><strong>Gabung</strong> (kuning): kamu berkunjung sebagai tamu. Ketuk untuk membuka <strong>Invites</strong>. Di komunitas lokal kamu bergabung di sana dengan undangan. Di komunitas global, ketuk <strong>Join with 12 words or a sign-in</strong> (<strong>Join with a sign-in</strong> jika komunitas hanya menerima akun masuk).</li>
+            <li><strong>Hubungkan</strong> (merah): ponsel ini belum terhubung ke suatu komunitas. Ketuk untuk membuka <strong>Pengaturan</strong>, tempat kamu dapat menambahkannya.</li>
+        </ul>
+        <p>Saat salah satu tombol ini muncul, ikon undangan disembunyikan.</p>
+        <h2>Tombol-tombol di sebelah kanan</h2>
+        <ul>
+            <li><strong>Ikon ?</strong> (tanda tanya dalam lingkaran): bantuan untuk layar yang sedang kamu buka. Ikon ini membuka lembar singkat yang menjelaskan fungsi layar tersebut, lalu <strong>Read the guide page</strong>, <strong>Cari di panduan</strong>, dan <strong>Ikuti tur lagi</strong>. Ikon ini ada di setiap tab, untuk anggota dan tamu. Di web app ikon ini berada di antara fotomu dan Pengaturan di bagian atas, dan di samping Pengaturan di bagian bawah bilah samping pada layar lebar.</li>
+            <li><strong>Ikon undangan</strong> (orang dengan tanda plus): membuka <strong>Invites</strong>, untuk mengundang seseorang atau bergabung ke komunitas lain. Lihat &quot;Joining BeanPool&quot;.</li>
+            <li><strong>Pengaturan</strong> (bilah geser): membuka <strong>Pengaturan</strong>. Ketuk lagi untuk kembali ke tempatmu sebelumnya.</li>
+            <li><strong>Fotomu:</strong> membuka profilmu sendiri, sebagaimana orang lain melihatnya.</li>
+        </ul>
+        <h2>Pesan pembaruan</h2>
+        <p>Terkadang bilah hijau muncul di bawah bilah atas:</p>
+        <ul>
+            <li><strong>Update available:</strong> versi aplikasi yang lebih baru telah dirilis. Ketuk <strong>Tingkatkan</strong> untuk mendapatkannya, atau tanda silang untuk menutup pesan.</li>
+            <li><strong>Your app is too old for this community:</strong> kamu perlu memperbarui sebelum aplikasi dapat berfungsi sebagaimana mestinya di sini. Pesan ini tidak dapat ditutup. Ketuk <strong>Tingkatkan</strong>.</li>
+        </ul>
+        <h2>Tab-tab aplikasi</h2>
+        <p>Di bawah bilah atas terdapat tab-tab: <strong>Beranda</strong>, <strong>Pasar</strong>, <strong>Peta</strong>, <strong>Obrolan</strong>, <strong>Sarana Bersama</strong>, dan <strong>Buku kas</strong>. Nama setiap tab berada di atas ikonnya. Di ponsel, suatu komunitas lokal tanpa Kacang tidak menampilkan <strong>Sarana Bersama</strong> atau <strong>Buku kas</strong>. Komunitas global menampilkan keduanya, dengan contoh dari komunitas lokal. Lihat &quot;Beans and the global community&quot;.</p>
+        <p>Pada halaman yang panjang, ketuk tab yang sedang kamu buka untuk langsung melompat kembali ke bagian paling atas. Ini berfungsi pada setiap tab kecuali <strong>Peta</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Beranda</strong><span>Apa itu Beranda, kartu apa saja yang muncul di ponsel dan web app, cara menambah, memindah, atau menghapusnya, memilih minatmu, dan privasi saat keluar.</span></a></li>
+            <li><a href="the-bean.html"><strong>Panduan ini</strong><span>Di mana menemukan panduan ini, cara mencarinya, dan bagaimana panduan selalu diperbarui.</span></a></li>
+            <li><a href="communities.html"><strong>Lebih dari satu komunitas</strong><span>Bergabung di beberapa komunitas dengan satu akun, berpindah antar komunitas, mengikuti komunitas saat pindah alamat, dan melihat apa yang ditampilkan komunitas global.</span></a></li>
+            <li><a href="../my-deals.html"><strong>My Deals</strong><span>One place for every trade you are in, every post you have up, and your past trades.</span></a></li>
+            <li><a href="../decisions.html"><strong>Voting on a Decision</strong><span>Find open Decisions, vote, change your vote, and see results.</span></a></li>
+            <li><a href="../messages.html"><strong>Messages</strong><span>Start a chat, send photos, reply, react, edit, delete, mute, and what is private.</span></a></li>
+            <li><a href="../notifications.html"><strong>Notifications</strong><span>Choose which alerts reach your phone, and when events remind you.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 1.</p>
+    </main>
+</body>
+</html>

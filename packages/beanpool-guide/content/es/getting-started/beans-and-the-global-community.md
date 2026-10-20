@@ -54,7 +54,7 @@ Toca cualquiera de ellos para abrir **Por qué esto vive en una comunidad local*
 Las pantallas con el marcador muestran **Valle de Ejemplo**: una comunidad ficticia, para que puedas ver las pantallas de una comunidad local con contenido en ellas.
 
 - **Registro:** un miembro de ejemplo con 85 frijoles, margen para gastar hasta −200, una insignia de confianza y algunos intercambios recientes, como pan, una hora de jardinería y algunos plantines.
-- **Comunes:** Example Valley Bakery, un emprendimiento que sus miembros custodian, y una Decisión: un área de compostaje, pagada con los frijoles compartidos de Bienes comunes.
+- **Bienes comunes:** Example Valley Bakery, un emprendimiento que sus miembros custodian, y una Decisión: un área de compostaje, pagada con los frijoles compartidos de Bienes comunes.
 - **Mis tratos,** en el Mercado: tres tratos de ejemplo: uno esperando por ti, uno con los frijoles retenidos de forma segura y uno completado.
 
 Nadie en Example Valley tiene nombre propio. Verás "un vecino", "Bienes comunes" o "Panadería de Valle de Ejemplo". Nada de esto es real ni te pertenece.
@@ -85,9 +85,9 @@ Si algún día la comunidad global puede verificar quién es quién, algunas de 
 
 Una comunidad local funciona en su propio servidor pequeño, administrado por alguien local. Esa persona puedes ser tú.
 
-- **Cuánto cuesta:** una computadora de repuesto que permanezca encendida en casa, o un pequeño servidor alquilado por unos pocos dólares al mes. El software es gratuito.
+- **Lo que cuesta:** una computadora de repuesto que permanezca encendida en casa, o un pequeño servidor alquilado por unos pocos dólares al mes. El software es gratuito.
 - **Quién la administra:** tú, en tu propia máquina o en la que alquiles. No necesita beanpool.org: puede tener su propia dirección web.
-- **Qué responsabilidades asumes:** los reportes de tus miembros llegan a ti. Los datos de la comunidad te corresponden a ti para respaldarlos, con un código de recuperación. Mantén dos propietarios y mantén el servidor encendido y actualizado.
+- **De qué te haces cargo:** los reportes de tus miembros llegan a ti. Los datos de la comunidad te corresponden a ti para respaldarlos, con un código de recuperación. Mantén dos propietarios y mantén el servidor encendido y actualizado.
 - **Lo que nunca ves:** los chats de tus miembros con otra persona. Están cifrados para que el servidor no pueda leerlos.
 - **Cuánto tiempo toma:** aproximadamente media hora, para alguien que pueda seguir instrucciones paso a paso.
 
@@ -100,7 +100,7 @@ Los pasos se encuentran en "Primeros pasos", en la guía para administradores de
 En el teléfono:
 
 - **Comunidades cerca de ti** lista las comunidades más cercanas a ti que decidieron figurar en la lista.
-- Toca **Solicitar unirse**: un miembro de allí puede dejarte entrar. Donde la comunidad permite que solo sus administradores inviten, lo hace un propietario o administrador.
+- Toca **Pedir unirme**: un miembro de allí puede dejarte entrar. Donde la comunidad permite que solo sus administradores inviten, lo hace un propietario o administrador.
 - ¿Todavía no hay ninguna cerca de ti? **Avisarme cuando empiece una aquí** te avisa cuando comience una.
 
 En la app web, la tarjeta **Encuentra tu comunidad** de Inicio enlaza cada comunidad cercana a ti a su propia página.

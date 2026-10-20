@@ -29,7 +29,7 @@ Una comunidad que no haya publicado su dirección aparece en la lista, pero aún
 
 ## Pedir unirte
 
-- Toca **Solicitar unirse** en una comunidad.
+- Toca **Pedir unirme** en una comunidad.
 - Revisa tu nombre y escribe unas palabras sobre ti, hasta 280 caracteres: dónde vives, qué te gustaría compartir o aprender.
 - Toca **Enviar**.
 

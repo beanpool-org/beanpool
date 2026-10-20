@@ -418,6 +418,7 @@ function normaliseBrowserLang(tag) {
     if (lower === 'in' || lower === 'id') return 'id';
     if (lower === 'tl' || lower === 'fil') return 'fil';
     const primary = lower.split(/[-_]/)[0];
+    if (primary === 'en') return 'en';
     return GUIDE_LANGS.includes(primary) ? primary : null;
 }
 
@@ -437,28 +438,32 @@ function initLanguageBanner() {
     let matched = null;
     for (const raw of navLangs) {
         matched = normaliseBrowserLang(raw);
-        if (matched && matched !== 'en') break;
-        matched = null;
+        if (matched) break;
     }
-    if (!matched) return;
+    if (!matched || matched === 'en') return;
+
+    // Figure out target page
+    const UNTRANSLATED_PAGES = ['privacy.html', 'terms.html', 'data-deletion.html'];
+    let pName = 'index.html';
+    if (typeof window !== 'undefined' && window.location && window.location.pathname) {
+        const seg = window.location.pathname.split('/').filter(Boolean).pop();
+        if (seg && seg.endsWith('.html')) {
+            if (UNTRANSLATED_PAGES.includes(seg)) return; // Do not recommend non-existent legal translations
+            pName = seg;
+        }
+    }
 
     const langName = LANGUAGE_NAMES[matched] || matched;
     const banner = document.createElement('div');
     banner.className = 'read-in-banner';
     banner.id = 'read-in-banner';
 
-    // Figure out target page
-    let pName = 'index.html';
-    if (typeof window !== 'undefined' && window.location && window.location.pathname) {
-        const seg = window.location.pathname.split('/').filter(Boolean).pop();
-        if (seg && seg.endsWith('.html')) pName = seg;
-    }
-
     const link = document.createElement('a');
-    link.href = `${matched}/${pName}`;
+    link.href = `/${matched}/${pName}`;
     link.textContent = word('readIn', langName);
     link.addEventListener('click', () => {
-        document.cookie = `beanpool_lang=${matched};path=/;max-age=31536000;SameSite=Lax`;
+        const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';
+        document.cookie = `beanpool_lang=${matched};path=/;max-age=31536000;SameSite=Lax${secure}`;
     });
 
     const closeBtn = document.createElement('button');
@@ -467,13 +472,18 @@ function initLanguageBanner() {
     closeBtn.setAttribute('aria-label', 'Dismiss language recommendation');
     closeBtn.textContent = '✕';
     closeBtn.addEventListener('click', () => {
-        document.cookie = 'beanpool_lang=en;path=/;max-age=31536000;SameSite=Lax';
+        const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';
+        document.cookie = `beanpool_lang=en;path=/;max-age=31536000;SameSite=Lax${secure}`;
         banner.remove();
+        if (document.body) {
+            document.body.classList.remove('has-read-in-banner');
+        }
     });
 
     banner.appendChild(link);
     banner.appendChild(closeBtn);
     if (document.body) {
+        document.body.classList.add('has-read-in-banner');
         document.body.prepend(banner);
     }
 }

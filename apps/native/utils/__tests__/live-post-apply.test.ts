@@ -262,7 +262,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
     function groupOffer(extra: Record<string, unknown> = {}) {
         return offer({
             id: 'post-g', category: 'tools', title: 'Box trailer for the working bee', credits: 20, priceType: 'daily',
-            repeatable: true, cashAlsoNeeded: true, status: 'pending', acceptedBy: BOB, acceptedByCallsign: 'Bob',
+            repeatable: true, lendable: true, cashAlsoNeeded: true, status: 'pending', acceptedBy: BOB, acceptedByCallsign: 'Bob',
             acceptedAt: '2026-09-24T01:30:00.000Z', pendingTransactionId: 'tx-9', originNode: 'test.beanpool.org',
             photos: ['/api/marketplace/posts/post-g/photos/0?v=0'], reach: 'local',
             audienceScope: 'group', targetGroupId: 'g1', targetGroupName: 'Repair group',
@@ -273,7 +273,7 @@ describe('every column the node sends survives the write, on a sync and on a pus
     const GROUP_ROW = {
         id: 'post-g', type: 'offer', category: 'tools', title: 'Box trailer for the working bee', description: 'A bag',
         credits: 20, author_pubkey: ANN, created_at: '2026-09-24T01:00:00.000Z', updated_at: '2026-09-24T01:00:00.000Z',
-        active: 1, status: 'pending', price_type: 'daily', repeatable: 1, cash_also_needed: 1,
+        active: 1, status: 'pending', price_type: 'daily', repeatable: 1, lendable: 1, cash_also_needed: 1,
         accepted_by: BOB, accepted_by_callsign: 'Bob', accepted_at: '2026-09-24T01:30:00.000Z',
         pending_transaction_id: 'tx-9', completed_at: null, lat: -28.5, lng: 153.4, origin_node: 'test.beanpool.org',
         photos: '["/api/marketplace/posts/post-g/photos/0?v=0"]', reach: 'local', reach_peers: null,

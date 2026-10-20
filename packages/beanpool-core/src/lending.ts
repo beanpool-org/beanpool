@@ -36,6 +36,27 @@ export function loanDays(priceType: string | null | undefined, units: unknown): 
     return null;
 }
 
+export type DealQuantityUnit = 'hour' | 'day' | 'week' | 'month';
+
+/**
+ * The unit a deal's quantity (`marketplace_transactions.hours`) is counted in: hours for an hourly price, days for daily,
+ * weeks for weekly, months for monthly, and days for a lendable Offer on one fee (fixed, Free included). Null for a
+ * fixed-price listing that is not lendable (no quantity line).
+ */
+export function dealQuantityUnit(
+    priceType: string | null | undefined,
+    lendable?: unknown,
+): DealQuantityUnit | null {
+    const pt = priceType || 'fixed';
+    if (pt === 'hourly') return 'hour';
+    if (pt === 'daily') return 'day';
+    if (pt === 'weekly') return 'week';
+    if (pt === 'monthly') return 'month';
+    const isLend = lendable === true || lendable === 1 || lendable === '1' || lendable === 'true';
+    if (pt === 'fixed' && isLend) return 'day';
+    return null;
+}
+
 /**
  * When a loan is due back: the day it was handed over (the listing's `accepted_at`) plus its length, as an ISO time. Null when
  * either is unknown. A date, never a name: every reader of the listing may be told it (design §2.3).

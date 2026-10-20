@@ -1080,6 +1080,7 @@ export interface MarketplacePost {
     active: boolean;
     status: 'active' | 'pending' | 'paused' | 'completed' | 'cancelled';
     repeatable: boolean;
+    lendable?: boolean;
     /** #108: a real cash outlay is involved (fuel / consumables used up doing the job). No amount by
      *  design — the app never touches the money, so terms are agreed in the chat. */
     cashAlsoNeeded?: boolean;

@@ -1,50 +1,159 @@
 /**
- * BeanPool.org — Live Node Directory, Interactive Map, Newsletter & Utilities
+ * BeanPool.org — Live Node Directory, Interactive Map, Newsletter, Language Banner & Utilities
  * 
  * Polls known BeanPool node endpoints for directory info,
  * then displays them as markers on a Leaflet map with radius circles.
+ * All user-facing strings adapt by document.documentElement.lang via WORDS.
  */
 
 const SUPABASE_URL = 'https://dpemwoermzkaxoctafzg.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_fmlYuaf6NCkTI2IwWnvZmw_bOzo-PrF';
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = (typeof window !== 'undefined' && window.supabase)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
+
+// ======================== WORDS & LOCALIZATION ========================
+const GUIDE_LANGS = [
+    'es', 'pt', 'hi', 'bn', 'fr', 'ar', 'id', 'ru',
+    'zh-Hans', 'zh-Hant', 'it', 'de', 'tr', 'sw', 'ml', 'ta',
+    'uk', 'ur', 'fa', 'vi', 'el', 'fil', 'ja', 'ko'
+];
+
+const LANGUAGE_NAMES = {
+    en: 'English', es: 'Español', pt: 'Português', hi: 'हिन्दी', bn: 'বাংলা', fr: 'Français', ar: 'العربية',
+    id: 'Bahasa Indonesia', ru: 'Русский', 'zh-Hans': '简体中文', 'zh-Hant': '繁體中文', it: 'Italiano', de: 'Deutsch',
+    tr: 'Türkçe', sw: 'Kiswahili', ml: 'മലയാളം', ta: 'தமிழ்', uk: 'Українська', ur: 'اردو', fa: 'فارسی',
+    vi: 'Tiếng Việt', el: 'Ελληνικά', fil: 'Filipino', ja: '日本語', ko: '한국어',
+};
+
+const WORDS = {
+    en: {
+        noneNear: 'No community near you yet.',
+        notLoaded: "The list of communities isn't available right now. Try again soon.",
+        members: (n) => `${n} members`,
+        radius: (km) => `${km}km radius`,
+        visit: (host) => `Visit ${host} →`,
+        subscribing: 'Subscribing...',
+        alreadySubscribed: "You're already subscribed! 🫘",
+        checkInbox: 'Check your inbox for a confirmation email! 🫘',
+        somethingWrong: 'Something went wrong. Please try again.',
+        subscribe: 'Subscribe',
+        readIn: (lang) => `Read this in ${lang} →`,
+    },
+    es: {
+        noneNear: 'Aún no hay una comunidad cerca de ti.',
+        notLoaded: 'La lista de comunidades no está disponible en este momento. Inténtalo de nuevo pronto.',
+        members: (n) => `${n} miembros`,
+        radius: (km) => `Radio de ${km}km`,
+        visit: (host) => `Visitar ${host} →`,
+        subscribing: 'Suscribiendo...',
+        alreadySubscribed: '¡Ya estás suscrito! 🫘',
+        checkInbox: '¡Revisa tu bandeja de entrada para el correo de confirmación! 🫘',
+        somethingWrong: 'Algo salió mal. Por favor, inténtalo de nuevo.',
+        subscribe: 'Suscribirse',
+        readIn: (lang) => `Leer esto en ${lang} →`,
+    },
+    pt: {
+        noneNear: 'Ainda não há comunidade perto de você.',
+        notLoaded: 'A lista de comunidades não está disponível no momento. Tente novamente em breve.',
+        members: (n) => `${n} membros`,
+        radius: (km) => `Raio de ${km}km`,
+        visit: (host) => `Visitar ${host} →`,
+        subscribing: 'Inscrevendo...',
+        alreadySubscribed: 'Você já está inscrito! 🫘',
+        checkInbox: 'Verifique sua caixa de entrada para o e-mail de confirmação! 🫘',
+        somethingWrong: 'Algo deu errado. Por favor, tente novamente.',
+        subscribe: 'Inscrever-se',
+        readIn: (lang) => `Ler isto em ${lang} →`,
+    },
+    fr: {
+        noneNear: 'Pas encore de communauté près de chez vous.',
+        notLoaded: 'La liste des communautés n\'est pas disponible pour le moment. Réessayez bientôt.',
+        members: (n) => `${n} membres`,
+        radius: (km) => `Rayon de ${km}km`,
+        visit: (host) => `Visiter ${host} →`,
+        subscribing: 'Inscription en cours...',
+        alreadySubscribed: 'Vous êtes déjà inscrit ! 🫘',
+        checkInbox: 'Vérifiez votre boîte de réception pour un e-mail de confirmation ! 🫘',
+        somethingWrong: 'Un problème est survenu. Veuillez réessayer.',
+        subscribe: 'S\'inscrire',
+        readIn: (lang) => `Lire en ${lang} →`,
+    },
+    ru: {
+        noneNear: 'Рядом с вами пока нет сообщества.',
+        notLoaded: 'Список сообществ сейчас недоступен. Попробуйте позже.',
+        members: (n) => `${n} участников`,
+        radius: (km) => `Радиус ${km} км`,
+        visit: (host) => `Перейти на ${host} →`,
+        subscribing: 'Подписка...',
+        alreadySubscribed: 'Вы уже подписаны! 🫘',
+        checkInbox: 'Проверьте почту для подтверждения! 🫘',
+        somethingWrong: 'Что-то пошло не так. Пожалуйста, попробуйте еще раз.',
+        subscribe: 'Подписаться',
+        readIn: (lang) => `Читать на ${lang} →`,
+    },
+    ar: {
+        noneNear: 'لا يوجد مجتمع بالقرب منك بعد.',
+        notLoaded: 'قائمة المجتمعات غير متاحة حالياً. حاول مرة أخرى قريباً.',
+        members: (n) => `${n} أعضاء`,
+        radius: (km) => `نصف القطر ${km} كم`,
+        visit: (host) => `زيارة ${host} ←`,
+        subscribing: 'جارٍ الاشتراك...',
+        alreadySubscribed: 'أنت مشترك بالفعل! 🫘',
+        checkInbox: 'تحقق من بريدك الإلكتروني للحصول على رسالة التأكيد! 🫘',
+        somethingWrong: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.',
+        subscribe: 'اشتراك',
+        readIn: (lang) => `اقرأ هذا باللغة ${lang} ←`,
+    }
+};
+
+function pageLang() {
+    return (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) || 'en';
+}
+
+function word(key, ...args) {
+    const lang = pageLang();
+    const table = WORDS[lang] || WORDS.en;
+    const val = (table && table[key] !== undefined) ? table[key] : WORDS.en[key];
+    return typeof val === 'function' ? val(...args) : val;
+}
 
 // ======================== MAP INIT ========================
-const nodesMap = L.map('nodes-map', {
+const mapContainer = typeof document !== 'undefined' ? document.getElementById('nodes-map') : null;
+const nodesMap = (mapContainer && typeof L !== 'undefined') ? L.map('nodes-map', {
     center: [20, 0],
     zoom: 2,
     zoomControl: true,
     attributionControl: false,
     scrollWheelZoom: false,
-});
+}) : null;
 
-// The tiles' credit (ODbL), said once: the attribution control shows each layer's own attribution, so it is given
-// here and nowhere else (an addAttribution as well showed it twice).
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-}).addTo(nodesMap);
+if (nodesMap) {
+    // The tiles' credit (ODbL), said once: the attribution control shows each layer's own attribution, so it is given
+    // here and nowhere else (an addAttribution as well showed it twice).
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(nodesMap);
 
-L.control.attribution({ position: 'bottomright', prefix: false }).addTo(nodesMap);
+    L.control.attribution({ position: 'bottomright', prefix: false }).addTo(nodesMap);
+}
 
 // ======================== NODE POLLING ========================
-const nodeIcon = L.divIcon({
+const nodeIcon = (typeof L !== 'undefined' && L.divIcon) ? L.divIcon({
     html: '<div class="map-pulse-marker"><div class="map-pulse-core"></div><div class="map-pulse-glow"></div></div>',
     className: '',
     // 44px to tap; .map-pulse-marker keeps the pin where it was in a 24px box
     iconSize: [44, 44],
     iconAnchor: [22, 22],
-});
+}) : null;
 
 let totalMembers = 0;
 let totalNodes = 0;
 // Whether the directory has answered once: until it has, an empty map is unknown, never "none".
 let directoryLoaded = false;
-// The apps' words (@beanpool/core find-community.ts FIND_COMMUNITY_WORDS; test-website-directory-map.ts keeps them equal).
-const NONE_NEAR = 'No community near you yet.';
-const NOT_LOADED = "The list of communities isn't available right now. Try again soon.";
 const bounds = [];
-const markersLayer = L.layerGroup().addTo(nodesMap);
+const markersLayer = (nodesMap && typeof L !== 'undefined') ? L.layerGroup().addTo(nodesMap) : null;
 
 // ======================== DIRECTORY ROWS ========================
 // Every field of a directory row is what some community published, and anyone who runs a node can publish one. This is
@@ -131,8 +240,8 @@ function directoryPopup(row) {
     box.appendChild(element('strong', null, row.name));
     box.appendChild(element('br'));
     const facts = [];
-    if (row.memberCount !== null) facts.push(`${row.memberCount} members`);
-    if (row.radiusKm !== null) facts.push(`${row.radiusKm}km radius`);
+    if (row.memberCount !== null) facts.push(word('members', row.memberCount));
+    if (row.radiusKm !== null) facts.push(word('radius', row.radiusKm));
     box.appendChild(element('span', 'color:var(--text-dim);font-size:0.85em;', facts.join(' · ')));
     if (row.email || row.phone) {
         box.appendChild(element('br'));
@@ -144,7 +253,7 @@ function directoryPopup(row) {
     }
     if (row.url) {
         box.appendChild(element('br'));
-        const visit = element('a', 'color:var(--success-ink); text-decoration:none; font-size:0.85em; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
+        const visit = element('a', 'color:var(--success-ink); text-decoration:none; font-size:0.85em; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600;', word('visit', new URL(row.url).host));
         visit.setAttribute('href', row.url);
         visit.setAttribute('target', '_blank');
         visit.setAttribute('rel', 'noopener');
@@ -156,14 +265,15 @@ function directoryPopup(row) {
 /** A popup fits inside the map and opens below the zoom buttons (they sit over popups), so every link in it can be tapped. */
 function popupOptions() {
     const map = document.getElementById('nodes-map');
-    const zoom = map.querySelector('.leaflet-control-zoom');
+    const zoom = map ? map.querySelector('.leaflet-control-zoom') : null;
     return {
-        maxWidth: Math.max(120, Math.min(300, map.clientWidth - 64)),
+        maxWidth: Math.max(120, Math.min(300, (map ? map.clientWidth : 320) - 64)),
         autoPanPaddingTopLeft: [5, zoom ? zoom.offsetTop + zoom.offsetHeight + 5 : 5],
     };
 }
 
 async function pollNodes() {
+    if (!supabaseClient) return;
 
     try {
         const { data: nodes, error } = await supabaseClient
@@ -175,7 +285,7 @@ async function pollNodes() {
         directoryLoaded = true;
         totalNodes = 0;
         totalMembers = 0;
-        markersLayer.clearLayers();
+        if (markersLayer) markersLayer.clearLayers();
 
         (Array.isArray(nodes) ? nodes : []).forEach((node) => {
             const row = readRow(node);
@@ -183,20 +293,22 @@ async function pollNodes() {
             totalMembers += row.memberCount || 0;
             if (row.lat === null || row.lng === null) return;
 
-            L.marker([row.lat, row.lng], { icon: nodeIcon })
-                .bindPopup(directoryPopup(row), popupOptions())
-                .addTo(markersLayer);
+            if (markersLayer && nodeIcon) {
+                L.marker([row.lat, row.lng], { icon: nodeIcon })
+                    .bindPopup(directoryPopup(row), popupOptions())
+                    .addTo(markersLayer);
 
-            if (row.radiusKm !== null) {
-                L.circle([row.lat, row.lng], {
-                    radius: row.radiusKm * 1000,
-                    color: '#f59e0b',
-                    fillColor: '#f59e0b',
-                    fillOpacity: 0.06,
-                    weight: 1.5,
-                    dashArray: '6 4',
-                    interactive: false,
-                }).addTo(markersLayer);
+                if (row.radiusKm !== null) {
+                    L.circle([row.lat, row.lng], {
+                        radius: row.radiusKm * 1000,
+                        color: '#f59e0b',
+                        fillColor: '#f59e0b',
+                        fillOpacity: 0.06,
+                        weight: 1.5,
+                        dashArray: '6 4',
+                        interactive: false,
+                    }).addTo(markersLayer);
+                }
             }
             bounds.push([row.lat, row.lng]);
         });
@@ -205,23 +317,26 @@ async function pollNodes() {
     }
 
     // Update map stats
-    document.getElementById('stat-nodes').textContent = totalNodes || '—';
-    document.getElementById('stat-members').textContent = totalMembers || '—';
+    const statNodes = document.getElementById('stat-nodes');
+    const statMembers = document.getElementById('stat-members');
+    if (statNodes) statNodes.textContent = totalNodes || '—';
+    if (statMembers) statMembers.textContent = totalMembers || '—';
 
     // Nothing on the map: "none" with Start a community once the directory answered with no rows; before it ever has
     // (a failed first read), the truth, and no Start.
     const emptyState = document.getElementById('map-empty-state');
+    const mapEl = document.getElementById('nodes-map');
     if (totalNodes === 0) {
-        document.getElementById('nodes-map').style.opacity = '0.5';
+        if (mapEl) mapEl.style.opacity = '0.5';
         if (emptyState) {
             emptyState.style.display = 'block';
-            const text = document.getElementById('map-empty-text');
-            const start = document.getElementById('map-empty-start');
-            if (text) text.textContent = directoryLoaded ? NONE_NEAR : NOT_LOADED;
-            if (start) start.style.display = directoryLoaded ? '' : 'none';
+            const textEl = document.getElementById('map-empty-text');
+            const startEl = document.getElementById('map-empty-start');
+            if (textEl) textEl.textContent = directoryLoaded ? word('noneNear') : word('notLoaded');
+            if (startEl) startEl.style.display = directoryLoaded ? '' : 'none';
         }
     } else {
-        document.getElementById('nodes-map').style.opacity = '1';
+        if (mapEl) mapEl.style.opacity = '1';
         if (emptyState) emptyState.style.display = 'none';
     }
 }
@@ -243,14 +358,14 @@ function copyCode(btn) {
 const newsletterForm = document.getElementById('newsletter-form');
 const newsletterStatus = document.getElementById('newsletter-status');
 
-if (newsletterForm) {
+if (newsletterForm && supabaseClient) {
     newsletterForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const email = document.getElementById('newsletter-email').value.trim();
         if (!email) return;
 
         const btn = newsletterForm.querySelector('button');
-        btn.textContent = 'Subscribing...';
+        btn.textContent = word('subscribing');
         btn.disabled = true;
         newsletterStatus.textContent = '';
         newsletterStatus.className = 'newsletter-status';
@@ -268,7 +383,7 @@ if (newsletterForm) {
 
             if (error) {
                 if (error.message.includes('already registered')) {
-                    newsletterStatus.textContent = "You're already subscribed! 🫘";
+                    newsletterStatus.textContent = word('alreadySubscribed');
                     newsletterStatus.className = 'newsletter-status success';
                 } else {
                     throw error;
@@ -279,19 +394,88 @@ if (newsletterForm) {
                     .from('newsletter_subscribers')
                     .insert({ email });
 
-                newsletterStatus.textContent = 'Check your inbox for a confirmation email! 🫘';
+                newsletterStatus.textContent = word('checkInbox');
                 newsletterStatus.className = 'newsletter-status success';
                 document.getElementById('newsletter-email').value = '';
             }
         } catch (err) {
             console.error('Newsletter signup failed:', err);
-            newsletterStatus.textContent = 'Something went wrong. Please try again.';
+            newsletterStatus.textContent = word('somethingWrong');
             newsletterStatus.className = 'newsletter-status error';
         }
 
-        btn.textContent = 'Subscribe';
+        btn.textContent = word('subscribe');
         btn.disabled = false;
     });
+}
+
+// ======================== LANGUAGE RECOMMENDATION BANNER ========================
+function normaliseBrowserLang(tag) {
+    if (!tag || typeof tag !== 'string') return null;
+    const lower = tag.toLowerCase().trim();
+    if (lower === 'zh-cn' || lower === 'zh-sg' || lower === 'zh-hans') return 'zh-Hans';
+    if (lower === 'zh-tw' || lower === 'zh-hk' || lower === 'zh-mo' || lower === 'zh-hant') return 'zh-Hant';
+    if (lower === 'in' || lower === 'id') return 'id';
+    if (lower === 'tl' || lower === 'fil') return 'fil';
+    const primary = lower.split(/[-_]/)[0];
+    return GUIDE_LANGS.includes(primary) ? primary : null;
+}
+
+function initLanguageBanner() {
+    if (pageLang() !== 'en') return;
+    if (typeof document === 'undefined' || typeof navigator === 'undefined') return;
+    if (document.cookie && /(?:^|;\s*)beanpool_lang=/.test(document.cookie)) return;
+
+    let navLangs = [];
+    if (navigator.languages && navigator.languages.length) {
+        navLangs = Array.from(navigator.languages);
+    }
+    if (navigator.language && !navLangs.includes(navigator.language)) {
+        navLangs.unshift(navigator.language);
+    }
+
+    let matched = null;
+    for (const raw of navLangs) {
+        matched = normaliseBrowserLang(raw);
+        if (matched && matched !== 'en') break;
+        matched = null;
+    }
+    if (!matched) return;
+
+    const langName = LANGUAGE_NAMES[matched] || matched;
+    const banner = document.createElement('div');
+    banner.className = 'read-in-banner';
+    banner.id = 'read-in-banner';
+
+    // Figure out target page
+    let pName = 'index.html';
+    if (typeof window !== 'undefined' && window.location && window.location.pathname) {
+        const seg = window.location.pathname.split('/').filter(Boolean).pop();
+        if (seg && seg.endsWith('.html')) pName = seg;
+    }
+
+    const link = document.createElement('a');
+    link.href = `${matched}/${pName}`;
+    link.textContent = word('readIn', langName);
+    link.addEventListener('click', () => {
+        document.cookie = `beanpool_lang=${matched};path=/;max-age=31536000;SameSite=Lax`;
+    });
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'read-in-close';
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Dismiss language recommendation');
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => {
+        document.cookie = 'beanpool_lang=en;path=/;max-age=31536000;SameSite=Lax';
+        banner.remove();
+    });
+
+    banner.appendChild(link);
+    banner.appendChild(closeBtn);
+    if (document.body) {
+        document.body.prepend(banner);
+    }
 }
 
 // ======================== SMOOTH SCROLL ========================
@@ -317,6 +501,7 @@ document.querySelectorAll('.nav-menu a').forEach(a => {
 // ======================== NAV SCROLL EFFECT ========================
 window.addEventListener('scroll', () => {
     const nav = document.getElementById('navbar');
+    if (!nav) return;
     if (window.scrollY > 50) {
         nav.style.background = 'rgba(var(--rgb-nav), 0.95)';
     } else {
@@ -325,7 +510,9 @@ window.addEventListener('scroll', () => {
 });
 
 // ======================== INIT ========================
-pollNodes();
-// Re-poll every 5 minutes
-setInterval(pollNodes, 300_000);
-
+if (nodesMap) {
+    pollNodes();
+    // Re-poll every 5 minutes
+    setInterval(pollNodes, 300_000);
+}
+initLanguageBanner();

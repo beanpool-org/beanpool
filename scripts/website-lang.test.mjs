@@ -248,6 +248,30 @@ test('pageContentHash ignores asset queries and script injections, but changes o
     }
 });
 
+test("editing words inside status.html's inline script marks that page stale in every language, while bumping ?v= leaves nothing stale", () => {
+    const statusEnglish = fs.readFileSync(path.join(WEBSITE_DIR, 'status.html'), 'utf8');
+    const baseHash = pageContentHash(statusEnglish);
+
+    // 1. Bumping ?v= asset query leaves hash unchanged and nothing stale
+    const bumpedV = statusEnglish.replace(/style\.css\?v=[0-9.]+/g, 'style.css?v=999.9');
+    assert.equal(pageContentHash(bumpedV), baseHash, 'bumping ?v= asset query does not change hash');
+    for (const lang of GUIDE_LANGS) {
+        const langContent = fs.readFileSync(path.join(CONTENT_DIR, lang, 'status.html'), 'utf8');
+        const rendered = renderTranslatedPage(lang, 'status.html', langContent, bumpedV);
+        assert.ok(!rendered.includes('website-stale-banner'), `bumping ?v= does not make status.html stale in ${lang}`);
+    }
+
+    // 2. Editing a word inside status.html inline script changes hash and marks page stale in every language
+    assert.ok(statusEnglish.includes("'Answering'"), "status.html contains inline script word 'Answering'");
+    const editedScriptStatus = statusEnglish.replace("'Answering'", "'Up and answering'");
+    assert.notEqual(pageContentHash(editedScriptStatus), baseHash, 'editing inline script word changes hash');
+    for (const lang of GUIDE_LANGS) {
+        const langContent = fs.readFileSync(path.join(CONTENT_DIR, lang, 'status.html'), 'utf8');
+        const rendered = renderTranslatedPage(lang, 'status.html', langContent, editedScriptStatus);
+        assert.ok(rendered.includes('website-stale-banner'), `editing inline script word makes status.html stale in ${lang}`);
+    }
+});
+
 test('--draft <lang> never re-stamps an existing file hash without writing new text', () => {
     const testLang = 'es';
     const testPage = 'rules.html';

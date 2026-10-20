@@ -138,7 +138,7 @@ export const LEGAL_BANNER_WORDS = Object.freeze({
 export function pageContentHash(html) {
     const canonical = html
         .replace(/<link\b[^>]*\/?>/gi, '')
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<script\b[^>]*\bsrc=[^>]*\s*(?:\/>|>[\s\S]*?<\/script>)/gi, '')
         .replace(/<div\s+class="footer-languages"[\s\S]*?<\/div>/gi, '')
         .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/\?v=[^"'\s>]+/gi, '')

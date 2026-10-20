@@ -227,8 +227,10 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
     const related = relatedPages(guide, page);
     const bodyInEnglish = guidePageBodyInEnglish(page);
     const newerInEnglish = guidePageNewerInEnglish(page);
-    const blocksToRender = (showEnglish && page.englishBlocks) ? page.englishBlocks : page.blocks;
-    const currentLang = (showEnglish || bodyInEnglish) ? 'en' : undefined;
+    // The English body only while the page is behind and the member asked for it: a page that turns current shows its translation.
+    const englishShown = showEnglish && newerInEnglish && !!page.englishBlocks;
+    const blocksToRender = englishShown ? page.englishBlocks! : page.blocks;
+    const currentLang = (englishShown || bodyInEnglish) ? 'en' : undefined;
 
     return (
         <article className="text-nature-800 dark:text-nature-200 text-base leading-relaxed">
@@ -247,7 +249,7 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
                         type="button"
                         data-testid="guide-toggle-english"
                         onClick={() => setShowEnglish(!showEnglish)}
-                        className="mt-1 min-h-[36px] p-0 bg-transparent border-none cursor-pointer text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
+                        className="mt-1 min-h-[48px] p-0 bg-transparent border-none cursor-pointer text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded"
                     >
                         {showEnglish ? t('Show translation') : t('Read in English')}
                     </button>

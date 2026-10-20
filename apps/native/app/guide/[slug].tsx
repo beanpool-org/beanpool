@@ -34,8 +34,10 @@ export default function GuideScreen() {
     // The title is in the member's language over an English body: one line says so, and VoiceOver reads the body as English.
     const bodyInEnglish = !!page && guidePageBodyInEnglish(page);
     const newerInEnglish = !!page && guidePageNewerInEnglish(page);
-    const blocksToRender = (showEnglish && page?.englishBlocks) ? page.englishBlocks : page?.blocks ?? [];
-    const currentBodyLanguage = (showEnglish || bodyInEnglish) ? 'en' : undefined;
+    // The English body only while the page is behind and the member asked for it: a page that turns current shows its translation.
+    const englishShown = showEnglish && newerInEnglish && !!page?.englishBlocks;
+    const blocksToRender = englishShown ? page!.englishBlocks! : page?.blocks ?? [];
+    const currentBodyLanguage = (englishShown || bodyInEnglish) ? 'en' : undefined;
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },

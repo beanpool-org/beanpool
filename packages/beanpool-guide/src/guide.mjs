@@ -282,9 +282,9 @@ function blockHtml(b, linkable = () => true) {
     return `<ul>\n${b.items.map(it => `            <li>${inline(it)}</li>`).join('\n')}\n        </ul>`;
 }
 
-function page({ title, description, body, root = '../', nav = `<a href="index.html">Members' guide</a>`, lang = 'en' }) {
+function page({ title, description, body, root = '../', nav = `<a href="index.html">Members' guide</a>`, lang = 'en', source = root === '../' ? 'content' : 'operators' }) {
     return `<!DOCTYPE html>
-<!-- Generated from packages/beanpool-guide/${root === '../' ? 'content' : 'operators'} by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<!-- Generated from packages/beanpool-guide/${source} by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
 <html lang="${esc(lang)}">
 <head>
     <meta charset="UTF-8">
@@ -554,7 +554,7 @@ export function renderLanguageWebsite(langGuide, englishGuide) {
             : '';
 
         files[`${g.slug}.html`] = page({
-            root, nav, lang,
+            root, nav, lang, source: `content/${lang}`,
             title: `${g.title} — BeanPool members' guide`,
             description: g.summary,
             body: [

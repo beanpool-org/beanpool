@@ -139,6 +139,26 @@ describe('the checks bite', () => {
         one(toolFixtureProblems({ ...good, doc: { ...good.doc, maxBytes: 22 } }, fixtures), /full document is 25 bytes, over its 22/);
     });
 
+    it('refuses a read() that throws or gives nothing on a document, in a sentence and never by throwing', () => {
+        const hasB = (raw: unknown) => !!raw && typeof raw === 'object' && Array.isArray((raw as Doc).items) && (raw as Doc).items.includes('b');
+        const throwsOnB = { ...good, doc: { ...good.doc, read: (raw: unknown) => { if (hasB(raw)) throw new Error('boom'); return read(raw); } } };
+        let problems: string[] = [];
+        expect(() => { problems = toolFixtureProblems(throwsOnB, fixtures); }).not.toThrow();
+        expect(problems).toHaveLength(2);
+        for (const p of problems) expect(p).toMatch(/^Tool sample: .+\.$/);
+        expect(problems[0]).toMatch(/read\(\) throws on its full document/);
+        expect(problems[1]).toMatch(/read\(\) throws on a newer version/);
+
+        const throwsOnItself = { ...good, doc: { ...good.doc, read: (raw: unknown) => { if ((raw as { seen?: boolean })?.seen) throw new Error('boom'); return { ...read(raw), seen: true }; } } };
+        expect(() => { problems = toolFixtureProblems(throwsOnItself, fixtures); }).not.toThrow();
+        expect(problems).toContain('Tool sample: read() throws on its own reading of "version 1": it must never throw.');
+
+        const nothingOnB = { ...good, doc: { ...good.doc, read: (raw: unknown) => (hasB(raw) ? undefined as unknown as Doc : read(raw)) } };
+        const stored = [{ name: 'version 1', raw: { v: 1, items: ['b'] }, reads: { v: 1, items: ['b'] } }];
+        expect(() => { problems = toolFixtureProblems(nothingOnB, { ...fixtures, stored }); }).not.toThrow();
+        expect(problems).toContain('Tool sample: read() of the stored value "version 1" is not JSON, so it can\'t be stored.');
+    });
+
     it("refuses a read() that rebuilds a newer version's records without the keys it doesn't know", () => {
         type Rec = { id: string };
         type RecDoc = { v: number; items: Rec[] };

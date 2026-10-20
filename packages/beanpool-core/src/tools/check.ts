@@ -39,6 +39,9 @@ function canonical(value: unknown): string | undefined {
     }
 }
 const sameJson = (a: unknown, b: unknown) => canonical(a) !== undefined && canonical(a) === canonical(b);
+/** What toolFixtureProblems' reread gives instead of a document, so each is a sentence and never a throw. */
+const NOT_JSON = Symbol('not JSON');
+const THROWS = Symbol('read() throws');
 
 /** UTF-8 bytes of a value serialised as JSON, without TextEncoder (pure, every runtime). */
 export function toolDocBytes(doc: unknown): number {
@@ -155,7 +158,20 @@ function lineProblem(line: ToolLine | ToolDue, screens: readonly string[]): stri
 export function toolFixtureProblems<D>(m: ToolManifest<D>, fx: ToolFixtures<D>): string[] {
     const out: string[] = [];
     const say = (s: string) => out.push(`Tool ${m.id}: ${s}`);
-    const reread = (d: unknown) => m.doc.read(JSON.parse(JSON.stringify(d)));
+    /** `d` stored (through JSON) and read again, or which of the two it can't be. */
+    const reread = (d: unknown): unknown => {
+        let stored: unknown;
+        try {
+            stored = JSON.parse(JSON.stringify(d));
+        } catch {
+            return NOT_JSON;
+        }
+        try {
+            return m.doc.read(stored);
+        } catch {
+            return THROWS;
+        }
+    };
     const versions = new Set<number>();
     for (const s of fx.stored ?? []) {
         if (isPlainObject(s.raw) && typeof s.raw.v === 'number') versions.add(s.raw.v);
@@ -167,14 +183,23 @@ export function toolFixtureProblems<D>(m: ToolManifest<D>, fx: ToolFixtures<D>):
             continue;
         }
         if (!sameJson(got, s.reads)) say(`read() of the stored value "${s.name}" is not what its fixture says it reads as.`);
-        if (!sameJson(reread(got), got)) say(`read() of "${s.name}" read again is not the same: reading twice must be reading once.`);
+        const again = reread(got);
+        if (again === NOT_JSON) say(`read() of the stored value "${s.name}" is not JSON, so it can't be stored.`);
+        else if (again === THROWS) say(`read() throws on its own reading of "${s.name}": it must never throw.`);
+        else if (!sameJson(again, got)) say(`read() of "${s.name}" read again is not the same: reading twice must be reading once.`);
     }
     for (let v = 1; v <= m.doc.version; v++) {
         if (!versions.has(v)) say(`its fixtures have no stored value of version ${v}: keep one of every version it ever wrote.`);
     }
     const max = m.doc.maxBytes ?? TOOL_LIMITS.docBytes;
     for (const [name, d] of Object.entries(fx.docs ?? {}) as [string, D][]) {
-        if (!sameJson(reread(d), d)) say(`its ${name} document does not read back as itself.`);
+        const again = reread(d);
+        if (again === NOT_JSON) {
+            say(`its ${name} document is not JSON, so it can't be stored.`);
+            continue;
+        }
+        if (again === THROWS) say(`read() throws on its ${name} document: it must never throw.`);
+        else if (!sameJson(again, d)) say(`its ${name} document does not read back as itself.`);
         if (toolDocBytes(d) > max) say(`its ${name} document is ${toolDocBytes(d)} bytes, over its ${max}.`);
     }
     const full = fx.docs?.full;

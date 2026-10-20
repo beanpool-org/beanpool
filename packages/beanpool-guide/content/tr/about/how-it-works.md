@@ -80,7 +80,7 @@ Rozet bir takdirdir, daha fazlası değildir. Hiçbir özelliğe erişim şartı
 
 ## Ücretler ve Ortak Alan
 
-Topluluğunuzun **Ortak** adı verilen ortak bir fasulye havuzu vardır. Ücretler buraya gider. Üyeler nasıl harcanacağına birlikte karar verir.
+Topluluğunuzun **Ortak Alan** adı verilen ortak bir fasulye havuzu vardır. Ücretler buraya gider. Üyeler nasıl harcanacağına birlikte karar verir.
 
 - **Pazar ücreti:** her pazar ödemesinin %1,5'i Ortak Alana gider. Satıcının aldığı miktardan kesilir.
 - **Dolaşım ücreti:** fasulyelerin hareketsiz durması değil, dolaşımda olması amaçlanır. Elinizde tuttuğunuz ilk 200 fasulye her zaman ücretsizdir. Bunun üzerinde, aylık küçük bir ücret Ortak Alana gider: 200 ile 500 arasındaki fasulyeler için ayda %1, 500 ile 1.000 arasında %1,5, 1.000 ile 2.000 arasında %2 ve 2.000'in üzerinde %2,5.
@@ -90,6 +90,6 @@ Topluluğunuzun **Ortak** adı verilen ortak bir fasulye havuzu vardır. Ücretl
 
 Bir **girişim** süreklidir ve kendi adına takas yapar: bir fırın, bir alet kütüphanesi, bir pazar tezgahı. Bir **baş sorumlu** önderliğinde **sorumlular** tarafından yönetilir. Sorumlular girişime bir kredi limiti sağlamak için kendi güvenlerinin bir kısmını taahhüt edebilir.
 
-Bir **grup**, bir veya daha fazla **koordinatör** tarafından yönetilen, kendi sohbeti ve gönderileri olan bir üye çevresidir. Bunlardan biri grubun **baş koordinatör**; başlangıçta grubu oluşturan kişi kimse odur.
+Bir **grup**, bir veya daha fazla **koordinatör** tarafından yönetilen, kendi sohbeti ve gönderileri olan bir üye çevresidir. Bunlardan biri grubun **baş koordinatörüdür**; başlangıçta grubu oluşturan kişi kimse odur.
 
 Sorumluların ve koordinatörlerin nasıl seçildiğini "Kurallar ve kararların nasıl işlediği" bölümünden okuyabilirsiniz.

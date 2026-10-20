@@ -92,7 +92,7 @@ Küresel topluluğa 12 kelimeyle katıldıysanız onlar tek geri dönüş yolunu
 ## Farklı adlar ve yerler
 
 - **Bir davetle katılma:** ilk adımın düğmesinde **Kimlik Oluştur ve Katıl →** yazar. Buradaki biri seçtiğiniz ada zaten sahipse bir sayı eklenmiş olarak alırsınız. **Fotoğraf** üzerindeki **← Geri**, **İleri →** ile birlikte yalnızca adınızı gösterir: aynı hesap üzerinde değiştirin (20 karaktere kadar) veya koruyun. Biri yeni ada zaten sahipse sayfa bunu belirtir ve başkalarını önerir.
-- **Sekmeler:** web uygulamasında **Ana Sayfa**, **Pazar**, **Harita**, **Ortak**, **Sohbet**, **Kişiler** ve **Defter** bulunur. Telefon uygulamasının **Sohbet** dediği yer web'de **Sohbet**'tir ve **Kişiler** kendi sekmesine sahiptir.
+- **Sekmeler:** web uygulamasında **Ana Sayfa**, **Pazar**, **Harita**, **Ortak**, **Chat**, **Kişiler** ve **Defter** bulunur. Telefon uygulamasının **Sohbet** dediği yer web'de **Chat**'tir ve **Kişiler** kendi sekmesine sahiptir.
 - **Ayarlar ve profiliniz:** sağ üstteki küçük düğmeler: profiliniz, **?**, ardından Ayarlar. Geniş bir ekranda soldaki menünün altındadırlar.
 - **Bir Teklif veya İhtiyaç paylaşma:** **Harita** sayfasında **Yeni İlan** seçeneğini kullanın.
 - **Görünüm:** bu seçenek "Telefonla aynı" yerine **Cihazla aynı** olarak adlandırılır.

@@ -13,12 +13,12 @@ Telefonda ekranın sol üst köşesindeki fasulyeye dokunun. Veya:
 - Ekranın üst kısmındaki kaydırıcı düğmesiyle **Ayarlar**'ı açın.
 - **BeanPool** altında, **Yardım ve nasıl çalışır** seçeneğine dokunun.
 
-Web uygulamasında da aynı yerdedir: **Ayarlar**, ardından **Yardım ve nasıl çalışır** altında **Yardım ve nasıl çalışır**.
+Web uygulamasında da aynı yerdedir: **Ayarlar**, ardından **BeanPool** altında **Yardım ve nasıl çalışır**.
 
 ## İçinde neler var
 
 - **Topluluğun:** adı (web uygulamasında adresi) ve sunucusuna şu anda ulaşılıp ulaşılamadığı. Telefonda, onun altında **Topluluklarınız**: geçiş yapmak için birine dokunun veya **Topluluk ekle** seçeneğine dokunun. **Küresel topluluk** her zaman satırlardan biridir ve ikinci satırında üye olup olmadığınızı, katılıp katılamayacağınızı veya şu anda neden kullanılamadığını belirtir. "Birden fazla topluluk" bölümüne bakın.
-- **Rehberler:** BeanPool'un nasıl çalıştığı, kurallar ve kararların nasıl alındığı ile sık sorulan sorular.
+- **Kılavuzlar:** BeanPool'un nasıl çalıştığı, kurallar ve kararların nasıl alındığı ile sık sorulan sorular.
 - **Uygulama nasıl kullanılır:** uygulamanın düzenlendiği şekilde gruplandırılmış her görev için kısa bir sayfa: Başlarken, Pazar, Harita, Sohbet, Pulse, Ortak Alan, Defter ve Ayarlar ile güvenlik.
 - **BeanPool projesi:** bu sürümde nelerin yeni olduğu ve beanpool.org web sitesine bir bağlantı (telefonda, bir arkadaşa göndermek için bir **Paylaş** düğmesiyle birlikte).
 
@@ -37,4 +37,4 @@ Aynı kılavuz, web sitesinde beanpool.org/guide adresinde de yer alır.
 
 ## Videolar
 
-Bazı sayfalar **İzle:** ve bir videonun adını gösterebilir. Bu bağlantı yalnızca BeanPool o sayfa için bir video hazırladığında ve topluluğunuz bunu Pulse'ta, **Öğren** altında (web uygulamasında **Nasıl çalışır**) bulundurduğunda görünür. Üyelerin Öğren bölümüne eklediği videolar hiçbir zaman kılavuz sayfasında gösterilmez. Her sayfa video olmadan da eksiksizdir.
+Bazı sayfalar **İzle:** ve bir videonun adını gösterebilir. Bu bağlantı yalnızca BeanPool o sayfa için bir video hazırladığında ve topluluğunuz bunu Pulse'ta, **Öğren** altında (web uygulamasında **Nasıl işler**) bulundurduğunda görünür. Üyelerin Öğren bölümüne eklediği videolar hiçbir zaman kılavuz sayfasında gösterilmez. Her sayfa video olmadan da eksiksizdir.

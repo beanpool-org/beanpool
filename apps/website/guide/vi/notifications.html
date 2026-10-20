@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thông báo — BeanPool members' guide</title>
+    <meta name="description" content="Chọn thông báo gửi đến điện thoại của bạn và thời điểm sự kiện nhắc nhở.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Cài đặt và an toàn</a></p>
+        <h1>Thông báo</h1>
+        <p class="lede">Chọn thông báo gửi đến điện thoại của bạn và thời điểm sự kiện nhắc nhở.</p>
+        <h2>Chọn các thông báo của bạn</h2>
+        <ul>
+            <li>Mở <strong>Cài đặt</strong>. Dưới mục <strong>Cài đặt ứng dụng</strong>, nhấn <strong>Tùy chọn thông báo</strong>.</li>
+            <li>Bật hoặc tắt từng loại:</li>
+            <li><strong>Tin nhắn trực tiếp:</strong> khi ai đó nhắn tin cho bạn, viết trong một nhóm của bạn hoặc nhắc đến bạn, hoặc khi một cuộc bỏ phiếu mở ra trong một nhóm hoặc doanh nghiệp bạn tham gia.</li>
+            <li><strong>Hoạt động thị trường:</strong> các yêu cầu, phê duyệt và từ chối đối với các giao dịch của bạn, và những gì đã xảy ra với một bài đăng bạn đã báo cáo hoặc một bài đăng của bạn bị quản trị viên gỡ bỏ. Ngoài ra còn có tin tức về các sự kiện bạn sắp tham gia, các thông báo từ quản trị viên cộng đồng của bạn, và một cộng đồng mới bắt đầu gần một địa điểm bạn đã hỏi thăm.</li>
+            <li><strong>Ký quỹ &amp; Hệ thống:</strong> đậu bị giữ, được giải ngân hoặc đang bị nghi vấn.</li>
+        </ul>
+        <p>Trong ứng dụng web, tùy chọn đầu tiên có tên là <strong>Tin nhắn trò chuyện</strong>, và tùy chọn thứ ba là tùy chọn có tên theo <strong>Giao dịch</strong>. Các tùy chọn này thiết lập những gì được gửi đến điện thoại của bạn.</p>
+        <p>Các thay đổi sẽ tự động lưu. Chúng được lưu giữ bởi máy chủ cộng đồng của bạn, vì vậy chúng sẽ đi theo tài khoản của bạn.</p>
+        <p>Hai thông báo về tài khoản của bạn luôn được gửi đến và ứng dụng không có nút tắt cho chúng: thông báo tài khoản của bạn vừa được khôi phục trên một thiết bị khác, và thông báo quản trị viên đã bắt đầu chuyển tài khoản của bạn sang một điện thoại mới. Nếu bạn vận hành máy chủ cộng đồng, các cảnh báo về máy chủ cũng luôn được gửi đến.</p>
+        <h2>Nội dung thông báo hiển thị những gì</h2>
+        <p>Một thông báo trên điện thoại của bạn chỉ cho biết đó là loại tin tức nào, ví dụ:</p>
+        <ul>
+            <li>&quot;Bạn có một tin nhắn mới.&quot;</li>
+            <li>&quot;Có tin tức mới về một trong các giao dịch của bạn.&quot;</li>
+            <li>&quot;Một sự kiện bạn sắp tham gia sắp bắt đầu.&quot;</li>
+            <li>&quot;Cộng đồng có một thông báo dành cho bạn.&quot;</li>
+        </ul>
+        <p>Thông báo không bao giờ nêu rõ tin nhắn từ ai, bài đăng nào, bao nhiêu đậu, hay thông báo của cộng đồng nói gì. Các thông báo phải đi qua máy chủ của Apple, Google và Expo trên đường đến điện thoại của bạn, và bất kỳ ai cũng có thể đọc màn hình khóa, vì vậy phần còn lại được giữ lại trong cộng đồng của bạn. Hãy mở BeanPool để xem chi tiết.</p>
+        <p>BeanPool không bao giờ hỏi 12 từ hoặc mật khẩu của bạn trong một thông báo.</p>
+        <h2>Khi bạn nhấn vào một thông báo</h2>
+        <p>Mỗi thông báo đều mang chữ ký của cộng đồng bạn, được tạo riêng cho một mình bạn. BeanPool sẽ kiểm tra chữ ký đó trước khi thực hiện bất kỳ điều gì:</p>
+        <ul>
+            <li><strong>Hợp lệ:</strong> BeanPool sẽ hỏi cộng đồng của bạn xem thông báo nói về điều gì và mở thông báo đó, nếu thông báo đến từ cộng đồng bạn đang ở trong đó. Một thông báo từ một cộng đồng khác của bạn sẽ mở BeanPool tại nơi bạn đã dừng lại: hãy chuyển sang cộng đồng đó để xem.</li>
+            <li><strong>Không hợp lệ:</strong> BeanPool không mở bất cứ nội dung gì và thông báo cho bạn một lần: &quot;That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.&quot;</li>
+        </ul>
+        <p>Trong khi BeanPool đang mở, một thông báo không hợp lệ sẽ hoàn toàn không hiển thị, và một thông báo bạn đã xem rồi cũng vậy.</p>
+        <p>Điện thoại của bạn hiển thị nội dung thông báo trước khi BeanPool có thể kiểm tra chúng. Vì vậy, người nào nắm được địa chỉ nhận thông báo của điện thoại bạn có thể đưa nội dung của riêng họ lên màn hình khóa của bạn. Nhấn vào một thông báo như vậy không làm thay đổi điều gì, và BeanPool sẽ thông báo rõ điều đó.</p>
+        <p>Một thông báo từ một cộng đồng bạn đã xóa khỏi chiếc điện thoại này cũng không làm gì cả.</p>
+        <p>Nếu máy chủ cộng đồng của bạn chưa được cập nhật, các thông báo của máy chủ sẽ không mang chữ ký. BeanPool sẽ hiển thị chúng bằng những từ ngữ chung (&quot;There is news from your community.&quot;) và khi bạn nhấn vào, ứng dụng sẽ mở tại nơi bạn đã dừng lại.</p>
+        <h2>Thông báo khi BeanPool kiểm tra ngầm</h2>
+        <p>Đôi khi điện thoại của bạn cho phép BeanPool kết nối kiểm tra với cộng đồng ở chế độ nền. Nếu cộng đồng lưu giữ một thông báo dành cho bạn mà bạn chưa thấy, chẳng hạn như điều gì đã xảy ra với một bài đăng của bạn, BeanPool sẽ hiển thị thông báo đó đầy đủ trên điện thoại của bạn một lần.</p>
+        <p>Tính năng này không cần gì ngoài máy chủ cộng đồng của bạn, vì vậy tính năng vẫn hoạt động ngay cả khi các thông báo đẩy không hoạt động. Thông báo này đến muộn hơn so với thông báo đẩy: điện thoại của bạn sẽ quyết định thời điểm, từ khoảng 15 phút đến vài giờ.</p>
+        <h2>Nhắc nhở sự kiện</h2>
+        <p>Bên dưới các nút bật tắt, mục <strong>Nhắc nhở sự kiện</strong> thiết lập thời gian nhắc nhở trước khi một sự kiện bạn chọn <strong>Sẽ đến</strong> hoặc <strong>Quan tâm</strong> bắt đầu. Đánh dấu vào <strong>1 tuần trước</strong>, <strong>1 ngày trước</strong>, <strong>2 giờ trước</strong>, <strong>1 giờ trước</strong> hoặc <strong>30 phút trước</strong> — bạn có thể đánh dấu nhiều hơn một lựa chọn — hoặc đánh dấu vào <strong>Tắt</strong> để không nhận thông báo nhắc nhở nào.</p>
+        <p>Mọi người đều bắt đầu với lựa chọn <strong>1 ngày</strong> trước. Đây là lựa chọn thông thường của bạn; bất kỳ sự kiện đơn lẻ nào cũng có thể được thiết lập khác đi ngay trên chính sự kiện đó. Xem &quot;Sự kiện&quot;.</p>
+        <p>Các nhắc nhở được gửi đến cùng với các thông báo <strong>Hoạt động thị trường</strong>, vì vậy chúng sẽ dừng lại nếu bạn tắt các thông báo đó. Bạn không bao giờ bị nhắc nhở về một sự kiện đã bị hủy hoặc đã kết thúc, hoặc về một thời điểm đã qua khi bạn xác nhận sẽ tham gia. Nếu người tổ chức dời sự kiện, lời nhắc nhở cũng sẽ dời theo.</p>
+        <h2>Không nhận được bất kỳ thông báo nào?</h2>
+        <p>Hãy kiểm tra để chắc chắn rằng điện thoại của bạn cho phép nhận thông báo cho BeanPool, trong phần cài đặt riêng của điện thoại.</p>
+        <h2>Tắt tiếng từng cuộc trò chuyện</h2>
+        <p>Bạn có thể tắt tiếng cuộc trò chuyện của một nhóm, dự án hoặc doanh nghiệp trong 8 giờ, một tuần hoặc vĩnh viễn. Xem &quot;Tắt thông báo chat&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="mute.html"><strong>Tắt thông báo chat</strong><span>Tắt tiếng một cuộc trò chuyện — cá nhân, nhóm hoặc dự án — trong 8 giờ, một tuần hoặc vĩnh viễn.</span></a></li>
+            <li><a href="messages.html"><strong>Tin nhắn</strong><span>Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.</span></a></li>
+            <li><a href="my-deals.html"><strong>Giao dịch</strong><span>Một nơi cho mọi giao dịch bạn tham gia, mọi tin bạn đã đăng và các giao dịch trước đây.</span></a></li>
+            <li><a href="events.html"><strong>Sự kiện</strong><span>Tạo sự kiện trực tiếp hoặc trực tuyến, một lần hoặc lặp lại; xác nhận tham gia, nhận nhắc nhở, chia sẻ và chủ trì sự kiện.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Chế độ nghỉ lễ</strong><span>Chế độ nghỉ lễ ẩn các Lời đề nghị và tạm dừng các yêu cầu mới khi bạn vắng mặt.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Thanh trên cùng</strong><span>Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

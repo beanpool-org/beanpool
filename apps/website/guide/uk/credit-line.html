@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ваша кредитна лінія — BeanPool members' guide</title>
+    <meta name="description" content="Наскільки ви можете піти в мінус і як збільшується цей ліміт.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Книга</a></p>
+        <h1>Ваша кредитна лінія</h1>
+        <p class="lede">Наскільки ви можете піти в мінус і як збільшується цей ліміт.</p>
+        <h2>Що це таке</h2>
+        <p>Кредитна лінія дозволяє вам витрачати більше бобів, ніж ви маєте, і йти в мінус (нижче нуля). Це ваша обіцянка допомогти іншим пізніше. Перебування нижче нуля нічого не коштує: жодних відсотків немає.</p>
+        <h2>Де це побачити</h2>
+        <p>У розділі <strong>Реєстр</strong>, під вашим балансом, шкала показує ваш поточний стан:</p>
+        <ul>
+            <li>нуль розташований посередині;</li>
+            <li>лівий край — це <strong>ваш ліміт</strong>, найнижча межа, до якої ви можете дійти;</li>
+            <li>позначки ліворуч показують, наскільки глибоко дозволяють вам піти ваші Пропозиції;</li>
+            <li>праворуч за позначкою <strong>+200</strong> починається нарахування внеску за обіг.</li>
+        </ul>
+        <p>На телефоні торкніться шкали, щоб відкрити вікно <strong>Інформація про повзунок кредиту</strong>, де пояснюється кожна її частина.</p>
+        <h2>Як вона відкривається</h2>
+        <p>Вона починається з нуля. Вона стає доступною, коли ви завершите свій перший обмін на ринку (обмін лише на 1 чи 2 боби занадто малий, щоб зараховуватися), або коли за вас поручиться хтось, кого обрано вітати новачків. Доти в Реєстрі вказано: <strong>Кредитної лінії ще немає</strong>. Ви все одно можете торгувати за наявні у вас боби.</p>
+        <h2>Як вона зростає</h2>
+        <ul>
+            <li><strong>Довіра:</strong> завершені обміни будують довіру, особливо коли ви торгуєте з багатьма різними людьми. Дивіться «Ліміт 500 бобів на партнера».</li>
+            <li><strong>Оцінки:</strong> зірочки можуть лише зменшити зароблену довіру. Середня оцінка 5 зірок зберігає її повністю; нижчий середній бал віднімає частину.</li>
+            <li>Найглибша можлива кредитна лінія становить 2000 бобів. Спільнота, яка підтверджує своїх учасників, може встановити вищий ліміт — до 5000 (дивіться нижче).</li>
+        </ul>
+        <h2>Ваші Пропозиції визначають доступну суму</h2>
+        <p>Ви можете використати лише таку частину кредитної лінії, яку дозволяють ваші активні Пропозиції:</p>
+        <ul>
+            <li>немає Пропозицій: жодного кредиту;</li>
+            <li>1 Пропозиція: до −200;</li>
+            <li>2: −500;</li>
+            <li>3: −1000;</li>
+            <li>4: −1500;</li>
+            <li>5: −2000.</li>
+        </ul>
+        <p>Рядок під шкалою підказує вам, наприклад «Опублікуйте пропозицію, щоб відкрити кредитну лінію».</p>
+        <h2>У спільноті з підтвердженням учасників</h2>
+        <p>Деякі спільноти мають адміністраторів, які знають кожного учасника особисто на ім'я. Якщо у вашій спільноті ввімкнено <strong>відомий мінімум</strong>, учасник, підтверджений адміністратором, отримує кредитну лінію одразу: 1000 бобів, якщо спільнота не встановила іншу суму. Це приблизно 25 годин праці, на які спільнота вам довіряє.</p>
+        <ul>
+            <li>Одна активна Пропозиція дозволяє використати її повністю. Без активних Пропозицій ви не можете нею скористатися.</li>
+            <li>Довіра, зароблена через обміни, додається до неї аж до ліміту спільноти (2000 бобів, якщо не встановлено більше, до 5000).</li>
+            <li>Адміністратор може встановити для вас менший ліміт, наприклад поки ви новачок. Це ніколи не списує у вас боби: якщо ви вже нижче цього рівня, витрати призупиняються, доки ви знову не підніметеся вище нього.</li>
+            <li>Якщо ви виплачуєте борг із попереднього акаунта, отримані вами боби понад 0 надходять до Спільного фонду до повного погашення. Ваш Реєстр показує залишок боргу. Ви також можете сплатити його частково або повністю самостійно: <strong>Реєстр → Сплатити до Спільного фонду</strong>: код погашення вже заповнено (або введіть наданий адміністратором). Сума, сплачена з кодом, одразу віднімається від боргу, і коли залишку немає, борг закрито: більше нічого не списується ні платежем, ні з надходжень. Платіж без коду надходить до Спільного, але не зменшує борг, про що попереджає додаток: щоб його зарахували, попросіть адміністратора врахувати його з цим номером. Доти борг продовжує виплачуватися: наступного разу, коли ви отримаєте боби, залишок буде вираховано з суми понад 0. Сума в повідомленні адміністратора — це те, що залишалося на момент відправлення: якщо зараз залишок менший, сервер відхилить більший платіж і повідомить поточний залишок, і нічого не спишеться. Якщо додаток повідомляє, що платіж міг пройти, торкніться <strong>Спробувати знову</strong> на цьому ж екрані: один і той самий платіж ніколи не списується двічі. Якщо ви залишили цей екран, перевірте свій Реєстр перед повторною оплатою.</li>
+        </ul>
+        <h2>Заморожування адміністраторами</h2>
+        <p>Адміністратори вашої спільноти можуть заморозити кредитну лінію учасника: повністю або, у спільноті з підтвердженням, ту її частину, яка надається за статус підтвердженого учасника.</p>
+        <ul>
+            <li>Якщо вони заморожують її повністю, або підтверджена частина була єдиним вашим кредитом, Реєстр повідомляє: <strong>Вашу кредитну лінію заморожено</strong>: ви не можете витрачати в мінус, поки триває заморожування, але можете продавати, отримувати боби й витрачати те, що маєте вище нуля. Якщо на момент заморожування у вас був мінус, Реєстр також показує, скільки бобів становить ваш дебет: продаж чи отримання бобів виводить баланс угору, і щойно ви опинитеся вище нуля, ви зможете витрачати наявне.</li>
+            <li>Якщо вони заморожують підтверджену частину, а ви також маєте кредит від поруки, обмінів або гранту, шкала залишається з приміткою під нею, що підтверджену частину заморожено, а решта діє як раніше. Якщо ваш баланс нижчий за залишок ліміту, Реєстр також показує статус <strong>Витрати призупинено</strong> (нижче).</li>
+        </ul>
+        <p>Ваш значок рівня не змінюється: він відповідає тому, який надає кредитна лінія за відсутності заморожування, навіть якщо адміністратори встановили ваш ліміт нижчим чи вищим за ліміт спільноти — як у вашому профілі, так і в оголошеннях. Щоб дізнатися причину або відновити лінію, зверніться до одного з адміністраторів.</p>
+        <h2>Призупинення витрат</h2>
+        <p>Якщо ви опустилися нижче рівня, який дозволяють ваші Пропозиції (наприклад, через те, що ви зняли Пропозицію), Реєстр повідомляє: <strong>Витрати призупинено</strong>. Ви все одно можете заробляти та продавати. Опублікуйте Пропозицію або відновіть баланс торгівлею, і обмеження зніметься. Ніщо у вас не забирається.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>Значки довіри</strong><span>Новачок, Мешканець, Опікун і Старійшина. Що вони означають і чому вони не відкривають додаткових привілеїв.</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>Ліміт 500 бобів на партнера</strong><span>Чому обмін з багатьма людьми будує більше довіри, ніж часті угоди з кимось одним.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Як працює BeanPool</strong><span>Боби, обмін, пропозиції та потреби, а також кредит простими словами.</span></a></li>
+            <li><a href="posting.html"><strong>Публікація Пропозиції чи Потреби</strong><span>Запропонуйте те, що ви можете зробити чи віддати, або те, що ви шукаєте.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Etkinlikler — BeanPool members' guide</title>
+    <meta name="description" content="Bir mekanda veya çevrim içi, tek seferlik veya tekrarlayan bir etkinlik oluşturun; katılacağınızı belirtin, paylaşın ve ev sahibi olarak yönetin.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Ortak Alan</a></p>
+        <h1>Etkinlikler</h1>
+        <p class="lede">Bir mekanda veya çevrim içi, tek seferlik veya tekrarlayan bir etkinlik oluşturun; katılacağınızı belirtin, paylaşın ve ev sahibi olarak yönetin.</p>
+        <h2>Etkinlikleri bulma</h2>
+        <ul>
+            <li><strong>Pazar</strong>'da <strong>Etkinlikler</strong>'e dokunun. <strong>Bugün</strong>, <strong>Bu hafta sonu</strong> veya <strong>Gelecek 7 gün</strong> seçeneklerinden birini belirleyin.</li>
+            <li><strong>Harita</strong>'da etkinlikler mor iğnelerdir. Telefonda yalnızca onları görmek için <strong>Etkinlikler</strong>'e dokunun. Web uygulamasında her zaman oradadırlar ve tarih filtreleri onları daraltır.</li>
+        </ul>
+        <h2>Etkinlikleriniz</h2>
+        <p><strong>Pazar</strong>'da <strong>★ Sana Özel</strong> seçeneğine dokunun. <strong>Etkinliklerin</strong> buradaki ilk şeydir: <strong>Katılıyor</strong> veya <strong>İlgileniyor</strong> dediğiniz her şey, en yakından başlayarak sıralanır. Açmak için birine dokunun.</p>
+        <p>Yalnızca yaklaşan bir etkinliğiniz olduğunda görünür ve yalnızca kendi yanıtlarınızı tutar — başka hiç kimse göremez.</p>
+        <h2>Katılma</h2>
+        <p>Bir etkinlikte <strong>Katılıyor</strong> veya <strong>İlgileniyor</strong> seçeneğine dokunun. Seçiminizi temizlemek için tekrar dokunun.</p>
+        <p><strong>Katılıyor</strong> olduğunuzda:</p>
+        <ul>
+            <li>ev sahibi izin verdiğinde ve bunu seçtiğinde, ev sahibinin <strong>Katılacaklar için not</strong> metnini okuyabilirsiniz;</li>
+            <li><strong>etkinlik odası</strong>nı açabilirsiniz. &quot;Etkinlik odası&quot; bölümüne bakın;</li>
+            <li>çevrim içi bir etkinlik için notla aynı koşullarda <strong>Katılım bağlantısı</strong>nı ve bir <strong>Katıl</strong> düğmesini görürsünüz.</li>
+        </ul>
+        <p>Her şeyi görmek için etkinliğe dokunun ve <strong>Haritada göster</strong> seçeneğini kullanın. Telefonda harita uygulamanızı açar. Web uygulamasında yeri Harita üzerinde gösterir.</p>
+        <h2>Hatırlatıcı alma</h2>
+        <p><strong>Katılıyor</strong> veya <strong>İlgileniyor</strong> durumundayken etkinlik <strong>Bana hatırlat</strong> seçeneğini ve başlamadan ne kadar önce bilgilendirileceğinizi gösterir — siz değiştirene kadar <strong>1 gün önce (varsayılanınız)</strong> şeklindedir.</p>
+        <ul>
+            <li><strong>1 hafta önce</strong>, <strong>1 gün önce</strong>, <strong>2 saat önce</strong>, <strong>1 saat önce</strong> veya <strong>30 dakika önce</strong> seçeneklerinden birini belirlemek için <strong>Değiştir</strong> seçeneğine dokunun. Birden fazlasını işaretleyebilirsiniz.</li>
+            <li>Bu etkinlik için hatırlatıcı almamak istiyorsanız hiçbirini işaretlemeyin.</li>
+            <li>Ardından <strong>Bu etkinlik için kaydet</strong> seçeneğine dokunun. Bunu yapana kadar işaretleme kaydedilmez.</li>
+            <li>Her zamanki tercihinize geri dönmek için <strong>Varsayılanımı kullan</strong> seçeneğine dokunun.</li>
+        </ul>
+        <p>Her etkinlik için her zamanki tercihinizi değiştirmek üzere &quot;Bildirimler&quot; bölümüne bakın.</p>
+        <p>Hatırlatıcılar, telefonunuza Pazar bildirimlerinizle birlikte gelir; dolayısıyla bunları kapatırsanız hatırlatıcılar da durur. İptal edilen veya sona ermiş bir etkinlik için ve geleceğinizi söylediğinizde saati geçmiş bir zaman için asla hatırlatma almazsınız.</p>
+        <h2>Birine bundan bahsetme</h2>
+        <p>Etkinliği açın ve <strong>Paylaş</strong> seçeneğine dokunun. Telefonunuzun alışılmış paylaşım sayfası, etkinliğin adı, ne zaman olduğu, nerede olduğu ve bir bağlantıyla açılır. Bilgisayarda bağlantı yapıştırmanız için kopyalanır.</p>
+        <p>Bu bağlantıya dokunan herkes etkinliği açar — varsa uygulamada, yoksa web uygulamasında. Topluluğunuzda olmayan biri topluluğun katılma sayfasına yönlendirilir. Bir web tarayıcısında küresel topluluk, etkinliği önce bir ziyaretçinin gördüğü gibi gösterir ve katıldıktan sonra tekrar açar.</p>
+        <h2>Takviminize ekleme</h2>
+        <p>Etkinliği açın ve <strong>Takvime ekle</strong> seçeneğine dokunun.</p>
+        <ul>
+            <li><strong>Web uygulamasında</strong> bir takvim dosyası indirilir. Dosyayı açtığınızda takviminiz etkinliği eklemeyi teklif eder.</li>
+            <li>Bir <strong>iPhone</strong>'da aynı dosya telefonunuza iletilir ve <strong>Takvime Ekle</strong> seçeneğini sunar.</li>
+            <li><strong>Android</strong>'de Google Takvim etkinlik önceden doldurulmuş olarak açılır. Kontrol edin ve kaydedin.</li>
+        </ul>
+        <p>Kayıt adı, saati, yeri ve etkinliğe geri dönen bağlantıyı taşır. Ev sahibi daha sonra saati değiştirirse takviminiz bununla birlikte değişmez — uygulama yine de size hatırlatır ve etkinliğin kendisi her zaman yeni saati gösterir.</p>
+        <h2>Bir etkinlik oluşturma</h2>
+        <ul>
+            <li>Pazar sekmesinde veya Harita'da <strong>+ İLAN EKLE</strong>'ye, ardından <strong>Etkinlik</strong>'e dokunun.</li>
+            <li><strong>Başlık</strong> ve ne zaman <strong>Başlar</strong>. <strong>Biter</strong> isteğe bağlıdır; siz değiştirmedikçe 2 saat sonrasıdır.</li>
+            <li>Saatler, iğneden alınan etkinliğin kendi saat dilimindedir. Bu saat dilimi sizinkiyle aynı olmadığında saatlerin altındaki bir satır bunu belirtir. Yanlışsa yanındaki <strong>Değiştir</strong> seçeneğine dokunun.</li>
+            <li><strong>Tekrarlanır:</strong> her hafta o gün veya ayda bir gibi ne sıklıkla gerçekleşeceğini seçin ya da <strong>Tekrarlanmaz</strong> olarak bırakın. <strong>Kadar</strong> isteğe bağlıdır: boş bırakırsanız siz iptal edene kadar etkinlik tekrarlanır.</li>
+            <li><strong>Bir mekanda</strong> veya <strong>Çevrimiçi</strong> seçin. Çevrim içi bir etkinlik için yer ve iğne yoktur: bunun yerine bir <strong>Katılım bağlantısı</strong> ekleyin. Bunu yalnızca siz ve katılan kişiler görür (insanları içeri aldığınız durumlarda yalnızca içeri aldığınız kişiler). Saatleri kendi saat diliminizdedir ve diğer herkes bunları <strong>yerel saatinizle</strong> olarak işaretlenmiş kendi saat diliminde görür.</li>
+            <li>&quot;Belediye binası&quot; gibi <strong>Yer adı</strong>.</li>
+            <li>İğneyi haritaya koyun: haritaya dokunun, <strong>Bir adres bulun</strong> araması yapın veya <strong>Konumumu kullan</strong> seçeneğine dokunun. Tam noktanın gösterilmesini istemiyorsanız <strong>Yaklaşık (~100 m)</strong> seçeneğine dokunun. &quot;İşaretinizin konumu&quot; bölümüne bakın.</li>
+            <li>Bir <strong>Açıklama</strong> ve isterseniz bir fotoğraf.</li>
+            <li><strong>Katılacaklar için not:</strong> Katılıyor'a dokunan herkes bunu görür; ancak <strong>Yalnızca içeri aldığım kişiler notu ve sohbeti görür</strong> seçeneğini işaretlerseniz (herkesin bir dakika içinde katılabildiği küresel toplulukta başlangıçta işaretlidir), bunu ve etkinlik sohbetini yalnızca içeri aldığınız kişiler görür. Tam adres veya bir kapı kodu için iyi bir yerdir; yer adı ise herkes içindir.</li>
+            <li><strong>Kimler görebilir:</strong> tüm topluluğunuz veya bir grup.</li>
+            <li>Bir projeyi veya girişimi yürütüyorsanız ya da bir grubun kolaylaştırıcısıysanız <strong>Farklı paylaş</strong>, etkinliği onun adına paylaşmanızı sağlar. Bir grup yalnızca kendi üyeleri için ev sahipliği yapar; bir girişim tüm topluluk için ev sahipliği yapar, bu nedenle bir girişim etkinliği asla yalnızca gruba özel olamaz.</li>
+            <li><strong>Oluştur</strong> seçeneğine dokunun. Etkinliğiniz Pazar'da ve Harita'dadır.</li>
+        </ul>
+        <p>Web uygulamasında başlık kutusu <strong>Neler oluyor</strong> şeklindedir, iğne düğmeleri <strong>📍 Konumum</strong> ve <strong>📌 İğne bırak</strong> şeklindedir ve son düğme <strong>Etkinlik Oluştur</strong> düğmesidir.</p>
+        <p>Bir seferde en fazla 5 yaklaşan etkinliğiniz olabilir. Bir grubun etkinlikleri gruba, bir girişimin etkinlikleri ise girişime sayılır.</p>
+        <h2>Etkinliğinizi yönetme</h2>
+        <p>Etkinliğinizi açın. Ev sahibi olarak şunları yapabilirsiniz:</p>
+        <ul>
+            <li><strong>Kimler katılıyor</strong> listesini görebilir ve insanları içeri alabilirsiniz: bir adın yanındaki <strong>İçeri al</strong> (geri almak için tekrar dokunun) veya <strong>Herkesi içeri al</strong>. Kendi arkadaşlarınız Katılıyor'a dokunduklarında içeri alınır. <strong>Yalnızca içeri aldığım kişiler notu ve sohbeti görür</strong> işaretini kaldırırsanız katılan herkes şimdiye kadarki notu ve sohbeti görür ve sohbet ev sahibinin bunu açtığını belirtir;</li>
+            <li><strong>Etkinliği düzenle</strong>. Saati veya yeri değiştirirseniz katılan herkese bildirilir;</li>
+            <li>Tekrar düzenlemek için <strong>Yeni bir tarihe kopyala</strong>;</li>
+            <li><strong>Etkinliği iptal et</strong>, ardından onaylayın (telefonda tekrar <strong>Etkinliği iptal et</strong>, web uygulamasında <strong>Tamam</strong>). Katılan herkes iptal edildiğini görebilir ve sohbeti salt okunur hale gelir.</li>
+        </ul>
+        <h2>Tekrarlayan etkinlikler</h2>
+        <p>Tekrarlayan bir etkinlik, tarihinin yanında <strong>↻</strong> işaretini ve ne sıklıkla olduğunu gösterir; örneğin <strong>Her Cuma</strong> veya <strong>Her ayın 16'sı</strong>. Kartı sonraki tarihi gösterir; <strong>Sonraki tarihler</strong> listesini görmek için açın.</p>
+        <p>Ev sahibi sizseniz sonraki tarihlerin her birinde şunlar bulunur:</p>
+        <ul>
+            <li><strong>Bu tarihi iptal et:</strong> yalnızca o gün iptal edilir. O gün katılan herkese bildirilir.</li>
+            <li><strong>Yalnızca bu tarihi değiştir:</strong> o gün iptal edilir ve başka bir tarihe tek seferlik bir etkinlik oluşturursunuz.</li>
+            <li><strong>Geri getir:</strong> iptal edilen bir tarih yeniden açılır.</li>
+        </ul>
+        <p><strong>Etkinliği iptal et</strong> tüm tarihleri iptal eder ve sohbeti salt okunur hale gelir. O zamana kadar sohbet tarihler arasında, son tarihe kadar açık kalır; <strong>Kadar</strong> belirtilmemişse siz etkinliği iptal edene kadar açık kalır.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>Etkinlik odası</strong><span>Etkinliğin ev sahibi ve katılan herkesle sohbet edin.</span></a></li>
+            <li><a href="notifications.html"><strong>Bildirimler</strong><span>Hangi uyarıların telefonunuza ulaşacağını ve etkinliklerin ne zaman hatırlatılacağını seçin.</span></a></li>
+            <li><a href="pin-locations.html"><strong>İşaretinizin konumu</strong><span>İlanlarınızın ve etkinliklerinizin yerini kimlerin gördüğü ve ev adresinizi nasıl gizli tutacağınız.</span></a></li>
+            <li><a href="map-pins.html"><strong>Haritanın gösterdikleri</strong><span>Haritadaki işaretler, renklerinin anlamı ve çevrelerindeki düğmeler.</span></a></li>
+            <li><a href="polls.html"><strong>Anketler</strong><span>Topluluğa hızlı bir soru sorun. Anketler fikirleri gösterir; tek başlarına hiçbir şeyi değiştirmezler.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kredi limitiniz — BeanPool members' guide</title>
+    <meta name="description" content="Sıfırın ne kadar altına inebileceğiniz ve bu limitin nasıl büyüdüğü.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Defter</a></p>
+        <h1>Kredi limitiniz</h1>
+        <p class="lede">Sıfırın ne kadar altına inebileceğiniz ve bu limitin nasıl büyüdüğü.</p>
+        <h2>Nedir</h2>
+        <p>Kredi limitiniz, sahip olduğunuzdan daha fazla fasulye harcamanıza ve sıfırın altına inmenize olanak tanır. Daha sonra başkalarına yardım etme sözüdür. Sıfırın altında olmanın hiçbir maliyeti yoktur: faiz yoktur.</p>
+        <h2>Nerede görünür</h2>
+        <p><strong>Defter</strong> sekmesinde, bakiyenizin altında bir çubuk nerede olduğunuzu gösterir:</p>
+        <ul>
+            <li>sıfır ortadadır;</li>
+            <li>sol uç <strong>limitiniz</strong>dir, inebileceğiniz en düşük seviyedir;</li>
+            <li>soldaki işaretler, Tekliflerinizin ne kadar derine inmenize izin verdiğini gösterir;</li>
+            <li>sağdaki <strong>+200</strong>'ün ötesi dolaşım ücretinin başladığı yerdir.</li>
+        </ul>
+        <p>Telefonda her bir bölümü açıklayan <strong>Kredi Kaydırıcısı Bilgisi</strong> için çubuğa dokunun.</p>
+        <h2>Nasıl açılır</h2>
+        <p>Sıfırdan başlar. Pazarda ilk takasınızı tamamladığınızda (yalnızca 1 veya 2 fasulyelik bir takas sayılmak için çok küçüktür) ya da yeni gelenleri karşılamak için seçilen biri size kefil olduğunda açılır. O zamana kadar Defter <strong>Henüz kredi limiti yok</strong> der. Elinizde tuttuğunuz fasulyelerle yine de takas yapabilirsiniz.</p>
+        <h2>Nasıl büyür</h2>
+        <ul>
+            <li><strong>Güven:</strong> tamamlanan takaslar, özellikle birçok farklı kişiyle yapıldığında güven oluşturur. &quot;500 fasulye ortak limiti&quot; bölümüne bakın.</li>
+            <li><strong>Değerlendirmeler:</strong> yıldızlar yalnızca kazandığınız güveni düşürebilir. Ortalama 5 yıldız tamamını korur; daha düşük bir ortalama bir kısmını eksiltir.</li>
+            <li>Bir kredi limitinin inebileceği en derin nokta 2.000 fasulyedir. Üyelerini teyit eden bir topluluk 5.000'e kadar daha yüksek bir üst sınır belirleyebilir (aşağıya bakın).</li>
+        </ul>
+        <h2>Ne kadar kullanabileceğinizi Teklifleriniz belirler</h2>
+        <p>Kredi limitinizin yalnızca yayındaki Tekliflerinizin izin verdiği kadarını kullanabilirsiniz:</p>
+        <ul>
+            <li>Teklif yoksa: hiçbiri;</li>
+            <li>1 Teklif: −200'e kadar;</li>
+            <li>2 Teklif: −500;</li>
+            <li>3 Teklif: −1.000;</li>
+            <li>4 Teklif: −1.500;</li>
+            <li>5 Teklif: −2.000.</li>
+        </ul>
+        <p>Çubuğun altındaki satır size bildirir; örneğin &quot;Kredi limitinizi açmak için bir teklif paylaşın&quot;.</p>
+        <h2>Bilinen bir toplulukta</h2>
+        <p>Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Sizinki <strong>bilinen taban</strong>ı açtıysa, bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır.</p>
+        <ul>
+            <li>Yayındaki tek bir Teklif bunun tamamını kullanmanızı sağlar. Teklif yoksa kullanamazsınız.</li>
+            <li>Takas yaparak kazandığınız güven, topluluğunuzun üst sınırına kadar buna eklenir (daha fazlasını seçmedikçe 2.000 Fasulye, 5.000'e kadar).</li>
+            <li>Bir yönetici sizin için örneğin yeni olduğunuz dönemde daha küçük bir limit belirleyebilir. Bu sizden asla Fasulye almaz: zaten bu sınırın altındaysanız, tekrar üzerine çıkana kadar harcama duraklatılır.</li>
+            <li>Daha önceki bir hesaptan kalan bir borcu ödüyorsanız, sıfırın üzerinde aldığınız Fasulyeler borç ödenene kadar Ortak Alana gider. Defteriniz ne kadar kaldığını belirtir. Ayrıca <strong>Defter → Ortak'a Öde</strong> bölümünden kendiniz de bir kısmını veya tamamını ödeyebilirsiniz: geri ödeme kodunuz orada doldurulmuştur (veya bir yöneticinin size verdiğini girin). Kodla ödediğiniz miktar doğrudan borçtan düşülür ve geriye hiçbir şey kalmadığında borç kapatılmış olur: bir ödemeyle veya aldığınız miktardan başka bir şey kesilmez. Kod olmadan yapılan bir ödeme Ortak Alana gider ancak borcunuzdan düşülmez ve uygulama bunu belirtir: sayılması için bir yöneticiden referansıyla birlikte bunu borcunuza saymasını isteyin. Bunu yapana kadar borç ödenmeye devam eder: bir dahaki sefere Fasulye aldığınızda, kalan miktar sıfırın üzerinde tuttuğunuz miktardan alınır. Yöneticinin mesajındaki miktar paylaştıkları anda kalan miktardır: şu anda daha az kaldıysa sunucunuz daha büyük bir ödemeyi reddeder, ne kadar kaldığını söyler ve hiçbir şey ödenmez. Uygulama bir ödemenin gerçekleşmiş olabileceğini söylerse aynı ekranda <strong>Tekrar dene</strong> seçeneğine dokunun: aynı ödeme asla iki kez ödenmez. O ekrandan ayrıldıysanız tekrar ödeme yapmadan önce Defterinizi kontrol edin.</li>
+        </ul>
+        <h2>Yöneticiler tarafından dondurulduğunda</h2>
+        <p>Topluluğunuzun yöneticileri bir üyenin kredi limitini dondurabilir: tamamını veya bilinen bir toplulukta teyit edilmiş bir üye olmaktan gelen kısmını.</p>
+        <ul>
+            <li>Tamamını dondururlarsa veya teyit edilen kısım sahip olduğunuz limitin tamamıysa, Defter <strong>Kredi limitiniz donduruldu</strong> der: sürdüğü müddetçe eksiye harcama yapamazsınız ancak Fasulye satmaya ve almaya, sıfırın üzerinde sahip olduğunuzu harcamaya devam edebilirsiniz. Dondurduklarında ekside idiyseniz Defter kaç Fasulye ekside olduğunuzu da belirtir: Fasulye satmak veya almak sizi tekrar yukarı taşır ve sıfırın üzerine çıktığınızda sahip olduğunuzu harcayabilirsiniz.</li>
+            <li>Teyit edilen kısmı dondururlarsa ve ayrıca bir kefaletten, takastan veya bir hibeden krediniz varsa, çubuk kalır ve altında teyit edilen kısmın dondurulduğu ve geri kalanının eskisi gibi çalıştığına dair bir not yer alır. Kalanın altındaysanız Defter <strong>Harcama duraklatıldı</strong> da der (aşağıda).</li>
+        </ul>
+        <p>Seviyeniz değişmez: yöneticiler limitinizi topluluğunkinden daha düşük veya daha yüksek belirlemiş olsa bile, dondurulmadığında kredi limitinizin size verdiği seviyedir; profilinizde de ilanlarınızda da aynıdır. Nedenini sormak veya tekrar açtırmak için yöneticilerden birine danışın.</p>
+        <h2>Harcama duraklatıldı</h2>
+        <p>Tekliflerinizin izin verdiğinin altına düşerseniz, örneğin bir Teklifi kaldırdığınız için, Defter <strong>Harcama duraklatıldı</strong> der. Yine de kazanabilir ve satış yapabilirsiniz. Bir Teklif paylaşın veya tekrar kazanarak yükselin, bu durum kalkar. Sizden hiçbir şey alınmaz.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>Güven rozetleri</strong><span>Yeni Gelen, Sakin, Temsilci ve Büyük. Anlamları ve neden ayrıcalık kilidi açmadıkları.</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>500 fasulye ortak limiti</strong><span>Neden tek bir kişiyle çok takas yapmak yerine birçok kişiyle takas yapmanın daha fazla güven oluşturduğu.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool nasıl çalışır</strong><span>Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.</span></a></li>
+            <li><a href="posting.html"><strong>Teklif veya İhtiyaç paylaşma</strong><span>Yapabileceğiniz, verebileceğiniz bir şey veya aradığınız bir şeyi paylaşın.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

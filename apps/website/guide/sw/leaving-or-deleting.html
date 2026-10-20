@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuondoka au kufuta akaunti yako — BeanPool members' guide</title>
+    <meta name="description" content="Ondoka kwenye simu hii, au ufute akaunti yako kabisa, na kitakachotokea kwa maharagwe yako.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Mipangilio na usalama</a></p>
+        <h1>Kuondoka au kufuta akaunti yako</h1>
+        <p class="lede">Ondoka kwenye simu hii, au ufute akaunti yako kabisa, na kitakachotokea kwa maharagwe yako.</p>
+        <h2>Chaguo mbili</h2>
+        <p>Fungua <strong>Mipangilio</strong> na uguse <strong>Kufuta Akaunti &amp; Kuondoka</strong>, chini kabisa. Unaweza:</p>
+        <ul>
+            <li><strong>Ondoa kwenye Kifaa Hiki Tu:</strong> ondoka kwenye simu hii. Akaunti yako inabaki kwenye jumuiya yako. Unaweza kurudi ukitumia maneno yako 12, au kwa akaunti ya kuingia iliyounganishwa.</li>
+            <li><strong>Futa Akaunti Kabisa:</strong> futa kabisa akaunti yako kwenye jumuiya hii moja kwa moja. Simu inahifadhi ufunguo wako kwa ajili ya jumuiya zako zingine.</li>
+        </ul>
+        <p>Unaenda mbali kwa muda? Hali ya Likizo inaweza kuwa kile unachotaka. Tazama &quot;Hali ya Likizo&quot;.</p>
+        <h2>Kuondoka kwenye simu hii</h2>
+        <ul>
+            <li>Gusa <strong>Ondoka (Kifaa Hiki Tu)</strong>.</li>
+            <li>Andika <strong>WIPE</strong> na uguse <strong>Thibitisha Kuondoka</strong>.</li>
+            <li>Pita ukaguzi wa kufunga skrini wa simu yako, kisha uguse <strong>Ondoka</strong> ili kuthibitisha.</li>
+        </ul>
+        <p>Kwenye programu ya wavuti, gusa <strong>Ondoka (Kifaa Hiki Tu)</strong>, kisha <strong>Thibitisha Kuondoka</strong>. Hakuna neno <strong>WIPE</strong> la kuandika na hakuna hatua ya skrini iliyofungwa.</p>
+        <p>Akaunti yako na kila jumuiya uliyohifadhi zitaondolewa kwenye simu hii. Vilevile viungo vya Instagram au TikTok ulivyotengeneza kwa chaneli zako, na vitengo ulivyoweka nyota chini ya <strong>Kwa Ajili Yako</strong>. Katika programu ya simu, jumuiya yako huhifadhi vitengo hivyo pamoja na akaunti yako, kwa hivyo vinarudi unaporudi. Orodha yako ya kuzuia inabaki kwenye simu, ikihifadhiwa kwa akaunti yako: ukirudi na akaunti hiyohiyo vizuizi vyako bado vipo hapo. Akaunti nyingine kwenye simu hii haivipati. Kwenye programu ya wavuti, jumuiya yako huhifadhi vizuizi vyako pamoja na akaunti yako: ingia tena, kwenye kivinjari chochote, navyo vinarudi. Hakuna chochote kuvihusu kinachobaki kwenye kompyuta. <strong>Bila maneno yako 12 huwezi kuingia tena.</strong> Kagua kwamba unayo kwanza.</p>
+        <p>Simu iliyorejeshwa kwa akaunti ya kuingia inaweza kuwa haina maneno 12. Mipangilio inasema hivyo. Huko, <strong>bila akaunti ya kuingia iliyounganishwa huwezi kuingia tena.</strong> Programu husema hivyo kabla hujaondoka, na <strong>Kagua Ulinzi wa Akaunti kwanza</strong> hukupeleka huko. Ikiwa umeandika maneno hayo chini, yaongeze kwenye simu kwanza (tazama &quot;Maneno yako 12&quot;).</p>
+        <h2>Kufuta akaunti yako</h2>
+        <ul>
+            <li>Gusa <strong>Futa Akaunti Kabisa</strong>.</li>
+            <li>Programu hukagua jumuiya zingine kwenye simu hii na kusema kile kinachobaki. Isubiri.</li>
+            <li>Andika <strong>DELETE</strong> au jina lako na uguse <strong>Futa Akaunti Kabisa</strong>.</li>
+            <li>Pita ukaguzi wa kufunga skrini wa simu yako, kisha uguse <strong>Futa Kabisa</strong> ili kuthibitisha.</li>
+        </ul>
+        <p>Kwenye programu ya wavuti, andika <strong>DELETE</strong> au jina lako na uguse <strong>Futa Akaunti Kabisa</strong>. Hakuna hatua ya kufunga skrini.</p>
+        <p>Hili haliwezi kutenduliwa, hata ukiwa na maneno yako 12.</p>
+        <ul>
+            <li>Huwezi kufuta ukiwa na makubaliano yanayoendelea. Yamilishe au yaghairi kwanza.</li>
+            <li>Ukishikilia maharagwe, huenda kwenye Hazina ya Pamoja.</li>
+            <li>Ikiwa uko chini ya sifuri, Hazina ya Pamoja hulipa deni hilo.</li>
+            <li>Ikiwa msimamizi alikuwa amekuthibitisha na unadaiwa Maharagwe, orodha ya majina ya wasimamizi huweka dokezo la kile ulichodaiwa kwa miaka 3, na hakuna anayeweza kuthibitishwa kulingana na ingizo hilo hadi lilipwe. Tazama &quot;Wanachoweza kuona wasimamizi&quot;.</li>
+            <li>Wasifu wako unakuwa &quot;Mwanachama Aliyefutwa&quot;.</li>
+            <li>Machapisho yako huondolewa, na maneno, picha na maeneo yake yanafutwa, pia kutoka kwenye machapisho yaliyokamilika au kuondolewa hapo awali. Makubaliano yaliyofanywa kwenye chapisho bado yanaonyeshwa, kama &quot;Tangazo lililofutwa&quot;.</li>
+            <li>Kila ujumbe ulioandika unasomeka <strong>Ujumbe huu ulifutwa</strong>: katika gumzo na mtu, gumzo za kikundi, gumzo za matukio na mijadala ya mradi na biashara ya kijamii. Picha ulizotuma zinafutwa. Ujumbe wa watu wengine unabaki kama ulivyo, ili mazungumzo bado yawe na maana. Hili haliwezi kufikia nakala ambayo mtu alihifadhi, picha ya skrini, au nakala rudufu ya seva iliyotengenezwa kabla hujafuta (tazama &quot;Kinachobaki kwa muda&quot; hapa chini). Programu ya mtu mwingine hufuta jumbe zako za zamani ambazo tayari inazo pia, na kufuta picha zako ilizokuwa imefungua, wakati mwingine itakaposawazisha. Toleo la zamani la programu linaweza kuweka jumbe hizo za zamani, kama picha ya skrini au nakala rudufu.</li>
+            <li>Matukio unayoandaa yanaghairiwa na kufutwa kwa njia hiyohiyo. Watu wanaokwenda bado wanaweza kusoma sehemu iliyobaki ya gumzo la tukio hadi siku 30 baada ya tukio.</li>
+            <li>Kura ya maoni uliyouliza inafungwa. Inaweka swali lake na kura zake.</li>
+            <li>Orodha ya kuzuia ambayo jumuiya yako ilikuhifadhia inaondoka pia.</li>
+            <li>Ukisaidia kuendesha mradi au kuwa mtunzaji wa biashara ya kijamii, unaacha kuwa mmoja wa washirika au watunzaji wake. Ikiwa ulikuwa kiongozi wa mradi au mtunzaji mkuu wa biashara ya kijamii, yule aliyekuwepo kwa muda mrefu zaidi anachukua usimamizi. Ikiwa ulikuwa peke yako, mradi au biashara ya kijamii husitishwa kwa muda. Maharagwe yake yanabaki nayo.</li>
+            <li>Inafuta akaunti yako kwenye jumuiya unayotumia pekee. Akaunti zako katika jumuiya zingine zinabaki.</li>
+            <li>Jumuiya yako haiwezi kamwe kuirudisha akaunti hiyo. Ili kurudi, jiunge tena kwa mwaliko mpya. Jumuiya ya kimataifa haipokei mialiko: ili kurudi huko, jiunge tena kama akaunti mpya, ukiwa na maneno mapya 12 au njia ya kuingia, kutoka kwenye simu au kivinjari kisicho na akaunti hii. Jumuiya ya kimataifa huikataa kabisa akaunti iliyofutwa, na simu ambayo bado iko kwenye jumuiya nyingine huiweka. Kwenye simu kama hiyo programu husema <strong>Nafasi ya akaunti hii katika jumuiya ya dunia nzima ilifungwa, kwa hivyo haiwezi kujiunga tena.</strong> na huacha kutoa mlango kwa akaunti hiyo. Sentensi hiyohiyo hutolewa kwa mwanachama ambaye jumuiya ilimwondoa.</li>
+        </ul>
+        <p>Ikiwa unaendesha seva ya jumuiya yako na wewe ndiye mmiliki wake pekee, huwezi kufuta akaunti yako hadi kuwe na mmiliki mwingine.</p>
+        <h3>Kinachobaki kwa muda</h3>
+        <p>Seva ya jumuiya yako hufuta yote yaliyo hapo juu mara moja. Pia huondoa jina lako na ufunguo wako kutoka kwenye kumbukumbu yake. Baadhi ya nakala hubaki kwa muda:</p>
+        <ul>
+            <li><strong>Seva ya akiba.</strong> Ikiwa jumuiya yako ina nakala ya seva ya akiba, seva ya akiba huzifuta wakati wa nakala yake inayofuata.</li>
+            <li><strong>Picha za kumbukumbu (snapshots).</strong> Seva huweka nakala yake yenyewe ya kila siku, ili kutendua makosa. Kila nakala bado inashikilia akaunti yako kama ilivyokuwa hadi nakala hiyo ifutwe. Hiyo ni baada ya wiki moja kwa mipangilio ya kawaida, na kamwe si zaidi ya siku 14.</li>
+            <li><strong>Nakala rudufu.</strong> Nakala rudufu ambayo mmiliki wa seva alipakua kabla hujafuta huhifadhi kila kitu hadi aifute. Seva haiwezi kuifikia.</li>
+            <li><strong>Nakala rudufu zilizowekwa mahali pengine.</strong> Ikiwa seva ya jumuiya yako inatuma nakala zake rudufu kwenye hifadhi mahali pengine, kila moja iliyotengenezwa kabla hujafuta huhifadhi akaunti yako kama ilivyokuwa hadi seva ifute huko: baada ya siku 30 zaidi. Nakala hizi rudufu zimefungwa: ni watu pekee ambao jumuiya yako inawaamini kwa msimbo wake wa urejeshaji, na wamiliki wake, wanaoweza kuzifungua.</li>
+            <li><strong>Dokezo la kufuta.</strong> Rekodi fupi ya kile kilichofutwa, kama vile wanachama wawili waliokuwa marafiki, hubaki kwa siku 30. Seva ya akiba huihitaji ili kufuta nakala yake.</li>
+            <li><strong>Kumbukumbu ya kiweko cha seva (console log).</strong> Inaweza kuonyesha jina lako kwa muda mrefu kidogo, hadi ijae na kubadilishwa. Hakuna kinachoweza kuibadilisha.</li>
+            <li><strong>Biashara zako</strong> hubaki kwenye daftari la hesabu, chini ya &quot;Mwanachama Aliyefutwa&quot;, ili maharagwe ya kila mtu bado yaendelee kuhesabika sawa.</li>
+            <li><strong>Taarifa zinazowekwa kwa ajili ya watu wengine.</strong> Kwa siku 7 seva huweka maelezo ya kila arifa iliyotuma kwa watu uliowaandikia au kufanya biashara nao, ili simu zao ziweze kuzionyesha (kwa mfano, kwamba ujumbe ulikuja kwenye gumzo). Unapofuta, jina lako na ufunguo huondolewa kwenye taarifa hizo, kwa hivyo ile iliyosema &quot;Wren alikutumia ujumbe&quot; inasomeka &quot;Mwanachama alikutumia ujumbe&quot;. Sehemu iliyobaki ya taarifa, kama vile ilikuwa ya gumzo gani, inabaki hadi siku zake 7 zitakapofika.</li>
+        </ul>
+        <h3>Kinachobaki kwenye simu hii</h3>
+        <ul>
+            <li><strong>Ikiwa wewe ni mwanachama wa jumuiya nyingine kwenye simu hii,</strong> ufunguo wako na maneno 12 hubaki. Jumuiya uliyoifuta huondoka kwenye orodha ya simu, pamoja na data yake kwenye simu, na programu hufungua mojawapo ya jumuiya zako zingine. Programu huzitaja kabla hujathibitisha.</li>
+            <li>Jumuiya ambayo programu haiwezi kuifikia inahesabiwa kama jumuiya ambayo bado umo ndani yake, kwa hivyo muunganisho mbaya hauondoi kamwe ufunguo wako.</li>
+            <li><strong>Ikiwa hii ndiyo jumuiya ya mwisho kwenye simu hii ambapo wewe ni mwanachama,</strong> ufunguo wako na maneno 12 huondoka kwenye simu pia, kama unapoondoka. Andika maneno yako 12 chini kwanza: yanakurudisha kwenye jumuiya yoyote ambayo simu hii haiorodheshi.</li>
+            <li><strong>Ikiwa ghala la funguo la BeanPool linaweka nakala ya ufunguo wako,</strong> kutoka kwa akaunti ya kuingia uliyounganisha, programu huiondoa kwanza, wakati ufunguo wako bado uko kwenye simu. Ufunguo wako pekee ndio unaoweza kuiondoa, kwa hivyo baada ya hapo hakuna mtu anayeweza. Ghala huifuta mara moja, na kutoka kwenye nakala zake rudufu ndani ya siku 30.</li>
+            <li>Ikiwa ghala halithibitishi hilo, programu husema hivyo, na ufunguo wako unabaki kwenye simu kwa sasa. Gusa <strong>Jaribu Tena</strong>, au <strong>Futa Hata Hivyo</strong>: ufunguo wako unaondoka kwenye simu na nakala ya ghala inabaki, ikiwa imefungwa kwa akaunti yako ya kuingia. Ili kuiondoa baadaye, unahitaji ufunguo wako tena, ukiwa na maneno yako 12 au akaunti hiyo ya kuingia, na jumuiya inayokutambua, ili uguse <strong>Tenganisha</strong> katika <strong>Ulinzi wa Akaunti</strong>.</li>
+            <li>Ili kuondoa BeanPool kabisa kwenye simu, tumia <strong>Ondoka (Kifaa Hiki Tu)</strong>.</li>
+            <li>Ikiwa jumuiya itakataa ufutaji, au haitajibu ndani ya sekunde 20, hakuna chochote kwenye simu kinachobadilika. Programu husema hivyo, na unaweza kujaribu tena.</li>
+        </ul>
+        <p>Programu ya wavuti huweka ufunguo wako kwenye kivinjari kwa kila anwani ya wavuti ya jumuiya, na kufuta huondoa ufunguo huo kwa anwani hiyo pekee. Programu ya simu na anwani za wavuti za jumuiya zingine huweka nakala zao zenyewe. Ikiwa ulielekeza programu ya wavuti kwenye jumuiya nyingine chini ya <strong>Kina / Mfumo Mdogo</strong>, na jumuiya ambayo anwani yake ya wavuti inatumiwa bado inakutambua, ufunguo unabaki na programu ya wavuti inarudi kwenye jumuiya hiyo. Ikiwa programu ya simu iliweka nakala ya ufunguo wako kwenye ghala la funguo la BeanPool, kufuta katika programu ya wavuti hakuiondoi: iondoe katika programu ya simu kwanza, kwa kutumia <strong>Tenganisha</strong> katika <strong>Ulinzi wa Akaunti</strong>.</p>
+        <h3>Ikiwa jumuiya haikutambui</h3>
+        <p>Wakati jumuiya ambayo simu imewekwa haitambui wewe kama mwanachama, programu huuliza jumuiya hiyo ni ya aina gani na huonyesha mojawapo ya haya:</p>
+        <ul>
+            <li><strong>Bado wewe si mwanachama hapa</strong>, kwenye jumuiya ya kimataifa, ambayo mtu yeyote anaweza kujiunga nayo. Akaunti yako iko sawa: gusa <strong>Jiunge na akaunti hii</strong> ili kujiunga nayo ukitumia ufunguo na maneno 12 uliyonayo tayari, au badilisha hadi mojawapo ya jumuiya zako. Ili kujaribu jumuiya tofauti, gusa <strong>Si jumuiya hii? Weka anwani nyingine</strong>.</li>
+            <li><strong>Jumuiya hii haikutambui</strong>, kwenye jumuiya inayowaunga watu kwa mwaliko. Kwa kawaida anwani huwa si sahihi, au bado hujajiunga nayo. Badilisha hadi mojawapo ya jumuiya zako, weka anwani nyingine na uguse <strong>Unganisha tena</strong>, au uguse <strong>Bandika mwaliko</strong> na <strong>Jiunge na mwaliko huu</strong> ikiwa unao. Jumuiya ya kimataifa hutolewa pia, kukiwa na mstari unaosema kama unaweza kujiunga nayo sasa.</li>
+            <li>Kwenye jumuiya iliyo katika onyesho la faragha, sentensi yake yenyewe, <strong>Jumuiya hii iko katika onyesho la faragha. Muombe mmiliki wake mwaliko.</strong>, kukiwa na nafasi ya mwaliko kutoka kwa mmiliki au msimamizi wake.</li>
+            <li><strong>Akaunti yako katika</strong> (jina la jumuiya) <strong>ilifungwa</strong>, ulipoifuta huko au jumuiya ilipoiondoa. Jumuiya zako zingine haziathiriwi: badilisha hadi mojawapo ya hizo au, pale programu inapotoa nafasi, jiunge na jumuiya ya kimataifa. Ikiwa jumuiya ilikuondoa, bado huweka wasifu wako: gusa <strong>Futa akaunti yangu kwenye</strong> (jina lake) ili kuufuta. Hiyo hufungua <strong>Mipangilio</strong> kwenye <strong>Futa Akaunti Kabisa</strong>, hatua zilizo hapo juu. Mipangilio ndio mahali pekee ambapo programu bado inafungua kwa ajili ya jumuiya hii; skrini nyingine yoyote inakurudisha kwenye ukurasa huu.</li>
+        </ul>
+        <p><strong>Unganisha tena</strong>, na kuchagua mojawapo ya jumuiya zako, huuliza jumuiya hiyo kwanza. Simu huhamia tu ikiwa inakutambua kama mwanachama (au ulichagua kuitembelea kama mgeni). Ikiwa sivyo, hakuna kinachobadilika: simu inabaki kwenye jumuiya iliyokuwepo, orodha yako ya jumuiya inabaki kama ilivyokuwa, na programu inaonyesha ukurasa wa jumuiya hiyo, ikisema simu yako bado iko pale ilipokuwa na hakuna kilichobadilishwa.</p>
+        <p>Ikiwa jumuiya nyingine kwenye simu hii bado inakutambua, au haiwezi kufikiwa, programu huiorodhesha ili ubadilishe kuelekea huko na huweka ufunguo wako. Kugusa <strong>Futa akaunti hii kutoka kwenye simu hii</strong> kwanza huuliza jumuiya zako zingine. Inafuta tu pale ambapo hakuna hata moja inayokutambua.</p>
+        <h3>Ikiwa jumuiya yako ilikuondoa</h3>
+        <p>Jumuiya inapomwondoa mwanachama, huhifadhi wasifu wake, ili kura iweze kumrudisha. Bado unaweza kufuta akaunti yako. Kwenye programu ya simu, ukurasa unaosema akaunti yako huko ilifungwa una chaguo la <strong>Futa akaunti yangu kwenye</strong> (jina la jumuiya), ambalo hufungua <strong>Futa Akaunti Kabisa</strong> katika <strong>Mipangilio</strong>: hatua zilizo hapo juu. Kisha:</p>
+        <ul>
+            <li>Jina lako, picha, wasifu mfupi, maelezo ya mawasiliano, marafiki na nakala za kurejesha za kuingia hufutwa, na vivyo hivyo maneno, picha na maeneo ya machapisho yako, isipokuwa kura zako za maoni.</li>
+            <li>Kila ujumbe ulioandika unasomeka <strong>Ujumbe huu ulifutwa</strong>, na picha ulizotuma zinafutwa.</li>
+            <li>Baada ya hapo, jumuiya yako haiwezi kupiga kura kuirudisha akaunti hiyo. Ili kurudi, jiunge tena kwa mwaliko mpya. Jumuiya ya kimataifa haipokei mialiko, na njia ya kuingia iliyoondolewa haiwezi kujiunga nayo tena.</li>
+            <li>Ikiwa makubaliano yako bado yanaendelea, mwanachama mwingine au msimamizi lazima ayafunge kwanza.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="recovery.html"><strong>Kurejesha akaunti yako</strong><span>Rejesha akaunti yako kwenye simu mpya, na uilinde kwa akaunti ya kuingia.</span></a></li>
+            <li><a href="communities.html"><strong>Zaidi ya jumuiya moja</strong><span>Kuwa wa jumuiya kadhaa kwa akaunti moja, kubadili kati yao, kufuata jumuiya yako kwenye anwani mpya, na kuona kile jumuiya ya kimataifa inakuonyesha.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Hali ya Likizo</strong><span>Hali ya Likizo huficha Ofa zako na kusitisha maombi mapya ukiwa mbali.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Maneno yako 12</strong><span>Maneno 12 ndio ufunguo wa akaunti yako. Umuhimu wake, mahali pa kuyapata, jinsi ya kuyaweka salama, na kuongeza njia ya kuingia kwa usalama.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

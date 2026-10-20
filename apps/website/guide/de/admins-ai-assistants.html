@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wenn Admins KI-Hilfe nutzen — BeanPool members' guide</title>
+    <meta name="description" content="Was der KI-Assistent eines Eigentümers oder Admins über dich lesen kann, was er nie sieht und wer Daten erhält.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Einstellungen &amp; Schutz</a></p>
+        <h1>Wenn Admins KI-Hilfe nutzen</h1>
+        <p class="lede">Was der KI-Assistent eines Eigentümers oder Admins über dich lesen kann, was er nie sieht und wer Daten erhält.</p>
+        <p>Die Eigentümer deiner Community können ihren eigenen KI-Assistenten (zum Beispiel Claude oder ChatGPT) mit dem Server deiner Community verbinden, um sich bei der Betreuung unterstützen zu lassen: um zu fragen, wo Handlungsbedarf besteht, oder um offene Meldungen zusammenzufassen. Admins können dies ebenfalls tun: Sie fügen die Adresse deiner Community zu ihrem Assistenten hinzu und bestätigen dies auf ihrem Smartphone. Sie verbinden ihn selbst und können die Verbindung jederzeit trennen. Die anderen Eigentümer werden benachrichtigt, sobald ein Assistent verbunden wird.</p>
+        <h2>Was er über dich lesen kann</h2>
+        <p>Ein Assistent sieht viel weniger als ein Admin in den Einstellungen. Der Server deiner Community bestimmt, was er erhält, nicht der Assistent.</p>
+        <ul>
+            <li><strong>Wenn jemand dich oder deinen Beitrag meldet</strong>, und der Admin nach dem Wortlaut der Meldung fragt: die angegebene Begründung, Titel und Beschreibung deines Beitrags sowie dein BeanPool-Name. Niemals, wer die Meldung erstattet hat.</li>
+            <li><strong>Wenn du um Beitritt bittest</strong>, und der Admin nach den Nachrichten fragt: der Name und die Nachricht, die du mit deiner Anfrage gesendet hast, und die Community, aus der du nach eigenen Angaben stammst. Niemals dein Foto oder dein Schlüssel.</li>
+            <li><strong>Gesamtzahlen für die gesamte Community</strong>, wie etwa wie viele Mitglieder es gibt und wie viele Bohnen im Umlauf sind. Niemals dein Kontostand.</li>
+        </ul>
+        <h2>Was er niemals sieht</h2>
+        <p>Deine Nachrichten und Chats, deinen Kontostand und Handelsgeschäfte, deine Schlüssel, deine Adresse, deine Fotos, die Namensliste und wer wen gemeldet hat. Er kann an dir nichts ändern: Er kann dich nicht ausschließen, stummschalten, deinen Beitrag entfernen oder deine Beitrittsanfrage beantworten. Dies wird von Menschen erledigt. Ein Admin tut dies in den Einstellungen oder auf seinem Smartphone, und eine Beitrittsanfrage wird in der App von jedem Mitglied beantwortet, das einladen darf.</p>
+        <p>Ein Assistent kann vorschlagen, was bezüglich einer Meldung getan werden sollte, zum Beispiel deinen Beitrag beizubehalten oder zu entfernen. Es geschieht nichts, sofern der Admin, für den er arbeitet, die Meldung nicht liest und zustimmt; alles, was du dazu hörst, stammt wie immer von den Moderatoren deiner Community.</p>
+        <h2>Wer die Daten erhält</h2>
+        <p>Was der Assistent liest, geht an das Unternehmen, das ihn betreibt – genauso wie wenn du selbst etwas in einen KI-Chat einfügst. Der Server sendet den Text einer Meldung oder eine Beitrittsnachricht nur dann, wenn der Assistent des Admins danach fragt, gekennzeichnet als Worte eines Mitglieds und nicht als Anweisungen.</p>
+        <p>Wenn du lieber möchtest, dass deine Meldung oder deine Beitrittsnachricht nicht von einer KI gelesen wird, frage deine Admins, wie sie ihren Assistenten nutzen.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>Was die Admins sehen</strong><span>In einer Community mit Namensliste: was über dich gespeichert wird, wer es lesen darf, was der Server behält und was bestätigt bedeutet.</span></a></li>
+            <li><a href="reporting.html"><strong>Ein Problem melden</strong><span>Den Moderatoren deiner Community einen Beitrag, ein Event, einen Puls-Beitrag, ein Projekt oder einen Betrieb melden.</span></a></li>
+            <li><a href="privacy.html"><strong>Privatsphäre</strong><span>Was andere über dich sehen können und welche Einstellungen dies steuern.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool beitreten</strong><span>Zwei Wege: eine Community mit Einladung oder die globale Community mit 12 geheimen Wörtern oder einem Login. Beitritt anfragen und andere einladen.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

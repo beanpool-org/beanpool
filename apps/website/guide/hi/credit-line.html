@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>आपकी क्रेडिट सीमा — BeanPool members' guide</title>
+    <meta name="description" content="आप शून्य से कितना नीचे जा सकते हैं, और यह कैसे बढ़ती है।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">खाता</a></p>
+        <h1>आपकी क्रेडिट सीमा</h1>
+        <p class="lede">आप शून्य से कितना नीचे जा सकते हैं, और यह कैसे बढ़ती है।</p>
+        <h2>What it is</h2>
+        <p>आपकी क्रेडिट सीमा आपको अपने पास मौजूद फलियों से अधिक खर्च करने और शून्य से नीचे जाने की अनुमति देती है। यह बाद में दूसरों की मदद करने का एक वादा है। शून्य से नीचे होने पर कुछ भी खर्च नहीं होता है: कोई ब्याज नहीं है।</p>
+        <h2>Where to see it</h2>
+        <p><strong>खाता</strong> पर, आपके शेष के नीचे, एक पट्टी दिखाती है कि आप कहाँ हैं:</p>
+        <ul>
+            <li>शून्य बीच में है;</li>
+            <li>बायाँ सिरा <strong>आपकी सीमा</strong> है, सबसे निचला स्तर जहाँ आप जा सकते हैं;</li>
+            <li>बाईं ओर के निशान दिखाते हैं कि आपके ऑफ़र आपको कितना नीचे जाने की अनुमति देते हैं;</li>
+            <li>दाईं ओर <strong>+200</strong> के पार वह जगह है जहाँ से चलन शुल्क शुरू होता है।</li>
+        </ul>
+        <p>फ़ोन पर, प्रत्येक भाग को समझाने वाली <strong>क्रेडिट स्लाइडर जानकारी</strong> के लिए पट्टी पर टैप करें।</p>
+        <h2>How it opens</h2>
+        <p>यह शून्य से शुरू होती है। यह तब खुलती है जब आप बाज़ार में अपना पहला व्यापार पूरा करते हैं (केवल 1 या 2 फलियों का व्यापार गिनने के लिए बहुत छोटा होता है), या जब नए लोगों का स्वागत करने के लिए चुना गया कोई व्यक्ति आपकी पुष्टि (वाउच) करता है। तब तक खाता कहता है <strong>अभी कोई क्रेडिट लाइन नहीं</strong>। आप अभी भी अपने पास मौजूद फलियों के साथ व्यापार कर सकते हैं।</p>
+        <h2>How it grows</h2>
+        <ul>
+            <li><strong>विश्वास:</strong> पूरे किए गए व्यापार विश्वास का निर्माण करते हैं, विशेष रूप से कई अलग-अलग लोगों के साथ। &quot;500-फली साथी सीमा&quot; देखें।</li>
+            <li><strong>रेटिंग:</strong> सितारे आपके द्वारा अर्जित विश्वास को केवल कम कर सकते हैं। औसतन 5 सितारे इसे पूरा बनाए रखते हैं; कम औसत कुछ कम कर देता है।</li>
+            <li>कोई भी क्रेडिट सीमा अधिकतम 2,000 फलियों तक जाती है। अपने सदस्यों की पुष्टि करने वाला कोई समुदाय 5,000 तक की उच्च सीमा निर्धारित कर सकता है (नीचे देखें)।</li>
+        </ul>
+        <h2>Your Offers set how much you can use</h2>
+        <p>आप अपनी क्रेडिट सीमा का उतना ही उपयोग कर सकते हैं जितना आपके लाइव ऑफ़र अनुमति देते हैं:</p>
+        <ul>
+            <li>कोई ऑफ़र नहीं: कुछ नहीं;</li>
+            <li>1 ऑफ़र: −200 तक;</li>
+            <li>2: −500;</li>
+            <li>3: −1,000;</li>
+            <li>4: −1,500;</li>
+            <li>5: −2,000।</li>
+        </ul>
+        <p>पट्टी के नीचे की पंक्ति आपको बताती है, उदाहरण के लिए &quot;अपनी क्रेडिट लाइन खोलने के लिए एक ऑफ़र पोस्ट करें&quot;।</p>
+        <h2>In a known community</h2>
+        <p>कुछ समुदायों में ऐसे व्यवस्थापक होते हैं जो प्रत्येक सदस्य को नाम से जानते हैं। यदि आपके समुदाय ने <strong>ज्ञात न्यूनतम सीमा</strong> चालू की है, तो व्यवस्थापक द्वारा पुष्ट किए गए सदस्य को तुरंत एक क्रेडिट सीमा मिलती है: 1,000 फलियाँ जब तक कि आपके समुदाय ने कोई अन्य राशि न चुनी हो। यह लगभग 25 घंटे का काम है जिसके लिए समुदाय आप पर भरोसा कर रहा है।</p>
+        <ul>
+            <li>एक लाइव ऑफ़र आपको इसका पूरा उपयोग करने देता है। बिना किसी ऑफ़र के, आप इसका उपयोग नहीं कर सकते।</li>
+            <li>व्यापार करके आपके द्वारा अर्जित विश्वास इसमें जुड़ता है, आपके समुदाय की अधिकतम सीमा तक (2,000 फलियाँ जब तक कि उसने 5,000 तक अधिक न चुना हो)।</li>
+            <li>एक व्यवस्थापक आपके लिए एक छोटी सीमा निर्धारित कर सकता है, उदाहरण के लिए जब आप नए हों। यह आपसे कभी फलियाँ नहीं लेता है: यदि आप पहले से ही इससे नीचे हैं, तो खर्च तब तक रुक जाता है जब तक आप वापस इसके ऊपर नहीं आ जाते।</li>
+            <li>यदि आप किसी पुराने खाते का ऋण चुका रहे हैं, तो 0 से ऊपर मिलने वाली फलियाँ साझा में तब तक जाती हैं जब तक कि इसका भुगतान न हो जाए। आपका खाता बताता है कि कितना शेष है। आप <strong>खाता → साझा पूल को भुगतान करें</strong> में स्वयं भी इसमें से कुछ या पूरा भुगतान कर सकते हैं: आपका पे-बैक कोड वहाँ भरा होता है (या व्यवस्थापक द्वारा दिया गया कोड दर्ज करें)। कोड के साथ आप जो भुगतान करते हैं वह तुरंत ऋण से कम हो जाता है, और जब कुछ भी शेष नहीं रहता तो ऋण का निपटारा हो जाता है: किसी भुगतान द्वारा या आपको मिलने वाली राशि से कुछ भी अधिक नहीं लिया जाता है। कोड के बिना किया गया भुगतान साझा में जाता है लेकिन आपके ऋण से कम नहीं होता है, और ऐप ऐसा कहता है: इसे गिनने के लिए, किसी व्यवस्थापक से इसके संदर्भ के साथ इसे आपके ऋण में जोड़ने के लिए कहें। जब तक वे ऐसा नहीं करते, ऋण चुकता होता रहता है: अगली बार जब आपको फलियाँ मिलेंगी, तो शेष राशि आपके 0 से ऊपर मौजूद बैलेंस में से ले ली जाएगी। व्यवस्थापक के संदेश में दी गई राशि वह थी जो उनके साझा करने के समय शेष थी: यदि अब कम बची है, तो आपका सर्वर बड़े भुगतान को अस्वीकार कर देता है और बताता है कि कितना शेष है, और कुछ भी भुगतान नहीं किया जाता है। यदि ऐप कहता है कि कोई भुगतान हो चुका हो सकता है, तो उसी स्क्रीन पर <strong>पुनः प्रयास करें</strong> पर टैप करें: वही भुगतान कभी दो बार नहीं किया जाता है। यदि आपने वह स्क्रीन छोड़ दी है, तो दोबारा भुगतान करने से पहले अपना खाता जांचें।</li>
+        </ul>
+        <h2>Frozen by the admins</h2>
+        <p>आपके समुदाय के व्यवस्थापक किसी सदस्य की क्रेडिट सीमा को फ़्रीज़ कर सकते हैं: पूरी, या किसी ज्ञात समुदाय में, वह हिस्सा जो एक पुष्ट सदस्य होने से आता है।</p>
+        <ul>
+            <li>यदि वे इसे पूरी तरह से फ़्रीज़ कर देते हैं, या पुष्ट हिस्सा ही आपकी पूरी सीमा है, तो खाता कहता है <strong>आपकी क्रेडिट लाइन रोक दी गई है</strong>: इसके बने रहने के दौरान आप डेबिट में खर्च नहीं कर सकते हैं, लेकिन आप अभी भी फलियाँ बेच और प्राप्त कर सकते हैं, और शून्य से ऊपर मौजूद फलियों को खर्च कर सकते हैं। यदि उनके इसे फ़्रीज़ करने पर आप डेबिट में थे, तो खाता यह भी बताता है कि आप कितनी फलियाँ डेबिट में हैं: फलियाँ बेचने या प्राप्त करने से आप वापस ऊपर आ जाते हैं, और शून्य से ऊपर आने पर आप अपने पास मौजूद फलियों को खर्च कर सकते हैं।</li>
+            <li>यदि वे पुष्ट हिस्से को फ़्रीज़ करते हैं और आपके पास किसी पुष्टि (वाउच), व्यापार या अनुदान से क्रेडिट भी है, तो पट्टी बनी रहती है, जिसके नीचे एक नोट होता है कि पुष्ट हिस्सा फ़्रीज़ है और बाकी पहले की तरह काम करता है। यदि आप बची हुई राशि से नीचे हैं, तो खाता <strong>खर्च रोक दिया गया है</strong> भी कहता है (नीचे)।</li>
+        </ul>
+        <p>आपका स्तर नहीं बदलता है: यह वही है जो आपकी क्रेडिट सीमा आपको तब देती है जब यह फ़्रीज़ नहीं होती है, भले ही व्यवस्थापकों ने आपकी सीमा को समुदाय की तुलना में कम या अधिक निर्धारित किया हो, आपकी प्रोफ़ाइल और आपकी लिस्टिंग दोनों पर। यह पूछने के लिए कि क्यों, या इसे फिर से खोलने के लिए, किसी व्यवस्थापक से पूछें।</p>
+        <h2>Spending paused</h2>
+        <p>यदि आप अपने ऑफ़र की अनुमति से नीचे जाते हैं, उदाहरण के लिए क्योंकि आपने कोई ऑफ़र हटा दिया, तो खाता कहता है <strong>खर्च रोक दिया गया है</strong>। आप अभी भी कमा और बेच सकते हैं। एक ऑफ़र पोस्ट करें, या वापस कमाएं, और यह हट जाता है। आपसे कुछ भी नहीं लिया जाता है।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>विश्वास बैज</strong><span>नवागंतुक, निवासी, प्रबंधक और वरिष्ठ। उनका क्या अर्थ है, और वे कुछ भी अनलॉक क्यों नहीं करते।</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>500-फली साथी सीमा</strong><span>एक व्यक्ति के साथ बहुत अधिक व्यापार करने की तुलना में कई लोगों के साथ व्यापार करने से अधिक विश्वास क्यों बनता है।</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool कैसे काम करता है</strong><span>फलियाँ, व्यापार, ऑफ़र और ज़रूरतें, और क्रेडिट, सरल शब्दों में।</span></a></li>
+            <li><a href="posting.html"><strong>ऑफ़र या ज़रूरत पोस्ट करना</strong><span>कुछ ऐसा डालें जो आप कर सकते हैं या दे सकते हैं, या जो आप ढूंढ रहे हैं।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

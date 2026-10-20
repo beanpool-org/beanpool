@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuvinjari sokoni — BeanPool members' guide</title>
+    <meta name="description" content="Pata Ofa na Mahitaji kwa utafutaji, vichujio na umbali.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Soko</a></p>
+        <h1>Kuvinjari sokoni</h1>
+        <p class="lede">Pata Ofa na Mahitaji kwa utafutaji, vichujio na umbali.</p>
+        <h2>Kichupo cha Soko</h2>
+        <p>Gusa <strong>Soko</strong> katika safu mlalo ya vichupo. Unaona kile ambacho watu katika jumuiya yako wanatoa na kutafuta, mpya zaidi kwanza, zikiwa zimewekwa katika makundi kulingana na siku zilizochapishwa.</p>
+        <p>Kwenye simu, matukio huja kwanza. Ikiwa tayari umeiruhusu programu kutumia eneo lako, mionekano ya orodha na ya kubana huonyesha orodha zilizo karibu zaidi kwanza badala yake, chini ya <strong>Ya karibu kwanza</strong>, kukiwa na kura za maoni chini ya <strong>Kura za maoni</strong>. <strong>Kwako</strong> huweka mpangilio wake yenyewe. Vuta orodha chini ili kuiburudisha.</p>
+        <p>Kwenye programu ya wavuti Soko hufunguka kama kadi. Katika mionekano ya orodha na ya kubana, matukio hukaa chini ya siku yaliyochapishwa. Kwenye jumuiya ya eneo programu ya wavuti haiweki yaliyo karibu zaidi kwanza.</p>
+        <p>Kwenye jumuiya ya kimataifa, programu ya wavuti huonyesha orodha zilizo karibu nawe kwanza: zilizo karibu zaidi ndani ya <strong>Umbali</strong> wako, au ndani ya kilomita 250 kutoka eneo lako (eneo la makadirio unaloipa jumuiya unapojiunga, au katika <strong>Mipangilio</strong>), kila moja ikiwa na umbali ilipo. Mstari ulio juu ya orodha hueleza ipi kati ya hizo. Karibu na eneo lako kuna kitufe cha <strong>Onyesha kila mahali</strong> kwa ajili ya mpya zaidi kutoka kila mahali. Ukiwa na <strong>Umbali</strong>, fungua <strong>Umbali</strong> na uguse <strong>Weka upya</strong> ili kurudi kwenye eneo lako, kisha uguse <strong>Onyesha kila mahali</strong>. Kwenye simu, jumuiya ya kimataifa huweka orodha zilizo karibu zaidi na eneo lako, hivyo hizo ndizo ambazo Soko huonyesha. Tazama &quot;Kupata vitu vilivyo karibu&quot;.</p>
+        <p>Kwenye jumuiya ya kimataifa, kukiwa na orodha chache tu, Soko huonyesha pia kadi chache zilizowekwa alama <strong>Mfano</strong>. Zimeundwa kama mifano, ili kuonyesha kile ambacho watu huchapisha, na haziwezi kufunguliwa au kujibiwa. Huondoka mara tu kunapokuwa na orodha za kutosha halisi.</p>
+        <p>Kwenye simu, utafutaji na vichujio huteleza mbali unaposogeza chini, ili uone machapisho zaidi. Sogeza juu kidogo na vinarudi. Ili kuruka tena juu kabisa, gusa <strong>Soko</strong> tena.</p>
+        <h2>Kutafuta</h2>
+        <p>Andika kwenye <strong>Tafuta sokoni...</strong> juu kabisa. Kwenye simu ndogo inaweza kusema tu <strong>Tafuta</strong>. Utafutaji pia hupata maneno yanayohusiana: &quot;tunda&quot; hupata &quot;ndimu&quot;. Hupata maneno katika Kichina, Kijapani na Kithai pia, na huacha machapisho ya watu uliowazuia. Bila muunganisho, hutafuta kile ambacho tayari kipo kwenye simu yako.</p>
+        <p>Wakati kukiwa na maneno kwenye utafutaji, kitufe cha <strong>Hifadhi utafutaji huu kwenye Nyumbani</strong> hutokea. Hufungua Nyumbani ikiwa na utafutaji uliohifadhiwa tayari kuongezwa: maneno yako, <strong>Ofa</strong> au <strong>Mahitaji</strong> ikiwa ulikuwa ukiangalia moja tu, kategoria na umbali. Hakuna kitufe chini ya <strong>Matukio</strong> au <strong>Kura za maoni</strong>. Tazama &quot;Nyumbani&quot;.</p>
+        <h2>Vichujio</h2>
+        <p>Safu ya vitufe chini ya utafutaji huchagua kile unachokiona:</p>
+        <ul>
+            <li><strong>Yote</strong>, <strong>Ofa</strong> au <strong>Mahitaji</strong>.</li>
+            <li><strong>Kwako:</strong> machapisho katika kategoria unazoweka nyota chini ya <strong>Binafsisha Maslahi</strong> (nyota zilezile unazoweka kwenye Nyumbani), na matukio yako yanayokuja, yale uliyosema unakwenda au unavutiwa nayo.</li>
+            <li><strong>Matukio</strong> na <strong>Kura za maoni</strong>.</li>
+        </ul>
+        <p>Safu ya pili huipunguza zaidi. Kwenye simu:</p>
+        <ul>
+            <li><strong>Kategoria Zote:</strong> chagua kategoria moja, kama vile Chakula, Vifaa au Bustani.</li>
+            <li><strong>Umbali:</strong> machapisho yaliyo ndani ya umbali kutoka sehemu fulani pekee. Tazama &quot;Kupata vitu vilivyo karibu&quot;.</li>
+            <li><strong>Uaminifu:</strong> machapisho ya wanachama ambao bado hawajafanya biashara tu (<strong>Waanzilishi</strong>), ya <strong>Wageni</strong>, au ya wanachama wenye angalau beji fulani ya uaminifu.</li>
+            <li><strong>Maharagwe pekee:</strong> huficha machapisho ambayo pia yanaomba pesa taslimu.</li>
+        </ul>
+        <p>Kwenye programu ya wavuti vitufe ni <strong>Kategoria</strong>, <strong>Umbali</strong>, <strong>🌱 Wanachama wapya</strong> (wanachama ambao bado hawajafanya biashara) na <strong>🫘 Maharagwe pekee</strong>. Hakuna kichujio cha Uaminifu.</p>
+        <p>Ikiwa wewe ni mwanachama wa vikundi, safu ya vitufe vya vikundi hutokea pia. <strong>Vikundi Vyote na Hadharani</strong> huonyesha kila kitu; kitufe cha kikundi huonyesha machapisho ya kikundi hicho tu. Kwenye programu ya wavuti vikundi viko kwenye menyu kunjuzi badala ya safu mlalo.</p>
+        <p>Kwenye simu, ikiwa hakuna kinacholingana, gusa <strong>Futa Vichujio Vyote</strong>. Kwenye programu ya wavuti orodha tupu husema <strong>Hakuna vitu vilivyopatikana</strong>, na hakuna kitufe kama hicho.</p>
+        <p>Kwenye simu, unaposogeza chini na utafutaji au kichujio kikiwa kimewashwa, kibandiko kidogo juu huonyesha ni nini. Gusa kibandiko ili kukibadilisha. Gusa <strong>✕</strong> juu yake ili kufuta utafutaji na kila kichujio.</p>
+        <p>Kitufe kilicho kando ya <strong>Makubaliano Yangu</strong> hubadilisha jinsi orodha inavyoonekana: orodha, gridi, au ya kubana.</p>
+        <h2>Kile ambacho chapisho huonyesha</h2>
+        <ul>
+            <li>picha, au picha ya kategoria;</li>
+            <li><strong>OFA</strong> au <strong>HITAJI</strong>;</li>
+            <li>bei katika maharagwe, ikiwa na <strong>/saa</strong> ikiwa ina bei kwa saa;</li>
+            <li><strong>LINALOJIRUDIA</strong> ikiwa linabaki wazi baada ya kila biashara;</li>
+            <li><strong>PESA TASLIMU PIA</strong> ikiwa mtu huyo pia anahitaji pesa taslimu, kwa ajili ya mafuta au vifaa;</li>
+            <li>kufuli na jina la kikundi ikiwa ni kikundi hicho tu kinachoweza kuliona;</li>
+            <li>nani aliyeichapisha, akiwa na beji yake ya uaminifu na nyota. Mwanachama ambaye bado hajafanya biashara huonyesha <strong>MWANZILISHI</strong>.</li>
+        </ul>
+        <p>Gusa chapisho ili kulifungua.</p>
+        <h2>Kwenye chapisho</h2>
+        <ul>
+            <li><strong>Ujumbe</strong> na jina lake: uliza swali kabla ya kujitolea.</li>
+            <li>Gusa jina lake ili kuona wasifu wake, maoni na uaminifu.</li>
+            <li><strong>Ripoti Tangazo</strong> ikiwa ni ulaghai, ya kukera, inapotosha, au inaweka mtoto hatarini (<strong>Usalama wa mtoto</strong>).</li>
+            <li><strong>Mzuie Mtumiaji</strong> ili kuficha machapisho na soga zake kwenye simu yako. Pia huwajulisha wasimamizi wako. Tazama &quot;Kuzuia mtu&quot;.</li>
+        </ul>
+        <p>Kwenye programu ya wavuti vitufe vilivyo kwenye chapisho ni <strong>💬 Ujumbe</strong> na <strong>🚩 Ripoti</strong>. Mzuie mtu kutoka kwenye wasifu wake.</p>
+        <p>Kwenye jumuiya ya kimataifa chapisho halina bei katika Maharagwe: husema kile ambacho mtu huyo angependa kupata badala yake. Pale ambapo bei ingekuwa, husema &quot;🏘️ Katika jumuiya ya eneo hii ni bei katika Maharagwe ›&quot;. Badala ya kuiomba, chapisho huonyesha <strong>Ombi · Maharagwe yameshikiliwa kwa usalama 🏘️</strong>: iguse ili kuona jinsi biashara inavyofanya kazi katika jumuiya ya eneo. Kumtumia mtu ujumbe kunafanya kazi kama popote pengine. Tazama &quot;Maharagwe na jumuiya ya kimataifa&quot;.</p>
+        <p>Huwezi kuhifadhi au kushiriki chapisho bado.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Nyumbani</strong><span>Nyumbani ni nini, kadi inazoonyesha kwenye simu na wavuti, jinsi ya kuongeza, kuhamisha au kuziondoa, kuchagua unachopenda, na faragha unapotoka.</span></a></li>
+            <li><a href="posting.html"><strong>Kuweka Ofa au Hitaji</strong><span>Weka kitu unachoweza kufanya au kutoa, au kitu unachotafuta.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>Makubaliano hatua kwa hatua</strong><span>Kuanzia kuomba hadi kulipwa, kwa Ofa na kwa Hitaji, na kuacha maoni.</span></a></li>
+            <li><a href="near-you.html"><strong>Kupata vitu vilivyo karibu</strong><span>Onyesha tu matangazo yaliyo ndani ya umbali kutoka kwako, au kutoka mahali popote unapochagua.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Beji za uaminifu</strong><span>Mgeni, Mkazi, Msimamizi na Mzee. Maana yake, na kwa nini hazifungui kitu chochote.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Maharagwe na jumuiya ya kimataifa</strong><span>Lengo la jumuiya ya kimataifa, jumuiya moja kati ya nyingi, na unachokiona hapo: alama ya 🏘️ Jamii ya eneo, jumuiya ya mfano ya Example Valley, kwa nini Maharagwe husubiri hapo, na jinsi ya kuanza au kupata jumuiya ya ndani.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

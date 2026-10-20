@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ur by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>فیصلے پر ووٹنگ — BeanPool members' guide</title>
+    <meta name="description" content="کھلے فیصلے تلاش کریں، ووٹ دیں، اپنا ووٹ تبدیل کریں، اور نتائج دیکھیں۔">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">مشترکہ</a></p>
+        <h1>فیصلے پر ووٹنگ</h1>
+        <p class="lede">کھلے فیصلے تلاش کریں، ووٹ دیں، اپنا ووٹ تبدیل کریں، اور نتائج دیکھیں۔</p>
+        <h2>کہاں</h2>
+        <p><strong>کامنز</strong> پر ٹیپ کریں، پھر <strong>فیصلہ کریں</strong> پر۔ کھلے فیصلے <strong>کھلے فیصلے</strong> کے تحت ہوتے ہیں۔</p>
+        <p>ایک فیصلہ پابند ہوتا ہے: اگر یہ منظور ہو جائے، تو آپ کی کمیونٹی کا سرور اسے خود نافذ کرتا ہے۔ کوئی ایڈمن صرف ایک تحریری وجہ بتا کر ہی کسی فیصلے کو روک سکتا ہے جسے اراکین پڑھ سکتے ہیں۔ کون ووٹ دے سکتا ہے، کتنی شرکت درکار ہے اور کتنے ہاں درکار ہیں، اس کے قواعد &quot;قواعد اور فیصلوں کا طریقہ کار&quot; میں ہیں۔</p>
+        <p>عالمی کمیونٹی میں کوئی فیصلے نہیں ہوتے۔ کوئی بھی 12 الفاظ یا سائن ان کے ذریعے اس میں شامل ہو سکتا ہے، اس لیے ایک شخص کئی اکاؤنٹس کے ذریعے وہاں ووٹ کا رخ موڑ سکتا ہے۔ اس کی بجائے اس کے ناظمین اس کی دیکھ بھال کرتے ہیں: &quot;مسئلہ رپورٹ کرنا&quot; دیکھیں۔ فیصلے مقامی کمیونٹیز کے لیے ہوتے ہیں۔ پولز اب بھی ہر جگہ کام کرتے ہیں۔</p>
+        <p>عالمی کمیونٹی پر، <strong>کامنز</strong> مقامی کمیونٹی سے ایک مثالی فیصلہ دکھاتا ہے، جس پر <strong>🏘️ Local community</strong> کا نشان ہوتا ہے، تاکہ آپ دیکھ سکیں کہ یہ کیسے کام کرتا ہے۔ اس کے <strong>ہاں میں ووٹ دیں</strong> اور <strong>نہیں میں ووٹ دیں</strong> کے بٹن بتاتے ہیں کہ ووٹنگ مقامی کمیونٹی میں کیوں ہوتی ہے، اور کوئی ووٹ نہیں ڈالتے۔ &quot;پھلیاں اور عالمی کمیونٹی&quot; دیکھیں۔</p>
+        <h2>فیصلہ پڑھنا</h2>
+        <p>ہر فیصلہ دکھاتا ہے:</p>
+        <ul>
+            <li>یہ کس بارے میں ہے، اور اگر یہ منظور ہو جائے تو کیا ہوگا؛</li>
+            <li>ووٹوں کا شمار کیسے ہوتا ہے: ایک رکن ایک ووٹ، یا کامنز کی پھلیوں کے فیصلوں کے لیے وائس کریڈٹس؛</li>
+            <li>کتنا وقت باقی ہے۔ ووٹنگ 7 دن تک چلتی ہے؛</li>
+            <li><strong>شرکت:</strong> اسے کتنے ووٹ درکار ہیں، اور آیا اس کے پاس اتنے ووٹ پہلے سے موجود ہیں؛</li>
+            <li><strong>گنتی:</strong> اب تک کی ہاں اور نہیں، اور اسے کتنے ہاں درکار ہیں۔</li>
+        </ul>
+        <h2>ووٹنگ</h2>
+        <ul>
+            <li><strong>ہاں میں ووٹ دیں</strong> یا <strong>نہیں میں ووٹ دیں</strong> پر ٹیپ کریں۔ فون پر، ایپ کہتی ہے <strong>ووٹ درج ہو گیا</strong>۔ ویب ایپ میں، کارڈ اپ ڈیٹ ہو جاتا ہے۔</li>
+            <li>کارڈ پھر بتاتا ہے کہ آپ نے کیا ووٹ دیا، جیسے &quot;آپ نے ہاں میں ووٹ دیا&quot;۔</li>
+            <li>اس کے بند ہونے سے پہلے اپنا ارادہ تبدیل کرنے کے لیے، دوسرے بٹن پر ٹیپ کریں، جیسے کہ <strong>تبدیل کر کے نہیں کریں</strong>۔</li>
+        </ul>
+        <p>ہر فیصلہ ایک <strong>خفیہ رائے شماری</strong> ہوتا ہے۔ اراکین مجموعی تعداد دیکھتے ہیں، کبھی یہ نہیں کہ کس نے کیا ووٹ دیا۔ آپ کا اپنا ووٹ صرف آپ کو دکھایا جاتا ہے۔</p>
+        <h2>کامنز کی پھلیوں کے بارے میں فیصلے</h2>
+        <p>یہ <strong>وائس کریڈٹس</strong> استعمال کرتے ہیں۔ آپ اپنے مکمل شدہ سودوں سے وائس کریڈٹس حاصل کرتے ہیں، جو ہر فیصلے کے لیے نئے سرے سے ملتے ہیں۔ کتنے ووٹ دینے ہیں یہ منتخب کرنے کے لیے <strong>−</strong> اور <strong>+</strong> کا استعمال کریں۔ زیادہ ووٹوں پر زیادہ لاگت آتی ہے: 2 ووٹوں کی قیمت 4 کریڈٹ ہے، 3 ووٹوں کی قیمت 9 ہے۔</p>
+        <p>اگر آپ نے ابھی تک کوئی سودا مکمل نہیں کیا ہے، تو آپ ان پر ووٹ نہیں دے سکتے۔ آپ اب بھی دوسرے فیصلوں پر ووٹ دے سکتے ہیں، جب تک کہ آپ ان کے کھلنے سے پہلے شامل ہوئے ہوں اور آپ کا کریڈٹ منجمد نہ ہو۔</p>
+        <h2>نتائج</h2>
+        <p><strong>فیصلوں کی تاریخ</strong> پر ٹیپ کریں۔ <strong>تمام</strong>، <strong>نافذ شدہ</strong>، <strong>ناکام رہا</strong> یا <strong>کالعدم</strong> منتخب کریں۔ ہر ایک حتمی شرکت اور گنتی دکھاتا ہے، اور یہ کہ کیا ہوا تھا، مثال کے طور پر کہ بہت کم لوگوں نے ووٹ دیا۔</p>
+        <h2>مزید</h2>
+        <p>فون پر، کامنز کی پھلیاں اور ووٹنگ کیسے کام کرتی ہیں اس کے لیے کامنز کے عنوان کے ساتھ <strong>ⓘ</strong> پر ٹیپ کریں۔ ویب ایپ میں، <strong>لیجر</strong> کھولیں، <strong>والیٹ</strong> پر ٹیپ کریں، پھر <strong>کامنز پول ⓘ</strong> پر۔</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>فیصلہ تجویز کرنا</strong><span>کمیونٹی سے کسی لازمی معاملے پر فیصلہ کرنے کی درخواست کریں۔</span></a></li>
+            <li><a href="rules.html"><strong>قواعد اور فیصلوں کا طریقہ کار</strong><span>ووٹنگ، ٹرن آؤٹ، خفیہ رائے شماری، کون ووٹ دے سکتا ہے، معطلی، رکن کو ہٹانا، نگران، اور کنوینرز و لیڈ کنوینرز۔</span></a></li>
+            <li><a href="polls.html"><strong>پولز</strong><span>کمیونٹی سے فوری سوال پوچھیں۔ پولز رائے ظاہر کرتے ہیں؛ وہ خود کچھ تبدیل نہیں کرتے۔</span></a></li>
+            <li><a href="commons-fund.html"><strong>مشترکہ فنڈ</strong><span>آپ کی کمیونٹی کی مشترکہ پھلیاں: وہ کہاں سے آتی ہیں، اور کیسے خرچ ہوتی ہیں۔</span></a></li>
+            <li><a href="the-top-bar.html"><strong>اوپر والی بار</strong><span>پھلی کا نشان، ضرورت پڑنے پر ظاہر ہونے والے چھوٹے آئیکونز، اور اوپر دائیں جانب کے بٹنز۔</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>پھلیاں اور عالمی کمیونٹی</strong><span>عالمی کمیونٹی کس مقصد کے لیے ہے، کئی میں سے ایک کمیونٹی، اور آپ وہاں کیا دیکھتے ہیں: 🏘️ مقامی کمیونٹی کا نشان، مثالی کمیونٹی Example Valley، پھلیاں وہاں کیوں انتظار کرتی ہیں، اور مقامی کمیونٹی کیسے شروع یا تلاش کریں۔</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

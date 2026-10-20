@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>۱۲ کلمه شما و کلیدهای سرور — BeanPool members' guide</title>
+    <meta name="description" content="برای مالکان جامعه. بررسی ۱۲ کلمه، به دست گرفتن یا بازیابی سرور با تلفن و بررسی خودکار تلفن.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">تنظیمات و امنیت</a></p>
+        <h1>۱۲ کلمه شما و کلیدهای سرور</h1>
+        <p class="lede">برای مالکان جامعه. بررسی ۱۲ کلمه، به دست گرفتن یا بازیابی سرور با تلفن و بررسی خودکار تلفن.</p>
+        <h2>این بخش برای چه کسانی است</h2>
+        <p>فقط <strong>مالکان</strong> جامعه. اگر مالک نیستید، هیچ‌کدام از این موارد را نخواهید دید.</p>
+        <h2>چرا از مالکان خواسته می‌شود</h2>
+        <p>سرور جامعه شما یک نسخه قفل‌شده از کلیدهای خود را نگه می‌دارد تا در صورت از دست رفتن سرور، جامعه به سرور دیگری منتقل شود، و نسخه‌های پشتیبان آن نیز قفل هستند. آن‌ها با حساب‌های مالکان قفل شده‌اند: هر یک از مالکان می‌تواند آن‌ها را با تلفن خود باز کند (بخش انتقال کنترل یا بازیابی با تلفن خود را در زیر ببینید). اگر تلفن خود را گم کنید، ۱۲ کلمه شما حسابتان را برمی‌گرداند، و همراه با آن کلید شما برای قفل سرور و نسخه‌های پشتیبان آن بازمی‌گردد. این موضوع در روزی که خود سرور از بین رفته باشد بیشترین اهمیت را دارد.</p>
+        <p>بنابراین برنامه هر از چند گاهی از هر مالک می‌خواهد بررسی کند که آیا هنوز ۱۲ کلمه درست را دارد یا خیر. می‌توانید بگویید <strong>بعداً</strong>. هیچ چیز هرگز مسدود نمی‌شود، و می‌توانید به انجام هر کاری که یک مالک انجام می‌دهد ادامه دهید.</p>
+        <h2>چه زمانی برنامه درخواست می‌کند</h2>
+        <ul>
+            <li>یک بار، کمی پس از آنکه مالک شدید.</li>
+            <li>دوباره ۱۲ ماه پس از آخرین بررسی شما.</li>
+        </ul>
+        <p>کارتی را در بالای بازار نشان می‌دهد (در برنامه تحت وب، در بالای هر صفحه‌ای به جز نقشه): <strong>اکنون بررسی کنید</strong> یا <strong>بعداً</strong>. گزینه <strong>بعداً</strong> کارت را تا موعد بعدی کنار می‌گذارد. هر زمان می‌توانید از <strong>تنظیمات</strong> بررسی کنید: زیر <strong>کلیدهای جامعه</strong>، روی <strong>۱۲ کلمه خود را بررسی کنید</strong> بزنید (در برنامه تحت وب، <strong>اکنون بررسی کنید</strong>).</p>
+        <h2>نحوه بررسی</h2>
+        <ul>
+            <li>برگه حاوی ۱۲ کلمه انگلیسی خود را بردارید (کلمات بازیابی انگلیسی هستند).</li>
+            <li>آن‌ها را به ترتیب و با فاصله بین آن‌ها تایپ کنید. حروف بزرگ و فاصله‌های اضافی اهمیتی ندارند.</li>
+            <li>روی <strong>بررسی کلمات من</strong> بزنید.</li>
+        </ul>
+        <p>اگر درست باشند، برنامه می‌گوید <strong>این‌ها کلمات درستی هستند</strong>. اگر نه: <strong>این‌ها کلمات مربوط به این حساب نیستند.</strong> نمی‌گوید کدام کلمه اشتباه است، بنابراین برگه را بررسی کرده و همه آن‌ها را دوباره تایپ کنید.</p>
+        <p>در تلفنی بدون نسخه ۱۲ کلمه شما (تلفنی که با یک حساب ورود بازیابی شده است)، کلمات درست همچنین گزینه <strong>ذخیره آن‌ها در این تلفن</strong> را می‌آورند. روی آن بزنید و از آن پس <strong>مشاهده عبارت بازیابی</strong> آن‌ها را نشان می‌دهد. این همان بررسی و ذخیره‌سازی مانند <strong>افزودن ۱۲ کلمه خود به این تلفن</strong> است («۱۲ کلمه شما» را ببینید).</p>
+        <p>نمی‌توانید آن‌ها را پیدا کنید؟ اگر این تلفن هنوز آن‌ها را دارد، <strong>تنظیمات</strong>، سپس <strong>مشاهده عبارت بازیابی</strong> آن‌ها را نشان می‌دهد. آن‌ها را دوباره یادداشت کنید، سپس بررسی کنید. در تلفنی بدون نسخه، برنامه این موضوع را اعلام می‌کند: هنگامی که آن‌ها را پیدا کردید، در اینجا بررسی کنید، سپس آن‌ها را ذخیره کنید.</p>
+        <h2>چه چیزی ارسال می‌شود، و چه چیزی ارسال نمی‌شود</h2>
+        <ul>
+            <li>بررسی روی تلفن شما انجام می‌شود (یا در مرورگر شما، در برنامه تحت وب). کلمات شما هرگز به جایی ارسال نمی‌شوند. کادر به محض پاسخ بررسی، و هنگامی که صفحه را ترک می‌کنید خالی می‌شود. آن‌ها تنها در صورتی ذخیره می‌شوند که روی <strong>ذخیره آن‌ها در این تلفن</strong> بزنید، و آن هم فقط روی این تلفن.</li>
+            <li>هنگامی که کلمات درست هستند، تلفن شما به سرور جامعه شما فقط اعلام می‌کند که شما بررسی کرده‌اید و چه زمانی، که با حساب شما امضا شده است.</li>
+            <li>مالکان و مدیران در تنظیمات سرور، تاریخ «۱۲ کلمه بررسی شد» هر مالک، یا «هنوز نه» را می‌بینند. این اظهارنظر خود شما است: سرور نمی‌تواند کلمات شما را ببیند یا بررسی کند.</li>
+        </ul>
+        <h2>در اختیار گرفتن کنترل یا بازیابی با تلفن خود</h2>
+        <p>اگر سرور جامعه شما از دست برود، هر کسی که سرور آماده‌به‌کار آن را اداره می‌کند (یا سرور جدیدی که یک نسخه پشتیبان را بازیابی می‌کند) می‌تواند از یک مالک بخواهد کلیدهای قفل‌شده را باز کند. هر یک از مالکان کافی است. به جدیدترین نسخه برنامه BeanPool نیاز دارید. برنامه تحت وب نیز در صورتی که هنوز باز شود کار می‌کند، اما در نشانی خود جامعه قرار دارد که ممکن است همراه با سرور از دسترس خارج شده باشد: برنامه تلفن همراه برنامه‌ای است که می‌توان روی آن حساب کرد.</p>
+        <ul>
+            <li>در تنظیمات سرور، آن‌ها <strong>به دست گرفتن کنترل به عنوان سرور اصلی</strong>، سپس <strong>متوجهم: استفاده از تلفن یک مالک</strong>، یا هنگام بازیابی یک نسخه پشتیبان <strong>باز کردن با تلفن یک مالک</strong> را انتخاب می‌کنند. کدی روی صفحه آن‌ها ظاهر می‌شود.</li>
+            <li>در برنامه: <strong>تنظیمات</strong>، زیر <strong>کلیدهای جامعه</strong>، روی <strong>در اختیار گرفتن یا بازیابی با این تلفن</strong> بزنید، و دوربین را به سمت کد بگیرید. اگر صفحه سرور روی تلفن خودتان باز است، زدن روی پیوند آن همان کار را انجام می‌دهد. در برنامه تحت وب، پیوند را از صفحه آن‌ها کپی کرده و زیر <strong>در اختیار گرفتن کنترل یا بازیابی با این مرورگر</strong> در <strong>تنظیمات</strong> جای‌گذاری کنید.</li>
+            <li>برنامه نشان می‌دهد کدام جامعه، کدام سرور، و چه اتفاقی خواهد افتاد. اگر سرور اصلی شما هنوز پاسخ می‌دهد، آن را با رنگ قرمز اعلام می‌کند: به دست گرفتن کنترل فقط برای سروری است که واقعاً از بین رفته باشد.</li>
+            <li>روی <strong>باز کردن قفل برای انتقال کنترل</strong> (یا <strong>باز کردن قفل نسخه پشتیبان</strong>) بزنید. تلفن شما ابتدا قفل‌گشایی خود را می‌خواهد: اثر انگشت، چهره یا پین. برنامه تحت وب چنین مرحله‌ای ندارد، به همین دلیل است که برنامه تلفن همراه مکان امن‌تری برای کلید یک مالک است.</li>
+            <li>تلفن شما بخش مربوط به خود از قفل را باز می‌کند و کلید را به آن سرور تحویل می‌دهد، قفل‌شده به گونه‌ای که فقط آن سرور می‌تواند آن را بخواند. تلفن شما هرگز کلیدهای سرور یا نسخه پشتیبان را نمی‌بیند.</li>
+            <li>در انتقال کنترل، فرد حاضر در سرور سپس روی صفحه خود تأیید می‌کند. به جامعه اطلاع داده می‌شود که منتقل شده است، و اینکه شما کلیدها را باز کرده‌اید.</li>
+        </ul>
+        <p>برنامه درخواست را رد می‌کند و دلیل آن را می‌گوید، اگر قفل متعلق به جامعه دیگری باشد، اگر به شما قفل نشده باشد، اگر کد سرور منقضی شده باشد (۱۰ دقیقه معتبر است و یک بار کار می‌کند)، یا اگر کلیدها توسط سرور خود جامعه شما قفل نشده باشند.</p>
+        <h2>تلفن شما قفل را خودبه‌خود بررسی می‌کند</h2>
+        <p>هر بار که قفل جامعه شما تغییر می‌کند (یک مالک اضافه یا حذف می‌شود، یک کد بازیابی جدید ساخته می‌شود)، برنامه شما بی‌صدا بررسی می‌کند که آیا هنوز می‌تواند بخش خود را باز کند یا خیر. آن را باز می‌کند، کلید را فوراً دور می‌اندازد، و به سرور می‌گوید که آیا کار کرده است یا خیر. هیچ چیزی از شما خواسته نمی‌شود.</p>
+        <p>مالکان و مدیران آن را در تنظیمات سرور، در کنار تاریخ ۱۲ کلمه شما می‌بینند: <strong>تلفن آن‌ها قفل فعلی را باز کرد</strong>، همراه با تاریخ، یا اینکه آخرین بار قفل قدیمی‌تری را باز کرده است. اگر می‌گوید تلفن شما <strong>نتوانست قفل را باز کند</strong>، ۱۲ کلمه خود را بررسی کنید، و از مالک دیگری بخواهید به تنظیمات سرور نگاه کند.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>۱۲ کلمه شما</strong><span>۱۲ کلمه کلید حساب شما هستند. چرا اهمیت دارند، کجا بیابیدشان، چگونه ایمن نگه دارید و افزودن ورود به عنوان راه دوم بازگشت.</span></a></li>
+            <li><a href="recovery.html"><strong>بازیابی حساب شما</strong><span>حسابتان را در تلفن جدید بازیابی کنید و با حساب ورود از آن محافظت نمایید.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eigene Kanäle teilen — BeanPool members' guide</title>
+    <meta name="description" content="Bringe YouTube, Blogs, Instagram und andere Kanäle in den Puls.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#pulse">Pulse</a></p>
+        <h1>Eigene Kanäle teilen</h1>
+        <p class="lede">Bringe YouTube, Blogs, Instagram und andere Kanäle in den Puls.</p>
+        <h2>Einen Kanal hinzufügen</h2>
+        <ul>
+            <li>Tippe im <strong>Puls</strong> auf <strong>+ Kanäle</strong>. Auf dem Smartphone kannst du auch die <strong>Einstellungen</strong> öffnen und auf <strong>Kanäle &amp; Schaufenster</strong> tippen.</li>
+            <li>Tippe auf <strong>+ Einen Kanal hinzufügen</strong>.</li>
+            <li>Wähle unter <strong>Wo veröffentlichst du?</strong> die Plattform aus.</li>
+            <li>Gib <strong>Dein Link oder Benutzername</strong> ein oder füge ihn ein.</li>
+            <li>Wähle unter <strong>Worum geht es?</strong> ein Thema aus.</li>
+            <li>Tippe auf <strong>Kanal hinzufügen</strong>.</li>
+        </ul>
+        <p>Jede Plattform funktioniert ein wenig anders. Der Bildschirm zeigt an, wie:</p>
+        <ul>
+            <li><strong>Aktualisiert sich selbst</strong> (YouTube, SoundCloud, ein Blog): Neue Beiträge erscheinen automatisch im Pulse.</li>
+            <li><strong>Ein Fingertipp pro Beitrag</strong> (Instagram, TikTok, Facebook): Teile jeden Beitrag manuell. Wo der Bildschirm <strong>Connect TikTok</strong> oder <strong>Connect Instagram</strong> anbietet, kannst du stattdessen das Konto verknüpfen. Deine Beiträge werden dann beim Verbinden und jedes Mal importiert, wenn du auf <strong>↻ Videos synchronisieren</strong> tippst. Der Server deiner Community ruft sie nicht selbstständig ab. Die Verknüpfung wird nur auf diesem Smartphone gespeichert. Das Abmelden vom Smartphone entfernt sie. Wenn du zurückkehrst, behält der Kanal sein Abzeichen; um jedoch wieder Beiträge zu importieren, tippe auf <strong>Trennen</strong> und danach erneut auf <strong>Connect TikTok</strong> oder <strong>Connect Instagram</strong>.</li>
+            <li><strong>Wird als Karte angezeigt</strong> (eine Website).</li>
+        </ul>
+        <p><strong>Connect TikTok</strong> und <strong>Connect Instagram</strong> gibt es nur in der Smartphone-App. Teile in der Web-App jeden Beitrag über <strong>+ Beitrag teilen</strong>.</p>
+        <h2>Verifizierte Konten</h2>
+        <ul>
+            <li>Wenn du auf <strong>Connect TikTok</strong> oder <strong>Connect Instagram</strong> tippst, fragt der Server deiner Community bei Instagram oder TikTok an, mit welchem Konto du angemeldet bist. Der Kanal wird nur dann als verifiziert markiert, wenn dies das Konto des Kanals ist.</li>
+            <li>Bei einem anderen Konto angemeldet? Der Bildschirm weist darauf hin. Melde dich beim richtigen Konto an und tippe erneut auf dieselbe <strong>Verbinden</strong>-Schaltfläche.</li>
+            <li>Füge den Kanal als dein <strong>@handle</strong> hinzu, damit er überprüft werden kann. Ein Kurzlink kann nicht überprüft werden.</li>
+            <li>Facebook-Kanäle werden niemals als verifiziert markiert.</li>
+            <li>Wenn bei einem Kanal <strong>Erneut verbinden, um dein Verifizierungsabzeichen wiederherzustellen</strong> steht, tippe auf <strong>Reconnect TikTok</strong> oder <strong>Reconnect Instagram</strong>.</li>
+        </ul>
+        <h2>Bei jedem Kanal</h2>
+        <ul>
+            <li><strong>Im lokalen Feed anzeigen:</strong> Schalte dies aus, um Beiträge dieses Kanals aus dem Pulse herauszuhalten.</li>
+            <li><strong>+ Beitrag teilen:</strong> Einen Beitrag manuell hinzufügen.</li>
+            <li><strong>Ändern</strong> (<strong>Kategorie ändern</strong> in der Web-App): Ein anderes Thema wählen.</li>
+            <li><strong>Zum Hauptkanal machen:</strong> Wähle deinen Haupt-Videokanal.</li>
+            <li><strong>Entfernen:</strong> Den Kanal entfernen.</li>
+        </ul>
+        <h2>Einen einzelnen Beitrag teilen</h2>
+        <p>Tippe auf <strong>Einen Beitrag auf Pulse teilen</strong>. Füge die <strong>Beitrags-URL</strong> ein, prüfe, zu welchem Kanal und Thema er gehört, und tippe auf <strong>Auf Pulse teilen</strong>.</p>
+        <h2>Bitte beachten</h2>
+        <p>Alles, was du auf Pulse teilst, wird mit deinem Namen und Foto angezeigt. Jedes Mitglied deiner Community kann es sehen. Personen, die nicht beigetreten sind, können es nicht sehen.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-pulse.html"><strong>Der Puls</strong><span>Was Nachbarn anderswo erstellen und teilen, gesammelt in einem Feed.</span></a></li>
+            <li><a href="learn.html"><strong>Die Lernspur</strong><span>Kurze Videos über BeanPool und die passenden Seiten aus dem Guide.</span></a></li>
+            <li><a href="your-profile.html"><strong>Dein Profil</strong><span>Dein Name, Foto, ein paar Worte über dich und wer deine Kontaktdaten sehen kann.</span></a></li>
+            <li><a href="privacy.html"><strong>Privatsphäre</strong><span>Was andere über dich sehen können und welche Einstellungen dies steuern.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

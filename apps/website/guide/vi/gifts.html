@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gửi quà tặng — BeanPool members' guide</title>
+    <meta name="description" content="Gửi đậu cho ai đó mà không cần giao dịch trao đổi.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Sổ cái</a></p>
+        <h1>Gửi quà tặng</h1>
+        <p class="lede">Gửi đậu cho ai đó mà không cần giao dịch trao đổi.</p>
+        <h2>Điều kiện cần trước khi gửi</h2>
+        <ul>
+            <li>Bạn cần hoàn tất một giao dịch trên chợ. Giao dịch chỉ có 1 hoặc 2 đậu là quá nhỏ để được tính.</li>
+            <li>Bạn chỉ có thể tặng số đậu bạn đang có. Một món quà tặng không bao giờ có thể đưa số dư của bạn xuống dưới mức 0.</li>
+        </ul>
+        <p>Cho đến lúc đó, nút sẽ cho biết điều kiện còn thiếu, chẳng hạn như <strong>cần 1 giao dịch hoàn tất</strong> hoặc <strong>cần có số dư dương</strong>.</p>
+        <p>Huy hiệu tin cậy của bạn không ảnh hưởng đến việc này.</p>
+        <h2>Cách gửi</h2>
+        <ul>
+            <li>Nhấn <strong>Sổ cái</strong>, sau đó nhấn <strong>Ví</strong>, rồi nhấn <strong>Gửi đậu</strong>.</li>
+            <li>Nhấn <strong>Chọn người nhận...</strong>, tìm kiếm tên của họ và nhấn vào đó.</li>
+            <li>Nhập <strong>Số lượng</strong>. Thêm <strong>Ghi chú</strong> nếu bạn thích, chẳng hạn như &quot;Cảm ơn vì số cà chua&quot;.</li>
+            <li>Kiểm tra lại mục <strong>Người nhận nhận được:</strong>. Quà tặng không mất phí, vì vậy họ sẽ nhận được toàn bộ số tiền.</li>
+            <li>Nhấn <strong>Xác nhận chuyển</strong>. Trên điện thoại bạn sẽ thấy <strong>✓ Đã gửi!</strong>; trong ứng dụng web biểu mẫu sẽ đóng lại và món quà tặng sẽ hiển thị trong các giao dịch của bạn.</li>
+        </ul>
+        <p>Một món quà tặng không thể thu hồi lại. Hãy kiểm tra kỹ tên người nhận trước khi gửi.</p>
+        <h2>Điều cần biết</h2>
+        <ul>
+            <li>Quà tặng không giúp xây dựng lòng tin cậy. Chỉ các giao dịch đã hoàn tất mới làm được điều này.</li>
+            <li>Bạn vẫn có thể gửi quà tặng khi đang trong chế độ nghỉ.</li>
+            <li>Bạn có thể thực hiện tối đa 100 khoản thanh toán trong bất kỳ khoảng thời gian 24 giờ nào. Quà tặng, mua hàng, yêu cầu mua một Lời đề nghị, chấp thuận sự giúp đỡ cho Nhu cầu của bạn, các khoản cam kết góp đậu cho một dự án và mua hàng từ một cộng đồng khác đều được tính. Khoản bảo chứng của người quản lý cho một doanh nghiệp không chuyển đậu, vì vậy đó không phải là một khoản thanh toán: nó chỉ tính là một trong 20 lần thay đổi cam kết mỗi ngày của bạn. Tối đa 30 khoản thanh toán trong số đó có thể gửi cho những người bạn chưa từng thanh toán trước đây; việc thanh toán cho những người bạn đã từng thanh toán trước đó vẫn hoạt động bình thường. Việc nhận đậu không bao giờ bị giới hạn. Nếu bạn đạt tới giới hạn, ứng dụng sẽ cho biết bạn đã chạm giới hạn nào và khi nào bạn có thể thanh toán lại.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-balance.html"><strong>Số dư và lịch sử giao dịch</strong><span>Bạn có bao nhiêu đậu, số lượng đang bị giữ, cùng mọi giao dịch và quà tặng.</span></a></li>
+            <li><a href="credit-line.html"><strong>Hạn mức tín dụng</strong><span>Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cách BeanPool hoạt động</strong><span>Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>Giao dịch từng bước một</strong><span>Từ yêu cầu đến khi nhận thanh toán, cho Lời đề nghị và Nhu cầu, cùng việc để lại đánh giá.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

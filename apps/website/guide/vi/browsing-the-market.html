@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xem qua chợ — BeanPool members' guide</title>
+    <meta name="description" content="Tìm Lời đề nghị và Nhu cầu bằng tìm kiếm, bộ lọc và khoảng cách.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Chợ</a></p>
+        <h1>Xem qua chợ</h1>
+        <p class="lede">Tìm Lời đề nghị và Nhu cầu bằng tìm kiếm, bộ lọc và khoảng cách.</p>
+        <h2>Tab Chợ</h2>
+        <p>Nhấn <strong>Chợ</strong> trong hàng các tab. Bạn sẽ thấy những gì mọi người trong cộng đồng của bạn đang chia sẻ và tìm kiếm, bài đăng mới nhất xếp trước, được nhóm theo ngày đăng.</p>
+        <p>Trên điện thoại, các sự kiện hiển thị đầu tiên. Nếu bạn đã cho phép ứng dụng sử dụng vị trí của bạn, chế độ xem danh sách và thu gọn sẽ hiển thị các tin đăng ở gần nhất trước, dưới mục <strong>Gần nhất trước</strong>, với các cuộc thăm dò dưới mục <strong>Thăm dò</strong>. Tab <strong>★ Dành cho bạn</strong> giữ thứ tự riêng của nó. Kéo danh sách xuống để làm mới.</p>
+        <p>Trong ứng dụng web, Chợ mở ra dưới dạng các thẻ. Ở chế độ xem danh sách và thu gọn, các sự kiện nằm dưới ngày chúng được đăng. Trên một cộng đồng địa phương, ứng dụng web không đặt các tin ở gần nhất lên đầu.</p>
+        <p>Trên cộng đồng toàn cầu, ứng dụng web hiển thị các tin đăng ở gần bạn trước: những tin gần nhất trong phạm vi <strong>Khoảng cách</strong> của bạn, hoặc trong phạm vi 250 km tính từ khu vực của bạn (vị trí gần đúng bạn cung cấp cho cộng đồng khi tham gia, hoặc trong <strong>Cài đặt</strong>), mỗi tin đều có khoảng cách cụ thể. Một dòng phía trên danh sách cho biết bạn đang xem chế độ nào. Ở chế độ gần khu vực của bạn, nó có nút <strong>Hiện tất cả mọi nơi</strong> để xem những tin mới nhất từ mọi nơi. Khi đã chọn <strong>Khoảng cách</strong>, hãy mở <strong>Khoảng cách</strong> và nhấn <strong>Đặt lại</strong> để quay lại khu vực của bạn, sau đó nhấn <strong>Hiện tất cả mọi nơi</strong>. Trên điện thoại, cộng đồng toàn cầu lưu các tin đăng gần khu vực của bạn nhất, vì vậy đó là những gì Chợ hiển thị. Xem &quot;Tìm kiếm thứ ở gần bạn&quot;.</p>
+        <p>Trên cộng đồng toàn cầu, khi chỉ mới có một vài tin đăng, Chợ cũng hiển thị một vài thẻ có nhãn <strong>Ví dụ</strong>. Chúng được tạo ra để minh họa những gì mọi người thường đăng, và không thể mở ra hay phản hồi. Chúng sẽ biến mất khi có đủ tin đăng thực tế.</p>
+        <p>Trên điện thoại, thanh tìm kiếm và các bộ lọc sẽ trượt đi khi bạn cuộn xuống, giúp bạn thấy nhiều bài đăng hơn. Cuộn lên một chút và chúng sẽ xuất hiện trở lại. Để nhảy về đầu trang, hãy nhấn lại vào tab <strong>Chợ</strong>.</p>
+        <h2>Tìm kiếm</h2>
+        <p>Nhập nội dung vào ô <strong>Tìm kiếm trên chợ...</strong> ở trên cùng. Trên điện thoại màn hình nhỏ, ô có thể chỉ ghi là <strong>Tìm kiếm</strong>. Tính năng tìm kiếm cũng tìm các từ khóa liên quan: &quot;trái cây&quot; sẽ tìm thấy &quot;chanh&quot;. Nó cũng tìm kiếm được các từ bằng tiếng Trung, tiếng Nhật và tiếng Thái, đồng thời bỏ qua các bài đăng của những người bạn đã chặn. Khi không có kết nối mạng, nó sẽ tìm kiếm những gì đã có sẵn trên điện thoại của bạn.</p>
+        <p>Khi có từ khóa trong ô tìm kiếm, nút <strong>Lưu tìm kiếm này vào Trang chủ</strong> sẽ xuất hiện. Thao tác này sẽ mở Trang chủ với một tìm kiếm đã lưu sẵn sàng để thêm: các từ khóa của bạn, <strong>Lời đề nghị</strong> hoặc <strong>Nhu cầu</strong> nếu bạn chỉ đang xem một loại, danh mục và khoảng cách. Không có nút này dưới mục <strong>Sự kiện</strong> hoặc <strong>Thăm dò</strong>. Xem &quot;Trang chủ&quot;.</p>
+        <h2>Bộ lọc</h2>
+        <p>Hàng nút bên dưới ô tìm kiếm cho phép chọn những gì bạn muốn xem:</p>
+        <ul>
+            <li><strong>Tất cả</strong>, <strong>Lời đề nghị</strong> hoặc <strong>Nhu cầu</strong>.</li>
+            <li><strong>★ Dành cho bạn:</strong> các bài đăng trong các danh mục bạn gắn dấu sao dưới mục <strong>Tùy chỉnh sở thích</strong> (cùng các dấu sao bạn đã đặt trên Trang chủ), và các sự kiện sắp diễn ra của bạn, những sự kiện bạn đã đánh dấu là sẽ tham gia hoặc quan tâm.</li>
+            <li><strong>Sự kiện</strong> và <strong>Thăm dò</strong>.</li>
+        </ul>
+        <p>Hàng thứ hai giúp thu hẹp phạm vi tìm kiếm. Trên điện thoại:</p>
+        <ul>
+            <li><strong>Tất cả danh mục:</strong> chọn một danh mục, chẳng hạn như Đồ ăn, Dụng cụ hoặc Làm vườn.</li>
+            <li><strong>Khoảng cách:</strong> chỉ các bài đăng trong phạm vi khoảng cách từ một điểm. Xem &quot;Tìm kiếm thứ ở gần bạn&quot;.</li>
+            <li><strong>Tin cậy:</strong> chỉ các bài đăng của những thành viên chưa từng giao dịch (<strong>Sáng lập</strong>), của <strong>Người mới</strong>, hoặc của các thành viên có ít nhất một huy hiệu tin cậy nhất định.</li>
+            <li><strong>Chỉ dùng đậu:</strong> ẩn các bài đăng có yêu cầu thêm một ít tiền mặt.</li>
+        </ul>
+        <p>Trong ứng dụng web, các nút là <strong>Danh mục</strong>, <strong>Khoảng cách</strong>, <strong>🌱 Thành viên mới</strong> (thành viên chưa từng giao dịch) và <strong>🫘 Chỉ dùng đậu</strong>. Ứng dụng web không có bộ lọc Tin cậy.</p>
+        <p>Nếu bạn thuộc về các nhóm, một hàng các nút nhóm cũng sẽ xuất hiện. Nút <strong>👥 Tất cả các nhóm &amp; Công khai</strong> hiển thị mọi thứ; nút của một nhóm chỉ hiển thị các bài đăng dành cho nhóm đó. Trong ứng dụng web, các nhóm nằm trong một menu thả xuống thay vì một hàng nút.</p>
+        <p>Trên điện thoại, nếu không có kết quả phù hợp, hãy nhấn <strong>Xóa tất cả bộ lọc</strong>. Trong ứng dụng web, một danh sách trống sẽ báo <strong>Không tìm thấy mục nào</strong>, và không có nút này.</p>
+        <p>Trên điện thoại, khi bạn đã cuộn xuống và đang bật tìm kiếm hoặc bộ lọc, một thẻ nhỏ ở trên cùng sẽ hiển thị thông tin đó. Nhấn vào thẻ để thay đổi. Nhấn <strong>✕</strong> trên thẻ để xóa tìm kiếm và mọi bộ lọc.</p>
+        <p>Nút bên cạnh <strong>Giao dịch của tôi</strong> thay đổi cách hiển thị danh sách: dạng danh sách, dạng lưới hoặc thu gọn.</p>
+        <h2>Bài đăng hiển thị những gì</h2>
+        <ul>
+            <li>một bức ảnh, hoặc hình ảnh của danh mục;</li>
+            <li><strong>ĐỀ NGHỊ</strong> hoặc <strong>CẦN</strong>;</li>
+            <li>giá tính bằng đậu, kèm theo <strong>/giờ</strong> nếu tính giá theo giờ;</li>
+            <li><strong>Định kỳ</strong> nếu bài đăng vẫn mở sau mỗi giao dịch;</li>
+            <li><strong>💸 KÈM TIỀN MẶT</strong> nếu người đăng cũng cần thêm một ít tiền mặt, để trả tiền xăng hoặc nguyên vật liệu;</li>
+            <li>biểu tượng ổ khóa và tên nhóm nếu chỉ nhóm đó mới có thể nhìn thấy;</li>
+            <li>người đã đăng tin, cùng với huy hiệu tin cậy và số sao của họ. Thành viên chưa từng giao dịch sẽ hiển thị nhãn <strong>Sáng lập</strong>.</li>
+        </ul>
+        <p>Nhấn vào bài đăng để mở bài đó.</p>
+        <h2>Trên một bài đăng</h2>
+        <ul>
+            <li><strong>Nhắn tin</strong> và tên của họ: đặt câu hỏi trước khi bạn cam kết giao dịch.</li>
+            <li>Nhấn vào tên của họ để xem hồ sơ, các đánh giá và điểm tin cậy của họ.</li>
+            <li><strong>Báo cáo bài đăng</strong> nếu bài đăng là lừa đảo, xúc phạm, gây hiểu lầm hoặc gây nguy hiểm cho trẻ em (<strong>An toàn cho trẻ em</strong>).</li>
+            <li><strong>Chặn người dùng</strong> để ẩn các bài đăng và đoạn chat của họ trên điện thoại của bạn. Thao tác này cũng thông báo cho quản trị viên của bạn. Xem &quot;Chặn một người&quot;.</li>
+        </ul>
+        <p>Trong ứng dụng web, các nút trên bài đăng là <strong>💬 Nhắn tin</strong> và <strong>🚩 Báo cáo</strong>. Chặn một người từ hồ sơ của họ.</p>
+        <p>Trên cộng đồng toàn cầu, một bài đăng không có giá tính bằng Đậu: nó nêu những gì người đăng mong muốn nhận lại. Tại vị trí thường hiển thị giá, bài đăng sẽ ghi &quot;🏘️ Trong cộng đồng địa phương, đây là giá tính bằng đậu ›&quot;. Thay vì yêu cầu giao dịch, bài đăng hiển thị <strong>Yêu cầu · Đậu được giữ an toàn 🏘️</strong>: hãy nhấn vào đó để xem cách một giao dịch vận hành trong cộng đồng địa phương. Việc nhắn tin cho người đó vẫn hoạt động như ở mọi nơi. Xem &quot;Đậu và cộng đồng toàn cầu&quot;.</p>
+        <p>Bạn hiện chưa thể lưu hoặc chia sẻ bài đăng.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Trang chủ</strong><span>Trang chủ là gì, các thẻ hiển thị trên điện thoại và web, cách thêm, di chuyển hoặc xóa thẻ, chọn sở thích và quyền riêng tư khi đăng xuất.</span></a></li>
+            <li><a href="posting.html"><strong>Đăng Lời đề nghị hoặc Nhu cầu</strong><span>Đăng thứ bạn có thể làm hoặc trao tặng, hoặc thứ bạn đang tìm kiếm.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>Giao dịch từng bước một</strong><span>Từ yêu cầu đến khi nhận thanh toán, cho Lời đề nghị và Nhu cầu, cùng việc để lại đánh giá.</span></a></li>
+            <li><a href="near-you.html"><strong>Tìm kiếm thứ ở gần bạn</strong><span>Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Huy hiệu tin cậy</strong><span>Người mới, Cư dân, Quản lý và Trưởng bối. Ý nghĩa của chúng và lý do chúng không mở khóa quyền hạn nào.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Đậu và cộng đồng toàn cầu</strong><span>Mục đích của cộng đồng toàn cầu, một trong nhiều cộng đồng, và những gì bạn thấy: dấu hiệu 🏘️ Cộng đồng địa phương, cộng đồng mẫu Example Valley, lý do Đậu chờ ở đó và cách bắt đầu hoặc tìm cộng đồng địa phương.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

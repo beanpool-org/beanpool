@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qué muestra el mapa — BeanPool members' guide</title>
+    <meta name="description" content="Los marcadores en el Mapa, el significado de sus colores y los botones a su alrededor.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Mapa</a></p>
+        <h1>Qué muestra el mapa</h1>
+        <p class="lede">Los marcadores en el Mapa, el significado de sus colores y los botones a su alrededor.</p>
+        <h2>Pines</h2>
+        <p>Toca <strong>Mapa</strong> en la fila de pestañas. El mapa muestra las publicaciones de tu comunidad:</p>
+        <ul>
+            <li><strong>Pines verdes:</strong> Ofertas.</li>
+            <li><strong>Pines naranjas:</strong> Necesidades.</li>
+            <li><strong>Pines morados con un calendario:</strong> eventos que aún no han terminado.</li>
+        </ul>
+        <p>Un pin muestra la imagen de la categoría de la publicación. Donde muchas Ofertas y Necesidades están juntas, se unen en un círculo con un número. El círculo es azul en el teléfono y gris oscuro en la app web. Acerca el mapa para verlas una por una. Los eventos siempre se muestran por separado.</p>
+        <p>Las personas y los grupos no están en el mapa. En la app web, un emprendimiento que ha establecido un lugar se muestra como un pin cuadrado con su imagen. Tócalo para abrir el emprendimiento.</p>
+        <p>Las encuestas tampoco están en el mapa. La única excepción es en el teléfono, en la comunidad global, donde una encuesta puede mostrarse como un pin en la zona de quien la publicó. Se ve como un pin naranja de Necesidad, y solo se muestra bajo <strong>Todos</strong>.</p>
+        <h2>Tocar un pin</h2>
+        <ul>
+            <li><strong>Una Oferta o una Necesidad:</strong> una tarjeta muestra el título y quién la publicó. Toca <strong>Ver detalles</strong> para abrirla. En el teléfono, toca su nombre para ver su perfil. Toca el mapa o <strong>✕</strong> para cerrar la tarjeta.</li>
+            <li><strong>Un evento:</strong> una tarjeta muestra cuándo y dónde, y cuántos asistirán. Toca <strong>Ver evento</strong>. En la app web el botón es <strong>Ver detalles</strong>, y también puedes tocar <strong>Asistiré</strong> o <strong>Me interesa</strong> en la tarjeta.</li>
+        </ul>
+        <h2>Filtros</h2>
+        <p>En el teléfono, en la parte superior del mapa:</p>
+        <ul>
+            <li><strong>Todos</strong>, <strong>Ofertas</strong>, <strong>Necesidades</strong> o <strong>Eventos</strong>. Toca <strong>✕</strong> para borrar.</li>
+            <li><strong>Todas las categorías</strong> para mostrar una categoría.</li>
+            <li>Para eventos: <strong>Todos</strong>, <strong>Hoy</strong>, <strong>Este fin de semana</strong> o <strong>Próximos 7 días</strong>. El mapa se desplaza para ajustarse a ellos.</li>
+        </ul>
+        <p>En la app web el mapa solo tiene las etiquetas de fecha de eventos: <strong>Hoy</strong>, <strong>Este fin de semana</strong>, <strong>Próximos 7 días</strong> y <strong>Todos los eventos</strong>. Solo se muestran mientras tu comunidad tenga un próximo evento.</p>
+        <h2>Botones a la izquierda</h2>
+        <ul>
+            <li>En el teléfono, la luna o el sol: un mapa oscuro o claro.</li>
+            <li>La diana: muestra dónde estás. La primera vez, la app solicita permiso para usar tu ubicación.</li>
+            <li><strong>+</strong> y <strong>−</strong>: zoom.</li>
+        </ul>
+        <p>El círculo ámbar muestra el área que abarca tu comunidad.</p>
+        <h2>Añadir una publicación desde el mapa</h2>
+        <p>Toca <strong>PUBLICAR</strong>. En la app web, toca el botón redondo <strong>+</strong> en la parte inferior derecha. Consulta &quot;Publicar una Oferta o una Necesidad&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>Ubicación del marcador</strong><span>Quién puede ver dónde están tus publicaciones y eventos, y cómo proteger la privacidad de tu casa.</span></a></li>
+            <li><a href="near-you.html"><strong>Encontrar cosas cerca de ti</strong><span>Ver solo publicaciones dentro de cierta distancia de ti o de cualquier lugar que elijas.</span></a></li>
+            <li><a href="events.html"><strong>Eventos</strong><span>Crea un evento, presencial o en línea, único o periódico; confirma asistencia, recibe recordatorios, compártelo y gestiónalo como anfitrión.</span></a></li>
+            <li><a href="posting.html"><strong>Publicar Oferta o Necesidad</strong><span>Ofrece algo que puedes hacer o dar, o pide algo que estés buscando.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

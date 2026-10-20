@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Події — BeanPool members' guide</title>
+    <meta name="description" content="Створюйте подію — наживо чи онлайн, одноразову або регулярну; повідомляйте про участь, отримуйте нагадування, діліться та керуйте як організатор.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Спільне</a></p>
+        <h1>Події</h1>
+        <p class="lede">Створюйте подію — наживо чи онлайн, одноразову або регулярну; повідомляйте про участь, отримуйте нагадування, діліться та керуйте як організатор.</p>
+        <h2>Пошук подій</h2>
+        <ul>
+            <li>У розділі <strong>Ринок</strong> торкніться <strong>Події</strong>. Виберіть <strong>Сьогодні</strong>, <strong>Цих вихідних</strong> або <strong>Наступні 7 днів</strong>.</li>
+            <li>На вкладці <strong>Карта</strong> події позначаються фіолетовими мітками. На телефоні торкніться <strong>Події</strong>, щоб бачити лише їх. У вебдодатку вони відображаються завжди, а кнопки дат дозволяють звузити вибір.</li>
+        </ul>
+        <h2>Ваші події</h2>
+        <p>У розділі <strong>Ринок</strong> торкніться <strong>★ Для вас</strong>. Першим пунктом там є <strong>Ваші події</strong>: усе, щодо чого ви зазначили <strong>Піду</strong> або <strong>Цікавить</strong>, у порядку найближчих дат. Торкніться будь-якої з них, щоб відкрити.</p>
+        <p>Цей розділ з'являється лише тоді, коли у вас є заплановані події, і містить лише ваші власні відповіді — ніхто інший його не бачить.</p>
+        <h2>Участь у події</h2>
+        <p>На картці події торкніться <strong>Піду</strong> або <strong>Цікавить</strong>. Торкніться свого вибору ще раз, щоб скасувати його.</p>
+        <p>Коли ви обрали <strong>Піду</strong>:</p>
+        <ul>
+            <li>ви можете прочитати примітку організатора <strong>Примітка для тих, хто йде</strong>, якщо організатор вирішив схвалювати учасників і вже надав вам доступ;</li>
+            <li>ви можете відкрити <strong>чат події</strong>. Дивіться «Чат події»;</li>
+            <li>для онлайн-події ви бачите її <strong>Посилання для приєднання</strong> та кнопку <strong>Приєднатися</strong> на тих самих умовах, що й примітку.</li>
+        </ul>
+        <p>Торкніться події, щоб переглянути всі відомості та пункт <strong>Показати на карті</strong>. На телефоні відкриється ваш картографічний додаток. У вебдодатку місце буде показано на Карті.</p>
+        <h2>Нагадування</h2>
+        <p>Коли ви зазначили <strong>Піду</strong> або <strong>Цікавить</strong>, у події з'являється пункт <strong>Нагадати</strong> та час до початку, коли вам надійде сповіщення — <strong>За 1 день (ваше стандартне)</strong>, доки ви його не зміните.</p>
+        <ul>
+            <li>Торкніться <strong>Змінити</strong>, щоб обрати <strong>За 1 тиждень</strong>, <strong>За 1 день</strong>, <strong>За 2 години</strong>, <strong>За 1 годину</strong> або <strong>За 30 хвилин</strong>. Можна позначити кілька варіантів.</li>
+            <li>Не позначайте нічого, щоб не отримувати нагадувань про цю подію.</li>
+            <li>Потім торкніться <strong>Зберегти для цієї події</strong>. Позначки не зберігаються, доки ви цього не зробите.</li>
+            <li>Торкніться <strong>Використовувати стандартне</strong>, щоб повернутися до свого звичайного вибору.</li>
+        </ul>
+        <p>Щоб змінити стандартний вибір для всіх подій, дивіться «Сповіщення».</p>
+        <p>Нагадування надходять як сповіщення на ваш телефон разом зі сповіщеннями Ринку, тому вони припиняться, якщо ви їх вимкнете. Вам ніколи не нагадуватимуть про подію, яку скасовано або яка вже завершилася, а також про час, який уже минув на момент вашої відповіді.</p>
+        <h2>Як поділитися подією</h2>
+        <p>Відкрийте подію та торкніться <strong>Поділитися</strong>. Відкриється стандартне вікно надсилання вашого телефона з назвою події, датою, місцем і посиланням. На комп'ютері посилання копіюється в буфер обміну.</p>
+        <p>Будь-хто, хто перейде за цим посиланням, відкриє подію — у додатку, якщо він встановлений, або у вебдодатку. Той, хто ще не є учасником вашої спільноти, потрапить на сторінку вступу. У веббраузері глобальна спільнота спочатку показує подію так, як її бачить гість, і відкриває знову після приєднання.</p>
+        <h2>Додавання до календаря</h2>
+        <p>Відкрийте подію та торкніться <strong>Додати до календаря</strong>.</p>
+        <ul>
+            <li>У <strong>вебдодатку</strong> завантажується файл календаря. Відкрийте його, і ваш календар запропонує додати подію.</li>
+            <li>На <strong>iPhone</strong> цей самий файл передається телефону, який пропонує <strong>Add to Calendar</strong>.</li>
+            <li>На <strong>Android</strong> відкривається Google Calendar із уже заповненими даними події. Перевірте їх і збережіть.</li>
+        </ul>
+        <p>Запис містить назву, час, місце та посилання на подію. Якщо організатор пізніше змінить час, ваш календар автоматично не зміниться — додаток усе одно нагадає вам, а сама подія завжди показує актуальний час.</p>
+        <h2>Створення події</h2>
+        <ul>
+            <li>Торкніться <strong>+ ДОДАТИ ДОПИС</strong> на вкладці «Ринок» або «Карта», а потім виберіть <strong>Подія</strong>.</li>
+            <li>Вкажіть пункт <strong>Назва</strong> та час початку — <strong>Починається</strong>. Час завершення — <strong>Завершується</strong> — є необов'язковим; за замовчуванням це 2 години по тому, якщо ви не зміните це.</li>
+            <li>Час вказується в часовому поясі самої події, визначеному за міткою. Якщо він не збігається з вашим, під часом з'явиться рядок із його назвою. Торкніться кнопки <strong>Змінити</strong> поруч, якщо він неправильний.</li>
+            <li><strong>Повторюється:</strong> оберіть частоту повторення (наприклад, щотижня в цей день або раз на місяць) або залиште значення <strong>Не повторюється</strong>. Пункт <strong>До</strong> є необов'язковим: залиште його порожнім, і подія повторюватиметься, доки ви її не скасуєте.</li>
+            <li>Оберіть <strong>У певному місці</strong> або <strong>Онлайн</strong>. Для онлайн-події немає місця й мітки: замість цього додайте <strong>Посилання для приєднання</strong>. Його бачите лише ви та учасники, які йдуть (якщо ви схвалюєте учасників — лише схвалені вами люди). Її час вказано у вашому часовому поясі, а всі інші бачать його у своєму з позначкою <strong>ваш час</strong>.</li>
+            <li><strong>Назва місця</strong>, наприклад «Міська рада».</li>
+            <li>Поставте мітку на карті: торкніться карти, скористайтеся пошуком <strong>Знайти адресу</strong> або натисніть <strong>Визначити місцезнаходження</strong>. Торкніться <strong>Приблизно (~100 м)</strong>, якщо ви не хочете показувати точне місце. Дивіться «Де розміщується ваша мітка».</li>
+            <li>Додайте поле <strong>Опис</strong> та за бажанням світлину.</li>
+            <li><strong>Примітка для тих, хто йде:</strong> її бачать усі, хто натиснув «Піду», якщо тільки ви не позначите пункт <strong>Лише схвалені учасники бачать примітку та чат</strong> (за замовчуванням позначено в глобальній спільноті, де будь-хто може приєднатися за хвилину): тоді лише схвалені вами люди бачитимуть її та чат події. Це зручне місце для точної адреси або коду від воріт; назву місця бачать усі.</li>
+            <li><strong>Хто може бачити:</strong> уся ваша спільнота або одна група.</li>
+            <li>Якщо ви опікуєтеся проєктом чи підприємством або є координатором групи, пункт <strong>Публікувати від імені</strong> дозволяє створити подію від їхнього імені. Група проводить події лише для власних учасників; підприємство діє для всієї спільноти, тому подія підприємства ніколи не може бути лише для групи.</li>
+            <li>Торкніться <strong>Створити</strong>. Ваша подія з'явиться на Ринку та на Карті.</li>
+        </ul>
+        <p>У вебдодатку поле назви підписане як <strong>Що відбувається?</strong>, кнопки мітки — <strong>📍 Моє місцезнаходження</strong> та <strong>📌 Поставити мітку</strong>, а остання кнопка — <strong>Створити подію</strong>.</p>
+        <p>Ви можете мати до 5 майбутніх подій одночасно. Події групи враховуються до лімітів групи, а події підприємства — до лімітів підприємства.</p>
+        <h2>Керування вашою подією</h2>
+        <p>Відкрийте свою подію. Як організатор ви можете:</p>
+        <ul>
+            <li>переглядати розділ <strong>Хто йде</strong> та схвалювати учасників: кнопка <strong>Впустити</strong> поруч з ім'ям (торкніться ще раз, щоб скасувати) або <strong>Впустити всіх</strong>. Ваші друзі додаються автоматично, коли натискають «Піду». Якщо зняти позначку з пункту <strong>Лише схвалені учасники бачать примітку та чат</strong>, кожен учасник побачить примітку та історію чату, а в чаті з'явиться повідомлення про те, що організатор відкрив його;</li>
+            <li>обрати <strong>Редагувати подію</strong>. Якщо ви зміните час або місце, усі учасники отримають сповіщення;</li>
+            <li>обрати <strong>Копіювати на іншу дату</strong>, щоб провести її знову;</li>
+            <li>обрати <strong>Скасувати подію</strong> та підтвердити дію (повторним натисканням <strong>Скасувати подію</strong> на телефоні або <strong>OK</strong> у вебдодатку). Усі учасники побачать, що подію скасовано, а чат стане доступним лише для читання.</li>
+        </ul>
+        <h2>Повторювані події</h2>
+        <p>Повторювана подія містить позначку <strong>↻</strong> та частоту поруч із датою, наприклад <strong>Щоп'ятниці</strong> або <strong>Щомісяця 16-го числа</strong>. На картці показано найближчу дату; відкрийте її, щоб переглянути розділ <strong>Наступні дати</strong>.</p>
+        <p>Якщо ви організатор, для кожної з наступних дат доступні дії:</p>
+        <ul>
+            <li><strong>Скасувати цю дату:</strong> скасовується лише цей конкретний день. Усіх учасників цього дня буде сповіщено.</li>
+            <li><strong>Змінити лише цю дату:</strong> цей день скасовується, і ви створюєте одноразову подію на іншу дату.</li>
+            <li><strong>Відновити:</strong> скасована дата знову стає активною.</li>
+        </ul>
+        <p>Дія <strong>Скасувати подію</strong> скасовує всі дати, а її чат переходить у режим лише для читання. Доти чат залишається відкритим між датами аж до останнього дня; якщо кінцевої дати <strong>До</strong> не встановлено, він діє до повного скасування події.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>Чат події</strong><span>Спілкуйтеся з організатором та всіма, хто йде на подію.</span></a></li>
+            <li><a href="notifications.html"><strong>Сповіщення</strong><span>Виберіть, які сповіщення надходитимуть на ваш телефон і коли події нагадуватимуть про себе.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Де розміщується ваша мітка</strong><span>Хто бачить розташування ваших оголошень і подій, і як зберегти приватність вашої домівки.</span></a></li>
+            <li><a href="map-pins.html"><strong>Що показує карта</strong><span>Мітки на Карті, що означають їхні кольори та кнопки навколо них.</span></a></li>
+            <li><a href="polls.html"><strong>Опитування</strong><span>Поставте спільноті швидке запитання. Опитування виявляють думку учасників, але самі по собі нічого не змінюють.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

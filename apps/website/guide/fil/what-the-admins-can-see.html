@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Makikita ng mga admin — BeanPool members' guide</title>
+    <meta name="description" content="Sa komunidad na ang mga admin ay nagtatabi ng listahan ng mga pangalan: ano ang hawak nito tungkol sa iyo, sino ang makakabasa nito, ano ang itinatago ng server ng iyong komunidad, at ano ang ibig sabihin ng pagiging kumpirmado.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Mga Setting at kaligtasan</a></p>
+        <h1>Makikita ng mga admin</h1>
+        <p class="lede">Sa komunidad na ang mga admin ay nagtatabi ng listahan ng mga pangalan: ano ang hawak nito tungkol sa iyo, sino ang makakabasa nito, ano ang itinatago ng server ng iyong komunidad, at ano ang ibig sabihin ng pagiging kumpirmado.</p>
+        <h2>Ang listahan ng mga pangalan</h2>
+        <p>Ang mga admin ng ilang komunidad ay nagtatabi ng <strong>listahan ng mga pangalan</strong>: kung sino ang mga miyembro, ayon sa tunay na pangalan, kung paano nagtatago ng listahan ng kasapian ang isang komite ng LETS. Hindi lahat ng komunidad ay nagtatago nito. Tanungin ang iyong mga admin kung ang sa iyo ay nagtatago nito.</p>
+        <p>Ang isang entry ay naglalaman ng iyong pangalan at, kung minsan, isang maikling tala na isinusulat ng isang admin, tulad ng kung paano ka nakikilala ng komunidad. Wala nang iba pa: walang address, walang petsa ng kapanganakan, walang numero ng ID.</p>
+        <h2>Sino ang makakabasa nito</h2>
+        <p><strong>Ang mga may-ari at admin lamang ng iyong komunidad, sa kanilang sariling mga telepono.</strong> Ang iyong pangalan ay tinatatakan sa telepono ng isang admin bago ito ipadala sa server ng iyong komunidad. Nagtatago ang server ng scrambled na teksto: ang isang backup, isang kopya, BeanPool, o sinumang magnakaw ng database ay walang hawak na anumang mababasa.</p>
+        <p>Sinumang nagpapatakbo ng server ay hindi makakabasa nito. Ibinibigay lamang ng mga telepono ng mga admin ang mga susi ng listahan sa mga admin na ang mga telepono ay nasuri ng isa pang admin, sa isang tawag o nang personal, at tumatanggap lamang ng mga bagong susi mula sa kanila. Nakasalalay iyon sa mga admin: ang isang admin na sumuri sa telepono ng maling tao, ang telepono ng isang admin na napasok ng ibang tao, o isang nawalang telepono bago alisin ng mga admin ang susi nito, ay maaaring magpahintulot sa ibang tao na basahin ang mga pangalan. Gayundin ang telepono ng isang admin na pinipigilan ng sinumang nagpapatakbo ng server na malaman na inalis na ang isang admin: hanggang sa malaman nito, ang isinusulat nito ay mababasa gamit ang mga susing mayroon ang inalis na admin. Ang isang admin na ang telepono ay nagpapakita pa rin ng inalis na admin ay manu-manong nag-aalis ng kanilang susi, at ang teleponong iyon ay gagawa ng bagong susi nang wala sila o walang isusulat.</p>
+        <p><strong>Hindi nakikita ng ibang mga miyembro ang mga pangalan.</strong> Nakikita nila ang iyong pangalan sa BeanPool, tulad ng dati.</p>
+        <p>Maaaring gumawa ang isang admin ng PDF na kopya ng listahan sa kanilang telepono, para sa ligtas na pagtatago. Kapag nagawa na, nasa kanila na ang pananagutan na panatilihin itong ligtas, tulad ng isang listahang papel. Sa bawat oras na buksan o kopyahin ang listahan, makikita ng ibang mga admin kung sino ang gumawa nito at kung kailan.</p>
+        <h2>Pagiging kumpirmado</h2>
+        <p>Maaari kang <strong>kumpirmahin</strong> ng isang admin: sinasabi nila na ang iyong account ay ang tao sa iyong entry. Ang isang taong nakakakilala lamang sa iyo ang dapat gumawa niyon, at sa ilang komunidad ay dapat magkasundo ang dalawang admin.</p>
+        <ul>
+            <li>Ang isang kumpirmasyon ay walang dalang pangalan. Itinatala ng server kung aling account, aling entry, at aling admin, hindi kailanman kung sino ka.</li>
+            <li>Hindi ito isang badge ng tiwala, at sa ngayon ay wala itong binabago sa app.</li>
+            <li>Kung inimbita ka ng isang admin ayon sa pangalan, ang pagsali gamit ang kanilang imbitasyon ay nagkumpirma sa iyo laban sa iyong entry, ng admin na iyon. Ang ibig sabihin ng &quot;Kumpirmado&quot; ay sinasabi lamang ng isang admin na ang account na ito ay ang tao sa entry na iyon.</li>
+            <li>Kung papalitan mo ang isang nawalang telepono at lumipat ang iyong account sa isang bagong susi, lilipat din ang iyong kumpirmasyon kasama nito.</li>
+            <li>Kung aalis ka o buburahin mo ang iyong account, magtatapos ang iyong kumpirmasyon. Mananatili ang iyong entry sa listahan ng mga admin hanggang sa burahin ito ng isang admin: hilingin sa kanila na gawin ito.</li>
+            <li>Kung ikaw ay kumpirmado at umalis ka, inalis ka, o binura mo ang iyong account habang may utang kang Munggo, sasagutin ng Komun ang utang tulad ng dati. Ang listahan ng mga admin ay nagtatabi rin ng tala sa iyong entry kung ano ang iyong utang, bakit at kailan, sa loob ng 3 taon, at nakikita ito ng mga admin sa tabi ng iyong pangalan sa kanilang mga telepono. Walang sinuman ang maaaring makumpirma laban sa entry na iyon hanggang sa ito ay mabayaran muli, mapagtrabahuhan, o mapatawad.</li>
+        </ul>
+        <h2>Kung ano ang hindi ipinapakita ng listahan ng mga pangalan sa mga admin</h2>
+        <p>Nagtataglay ang listahan ng mga pangalan at tala, at kung aling account ang para kanino. Bukod sa tala, sa itaas, ng isang utang na iniwan mong hindi nabayaran, hindi nito ipinapakita sa sinuman ang iyong balanse o ang iyong mga kalakalan (makikita ng isang admin ang iyong balanse sa mga kaso sa ibaba, at ang ilan sa iyong mga kalakalan: tingnan ang dulo ng pahinang ito). Tingnan ang &quot;Iyong privacy&quot; para sa kung ano ang makikita ng mga miyembro at admin sa ibang pagkakataon.</p>
+        <h2>Kung ano ang sinasang-ayunan mo sa isang kilalang komunidad</h2>
+        <p>Ang isang komunidad na nagpapatunay sa mga miyembro nito, isang <strong>kilalang komunidad</strong>, ay gumagana tulad ng dati nang pamamaraan ng isang LETS: binabantayan ng mga admin ang mga utang na lumalaki nang sobra o nananatili nang napakatagal. Kapag sumali ka sa isa, sinasabi ng screen ng pagsali nang eksakto kung kailan, sa mga numero ng iyong komunidad, halimbawa:</p>
+        <p>&quot;Sa komunidad na ito, makikita ng mga admin ang iyong balanse kung lumampas ito sa 50% ng iyong linya ng kredito o kung mananatili kang may utang sa loob ng 60 araw nang walang benta. Ganoon palagi gumana ang isang LETS. Bawat oras na buksan ng isang admin ang listahan ng mga miyembrong lumampas sa mga linyang iyon, at bawat oras na tingnan ng isang admin ang iyong balanse habang inaalis ka, ito ay naka-log. Sa isang boto sa pag-alis sa iyo, makikita ng bawat makakaboto rito ang iyong balanse at anumang utang, sa botong iyon lamang, at ang mga pagtinging iyon ay hindi naka-log. Maaari mo itong bawiin anumang oras sa Mga Setting. Anuman ang iyong piliin, makikita ng sinumang admin ang ilan sa iyong mga kalakalan: isang kalakalan na hindi pa natatapos o inayos ng isang admin (kung kanino, ang listing, ang presyo, at ang iyong one-to-one chat sa kanila, na hindi nila mababasa kung ito ay pribado), upang maayos ang isang nakatenggang kalakalan; isang kalakalan na ang mga Munggo ay naiwang nakatengga noong inalis ang isang miyembro sa mas lumang server (ang status ng kalakalan, ang listing, ang presyo, ang mga petsa nito, ang mga Munggong naiwang nakatengga, gaano karaming kabayaran ang dumaan dito, at ang halaga at tala ng huli); isang alerto sa pandaraya na nagpapangalan sa iyo kung ikaw at ang isang miyembro ay bumibili sa isa't isa nang pabalik-balik, halos magkapantay, lampas sa isang limitasyon, kasama ang kabuuang Munggo at kung gaano kapantay ang napunta sa bawat panig; isa na nagpapangalan sa iyo, kasama ang kabuuang Munggo at kung ilan sa mga miyembrong inimbita mo ang nakipagkalakalan sa wala kundi ikaw lamang, kung ang mga miyembrong inimbita mo ay nagpadala sa iyo ng Munggo lampas sa limitasyon sa loob ng nakatakdang bilang ng mga araw, o kung isa ka sa mga miyembrong iyon; isa na nagpapangalan sa iyo, kasama kung gaano karami sa pakikipagkalakalan ng grupo ay sa isa't isa ngunit walang Munggo, kung ikaw ay nasa isang grupo ng mga miyembro, hindi bababa sa kalahati sa kanila ay bago, na halos sa isa't isa lamang nakikipagkalakalan; at isang alerto na nagpapangalan sa iyo kung walang Munggo na pumasok o lumabas sa iyong account sa loob ng nakatakdang bilang ng mga araw. Naka-log ang bawat pagtingin sa isa sa mga kalakalang iyon, kasama kung sino ang tumingin, kailan, at sa aling mga kalakalan; ang pagtingin sa mga alertong nagpapangalan sa iyo ay naka-log sa unang pagkakataon na buksan ng bawat admin ang mga ito, at muli sa unang pagtingin ng admin na iyon pagkalipas ng 24 oras, at ang mga pagtingin sa pagitan ay hindi nagdaragdag ng linya. Makikita ng may-ari at ng mga admin ang log na iyon. Ang mga istatistika ng miyembro na nakikita ng mga admin ay nagpapakita kung gaano karaming post ang mayroon ka at mga mensaheng naipadala mo, at sa mga kalakalan ay ang kabuuan lamang ng buong komunidad, hindi ang sa iyo. Nakikita ng bawat miyembro, kasama ang mga admin, ang iyong profile ng tiwala: gaano karami sa iyong mga kalakalan ang natapos at ilan ang nakansela, at ang bahaging natapos, gaano karaming kabayaran sa Munggo ang naipadala mo o natanggap mula sa mga miyembro kasama ang mga kalakalang natapos mo, kasama ang kung ilang magkakaibang miyembro ang binayaran mo, binayaran ka o kinalakal mo, gaano karaming kabayaran at kalakalan ang nagawa mo sa miyembrong tumitingin, at ang iyong Mga Puntos ng Tiwala. Hindi iyon naka-log, dahil makikita ito ng bawat miyembro. Wala nang iba pa sa iyong mga kalakalan. Sinumang nagpapatakbo ng server ng komunidad na ito ay hawak ang buong database nito, kasama ang iyong balanse at mga kalakalan, at ang mga backup, snapshot, at standby na kopya nito.&quot;</p>
+        <p>Ang pagsang-ayon doon ay ang iyong pahintulot. Pagkatapos, at habang kinumpirma ka lamang ng isang admin:</p>
+        <ul>
+            <li>Kung lumampas ang iyong balanse sa alinmang linya, lilitaw ang iyong account sa mga telepono ng mga admin kasama ang iyong balanse, upang ang isang admin na nakakakilala sa iyo ay makipag-usap sa iyo. Walang ibang ipinapakita ang listahang iyon tungkol sa iyo, at wala sa iyong mga kalakalan.</li>
+            <li>Sa bawat oras na buksan ng isang admin ang listahang iyon, makikita ng ibang mga admin at ng may-ari kung sino ang nagbukas nito at kung kailan.</li>
+            <li>Kung hindi ka sumang-ayon, o walang nagkumpirma sa iyo, o hindi nagkukumpirma ng mga miyembro ang iyong komunidad, hindi ka kailanman ipinapakita ng listahang iyon.</li>
+        </ul>
+        <p>Kung sumali ka bago nagtanong ang iyong komunidad, iniaalok ito ng iyong app sa iyo. Ang pagsasabi ng hindi, o hindi pagsagot, ay walang binabago sa iba: miyembro ka pa rin. Kung babaguhin ng komunidad ang mga linya nito sa ibang pagkakataon, tatanungin ka muli ng iyong app.</p>
+        <p>Maaari mong bawiin ang iyong pahintulot anumang oras: buksan ang <strong>Mga Setting</strong>, kung saan ipinapakita ng iyong app kung ano ang sinang-ayunan mo at kailan, at i-tap ang <strong>Bawiin</strong>. Mula sa sandaling iyon ay wala ka na sa listahan. Nagtatago ang iyong komunidad ng tala na ikaw ay sumang-ayon at na ikaw ay nagbawi, at maaari kang sumang-ayon muli mamaya.</p>
+        <h2>Kailan nakikita ng isang admin ang iyong balanse kahit paano</h2>
+        <p>Sumang-ayon ka man o hindi sa anuman, sa anumang komunidad:</p>
+        <ul>
+            <li><strong>Kapag inalis ng isang admin ang iyong account.</strong> Ang admin na magsisimulang mag-alis sa iyo ay makikita ang iyong balanse at kung gaano karaming kalakalan ang bukas mo, upang maayos kung ano ang hawak mo o utang mo. Makikita ng ibang mga admin at ng may-ari kung sino ang tumingin, sa balanse ninuman, at kung kailan.</li>
+            <li><strong>Kapag bumoto ang iyong komunidad sa pag-alis sa iyo.</strong> Makikita ng bawat makakaboto rito ang iyong balanse at anumang utang, sa botong iyon lamang. Ang isang admin o may-ari na hindi makakaboto rito ay hindi makakakita sa mga ito roon. Ang mga pagtinging iyon ay hindi naka-log.</li>
+            <li><strong>Sinumang nagpapatakbo ng server ng iyong komunidad</strong> ay hawak ang buong database nito, kasama ang iyong balanse at mga kalakalan, at ang mga backup, snapshot, at standby na kopya nito.</li>
+        </ul>
+        <h2>Kung ano ang makikita ng sinumang admin sa iyong mga kalakalan</h2>
+        <p>Sumang-ayon ka man o hindi sa anuman, sa anumang komunidad, makikita ng sinumang admin ang:</p>
+        <ul>
+            <li><strong>Isang kalakalan na hindi pa natatapos, o inayos ng isang admin.</strong> Ang dalawang miyembro, ang listing, ang presyo, at ang mga mensahe sa one-to-one chat ng dalawang miyembro. Hindi mababasa ng isang admin ang pribadong chat, makikita lamang kung sino ang sumulat at kailan. Ito ay upang maayos ng isang admin ang isang kalakalan na natetengga.</li>
+            <li><strong>Isang kalakalan na ang mga Munggo ay naiwang nakatengga noong inalis ang isang miyembro sa mas lumang server.</strong> Ang status ng kalakalan, ang listing, ang presyo, ang mga petsa nito, ang mga Munggong naiwang nakatengga, gaano karaming kabayaran ang dumaan dito, at ang halaga at tala ng huli, upang ma-write off ng may-ari ang mga nakatenggang Munggo.</li>
+            <li><strong>Mga alerto sa pandaraya na nagpapangalan ng mga miyembro,</strong> na may Munggo. Ang isa ay nagpapangalan ng dalawang miyembro na bumibili sa isa't isa nang pabalik-balik, halos magkapantay, lampas sa isang limitasyon. Ipinapakita nito ang kabuuang Munggo at kung gaano kapantay ang napunta sa bawat panig. Ang isa pa ay nagpapangalan ng isang miyembro at ng mga miyembrong kanilang inimbita, kapag ang mga miyembrong iyon ay nagpadala sa kanila ng Munggo lampas sa limitasyon sa loob ng nakatakdang bilang ng mga araw. Ipinapakita nito ang kabuuang Munggo at kung ilan sa mga miyembrong inimbita nila ang nakipagkalakalan sa wala kundi sila lamang.</li>
+            <li><strong>Isang alerto sa pandaraya na nagpapangalan ng isang grupo ng mga miyembro,</strong> hindi bababa sa kalahati sa kanila ay bago, na halos sa isa't isa lamang nakikipagkalakalan. Ipinapakita nito kung gaano karami sa pakikipagkalakalan ng grupo ay sa isa't isa, ngunit walang Munggo.</li>
+            <li><strong>Isang alerto na nagpapangalan sa mga miyembrong walang Munggo na pumasok o lumabas</strong> sa loob ng nakatakdang bilang ng mga araw.</li>
+        </ul>
+        <p><strong>Naka-log ang bawat pagtingin sa isa sa mga kalakalang ito:</strong> sino ang tumingin, kailan, at sa aling mga kalakalan. <strong>Ang pagtingin sa mga alertong nagpapangalan sa isang miyembro ay naka-log</strong> sa unang pagkakataon na buksan ng bawat admin ang mga ito, at muli sa unang pagtingin ng admin na iyon pagkalipas ng 24 oras; ang mga pagtingin sa pagitan ay hindi nagdaragdag ng linya. Makikita ng may-ari at ng mga admin ang log na iyon sa Kalusugan ng komunidad, bilang isang hiwalay na listahan katabi ng listahan ng kung sino ang tumingin sa balanse. Ang isang pagtingin na ginawa ng isang automation token (isang script na na-set up ng isang may-ari) ay nagsasabi nito: mababasa sa linya ang &quot;by token&quot; at ang pangalan ng token, katabi ng may-ari na gumawa nito.</p>
+        <p>Ang mga istatistika ng miyembro na nakikita ng mga admin ay nagpapakita kung gaano karaming post ang mayroon ang bawat miyembro at mga mensaheng naipadala nila, at sa mga kalakalan ay ang kabuuan lamang ng buong komunidad: gaano karaming kalakalan ang natapos o nakansela at kung magkano ang kinalabasan ng mga natapos, hindi kailanman ang sa isang miyembro.</p>
+        <p>Nakikita ng bawat miyembro, kasama ang mga admin, ang <strong>profile ng tiwala</strong> ng bawat miyembro: gaano karami sa kanilang mga kalakalan ang natapos at ilan ang nakansela, at ang bahaging natapos, gaano karaming kabayaran sa Munggo ang naipadala nila o natanggap mula sa mga miyembro kasama ang mga kalakalang natapos nila, kasama ang kung ilang magkakaibang miyembro ang binayaran nila, binayaran sila o kinalakal nila, gaano karaming kabayaran at kalakalan ang nagawa nila sa miyembrong tumitingin, at ang kanilang Mga Puntos ng Tiwala. Hindi ito naka-log, dahil makikita ito ng bawat miyembro.</p>
+        <p>Wala nang iba pa sa iyong mga kalakalan.</p>
+        <h2>AI assistant ng isang admin</h2>
+        <p>Maaaring ikonekta ng isang may-ari o admin ang kanilang sariling AI assistant sa server upang tulungan sila. Mas kaunti ang nakikita nito kaysa sa kanila: hindi kailanman ang iyong mga mensahe, balanse, kalakalan, mga susi, mga larawan, o ang listahan ng mga pangalan, at hindi kailanman kung sino ang nag-ulat ng sinuman. Tingnan ang &quot;Kapag gumagamit ang admin ng AI assistant&quot;.</p>
+        <h2>Pagtatanong tungkol sa iyong entry</h2>
+        <p>Maaari mong tanungin ang iyong mga admin kung ano ang sinasabi ng iyong entry, upang itama ito, o burahin ito kapag hindi ka na kabilang sa komunidad. Sila ang nagtatabi ng listahan, hindi ang BeanPool.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>Iyong privacy</strong><span>Kung ano ang makikita ng iba tungkol sa iyo, at ang mga setting na kumokontrol dito.</span></a></li>
+            <li><a href="joining.html"><strong>Pagsali sa BeanPool</strong><span>Dalawang paraan: isang komunidad, gamit ang imbitasyon ng miyembro, o ang pandaigdigang komunidad kapag bukas, gamit ang 12 lihim na salita o isang sign-in. Paghiling na sumali sa komunidad, at paano mag-imbita ng iba.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Pag-alis o pagbura ng account</strong><span>Mag-sign out sa teleponong ito, o burahin ang account nang tuluyan, at ano ang mangyayari sa iyong munggo.</span></a></li>
+            <li><a href="admins-ai-assistants.html"><strong>Kapag gumamit ng AI assistant ang admin</strong><span>Ano ang mababasa ng AI assistant ng may-ari o admin tungkol sa iyo, ano ang hindi nito kailanman nakikita, at sino ang tumatanggap nito.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

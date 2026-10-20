@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mga Notipikasyon — BeanPool members' guide</title>
+    <meta name="description" content="Piliin kung aling mga alerto ang darating sa telepono, at kailan magpapaalala ang mga event.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Mga Setting at kaligtasan</a></p>
+        <h1>Mga Notipikasyon</h1>
+        <p class="lede">Piliin kung aling mga alerto ang darating sa telepono, at kailan magpapaalala ang mga event.</p>
+        <h2>Pagpili ng iyong mga alerto</h2>
+        <ul>
+            <li>Buksan ang <strong>Mga Setting</strong>. Sa ilalim ng <strong>Mga Setting ng App</strong>, i-tap ang <strong>Mga Kagustuhan sa Notification</strong>.</li>
+            <li>I-on o i-off ang bawat uri:</li>
+            <li><strong>Mga Direktang Mensahe:</strong> kapag may nagpadala ng mensahe sa iyo, sumulat sa isa sa iyong mga grupo o nag-mention sa iyo, o kapag nagbukas ang isang boto sa isang grupo o negosyo kung saan ka kabilang.</li>
+            <li><strong>Aktibidad sa Marketplace:</strong> mga kahilingan, pag-apruba, at pagtanggi sa iyong mga kasunduan, at kung ano ang nangyari sa isang post na iniulat mo o sa isa sa mga post mo na inalis ng mga admin. Balita rin tungkol sa mga kaganapang pupuntahan mo, mga abiso mula sa mga admin ng iyong komunidad, at isang komunidad na nagsisimula malapit sa isang lugar na itinanong mo.</li>
+            <li><strong>Hawak sa Tiwala at Sistema:</strong> mga munggong hawak, pinakawalan, o kinukuwestiyon.</li>
+        </ul>
+        <p>Sa web app ang una ay tinatawag na <strong>Mga Mensahe sa Chat</strong>, at ang ikatlo ay ang ipinangalan sa <strong>Mga Kasunduan</strong>. Itinatakda ng mga ito kung ano ang makakarating sa iyong telepono.</p>
+        <p>Kusang nagse-save ang mga pagbabago. Ang mga ito ay itinatago ng server ng iyong komunidad, kaya sinusundan ng mga ito ang iyong account.</p>
+        <p>Dalawang alerto tungkol sa iyong account ang palaging lumalampas, at walang switch ang app para sa mga ito: na naibalik lang ang iyong account sa ibang device, at na sinimulan ng isang admin ang paglipat ng iyong account sa isang bagong telepono. Kung ikaw ang nagpapatakbo ng server ng iyong komunidad, ang mga alerto nito tungkol sa server ay palagi ring lumalampas.</p>
+        <h2>Ano ang sinasabi ng isang alerto</h2>
+        <p>Sinasabi lamang ng isang alerto sa iyong telepono kung anong uri ng balita ito, halimbawa:</p>
+        <ul>
+            <li>&quot;Mayroon kang bagong mensahe.&quot;</li>
+            <li>&quot;May balita sa isa sa iyong mga pakikipagpalitan.&quot;</li>
+            <li>&quot;Magsisimula na sa lalong madaling panahon ang isang kaganapang pupuntahan mo.&quot;</li>
+            <li>&quot;May abiso ang iyong komunidad para sa iyo.&quot;</li>
+        </ul>
+        <p>Hindi nito kailanman sinasabi kung kanino ito galing, aling listing, gaano karaming munggo, o kung ano ang sinasabi ng anunsyo ng iyong komunidad. Dumadaan ang mga alerto sa mga server ng Apple, Google, at Expo sa kanilang pagpunta sa iyong telepono, at maaaring basahin ng sinuman ang lock screen, kaya nananatili ang iba sa iyong komunidad. Buksan ang BeanPool upang makita ito.</p>
+        <p>Hindi kailanman humihingi ang BeanPool ng iyong 12 salita o password sa isang alerto.</p>
+        <h2>Kapag nag-tap ka ng alerto</h2>
+        <p>Ang bawat alerto ay nagdadala ng lagda ng iyong komunidad, na ginawa para sa iyo lamang. Sinusuri ito ng BeanPool bago gumawa ng anuman:</p>
+        <ul>
+            <li><strong>Pumasa ito:</strong> Tinatanong ng BeanPool ang iyong komunidad kung tungkol saan ang alerto at binubuksan ito, kung ito ay mula sa komunidad kung saan ka naroroon. Ang isang alerto mula sa isa pa sa iyong mga komunidad ay nagbubukas ng BeanPool kung saan ka huminto: lumipat sa komunidad na iyon upang makita ito.</li>
+            <li><strong>Hindi ito pumasa:</strong> Walang binubuksan ang BeanPool at sinasabihan ka nang isang beses: &quot;Hindi galing sa iyong komunidad ang notification na iyon. Huwag pansinin ang sinabi nito. Hindi kailanman humihingi ang BeanPool ng iyong 12 salita o password sa isang notification.&quot;</li>
+        </ul>
+        <p>Habang bukas ang BeanPool, ang isang alertong hindi pumasa ay hindi ipinapakita, at gayundin ang isa na nakita mo na.</p>
+        <p>Ipinapakita ng iyong telepono ang mga salita ng alerto bago masuri ng BeanPool ang mga ito. Kaya ang isang taong nakakuha sa address ng alerto ng iyong telepono ay maaaring maglagay ng sarili nilang mga salita sa iyong lock screen. Walang ginagawa ang pag-tap sa isa, at sinasabi ito ng BeanPool.</p>
+        <p>Ang isang alerto mula sa isang komunidad na inalis mo sa teleponong ito ay wala ring ginagawa.</p>
+        <p>Kung hindi pa na-update ang server ng iyong komunidad, walang dalang lagda ang mga alerto nito. Ipinapakita ng BeanPool ang mga ito sa mga pangkalahatang salita (&quot;May balita mula sa iyong komunidad.&quot;) at, kapag nag-tap ka sa isa, bubuksan nito kung saan ka huminto.</p>
+        <h2>Mga abiso kapag nag-check in ang BeanPool</h2>
+        <p>Paminsan-minsan ay hinahayaan ng iyong telepono ang BeanPool na mag-check in sa iyong komunidad sa background. Kung nagtago ang iyong komunidad ng abiso para sa iyo na hindi mo pa nakikita, tulad ng kung ano ang nangyari sa isa sa iyong mga post, ipinapakita ito ng BeanPool sa iyong telepono nang buo, nang isang beses.</p>
+        <p>Wala itong kailangan kundi ang server lamang ng iyong komunidad, kaya gumagana pa rin ito kung hindi gumagana ang mga alerto. Dumarating ito nang mas huli kaysa sa alerto: ang iyong telepono ang nagpapasya kung kailan, mula sa humigit-kumulang 15 minuto hanggang sa ilang oras.</p>
+        <h2>Mga paalala sa kaganapan</h2>
+        <p>Sa ilalim ng mga switch, itinatakda ng <strong>Mga paalala sa kaganapan</strong> kung gaano katagal bago magsimula ang isang kaganapang iyong <strong>Pupunta</strong> o <strong>Interesado</strong> ka bago ka masabihan. Lagyan ng tsek ang <strong>1 linggo bago</strong>, <strong>1 araw bago</strong>, <strong>2 oras bago</strong>, <strong>1 oras bago</strong>, o <strong>30 minuto bago</strong> — maaari kang maglagay ng higit sa isa — o lagyan ng tsek ang <strong>Naka-off</strong> para sa wala talaga.</p>
+        <p>Nagsisimula ang lahat sa <strong>1 araw</strong> bago. Ito ang iyong karaniwang pagpipilian; ang anumang kaganapan ay maaaring itakda nang iba sa mismong kaganapan. Tingnan ang &quot;Mga Kaganapan&quot;.</p>
+        <p>Dumarating ang mga paalala kasama ng iyong mga alerto sa <strong>Aktibidad sa Marketplace</strong>, kaya hihinto ang mga ito kung i-off mo ang mga iyon. Hindi ka kailanman ipinapaalala tungkol sa isang kaganapang nakansela o natapos na, o tungkol sa isang oras na lumipas na noong sinabi mong pupunta ka. Kung ililipat ng host ang kaganapan, lilipat din ang paalala kasama nito.</p>
+        <h2>Walang alerto kahit ano?</h2>
+        <p>Suriin kung pinapayagan ng iyong telepono ang mga notipikasyon para sa BeanPool, sa sariling mga setting ng iyong telepono.</p>
+        <h2>Isang chat sa bawat pagkakataon</h2>
+        <p>Maaari mong i-mute ang chat ng isang grupo, proyekto, o negosyo sa loob ng 8 oras, isang linggo, o nang tuluyan. Tingnan ang &quot;Pag-mute ng chat&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="mute.html"><strong>Pag-mute ng chat</strong><span>Patahimikin ang chat — ng isang tao, ng grupo o ng negosyo — nang 8 oras, isang linggo, o permanente.</span></a></li>
+            <li><a href="messages.html"><strong>Mga Mensahe</strong><span>Magsimula ng chat, magpadala ng larawan, sumagot, mag-react, mag-edit, magbura, mag-mute, at ano ang pribado.</span></a></li>
+            <li><a href="my-deals.html"><strong>Aking mga Deal</strong><span>Isang lugar para sa bawat palitan kung saan ka kasali, bawat post mo, at mga nakaraang palitan.</span></a></li>
+            <li><a href="events.html"><strong>Mga Event</strong><span>Gumawa ng event, sa isang lugar o online, minsanan o umuulit; sabihing pupunta ka, maabisuhan, ibahagi ito, at pamunuan ito bilang host.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Pag-alis</strong><span>Itinatago ng Holiday Mode ang iyong Mga Alok at ipinapahinga ang mga bagong kahilingan habang wala ka.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Bar sa itaas</strong><span>Ang munggo, ang maliliit na icon na nagpapakita kapag may kailangan sa iyo, at ang mga button sa kanang itaas.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

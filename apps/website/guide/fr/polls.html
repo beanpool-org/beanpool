@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sondages — BeanPool members' guide</title>
+    <meta name="description" content="Poser une question rapide à la communauté. Les sondages reflètent des avis ; ils ne changent rien à eux seuls.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Communs</a></p>
+        <h1>Sondages</h1>
+        <p class="lede">Poser une question rapide à la communauté. Les sondages reflètent des avis ; ils ne changent rien à eux seuls.</p>
+        <h2>Sondage ou Décision ?</h2>
+        <p>Un <strong>Sondage</strong> demande l'avis des gens : « Marché le dimanche ou le samedi ? ». Il ne change rien par lui-même. Pour quelque chose de contraignant, proposez une Décision.</p>
+        <p>Sur la communauté globale, chaque sondage indique <strong>Un sondage informel ; il ne décide de rien</strong>. N'importe qui peut la rejoindre, avec 12 mots ou une connexion, de sorte qu'une personne possédant plusieurs comptes pourrait faire basculer le résultat, et il n'y a pas de Décisions là-bas. En dessous, « 🏘️ Dans une communauté locale, une Décision engage › » explique pourquoi un vote n'est contraignant que dans une communauté locale.</p>
+        <p>Lorsqu'un sondage anonyme y est clos, il indique également combien de ses voix proviennent de <strong>comptes nouveaux ou de 12 mots</strong>, par exemple « 5 sur 12 votes proviennent de comptes nouveaux ou de 12 mots ». Chaque vote est comptabilisé selon l'état du compte au moment du vote : un compte nouveau est un compte qui avait encore les limites des nouveaux comptes, et un compte de 12 mots est un compte créé avec 12 mots qui n'avait pas ajouté de connexion. Quand au moins 3 votes proviennent de comptes nouveaux ou de 12 mots, et que les autres votes sont soit nuls soit au moins 3, chaque réponse indique aussi combien de ses propres voix en proviennent. Chaque vote compte toujours, et rien n'indique qui a voté.</p>
+        <p>Pendant qu'un sondage est ouvert, il ne mentionne rien de tout cela. Si c'était le cas, quelqu'un consultant le sondage après chaque vote pourrait deviner de quel type de compte provient chaque vote et ce qu'il a choisi. Un vote ouvert ne l'indique jamais, qu'il soit ouvert ou clos : il affiche qui a voté, de sorte que le décompte révélerait quel type de compte possède chaque votant. Le sondage d'un groupe ne l'indique pas non plus, pas plus qu'un sondage sur une communauté locale.</p>
+        <h2>Lancer un sondage</h2>
+        <ul>
+            <li>Touchez <strong>+ PUBLIER</strong> dans l'onglet Marché ou sur la Carte.</li>
+            <li>Choisissez <strong>Sondage communautaire</strong>.</li>
+            <li>Rédigez la <strong>Question</strong>.</li>
+            <li>Ajoutez <strong>Contexte / Remarques</strong> si cela peut aider. C'est facultatif.</li>
+            <li>Rédigez de 2 à 4 <strong>Options</strong>. Touchez <strong>+ Ajouter une option</strong> pour en ajouter d'autres.</li>
+            <li>Choisissez sa durée : <strong>3 jours</strong>, <strong>7 jours</strong> ou <strong>14 jours</strong>.</li>
+            <li>Choisissez s'il s'agit d'un <strong>Vote ouvert</strong> avant de toucher <strong>Créer</strong>. Laissez l'option décochée pour que le sondage reste anonyme. Cochez-la pour que les membres puissent voir qui a choisi quoi. Vous ne pouvez plus modifier ce choix une fois le sondage publié.</li>
+            <li>Touchez <strong>Créer</strong>.</li>
+        </ul>
+        <p>Dans l'application web, le type est <strong>🗳️ Sondage</strong>, les notes sont <strong>Background / Context</strong>, le bouton d'option est <strong>+ Ajouter une option</strong> et le dernier bouton est <strong>🗳️ Créer le sondage</strong>. Sur la Carte web, touchez le bouton rond <strong>+</strong>.</p>
+        <p>Vous pouvez avoir un seul sondage ouvert à la fois, et une communauté peut en avoir 5 ouverts en même temps. Votre crédit ne doit pas être gelé pour pouvoir lancer ou répondre à un sondage.</p>
+        <h2>Trouver des sondages et y répondre</h2>
+        <p>Les sondages se trouvent sur le Marché. Touchez <strong>Sondages</strong> sur la ligne du haut pour n'afficher que les sondages.</p>
+        <ul>
+            <li>Touchez une réponse pour la choisir. Touchez-en une autre pour changer d'avis, jusqu'à la clôture du sondage.</li>
+            <li>La fiche indique combien de personnes ont choisi chaque réponse.</li>
+        </ul>
+        <h2>Qui peut voir comment vous avez voté</h2>
+        <p>Chaque sondage indique son type, au-dessus de la participation :</p>
+        <ul>
+            <li><strong>Anonyme</strong> (le type habituel) : tout le monde voit uniquement le nombre de personnes ayant choisi chaque réponse. Personne ne voit qui a choisi quoi, y compris la personne qui l'a lancé.</li>
+            <li><strong>Vote ouvert :</strong> la personne qui l'a lancé a choisi de rendre les votants visibles. Les membres peuvent toucher <strong>Voir les votants</strong> (<strong>Afficher les votants</strong> dans l'application web) pour voir qui a choisi quoi. Un membre suspendu ne voit que les totaux, jusqu'à la fin de sa suspension.</li>
+        </ul>
+        <p>Les propriétaires et administrateurs qui gèrent le serveur de votre communauté peuvent toujours voir chaque vote qui y est enregistré.</p>
+        <h2>Clôturer un sondage plus tôt</h2>
+        <p>Si vous l'avez lancé, touchez <strong>Clôturer le sondage</strong>, puis de nouveau <strong>Clôturer le sondage</strong> pour confirmer (<strong>OK</strong> dans l'application web).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Voter une Décision</strong><span>Trouver les Décisions ouvertes, voter, modifier votre vote et voir les résultats.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>Proposer une Décision</strong><span>Demander à la communauté de voter une décision contraignante.</span></a></li>
+            <li><a href="events.html"><strong>Événements</strong><span>Créer un événement, sur place ou en ligne, unique ou récurrent ; s'inscrire, recevoir un rappel, le partager et le gérer en tant qu'hôte.</span></a></li>
+            <li><a href="rules.html"><strong>Règles et décisions</strong><span>Vote, participation, vote secret, qui peut voter, suspension, exclusion d'un membre, gestionnaires, coordinateurs et coordinateurs principaux.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Haricots et communauté globale</strong><span>Le rôle de la communauté globale, une communauté parmi d'autres, et ce que vous y voyez : le repère 🏘️ Communauté locale, la communauté exemple Example Valley, l'attente des haricots et comment lancer ou trouver une communauté locale.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

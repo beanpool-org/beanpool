@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流通費 — BeanPool members' guide</title>
+    <meta name="description" content="對高額餘額每月收取的小額費用，以促使豆子保持流通。前 200 豆免收費用。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">帳本</a></p>
+        <h1>流通費</h1>
+        <p class="lede">對高額餘額每月收取的小額費用，以促使豆子保持流通。前 200 豆免收費用。</p>
+        <h2>為什麼收取</h2>
+        <p>豆子是用來使用的，而不是用來累積的。對大額餘額收取少許費用，有助於讓豆子在社群中保持流動。這筆費用將歸入公共板塊，為所有人共享。</p>
+        <h2>收取多少</h2>
+        <p>只有你<strong>持有</strong>超過 200 顆的豆子才需要付費。你餘額的各個級距每個月分別適用各自的費率：</p>
+        <ul>
+            <li>最初的 200 顆：完全免費；</li>
+            <li>200 至 500 顆：1%；</li>
+            <li>500 至 1,000 顆：1.5%；</li>
+            <li>1,000 至 2,000 顆：2%；</li>
+            <li>超過 2,000 顆：2.5%。</li>
+        </ul>
+        <p>負數餘額無需支付任何費用。任何人都不會因欠額而支付利息。</p>
+        <p>舉例來說，持有 600 顆豆子一個月大約需支付 4.5 顆豆子：前 200 顆不收費，接下來的 300 顆收 3 顆，最後的 100 顆收 1.5 顆。</p>
+        <h2>何時扣除</h2>
+        <p>費用每天累積計算，並在你下次使用帳號時分次少量扣除。你絕不會在單一天被扣除一整筆大額款項。</p>
+        <h2>查看費用</h2>
+        <p>在<strong>帳本</strong>的<strong>錢包</strong>中，<strong>社群循環流轉</strong>方塊會顯示你本月大約需要支付的金額。該方塊僅在你持有豆子時才會顯示。超過 1,000 顆豆子時會顯示為琥珀色。在手機上它還會建議你支出一些豆子，點擊它即可查看<strong>系統流通</strong>，該處詳細說明了流通費機制。</p>
+        <p>休假模式不會暫停流通費。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-balance.html"><strong>餘額與帳目歷史</strong><span>你擁有的豆子數量、交易中暫扣的豆子，以及每一筆交易與贈送紀錄。</span></a></li>
+            <li><a href="commons-fund.html"><strong>公共資金</strong><span>你所在社群的共享豆子：它們從何而來，以及如何支出運用。</span></a></li>
+            <li><a href="credit-line.html"><strong>信用額度</strong><span>你的餘額最多可以透支多少，以及額度如何增長。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool 運作方式</strong><span>用通俗的話解釋豆子、交易、提供與需求以及信用。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

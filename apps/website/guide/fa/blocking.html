@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مسدود کردن دیگران — BeanPool members' guide</title>
+    <meta name="description" content="پنهان کردن پست‌ها و پیام‌های شخصی از دید شما و لغو آن در آینده.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">تنظیمات و امنیت</a></p>
+        <h1>مسدود کردن دیگران</h1>
+        <p class="lede">پنهان کردن پست‌ها و پیام‌های شخصی از دید شما و لغو آن در آینده.</p>
+        <h2>مسدود کردن</h2>
+        <ul>
+            <li>در نمایه آن‌ها: روی <strong>مسدود کردن</strong>، یا پایین‌تر روی <strong>مسدود کردن</strong> و نام آن‌ها بزنید.</li>
+            <li>روی یکی از پست‌های آن‌ها (برنامه تلفن همراه): روی <strong>مسدود کردن کاربر</strong> بزنید. یک پست در برنامه تحت وب دکمه مسدود کردن ندارد.</li>
+            <li>از داخل یک گفتگو: روی نام آن‌ها در بالا بزنید تا نمایه آن‌ها باز شود، سپس روی <strong>مسدود کردن</strong> بزنید. در برنامه تحت وب، گفتگوی با یک نفر دکمه <strong>مسدود کردن</strong> را در بالا نیز دارد.</li>
+        </ul>
+        <p>در برنامه تلفن همراه، با <strong>مسدود کردن کاربر</strong> تأیید کنید. در برنامه تحت وب، مرورگر شما تأیید می‌خواهد: روی <strong>تأیید</strong> بزنید.</p>
+        <h2>چه کاری انجام می‌دهد</h2>
+        <ul>
+            <li>پست‌های آن‌ها در بازار از دید شما پنهان می‌شود.</li>
+            <li>آن‌ها از گفتگوهای شما و از فهرست افراد ناپدید می‌شوند، و نمی‌توانید به یکدیگر پیام دهید. در برنامه تلفن همراه، فردی که اضافه کرده بودید همچنان در برگه <strong>دوستان</strong> شما نشان داده می‌شود: «آنچه انجام نمی‌دهد» را در زیر ببینید. برنامه تحت وب آن‌ها را از همه فهرست‌ها پنهان می‌کند.</li>
+            <li>پست‌های نبض آن‌ها همچنان نشان داده می‌شوند. در تلفن، سنجاق‌های آن‌ها روی نقشه نیز همچنان نشان داده می‌شوند. نقشه برنامه تحت وب آن‌ها را پنهان می‌کند.</li>
+            <li>در دفتر کل شما، لوبیاهای دریافتی از آن‌ها به جای هر یادداشتی که فرستاده باشند، عبارت «لوبیا از طرف عضوی که مسدود کرده‌اید» را نشان می‌دهد.</li>
+            <li>گزارشی به ناظران جامعه شما ارسال می‌شود، که می‌توانند آن را بررسی کنند.</li>
+        </ul>
+        <h2>جامعه شما در این مورد چه می‌کند</h2>
+        <p>جامعه شما این کارها را برای مواردی از مسدودسازی که برای شما نگه می‌دارد انجام می‌دهد. امروز این شامل مسدودسازی‌های انجام‌شده در برنامه تحت وب است. مسدودسازی انجام‌شده در برنامه تلفن همراه روی همان تلفن باقی می‌ماند، و جامعه شما از آن مطلع نمی‌شود.</p>
+        <ul>
+            <li>پیام‌های مستقیم آن‌ها هرگز به شما نمی‌رسند. جامعه شما آن‌ها را در هیچ تلفن یا رایانه‌ای به شما تحویل نمی‌دهد، و هیچ اعلان و هیچ شمارش پیام خوانده‌نشده‌ای برای آن‌ها دریافت نمی‌کنید.</li>
+            <li>اگر آن‌ها گفتگوی جدیدی با شما آغاز کنند، در گفتگوهای شما ظاهر نمی‌شود.</li>
+            <li>اگر آن‌ها را از مسدودیت خارج کنید، هیچ چیزی که در مدت مسدود بودن ارسال کرده‌اند دریافت نمی‌شود. فقط پیام‌هایی که پس از آن ارسال می‌کنند به دست شما می‌رسد.</li>
+            <li>اگر آن‌ها به یکی از پیام‌های شما واکنش نشان دهند، یا یکی از پیام‌های قدیمی خود را تغییر دهند، آن را نمی‌بینید.</li>
+            <li>هنگامی که آن‌ها در یک گفتگوی گروهی می‌نویسند، حتی زمانی که با @ به شما اشاره می‌کنند، هیچ اعلانی دریافت نمی‌کنید.</li>
+            <li>اگر آن‌ها درخواست معامله‌ای روی یکی از آگهی‌های شما بدهند، درخواست بدون اعلان در معاملات شما منتظر می‌ماند. اگر به آن پاسخی ندهید، پس از ۷ روز و باز هم بدون اعلان به پایان می‌رسد.</li>
+            <li>اگر آن‌ها یکی از پیشنهادهای شما را بلافاصله بپذیرند، هیچ اعلانی دریافت نمی‌کنید، و اگر بعداً آن معامله را لغو کنند نیز اعلانی دریافت نمی‌کنید. معامله همچنان در معاملات شما و پیام‌های آن در گفتگوی شما با آن‌ها، مانند هر کس دیگری نشان داده می‌شود. لوبیاهای آن‌ها مانند همیشه در امانت نگهداری شده و بازگردانده می‌شوند.</li>
+            <li>آن‌ها نمی‌توانند آگهی‌ای ایجاد کنند که فقط خطاب به شما باشد.</li>
+            <li>نمی‌توانید آن‌ها را اضافه کنید. اگر آن‌ها شما را اضافه کنند، به شما اطلاع داده نمی‌شود. اگر آن‌ها شما را اضافه کرده بودند، خط «شما را اضافه کرد» در برگه افراد حذف می‌شود. دوستان شما دیگر شما را به عنوان یک ارتباط مشترک در نمایه فرد مسدودشده نمی‌بینند.</li>
+            <li>اگر آن‌ها همراه با یک یادداشت برای شما لوبیا بفرستند، لوبیاها به طور کامل می‌رسند و یادداشت نمی‌رسد. به جای آن «لوبیا از طرف عضوی که مسدود کرده‌اید» را می‌بینید، و پس از خروج از مسدودیت نیز همچنان این متن را می‌بینید.</li>
+        </ul>
+        <h2>آنچه انجام نمی‌دهد</h2>
+        <ul>
+            <li>به آن‌ها اطلاع داده نمی‌شود. برای آن‌ها، پیام‌هایشان ارسال‌شده به نظر می‌رسد، و همین‌طور یادداشت‌های همراه لوبیاهایشان.</li>
+            <li>دوستی را به پایان نمی‌رساند: اگر آن‌ها را اضافه کرده بودید، همچنان دوست شما هستند، و اگر اطلاعات تماس شما روی دوستان تنظیم شده باشد، همچنان آن را می‌بینند. برای پایان دادن به این مورد نیز، <strong>مدیریت کاربران مسدودشده</strong> (در وب، <strong>مدیریت اعضای مسدودشده</strong>؛ «خروج از مسدودیت» را در زیر ببینید) را باز کنید و روی <strong>از دوستان نیز حذف شود</strong> در زیر نام آن‌ها بزنید. این گزینه فقط برای فردی که اضافه کرده‌اید وجود دارد. آن‌ها همچنان مسدود می‌مانند. آن‌ها می‌توانند متوجه حذف شدن بشوند.</li>
+            <li>گفتگوهای گروهی، گفتگوهای رویداد و گفتگوهای پروژه و طرح تجاری مشترک هستند: همه افراد حاضر در آن‌ها پیام‌های یکسانی را می‌بینند. پیام‌های آن‌ها در آنجا، هم برای شما و هم برای دیگران همچنان نشان داده می‌شود.</li>
+            <li>معامله‌ای که در حال حاضر با آن‌ها دارید، همراه با اطلاعیه‌ها و اعلان‌هایش مانند قبل ادامه می‌یابد.</li>
+            <li>اگر قبلاً با آن‌ها معامله کرده باشید، آن‌ها همچنان می‌توانند برای شما لوبیا بفرستند. هر لوبیا بدون هیچ اعلانی می‌رسد.</li>
+            <li>اطلاعیه‌های جامعه شما همچنان ارسال می‌شوند، حتی زمانی که آن‌ها شروع‌کننده بوده‌اند. برای مثال، هنگامی که فردی رأی‌گیری برای جایگزینی شما به عنوان هماهنگ‌کننده ارشد یک گروه را باز می‌کند به شما اطلاع داده می‌شود، و پیام‌هایی از افرادی که جامعه شما را اداره می‌کنند دریافت می‌کنید.</li>
+            <li>آن‌ها همچنان می‌توانند پست‌های شما را ببینند.</li>
+            <li>در برنامه تلفن همراه، مسدودسازی روی همین تلفن و فقط برای حساب شما نگهداری می‌شود. حساب دیگری روی این تلفن مسدودسازی‌های شما را دریافت نمی‌کند.</li>
+            <li>در برنامه تلفن همراه، اگر از حساب خارج شوید یا حساب این تلفن را با حسابی دیگر جایگزین کنید، مسدودسازی‌های شما روی تلفن باقی می‌مانند. با همان حساب بازگردید و آن‌ها همچنان آنجا هستند.</li>
+            <li>در برنامه تلفن همراه، اگر برنامه را دوباره نصب کنید یا از تلفن دیگری استفاده کنید، باید آن‌ها را دوباره مسدود کنید.</li>
+            <li>در برنامه تحت وب، جامعه شما مسدودسازی‌های شما را همراه با حسابتان نگه می‌دارد. در هر مرورگری وارد شوید آن‌ها بازمی‌گردند. خروج از حساب هیچ اثری از آن‌ها روی آن رایانه باقی نمی‌گذارد. «استفاده از BeanPool در مرورگر» را ببینید.</li>
+            <li>افرادی که سرور جامعه شما را اداره می‌کنند می‌توانند ببینند چه کسی را در برنامه تحت وب مسدود کرده‌اید، همان‌طور که می‌توانند گزارش‌ها را ببینند.</li>
+            <li>برنامه تلفن همراه و برنامه تحت وب فهرست‌های جداگانه‌ای نگه می‌دارند. مسدودسازی در یکی در دیگری نشان داده نمی‌شود.</li>
+        </ul>
+        <h2>خروج از مسدودیت</h2>
+        <ul>
+            <li><strong>تنظیمات</strong> را باز کنید. زیر <strong>حقوقی و حریم خصوصی</strong>، روی <strong>مدیریت کاربران مسدودشده</strong> بزنید.</li>
+            <li>روی <strong>رفع مسدودی</strong> در کنار یک نام، یا روی <strong>رفع مسدودیت همه</strong> بزنید.</li>
+        </ul>
+        <p>در برنامه تحت وب، مسدود کردن و رفع مسدودیت به اتصال به جامعه شما نیاز دارد. بدون اتصال، برنامه این موضوع را اعلام می‌کند و چیزی تغییر نمی‌کند. هنگامی که دوباره آنلاین شدید دوباره امتحان کنید.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>گزارش مشکل</strong><span>اطلاع‌رسانی به ناظران جامعه درباره یک پست، رویداد، پست نبض، پروژه یا طرح تجاری.</span></a></li>
+            <li><a href="messages.html"><strong>پیام‌ها</strong><span>شروع گفتگو، ارسال تصویر، پاسخ، واکنش، ویرایش، حذف، بی‌صدا و حریم خصوصی.</span></a></li>
+            <li><a href="privacy.html"><strong>حریم خصوصی شما</strong><span>دیگران چه اطلاعاتی درباره شما می‌بینند و تنظیماتی که آن را کنترل می‌کند.</span></a></li>
+            <li><a href="getting-help.html"><strong>دریافت راهنمایی</strong><span>کجا دنبال پاسخ بگردید و از چه کسی بپرسید.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

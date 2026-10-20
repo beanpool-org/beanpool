@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تصفح السوق — BeanPool members' guide</title>
+    <meta name="description" content="ابحث عن العروض والطلبات باستخدام البحث، والتصنيفات، والمسافة.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">السوق</a></p>
+        <h1>تصفح السوق</h1>
+        <p class="lede">ابحث عن العروض والطلبات باستخدام البحث، والتصنيفات، والمسافة.</p>
+        <h2>علامة تبويب السوق</h2>
+        <p>اضغط على <strong>السوق</strong> في صف علامات التبويب. سترى ما يعرضه الناس في مجتمعك وما يبحثون عنه، الأحدث أولاً، مجمعة حسب اليوم الذي نُشرت فيه.</p>
+        <p>على الهاتف، تأتي الفعاليات أولاً. وإذا كنت قد سمحت للتطبيق بالفعل باستخدام موقعك، فإن طريقة عرض القائمة والعرض المصغر يعرضان القوائم الأقرب أولاً بدلاً من ذلك، تحت <strong>الأقرب أولًا</strong>، وتكون الاستطلاعات تحت <strong>الاستطلاعات</strong>. ويحتفظ قسم <strong>مخصص لك</strong> بترتيبه الخاص. اسحب القائمة لأسفل لتحديثها.</p>
+        <p>في تطبيق الويب، يفتح السوق على شكل بطاقات. وفي طريقة عرض القائمة والعرض المصغر، توضع الفعاليات تحت اليوم الذي نُشرت فيه. وفي المجتمع المحلي، لا يضع تطبيق الويب الأقرب أولاً.</p>
+        <p>في المجتمع العالمي، يعرض تطبيق الويب القوائم القريبة منك أولاً: الأقرب ضمن <strong>المسافة</strong> المحددة، أو في حدود 250 كم من منطقتك (المكان التقريبي الذي تقدمه للمجتمع عند الانضمام، أو في <strong>الإعدادات</strong>)، مع توضيح مدى بعدها. ويوضح سطر أعلى القائمة أيًا منها يُعرض. وبالقرب من منطقتك، يتوفر خيار <strong>عرض في كل مكان</strong> لرؤية الأحدث من كل مكان. ومع تحديد <strong>المسافة</strong>، افتح <strong>المسافة</strong> واضغط على <strong>إعادة تعيين</strong> للعودة إلى منطقتك، ثم اضغط على <strong>عرض في كل مكان</strong>. وعلى الهاتف، يحتفظ المجتمع العالمي بالقوائم الأقرب إلى منطقتك، وتلك هي ما يعرضه السوق. انظر &quot;العثور على أشياء قريبة منك&quot;.</p>
+        <p>في المجتمع العالمي، عندما لا يوجد سوى عدد قليل من القوائم، يعرض السوق أيضًا بضع بطاقات مميزة بـ <strong>مثال</strong>. إنها بطاقات تجريبية، لتوضيح ما ينشره الناس، ولا يمكن فتحها أو الإجابة عليها. وتختفي بمجرد توفر قوائم حقيقية كافية.</p>
+        <p>على الهاتف، ينزلق شريط البحث والمرشحات بعيدًا عند التمرير لأسفل، لترى المزيد من المنشورات. مرر لأعلى قليلاً وستعود مجددًا. وللرجوع إلى الأعلى، اضغط على <strong>السوق</strong> مرة أخرى.</p>
+        <h2>البحث</h2>
+        <p>اكتب في <strong>البحث في السوق...</strong> في الأعلى. على الهاتف الصغير، قد يُكتب ببساطة <strong>بحث</strong>. يجد البحث أيضًا الكلمات ذات الصلة: فكلمة &quot;فاكهة&quot; تجد &quot;ليمون&quot;. كما يجد الكلمات باللغات الصينية واليابانية والتايلاندية أيضًا، ويستبعد منشورات الأشخاص الذين حظرتهم. وفي حال عدم وجود اتصال، فإنه يبحث في ما هو موجود بالفعل على هاتفك.</p>
+        <p>أثناء وجود كلمات في البحث، يظهر زر <strong>حفظ هذا البحث في الرئيسية</strong>. ويفتح الرئيسية مع بحث محفوظ جاهز للإضافة: كلماتك، و<strong>عروض</strong> أو <strong>طلبات</strong> إذا كنت تشاهد واحدًا منها فقط، والفئة والمسافة. لا يوجد زر تحت <strong>الفعاليات</strong> أو <strong>الاستطلاعات</strong>. انظر &quot;الرئيسية&quot;.</p>
+        <h2>المرشحات</h2>
+        <p>يحدد صف الأزرار الموجود أسفل شريط البحث ما تراه:</p>
+        <ul>
+            <li><strong>الكل</strong>، أو <strong>عروض</strong>، أو <strong>طلبات</strong>.</li>
+            <li><strong>مخصص لك:</strong> المنشورات في الفئات التي تضع عليها نجمة تحت <strong>تخصيص الاهتمامات</strong> (نفس النجوم التي تحددها في الرئيسية)، وفعالياتك القادمة، تلك التي ذكرت أنك ستحضرها أو مهتم بها.</li>
+            <li><strong>الفعاليات</strong> و<strong>الاستطلاعات</strong>.</li>
+        </ul>
+        <p>يعمل الصف الثاني على تضييق النطاق. على الهاتف:</p>
+        <ul>
+            <li><strong>كل الفئات:</strong> اختر فئة واحدة، مثل طعام، أو أدوات، أو حديقة.</li>
+            <li><strong>المسافة:</strong> المنشورات الواقعة ضمن مسافة معينة من نقطة محددة فقط. انظر &quot;العثور على أشياء قريبة منك&quot;.</li>
+            <li><strong>الثقة:</strong> المنشورات فقط من الأعضاء الذين لم يتداولوا بعد (<strong>تأسيسي</strong>)، أو من <strong>القادمون الجدد</strong>، أو من الأعضاء الحاصلين على شارة ثقة معينة على الأقل.</li>
+            <li><strong>فاصوليا فقط:</strong> يخفي المنشورات التي تطلب أيضًا بعض النقود.</li>
+        </ul>
+        <p>في تطبيق الويب، تكون الأزرار هي <strong>الفئة</strong>، و<strong>المسافة</strong>، و<strong>🌱 أعضاء جدد</strong> (الأعضاء الذين لم يتداولوا بعد)، و<strong>🫘 فاصوليا فقط</strong>. ولا يوجد مرشح الثقة.</p>
+        <p>إذا كنت تنتمي إلى مجموعات، فسيظهر صف من أزرار المجموعات أيضًا. يعرض <strong>كل المجموعات والعام</strong> كل شيء؛ بينما يعرض زر المجموعة المنشورات المخصصة لتلك المجموعة فقط. وفي تطبيق الويب، توجد المجموعات في قائمة منسدلة بدلاً من صف أزرار.</p>
+        <p>على الهاتف، إذا لم يتطابق أي شيء، فاضغط على <strong>مسح كل عوامل التصفية</strong>. في تطبيق الويب، تذكر القائمة الفارغة <strong>لم يتم العثور على عناصر</strong>، ولا يوجد مثل هذا الزر.</p>
+        <p>على الهاتف، عندما تكون قد مررت لأسفل وهناك بحث أو مرشح مفعّل، تعرض شريحة صغيرة في الأعلى ما هو. اضغط على الشريحة لتغييرها. اضغط على <strong>✕</strong> عليها لمسح البحث وكل المرشحات.</p>
+        <p>الزر المجاور لـ <strong>صفقاتي</strong> يغير شكل القائمة: قائمة، أو شبكة، أو عرض مصغر.</p>
+        <h2>ما يعرضه المنشور</h2>
+        <ul>
+            <li>صورة، أو صورة الفئة؛</li>
+            <li><strong>عرض</strong> أو <strong>طلب</strong>؛</li>
+            <li>السعر بالفاصوليا، مع <strong>/ساعة</strong> إذا كان السعر بالساعة؛</li>
+            <li><strong>متكرر</strong> إذا كان يظل مفتوحًا بعد كل صفقة؛</li>
+            <li><strong>نقد أيضًا</strong> إذا كان الشخص يحتاج أيضًا إلى بعض النقود للوقود أو المواد؛</li>
+            <li>قفل واسم مجموعة إذا كانت تلك المجموعة وحدها هي التي يمكنها رؤيته؛</li>
+            <li>من نشره، مع شارة ثقته ونجومه. يظهر للعضو الذي لم يتداول بعد شارة <strong>تأسيسي</strong>.</li>
+        </ul>
+        <p>اضغط على المنشور لفتحه.</p>
+        <h2>داخل المنشور</h2>
+        <ul>
+            <li><strong>مراسلة</strong> واسمه: اطرح سؤالاً قبل الالتزام.</li>
+            <li>اضغط على اسمه لرؤية ملفه الشخصي وتقييماته وثقته.</li>
+            <li><strong>إبلاغ عن المنشور</strong> إذا كان احتيالاً أو مسيئاً أو مضللاً أو يعرض طفلاً للخطر (<strong>سلامة الأطفال</strong>).</li>
+            <li><strong>حظر المستخدم</strong> لإخفاء منشوراته ومحادثاته على هاتفك. ويخبر ذلك مشرفيك أيضًا. انظر &quot;حظر شخص ما&quot;.</li>
+        </ul>
+        <p>في تطبيق الويب، تكون الأزرار على المنشور هي <strong>💬 مراسلة</strong> و<strong>🚩 إبلاغ</strong>. ويمكنك حظر شخص ما من ملفه الشخصي.</p>
+        <p>في المجتمع العالمي، لا يحتوي المنشور على سعر بالفاصوليا: بل يوضح ما يود الشخص الحصول عليه في المقابل. وحيثما يكون السعر، يُكتب &quot;🏘️ في المجتمع المحلي يكون هذا سعرًا بالفاصوليا ›&quot;. وبدلاً من طلبه، يعرض المنشور <strong>طلب · فاصوليا محفوظة بأمان 🏘️</strong>: اضغط عليه لترى كيف تعمل الصفقة في المجتمع المحلي. وتعمل مراسلة الشخص كما هو الحال في أي مكان. انظر &quot;فاصوليا والمجتمع العالمي&quot;.</p>
+        <p>لا يمكنك حفظ منشور أو مشاركته حتى الآن.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>الرئيسية</strong><span>ما هي الرئيسية، والبطاقات التي تعرضها على الهاتف وفي تطبيق الويب، وكيفية إضافتها أو نقلها أو إزالتها، واختيار ما تهتم به، والخصوصية عند تسجيل الخروج.</span></a></li>
+            <li><a href="posting.html"><strong>نشر عرض أو طلب</strong><span>انشر شيئًا يمكنك فعله أو تقديمه، أو شيئًا تبحث عنه.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>الصفقة، خطوة بخطوة</strong><span>من الطلب إلى استلام الدفع، للعرض وللطلب، وترك تقييم.</span></a></li>
+            <li><a href="near-you.html"><strong>العثور على أشياء قريبة منك</strong><span>إظهار المنشورات فقط ضمن مسافة معينة منك، أو من أي مكان تختاره.</span></a></li>
+            <li><a href="trust-badges.html"><strong>شارات الثقة</strong><span>قادم جديد، مقيم، مشرف، وحكيم. ما تعنيه، ولماذا لا تمنح أي صلاحيات إضافية.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>فاصوليا والمجتمع العالمي</strong><span>ما الغرض من المجتمع العالمي، مجتمع بين كثيرين، وما تراه هناك: علامة 🏘️ مجتمع محلي، والمجتمع النموذجي وادي المثال، ولماذا تنتظر الفاصوليا هناك، وكيف تبدأ مجتمعًا محليًا أو تعثر عليه.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

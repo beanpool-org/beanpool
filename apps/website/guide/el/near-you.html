@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/el by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Εύρεση πραγμάτων κοντά σου — BeanPool members' guide</title>
+    <meta name="description" content="Εμφάνιση μόνο αναρτήσεων σε συγκεκριμένη απόσταση από εσάς ή από οποιοδήποτε μέρος επιλέξετε.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Χάρτης</a></p>
+        <h1>Εύρεση πραγμάτων κοντά σου</h1>
+        <p class="lede">Εμφάνιση μόνο αναρτήσεων σε συγκεκριμένη απόσταση από εσάς ή από οποιοδήποτε μέρος επιλέξετε.</p>
+        <h2>Στην καρτέλα Αγορά</h2>
+        <ul>
+            <li>Πατήστε <strong>Αγορά</strong>, και στη συνέχεια <strong>Απόσταση</strong> στη δεύτερη σειρά φίλτρων. Δεν εμφανίζεται όσο είναι επιλεγμένο το <strong>Εκδηλώσεις</strong>.</li>
+            <li>Ανοίγει το <strong>Τοποθεσία &amp; ακτίνα</strong> (<strong>Ορισμός τοποθεσίας &amp; ακτίνας</strong> στην εφαρμογή ιστού). Για να χρησιμοποιήσετε την τοποθεσία στην οποία βρίσκεστε, πατήστε το κουμπί-στόχο. Ή πατήστε στον χάρτη ή σύρετε την πινέζα, για να επιλέξετε άλλο κέντρο.</li>
+            <li>Επιλέξτε πόσο μακριά με την <strong>Ακτίνα αναζήτησης</strong>: από 100 μέτρα έως 50 χιλιόμετρα.</li>
+            <li>Πατήστε <strong>Εφαρμογή</strong>. Το κουμπί εμφανίζει στη συνέχεια την απόσταση, όπως <strong>5 χλμ</strong>.</li>
+            <li>Για να επιστρέψετε σε όλα, ανοίξτε το ξανά και πατήστε <strong>Επαναφορά</strong>. Στην εφαρμογή ιστού μπορείτε επίσης να πατήσετε το <strong>✕</strong> στο <strong>Απόσταση</strong>.</li>
+        </ul>
+        <p>Στο τηλέφωνο, οι αναρτήσεις χωρίς τοποθεσία εμφανίζονται πάντα. Στην εφαρμογή ιστού, η επιλογή <strong>Απόσταση</strong> τις κρύβει, εκτός από τις ψηφοφορίες. Στην παγκόσμια κοινότητα η εφαρμογή ιστού τις παραλείπει επίσης όσο η λίστα είναι κοντά σας (παρακάτω).</p>
+        <p>Αν το πρόγραμμα περιήγησής σας επιτρέπει ήδη στο BeanPool να χρησιμοποιεί την τοποθεσία σας, ο επιλογέας μπορεί να ανοίξει στο σημείο όπου βρίσκεστε τώρα. Αν όχι, ανοίγει σε ένα σταθερό σημείο. Ελέγξτε την πινέζα, ή πατήστε το κουμπί-στόχο ή τον χάρτη, πριν πατήσετε <strong>Εφαρμογή</strong>. Στην παγκόσμια κοινότητα η εφαρμογή ιστού στέλνει το κέντρο που επιλέξατε στην κοινότητα, στρογγυλοποιημένο σε περίπου 11 μέτρα.</p>
+        <p>Στο τηλέφωνο ο επιλογέας ανοίγει στο τελευταίο κέντρο που επιλέξατε, ή σε ένα σταθερό σημείο, οπότε πατήστε πρώτα το κουμπί-στόχο.</p>
+        <h2>Στον Χάρτη</h2>
+        <p>Ο χάρτης δεν έχει δικό του φίλτρο απόστασης. Πατήστε το κουμπί-στόχο στα αριστερά για να δείτε πού βρίσκεστε, και στη συνέχεια κοιτάξτε γύρω και εστιάστε.</p>
+        <h2>Στην παγκόσμια κοινότητα, στην εφαρμογή ιστού</h2>
+        <p>Η παγκόσμια κοινότητα έχει καταχωρίσεις από παντού, επομένως η <strong>Αγορά</strong> και ο <strong>Χάρτης</strong> της εφαρμογή ιστού ξεκινούν από κοντά σας:</p>
+        <ul>
+            <li>Με μια <strong>Απόσταση</strong> επιλεγμένη στην Αγορά, και τα δύο εμφανίζουν τις πλησιέστερες καταχωρίσεις εντός αυτής, με τις πλησιέστερες πρώτες. Ο Χάρτης εμφανίζει έως και 200 πινέζες.</li>
+            <li>Χωρίς επιλογή απόστασης, εμφανίζουν τις πλησιέστερες καταχωρίσεις εντός 250 χλμ. από την περιοχή σας: το κατά προσέγγιση μέρος που δίνετε στην κοινότητα κατά την εγγραφή σας, ή αργότερα στις <strong>Ρυθμίσεις</strong>, κάτω από το <strong>Η περιοχή σου</strong>. Μια γραμμή πάνω από τη λίστα της Αγοράς αναφέρει <strong>Πρώτα τα πλησιέστερα στην περιοχή σας, εντός 250 χλμ.</strong> Πατήστε <strong>Εμφάνιση παντού</strong> για τις νεότερες από παντού, και <strong>Κοντά στην περιοχή σας</strong> για να επιστρέψετε.</li>
+            <li>Χωρίς κανένα από τα δύο, βλέπετε τις νεότερες από παντού, και το <strong>Δείτε τι υπάρχει κοντά σας</strong> ανοίγει τον επιλογέα απόστασης. Μια γραμμή πάνω από τη λίστα της Αγοράς αναφέρει ποιο από αυτά βλέπετε. Με μια <strong>Απόσταση</strong> δεν διαθέτει κουμπί: ανοίξτε το <strong>Απόσταση</strong> και πατήστε <strong>Επαναφορά</strong>. Βρίσκεστε τότε ξανά κοντά στην περιοχή σας, ή, χωρίς ορισμένη περιοχή, βλέπετε τις νεότερες από παντού.</li>
+            <li>Κάθε καταχώριση δείχνει πόσο μακριά βρίσκεται, όπως <strong>📍 12 χλμ</strong>. Οι δικές σας καταχωρίσεις βρίσκονται πάντα στον Χάρτη και στην Αγορά κοντά στην περιοχή σας, όπου κι αν βρίσκονται. Με μια <strong>Απόσταση</strong>, η Αγορά εμφανίζει μόνο ό,τι βρίσκεται εντός αυτής, συμπεριλαμβανομένων των δικών σας.</li>
+            <li>Όσο η λίστα είναι κοντά σας, οι αναρτήσεις χωρίς τοποθεσία παραλείπονται. Μια ψηφοφορία από κάποιον που δεν έχει ορίσει την περιοχή του είναι μία από αυτές. Για να τις δείτε, επαναφέρετε την <strong>Απόσταση</strong> αν είχατε επιλέξει μία, και στη συνέχεια πατήστε <strong>Εμφάνιση παντού</strong>.</li>
+            <li>Κάτω από το <strong>Εκδηλώσεις</strong> η λίστα δεν περικόπτεται ποτέ από την περιοχή σας ή την <strong>Απόσταση</strong>, όπως και πριν.</li>
+            <li>Αν δεν υπάρχει τίποτα κοντά, ο Χάρτης το αναφέρει, με το <strong>Εμφάνιση παντού</strong>. Στη συνέχεια, το <strong>Κοντά στην περιοχή σας</strong> (ή <strong>Κοντά στο μέρος που επιλέξατε</strong>) επαναφέρει τις πλησιέστερες.</li>
+        </ul>
+        <p>Η αναζήτηση της εφαρμογής ιστού ψάχνει μόνο μέσα στις καταχωρίσεις που εμφανίζονται στην οθόνη. Το <strong>Εμφάνιση παντού</strong> εμφανίζει τις νεότερες καταχωρίσεις από παντού, όχι κάθε μία, οπότε μια καταχώριση που είναι μακριά και όχι νέα δεν θα εμφανιστεί στην αναζήτηση. Σε κάθε άλλη κοινότητα η εφαρμογή ιστού δεν περικόπτει την Αγορά ή τον Χάρτη με βάση την περιοχή σας. Εμφανίζουν τις 50 πιο πρόσφατα τροποποιημένες καταχωρίσεις καθώς και τις δικές σας, και η αναζήτηση ψάχνει μόνο μέσα σε αυτές.</p>
+        <h2>Στην παγκόσμια κοινότητα, στο τηλέφωνο</h2>
+        <p>Το τηλέφωνο διατηρεί τις καταχωρίσεις που είναι πλησιέστερες στην περιοχή σας: έως και 500, εντός 250 χλμ. Διατηρεί επίσης τις δικές σας καταχωρίσεις, καθώς και όσες έχετε συμφωνία, συνομιλία ή απάντηση. Η Αγορά και ο Χάρτης δείχνουν ό,τι διατηρεί το τηλέφωνο. Χωρίς ορισμένη περιοχή, διατηρεί τις νεότερες καταχωρίσεις αντ' αυτού, και μια γραμμή πάνω από την Αγορά το αναφέρει. Βλέπε «Η περιοχή σας».</p>
+        <h2>Εκδηλώσεις κοντά σας</h2>
+        <p>Στο τηλέφωνο, οι κάρτες εκδηλώσεων δείχνουν πόσο μακριά βρίσκονται μόλις επιτρέψετε στην εφαρμογή να χρησιμοποιήσει την τοποθεσία σας. Στην εφαρμογή ιστού το δείχνουν από το κέντρο που επιλέξατε στην <strong>Απόσταση</strong>. Στην παγκόσμια κοινότητα, αν δεν έχετε επιλέξει κέντρο, το δείχνουν από την περιοχή σας (όχι κάτω από το <strong>Εκδηλώσεις</strong>). Στον Χάρτη, η εφαρμογή ιστού το δείχνει από εσάς μόλις πατήσετε τον στόχο.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>Περιήγηση στην αγορά</strong><span>Βρείτε Προσφορές και Ανάγκες με αναζήτηση, φίλτρα και απόσταση.</span></a></li>
+            <li><a href="map-pins.html"><strong>Τι δείχνει ο χάρτης</strong><span>Οι πινέζες στον Χάρτη, τι σημαίνουν τα χρώματά τους και τα κουμπιά γύρω τους.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Πού μπαίνει η πινέζα σου</strong><span>Ποιος βλέπει πού βρίσκονται οι αναρτήσεις και οι εκδηλώσεις σας, και πώς να κρατήσετε το σπίτι σας ιδιωτικό.</span></a></li>
+            <li><a href="events.html"><strong>Εκδηλώσεις</strong><span>Δημιουργήστε εκδήλωση, σε τοποθεσία ή διαδικτυακά, μία φορά ή επαναλαμβανόμενη· δηλώστε συμμετοχή, λάβετε υπενθυμίσεις, μοιραστείτε την και διαχειριστείτε την ως διοργανωτής.</span></a></li>
+            <li><a href="your-area.html"><strong>Η περιοχή σου</strong><span>Η κατά προσέγγιση περιοχή που χρησιμοποιεί η παγκόσμια κοινότητα για να σας δείξει αναρτήσεις κοντά σας, και πώς να την αλλάξετε ή να την καθαρίσετε.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

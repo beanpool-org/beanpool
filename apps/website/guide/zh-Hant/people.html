@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成員與好友 — BeanPool members' guide</title>
+    <meta name="description" content="尋找社群成員、新增好友以及為他人背書擔保。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">聊天</a></p>
+        <h1>成員與好友</h1>
+        <p class="lede">尋找社群成員、新增好友以及為他人背書擔保。</p>
+        <h2>尋找成員</h2>
+        <p>點選<strong>聊天</strong>，然後點選<strong>成員</strong>。在網頁版應用程式中，點選分頁列中的<strong>成員</strong>。共有三個按鈕：</p>
+        <ul>
+            <li><strong>好友：</strong>你新增的成員。</li>
+            <li><strong>社群：</strong>所有成員。可依姓名搜尋。在手機上，可按<strong>最新</strong>、<strong>姓名</strong>、<strong>好友</strong>、<strong>受信任</strong>或<strong>活躍</strong>進行排序。在全球社群中，它會顯示離你所在區域最近的成員：至少輸入姓名的前 2 個字母即可尋找其他成員。</li>
+            <li><strong>邀請：</strong>邀請新成員。請參閱「加入 BeanPool」。如果你尚未加入社群，此按鈕會顯示為<strong>註冊</strong>。當有人申請加入你的社群時，它會顯示申請人數，且他們會列在<strong>想加入</strong>下方。在網頁版應用程式中，此按鈕一律為 <strong>🎟️ 邀請</strong>，沒有計數，也沒有<strong>想加入</strong>清單。</li>
+        </ul>
+        <p>點選一位成員可查看其個人檔案：其評價與貼文，以及在有豆子的社群中手機上會顯示其信任徽章與交易記錄。請參閱「個人檔案」。</p>
+        <h2>好友</h2>
+        <ul>
+            <li>在<strong>社群</strong>中，點選姓名旁的 <strong>+ 新增</strong>。按鈕會變更為<strong>已新增</strong>。點選<strong>已新增</strong>可再次將其移除。在網頁版應用程式中，它會變更為 <strong>✓ 好友</strong>，此時無法直接點選：若要移除，請使用<strong>好友</strong>下的<strong>移除</strong>。</li>
+            <li>在<strong>好友</strong>中，點選訊息按鈕可發起聊天，或點選移除按鈕並點選<strong>移除</strong>將其移除。</li>
+            <li>當有人新增你為好友時，<strong>好友</strong>頂部會顯示是誰，例如「Sam 新增了你」，並附有<strong>加回好友</strong>。點選其姓名可先查看其個人檔案。系統不會發送通知。當你加回好友或 30 天後，該提示行便會消失。最多顯示 20 則，隨後顯示還有多少位。</li>
+            <li>你在任何 24 小時內最多可以新增 100 位成員。移除好友也計入此限制。如果你達到上限，應用程式會發出相應提示並說明何時可以再次新增。</li>
+            <li>你無法新增已被你封鎖的人：請先解除封鎖。請參閱「封鎖某人」。</li>
+        </ul>
+        <p>好友是為你提供的一種捷徑。如果你在聯絡方式中選擇<strong>好友</strong>，則只有好友可以看到你的聯絡資訊。請參閱「個人檔案」。</p>
+        <p>沒有其他人可以讀取你的好友名單。但你新增的成員會看到你已新增他們。</p>
+        <h2>共同好友</h2>
+        <p>成員的個人檔案可以顯示<strong>共同好友</strong>：你可以向其諮詢該成員評價的人。只有當你與某人互為雙向好友，且該人與該成員亦互為雙向好友時，此人才會顯示在該處。這意味著你與該人已互相新增為好友，且該人與該成員也已互相新增為好友。僅由你單方面新增任何人絕不會使其顯示在該處，他人單方面新增你也是如此。最多顯示 12 位。點選姓名可查看其個人檔案。</p>
+        <p>你可以選擇不將自己顯示為任何人的共同好友。在「設定」的<strong>法律與隱私</strong>下，關閉<strong>將我顯示為共同好友</strong>。隨後便沒有人能在該處看到你的名字，且你不會被計入。此功能預設開啟，直到你將其關閉。請參閱「個人隱私」。</p>
+        <h2>為他人擔保</h2>
+        <p>社群會選出部分成員來歡迎新成員。他們可以為新成員進行擔保，這為該成員提供了一筆小額的初始信用額度。在該成員的個人檔案上，點選<strong>為成員擔保</strong>並選擇<strong>輕度</strong> (25)、<strong>標準</strong> (50) 或<strong>深度</strong> (100)。擔保人自己的錢包不會扣除任何豆子。</p>
+        <p>誰具備擔保資格由管理員決定或由社群決策決定，絕不取決於徽章。請參閱「規則與決策機制」。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>訊息</strong><span>發起聊天、傳送相片、回覆、表情回應、編輯、刪除、靜音以及隱私說明。</span></a></li>
+            <li><a href="your-profile.html"><strong>個人檔案</strong><span>你的暱稱、相片、個人簡述以及誰可以查看你的聯絡方式。</span></a></li>
+            <li><a href="joining.html"><strong>加入 BeanPool</strong><span>兩種加入方式：憑成員邀請加入在地社群，或在開放時憑 12 個助記詞或一次登入加入全球社群。申請加入社群以及如何邀請他人。</span></a></li>
+            <li><a href="blocking.html"><strong>封鎖成員</strong><span>向自己隱藏某人的刊登和訊息，並可在日後取消封鎖。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

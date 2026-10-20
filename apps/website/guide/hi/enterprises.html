@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>परियोजनाएं और उपक्रम — BeanPool members' guide</title>
+    <meta name="description" content="अपनी फलियों वाले साझा उपक्रम: कोई खोजें, समर्थन करें, या शुरू करें।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">साझा</a></p>
+        <h1>परियोजनाएं और उपक्रम</h1>
+        <p class="lede">अपनी फलियों वाले साझा उपक्रम: कोई खोजें, समर्थन करें, या शुरू करें।</p>
+        <h2>What they are</h2>
+        <p>प्रोजेक्ट और उद्यम वे समूह हैं जो फलियाँ रखते हैं। प्रत्येक के पास अपनी फलियाँ, अपने ऑफ़र और ज़रूरतें, और अपनी क्रेडिट सीमा होती है।</p>
+        <p>वैश्विक समुदाय पर कोई उद्यम नहीं होते हैं, इसलिए <strong>साझा</strong> किसी स्थानीय समुदाय का एक उदाहरण उद्यम दिखाता है, Example Valley Bakery, जिस पर <strong>🏘️ Local community</strong> अंकित होता है। इसके बटन, जैसे <strong>संकल्प</strong> और <strong>रोकें</strong>, बताते हैं कि उद्यम स्थानीय समुदाय में क्यों रहते हैं, और कुछ नहीं बदलते। &quot;फलियाँ और वैश्विक समुदाय&quot; देखें।</p>
+        <ul>
+            <li>एक <strong>प्रोजेक्ट</strong> का एक प्रमुख, फलियों में एक लक्ष्य और आमतौर पर एक अंतिम तिथि होती है: एक नई छत के लिए 500 फलियाँ जुटाएं, नवंबर तक शेड हाउस बनाएं। <strong>प्रमुख</strong> इसे चलाता है; <strong>सहयोगी</strong> मदद करते हैं। जब लक्ष्य पूरा हो जाता है, तो संकल्प प्रोजेक्ट के खाते में चले जाते हैं और यह आगे कुछ नहीं लेता। जब काम पूरा हो जाता है, तो इसका प्रमुख इसे समाप्त करता है। 7 दिनों के बाद प्रमुख इसे अंतिम रूप देता है, और जो बचता है वह साझा में वापस चला जाता है।</li>
+            <li>एक <strong>उद्यम</strong> लगातार चलता है और व्यापार करता है: एक टूल लाइब्रेरी, अंडों का झुंड, एक बाज़ार का स्टॉल। इसके <strong>व्यवस्थापक</strong> मिलकर इसे चलाते हैं और इसके पीछे खड़े होते हैं। उनमें से एक <strong>मुख्य व्यवस्थापक</strong> होता है।</li>
+        </ul>
+        <p>किसी उद्यम की अपनी दैनिक सीमाएँ होती हैं, जो किसी सदस्य की तुलना में दस गुना होती हैं: 1,000 भुगतान, 300 ऐसे लोग जिन्हें उसने पहले कभी भुगतान नहीं किया, 1,000 स्वीकृत सौदे, 1,000 नई पोस्ट और 50,000 परिवर्तन। एक व्यवस्थापक इसके लिए जो कुछ भी करता है वह उद्यम के विरुद्ध गिना जाता है, व्यवस्थापक की अपनी सीमाओं के विरुद्ध नहीं। यह उस व्यवस्थापक द्वारा उन सभी उद्यमों के लिए किए गए कार्यों के विरुद्ध भी गिना जाता है जिन्हें वे एक साथ संभालते हैं, जिनकी सीमाएं समान होती हैं: आप चाहे कितने भी उद्यम संभालें, आप अपने काम के अलावा एक दिन में उनके लिए एक उद्यम के बराबर काम कर सकते हैं। इसलिए दो या अधिक व्यवस्थापकों वाला कोई उद्यम अभी भी अपनी सभी सीमाओं का उपयोग कर सकता है। एक बार जब कोई उद्यम उस दिन के लिए अपनी किसी एक सीमा का उपयोग कर लेता है, तो आप उसके लिए जो कुछ भी करते हैं वह आपकी अपनी सीमाओं के विरुद्ध गिना जाता है, जैसे कि आपने इसे अपने लिए किया हो। यदि आप फिर अपनी किसी सीमा तक पहुँच जाते हैं, तो ऐप ऐसा कहता है और उद्यम का नाम बताता है। इसलिए एक व्यवस्थापक जो अपने दिन का कोटा समाप्त कर लेता है वह केवल खुद को रोक सकता है: हर दूसरे व्यवस्थापक के पास अभी भी अपना पूरा कोटा होता है। उद्यम चलाने का काम हमेशा व्यवस्थापक के अपने परिवर्तनों के विरुद्ध गिना जाता है: व्यवस्थापकों को जोड़ना, हटाना या बदलना, पद छोड़ना, रोकना, समाप्त करना, और इसके सौदों को पूरा करना या अस्वीकार करना।</p>
+        <h2>Finding them</h2>
+        <p><strong>साझा</strong> पर टैप करें, फिर <strong>समूह</strong> पर, और <strong>परियोजनाएँ</strong> या <strong>उपक्रम</strong> चुनें। प्रत्येक अपनी स्थिति, उद्देश्य और शेष दिखाता है। फ़ोन पर, जिन्हें आप संभालते हैं वे <strong>आपके समूह</strong> के अंतर्गत होते हैं। इसे खोलने के लिए किसी एक पर टैप करें।</p>
+        <h2>What an enterprise page shows</h2>
+        <p>प्रत्येक सदस्य देख सकता है:</p>
+        <ul>
+            <li>इसका <strong>उद्देश्य</strong>;</li>
+            <li>इसका <strong>शेष</strong>, क्रेडिट सीमा, लाइव ऑफ़र और अधिशेष;</li>
+            <li><strong>आय और व्यय</strong>: अंदर और बाहर जाने वाली प्रत्येक फली। इसके व्यवस्थापक देखते हैं कि किसने भुगतान किया या किसे भुगतान किया गया और इसके साथ का नोट; अन्य सदस्य राशियाँ देखते हैं, और अपने स्वयं के भुगतान पूरी तरह से देखते हैं;</li>
+            <li>इसके व्यवस्थापक;</li>
+            <li>इसकी <strong>लिस्टिंग</strong>, <strong>हालिया गतिविधि</strong> और एक <strong>चर्चा</strong> जिसमें आप लिख सकते हैं।</li>
+        </ul>
+        <p>सबसे नीचे, यदि कुछ गलत है तो <strong>उद्यम की रिपोर्ट करें</strong> (प्रोजेक्ट पर <strong>प्रोजेक्ट की रिपोर्ट करें</strong>)।</p>
+        <h2>Backing an enterprise</h2>
+        <ul>
+            <li><strong>किसी प्रोजेक्ट को फलियों का संकल्प दें:</strong> इसके पृष्ठ पर, फ़ंडिंग बॉक्स के अंतर्गत, एक राशि दर्ज करें और <strong>फलियों का संकल्प लें</strong> पर टैप करें। आप किसी भी 24 घंटे में 20 तक संकल्प बना या बदल सकते हैं, जिसमें व्यवस्थापक का समर्थन भी शामिल है, और फलियों का एक संकल्प आपके भुगतानों में से भी एक है। संकल्प तब तक विश्वास में रखे जाते हैं जब तक कि प्रोजेक्ट अपने लक्ष्य तक नहीं पहुँच जाता, और फिर वे सभी उद्यम में चले जाते हैं। उसके बाद यह आगे कोई संकल्प नहीं लेता है, और न ही ऐसा कोई उद्यम लेता है जो समाप्त हो रहा है या बंद हो चुका है: इसका पृष्ठ संकल्प बॉक्स के स्थान पर ऐसा कहता है, और आपकी फलियाँ आपके पास ही रहती हैं। यदि कोई प्रोजेक्ट अपने लक्ष्य तक पहुँचने से पहले रद्द कर दिया जाता है, तो प्रत्येक संकल्प उस व्यक्ति के पास वापस चला जाता है जिसने इसे बनाया था।</li>
+            <li><strong>इसके साथ व्यापार करें:</strong> इसके ऑफ़र और ज़रूरतें हर किसी की तरह बाज़ार में हैं।</li>
+            <li><strong>व्यवस्थापक बनें:</strong> &quot;व्यवस्थापक&quot; देखें।</li>
+        </ul>
+        <h2>If you keep it</h2>
+        <p>यदि आप किसी उद्यम को संभालते हैं, या किसी प्रोजेक्ट को चलाने में मदद करते हैं, तो इसके पृष्ठ पर <strong>प्रबंधक नियंत्रण</strong> होता है:</p>
+        <ul>
+            <li><strong>ऑफ़र पोस्ट करें</strong> और <strong>ज़रूरत पोस्ट करें:</strong> इसके नाम से पोस्ट करें।</li>
+            <li><strong>साझा संसाधन को:</strong> इसके अधिशेष का कुछ हिस्सा साझा को भेजें।</li>
+            <li>वेब ऐप में, <strong>नक्शा पिन सेट करें</strong> इसे नक्शे पर रखता है।</li>
+        </ul>
+        <p>इसे रोकना और बंद करना वेब ऐप में एक ही पैनल में हैं। फ़ोन पर वे इसके नीचे अपने स्वयं के एक कार्ड, <strong>सत्र और जीवनचक्र नियंत्रण</strong> में हैं, जो केवल वे बटन दिखाता है जिनका आप उपयोग कर सकते हैं:</p>
+        <ul>
+            <li><strong>सत्र के लिए रोकें:</strong> कोई भी व्यवस्थापक। इसकी लिस्टिंग रुक जाती है ताकि कोई खरीद न सके, और इसकी क्रेडिट सीमा 90 दिनों तक वहीं रहती है जहाँ वह है। <strong>उद्यम फिर से शुरू करें</strong> (<strong>प्रोजेक्ट फिर से शुरू करें</strong>) रोक को समाप्त करता है।</li>
+            <li><strong>समापन शुरू करें:</strong> मुख्य व्यवस्थापक, एकमात्र व्यवस्थापक या कोई सामुदायिक व्यवस्थापक। 7 दिनों का इंतजार शुरू होता है; कोई भी चीज़ उद्यम को अपने आप बंद नहीं करती। प्रतीक्षा के दौरान कोई भी व्यवस्थापक या सामुदायिक व्यवस्थापक <strong>समापन रोकें</strong> पर टैप कर सकता है।</li>
+            <li><strong>समापन पूरा करें:</strong> 7 दिन पूरे होने के बाद, मुख्य व्यवस्थापक, एकमात्र व्यवस्थापक या कोई सामुदायिक व्यवस्थापक इसे बंद करना पूरा करता है। &quot;नियम और निर्णय कैसे काम करते हैं&quot; देखें।</li>
+        </ul>
+        <p>किसी प्रोजेक्ट के अपने लक्ष्य तक पहुँचने से पहले, उसका प्रमुख इसे रद्द भी कर सकता है, और प्रत्येक संकल्प वापस चला जाता है।</p>
+        <h2>Starting one</h2>
+        <ul>
+            <li>वेब पर, <strong>साझा</strong> पर टैप करें, फिर <strong>+ समूह बनाएं</strong> पर, फिर <strong>Start a project</strong> या <strong>Start an enterprise</strong> पर। फ़ोन ऐप में, <strong>साझा</strong> पर टैप करें, फिर <strong>समूह</strong> पर, <strong>परियोजनाएँ</strong> या <strong>उपक्रम</strong> चुनें, फिर गोल <strong>+</strong> बटन पर।</li>
+            <li><strong>प्रोजेक्ट</strong> या <strong>उद्यम</strong> चुनें।</li>
+            <li>इसे एक <strong>नाम</strong> और एक <strong>उद्देश्य विवरण</strong> दें।</li>
+            <li>किसी प्रोजेक्ट के लिए, एक <strong>Funding goal</strong> (वेब ऐप में <strong>लक्ष्य राशि</strong>) और यदि आप चाहें तो एक समय-सीमा निर्धारित करें।</li>
+            <li>यदि आप चाहें तो एक फ़ोटो जोड़ें।</li>
+            <li><strong>पहल शुरू करें</strong> पर टैप करें (वेब ऐप में <strong>उद्यम प्रस्तावित करें</strong>; यह फिर भी तुरंत शुरू होता है)।</li>
+        </ul>
+        <p>यह तुरंत शुरू होता है, और आप इसके प्रमुख (एक प्रोजेक्ट) या इसके मुख्य व्यवस्थापक (एक उद्यम) होते हैं। इसे शुरू करने के लिए कोई सामुदायिक वोट नहीं होता है।</p>
+        <p>आप किसी भी 24 घंटे में 3 प्रोजेक्ट या उद्यम शुरू कर सकते हैं, और एक साथ 20 चालू रख सकते हैं। इससे आगे ऐप मना कर देता है। यदि आपके पास 20 चालू हैं, तो दूसरा शुरू करने से पहले एक को समाप्त करें।</p>
+        <p>नाम, उद्देश्य और फ़ोटो को ऐप में अभी बदला नहीं जा सकता है।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="keepers.html"><strong>व्यवस्थापक</strong><span>वे लोग जो उपक्रम चलाते हैं और इसके पीछे खड़े होते हैं। कैसे जुड़ें, आपत्ति करें, और पद छोड़ें।</span></a></li>
+            <li><a href="commons-fund.html"><strong>साझा कोष</strong><span>आपके समुदाय की साझा फलियाँ: वे कहाँ से आती हैं, और उन्हें कैसे खर्च किया जाता है।</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>निर्णय का प्रस्ताव</strong><span>समुदाय से किसी बाध्यकारी बात पर निर्णय लेने के लिए कहें।</span></a></li>
+            <li><a href="rules.html"><strong>नियम और निर्णय कैसे होते हैं</strong><span>मतदान, उपस्थिति, गुप्त मतदान, कौन वोट कर सकता है, निलंबन, सदस्य को हटाना, व्यवस्थापक, और संयोजक व मुख्य संयोजक।</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>फलियाँ और वैश्विक समुदाय</strong><span>वैश्विक समुदाय किसलिए है, कई में से एक समुदाय, और आप वहाँ क्या देखते हैं: 🏘️ समुदाय मार्कर, उदाहरण समुदाय Example Valley, फलियाँ वहाँ क्यों प्रतीक्षा करती हैं, और स्थानीय समुदाय कैसे खोजें या शुरू करें।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

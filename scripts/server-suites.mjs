@@ -246,6 +246,7 @@ export const SUITES = [
     'test-standby-rekey',
     'test-takeover-parity',
     'test-replication-manifest',
+    'test-replica-hashes',
     'test-standby-ledger-copy',
     'test-standby-ledger-gate',
     'test-standby-community-settings',

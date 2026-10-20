@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuweka Ofa au Hitaji — BeanPool members' guide</title>
+    <meta name="description" content="Weka kitu unachoweza kufanya au kutoa, au kitu unachotafuta.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Soko</a></p>
+        <h1>Kuweka Ofa au Hitaji</h1>
+        <p class="lede">Weka kitu unachoweza kufanya au kutoa, au kitu unachotafuta.</p>
+        <h2>Ofa kwanza</h2>
+        <p>Katika jumuiya yenye Maharagwe, lazima uwe umechapisha angalau <strong>Ofa</strong> moja kabla hujaweza kuchapisha <strong>Hitaji</strong> au kuchukua Ofa ya mtu mwingine. Kila mtu huleta kitu. Idadi ya Ofa ulizo nazo pia huamua jinsi unavyoweza kwenda chini ya sifuri. Tazama &quot;Kikomo chako cha mkopo&quot;.</p>
+        <p>Mahali ambapo hakuna Maharagwe, kama vile kwenye jumuiya ya kimataifa, chapisho lako la kwanza linaweza kuwa Hitaji.</p>
+        <h2>Kabla hujaanza</h2>
+        <p>Katika jumuiya yenye Maharagwe unahitaji jina na picha ya wasifu. Mahali ambapo hakuna Maharagwe, jina linatosha. Ikiwa kitu kinakosekana, programu inakuomba <strong>Weka wasifu</strong> kwanza.</p>
+        <h2>Kuchapisha</h2>
+        <ul>
+            <li>Gusa <strong>+ WEKA TANGAZO</strong> kwenye kichupo cha Soko au kwenye Ramani.</li>
+            <li>Chagua <strong>Ofa</strong> au <strong>Hitaji</strong>. Fomu inafungukia kwenye Ramani.</li>
+            <li><strong>Kichwa:</strong> maneno machache, hadi herufi 50 kwenye simu. &quot;Mkate wa unga ulioumuka&quot;, &quot;Usafiri wa kwenda mjini siku za Ijumaa&quot;.</li>
+            <li><strong>Kategoria:</strong> chagua ile iliyo karibu zaidi.</li>
+            <li><strong>Maelezo:</strong> nini, lini, wapi, chochote ambacho watu wanapaswa kujua.</li>
+            <li><strong>Picha:</strong> angalau moja, hadi tano. Gusa <strong>Kamera</strong> au <strong>Matunzio</strong>. Mahali ambapo hakuna Maharagwe, picha za Hitaji ni za hiari.</li>
+            <li><strong>Eneo:</strong> gusa <strong>Mahali nilipo</strong>, au <strong>Weka pini</strong> na uguse ramani, kisha <strong>Thibitisha Pini</strong>. Kila mwanachama wa jumuiya yako anaweza kuona pini, kwa hivyo iweke karibu nawe badala ya mlango wako wa mbele ukipenda. Tazama &quot;Pini yako inapokwenda&quot;.</li>
+            <li><strong>Bei:</strong> idadi ya maharagwe. Gusa kitufe cha kipimo ili kuchagua <strong>Jumla</strong> au <strong>/saa</strong>. Gusa <strong>BURE</strong> ili kuitoa bure. Kitufe hicho pia kinatoa <strong>/siku</strong>, <strong>/wiki</strong> na <strong>/mwezi</strong>, lakini chapisho jipya halizihifadhi bado: linahifadhiwa kama bei ya jumla. Chagua <strong>Jumla</strong> na useme kipindi katika maelezo.</li>
+            <li>Gusa <strong>Weka Ofa</strong> au <strong>Weka Uhitaji</strong>.</li>
+        </ul>
+        <p>Hadi kila kitu kinachohitajika kijazwe, kitufe kinakuambia kile kinachokosekana, kama vile <strong>Ongeza picha</strong> au <strong>Weka bei</strong>.</p>
+        <p>Kwenye programu ya wavuti hatua ni tofauti kidogo:</p>
+        <ul>
+            <li>Gusa kitufe cha <strong>+</strong> kwenye Ramani (kinachoitwa <strong>Chapisho Jipya</strong>), au <strong>+ WEKA TANGAZO</strong> kwenye Soko.</li>
+            <li>Ili kuweka pini yako, gusa <strong>Mahali nilipo</strong>, au gusa <strong>Weka pini</strong> na kisha uguse ramani. Hakuna <strong>Thibitisha Pini</strong>.</li>
+            <li>Bei ni kisanduku cha nambari na orodha ya vipimo. Hakuna kitufe cha <strong>BURE</strong>: andika 0 ili kuitoa bure.</li>
+            <li>Kichwa hakina kikomo cha herufi 50.</li>
+            <li>Kitufe husema <strong>Eneo la ramani linahitajika</strong> au <strong>Jaza sehemu zinazohitajika</strong> wakati kitu kinapokosekana. Pia hubaki na rangi ya kijivu hadi utakapokuwa umeongeza angalau picha moja.</li>
+            <li>Fomu haiweki rasimu.</li>
+        </ul>
+        <h2>Kwenye jumuiya ya kimataifa</h2>
+        <p>Hakuna Maharagwe kwenye jumuiya ya kimataifa, kwa hivyo chapisho huko halina bei. Fomu haina <strong>Bei</strong>: sema katika maelezo kile ungependa kupata badala yake, au kwamba ni bure. Pale ambapo bei ingewekwa, fomu ya programu ya wavuti, na fomu ya simu ya kubadilisha chapisho, husema &quot;🏘️ Katika jumuiya ya eneo hii ni bei katika Maharagwe ›&quot;: iguse ili kuona kwa nini. Tazama &quot;Maharagwe na jumuiya ya kimataifa&quot;.</p>
+        <p>Wageni kwenye jumuiya ya kimataifa wanaweza kuona picha za tangazo hili na eneo lake la makadirio kabla ya kujiunga. Wanaona maneno ya chapisho na picha na takriban mahali lilipo, si jina lako, uso wako au eneo halisi. Kwenye programu ya wavuti fomu inasema hivyo chini ya picha. Wanachama wa jumuiya ya kimataifa huona eneo lako hadi takriban kilomita moja.</p>
+        <h2>Huna uhakika wa kiasi cha kutoza?</h2>
+        <p>Kwenye simu, gusa <strong>Huna uhakika wa kiasi cha kutoza?</strong> chini ya bei. Kwenye programu ya wavuti fomu haina mstari kama huo: fungua <strong>💡 Mwongozo wa Bei</strong> kwenye Soko badala yake. Mwongozo wa makadirio: maharagwe 40 ni takriban saa moja ya muda wa mtu. <strong>Mwongozo wa Bei wa Jumuiya</strong> una makadirio ya mambo mengi ya kila siku. Kwenye simu, kugusa moja kunakujazia Ofa. Kwenye programu ya wavuti, kugusa moja hufungua fomu ya Chapisho Jipya kwenye Ramani bila kujaza chochote.</p>
+        <p>Chini ya bei unaona kile utakachopokea baada ya ada ya soko ya 1.5%. Zawadi hazina ada.</p>
+        <h2>Machaguo ya ziada</h2>
+        <ul>
+            <li><strong>Inajirudia:</strong> chapisho linabaki wazi baada ya kila biashara, na watu kadhaa wanaweza kulichukua kwa wakati mmoja. Nzuri kwa usafiri wa kila wiki au mkate kila Jumamosi.</li>
+            <li><strong>Pesa taslimu inahitajika pia:</strong> weka alama hapa ikiwa unahitaji pia pesa taslimu, kwa ajili ya mafuta au vifaa. Programu haishughulikii kamwe pesa taslimu; mtakubaliana wenyewe baina yenu.</li>
+            <li><strong>Hili linafika wapi?</strong> Ni pale tu jumuiya yako inapofanya biashara na jumuiya nyingine: weka chapisho hapa, au lishiriki zaidi.</li>
+        </ul>
+        <p>Kwenye simu, programu huweka rasimu unapoandika. Ukiondoka na kurudi, inakuuliza iwapo unataka <strong>Endelea</strong> au <strong>Anza upya</strong>.</p>
+        <h2>Kuchapisha kwa kikundi tu</h2>
+        <p>Fungua <strong>Mali za Pamoja</strong>, kisha <strong>Vikundi</strong>, kisha kikundi chako, na uguse <strong>Chapisha kwa</strong> na jina la kikundi. Kikundi hicho tu ndicho kinacholiona. Kwenye simu fomu hii fupi haina picha na haina eneo. Kwenye programu ya wavuti inafungua fomu ya kawaida kwenye Ramani, ikiwa imewekwa kwa kikundi.</p>
+        <h2>Kubadilisha au kuondoa chapisho</h2>
+        <p>Fungua chapisho lako. Ikiwa hakuna biashara inayoendelea kwayo:</p>
+        <ul>
+            <li><strong>Hariri Tangazo</strong> hubadilisha maneno, kategoria, bei na picha. Gusa <strong>Hifadhi</strong>. Eneo haliwezi kubadilishwa; futa chapisho na uliposti tena badala yake.</li>
+            <li><strong>Sitisha Ofa</strong> huficha Ofa kwa muda mfupi. <strong>Washa Ofa</strong> huirudisha tena. Mahitaji hayawezi kusitishwa.</li>
+            <li><strong>Futa Tangazo</strong> huliondoa. Mtu yeyote anayeendelea kuliomba huona ombi lake likiwa limetiwa alama ya kukataliwa.</li>
+        </ul>
+        <p>Wakati mtu anapoliomba chapisho lako, bado unaweza kubadilisha maneno na picha zake, lakini si bei yake: programu inasema hivyo. Wakati maharagwe yanapozuiliwa kwenye chapisho, huwezi kulihariri kabisa. Tofauti ni chapisho Linalojirudia (linaweza kuwa na biashara kadhaa kwa wakati mmoja): bado unaweza kubadilisha maneno na picha zake, lakini si bei yake. Ili kubadilisha bei, kataa au ughairi biashara hiyo kwanza.</p>
+        <p>Katika jumuiya ya eneo, machapisho hayaishi muda. Yafute yanapokamilika.</p>
+        <p>Kwenye jumuiya ya kimataifa, tangazo huwekwa kwenye kumbukumbu siku 90 baada ya kubadilishwa mara ya mwisho: huondolewa Sokoni na picha zake hufutwa. Kulihifadhi kwa <strong>Hariri Tangazo</strong> hulibakisha kwa siku nyingine 90. Tazama &quot;Mipaka ya jumuiya ya kimataifa&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Makubaliano hatua kwa hatua</strong><span>Kuanzia kuomba hadi kulipwa, kwa Ofa na kwa Hitaji, na kuacha maoni.</span></a></li>
+            <li><a href="my-deals.html"><strong>Biashara Zangu</strong><span>Mahali pamoja kwa kila makubaliano uliyomo, kila tangazo uliloweka, na makubaliano ya awali.</span></a></li>
+            <li><a href="map-pins.html"><strong>Kile ramani inaonyesha</strong><span>Pini kwenye Ramani, maana ya rangi zake, na vitufe vinavyozizunguka.</span></a></li>
+            <li><a href="credit-line.html"><strong>Kikomo chako cha mkopo</strong><span>Jinsi unavyoweza kwenda chini ya sifuri, na jinsi inavyoongezeka.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

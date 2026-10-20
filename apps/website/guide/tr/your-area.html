@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bölgeniz — BeanPool members' guide</title>
+    <meta name="description" content="Küresel topluluğun size yakındaki ilanları göstermek için kullandığı yaklaşık konum ve bunu değiştirme veya temizleme.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Ayarlar ve güvenlik</a></p>
+        <h1>Bölgeniz</h1>
+        <p class="lede">Küresel topluluğun size yakındaki ilanları göstermek için kullandığı yaklaşık konum ve bunu değiştirme veya temizleme.</p>
+        <h2>Bölgenizin ne olduğu</h2>
+        <p>Küresel toplulukta bölgeniz yaklaşık olarak bulunduğunuz yerdir: bir kasaba veya bir noktanın çevresinde yaklaşık 10 km, asla tam konumunuz değildir. Küresel topluluk, yakınınızda nelerin sunulduğunu size göstermek için bunu kullanır: 250 km mesafedeki en yakın 500 ilan. Bkz. &quot;Birden fazla topluluk&quot;.</p>
+        <p>Bunu katıldığınızda <strong>Yaklaşık olarak neredesin?</strong> ekranında verirsiniz; burayı <strong>Şimdilik atla</strong> ile geçebilirsiniz. İstediğiniz zaman değiştirebilir veya temizleyebilirsiniz. Küresel topluluktaki hesabınıza aittir, bu nedenle telefonunuz ve web uygulaması aynısını kullanır.</p>
+        <p>Diğer topluluklarınız bunu istemez. Sunucusu aynı şekilde çalışacak şekilde kurulmuş olan bir topluluk da Ayarlar bölümünde <strong>Bölgeniz</strong> seçeneğini gösterir.</p>
+        <h2>Kendinizinkini görme</h2>
+        <ul>
+            <li>Ayarlar'ı açın: ekranın sağ üst kısmındaki kaydırıcılar düğmesine dokunun (geniş bir bilgisayar ekranında, sol kenar çubuğundaki dişli simgesi).</li>
+            <li><strong>UYGULAMA AYARLARI</strong> altında <strong>Bölgeniz</strong> seçeneğine dokunun. Telefonda hemen <strong>Konum</strong> altındadır.</li>
+        </ul>
+        <p><strong>Yaklaşık 10 km çevresinde</strong> ve yazdığınız kasaba, konumunuzu kullandıysanız iki sayı veya <strong>Ayarlanmadı</strong> yazar. Kasabanın adı yalnızca yazdığınız telefonda veya tarayıcıda tutulur, bu nedenle başka yerlerde iki sayıyı görürsünüz. Uygulama topluluğa ulaşamazsa, satırda <strong>Şu anda kontrol edilemedi</strong> yazar.</p>
+        <h2>Değiştirme</h2>
+        <ul>
+            <li><strong>Bölgeniz</strong> içinde, <strong>Yaklaşık olarak neredesin?</strong> altında, <strong>Konumumu kullan</strong>'a dokunun ya da <strong>Bir kasaba veya banliyö yaz</strong>'a dokunup kasabanızı listeden seçin.</li>
+            <li>Kaydedildikten sonra tekrar Ayarlar'a dönersiniz.</li>
+            <li><strong>İptal</strong> (tarayıcıda <strong>← Ayarlara Dön</strong>) her şeyi olduğu gibi bırakır.</li>
+        </ul>
+        <p>Telefonunuz veya tarayıcınız gönderilmeden önce konumu yaklaşık 10 km'ye yuvarlar ve topluluk bunu tekrar yuvarlar, bu nedenle tam konumunuz asla gönderilmez veya saklanmaz. <strong>Konumumu kullan</strong> bulunduğunuz yerin tek bir okumasını alır. Bir kasaba bulmak için yazdıklarınız, yer listesinin alındığı OpenStreetMap'e gönderilir.</p>
+        <p>Bölgeniz değiştiğinde telefonunuz bir sonraki eşitlemesinde tuttuğu ilanları yeni bölgenin yakınındakilerle değiştirir. Web uygulamasında veya başka bir telefonda değiştirirseniz telefonunuz bunu yaklaşık bir saat içinde alır.</p>
+        <h2>Temizleme</h2>
+        <ul>
+            <li><strong>Bölgeniz</strong> içinde <strong>Temizle</strong> seçeneğine dokunun. Bu seçenek yalnızca bir bölgeniz varken oradadır.</li>
+        </ul>
+        <p>Bir bölgeniz olmadan da küresel topluluğu daha önce olduğu gibi kullanmaya devam edersiniz. Telefonunuz yakınınızdakiler yerine her yerden en yeni 100 ilanı tutar ve Pazar'ın üzerindeki bir satırda <strong>Dünya genelindeki en yeni ilanları görüyorsunuz. Yakınınızdakileri görmek için bölgenizi belirleyin.</strong> yazar. Bir tane belirlemek için üzerine dokunun. Web uygulamasında Pazar ve Harita her yerden en yenileri gösterir: bkz. &quot;Yakınınızdakileri bulma&quot;.</p>
+        <h2>Kim neyi görür</h2>
+        <ul>
+            <li>Diğer üyeler ne kadar uzakta olduğunuzu görür ve yaptığınız bir anket bölgenizde gösterilir. Bkz. &quot;Gizliliğiniz&quot;.</li>
+            <li>Bir bölge olmadan, yakındaki üyeler yaptığınız bir anketi listelerinde görmez, ancak yine de arayarak bulabilirler.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="communities.html"><strong>Birden fazla topluluk</strong><span>Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.</span></a></li>
+            <li><a href="privacy.html"><strong>Gizliliğiniz</strong><span>Başkalarının sizin hakkınızda neleri görebileceği ve bunu denetleyen ayarlar.</span></a></li>
+            <li><a href="near-you.html"><strong>Yakınınızdakileri bulma</strong><span>Yalnızca size veya seçtiğiniz herhangi bir yere belirli bir mesafedeki ilanları gösterin.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool'a katılma</strong><span>Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Pazarda gezinme</strong><span>Arama, filtreler ve mesafe ile Teklifleri ve İhtiyaçları bulun.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

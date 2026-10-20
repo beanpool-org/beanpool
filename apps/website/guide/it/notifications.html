@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notifiche — BeanPool members' guide</title>
+    <meta name="description" content="Scegli quali avvisi ricevere sul telefono e quando ricevere promemoria per gli eventi.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Impostazioni e sicurezza</a></p>
+        <h1>Notifiche</h1>
+        <p class="lede">Scegli quali avvisi ricevere sul telefono e quando ricevere promemoria per gli eventi.</p>
+        <h2>Scegliere i tuoi avvisi</h2>
+        <ul>
+            <li>Apri <strong>Impostazioni</strong>. Sotto <strong>IMPOSTAZIONI APP</strong>, tocca <strong>Preferenze di notifica</strong>.</li>
+            <li>Attiva o disattiva ciascun tipo:</li>
+            <li><strong>Messaggi diretti:</strong> quando qualcuno ti scrive, invia un messaggio in uno dei tuoi gruppi o ti menziona, oppure quando si apre una votazione in un gruppo o in un'impresa di cui fai parte.</li>
+            <li><strong>Attività del marketplace:</strong> richieste, approvazioni e rifiuti sui tuoi scambi, e gli esiti di un post che hai segnalato o di uno dei tuoi rimosso dagli amministratori. Anche novità sugli eventi a cui partecipi, comunicazioni dagli amministratori della tua comunità e la nascita di una comunità vicino a un luogo di tuo interesse.</li>
+            <li><strong>In garanzia e di sistema:</strong> fagioli trattenuti, rilasciati o contestati.</li>
+        </ul>
+        <p>Nella web app la prima voce si chiama <strong>Messaggi chat</strong>, e la terza prende il nome da <strong>Scambi</strong>. Definiscono cosa raggiunge il tuo telefono.</p>
+        <p>Le modifiche si salvano automaticamente. Sono conservate dal server della tua comunità, quindi seguono il tuo account.</p>
+        <p>Due avvisi relativi al tuo account arrivano sempre, e l'app non prevede un interruttore per disattivarli: la notifica che il tuo account è stato appena ripristinato su un altro dispositivo e la notifica che un amministratore ha iniziato a trasferire il tuo account su un nuovo telefono. Se gestisci il server della tua comunità, arrivano sempre anche i suoi avvisi relativi al server.</p>
+        <h2>Cosa dice un avviso</h2>
+        <p>Un avviso sul tuo telefono indica soltanto di quale tipo di notizia si tratta, ad esempio:</p>
+        <ul>
+            <li>&quot;Hai un nuovo messaggio.&quot;</li>
+            <li>&quot;Ci sono novità su uno dei tuoi scambi.&quot;</li>
+            <li>&quot;Un evento a cui partecipi inizierà presto.&quot;</li>
+            <li>&quot;La tua comunità ha un avviso per te.&quot;</li>
+        </ul>
+        <p>Non indica mai da parte di chi sia, quale sia l'annuncio, quanti siano i fagioli o cosa dica la comunicazione della tua comunità. Gli avvisi passano attraverso i server di Apple, Google ed Expo prima di raggiungere il tuo telefono, e chiunque può leggere una schermata di blocco, per cui il resto delle informazioni rimane custodito nella tua comunità. Apri BeanPool per vederle.</p>
+        <p>BeanPool non chiede mai le tue 12 parole o una password in un avviso.</p>
+        <h2>Quando tocchi un avviso</h2>
+        <p>Ciascun avviso reca la firma della tua comunità, generata solo per te. BeanPool la verifica prima di eseguire qualsiasi azione:</p>
+        <ul>
+            <li><strong>La verifica ha esito positivo:</strong> BeanPool chiede alla tua comunità a cosa si riferisse l'avviso e lo apre, se proviene dalla comunità in cui ti trovi. Un avviso proveniente da un'altra delle tue comunità apre BeanPool nel punto in cui avevi interrotto: passa a quella comunità per vederlo.</li>
+            <li><strong>Non è così:</strong> BeanPool non apre nulla e ti avvisa una sola volta: &quot;Quella notifica non proviene dalla tua comunità. Ignora ciò che diceva. BeanPool non richiede mai le tue 12 parole o una password in una notifica.&quot;</li>
+        </ul>
+        <p>Mentre BeanPool è aperto, un avviso che non supera la verifica non viene mostrato affatto, e lo stesso vale per un avviso già visualizzato.</p>
+        <p>Il telefono mostra il testo di un avviso prima che BeanPool possa verificarlo. Quindi, chiunque entri in possesso dell'indirizzo delle notifiche del tuo telefono potrebbe inserire il proprio testo sulla schermata di blocco. Toccarlo non produce alcun effetto, e BeanPool lo segnala.</p>
+        <p>Anche un avviso proveniente da una comunità che hai rimosso da questo telefono non produce alcun effetto.</p>
+        <p>Se il server della tua comunità non è ancora stato aggiornato, i suoi avvisi non contengono alcuna firma. BeanPool li mostra con parole generiche (&quot;Ci sono novità dalla tua comunità.&quot;) e, quando ne tocchi uno, apre il punto in cui avevi interrotto.</p>
+        <h2>Avvisi al controllo di BeanPool</h2>
+        <p>Di tanto in tanto il telefono consente a BeanPool di effettuare un controllo in background con la tua comunità. Se la tua comunità ha registrato per te un avviso che non hai ancora visto, come l'esito riguardante uno dei tuoi annunci, BeanPool lo mostra per intero sul telefono, una sola volta.</p>
+        <p>Questo richiede unicamente il server della tua comunità, quindi funziona anche se gli avvisi push non dovessero arrivare. Arriva più tardi rispetto a un avviso istantaneo: è il telefono a decidere quando, da circa 15 minuti ad alcune ore.</p>
+        <h2>Promemoria eventi</h2>
+        <p>Sotto gli interruttori, <strong>Promemoria eventi</strong> imposta con quanto anticipo rispetto all'inizio di un evento a cui hai indicato <strong>Partecipo</strong> o <strong>Interessato</strong> riceverai l'avviso. Seleziona <strong>1 settimana prima</strong>, <strong>1 giorno prima</strong>, <strong>2 ore prima</strong>, <strong>1 ora prima</strong> o <strong>30 minuti prima</strong> — puoi selezionarne più di uno — oppure seleziona <strong>Disattivati</strong> per non riceverne alcuno.</p>
+        <p>L'impostazione iniziale per tutti è <strong>1 giorno</strong> prima. Questa è la scelta generale predefinita; ogni singolo evento può essere impostato diversamente sulla pagina dell'evento stesso. Vedi &quot;Eventi&quot;.</p>
+        <p>I promemoria arrivano insieme agli avvisi di <strong>Attività del marketplace</strong>, quindi si interrompono se disattivi quella voce. Non riceverai mai promemoria per un evento annullato o concluso, né per un orario che era già passato quando hai confermato la tua presenza. Se l'organizzatore sposta l'evento, anche il promemoria si sposta di conseguenza.</p>
+        <h2>Nessun avviso?</h2>
+        <p>Verifica nelle impostazioni del tuo telefono che le notifiche siano consentite per BeanPool.</p>
+        <h2>Una chat alla volta</h2>
+        <p>Puoi disattivare l'audio della chat di un singolo gruppo, progetto o impresa per 8 ore, una settimana o per sempre. Vedi &quot;Disattivare l'audio delle chat&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="mute.html"><strong>Silenziare chat</strong><span>Silenzia una chat — di una persona, di un gruppo o di un'impresa — per 8 ore, una settimana o per sempre.</span></a></li>
+            <li><a href="messages.html"><strong>Messaggi</strong><span>Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.</span></a></li>
+            <li><a href="my-deals.html"><strong>I miei accordi</strong><span>Un unico posto per ogni scambio in corso, ogni tuo annuncio e le transazioni passate.</span></a></li>
+            <li><a href="events.html"><strong>Eventi</strong><span>Crea un evento, di persona o online, singolo o ricorrente; conferma la partecipazione, ricevi promemoria, condividilo e gestiscilo come organizzatore.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Assenza</strong><span>La Modalità vacanza nasconde le tue Offerte e mette in pausa le nuove richieste mentre sei via.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Barra in alto</strong><span>Il fagiolo, le piccole icone che segnalano quando qualcosa richiede attenzione e i pulsanti in alto a destra.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

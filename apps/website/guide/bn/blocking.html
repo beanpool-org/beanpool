@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>কাউকে ব্লক করা — BeanPool members' guide</title>
+    <meta name="description" content="কারও পোস্ট ও বার্তা আপনার থেকে লুকিয়ে রাখুন এবং পরে তা পূর্বাবস্থায় ফিরিয়ে আনুন।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">সেটিংস ও নিরাপত্তা</a></p>
+        <h1>কাউকে ব্লক করা</h1>
+        <p class="lede">কারও পোস্ট ও বার্তা আপনার থেকে লুকিয়ে রাখুন এবং পরে তা পূর্বাবস্থায় ফিরিয়ে আনুন।</p>
+        <h2>ব্লক করা</h2>
+        <ul>
+            <li>তাদের প্রোফাইলে: <strong>ব্লক করুন</strong>-এ ট্যাপ করুন, অথবা আরও নিচে <strong>ব্লক করুন</strong> এবং তাদের নামের ওপর ট্যাপ করুন।</li>
+            <li>তাদের কোনো একটি পোস্টে (ফোন অ্যাপ): <strong>ব্যবহারকারীকে ব্লক করুন</strong>-এ ট্যাপ করুন। ওয়েব অ্যাপের কোনো পোস্টে ব্লক বোতাম নেই।</li>
+            <li>কোনো চ্যাট থেকে: তাদের প্রোফাইল খুলতে উপরে তাদের নামে ট্যাপ করুন, তারপর <strong>ব্লক করুন</strong>-এ। ওয়েব অ্যাপে, একজনের সাথে চ্যাটের উপরেও <strong>ব্লক করুন</strong> থাকে।</li>
+        </ul>
+        <p>ফোন অ্যাপে, <strong>ব্যবহারকারীকে ব্লক করুন</strong> দিয়ে নিশ্চিত করুন। ওয়েব অ্যাপে, আপনার ব্রাউজার নিশ্চিত করতে বলবে: <strong>ঠিক আছে</strong>-তে ট্যাপ করুন।</p>
+        <h2>এটি যা করে</h2>
+        <ul>
+            <li>বাজারে তাদের পোস্টগুলো আপনার থেকে লুকানো থাকে।</li>
+            <li>তারা আপনার চ্যাট এবং মানুষজন তালিকা থেকে অদৃশ্য হয়ে যায়, এবং আপনারা একে অপরকে বার্তা পাঠাতে পারবেন না। ফোন অ্যাপে, আপনার যোগ করা কেউ তখনও আপনার <strong>বন্ধুরা</strong> ট্যাবে প্রদর্শিত হতে পারে: নিচে &quot;এটি যা করে না&quot; দেখুন। ওয়েব অ্যাপ তাদের প্রতিটি তালিকা থেকে লুকিয়ে রাখে।</li>
+            <li>তাদের পালস পোস্টগুলো এখনও প্রদর্শিত হয়। ফোনে, মানচিত্রে তাদের পিনগুলোও এখনও প্রদর্শিত হয়। ওয়েব অ্যাপের মানচিত্র সেগুলো লুকিয়ে রাখে।</li>
+            <li>আপনার খতিয়ানে, তাদের কাছ থেকে আসা শিম কোনো প্রেরিত নোটের পরিবর্তে &quot;আপনার ব্লক করা কোনো সদস্যের কাছ থেকে শিম&quot; দেখায়।</li>
+            <li>আপনার সম্প্রদায়ের মডারেটরদের কাছে একটি রিপোর্ট যায়, যারা বিষয়টি খতিয়ে দেখতে পারেন।</li>
+        </ul>
+        <h2>আপনার সম্প্রদায় এ বিষয়ে যা করে</h2>
+        <p>আপনার জন্য সংরক্ষিত ব্লকের ক্ষেত্রে আপনার সম্প্রদায় এটি করে থাকে। বর্তমানে এটি ওয়েব অ্যাপে করা ব্লকের জন্য প্রযোজ্য। ফোন অ্যাপে করা একটি ব্লক কেবল সেই ফোনেই থাকে, এবং আপনার সম্প্রদায় সে সম্পর্কে জানে না।</p>
+        <ul>
+            <li>তাদের সরাসরি বার্তাগুলো কখনই আপনার কাছে পৌঁছায় না। কোনো ফোন বা কম্পিউটারে আপনার সম্প্রদায় সেগুলো আপনার কাছে পৌঁছে দেয় না, এবং সেগুলোর জন্য আপনি কোনো বিজ্ঞপ্তি বা অপঠিত গণনা পান না।</li>
+            <li>তারা যদি আপনার সাথে একটি নতুন চ্যাট শুরু করে, তবে তা আপনার চ্যাটে প্রদর্শিত হয় না।</li>
+            <li>আপনি যদি তাদের আনব্লক করেন, তবে ব্লক থাকা অবস্থায় পাঠানো কোনো কিছুই পৌঁছাবে না। শুধুমাত্র এরপর পাঠানো বার্তাই আপনার কাছে পৌঁছাবে।</li>
+            <li>তারা যদি আপনার কোনো বার্তায় প্রতিক্রিয়া জানায় বা তাদের পুরনো কোনো বার্তা পরিবর্তন করে, তবে আপনি তা দেখতে পাবেন না।</li>
+            <li>তারা কোনো গ্রুপ চ্যাটে লিখলে আপনি কোনো বিজ্ঞপ্তি পাবেন না, এমনকি তারা @ দিয়ে আপনাকে উল্লেখ করলেও নয়।</li>
+            <li>তারা যদি আপনার কোনো লিস্টিংয়ে চুক্তির অনুরোধ করে, তবে অনুরোধটি কোনো বিজ্ঞপ্তি ছাড়াই আপনার চুক্তিতে অপেক্ষা করে। আপনি যদি এটি ফেলে রাখেন, তবে কোনো বিজ্ঞপ্তি ছাড়াই ৭ দিন পর এটি শেষ হয়ে যায়।</li>
+            <li>তারা যদি তাৎক্ষণিকভাবে আপনার কোনো অফার গ্রহণ করে, তবে আপনি কোনো বিজ্ঞপ্তি পাবেন না, এবং তারা যদি পরে সেই চুক্তি বাতিলও করে তবুও কোনো বিজ্ঞপ্তি আসবে না। চুক্তিটি অন্যান্য সবার মতোই আপনার চুক্তিতে এবং এর বার্তাগুলো তাদের সাথে আপনার চ্যাটে দেখা যাবে। তাদের শিম আটকে রাখা হয় এবং যথারীতি ফেরত দেওয়া হয়।</li>
+            <li>তারা কেবল আপনাকে উদ্দেশ্য করে কোনো লিস্টিং তৈরি করতে পারে না।</li>
+            <li>আপনি তাদের যোগ করতে পারবেন না। তারা আপনাকে যোগ করলে আপনাকে জানানো হবে না। তারা যদি আপনাকে যোগ করে থাকে, তবে আপনার মানুষজন ট্যাবের &quot;আপনাকে যোগ করেছে&quot; লাইনটি চলে যাবে। আপনি যাকে ব্লক করেছেন তার প্রোফাইলে আপনার বন্ধুরা আর আপনাকে যৌথ সংযোগ হিসেবে দেখতে পাবেন না।</li>
+            <li>তারা যদি কোনো নোটসহ আপনাকে শিম পাঠায়, তবে পুরো শিম পৌঁছাবে কিন্তু নোটটি পৌঁছাবে না। পরিবর্তে আপনি &quot;আপনার ব্লক করা কোনো সদস্যের কাছ থেকে শিম&quot; দেখতে পাবেন, এবং আনব্লক করার পরেও তা দেখতে পাবেন।</li>
+        </ul>
+        <h2>এটি যা করে না</h2>
+        <ul>
+            <li>তাদের জানানো হয় না। তাদের কাছে তাদের বার্তাগুলো প্রেরিত হয়েছে বলেই মনে হয়, এবং তাদের শিমের সাথে থাকা নোটগুলোর ক্ষেত্রেও তাই।</li>
+            <li>এটি বন্ধুত্ব শেষ করে না: আপনি যদি তাদের যোগ করে থাকেন, তবে তারা এখনও আপনার বন্ধু, এবং আপনার যোগাযোগের মাধ্যম যদি বন্ধুদের জন্য নির্ধারিত থাকে তবে তারা এখনও তা দেখতে পাবে। সেটিও শেষ করতে, <strong>অবরুদ্ধ ব্যবহারকারীদের পরিচালনা করুন</strong> খুলুন (ওয়েবে, <strong>ব্লক করা সদস্যদের পরিচালনা করুন</strong>; নিচে &quot;আনব্লক করা&quot; দেখুন) এবং তাদের নামের নিচে <strong>বন্ধুদের তালিকা থেকেও সরান</strong>-এ ট্যাপ করুন। এটি কেবল আপনার যোগ করা কারও ক্ষেত্রেই উপস্থিত থাকে। তারা ব্লক অবস্থায় থাকে। তারা বাদ পড়া বুঝতে পারে।</li>
+            <li>গ্রুপ চ্যাট, ইভেন্ট চ্যাট এবং প্রকল্প ও উদ্যোগের চ্যাটগুলো শেয়ার করা থাকে: সেগুলোতে থাকা প্রত্যেকে একই বার্তা দেখতে পায়। সেখানে তাদের বার্তাগুলো অন্যান্য সবার মতোই আপনার কাছেও দৃশ্যমান থাকে।</li>
+            <li>তাদের সাথে আপনার ইতিমধ্যে বিদ্যমান কোনো চুক্তি আগের মতোই তার বিজ্ঞপ্তি ও নোটিশসহ চলতে থাকে।</li>
+            <li>আপনি যদি তাদের সাথে আগে লেনদেন করে থাকেন, তবে তারা এখনও আপনাকে শিম পাঠাতে পারে। কোনো বিজ্ঞপ্তি ছাড়াই প্রতিটি শিম এসে পৌঁছায়।</li>
+            <li>আপনার সম্প্রদায়ের নোটিশগুলো এখনও আসবে, এমনকি তারা সেগুলো শুরু করলেও। উদাহরণস্বরূপ, কোনো গ্রুপের প্রধান আহ্বায়ক হিসেবে আপনাকে প্রতিস্থাপনের জন্য কেউ ভোট চালু করলে আপনাকে জানানো হয়, এবং যারা আপনার সম্প্রদায় পরিচালনা করেন তাদের কাছ থেকে আপনি বার্তা পান।</li>
+            <li>তারা এখনও আপনার পোস্ট দেখতে পারে।</li>
+            <li>ফোন অ্যাপে, ব্লকটি কেবল আপনার অ্যাকাউন্টের জন্য এই ফোনে সংরক্ষিত থাকে। এই ফোনে অন্য কোনো অ্যাকাউন্ট আপনার ব্লকগুলো পায় না।</li>
+            <li>ফোন অ্যাপে, আপনি সাইন আউট করলে বা এই ফোনের অ্যাকাউন্টটি অন্য একটি দিয়ে প্রতিস্থাপন করলে, আপনার ব্লকগুলো ফোনেই থেকে যায়। একই অ্যাকাউন্ট দিয়ে ফিরে এলে সেগুলো এখনও সেখানে থাকে।</li>
+            <li>ফোন অ্যাপে, আপনি যদি অ্যাপটি পুনরায় ইনস্টল করেন বা অন্য ফোন ব্যবহার করেন, তবে তাদের আবার ব্লক করুন।</li>
+            <li>ওয়েব অ্যাপে, আপনার সম্প্রদায় আপনার অ্যাকাউন্টের সাথে আপনার ব্লকগুলো সংরক্ষণ করে। যেকোনো ব্রাউজারে সাইন ইন করলে সেগুলো ফিরে আসে। সাইন আউট করলে সেই কম্পিউটারে তাদের সম্পর্কে কিছুই অবশিষ্ট থাকে না। &quot;ওয়েব ব্রাউজারে BeanPool ব্যবহার&quot; দেখুন।</li>
+            <li>যারা আপনার সম্প্রদায়ের সার্ভার পরিচালনা করেন তারা ওয়েব অ্যাপে আপনি কাকে ব্লক করেছেন তা দেখতে পারেন, যেমনটি তারা রিপোর্ট দেখতে পারেন।</li>
+            <li>ফোন অ্যাপ এবং ওয়েব অ্যাপ পৃথক তালিকা রাখে। একটিতে করা ব্লক অন্যটিতে দেখা যায় না।</li>
+        </ul>
+        <h2>আনব্লক করা</h2>
+        <ul>
+            <li><strong>সেটিংস</strong> খুলুন। <strong>আইনি ও গোপনীয়তা</strong>-র অধীনে, <strong>অবরুদ্ধ ব্যবহারকারীদের পরিচালনা করুন</strong>-এ ট্যাপ করুন।</li>
+            <li>নামের পাশে <strong>আনব্লক করুন</strong>-এ ট্যাপ করুন, বা <strong>সবাইকে আনব্লক করুন</strong>-এ।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে, ব্লক করা এবং আনব্লক করার জন্য আপনার সম্প্রদায়ের সাথে সংযোগ প্রয়োজন। সংযোগ না থাকলে, অ্যাপ তা জানিয়ে দেয় এবং কোনো পরিবর্তন হয় না। আপনি আবার অনলাইনে এলে পুনরায় চেষ্টা করুন।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>সমস্যার রিপোর্ট করা</strong><span>একটি পোস্ট, ইভেন্ট, পালস পোস্ট, প্রকল্প বা উদ্যোগ সম্পর্কে আপনার কমিউনিটির মডারেটরদের জানান।</span></a></li>
+            <li><a href="messages.html"><strong>বার্তাসমূহ</strong><span>একটি চ্যাট শুরু করুন, ছবি পাঠান, উত্তর দিন, প্রতিক্রিয়া দিন, সম্পাদনা করুন, মুছুন, মিউট করুন এবং কী গোপনীয়।</span></a></li>
+            <li><a href="privacy.html"><strong>আপনার গোপনীয়তা</strong><span>অন্যরা আপনার সম্পর্কে কী দেখতে পারে এবং সেটিংস যা এটি নিয়ন্ত্রণ করে।</span></a></li>
+            <li><a href="getting-help.html"><strong>সাহায্য পাওয়া</strong><span>কোথায় আটকে গেলে দেখতে হবে এবং কাকে জিজ্ঞাসা করতে হবে।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

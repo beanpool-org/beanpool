@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konto wiederherstellen — BeanPool members' guide</title>
+    <meta name="description" content="Stelle dein Konto auf einem neuen Handy wieder her und schütze es mit einem Login.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Einstellungen &amp; Schutz</a></p>
+        <h1>Konto wiederherstellen</h1>
+        <p class="lede">Stelle dein Konto auf einem neuen Handy wieder her und schütze es mit einem Login.</p>
+        <h2>Auf einem neuen Telefon</h2>
+        <p>Der Schlüssel deines Kontos befindet sich nicht in den Datensicherungen deines Telefons. Ein neues Telefon benötigt deine 12 Wörter oder ein Anmeldekonto, das du verknüpft hast – selbst ein iPhone, das aus einem Backup deines alten Telefons wiederhergestellt wurde.</p>
+        <ul>
+            <li>Installiere BeanPool und öffne es.</li>
+            <li>Tippe auf <strong>Schon Mitglied? Konto wiederherstellen</strong>.</li>
+            <li>Wähle <strong>Mit 12 Wörtern wiederherstellen</strong> oder <strong>Mit Anmeldekonto wiederherstellen</strong>.</li>
+        </ul>
+        <h2>Mit deinen 12 Wörtern</h2>
+        <ul>
+            <li>Die 12 Wörter sind englische Wörter. Gib die 12 Wörter der Reihe nach ein oder tippe auf <strong>Einfügen</strong>.</li>
+            <li>Tippe unter <strong>Welche Community?</strong> auf <strong>Globale Gemeinschaft</strong> oder auf eine der Communitys, die dieses Telefon bereits hatte. Für jede andere tippe auf <strong>andere Adresse</strong> und gib den Namen oder die Adresse deiner Community ein.</li>
+            <li>Tippe auf <strong>Identität wiederherstellen</strong>. Dein Name und dein Foto werden von deiner Community wiederhergestellt.</li>
+        </ul>
+        <h2>Mit einem Anmeldekonto</h2>
+        <p>Dies funktioniert nur, wenn du zuvor eines verknüpft hast (siehe unten), und nur, solange der Server deiner Community läuft.</p>
+        <ul>
+            <li>Gib deinen Namen in der Community ein. Die App schlägt möglicherweise „Bist du das?“ vor.</li>
+            <li>Gib den Namen oder die Adresse deiner Community ein.</li>
+            <li>Tippe auf <strong>Wiederherstellen mit</strong> und das Konto, das du verknüpft hast: Google oder Facebook, oder Apple auf einem iPhone.</li>
+            <li>Bei Google auf einem iPhone öffnet sich eine Google-Webseite. Melde dich dort an und wähle das Konto, das du verknüpft hast. Unter Android zeigt Google seine eigene Kontoliste an. Wenn es auf diesem Telefon keines anzeigen kann, öffnet sich stattdessen eine Google-Webseite.</li>
+        </ul>
+        <p>Wurde das Anmeldekonto von einem Telefon aus verknüpft, das deine 12 Wörter hatte, und geschah dies mit einer aktuellen App, kommen auch deine 12 Wörter zurück. Andernfalls hat das Telefon keine 12 Wörter: Sie können nicht aus einer Anmeldung wiederhergestellt werden. Wenn du sie aufgeschrieben hast, kannst du sie hinzufügen (siehe „Deine 12 Wörter“). Bis dahin ist ein verknüpftes Anmeldekonto der einzige Weg für dieses Telefon zurück, behalte also eines verknüpft und verknüpfe ein zweites, wenn du kannst (siehe unten).</p>
+        <h2>Dein Konto jetzt schützen</h2>
+        <ul>
+            <li>Öffne die <strong>Einstellungen</strong> und tippe auf <strong>Kontoschutz</strong>.</li>
+            <li>Tippe unter <strong>Anmelde-Wiederherstellung (1-aus-N)</strong> auf <strong>Absichern mit</strong> und wähle ein Konto.</li>
+            <li>Bestätige die Sperrbildschirm-Prüfung deines Telefons. Das verknüpfte Konto kann dein Konto wiederherstellen, daher fragt die App zuerst nach.</li>
+            <li>Bei Google auf einem iPhone öffnet sich eine Google-Webseite. Melde dich dort an und wähle dein Konto, und du kehrst zu BeanPool zurück.</li>
+        </ul>
+        <p>Dies funktioniert auch auf einem Telefon ohne 12 Wörter.</p>
+        <p>Wenn du der globalen Community mit 12 Wörtern beigetreten bist, nutze stattdessen <strong>Anmeldung hinzufügen</strong> oben unter <strong>Kontoschutz</strong>. Dies ist ebenfalls ein Weg zurück und hebt zudem die Beschränkungen eines neuen Kontos mit 12 Wörtern auf. Siehe „Deine 12 Wörter“.</p>
+        <p>Wenn dieses Telefon deine 12 Wörter hat, behält das verknüpfte Konto diese ebenfalls, sodass die Wiederherstellung damit diese zurückgibt. Ein Konto, das du in einer älteren Version der App verknüpft hast, behält nur deinen Schlüssel: Tippe daneben auf <strong>Erneut verbinden</strong> und bestätige die Sperrbildschirm-Prüfung deines Telefons, um die Wörter einzuschließen. Auf einem Telefon ohne 12 Wörter gibt es nichts einzuschließen, daher wird <strong>Erneut verbinden</strong> nicht angezeigt.</p>
+        <p>Dies ist keine Möglichkeit, sich einzuloggen. Dein Konto ist immer noch dein eigener Schlüssel. Das verknüpfte Konto hilft dir nur, es in dieser Community wiederzuerlangen.</p>
+        <p>Um es zu entfernen, tippe auf <strong>Trennen</strong>.</p>
+        <h2>Wenn du GitHub verknüpft hattest</h2>
+        <p>BeanPool nutzt GitHub nicht mehr. Die ID eines GitHub-Kontos ist öffentlich, daher war eine daran gebundene Kopie nicht an etwas geschützt, das nur du besitzt. Wenn der Server deiner Community aktualisiert wird, löscht er jede mit GitHub verknüpfte Kopie. Dein Konto selbst wird nicht angetastet, und deine 12 Wörter funktionieren weiterhin.</p>
+        <ul>
+            <li>Wenn GitHub das einzige Konto war, das du verknüpft hast, und deine 12 Wörter sich auf diesem Telefon befinden, aber nicht aufgeschrieben sind, schreibe sie jetzt auf (<strong>Einstellungen</strong>, dann <strong>12 Wörter anzeigen</strong>) oder verknüpfe Google, Facebook oder (auf einem iPhone) Apple wie oben beschrieben. Bis du eines davon tust, ist dieses Telefon dein einziger Zugang zu deinem Konto.</li>
+            <li>Wenn deine 12 Wörter aufgeschrieben sind, brauchst du nichts zu tun. Um zusätzlich ein Anmeldekonto zu haben, verknüpfe Google, Facebook oder (auf einem iPhone) Apple wie oben beschrieben.</li>
+            <li>Wenn GitHub das einzige Konto war, das du verknüpft hast, dieses Telefon keine 12 Wörter hat und du keine aufgeschrieben hast, verknüpfe jetzt Google, Facebook oder (auf einem iPhone) Apple. Bis du das tust, ist dieses Telefon dein einziger Zugang zu deinem Konto.</li>
+        </ul>
+        <h2>Wer die Kopie öffnen kann</h2>
+        <p>Ein verknüpftes Anmeldekonto funktioniert, weil der Server deiner Community eine verschlüsselte Kopie deines Kontos dafür aufbewahrt. Die Personen, die diesen Server betreiben, können diese Kopie öffnen, da ihr Server deine Anmeldung überprüft. In der globalen Community ist das BeanPool. Eine gestohlene Kopie der Serverdatenbank kann das nicht, sobald der Server dafür aktualisiert wurde. Jeder, der die Kontrolle über dein Anmeldekonto übernimmt, kann ebenfalls hineingelangen: Siehe „Wenn es jemand anderes versucht“.</p>
+        <p>Wenn du möchtest, dass niemand außer dir Zugang hat, verwende ausschließlich deine 12 Wörter: Halte sie schriftlich fest und tippe neben jedem Anmeldekonto auf <strong>Trennen</strong>. Das Trennen löscht die Kopie. Ein Standby-Server, der zweite Server, den manche Communitys zur Übernahme bereithalten, löscht seine Kopie ebenfalls, sobald er das nächste Mal vom Hauptserver kopiert (etwa einmal pro Minute). Das Trennen löscht jedoch nicht die Kopien, die sich bereits in den Datensicherungen des Servers befinden, oder die Kopie, die der Server jedes Mal als Protokoll aufbewahrt, wenn eine Anmeldung dein Konto wiederherstellt. Die Betreiber des Servers können auch diese öffnen.</p>
+        <h2>Wenn es jemand anderes versucht</h2>
+        <p>Wenn jemand beginnt, dein Konto wiederherzustellen, zeigt Einstellungen <strong>Jemand stellt dein Konto wieder her</strong> an, während dies im Gange ist. Wenn du es nicht bist, tippe auf <strong>Jetzt stoppen</strong>: Der Server deiner Community gibt dann nichts weiter an diese Wiederherstellung weiter. Wenn die Person mit deinem verknüpften Anmeldekonto hineingelangt, erhältst du einen Hinweis, dass dein Konto gerade auf einem anderen Gerät wiederhergestellt wurde, und möglicherweise ist sie bereits eingeloggt, wenn du den Hinweis siehst. Halte dieses Anmeldekonto sicher mit einem eigenen starken Passwort.</p>
+        <h2>Wenn das Telefon bereits ein Konto hat</h2>
+        <p>Das Wiederherstellen eines anderen Kontos ersetzt dasjenige auf diesem Telefon, egal ob du mit deinen 12 Wörtern oder mit einem Anmeldekonto wiederherstellst. Die App fragt zuerst nach, unter <strong>Konto auf diesem Telefon ersetzen?</strong> (bei einem Anmeldekonto, sobald du dich angemeldet hast). Nichts ändert sich, bis du <strong>WIPE</strong> eingibst, auf <strong>Konto ersetzen</strong> tippst und die Sperrbildschirm-Prüfung deines Telefons bestätigst. Tippe auf <strong>Behalten</strong>, dann auf den Namen des Kontos oder gehe zurück, um alles so zu belassen, wie es war.</p>
+        <p>Stelle sicher, dass du die 12 Wörter für das Konto hast, das du ersetzt. Wenn dieses Telefon sie hat, zeigt dieser Bildschirm sie an, wenn du auf <strong>12 Wörter von</strong> (dem Kontonamen) <strong>anzeigen</strong> tippst und die Sperrbildschirm-Prüfung deines Telefons bestätigst. Wenn dieses Telefon keine 12 Wörter für dieses Konto hat (die Einstellungen weisen darauf hin), kannst du es ohne ein verknüpftes Anmeldekonto nicht wiederherstellen.</p>
+        <h2>Telefon und 12 Wörter verloren</h2>
+        <p>Ohne deine 12 Wörter und ohne ein verknüpftes Anmeldekonto kann ein Admin deiner Community dein Konto auf ein neues Telefon übertragen – zusammen mit deinen Bohnen, deinem Namen und deinem Verlauf. Gehe persönlich zu ihm: Er prüft zuerst, ob du es wirklich bist.</p>
+        <ul>
+            <li>Der Admin generiert auf seinem Bildschirm einen Code zur Schlüsseländerung. Wenn deine alte App noch auf dem alten Telefon installiert ist, erhält sie den Hinweis, dass ein Admin mit der Übertragung deines Kontos begonnen hat.</li>
+            <li>Öffne auf deinem neuen Telefon BeanPool, tippe auf <strong>Schon Mitglied? Konto wiederherstellen</strong> und dann auf <strong>Ein Admin hat mir einen Code zur Schlüsseländerung gegeben</strong>. Scanne den QR-Code auf dem Bildschirm des Admins oder gib den Code (er beginnt mit RK-) und den Namen deiner Community ein. In einem Browser öffnet der Link des QR-Codes denselben Bildschirm; oder öffne die Web-App deiner Community, tippe auf <strong>Ich bin schon Mitglied →</strong>, dann auf <strong>Ein Admin hat mir einen Code zur Schlüsseländerung gegeben</strong> und gib den Code ein.</li>
+            <li>Dein Telefon zeigt eine zweistellige Zahl an und darunter die Adresse der angefragten Community. Zeige beides dem Admin: Er gibt die Zahl auf seinem Bildschirm ein. Die Zahl stellt sicher, dass sein System genau dein Telefon verknüpft und nicht jemanden, der den Code gesehen hat. <strong>Nicht jetzt</strong> verlässt die Zahl: Dein Telefon merkt sich die Stelle, und derselbe Code zeigt wieder dieselbe Zahl an.</li>
+            <li>Hatte das neue Telefon noch kein BeanPool-Konto, zeigt es anschließend die 12 Wörter deines <strong>neuen</strong> Schlüssels an (dies sind englische Wörter). Schreibe sie auf: Deine alten Wörter funktionieren nicht mehr, und dein altes Telefon wird dauerhaft unbrauchbar. Ein Telefon, das bereits ein Konto hatte (für eine andere Community), behält die 12 Wörter dieses Kontos, und sie bringen nun auch dieses Konto zurück.</li>
+            <li>Wenn du ein Anmeldekonto verknüpft hattest, bittet dein Telefon dich, dieses unter Kontoschutz erneut zu verknüpfen: Das bisherige schützte deinen alten Schlüssel und wurde daher entfernt.</li>
+            <li>Personen, mit denen du schreibst, sehen, dass sich dein Schlüssel geändert hat. Sage ihnen, dass du es warst, und lies ihnen deinen <strong>Mein Schlüsselcode</strong> vor, der in den <strong>Einstellungen</strong> unter <strong>Kontoschutz</strong> auf dem Telefon steht. Siehe „Wenn ein Schlüssel im Chat wechselt“.</li>
+        </ul>
+        <p>Der Code ist 24 Stunden lang gültig. Wenn dein Admin feststellt, dass dein Telefon nicht dasjenige ist, das er gesehen hat, oder der Code abläuft, bitte ihn um einen neuen.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Deine 12 Wörter</strong><span>Die 12 Wörter sind der Schlüssel zu deinem Konto. Warum sie wichtig sind, wo du sie findest, wie du sie schützt und ein Login als zweiten Weg hinzufügst.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Konto verlassen oder löschen</strong><span>Auf diesem Handy abmelden oder dein Konto dauerhaft löschen, und was mit deinen Bohnen passiert.</span></a></li>
+            <li><a href="communities.html"><strong>Mehrere Communitys</strong><span>Mit einem Konto zu mehreren Communitys gehören, wechseln, einer Community zu einer neuen Adresse folgen und die globale Ansicht nutzen.</span></a></li>
+            <li><a href="faq.html"><strong>Fragen</strong><span>Kurze Antworten auf die häufigsten Fragen der Mitglieder.</span></a></li>
+            <li><a href="key-changed.html"><strong>Wenn ein Schlüssel im Chat wechselt</strong><span>Warum ein Chat den Versand stoppt, wie du den Schlüsselcode prüfst und wann du fortfahren kannst.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

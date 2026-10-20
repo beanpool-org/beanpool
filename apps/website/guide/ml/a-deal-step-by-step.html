@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ഒരു ഇടപാട്, ഘട്ടം ഘട്ടമായി — BeanPool members' guide</title>
+    <meta name="description" content="ചോദിക്കുന്നത് മുതൽ പണം ലഭിക്കുന്നത് വരെ, ഓഫറുകൾക്കും ആവശ്യങ്ങൾക്കും, അവലോകനം നൽകുന്നതും.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">മാർക്കറ്റ്</a></p>
+        <h1>ഒരു ഇടപാട്, ഘട്ടം ഘട്ടമായി</h1>
+        <p class="lede">ചോദിക്കുന്നത് മുതൽ പണം ലഭിക്കുന്നത് വരെ, ഓഫറുകൾക്കും ആവശ്യങ്ങൾക്കും, അവലോകനം നൽകുന്നതും.</p>
+        <h2>ആശയം</h2>
+        <p>ഒരു ഇടപാട് ആരംഭിക്കുമ്പോൾ, പണം നൽകുന്ന വ്യക്തിയുടെ പയർ <strong>ട്രസ്റ്റിൽ സൂക്ഷിക്കുന്നു</strong>. തടഞ്ഞുവെച്ച പയർ ആർക്കും ചെലവഴിക്കാൻ കഴിയില്ല. ജോലി പൂർത്തിയാകുമ്പോൾ, പണം നൽകുന്ന വ്യക്തി അവ വിട്ടുനൽകുകയും മറ്റേ വ്യക്തിക്ക് പണം ലഭിക്കുകയും ചെയ്യുന്നു. സ്ക്രീനുകളിൽ ചിലയിടങ്ങളിൽ പയറിനെ &quot;credits&quot; എന്ന് വിളിക്കുന്നു; രണ്ടും ഒരേ കാര്യത്തെയാണ് സൂചിപ്പിക്കുന്നത്.</p>
+        <p>ഏത് 24 മണിക്കൂറിലും നിങ്ങൾക്ക് 100 ഡീലുകൾ വരെ ചോദിക്കുകയോ സ്വീകരിക്കുകയോ അംഗീകരിക്കുകയോ ചെയ്യാം. നിങ്ങൾ പണം നൽകുന്ന ഒരു ഇടപാട് നിങ്ങളുടെ പ്രതിദിന 100 പേയ്‌മെന്റുകളിൽ ഒന്നായി കണക്കാക്കുന്നു (&quot;സമ്മാനം അയയ്ക്കൽ&quot; കാണുക). പയർ വിട്ടുനൽകുന്നതിനോ, റദ്ദാക്കുന്നതിനോ, പണം ലഭിക്കുന്നതിനോ ഒരിക്കലും പരിധിയില്ല.</p>
+        <h2>ഒരാളുടെ ഓഫർ സ്വീകരിക്കൽ</h2>
+        <ul>
+            <li>ഓഫർ തുറന്ന് <strong>ഓഫർ സ്വീകരിക്കുക</strong> ടാപ്പ് ചെയ്യുക.</li>
+            <li>മണിക്കൂർ അടിസ്ഥാനത്തിലാണ് വില നിശ്ചയിച്ചിട്ടുള്ളതെങ്കിൽ, എത്ര മണിക്കൂർ എന്ന് വ്യക്തമാക്കുക.</li>
+            <li><strong>സ്ഥിരീകരിക്കുക</strong> ടാപ്പ് ചെയ്യുക. നിങ്ങളുടെ പയർ ഉടനടി തടഞ്ഞുവെക്കപ്പെടുകയും വിൽപ്പനക്കാരനെ അറിയിക്കുകയും ചെയ്യും. വിൽപ്പനക്കാരൻ സമ്മതം പറയുന്നതുവരെ കാത്തിരിക്കേണ്ടതില്ല.</li>
+            <li>വിൽപ്പനക്കാരനുമായുള്ള ഒരു ചാറ്റ് തുറക്കുന്നു. എപ്പോൾ, എവിടെ എന്ന് തമ്മിൽ സമ്മതിക്കുക.</li>
+        </ul>
+        <p>നിങ്ങൾ ആദ്യം നിങ്ങളുടെ സ്വന്തം ഒരു ഓഫർ പോസ്റ്റ് ചെയ്തിരിക്കണം. നിങ്ങൾ ചെയ്തിട്ടില്ലെങ്കിൽ, ആപ്പ് <strong>ഒരു ഓഫർ ഉണ്ടാക്കുക</strong> നിർദ്ദേശിക്കുന്നു.</p>
+        <h2>ഒരാളുടെ ആവശ്യത്തിൽ സഹായിക്കൽ</h2>
+        <ul>
+            <li>ആവശ്യം തുറന്ന് <strong>പൂർത്തിയാക്കാൻ സന്നദ്ധത അറിയിക്കുക</strong> ടാപ്പ് ചെയ്യുക, തുടർന്ന് <strong>സ്ഥിരീകരിക്കുക</strong>.</li>
+            <li>ഇത് പോസ്റ്റ് ചെയ്ത വ്യക്തി തീരുമാനിക്കുന്നു. അതുവരെ നിങ്ങൾക്ക് <strong>അഭ്യർത്ഥന പിൻവലിക്കുക</strong> ടാപ്പ് ചെയ്യാം. അവർ 7 ദിവസത്തിനുള്ളിൽ മറുപടി നൽകിയില്ലെങ്കിൽ, അഭ്യർത്ഥന സ്വയം അവസാനിക്കുകയും നിങ്ങളെ രണ്ടുപേരെയും അറിയിക്കുകയും ചെയ്യും.</li>
+            <li>അവർ നിങ്ങളുടെ അഭ്യർത്ഥന <strong>പൂർത്തിയാക്കൽ അഭ്യർത്ഥനകൾ</strong> എന്നതിന് കീഴിൽ കാണുന്നു, ഒപ്പം നിങ്ങൾക്ക് <strong>സന്ദേശം അയക്കുക</strong> അയയ്ക്കാനും, അത് <strong>നിരസിക്കുക</strong> ചെയ്യാനും അല്ലെങ്കിൽ <strong>അംഗീകരിച്ച് നൽകുക</strong> ചെയ്യാനും കഴിയും.</li>
+            <li>അവർ അംഗീകരിക്കുമ്പോൾ, അവരുടെ പയർ തടഞ്ഞുവെക്കപ്പെടുന്നു. പോസ്റ്റ് ആവർത്തിക്കാവുന്നത് അല്ലെങ്കിലൊഴികെ, ഓഫർ ചെയ്ത മറ്റെല്ലാവരുടെയും അഭ്യർത്ഥന നിരസിച്ചതായി അടയാളപ്പെടുത്തും.</li>
+        </ul>
+        <p>വെബ് ആപ്പിൽ, <strong>അഭ്യർത്ഥന പിൻവലിക്കുക</strong> എന്നത് <strong>ഓഫർ റദ്ദാക്കുക</strong> എന്നും <strong>അംഗീകരിച്ച് നൽകുക</strong> എന്നത് <strong>അംഗീകരിച്ച് ട്രസ്റ്റിൽ സൂക്ഷിക്കുക</strong> എന്നുമാണ്. ആവശ്യം പോസ്റ്റ് ചെയ്ത വ്യക്തിക്ക് അവിടെ <strong>നിരസിക്കുക</strong> അല്ലെങ്കിൽ അംഗീകരിക്കാൻ മാത്രമേ കഴിയൂ: ഒരു അഭ്യർത്ഥനയ്ക്ക് <strong>സന്ദേശം അയക്കുക</strong> ബട്ടൺ ഇല്ല.</p>
+        <h2>പയർ തടഞ്ഞുവെച്ചിരിക്കുന്ന സമയത്ത്</h2>
+        <p>സംസാരിക്കാനായി നിങ്ങൾ രണ്ടുപേരും ഒരു <strong>സന്ദേശം അയക്കുക</strong> ബട്ടണും, അത് റദ്ദാക്കാനായി <strong>ട്രസ്റ്റ് ഹോൾഡ് റദ്ദാക്കുക</strong> എന്നതും കാണുന്നു. വെബ് ആപ്പിൽ, ലിസ്റ്റിംഗ് പോസ്റ്റ് ചെയ്യാത്ത വ്യക്തി മാത്രമേ <strong>സന്ദേശം അയക്കുക</strong> കാണൂ, അത് റദ്ദാക്കാനുള്ള ബട്ടൺ <strong>ഹോൾഡ് റദ്ദാക്കുക</strong> എന്നാണ്.</p>
+        <ul>
+            <li>ജോലി ചെയ്യുക, അല്ലെങ്കിൽ സാധനം കൈമാറുക.</li>
+            <li>പണം നൽകുന്ന വ്യക്തി <strong>ക്രെഡിറ്റുകൾ നൽകുക</strong> ടാപ്പ് ചെയ്യുന്നു, തുടർന്ന് സ്ഥിരീകരിക്കാൻ വീണ്ടും <strong>ക്രെഡിറ്റുകൾ നൽകുക</strong> ടാപ്പ് ചെയ്യുന്നു. മണിക്കൂർ ജോലികൾക്കായി അവർ യഥാർത്ഥത്തിൽ ജോലി ചെയ്ത മണിക്കൂറുകൾ ആദ്യം രേഖപ്പെടുത്തുന്നു. ഇത് കുറവാണെങ്കിൽ, ബാക്കി തുക അവർക്ക് തിരികെ ലഭിക്കും. ഇത് കൂടുതലാണെങ്കിൽ, അധിക തുക അവരിൽ നിന്ന് ഈടാക്കും. ഓരോ മണിക്കൂറിനും ഇടപാട് നടത്തിയ നിരക്കിലാണ് പണം നൽകുന്നത്.</li>
+            <li>നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ കോമൺസിലേക്ക് പോകുന്ന 1.5% മാർക്കറ്റ് ഫീസ് കുറച്ച് വിൽപ്പനക്കാരന് ഉടനടി പണം ലഭിക്കും.</li>
+        </ul>
+        <p>പണം നൽകുന്ന വ്യക്തിക്ക് മാത്രമേ പയർ വിട്ടുനൽകാൻ കഴിയൂ. സമയപരിധിയില്ല: പയർ വിട്ടുനൽകുന്നതുവരെയോ ഇടപാട് റദ്ദാക്കുന്നതുവരെയോ അവ തടഞ്ഞുവെക്കപ്പെടും. ഒരാഴ്ചയ്ക്ക് ശേഷവും, അതിനുശേഷം ഓരോ ആഴ്ചയിലും, പണം നൽകുന്ന വ്യക്തിക്ക് ഒരു ഓർമ്മപ്പെടുത്തൽ ലഭിക്കും.</p>
+        <p>ആരെങ്കിലും അത് ചോദിച്ചുകൊണ്ടിരിക്കുമ്പോഴോ അവരുടെ പയർ തടഞ്ഞുവെച്ചിരിക്കുമ്പോഴോ പോസ്റ്റിലെ വില മാറ്റാൻ കഴിയില്ല. ഇടപാട് നിശ്ചയിച്ച വില തന്നെ അത് നിലനിർത്തുന്നു. വില മാറ്റാൻ, അത് പോസ്റ്റ് ചെയ്ത വ്യക്തി ആദ്യം ഇടപാട് നിരസിക്കുകയോ റദ്ദാക്കുകയോ ചെയ്യണം.</p>
+        <h2>ആവർത്തിക്കാവുന്ന ഒരു പോസ്റ്റ്</h2>
+        <p>ഓരോ ഇടപാടിനും ശേഷം ആവർത്തിക്കാവുന്ന ഒരു പോസ്റ്റ് വീണ്ടും സജീവമായി തുടരുന്നു, ഒപ്പം നിരവധി ആളുകൾക്ക് ഒരേസമയം അതിൽ ഒരു ഇടപാടിൽ ഏർപ്പെടാം. മറ്റേതൊരു പോസ്റ്റും പൂർത്തിയായതായി അടയാളപ്പെടുത്തുന്നു.</p>
+        <h2>അവലോകനങ്ങൾ</h2>
+        <p>പണം വിട്ടുനൽകിയ ശേഷം, ഇടപാടിന് റേറ്റിംഗ് നൽകാൻ പണം നൽകുന്ന ആളോട് ആവശ്യപ്പെടുന്നു: 1 മുതൽ 5 നക്ഷത്രങ്ങൾ വരെയും ഒരു ചെറിയ, ഓപ്ഷണൽ കമന്റും. <strong>റേറ്റിംഗ് സമർപ്പിക്കുക</strong>, അല്ലെങ്കിൽ <strong>തൽക്കാലം ഒഴിവാക്കൂ</strong> ടാപ്പ് ചെയ്യുക.</p>
+        <p>രണ്ടുപേർക്കും പിന്നീട് റേറ്റ് ചെയ്യാം: പൂർത്തിയായ പോസ്റ്റിൽ (വീണ്ടും സജീവമാകുന്ന ഒരു ആവർത്തിക്കാവുന്ന പോസ്റ്റിൽ അല്ല) <strong>Rate</strong> എന്നും പേരും ടാപ്പ് ചെയ്യുക, അല്ലെങ്കിൽ My Deals, History എന്നതിലെ <strong>അവലോകനം</strong> ടാപ്പ് ചെയ്യുക (വെബ് ആപ്പിൽ <strong>അവലോകനം നൽകുക</strong>). നിങ്ങളുടെ റേറ്റിംഗ് മാറ്റാൻ കഴിയും; പുതിയത് പഴയതിന് പകരമായി മാറും.</p>
+        <p>നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയിലെ എല്ലാവർക്കും ഒരു അവലോകനത്തിലെ നക്ഷത്രങ്ങളും വാക്കുകളും വായിക്കാൻ കഴിയും. ഇടപാടിൽ ഉൾപ്പെട്ട രണ്ട് ആളുകൾക്ക് മാത്രമേ അത് ആരാണ് എഴുതിയതെന്നും ഏത് ഇടപാടിനെക്കുറിച്ചാണെന്നും കാണാൻ കഴിയൂ.</p>
+        <p>നക്ഷത്രങ്ങൾക്ക് പ്രാധാന്യമുണ്ട്. കുറഞ്ഞ ശരാശരി മറ്റേ വ്യക്തി അവരുടെ വ്യാപാരങ്ങളിൽ നിന്ന് നേടുന്ന വിശ്വാസ്യതയെ കുറയ്ക്കുന്നു. നീതിപൂർവ്വം പെരുമാറുക.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>എന്റെ ഇടപാടുകൾ</strong><span>നിങ്ങൾ ഉൾപ്പെട്ടിട്ടുള്ള എല്ലാ ഇടപാടുകൾക്കും നിങ്ങൾ പോസ്റ്റ് ചെയ്തതിനും മുൻ ഇടപാടുകൾക്കും ഒരു സ്ഥലം.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>ഇടപാടിൽ പ്രശ്നമുണ്ടാകുമ്പോൾ</strong><span>ഇടപാട് റദ്ദാക്കലും, യോജിപ്പിലെത്താൻ കഴിയാതെ വരുമ്പോൾ എന്ത് സംഭവിക്കുമെന്നതും.</span></a></li>
+            <li><a href="posting.html"><strong>ഒരു ഓഫറോ ആവശ്യമോ പോസ്റ്റ് ചെയ്യൽ</strong><span>നിങ്ങൾക്ക് ചെയ്യാൻ അല്ലെങ്കിൽ നൽകാൻ കഴിയുന്നതോ, അല്ലെങ്കിൽ നിങ്ങൾ അന്വേഷിക്കുന്നതോ ആയ കാര്യങ്ങൾ പങ്കിടുക.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool എങ്ങനെ പ്രവർത്തിക്കുന്നു</strong><span>പയർ, ഇടപാടുകൾ, ഓഫറുകളും ആവശ്യങ്ങളും, ക്രെഡിറ്റ് എന്നിവ ലളിതമായ വാക്കുകളിൽ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

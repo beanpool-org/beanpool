@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eventos — BeanPool members' guide</title>
+    <meta name="description" content="Crie um evento, presencial ou online, único ou recorrente; confirme presença, receba lembretes, compartilhe e gerencie como anfitrião.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Bens comuns</a></p>
+        <h1>Eventos</h1>
+        <p class="lede">Crie um evento, presencial ou online, único ou recorrente; confirme presença, receba lembretes, compartilhe e gerencie como anfitrião.</p>
+        <h2>Encontrar eventos</h2>
+        <ul>
+            <li>No <strong>Mercado</strong>, toque em <strong>Eventos</strong>. Escolha <strong>Hoje</strong>, <strong>Este fim de semana</strong> ou <strong>Próximos 7 dias</strong>.</li>
+            <li>No <strong>Mapa</strong>, os eventos são marcadores roxos. No celular, toque em <strong>Eventos</strong> para ver apenas eles. No aplicativo web eles estão sempre presentes, e os seletores de data os refinam.</li>
+        </ul>
+        <h2>Seus eventos</h2>
+        <p>No <strong>Mercado</strong>, toque em <strong>★ Para Você</strong>. <strong>Seus eventos</strong> é a primeira coisa nele: tudo o que você marcou como <strong>Vou</strong> ou <strong>Tenho interesse</strong>, em ordem de proximidade. Toque em um para abri-lo.</p>
+        <p>Ele só aparece quando você tem algo chegando e contém apenas suas próprias respostas — ninguém mais pode vê-lo.</p>
+        <h2>Participar</h2>
+        <p>Em um evento, toque em <strong>Vou</strong> ou <strong>Tenho interesse</strong>. Toque na sua escolha novamente para desmarcá-la.</p>
+        <p>Quando você está marcado como <strong>Vou</strong>:</p>
+        <ul>
+            <li>você pode ler o <strong>Aviso para quem vai</strong> do anfitrião, assim que ele permitir sua entrada, quando ele tiver escolhido essa opção;</li>
+            <li>você pode abrir o <strong>bate-papo do evento</strong>. Consulte &quot;Bate-papo de evento&quot;;</li>
+            <li>para um evento online, você vê o <strong>Link para entrar</strong> e um botão <strong>Participar</strong>, sob as mesmas condições do aviso.</li>
+        </ul>
+        <p>Toque no evento para ver tudo e em <strong>Mostrar no mapa</strong>. No celular, ele abre seu aplicativo de mapas. No aplicativo web, ele mostra o local no Mapa.</p>
+        <h2>Receber lembretes</h2>
+        <p>Quando você está marcado como <strong>Vou</strong> ou <strong>Tenho interesse</strong>, o evento mostra <strong>Lembrar-me</strong> e quanto tempo antes do início você será avisado — <strong>1 dia antes (seu padrão)</strong> até você alterar.</p>
+        <ul>
+            <li>Toque em <strong>Alterar</strong> para escolher <strong>1 semana antes</strong>, <strong>1 dia antes</strong>, <strong>2 horas antes</strong>, <strong>1 hora antes</strong> ou <strong>30 minutos antes</strong>. Você pode marcar mais de uma opção.</li>
+            <li>Não marque nada para não receber nenhum lembrete para este evento.</li>
+            <li>Em seguida, toque em <strong>Salvar para este evento</strong>. Uma marcação não é salva até você fazer isso.</li>
+            <li>Toque em <strong>Usar meu padrão</strong> para retornar à sua escolha habitual.</li>
+        </ul>
+        <p>Para alterar sua escolha habitual para todos os eventos, consulte &quot;Notificações&quot;.</p>
+        <p>Os lembretes chegam como alertas no celular, junto com seus alertas do Mercado, portanto deixam de chegar se você desativá-los. Você nunca recebe lembrete de um evento cancelado ou encerrado, nem de um horário que já havia passado quando confirmou presença.</p>
+        <h2>Contar a alguém sobre o evento</h2>
+        <p>Abra o evento e toque em <strong>Compartilhar</strong>. O menu de compartilhamento padrão do celular se abre com o nome do evento, quando é, onde é e um link. No computador, o link é copiado para você colar.</p>
+        <p>Qualquer pessoa que tocar nesse link abre o evento — no aplicativo se o tiver instalado, ou no aplicativo web caso contrário. Quem não fizer parte da sua comunidade chega à página de entrada dela. No navegador web, a comunidade global mostra o evento primeiro, como um visitante o vê, e o reabre assim que ela entrar.</p>
+        <h2>Colocar no seu calendário</h2>
+        <p>Abra o evento e toque em <strong>Adicionar ao calendário</strong>.</p>
+        <ul>
+            <li>No <strong>aplicativo web</strong>, um arquivo de calendário é baixado. Abra-o e seu calendário oferecerá a opção de adicionar o evento.</li>
+            <li>No <strong>iPhone</strong>, o mesmo arquivo é enviado ao celular, que oferece <strong>Adicionar ao Calendário</strong>.</li>
+            <li>No <strong>Android</strong>, o Google Agenda é aberto com o evento já preenchido. Confira e salve.</li>
+        </ul>
+        <p>O registro contém o nome, a hora, o local e o link de volta para o evento. Se o anfitrião alterar o horário mais tarde, seu calendário não se ajustará com a mudança — o aplicativo ainda lembrará você, e o próprio evento sempre mostrará o novo horário.</p>
+        <h2>Criar um evento</h2>
+        <ul>
+            <li>Toque em <strong>+ PUBLICAR</strong> na aba Mercado ou no Mapa e depois em <strong>Evento</strong>.</li>
+            <li><strong>Título</strong> e quando ele <strong>Começa</strong>. O campo <strong>Termina</strong> é opcional; fica definido para 2 horas depois, a menos que você altere.</li>
+            <li>Os horários usam o fuso horário próprio do evento, obtido a partir do marcador. Se não for o seu próprio fuso, uma linha abaixo dos horários indicará o nome dele. Toque em <strong>Alterar</strong> ao lado caso esteja incorreto.</li>
+            <li><strong>Repete:</strong> escolha a frequência com que ocorre, como semanalmente naquele dia ou uma vez por mês, ou deixe em <strong>Não repete</strong>. O campo <strong>Até</strong> é opcional: deixe em branco e o evento se repetirá até você cancelá-lo.</li>
+            <li>Escolha <strong>Em um local</strong> ou <strong>On-line</strong>. Para um evento online, não há local nem marcador: adicione um <strong>Link para entrar</strong>. Apenas você e as pessoas que vão participar veem o link (caso aprove entradas, apenas quem você permitir). Os horários dele usam seu próprio fuso, e todos os demais veem nos fusos deles, indicado com <strong>no seu horário</strong>.</li>
+            <li><strong>Nome do local</strong>, como &quot;Câmara Municipal&quot;.</li>
+            <li>Coloque o marcador no mapa: toque no mapa, pesquise em <strong>Encontrar um endereço</strong> ou toque em <strong>Usar minha localização</strong>. Toque em <strong>Aproximada (~100 m)</strong> se não quiser mostrar o ponto exato. Consulte &quot;Onde seu marcador fica&quot;.</li>
+            <li>Uma <strong>Descrição</strong> e uma foto, se desejar.</li>
+            <li><strong>Aviso para quem vai:</strong> todos que tocam em Vou veem o aviso, a menos que você marque <strong>Apenas as pessoas que eu permitir veem a observação e o bate-papo</strong> (marcado por padrão na comunidade global, onde qualquer pessoa pode entrar em um minuto): nesse caso, apenas as pessoas que você permitir verão o aviso e a conversa do evento. Um bom lugar para o endereço exato ou código de portão; o nome do local fica visível para todos.</li>
+            <li><strong>Quem pode ver:</strong> toda a sua comunidade ou um único grupo.</li>
+            <li>Se você administra um projeto ou empreendimento ou é articulador de um grupo, <strong>Publicar como</strong> permite publicar o evento em nome dele. Um grupo realiza eventos apenas para seus próprios membros; um empreendimento realiza eventos para toda a comunidade, portanto um evento de empreendimento nunca é exclusivo de um grupo.</li>
+            <li>Toque em <strong>Criar</strong>. Seu evento estará no Mercado e no Mapa.</li>
+        </ul>
+        <p>No aplicativo web, o campo de título é <strong>O que está acontecendo</strong>, os botões de marcador são <strong>📍 Minha localização</strong> e <strong>📌 Fixar marcador</strong>, e o último botão é <strong>Criar evento</strong>.</p>
+        <p>Você pode ter até 5 eventos futuros ao mesmo tempo. Os eventos de um grupo contam no limite do grupo, e os de um empreendimento no do empreendimento.</p>
+        <h2>Gerenciar seu evento</h2>
+        <p>Abra seu evento. Como anfitrião, você pode:</p>
+        <ul>
+            <li>ver <strong>Quem vai</strong> e autorizar a entrada de participantes: <strong>Deixar entrar</strong> ao lado do nome (toque novamente para desfazer) ou <strong>Deixar todos entrarem</strong>. Seus amigos entram assim que tocam em Vou. Se você desmarcar <strong>Apenas as pessoas que eu permitir veem a observação e o bate-papo</strong>, todos que vão verão o aviso e a conversa até o momento, e a conversa avisará que o anfitrião a abriu;</li>
+            <li><strong>Editar evento</strong>. Se você alterar a hora ou o local, todos os participantes serão avisados;</li>
+            <li><strong>Copiar para nova data</strong>, para realizá-lo novamente;</li>
+            <li><strong>Cancelar evento</strong> e confirmar (<strong>Cancelar evento</strong> novamente no celular, <strong>OK</strong> no aplicativo web). Todos os participantes veem que foi cancelado, e a conversa passa a ser somente leitura.</li>
+        </ul>
+        <h2>Eventos recorrentes</h2>
+        <p>Um evento recorrente exibe <strong>↻</strong> e a frequência ao lado da data, como <strong>Toda sexta-feira</strong> ou <strong>Mensalmente no dia 16</strong>. O cartão exibe a data seguinte; abra-o para ver as <strong>Próximas datas</strong>.</p>
+        <p>Se você for o anfitrião, cada data seguinte tem:</p>
+        <ul>
+            <li><strong>Cancelar esta data:</strong> apenas aquele dia é cancelado. Todos que compareceriam naquele dia são avisados.</li>
+            <li><strong>Alterar apenas esta data:</strong> aquele dia é cancelado e você cria um evento avulso em outra data.</li>
+            <li><strong>Reativar data:</strong> uma data cancelada volta a acontecer.</li>
+        </ul>
+        <p><strong>Cancelar evento</strong> cancela todas as datas, e a conversa passa a ser somente leitura. Até lá, a conversa permanece aberta entre as datas, até a última; sem o campo <strong>Até</strong>, ela permanece aberta até que você cancele o evento.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>Chat do evento</strong><span>Converse com o anfitrião e todos que vão ao evento.</span></a></li>
+            <li><a href="notifications.html"><strong>Notificações</strong><span>Escolha quais alertas chegam ao seu celular e quando os eventos enviam lembretes.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Localização do marcador</strong><span>Quem vê onde estão seus anúncios e eventos, e como manter sua casa em privacidade.</span></a></li>
+            <li><a href="map-pins.html"><strong>O que o mapa mostra</strong><span>Os marcadores no Mapa, o significado das cores e os botões ao redor.</span></a></li>
+            <li><a href="polls.html"><strong>Enquetes</strong><span>Faça uma pergunta rápida à comunidade. Enquetes mostram opiniões; não mudam nada sozinhas.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

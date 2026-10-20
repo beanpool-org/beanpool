@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nhịp đập — BeanPool members' guide</title>
+    <meta name="description" content="Những gì hàng xóm chia sẻ ở nơi khác, tập hợp trong một bảng tin duy nhất.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#pulse">Nhịp đập</a></p>
+        <h1>Nhịp đập</h1>
+        <p class="lede">Những gì hàng xóm chia sẻ ở nơi khác, tập hợp trong một bảng tin duy nhất.</p>
+        <h2>Nhịp đập là gì</h2>
+        <p>Mở Nhịp đập từ thẻ <strong>Nhịp đập</strong> trên <strong>Trang chủ</strong>: nhấn vào một bài đăng, hoặc nhấn <strong>Xem tất cả</strong>. Nếu thẻ không có trên Trang chủ của bạn, hãy đưa nó trở lại bằng <strong>Thêm thẻ</strong> trên điện thoại, hoặc <strong>Chỉnh sửa trang chủ</strong> trong ứng dụng web. Trên điện thoại, bạn cũng có thể mở mục này từ <strong>Cài đặt</strong>, dưới mục <strong>Nhịp đập</strong>.</p>
+        <p>Nhịp đập tập hợp những gì các thành viên trong cộng đồng của bạn đăng trên các trang web khác: video, âm nhạc, blog, ảnh. Đây là một cách để tìm hiểu những gì hàng xóm của bạn sáng tạo và thực hiện.</p>
+        <ul>
+            <li><strong>Hàng xóm:</strong> các bài đăng từ các kênh của thành viên. Các nút dọc theo phía trên cùng để chọn một chủ đề, chẳng hạn như Thực phẩm &amp; trồng trọt hoặc Sửa chữa &amp; tái sử dụng. <strong>Tất cả</strong> hiển thị mọi thứ.</li>
+            <li><strong>Tìm hiểu</strong> (ứng dụng điện thoại): các video về cách BeanPool hoạt động, và một chiêm nghiệm ngắn mỗi ngày. Xem &quot;Mục Tìm hiểu&quot;. Trong ứng dụng web, chúng nằm trong bảng tin, và <strong>Cách thức hoạt động</strong> ở dọc trên cùng chỉ hiển thị các video đó.</li>
+        </ul>
+        <p>Kéo xuống để làm mới. Trong ứng dụng web, hãy nhấn vào 🔄 ở trên cùng để thay thế.</p>
+        <p>Trên điện thoại, các nút dọc theo phía trên cùng sẽ trượt đi khi bạn cuộn xuống. Cuộn lên một chút và chúng sẽ xuất hiện trở lại.</p>
+        <h2>Mở một bài đăng</h2>
+        <p><strong>Một video YouTube:</strong> trên điện thoại, nhấn vào ảnh có biểu tượng ▶ trên đó, và video sẽ phát ngay tại đây trong thẻ. Không có nội dung nào được tải từ YouTube cho đến khi bạn nhấn — cuộn lướt qua một video không gửi bất kỳ thông tin nào cho ai. Nhấn vào nút ở góc video để mở toàn màn hình.</p>
+        <p>Video sẽ dừng lại khi bạn cuộn nó ra khỏi tầm nhìn, khi bạn rời khỏi Nhịp đập, và khi bạn bắt đầu một video khác. Mỗi lần chỉ phát một video.</p>
+        <p>Trong ứng dụng web, video không phát trong thẻ. Nhấn vào ảnh hoặc tiêu đề và video sẽ mở trên YouTube trong một tab mới.</p>
+        <p><strong>Mọi nội dung khác</strong> — TikTok, Instagram, blog, trang web: nhấn vào ảnh hoặc tiêu đề và nội dung đó sẽ mở trong trình duyệt của bạn hoặc trong ứng dụng riêng của trang web đó.</p>
+        <p>Bạn luôn có thể mở video trên YouTube để thay thế: nhấn vào tiêu đề, hoặc <strong>Open on YouTube ↗</strong> ở bên dưới video. Nếu một video không thể phát tại đây — một số người không cho phép video của họ phát bên ngoài YouTube, và một số điện thoại không thể phát — thẻ sẽ cho biết điều đó và cung cấp cho bạn nút đó.</p>
+        <h2>Có vấn đề với một bài đăng</h2>
+        <ul>
+            <li><strong>Bài đăng của người khác:</strong> nhấn vào lá cờ, chọn lý do (<strong>Spam hoặc lừa đảo</strong>, <strong>Nội dung phản cảm</strong>, <strong>Bài đăng gây hiểu lầm</strong>, <strong>An toàn cho trẻ em</strong> hoặc <strong>Khác</strong>) và nhấn <strong>Gửi báo cáo</strong> (<strong>Gửi báo cáo</strong> trong ứng dụng web). Những người vận hành máy chủ cộng đồng của bạn sẽ xem xét nó.</li>
+            <li><strong>Bài đăng của chính bạn:</strong> nhấn <strong>Ẩn</strong>, sau đó nhấn <strong>Ẩn khỏi bảng tin</strong>. Bài đăng sẽ rời khỏi Nhịp đập đối với tất cả mọi người. Một bài đăng đã ẩn không thể khôi phục lại. Trong ứng dụng web, bạn cũng có thể nhấn <strong>Xóa</strong>, sau đó nhấn <strong>Xóa vĩnh viễn</strong>, để gỡ bỏ bài đăng của bạn mãi mãi.</li>
+        </ul>
+        <p>Bạn không thể ẩn bài đăng của người khác chỉ cho riêng bạn.</p>
+        <h2>Thêm nội dung của riêng bạn</h2>
+        <p>Nhấn <strong>+ Kênh</strong> ở trên cùng. Xem &quot;Chia sẻ các kênh của bạn&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Trang chủ</strong><span>Trang chủ là gì, các thẻ hiển thị trên điện thoại và web, cách thêm, di chuyển hoặc xóa thẻ, chọn sở thích và quyền riêng tư khi đăng xuất.</span></a></li>
+            <li><a href="learn.html"><strong>Mục Tìm hiểu</strong><span>Các video ngắn về BeanPool và các trang hướng dẫn đi kèm.</span></a></li>
+            <li><a href="your-channels.html"><strong>Chia sẻ các kênh của bạn</strong><span>Đưa các kênh YouTube, blog, Instagram và các kênh khác của bạn lên Nhịp đập.</span></a></li>
+            <li><a href="reporting.html"><strong>Báo cáo vấn đề</strong><span>Báo cho kiểm duyệt viên cộng đồng về bài đăng, sự kiện, bài đăng Nhịp đập hoặc dự án.</span></a></li>
+            <li><a href="the-bean.html"><strong>Hướng dẫn này</strong><span>Nơi tìm thấy hướng dẫn này, cách tìm kiếm và cách hướng dẫn luôn được cập nhật.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

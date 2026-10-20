@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat di eventi — BeanPool members' guide</title>
+    <meta name="description" content="Parla con gli organizzatori e con tutti i partecipanti all'evento.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Chat di eventi</h1>
+        <p class="lede">Parla con gli organizzatori e con tutti i partecipanti all'evento.</p>
+        <h2>Chi vi partecipa</h2>
+        <p>Ogni evento ha la propria chat. L'organizzatore e tutti coloro che hanno toccato <strong>Partecipo</strong> possono leggerla e scrivervi. Nei casi in cui l'organizzatore approva l'ingresso, vi partecipano le persone che hanno confermato la presenza e che l'organizzatore ha ammesso: fino a quel momento la chat indica <strong>La chat si apre quando chi organizza ti fa entrare.</strong> Se passi a <strong>Interessato</strong>, oppure tocchi di nuovo <strong>Partecipo</strong> per annullarlo, lasci la chat. L'organizzatore è sempre presente.</p>
+        <h2>Come aprirla</h2>
+        <ul>
+            <li>Apri l'evento e tocca <strong>Apri chat dell'evento</strong>.</li>
+            <li>Oppure cercala in <strong>Parla</strong>, sotto <strong>Gruppi</strong>, contrassegnata con 📅 <strong>Evento</strong>. Nella web app si trova nella scheda <strong>Chat</strong>, insieme alle altre tue chat.</li>
+        </ul>
+        <p>In alto, un riquadro fissato mostra la <strong>Nota per chi partecipa</strong> dell'organizzatore, come l'indirizzo esatto. Tocca il nome dell'evento in cima (nella web app, <strong>Visualizza evento</strong>) per tornare alla pagina dell'evento.</p>
+        <h2>Scrivere</h2>
+        <p>Digita in <strong>Invia un messaggio a tutti i partecipanti…</strong> e tocca il pulsante di invio. Puoi inviare fino a 30 messaggi al minuto. Il messaggio più recente si posiziona subito sopra la casella di testo e rimane visibile quando si apre la tastiera.</p>
+        <h2>Informazioni utili</h2>
+        <ul>
+            <li>Le chat degli eventi non sono crittografate end-to-end. L'organizzatore, tutti i partecipanti (laddove sia richiesta l'approvazione, coloro che sono stati ammessi) e le persone che gestiscono il server della tua comunità possono leggerle. La chat lo segnala sopra la casella del messaggio.</li>
+            <li>L'organizzatore può rimuovere qualsiasi messaggio. Toccalo, poi tocca <strong>Rimuovi</strong>. Mostrerà quindi &quot;rimosso dall'organizzatore&quot;.</li>
+            <li>Una chat di evento non prevede risposte ai singoli messaggi, né reazioni, modifiche o eliminazione autonoma del proprio messaggio — a differenza di una chat con una persona o di una chat di gruppo. Chiedi all'organizzatore di rimuovere ciò che preferisci cancellare. Se elimini il tuo account, ogni messaggio scritto da te qui riporterà <strong>Questo messaggio è stato eliminato</strong>.</li>
+            <li>Quando l'evento si conclude o viene annullato, la chat diventa di sola lettura. La chat di un evento ricorrente rimane aperta tra una data e l'altra: fino all'ultima data se l'organizzatore ha impostato <strong>Fino a</strong>, e finché l'organizzatore non annulla l'evento in caso contrario. Trascorsi 30 giorni dalla conclusione, la chat scompare.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="events.html"><strong>Eventi</strong><span>Crea un evento, di persona o online, singolo o ricorrente; conferma la partecipazione, ricevi promemoria, condividilo e gestiscilo come organizzatore.</span></a></li>
+            <li><a href="messages.html"><strong>Messaggi</strong><span>Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Dove va il tuo pin</strong><span>Chi può vedere la posizione dei tuoi annunci ed eventi e come proteggere la privacy della tua abitazione.</span></a></li>
+            <li><a href="reporting.html"><strong>Segnalare un problema</strong><span>Segnala ai moderatori della comunità un post, un evento, un post su Polso, un progetto o un'impresa.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

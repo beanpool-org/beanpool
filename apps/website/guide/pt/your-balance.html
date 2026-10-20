@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seu saldo e histórico — BeanPool members' guide</title>
+    <meta name="description" content="Quantos feijões você tem, o que está retido e cada troca e presente.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Registro</a></p>
+        <h1>Seu saldo e histórico</h1>
+        <p class="lede">Quantos feijões você tem, o que está retido e cada troca e presente.</p>
+        <h2>Como abrir</h2>
+        <p>Toque em <strong>Registro</strong> na barra de abas. Seu saldo fica no canto superior direito, em <strong>FEIJÕES</strong>. Ele pode ficar abaixo de zero; consulte &quot;Sua linha de crédito&quot;.</p>
+        <p>Na comunidade global não há feijões, então o Registro mostra um membro de exemplo de uma comunidade local, Example Valley, marcado como <strong>🏘️ Comunidade local</strong>. Seus botões explicam por que os feijões vivem em uma comunidade local, e não enviam nada. Consulte &quot;Feijões e comunidade global&quot;.</p>
+        <p>O Registro tem duas abas: <strong>Níveis</strong> (sua confiança, consulte &quot;Emblemas&quot;) e <strong>Carteira</strong>. No celular, toque no seu saldo para ir direto para a Carteira.</p>
+        <h2>A aba Carteira</h2>
+        <ul>
+            <li><strong>Seu saldo</strong>, e aproximadamente quantas horas de ajuda ele vale, a 40 feijões por hora.</li>
+            <li><strong>Bens comuns:</strong> o fundo compartilhado da sua comunidade.</li>
+            <li><strong>Piso de crédito:</strong> até quanto você poderia ficar abaixo de zero.</li>
+            <li>Quantos dos seus feijões estão retidos em negociações em andamento, quando houver algum.</li>
+            <li><strong>Circulação comunitária:</strong> aparece quando você possui feijões. Consulte &quot;A taxa de circulação&quot;.</li>
+            <li><strong>Contribuições a projetos:</strong> feijões que você comprometeu com projetos, se houver.</li>
+            <li><strong>Enviar feijões:</strong> envie um presente. Consulte &quot;Enviar um presente&quot;.</li>
+        </ul>
+        <p>No aplicativo web, a aba Carteira é mais curta: <strong>Piso de cheque especial</strong>, <strong>Fundo dos Bens comuns</strong>, <strong>Enviar feijões</strong> e <strong>Circulação comunitária</strong>. Seu saldo fica no topo do Registro.</p>
+        <h2>Transações recentes</h2>
+        <p>Cada troca, presente e taxa, do mais recente ao mais antigo, com uma observação, a hora e o sinal de mais ou menos. No celular, cada linha também informa com quem foi; no aplicativo web, diz <strong>Enviado</strong> ou <strong>Recebido</strong>. Se uma observação mencionar uma publicação, toque em <strong>Ver oferta</strong> para abri-la.</p>
+        <p>Apenas você pode ver o seu saldo e estas transações. Ninguém mais na sua comunidade pode lê-los. <strong>Exportar CSV</strong> (<strong>Exportar o meu</strong> no aplicativo web) salva suas próprias transações como um arquivo.</p>
+        <p>A lista ainda não tem pesquisa nem filtros.</p>
+        <h2>Botões ⓘ</h2>
+        <p>No celular, toque no <strong>ⓘ</strong> ao lado do seu saldo para uma breve explicação sobre o seu saldo e o seu piso.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>Sua linha de crédito</strong><span>Até quanto você pode ficar abaixo de zero e como esse valor aumenta.</span></a></li>
+            <li><a href="gifts.html"><strong>Enviar um presente</strong><span>Envie feijões para alguém, sem nenhuma troca envolvida.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>Taxa de circulação</strong><span>Pequena taxa mensal sobre saldos altos, para que os feijões continuem circulando. Os primeiros 200 são isentos.</span></a></li>
+            <li><a href="my-deals.html"><strong>Meus acordos</strong><span>Um só lugar para cada troca em andamento, cada anúncio ativo e suas trocas passadas.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Feijões e comunidade global</strong><span>Para que serve a comunidade global, uma comunidade entre várias, e o que você vê lá: o marcador 🏘️ Comunidade local, a comunidade de exemplo Example Valley, a espera dos feijões e como criar ou achar uma comunidade local.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

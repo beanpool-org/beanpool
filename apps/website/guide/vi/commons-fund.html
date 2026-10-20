@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quỹ Commons — BeanPool members' guide</title>
+    <meta name="description" content="Số đậu chung của cộng đồng: nguồn gốc từ đâu và được chi tiêu như thế nào.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Chung</a></p>
+        <h1>Quỹ Commons</h1>
+        <p class="lede">Số đậu chung của cộng đồng: nguồn gốc từ đâu và được chi tiêu như thế nào.</p>
+        <h2>Quỹ Commons là gì</h2>
+        <p><strong>Chung</strong> là quỹ đậu chung của cộng đồng bạn. Quỹ thuộc về tất cả mọi người.</p>
+        <p>Đậu được chuyển vào quỹ từ:</p>
+        <ul>
+            <li>khoản phí chợ 1,5% trên mỗi giao dịch hoàn tất;</li>
+            <li>phí lưu thông đối với các số dư lớn. Xem &quot;Phí lưu thông&quot;.</li>
+            <li>các thành viên tự nộp vào, bằng nút <strong>Trả cho Commons</strong> trên <strong>Sổ cái</strong>. Thành viên hoàn trả nợ cho Commons nhập mã hoàn trả do quản trị viên chia sẻ, và khoản thanh toán sẽ trừ ngay vào khoản nợ.</li>
+        </ul>
+        <h2>Xem quỹ Commons</h2>
+        <p>Nhấn <strong>Chung</strong>. Ở trên cùng, <strong>Quỹ Commons</strong> hiển thị số đậu mà quỹ đang nắm giữ. Trên điện thoại, nhấn vào biểu tượng <strong>ⓘ</strong> bên cạnh tiêu đề Commons. Trong ứng dụng web, mở <strong>Sổ cái</strong>, nhấn <strong>Ví</strong>, sau đó nhấn <strong>Quỹ Commons ⓘ</strong>. Cả hai cách đều mở ra bảng điều khiển với <strong>Cách hoạt động</strong>, <strong>Phí lưu thông</strong> và <strong>Bỏ phiếu</strong>.</p>
+        <p>Các doanh nghiệp, bao gồm cả những doanh nghiệp hoạt động vì Commons, được liệt kê trong <strong>Chung</strong>, dưới mục <strong>Nhóm</strong>. Nhấn vào một doanh nghiệp để xem số dư và từng hạt đậu ra vào. Mọi thành viên đều thấy các số tiền; ai đã trả hoặc được trả, và phần ghi chú, thì chỉ người quản lý của doanh nghiệp đó và thành viên liên quan mới nhìn thấy.</p>
+        <h2>Cách chi tiêu</h2>
+        <p>Số đậu của Commons được chi tiêu theo một Quyết định của cộng đồng: một khoản tài trợ cho doanh nghiệp, một khoản hỗ trợ khó khăn cho thành viên, hoặc xóa nợ. Xem &quot;Đề xuất một Quyết định&quot;. Các quyết định về số đậu của Commons được tính bằng tín chỉ biểu quyết, từ các giao dịch đã hoàn tất.</p>
+        <p>Commons cũng chi trả khoản nợ của một thành viên khi họ rời đi hoặc bị khai trừ. Xem &quot;Rời khỏi hoặc xóa tài khoản&quot;.</p>
+        <p>Một vài điều chỉnh nhỏ không cần Quyết định. Hai ví dụ là hoàn phí khi giao dịch giữa các cộng đồng bị hủy, và chủ sở hữu dọn dẹp tài khoản của một giao dịch bị lỗi.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Bỏ phiếu cho Quyết định</strong><span>Tìm các Quyết định đang mở, bỏ phiếu, đổi phiếu bầu và xem kết quả.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>Phí lưu thông</strong><span>Khoản phí nhỏ hàng tháng cho số dư lớn để đậu luôn được luân chuyển. 200 đậu đầu tiên miễn phí.</span></a></li>
+            <li><a href="enterprises.html"><strong>Dự án và sáng kiến chung</strong><span>Các dự án chung có quỹ đậu riêng: tìm kiếm, ủng hộ hoặc khởi tạo một dự án.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cách BeanPool hoạt động</strong><span>Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

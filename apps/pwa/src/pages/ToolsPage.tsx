@@ -189,7 +189,8 @@ type Panel = 'tool' | 'settings' | 'about';
 interface Step { screen: string; params: Record<string, string> }
 
 function homeOfferKey(owner: string, id: string) {
-    return `beanpool_tool_home_offered_${owner}_${id}`;
+    const node = getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
+    return `beanpool_tool_home_offered_${node}_${owner}_${id}`;
 }
 function homeOffered(owner: string, id: string): boolean {
     try { return localStorage.getItem(homeOfferKey(owner, id)) === '1'; } catch { return true; }
@@ -372,7 +373,7 @@ function ToolSettings({ manifest, onRemove }: { manifest: ToolManifest; onRemove
             </ToolSection>
             <ToolSection title={t('Remove my data from this browser')}>
                 <p className="m-0 px-3 pt-3 text-sm text-nature-800 dark:text-nature-100 break-words">
-                    {t('Takes everything {tool} keeps out of this browser. It can\'t be undone.', { tool: t(manifest.name) })}
+                    {t('Takes this community\'s data for {tool} out of this browser. The same tool in another community keeps its own. It can\'t be undone.', { tool: t(manifest.name) })}
                 </p>
                 <div className="p-3 flex flex-wrap gap-2 min-w-0">
                     {!confirming

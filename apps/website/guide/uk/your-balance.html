@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ваш баланс та історія — BeanPool members' guide</title>
+    <meta name="description" content="Скільки у вас бобів, скільки заблоковано в угодах, а також історія всіх обмінів і подарунків.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Книга</a></p>
+        <h1>Ваш баланс та історія</h1>
+        <p class="lede">Скільки у вас бобів, скільки заблоковано в угодах, а також історія всіх обмінів і подарунків.</p>
+        <h2>Як відкрити</h2>
+        <p>Торкніться вкладки <strong>Реєстр</strong> у рядку вкладок. Ваш баланс відображається у правому верхньому кутку в <strong>БОБАХ</strong>. Він може бути нижче нуля; дивіться «Ваша кредитна лінія».</p>
+        <p>У глобальній спільноті бобів немає, тому Реєстр показує приклад учасника місцевої спільноти, Example Valley, з позначкою <strong>🏘️ Місцева спільнота</strong>. Його кнопки пояснюють, чому боби існують лише в місцевій спільноті, і нічого не надсилають. Дивіться «Боби та глобальна спільнота».</p>
+        <p>Реєстр має дві вкладки: <strong>Рівні</strong> (ваша довіра, дивіться «Значки довіри») та <strong>Гаманець</strong>. На телефоні торкніться свого балансу, щоб одразу перейти до Гаманця.</p>
+        <h2>Вкладка «Гаманець»</h2>
+        <ul>
+            <li><strong>Ваш баланс</strong> і приблизна кількість годин допомоги, якій він відповідає (з розрахунку 40 бобів за годину).</li>
+            <li><strong>Спільне:</strong> спільний фонд вашої спільноти.</li>
+            <li><strong>Кредитна межа:</strong> наскільки низько нижче нуля ви можете опуститися.</li>
+            <li>Кількість бобів, заблокованих у поточних незавершених угодах (якщо такі є).</li>
+            <li><strong>Обіг у спільноті:</strong> відображається, коли у вас є боби. Дивіться «Внесок за обіг».</li>
+            <li><strong>Внески до проєктів:</strong> боби, які ви внесли до проєктів (якщо є).</li>
+            <li><strong>Надіслати боби:</strong> надіслати подарунок. Дивіться «Надіслати подарунок».</li>
+        </ul>
+        <p>У вебдодатку вкладка «Гаманець» компактніша: <strong>Межа овердрафту</strong>, <strong>Спільний фонд</strong>, <strong>Надіслати боби</strong> та <strong>Обіг у спільноті</strong>. Ваш баланс відображається у верхній частині Реєстру.</p>
+        <h2>Останні транзакції</h2>
+        <p>Кожна угода, подарунок і комісія наведені у хронологічному порядку від новіших до старіших із приміткою, часом і позначкою плюс чи мінус. На телефоні в кожному рядку також зазначено співрозмовника; у вебдодатку вказано <strong>Надіслано</strong> або <strong>Отримано</strong>. Якщо в примітці згадується оголошення, натисніть <strong>Переглянути пропозицію</strong>, щоб відкрити його.</p>
+        <p>Лише ви можете бачити свій баланс і ці транзакції. Ніхто інший у вашій спільноті не має до них доступу. Кнопка <strong>Експорт CSV</strong> (<strong>Експортувати мої</strong> у вебдодатку) зберігає ваші особисті транзакції у вигляді файлу.</p>
+        <p>У списку наразі немає пошуку та фільтрів.</p>
+        <h2>Кнопки ⓘ</h2>
+        <p>На телефоні торкніться значка <strong>ⓘ</strong> поруч із розділом «Ваш баланс», щоб переглянути коротке пояснення вашого балансу та кредитної межі.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>Ваша кредитна лінія</strong><span>Наскільки ви можете піти в мінус і як збільшується цей ліміт.</span></a></li>
+            <li><a href="gifts.html"><strong>Надіслати подарунок</strong><span>Без обміну надішліть боби іншій людині як подарунок.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>Внесок за обіг</strong><span>Невеликий щомісячний внесок з великих балансів для підтримки руху бобів. Перші 200 безкоштовні.</span></a></li>
+            <li><a href="my-deals.html"><strong>Мої обміни</strong><span>Єдине місце для кожного вашого обміну, кожного активного оголошення та минулих угод.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Боби та глобальна спільнота</strong><span>Для чого потрібна глобальна спільнота, одна серед багатьох, і що ви там бачите: позначку 🏘️ Місцева спільнота, приклад Example Valley, чому Боби очікують там, і як почати або знайти місцеву спільноту.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

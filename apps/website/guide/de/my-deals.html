@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meine Deals — BeanPool members' guide</title>
+    <meta name="description" content="Ein Ort für alle deine laufenden Deals, aktiven Beiträge und vergangenen Abschlüsse.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Markt</a></p>
+        <h1>Meine Deals</h1>
+        <p class="lede">Ein Ort für alle deine laufenden Deals, aktiven Beiträge und vergangenen Abschlüsse.</p>
+        <h2>Wie du es öffnest</h2>
+        <p>Tippe oben auf dem Tab „Markt“ auf <strong>Meine Deals</strong>. Eine rote Zahl daran zählt deine laufenden Deals.</p>
+        <p>In der globalen Community gibt es keine Deals, daher zeigt <strong>Meine Deals</strong> drei Beispiel-Deals aus einer lokalen Community, Example Valley, gekennzeichnet mit <strong>🏘️ Lokale Gemeinschaft</strong>: einer wartet auf dich, einer hat sicher verwahrte Bohnen und einer ist abgeschlossen. Ihre Schaltflächen erklären, warum Deals in einer lokalen Community leben, und ändern nichts. Siehe „Bohnen &amp; globale Community“.</p>
+        <h2>Drei Tabs</h2>
+        <ul>
+            <li><strong>In Bearbeitung:</strong> Laufende Deals und Anfragen, die auf eine Antwort warten. Jeder zeigt seinen Status: <strong>In Treuhand</strong> (die Bohnen sind verwahrt), <strong>Aktion erforderlich</strong> (jemand hat angefragt und du musst antworten) oder <strong>Wartet auf Genehmigung</strong> (du hast angefragt und wartest auf die andere Person).</li>
+            <li><strong>Meine Beiträge:</strong> Deine aktiven Angebote und Gesuche oder <strong>PAUSIERT</strong>. Ein Beitrag, für den jemand angefragt hat, zeigt <strong>Aktion erforderlich</strong>.</li>
+            <li><strong>Verlauf:</strong> Abgeschlossene, abgebrochene und abgelehnte Deals. Wähle <strong>Alle</strong>, <strong>Empfangen</strong> oder <strong>Gegeben</strong>. Jeder Eintrag zeigt das Datum, den Betrag und die andere Person.</li>
+        </ul>
+        <p>In der Web-App listet <strong>In Bearbeitung</strong> nur Deals mit verwahrten Bohnen auf; eine Anfrage, die auf eine Antwort wartet, steht dort nicht. <strong>Meine Beiträge</strong> zeigt nur deine aktiven Einträge, jeweils mit <strong>Aktiv</strong> markiert: Pausierte Beiträge werden nicht aufgelistet.</p>
+        <p>Tippe auf einen Deal unter <strong>In Bearbeitung</strong> oder <strong>Meine Beiträge</strong>, um den Beitrag zu öffnen. Dort nimmst du einen Deal an, schließt ihn ab oder brichst ihn ab. Eine Anfrage, die niemand beantwortet, endet nach 7 Tagen automatisch.</p>
+        <h2>Bewertungen</h2>
+        <p>Ein abgeschlossener Handel im <strong>Verlauf</strong> hat eine <strong>Bewerten</strong>-Schaltfläche. Nachdem du eine Bewertung abgegeben hast, steht dort <strong>Bearbeiten</strong>, und du kannst deine Sterne ändern.</p>
+        <p>In der Web-App heißt die Schaltfläche <strong>Bewertung abgeben</strong>, und sie ist nur sichtbar, bis du diesen Handel bewertet hast. Um eine Bewertung dort zu ändern, öffne den Beitrag.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Deal Schritt für Schritt</strong><span>Von der Anfrage bis zur Zahlung, für Angebote und Gesuche, und wie man eine Bewertung abgibt.</span></a></li>
+            <li><a href="posting.html"><strong>Angebot oder Gesuch aufgeben</strong><span>Stelle etwas ein, das du tun oder geben kannst, oder etwas, das du suchst.</span></a></li>
+            <li><a href="your-balance.html"><strong>Kontostand und Historie</strong><span>Wie viele Bohnen du hast, was gebunden ist und jeder Handel sowie jedes Geschenk.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Wenn ein Deal scheitert</strong><span>Einen Deal abbrechen und was passiert, wenn ihr euch nicht einig werdet.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Die Leiste oben</strong><span>Die Bohne, kleine Symbole bei Handlungsbedarf und die Schaltflächen oben rechts.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

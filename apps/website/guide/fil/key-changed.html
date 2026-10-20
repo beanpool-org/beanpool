@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kapag nagbago ang susi o pangalan — BeanPool members' guide</title>
+    <meta name="description" content="Bakit humihinto sa pagpapadala ang chat, paano susuriin ang key code sa kausap, at kailan magpapatuloy.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Usapan</a></p>
+        <h1>Kapag nagbago ang susi o pangalan</h1>
+        <p class="lede">Bakit humihinto sa pagpapadala ang chat, paano susuriin ang key code sa kausap, at kailan magpapatuloy.</p>
+        <h2>Ano ang ibig sabihin nito</h2>
+        <p>Bawat mensahe sa pagitan ng dalawang tao ay naka-lock upang ang telepono lamang ng kabilang tao ang makakabukas nito. Naka-lock ito sa kanilang <strong>key</strong>, hindi sa kanilang pangalan. Naaalala ng iyong telepono kung aling key nito ini-lock ang iyong chat.</p>
+        <p>Kung magpapangalan ngayon ang iyong komunidad ng ibang key para sa tao, hihinto ang iyong telepono at sasabihin sa iyo, sa halip na tahimik na magpadala sa bagong key. Sa itaas ng chat makikita mo ang <strong>Nagbago ang key sa likod ni &quot;Ben&quot;.</strong> Naka-grey out ang kahon ng mensahe at sinasabing pansamantalang itinigil ang pagpapadala.</p>
+        <p>Ang iyong mga naunang mensahe sa kanila ay karaniwang mababasa pa rin tulad ng dati. Sa isang teleponong kaka-restore mo lang o na-set up muli, ang mga mensahe mula sa bagong key ay mababasang <strong>Ipinadala mula sa bagong key. Ipapakita matapos kang magpatuloy.</strong> hanggang sa magpasya ka.</p>
+        <p>Ito ay sa app sa telepono. Hindi pa naaalala ng web app ang mga key.</p>
+        <h2>Bakit ito maaaring mangyari</h2>
+        <ul>
+            <li><strong>Nagkaroon sila ng bagong telepono at nag-re-key.</strong> Ito ang karaniwang dahilan. Nawala ang kanilang lumang key, kaya may bago na sila.</li>
+            <li><strong>May mali.</strong> Inililista ng server ng komunidad kung sino ang nasa bawat chat. Ang isang server na gustong magbasa ng iyong mga mensahe ay maaaring maglagay ng key ng ibang tao sa likod ng pangalan ng iyong kaibigan. Mukhang tama ang pangalan, ngunit hindi ang key.</li>
+        </ul>
+        <p>Hindi kayang pag-ibahin ng iyong telepono ang mga ito nang mag-isa. Magagawa mo ito, gamit ang key code.</p>
+        <h2>Suriin ang key code sa kausap</h2>
+        <ul>
+            <li>Nagpapakita ang banner ng isang code: 20 digit sa limang pangkat ng apat.</li>
+            <li>Hilingin sa tao na buksan ang <strong>Mga Setting</strong>, pagkatapos ay <strong>Proteksyon ng Account</strong>, at basahin sa iyo ang <strong>Aking key code</strong>.</li>
+            <li>Ang <strong>Aking key code</strong> ay nasa app lamang sa telepono. Kung ang tao ay gumagamit lamang ng web app, hindi pa nila ito mababasa sa iyo: i-tap ang <strong>Huwag muna</strong> hanggang sa mabuksan nila ang app sa telepono.</li>
+            <li>Suriin ito <strong>nang personal, o sa isang tawag sa telepono o video</strong> kung saan alam mong sila ito. Huwag itong suriin sa pamamagitan ng mensahe sa BeanPool: kung mali ang key, mali rin ang sinumang sumasagot.</li>
+            <li>Kung tumutugma ang bawat digit, lagyan ng tsek ang <strong>Tiningnan ko kay Ben: tumutugma dito ang key code sa Mga Setting niya</strong>, pagkatapos ay i-tap ang <strong>Magpatuloy gamit ang bagong key</strong>.</li>
+        </ul>
+        <p>Mula noon ang iyong mga mensahe ay mapupunta sa bagong key. Ang banner at ang tag na <strong>nagbago ang key</strong> sa chat sa <strong>Usapan</strong> ay mawawala, at mababasa pa rin ang iyong mga naunang mensahe.</p>
+        <p>Hindi lihim ang code. Ligtas itong basahin nang malakas.</p>
+        <h2>Kung hindi tumutugma ang code, o hindi mo masuri</h2>
+        <p>I-tap ang <strong>Huwag muna</strong>. Walang ipinapadala at walang nagbabago. Maaari kang bumalik sa chat mamaya.</p>
+        <p>Maaaring manatiling naka-pause ang isang naka-pause na chat hanggang sa magpatuloy ka. Walang ibang paraan upang magpatuloy sa pakikipag-usap dito: nagtatago ang iyong komunidad ng isang chat para sa inyong dalawa, kaya ang pagsisimula ng bagong chat sa parehong tao ay nagbubukas ng parehong chat na ito.</p>
+        <p>Kung hindi tumutugma ang code, huwag magpatuloy. Sabihin sa tao at sa mga admin ng iyong komunidad: maaaring may sumusubok na basahin ang iyong mga mensahe.</p>
+        <h2>Kung walang iniaalok na key ang banner para ipagpatuloy</h2>
+        <p>Kung minsan ang komunidad ay hindi naglilista ng iisang key para sa tao sa isang chat sa pagitan ng dalawang tao: naglilista ito ng ilan, o wala. Wala kung gayon key na maipagpapatuloy, kaya sinasabi ito ng banner at nag-aalok lamang ng <strong>Huwag muna</strong>. Walang ipinapadala. Makipag-usap sa tao nang personal o sa isang tawag. Sinusuri muli ng iyong telepono ang chat nang kusa kapag nagbago ang listahan ng komunidad, at ang isang bagong chat sa parehong tao ay ang parehong chat na ito.</p>
+        <h2>Kung sinasabi ng banner na sinusuri ng iyong telepono ang chat mula sa simula</h2>
+        <p>Matapos mong i-restore ang iyong telepono mula sa iyong 12 salita, o i-update ang app, sinusuri ng iyong telepono ang bawat chat laban sa sarili nitong mga naunang mensahe. Kung ang mga iyon ay nagmula sa ibang key kaysa sa ibinibigay ngayon ng iyong komunidad para sa tao, ang banner ay nagsisimula sa <strong>Sinusuri ng teleponong ito ang chat na ito mula sa simula, gaya ng ginagawa nito matapos mong mag-restore o mag-update ng app.</strong> Suriin ang code sa tao tulad ng nasa itaas. Matapos mong i-reset ang memorya ng chat ng komunidad, nagsisimula ito sa <strong>Na-reset ang memorya ng chat ng komunidad na ito, kaya sinusuri ng telepono ang chat na ito mula sa simula.</strong> sa halip.</p>
+        <h2>Memorya ng chat</h2>
+        <p>Nagtatago ang iyong telepono ng maliit na memorya para sa bawat komunidad: kung saang key ang bawat isa sa iyong mga chat, at aling mga chat ang pribado. Itinatago ito sa telepono, at hindi maililipat ng server ng komunidad ang isang chat sa ibang key nang mag-isa: ikaw lamang ang makakagawa nito, sa banner. Nananatili ito sa telepono kapag nag-sign out ka, kaya ang pag-sign out at pag-sign in muli ay hindi nagbubura nito. Hindi ito kailanman ini-reset ng telepono nang kusa.</p>
+        <p>Maaari mo itong i-reset para sa isang komunidad: buksan ang <strong>Mga Setting</strong>, i-tap ang <strong>Memorya ng chat</strong> sa ilalim ng <strong>ACCOUNT AT PAGKAKAKILANLAN</strong>, i-tap ang <strong>I-reset</strong> sa tabi ng komunidad, basahin ang babala, at i-tap ang <strong>I-reset</strong> muli. Dinadala ka lamang ng app dito kapag sinabi nitong hindi nito mabasa ang memoryang iyon at hindi nakatulong ang muling pagsubok.</p>
+        <p>Pagkatapos ng pag-reset, sinusuri muli ng iyong telepono ang bawat chat sa komunidad na iyon mula sa simula, mula sa mga mensaheng hawak nito. Ang isang chat na ang mga mensahe ay nagmula sa ibang key kaysa sa ibinibigay ngayon ng komunidad ay nagpapakita muli ng banner, simula sa <strong>Na-reset ang memorya ng chat ng komunidad na ito, kaya sinusuri ng telepono ang chat na ito mula sa simula.</strong> Suriin ang code sa tao tulad ng nasa itaas.</p>
+        <p>Dalawang bagay ang maaaring magbago pagkatapos ng pag-reset, at sinasabi ito ng babala bago ka magkumpirma: ang isang chat na na-pause dahil nagbago ang key nito ay maaaring magbukas gamit ang bagong key, at ang isang pribadong chat na nawala sa Usapan ay maaaring bumalik bilang panggrupong chat na mababasa ng komunidad. Suriin ang key code, o kung sino ang nasa chat, bago ka magpadala.</p>
+        <p>Hindi nakakatulong ang pag-reset sa isang chat na hindi maitugma ng iyong telepono sa isang key: sinusuri itong muli at humihinto muli. Suriin ang code sa tao sa halip (sa itaas).</p>
+        <p>Ito ay sa app sa telepono. Walang memorya ng chat ang web app.</p>
+        <h2>Kung sinasabi ng banner na hindi maitugma ng iyong telepono ang chat sa isang key</h2>
+        <p>Kung minsan ang mga naunang mensahe sa isang chat ay naka-lock sa mga key na hindi maitugma ng iyong telepono sa isang tao. Sa itaas ng kahon ng mensahe sinasabi nitong <strong>Hindi maitugma ng teleponong ito ang chat sa isang key, kaya naka-off ang pagpapadala.</strong> at ipinapakita ng banner ang code ng key na inililista ngayon ng iyong komunidad para sa tao.</p>
+        <p>Maaaring lumabas pa rin ang ilang mensahe. Maaaring hindi galing ang mga ito sa taong ang pangalan ay nasa chat: ang sarili nilang mga naunang mensahe ay maaaring ang mga mababasang <strong>Hindi ma-verify ang mensaheng ito, kaya hindi ito ipinapakita.</strong> Mananatili ang mga iyon sa ganoong paraan, kahit na magpatuloy ka.</p>
+        <p>Suriin ang code sa tao tulad ng nasa itaas, nang personal o sa isang tawag. Kung tumutugma ito, lagyan ng tsek ang kahon at i-tap ang <strong>Magpatuloy gamit ang bagong key</strong>: mula noon ang iyong mga mensahe ay mapupunta sa key na iyon. Kung hindi ito tumutugma, o hindi mo masuri, i-tap ang <strong>Huwag muna</strong>. Ang isang bagong chat sa parehong tao ay ang parehong chat na ito, kaya wala nang iba pang masusubukan. Kung walang inililistang iisang key ang komunidad para sa kanila, ang banner ay nag-aalok lamang ng <strong>Huwag muna</strong>, at sinusuri muli ng iyong telepono ang chat nang kusa kapag nagbago ang listahan ng komunidad.</p>
+        <h2>Kung ano ang kayang suriin ng iyong telepono, at kung ano ang hindi</h2>
+        <p>Sinusuri ng iyong telepono ang isang chat laban sa mga mensaheng hawak na nito. Ang isang naibalik na telepono, o isang umiiral na telepono sa pag-update, ay pinapatnubayan lamang ng isang server na nagpipigil o pumapalibot sa pinakalumang bahagi ng chat sa ipinapadala nito. Ang isang teleponong may hawak na sa pinakalumang bahaging iyon ay hindi pinapatnubayan ng anuman na ipinapadala ng server pagkatapos ng update.</p>
+        <p>Kaya ang isang teleponong kaka-restore mo lang, o kaka-update lang, ay maaaring mailigaw tungkol sa key ng isang chat. Hindi iyon maiaalis ng banner. <strong>Kumpirmahin ang nabagong key nang personal</strong>, o sa isang tawag kung saan alam mong sila ito.</p>
+        <h2>Kung nagbibigay ng petsa ang komunidad</h2>
+        <p>Kapag maipapakita ng iyong komunidad na binigyan ng bagong key ang account, sinasabi ito ng banner, halimbawa: <strong>Sinasabi ng komunidad na ito na binigyan ng bagong key ang account noong 3 Okt 2026.</strong> Nakakatulong iyon upang maunawaan mo kung ano ang nangyari, ngunit hindi nito pinapalitan ang pagsusuri sa code: masasabi rin ito ng isang server.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Mga Mensahe</strong><span>Magsimula ng chat, magpadala ng larawan, sumagot, mag-react, mag-edit, magbura, mag-mute, at ano ang pribado.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Iyong 12 salita</strong><span>Ang 12 salita ang susi sa iyong account. Bakit mahalaga ang mga ito, saan mahahanap, paano panatilihing ligtas, at pagdaragdag ng sign-in bilang pangalawang paraan pabalik.</span></a></li>
+            <li><a href="people.html"><strong>Mga tao at kaibigan</strong><span>Paghahanap ng mga miyembro ng iyong komunidad, kanilang mga profile at trust badge, at pagmarka ng mga kaibigan upang mapansin kapag umalis ang isa.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sua privacidade — BeanPool members' guide</title>
+    <meta name="description" content="O que os outros podem ver sobre você e as configurações que controlam isso.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Configurações e segurança</a></p>
+        <h1>Sua privacidade</h1>
+        <p class="lede">O que os outros podem ver sobre você e as configurações que controlam isso.</p>
+        <h2>Abrindo as Configurações</h2>
+        <p>Toque no botão com controles deslizantes no canto superior direito da tela. No app web em uma tela de computador larga, em vez disso há uma engrenagem na parte inferior da barra lateral esquerda. As Configurações não são uma das abas.</p>
+        <h2>O que os membros da sua comunidade podem ver</h2>
+        <ul>
+            <li>Seu nome, foto, biografia, quando você entrou e quando esteve ativo pela última vez.</li>
+            <li>Seu selo de confiança, suas avaliações (ninguém mais pode ver quem escreveu uma avaliação) e seu perfil de confiança: quantas das suas trocas foram concluídas e quantas foram canceladas, e a porcentagem de conclusão, quantos pagamentos em feijões você enviou ou recebeu de membros somados às trocas que concluiu, com quantos membros diferentes você pagou, recebeu ou negociou, quantos pagamentos e trocas você realizou com o membro que está olhando, e seus Pontos de Confiança. Os administradores veem isso da mesma forma que qualquer membro, e isso não fica registrado em logs.</li>
+            <li>Suas publicações e onde estão os marcadores delas. Veja &quot;Onde o seu marcador vai&quot;.</li>
+            <li>Como você votou em uma enquete, mas apenas em uma enquete em que o criador fez um <strong>voto aberto</strong>. Caso contrário, as enquetes são anônimas, e os votos em <strong>Decisões</strong> são sempre secretos.</li>
+            <li>Quem convidou você. No celular, seu perfil diz <strong>Apoiado(a) por</strong> e o nome da pessoa. Se você entrou como membro fundador ou foi convidado diretamente pelo administrador do sistema, o perfil exibe <strong>Membro fundador</strong> ou <strong>Convidado(a) diretamente pelo administrador do sistema</strong>, em vez disso. Se um membro apoiou sua linha de crédito, seu perfil diz <strong>Apoiado(a) por</strong> e o nome dele, no app para celular e no app web.</li>
+        </ul>
+        <h2>O que apenas você pode ver</h2>
+        <ul>
+            <li><strong>Seu saldo e suas trocas.</strong> Ninguém mais na sua comunidade pode lê-los, no app ou a partir do servidor da sua comunidade. Uma troca mostra apenas suas duas partes: você e a outra pessoa.</li>
+            <li><strong>Sua lista de amigos, com quem você conversa e os convites que você fez.</strong> Somente você pode lê-los, no app ou no servidor da comunidade. Outras pessoas veem apenas as conexões em comum que compartilham com você.</li>
+            <li>Se a comunidade votar sobre a sua remoção, todas as pessoas autorizadas a votar veem o seu saldo e qualquer dívida, apenas nessa votação. Um administrador ou proprietário que não possa votar nela não os vê ali. Essas visualizações não são registradas em logs.</li>
+            <li>Se um administrador remover a sua conta, o administrador que iniciar o processo vê o seu saldo, para que o que você tem ou deve possa ser liquidado. Os outros administradores e o proprietário podem ver quem consultou e quando.</li>
+            <li>Em uma comunidade conhecida, se você concordou com isso ao entrar e um administrador confirmou seu cadastro, os administradores podem ver o seu saldo quando ele ultrapassa um dos limites definidos pela comunidade. Você pode revogar essa permissão a qualquer momento nas Configurações. Em qualquer comunidade, qualquer administrador também pode visualizar algumas das suas trocas: uma negociação que ainda não foi concluída ou que um administrador liquidou, uma troca cujos feijões ficaram retidos quando um membro foi removido em um servidor mais antigo, alertas de fraude e um alerta se nenhum feijão tiver entrado ou saído da sua conta por um número determinado de dias. Cada consulta a uma dessas trocas é registrada em logs, e o acesso aos alertas que citam você é registrado na primeira vez que cada administrador os abre no período de 24 horas. O proprietário e os administradores podem consultar esse registro. Os administradores também veem quantas publicações ativas e quantas mensagens você enviou, e em relação a trocas veem apenas os totais de toda a comunidade, e não os seus; e, como qualquer membro, veem seu perfil de confiança, sem registro em logs. Quem administra o servidor da sua comunidade detém todo o banco de dados, com seus backups, instantâneos e cópias em espera. Veja &quot;O que os administradores podem ver&quot;.</li>
+        </ul>
+        <p>Os proprietários e administradores que operam o servidor da sua comunidade ainda podem ver o que está armazenado nele. Veja &quot;Quem mais pode ver as informações&quot;.</p>
+        <h2>Pessoas que não entraram na comunidade</h2>
+        <ul>
+            <li><strong>Na sua comunidade:</strong> nada das suas publicações. Os anúncios dela e suas fotos são para os membros, assim como sua foto de perfil. Cada foto só abre a partir do link fornecido no anúncio ou no seu nome no app, de modo que alguém de fora só a vê se um membro repassar esse link. Alguém que abra o endereço da sua comunidade sem entrar é direcionado para a comunidade global.</li>
+            <li><strong>Na comunidade global:</strong> qualquer pessoa pode ver as publicações antes de entrar, mas vê apenas o texto, as fotos e aproximadamente onde cada item está, nunca o seu nome, o seu rosto ou o local exato.</li>
+            <li><strong>Suas publicações no Pulso:</strong> nada. O Pulso é para membros. O vídeo ou a publicação original permanece no próprio site (YouTube, Instagram e etc.), com a visibilidade pública que tiver por lá. Veja &quot;Compartilhando seus canais&quot;.</li>
+        </ul>
+        <h2>O que você controla</h2>
+        <ul>
+            <li><strong>Dados de contato:</strong> no seu perfil, escolha <strong>Quem pode ver isso?</strong>: <strong>Oculto</strong>, <strong>Parceiros de troca</strong>, <strong>Amigos</strong> ou <strong>Comunidade</strong>. Veja &quot;Seu perfil&quot;.</li>
+            <li><strong>Conexões em comum:</strong> quando você e duas pessoas tiverem adicionado umas às outras, cada uma delas pode ver seu nome no perfil da outra, como alguém a quem podem recorrer. Nas Configurações, em <strong>Jurídico e privacidade</strong>, desative <strong>Mostrar-me como conexão em comum</strong> e ninguém verá seu nome ali. A opção fica ativada até que você a desative. Veja &quot;Pessoas e amigos&quot;.</li>
+            <li><strong>Quem adicionou você:</strong> quando você adiciona alguém, essa pessoa vê uma linha na aba Pessoas dizendo que você a adicionou, para que possa adicionar você de volta. Nenhuma notificação é enviada para ela.</li>
+            <li><strong>Localização (celular):</strong> nas Configurações, em <strong>Configurações do app</strong>, ative <strong>Localização</strong> para usar sua posição no mapa e nas publicações próximas. Para desativar, altere nas próprias configurações do celular; o app mostra como fazer. No navegador web não há esse botão: o navegador faz a pergunta e memoriza sua resposta.</li>
+            <li><strong>Sua área</strong> (na comunidade global): nas Configurações, em <strong>Sua área</strong>, veja a região definida, cerca de 10 km em torno de uma cidade ou de duas coordenadas, ou <strong>Não definida</strong>. O botão <strong>Limpar</strong> remove essa definição. Abaixo, <strong>Mais ou menos onde você está?</strong> define uma nova área com <strong>Usar minha localização</strong> ou <strong>Digite uma cidade ou bairro</strong>, e <strong>Cancelar</strong> (no navegador, <strong>← Voltar para Configurações</strong>) mantém como está. Apenas a área aproximada é transmitida. Outros membros veem a que distância você está, e uma enquete que você cria é exibida na sua área. Sem ela, você vê as publicações mais recentes do mundo todo, e os membros próximos não verão uma enquete sua na lista deles, embora ainda possam encontrá-la pela busca. Veja &quot;Sua área&quot;.</li>
+            <li><strong>Bloqueio do aplicativo:</strong> solicita o bloqueio de tela do celular (PIN, padrão, senha, impressão digital ou reconhecimento facial) quando o app abre e quando você retorna a ele após 15 segundos ou mais de ausência. O bloqueio protege as telas e avisos do app. No iPhone, ele também fecha uma página web que o app abriu, como as Configurações da comunidade a partir de <strong>Gerenciar</strong>. Ele não consegue cobrir uma página web aberta pelo app em um celular Android, que abre fora do aplicativo, nem o painel de compartilhamento em qualquer um dos dois sistemas: feche-os antes de pousar o celular. As Configurações da comunidade, abertas em <strong>Gerenciar</strong>, encerram a sessão após 15 minutos sem uso. Com o Bloqueio do aplicativo ativado, a tela fica em branco ao sair do app e retorna quando você volta. Ele necessita de um bloqueio de tela configurado no celular: sem ele, não há o que solicitar.</li>
+            <li><strong>Canais:</strong> tudo o que você compartilha no Pulso é exibido com o seu nome para todos na comunidade. Veja &quot;Compartilhando seus canais&quot;.</li>
+        </ul>
+        <h2>Quem mais pode ver as informações</h2>
+        <ul>
+            <li>As conversas entre duas pessoas são criptografadas de ponta a ponta: uma mensagem que não puder ser protegida não é enviada. Os avisos que o BeanPool adiciona a uma conversa sobre um acordo, como o valor correspondente, não são criptografados. Veja &quot;Mensagens&quot;.</li>
+            <li>No celular, a conversa de um grupo também é criptografada de ponta a ponta em uma comunidade cujo servidor tenha sido atualizado para proteger conversas em grupo: o servidor armazena dados ilegíveis. Ele ainda vê quem escreveu, quando, quem foi mencionado, a qual mensagem cada linha responde e as reações com emojis. O bate-papo indica se está protegido. Em um servidor que não tenha sido atualizado, ele ainda consegue ler as conversas do grupo.</li>
+            <li>Assistir a um vídeo do YouTube no Pulso informa ao YouTube que você o assistiu, exatamente como abrir no app do YouTube faria. Nada é enviado ao YouTube até você tocar em ▶, e rolar a tela passando por um vídeo não envia absolutamente nada. Veja &quot;O Pulso&quot;.</li>
+            <li>O servidor da sua comunidade guarda suas trocas, publicações e votos, além de quem você bloqueou no app web. Os proprietários e administradores que o gerenciam podem ver o que está armazenado ali, incluindo bate-papos de eventos, conversas de empreendimentos e bate-papos em grupo em um servidor que não tenha sido atualizado para protegê-los. Escolha uma comunidade cujos membros você confie.</li>
+            <li>Se você excluir sua conta, todas as mensagens que escreveu exibirão <strong>Esta mensagem foi apagada</strong> e as fotos enviadas serão excluídas. As cópias diárias do próprio servidor feitas antes disso as mantêm por até 14 dias. Se o servidor da comunidade enviar backups para um armazenamento externo, cada um feito antes disso as manterá por até 30 dias. Um backup baixado por um proprietário as guarda até que ele o exclua. Veja &quot;Sair ou excluir sua conta&quot;.</li>
+            <li>Se você vinculou uma conta de login, entrou com uma ou adicionou uma mais tarde, o servidor da comunidade mantém uma cópia protegida da sua conta para ela. As pessoas que gerenciam esse servidor podem abri-la. Apenas suas 12 palavras não dependem de ninguém. Veja &quot;Recuperando sua conta&quot;.</li>
+            <li>Na comunidade global, os moderadores podem ver quais contas ingressaram pela mesma conexão de internet dentro de um intervalo de 24 horas, mas nunca a conexão em si, permitindo conter uma onda de contas falsas de uma só vez. Veja &quot;Denunciando um problema&quot;.</li>
+            <li>Quando você entra na comunidade global, ela guarda uma referência codificada da conexão de internet de onde você entrou por um dia, nunca o endereço em si. Com isso, quando muitas contas estão sendo criadas a partir de uma mesma conexão, cada nova conta exige um pouco mais de etapas de configuração, e apenas uma quantidade limitada pode ser criada a partir dela. Se a comunidade remover uma conta dentro de um dia após a entrada, essa referência é guardada por 7 dias a partir da entrada, de modo que novas contas criadas com 12 palavras pela mesma conexão levem mais tempo para serem configuradas naquela semana. O prazo nunca é ampliado para alguém que excluiu a própria conta.</li>
+            <li>Se você entrar na comunidade global com 12 palavras, tudo o que ela registra na entrada, além dessa referência, é o nome que você escolheu e a chave da sua conta: nenhum e-mail, nenhum número de telefone, nenhuma outra conta.</li>
+        </ul>
+        <h2>Saiba mais</h2>
+        <p>Nas Configurações, em <strong>Jurídico e privacidade</strong>, toque em <strong>Política de Privacidade</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-profile.html"><strong>Seu perfil</strong><span>Seu nome, foto, algumas palavras sobre você e quem pode ver seus dados de contato.</span></a></li>
+            <li><a href="your-area.html"><strong>Sua região</strong><span>O local aproximado que a comunidade global usa para mostrar anúncios perto de você e como alterar ou limpar.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Localização do marcador</strong><span>Quem vê onde estão seus anúncios e eventos, e como manter sua casa em privacidade.</span></a></li>
+            <li><a href="blocking.html"><strong>Bloquear alguém</strong><span>Oculte as publicações e mensagens de alguém e desfaça isso quando quiser.</span></a></li>
+            <li><a href="messages.html"><strong>Mensagens</strong><span>Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

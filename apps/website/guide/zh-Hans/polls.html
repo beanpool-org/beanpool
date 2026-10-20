@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投票 — BeanPool members' guide</title>
+    <meta name="description" content="向社区提出简短问题。民意投票仅反映大家的看法，其本身不产生任何变更。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">公共资金池</a></p>
+        <h1>投票</h1>
+        <p class="lede">向社区提出简短问题。民意投票仅反映大家的看法，其本身不产生任何变更。</p>
+        <h2>投票还是决策？</h2>
+        <p><strong>投票</strong>用于询问大家的看法：“市集定在周日还是周六？”。它本身不产生任何变更。对于具有约束力的事项，请发起决策。</p>
+        <p>在全球社区中，每个投票都会注明<strong>非正式民意调查，不做任何正式决定</strong>。任何人都可以凭 12 个助记词或登录加入全球社区，因此拥有多个账户的一个人可能会影响统计结果，且全球社区没有决策。在其下方，“🏘️ 在本地社区中，决策具有约束力 ›”说明了为何决策仅在本地社区具有约束力。</p>
+        <p>当全球社区的某项匿名投票截止后，它还会显示有多少票来自<strong>新账户或 12 个助记词账户</strong>，例如“12 票中有 5 票来自新账户或 12 个助记词账户”。每张选票都按投票时该账户的状态进行统计：新账户是指仍受新账户限制约束的账户，12 个助记词账户是指凭 12 个助记词创建且尚未添加登录方式的账户。当至少有 3 票来自新账户或 12 个助记词账户，且其他票数要么为零要么至少有 3 票时，每个选项也会注明其自身有多少票来自此类账户。每张选票仍然有效，且不会显示具体是谁投的。</p>
+        <p>在投票进行期间，系统绝不会透露此类信息。否则，有人若在每次有人投票后查看，就能推断出每张选票来自哪种账户以及选择了什么。公开投票在进行中或截止后也绝不会说明：它会直接显示投票人名单，因此票数统计会直接透露每位投票人拥有哪种账户。群组内的投票不会说明，本地社区的投票也不会说明。</p>
+        <h2>发起投票</h2>
+        <ul>
+            <li>在“市集”标签页或“地图”上点按 <strong>+ 发布信息</strong>。</li>
+            <li>选择<strong>社区投票</strong>。</li>
+            <li>填写<strong>问题</strong>。</li>
+            <li>如有帮助，可添加<strong>背景说明 / 备注</strong>。此项为选填。</li>
+            <li>填写 2 到 4 个<strong>选项</strong>。点按 <strong>+ 添加选项</strong>可添加更多。</li>
+            <li>选择投票时长：<strong>3 天</strong>、<strong>7 天</strong>或 <strong>14 天</strong>。</li>
+            <li>在点按<strong>创建</strong>之前，选择是否设为<strong>公开投票</strong>。不勾选则为匿名投票。勾选后成员可以看到谁选择了什么。投票发布后将无法更改此设置。</li>
+            <li>点按<strong>创建</strong>。</li>
+        </ul>
+        <p>在 Web 应用中，类型为 <strong>🗳️ 投票</strong>，备注为 <strong>Background / Context</strong>，选项按钮为 <strong>+ 添加选项</strong>，最后一个按钮为 <strong>🗳️ Create Poll</strong>。在网页版“地图”上，点按圆形的 <strong>+</strong>。</p>
+        <p>你同一时间只能进行一项投票，且一个社区最多可以同时开展 5 项投票。发起或参与投票需要你的信用未被冻结。</p>
+        <h2>查找并参与投票</h2>
+        <p>投票位于市集中。点按顶部的<strong>投票</strong>可仅查看投票。</p>
+        <ul>
+            <li>点按某个选项即可选择。在投票截止前，点按另一个选项可更改你的选择。</li>
+            <li>卡片会显示选择各个选项的人数。</li>
+        </ul>
+        <h2>谁能看到你的投票</h2>
+        <p>每个投票都会在投票率上方注明其类型：</p>
+        <ul>
+            <li><strong>匿名</strong>（常规类型）：所有人只能看到选择各个选项的人数。没有任何人能看到谁选了什么，发起人也不例外。</li>
+            <li><strong>公开投票：</strong>发起人选择公开投票人。成员可以点按<strong>查看投票人</strong>（在 Web 应用中为<strong>显示投票人</strong>）查看谁选了什么。被暂停的成员只能看到总数，直到暂停解除。</li>
+        </ul>
+        <p>运营你所在社区服务器的所有者和管理员仍可在服务器上查看存储的每张选票。</p>
+        <h2>提前截止投票</h2>
+        <p>如果是你发起的投票，点按<strong>截止投票</strong>，然后再次点按<strong>截止投票</strong>进行确认（在 Web 应用中点按 <strong>确定</strong>）。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>参与决策投票</strong><span>查找进行中的决策、投票、更改你的投票并查看投票结果。</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>发起决策提案</strong><span>提请社区共同做出具有约束力的决定。</span></a></li>
+            <li><a href="events.html"><strong>活动</strong><span>在线下或线上发起一次性或周期性活动；报名参加、接收提醒、分享活动并作为主办方进行管理。</span></a></li>
+            <li><a href="rules.html"><strong>规则与决策机制</strong><span>投票、投票率、匿名投票、投票资格、暂停资格、移除成员、管理者以及召集人和主召集人。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆子与全球社区</strong><span>全球社区的用途、众多社区中的一员，以及你在那里看到的内容：🏘️ 本地社区标记、示例社区 Example Valley、为什么豆子在那里等待，以及如何发起或寻找本地社区。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

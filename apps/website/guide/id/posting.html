@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memasang Penawaran atau Permintaan — BeanPool members' guide</title>
+    <meta name="description" content="Tawarkan keahlian atau barang yang bisa kamu berikan, atau tulis hal yang kamu butuhkan.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Pasar</a></p>
+        <h1>Memasang Penawaran atau Permintaan</h1>
+        <p class="lede">Tawarkan keahlian atau barang yang bisa kamu berikan, atau tulis hal yang kamu butuhkan.</p>
+        <h2>Pasang Penawaran terlebih dahulu</h2>
+        <p>Di komunitas dengan Kacang, kamu harus telah memasang setidaknya satu <strong>Penawaran</strong> sebelum kamu dapat memasang <strong>Permintaan</strong> atau mengambil Penawaran orang lain. Setiap orang membawa sesuatu. Berapa banyak Penawaran yang kamu pasang juga menentukan seberapa jauh saldomu bisa di bawah nol. Lihat &quot;Batas kreditmu&quot;.</p>
+        <p>Di tempat yang tidak menggunakan Kacang, seperti di komunitas global, postingan pertamamu bisa berupa Permintaan.</p>
+        <h2>Sebelum memulai</h2>
+        <p>Di komunitas dengan Kacang kamu memerlukan nama dan foto profil. Di tempat yang tidak menggunakan Kacang, sebuah nama sudah cukup. Jika ada yang kurang, aplikasi akan memintamu untuk <strong>Atur profil</strong> terlebih dahulu.</p>
+        <h2>Memasang postingan</h2>
+        <ul>
+            <li>Ketuk <strong>+ TAMBAH POSTINGAN</strong> pada tab Pasar atau Peta.</li>
+            <li>Pilih <strong>Penawaran</strong> atau <strong>Permintaan</strong>. Formulir akan terbuka di atas Peta.</li>
+            <li><strong>Judul:</strong> beberapa kata, hingga 50 karakter di ponsel. &quot;Roti sourdough&quot;, &quot;Tumpangan ke kota setiap Jumat&quot;.</li>
+            <li><strong>Kategori:</strong> pilih yang paling mendekati.</li>
+            <li><strong>Deskripsi:</strong> apa, kapan, di mana, dan apa pun yang perlu diketahui orang lain.</li>
+            <li><strong>Foto:</strong> setidaknya satu, hingga lima foto. Ketuk <strong>Kamera</strong> atau <strong>Galeri</strong>. Di tempat yang tidak menggunakan Kacang, foto untuk Permintaan bersifat opsional.</li>
+            <li><strong>Lokasi:</strong> ketuk <strong>Lokasi saya</strong>, atau <strong>Pasang pin</strong> dan ketuk peta, lalu <strong>Konfirmasi Pin</strong>. Setiap anggota komunitasmu dapat melihat pin tersebut, jadi pasanglah di dekatmu daripada persis di pintu depan rumahmu jika kamu menginginkannya. Lihat &quot;Lokasi pin kamu&quot;.</li>
+            <li><strong>Harga:</strong> sejumlah kacang. Ketuk tombol satuan untuk memilih <strong>Total</strong> atau <strong>/ Jam</strong>. Ketuk <strong>GRATIS</strong> untuk memberikannya secara cuma-cuma. Tombol ini juga menawarkan pilihan <strong>/ Jam</strong>, <strong>/ Mgg</strong>, dan <strong>/ Bln</strong>, tetapi postingan baru belum menyimpannya: postingan akan disimpan sebagai harga total. Pilih <strong>Total</strong> dan sebutkan periodenya di dalam deskripsi.</li>
+            <li>Ketuk <strong>Pasang Penawaran</strong> atau <strong>Pasang Permintaan</strong>.</li>
+        </ul>
+        <p>Sampai semua yang dibutuhkan terisi, tombol akan memberi tahu apa yang kurang, seperti <strong>Tambah foto</strong> atau <strong>Tentukan harga</strong>.</p>
+        <p>Di web app langkah-langkahnya sedikit berbeda:</p>
+        <ul>
+            <li>Ketuk tombol <strong>+</strong> di Peta (bernama <strong>Postingan Baru</strong>), atau <strong>+ TAMBAH POSTINGAN</strong> di Pasar.</li>
+            <li>Untuk meletakkan pin, ketuk <strong>Lokasi saya</strong>, atau ketuk <strong>Pasang pin</strong> lalu ketuk peta. Tidak ada tombol <strong>Konfirmasi Pin</strong>.</li>
+            <li>Harga berupa kotak angka dan daftar satuan. Tidak ada tombol <strong>GRATIS</strong>: ketik 0 untuk memberikannya secara cuma-cuma.</li>
+            <li>Judul tidak memiliki batasan 50 karakter.</li>
+            <li>Tombol menyatakan <strong>Map location required</strong> atau <strong>Isi bidang yang diperlukan</strong> selama ada yang kurang. Tombol juga tetap berwarna abu-abu sampai kamu menambahkan setidaknya satu foto.</li>
+            <li>Formulir tidak menyimpan draf.</li>
+        </ul>
+        <h2>Di komunitas global</h2>
+        <p>Tidak ada Kacang di komunitas global, jadi postingan di sana tidak memiliki harga. Formulir tidak memiliki bidang <strong>Harga</strong>: sebutkan di deskripsi apa yang kamu inginkan sebagai imbalan, atau bahwa barang/jasa tersebut gratis. Di tempat harga seharusnya berada, formulir web app dan formulir ubah postingan di ponsel menyatakan &quot;🏘️ Di komunitas lokal ini adalah harga dalam Kacang ›&quot;: ketuk untuk mengetahui alasannya. Lihat &quot;Kacang dan komunitas global&quot;.</p>
+        <p>Pengunjung komunitas global dapat melihat foto dan perkiraan wilayah listing ini sebelum mereka bergabung. Mereka melihat kata-kata dan foto postingan serta perkiraan lokasinya, bukan nama, wajah, atau lokasi persismu. Di web app formulir memberi tahu demikian di bawah foto. Anggota komunitas global melihat lokasimu hingga sekitar satu kilometer.</p>
+        <h2>Tidak yakin berapa biayanya?</h2>
+        <p>Di ponsel, ketuk <strong>Tidak yakin berapa biayanya?</strong> di bawah harga. Di web app formulir tidak memiliki baris tersebut: buka <strong>💡 Panduan Harga</strong> di Pasar sebagai gantinya. Panduan perkiraan: 40 kacang setara dengan sekitar satu jam waktu seseorang. <strong>Panduan Harga Komunitas</strong> memiliki estimasi untuk banyak hal sehari-hari. Di ponsel, mengetuk salah satunya akan mengisikan Penawaran untukmu. Di web app, mengetuk salah satunya membuka formulir Postingan Baru di Peta tanpa mengisi apa pun.</p>
+        <p>Di bawah harga kamu akan melihat apa yang akan kamu terima setelah dipotong biaya pasar 1,5%. Hadiah tidak dikenakan biaya.</p>
+        <h2>Pilihan tambahan</h2>
+        <ul>
+            <li><strong>Dapat diulang:</strong> postingan tetap aktif setelah setiap kesepakatan, dan beberapa orang dapat mengambilnya sekaligus. Cocok untuk tumpangan mingguan atau roti setiap hari Sabtu.</li>
+            <li><strong>Perlu uang tunai juga:</strong> centang ini jika kamu juga membutuhkan uang tunai, untuk bahan bakar atau material. Aplikasi tidak pernah menangani uang tunai; kalian berdua mengaturnya sendiri.</li>
+            <li><strong>Ke mana jangkauan ini?</strong> Hanya jika komunitasmu bertransaksi dengan komunitas lain: pertahankan postingan di sini, atau bagikan lebih jauh.</li>
+        </ul>
+        <p>Di ponsel, aplikasi menyimpan draf saat kamu mengetik. Jika kamu keluar dan kembali lagi, aplikasi menanyakan apakah ingin <strong>Lanjutkan</strong> atau <strong>Mulai baru</strong>.</p>
+        <h2>Memposting hanya ke grup</h2>
+        <p>Buka <strong>Sarana Bersama</strong>, lalu <strong>Grup</strong>, kemudian grupmu, dan ketuk <strong>Posting ke</strong> dan nama grup tersebut. Hanya grup tersebut yang melihatnya. Di ponsel formulir yang lebih ringkas ini tidak memiliki foto dan lokasi. Di web app tindakan ini membuka formulir biasa di Peta, yang diatur khusus untuk grup tersebut.</p>
+        <h2>Mengubah atau menghapus postingan</h2>
+        <p>Buka postinganmu. Jika tidak ada kesepakatan yang sedang berlangsung di dalamnya:</p>
+        <ul>
+            <li><strong>Edit Postingan</strong> mengubah kata-kata, kategori, harga, dan foto. Ketuk <strong>Simpan</strong>. Lokasi tidak dapat diubah; hapus postingan dan pasang kembali sebagai gantinya.</li>
+            <li><strong>Jeda Penawaran</strong> menyembunyikan Penawaran untuk sementara. <strong>Aktifkan Penawaran</strong> memunculkannya kembali. Permintaan tidak dapat dijeda.</li>
+            <li><strong>Hapus Postingan</strong> menghapusnya. Siapa pun yang masih memintanya akan melihat permintaan mereka ditandai ditolak.</li>
+        </ul>
+        <p>Selama seseorang meminta postinganmu, kamu masih dapat mengubah kata-kata dan fotonya, tetapi bukan harganya: aplikasi akan memberi tahu demikian. Selama kacang ditahan pada suatu postingan, kamu tidak dapat mengeditnya sama sekali. Pengecualiannya adalah postingan Dapat diulang (dapat memiliki beberapa kesepakatan sekaligus): kamu masih dapat mengubah kata-kata dan fotonya, tetapi bukan harganya. Untuk mengubah harga, tolak atau batalkan kesepakatan tersebut terlebih dahulu.</p>
+        <p>Di komunitas lokal, postingan tidak kedaluwarsa. Hapus postingan saat sudah selesai.</p>
+        <p>Di komunitas global, listing diarsipkan 90 hari setelah terakhir kali diubah: listing akan diturunkan dari Pasar dan fotonya dihapus. Menyimpannya dengan <strong>Edit Postingan</strong> menyimpannya untuk 90 hari lagi. Lihat &quot;Batasan komunitas global&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Tahapan kesepakatan</strong><span>Dari permintaan hingga pembayaran, untuk Penawaran maupun Permintaan, serta memberikan ulasan.</span></a></li>
+            <li><a href="my-deals.html"><strong>Kesepakatanku</strong><span>Satu tempat untuk setiap transaksi yang sedang berlangsung, semua kirimanmu, dan riwayat transaksimu.</span></a></li>
+            <li><a href="map-pins.html"><strong>Yang ditampilkan peta</strong><span>Pin di Peta, arti warnanya, dan tombol-tombol di sekitarnya.</span></a></li>
+            <li><a href="credit-line.html"><strong>Batas kreditmu</strong><span>Seberapa jauh saldomu bisa di bawah nol, dan bagaimana batas ini bertambah.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notificações — BeanPool members' guide</title>
+    <meta name="description" content="Escolha quais alertas chegam ao seu celular e quando os eventos enviam lembretes.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Configurações e segurança</a></p>
+        <h1>Notificações</h1>
+        <p class="lede">Escolha quais alertas chegam ao seu celular e quando os eventos enviam lembretes.</p>
+        <h2>Escolhendo seus alertas</h2>
+        <ul>
+            <li>Abra as <strong>Configurações</strong>. Em <strong>Configurações do app</strong>, toque em <strong>Preferências de notificação</strong>.</li>
+            <li>Ative ou desative cada tipo:</li>
+            <li><strong>Mensagens diretas:</strong> quando alguém enviar uma mensagem para você, escrever em um dos seus grupos ou mencionar você, ou quando uma votação for aberta em um grupo ou empreendimento em que você participa.</li>
+            <li><strong>Atividade no mercado:</strong> pedidos, aprovações e recusas em seus acordos, e o que aconteceu com uma publicação que você denunciou ou com uma publicação sua que os administradores removeram. Também inclui novidades sobre eventos aos quais você vai, avisos dos administradores da sua comunidade e quando uma comunidade estiver começando perto de um local pelo qual você pesquisou.</li>
+            <li><strong>Em custódia e do sistema:</strong> feijões retidos, liberados ou em disputa.</li>
+        </ul>
+        <p>No app web, o primeiro é chamado de <strong>Mensagens de bate-papo</strong>, e o terceiro tem o nome de <strong>Acordos</strong>. Eles definem o que chega ao seu celular.</p>
+        <p>As alterações são salvas automaticamente. Elas são mantidas pelo servidor da sua comunidade, então acompanham a sua conta.</p>
+        <p>Dois alertas sobre a sua conta sempre chegam, e o app não possui um interruptor para desativá-los: o aviso de que a sua conta acabou de ser restaurada em outro dispositivo e o aviso de que um administrador começou a transferir a sua conta para um novo celular. Se você gerencia o servidor da sua comunidade, os alertas sobre o servidor também sempre chegam.</p>
+        <h2>O que um alerta diz</h2>
+        <p>Um alerta no seu celular diz apenas que tipo de novidade é, por exemplo:</p>
+        <ul>
+            <li>&quot;Você tem uma nova mensagem.&quot;</li>
+            <li>&quot;Há novidades em uma das suas trocas.&quot;</li>
+            <li>&quot;Um evento do qual você vai participar começa em breve.&quot;</li>
+            <li>&quot;Sua comunidade tem um aviso para você.&quot;</li>
+        </ul>
+        <p>Ele nunca informa de quem é, qual é o anúncio, quantos feijões ou o que diz o comunicado da sua comunidade. Os alertas passam pelos servidores da Apple, do Google e do Expo a caminho do seu celular, e qualquer pessoa pode ler uma tela de bloqueio; portanto, o restante fica guardado na sua comunidade. Abra o BeanPool para visualizá-lo.</p>
+        <p>O BeanPool nunca pede suas 12 palavras ou uma senha em um alerta.</p>
+        <h2>Quando você toca em um alerta</h2>
+        <p>Cada alerta carrega a assinatura da sua comunidade, feita apenas para você. O BeanPool a verifica antes de fazer qualquer coisa:</p>
+        <ul>
+            <li><strong>Se for válida:</strong> o BeanPool pergunta à sua comunidade sobre o que era o alerta e o abre, caso seja da comunidade em que você está no momento. Um alerta de outra das suas comunidades abre o BeanPool onde você parou: mude para essa comunidade para vê-lo.</li>
+            <li><strong>Se não for válida:</strong> o BeanPool não abre nada e avisa você uma vez: &quot;Essa notificação não veio da sua comunidade. Ignore o que dizia. O BeanPool nunca pede suas 12 palavras ou uma senha em uma notificação.&quot;</li>
+        </ul>
+        <p>Enquanto o BeanPool estiver aberto, um alerta que não seja válido não é mostrado de forma alguma, nem aquele que você já viu.</p>
+        <p>Seu celular mostra o texto de um alerta antes que o BeanPool possa verificá-lo. Por isso, alguém que tivesse acesso ao endereço de alertas do seu celular poderia colocar suas próprias palavras na sua tela de bloqueio. Tocar nele não faz nada, e o BeanPool avisa isso.</p>
+        <p>Um alerta de uma comunidade que você removeu deste celular também não faz nada.</p>
+        <p>Se o servidor da sua comunidade ainda não tiver sido atualizado, os alertas dele não trazem assinatura. O BeanPool os mostra com palavras gerais (&quot;Há novidades da sua comunidade.&quot;) e, quando você toca em um deles, abre de onde você parou.</p>
+        <h2>Avisos quando o BeanPool se conecta</h2>
+        <p>De tempos em tempos, seu celular permite que o BeanPool se conecte com sua comunidade em segundo plano. Se a sua comunidade tiver um aviso para você que você ainda não viu, como o que aconteceu com uma das suas publicações, o BeanPool o exibirá no seu celular por completo, uma vez.</p>
+        <p>Isso requer apenas o servidor da sua comunidade, então ainda funciona se os alertas falharem. Isso chega mais tarde do que um alerta chegaria: seu celular decide quando, variando de cerca de 15 minutos a algumas horas.</p>
+        <h2>Lembretes de eventos</h2>
+        <p>Abaixo dos interruptores, <strong>Lembretes de eventos</strong> define com quanto tempo de antecedência em relação ao início de um evento em que você marcou <strong>Vou</strong> ou <strong>Tenho interesse</strong> você será avisado. Marque <strong>1 semana antes</strong>, <strong>1 dia antes</strong>, <strong>2 horas antes</strong>, <strong>1 hora antes</strong> ou <strong>30 minutos antes</strong> — você pode marcar mais de uma opção — ou marque <strong>Desativado</strong> para não receber nenhum.</p>
+        <p>Todos começam com <strong>1 dia antes</strong>. Essa é a sua escolha padrão; qualquer evento individual pode ser configurado de forma diferente no próprio evento. Veja &quot;Eventos&quot;.</p>
+        <p>Os lembretes chegam com seus alertas de <strong>Atividade no mercado</strong>, então eles param se você desativar essa opção. Você nunca recebe lembretes sobre um evento que foi cancelado ou já terminou, nem sobre um horário que já havia passado quando você disse que participaria. Se o organizador alterar a data ou horário do evento, o lembrete muda junto.</p>
+        <h2>Nenhum alerta chega?</h2>
+        <p>Verifique se o seu celular permite notificações para o BeanPool nas configurações do próprio aparelho.</p>
+        <h2>Uma conversa por vez</h2>
+        <p>Você pode silenciar o bate-papo de um grupo, projeto ou empreendimento por 8 horas, uma semana ou para sempre. Veja &quot;Silenciando uma conversa&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="mute.html"><strong>Silenciar conversa</strong><span>Silencie uma conversa — individual, de grupo ou de empreendimento — por 8 horas, uma semana ou para sempre.</span></a></li>
+            <li><a href="messages.html"><strong>Mensagens</strong><span>Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.</span></a></li>
+            <li><a href="my-deals.html"><strong>Meus acordos</strong><span>Um só lugar para cada troca em andamento, cada anúncio ativo e suas trocas passadas.</span></a></li>
+            <li><a href="events.html"><strong>Eventos</strong><span>Crie um evento, presencial ou online, único ou recorrente; confirme presença, receba lembretes, compartilhe e gerencie como anfitrião.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Ausentar-se</strong><span>O Modo férias oculta suas Ofertas e pausa novos pedidos enquanto você estiver fora.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Barra superior</strong><span>O feijão, os pequenos ícones que avisam quando algo precisa de você e os botões no canto superior direito.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

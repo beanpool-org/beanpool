@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>余额与账目历史 — BeanPool members' guide</title>
+    <meta name="description" content="你拥有的豆子数量、交易中暂扣的豆子，以及每一笔交易与赠送记录。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">账本</a></p>
+        <h1>余额与账目历史</h1>
+        <p class="lede">你拥有的豆子数量、交易中暂扣的豆子，以及每一笔交易与赠送记录。</p>
+        <h2>打开方式</h2>
+        <p>在底部的标签页栏中点按<strong>账本</strong>。你的余额显示在右上角，单位为<strong>豆子</strong>。它可以低于零；参见“信用额度”。</p>
+        <p>在全球社区中没有豆子，因此账本展示了一个本地社区的示例成员（来自 Example Valley），并标有 <strong>🏘️ 本地社区</strong>。其中的按钮会说明为什么豆子只存在于本地社区中，且不会发送任何内容。参见“豆子与全球社区”。</p>
+        <p>账本有两个标签页：<strong>等级</strong>（你的信任度，参见“信任徽章”）和<strong>钱包</strong>。在手机上，点按你的余额即可直接前往钱包。</p>
+        <h2>钱包标签页</h2>
+        <ul>
+            <li><strong>你的余额</strong>，以及按每小时 40 颗豆子计算大致相当于多少小时的互助时间。</li>
+            <li><strong>公共资金池：</strong>你社区的共享资金池。</li>
+            <li><strong>信用底线：</strong>你的余额最多可以透支多少。</li>
+            <li>当有交易正在进行时，显示其中有多少颗豆子处于暂扣状态。</li>
+            <li><strong>社区循环流转：</strong>在你持有豆子时显示。参见“流通费”。</li>
+            <li><strong>项目认捐：</strong>你认捐给项目的豆子（若有）。</li>
+            <li><strong>发送豆子：</strong>发送赠予。参见“赠送豆子”。</li>
+        </ul>
+        <p>在 Web 应用中，钱包标签页更简短：<strong>透支底线</strong>、<strong>公共资金池</strong>、<strong>发送豆子</strong>和<strong>社区循环流转</strong>。你的余额位于账本顶部。</p>
+        <h2>近期交易明细</h2>
+        <p>按时间倒序列出每笔交易、赠送和费用，附有备注、时间和增减数额。在手机上，每行还会标明交易对象；在 Web 应用中则标明 <strong>已发出</strong> 或<strong>收到</strong>。如果备注中提及了某项刊登，点按<strong>查看供应</strong>即可将其打开。</p>
+        <p>只有你能看到自己的余额和这些交易明细。你社区中的其他任何人都无法查阅。<strong>导出 CSV</strong>（Web 应用中为<strong>导出我的数据</strong>）可将你自己的交易记录另存为文件。</p>
+        <p>该列表目前暂不支持搜索或筛选。</p>
+        <h2>ⓘ 按钮</h2>
+        <p>在手机上，点按你的余额旁边的 <strong>ⓘ</strong>，可查看关于你的余额和底线的简要说明。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>信用额度</strong><span>你的余额最多可以透支多少，以及额度如何增长。</span></a></li>
+            <li><a href="gifts.html"><strong>赠送豆子</strong><span>无需任何交易即可向他人赠送豆子。</span></a></li>
+            <li><a href="circulation-fee.html"><strong>流通费</strong><span>对高额余额每月收取的小额费用，以促使豆子保持流通。前 200 豆免收费用。</span></a></li>
+            <li><a href="my-deals.html"><strong>我的交易</strong><span>集中管理你参与的每一笔交易、发布的每一条信息以及过去的交易历史。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆子与全球社区</strong><span>全球社区的用途、众多社区中的一员，以及你在那里看到的内容：🏘️ 本地社区标记、示例社区 Example Valley、为什么豆子在那里等待，以及如何发起或寻找本地社区。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地圖圖釘說明 — BeanPool members' guide</title>
+    <meta name="description" content="地圖上的圖釘、顏色代表的含義以及圖釘周邊的操作按鈕。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">地圖</a></p>
+        <h1>地圖圖釘說明</h1>
+        <p class="lede">地圖上的圖釘、顏色代表的含義以及圖釘周邊的操作按鈕。</p>
+        <h2>圖釘</h2>
+        <p>點擊分頁列中的<strong>地圖</strong>。地圖會顯示你所在社群的刊登項目：</p>
+        <ul>
+            <li><strong>綠色圖釘：</strong>提供。</li>
+            <li><strong>橘色圖釘：</strong>需求。</li>
+            <li><strong>帶有行事曆圖示的紫色圖釘：</strong>尚未結束的活動。</li>
+        </ul>
+        <p>圖釘會顯示該刊登的類別圖示。當許多「提供」與「需求」距離很近時，它們會合併成一個帶有數字的圓圈。在手機上該圓圈為藍色，在網頁版應用程式中為深灰色。放大地圖即可逐一檢視。活動則始終單獨顯示。</p>
+        <p>成員與群組不會顯示在地圖上。在網頁版應用程式中，已設定地點的事業會顯示為帶有其圖示的方形圖釘。點擊它即可開啟該事業。</p>
+        <p>民意調查通常也不會顯示在地圖上。唯一的例外是在手機上的全球社群中，民意調查可以顯示為發布者所在區域的圖釘。外觀類似橘色的「需求」圖釘，且僅在<strong>全部</strong>下方顯示。</p>
+        <h2>點擊圖釘</h2>
+        <ul>
+            <li><strong>「提供」或「需求」：</strong>卡片會顯示標題與發布者。點擊<strong>查看詳情</strong>即可將其開啟。在手機上，點擊對方的姓名即可查看其個人檔案。點擊地圖任意處或 <strong>✕</strong> 即可關閉卡片。</li>
+            <li><strong>活動：</strong>卡片會顯示時間、地點以及有多少人參加。點擊<strong>查看活動</strong>。在網頁版應用程式中按鈕為<strong>查看詳情</strong>，且你也可以直接在卡片上點擊<strong>會參加</strong>或<strong>有興趣</strong>。</li>
+        </ul>
+        <h2>篩選條件</h2>
+        <p>在手機上，位於地圖頂端：</p>
+        <ul>
+            <li><strong>全部</strong>、<strong>提供</strong>、<strong>需求</strong>或<strong>活動</strong>。點擊 <strong>✕</strong> 可清除篩選。</li>
+            <li><strong>所有類別</strong>可選擇僅顯示單一類別。</li>
+            <li>針對活動：<strong>全部</strong>、<strong>今天</strong>、<strong>本週末</strong>或<strong>未來 7 天</strong>。地圖會自動調整視野以完整呈現。</li>
+        </ul>
+        <p>在網頁版應用程式中，地圖僅有活動日期標籤：<strong>今天</strong>、<strong>本週末</strong>、<strong>未來 7 天</strong>與<strong>所有活動</strong>。這些標籤僅在你所在社群有即將到來的活動時才會顯示。</p>
+        <h2>左側按鈕</h2>
+        <ul>
+            <li>在手機上，月亮或太陽圖示：切換深色或淺色地圖。</li>
+            <li>準星圖示：顯示你目前所在位置。首次使用時，應用程式會請求使用你位置的權限。</li>
+            <li><strong>+</strong> 與 <strong>−</strong>：縮放地圖。</li>
+        </ul>
+        <p>琥珀色的圓圈顯示你所在社群服務的地理範圍。</p>
+        <h2>從地圖新增刊登</h2>
+        <p>點擊 <strong>+ 新增刊登</strong>。在網頁版應用程式中，點擊右下角的圓形 <strong>+</strong>。參見「發布提供或需求」。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>你的圖釘位置</strong><span>誰能看到你的刊登和活動所在位置，以及如何保護住家地址隱私。</span></a></li>
+            <li><a href="near-you.html"><strong>尋找附近的刊登</strong><span>僅顯示距離你或你選擇的任意地點一定範圍內的貼文。</span></a></li>
+            <li><a href="events.html"><strong>活動</strong><span>在實體或線上發起一次性或週期性活動；報名參加、接收提醒、分享活動並作為主辦方進行管理。</span></a></li>
+            <li><a href="posting.html"><strong>發布提供或需求</strong><span>發布你能做或能給予的事情，或者你正在尋找的東西。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

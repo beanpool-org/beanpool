@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Số dư và lịch sử giao dịch — BeanPool members' guide</title>
+    <meta name="description" content="Bạn có bao nhiêu đậu, số lượng đang bị giữ, cùng mọi giao dịch và quà tặng.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Sổ cái</a></p>
+        <h1>Số dư và lịch sử giao dịch</h1>
+        <p class="lede">Bạn có bao nhiêu đậu, số lượng đang bị giữ, cùng mọi giao dịch và quà tặng.</p>
+        <h2>Cách mở</h2>
+        <p>Nhấn <strong>Sổ cái</strong> trong hàng các tab. Số dư của bạn nằm ở góc trên cùng bên phải, tính bằng <strong>ĐẬU</strong>. Số dư có thể ở dưới mức 0; xem &quot;Hạn mức tín dụng&quot;.</p>
+        <p>Trên cộng đồng toàn cầu không có Đậu, vì vậy Sổ cái hiển thị một thành viên ví dụ của một cộng đồng địa phương, Example Valley, được đánh dấu <strong>🏘️ Cộng đồng địa phương</strong>. Các nút của nó giải thích lý do tại sao Đậu hoạt động trong cộng đồng địa phương, và không gửi đi khoản nào. Xem &quot;Đậu và cộng đồng toàn cầu&quot;.</p>
+        <p>Sổ cái có hai tab: <strong>Cấp bậc</strong> (mức độ tin cậy của bạn, xem &quot;Huy hiệu tin cậy&quot;) và <strong>Ví</strong>. Trên điện thoại, hãy nhấn vào số dư của bạn để chuyển thẳng đến Ví.</p>
+        <h2>Tab Ví</h2>
+        <ul>
+            <li><strong>Số dư của bạn</strong>, và tương đương khoảng bao nhiêu giờ giúp đỡ, với tỷ lệ 40 đậu một giờ.</li>
+            <li><strong>Commons:</strong> quỹ chung của cộng đồng bạn.</li>
+            <li><strong>SÀN TÍN DỤNG:</strong> bạn có thể xuống sâu đến mức nào dưới 0.</li>
+            <li>Số đậu của bạn đang bị giữ trong các giao dịch đang thực hiện, nếu có.</li>
+            <li><strong>Luân chuyển cộng đồng:</strong> hiển thị khi bạn đang nắm giữ đậu. Xem &quot;Phí lưu thông&quot;.</li>
+            <li><strong>CAM KẾT DỰ ÁN:</strong> số đậu bạn đã cam kết cho các dự án, nếu có.</li>
+            <li><strong>Gửi đậu:</strong> gửi một món quà tặng. Xem &quot;Gửi quà tặng&quot;.</li>
+        </ul>
+        <p>Trong ứng dụng web, tab Ví ngắn gọn hơn: <strong>Mức sàn thấu chi</strong>, <strong>Quỹ Commons</strong>, <strong>Gửi đậu</strong> và <strong>Luân chuyển cộng đồng</strong>. Số dư của bạn hiển thị ở trên cùng của Sổ cái.</p>
+        <h2>Giao dịch gần đây</h2>
+        <p>Mọi giao dịch, quà tặng và khoản phí, mới nhất hiển thị trước, kèm theo ghi chú, thời gian và dấu cộng hoặc trừ. Trên điện thoại, mỗi dòng cũng cho biết bạn đã giao dịch với ai; trong ứng dụng web, dòng đó ghi <strong>Đã gửi</strong> hoặc <strong>Đã nhận</strong>. Nếu một ghi chú đề cập đến một bài đăng, hãy nhấn <strong>Xem ưu đãi</strong> để mở bài đăng đó.</p>
+        <p>Chỉ bạn mới có thể thấy số dư và các giao dịch này của mình. Không ai khác trong cộng đồng của bạn có thể đọc được chúng. <strong>Xuất CSV</strong> (<strong>Xuất dữ liệu của tôi</strong> trong ứng dụng web) lưu các giao dịch của riêng bạn dưới dạng tệp.</p>
+        <p>Danh sách này hiện chưa có chức năng tìm kiếm hoặc bộ lọc.</p>
+        <h2>Các nút ⓘ</h2>
+        <p>Trên điện thoại, nhấn vào biểu tượng <strong>ⓘ</strong> bên cạnh Số dư của bạn để xem giải thích ngắn gọn về số dư và mức sàn của bạn.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>Hạn mức tín dụng</strong><span>Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.</span></a></li>
+            <li><a href="gifts.html"><strong>Gửi quà tặng</strong><span>Gửi đậu cho ai đó mà không cần giao dịch trao đổi.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>Phí lưu thông</strong><span>Khoản phí nhỏ hàng tháng cho số dư lớn để đậu luôn được luân chuyển. 200 đậu đầu tiên miễn phí.</span></a></li>
+            <li><a href="my-deals.html"><strong>Giao dịch</strong><span>Một nơi cho mọi giao dịch bạn tham gia, mọi tin bạn đã đăng và các giao dịch trước đây.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Đậu và cộng đồng toàn cầu</strong><span>Mục đích của cộng đồng toàn cầu, một trong nhiều cộng đồng, và những gì bạn thấy: dấu hiệu 🏘️ Cộng đồng địa phương, cộng đồng mẫu Example Valley, lý do Đậu chờ ở đó và cách bắt đầu hoặc tìm cộng đồng địa phương.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>장터 둘러보기 — BeanPool members' guide</title>
+    <meta name="description" content="검색, 필터, 거리 설정을 통해 제공과 요청을 찾아보세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">장터</a></p>
+        <h1>장터 둘러보기</h1>
+        <p class="lede">검색, 필터, 거리 설정을 통해 제공과 요청을 찾아보세요.</p>
+        <h2>장터 탭</h2>
+        <p>탭 행에서 <strong>장터</strong>를 탭하세요. 커뮤니티 이웃들이 제공하거나 찾고 있는 항목이 등록된 날짜별로 묶여 최신순으로 표시돼요.</p>
+        <p>휴대폰에서는 행사가 가장 먼저 나와요. 앱에 위치 정보 사용 권한을 이미 허용한 경우, 목록 보기와 요약 보기에서는 <strong>가까운 순</strong> 아래에 가장 가까운 게시물이 먼저 표시되며, 설문은 <strong>설문</strong> 아래에 표시돼요. <strong>추천</strong>은 고유한 순서를 유지해요. 목록을 아래로 당겨 새로고침하세요.</p>
+        <p>웹 앱에서 장터는 카드 형태로 열려요. 목록 보기와 요약 보기에서 행사는 등록된 날짜 아래에 위치해요. 로컬 커뮤니티의 웹 앱에서는 가까운 순으로 먼저 정렬되지 않아요.</p>
+        <p>글로벌 커뮤니티의 웹 앱은 내 주변 게시물을 먼저 보여줘요: 설정한 <strong>거리</strong> 내, 또는 내 지역(가입할 때 입력한 대략적인 위치 또는 <strong>설정</strong>에서 입력한 위치) 기준 250km 이내의 가장 가까운 게시물이 각각의 거리와 함께 표시돼요. 목록 위의 줄에 어떤 기준인지가 나와요. 내 지역 주변 목록에는 전 세계의 최신 항목을 볼 수 있는 <strong>모든 지역 표시</strong>가 있어요. <strong>거리</strong>를 설정한 경우, <strong>거리</strong>를 열고 <strong>초기화</strong>를 탭하여 내 지역으로 돌아간 다음 <strong>모든 지역 표시</strong>를 탭하세요. 휴대폰의 글로벌 커뮤니티는 내 지역에서 가장 가까운 게시물을 보관하므로 장터에 해당 게시물들이 표시돼요. &quot;내 주변 항목 찾기&quot;를 참조하세요.</p>
+        <p>글로벌 커뮤니티에 게시물이 아직 몇 개 없을 때는 <strong>예시</strong>로 표시된 몇 개의 카드가 장터에 함께 나타나요. 사람들이 어떤 게시물을 올리는지 보여주기 위해 만들어진 가상의 게시물이며, 열거나 참여할 수 없어요. 실제 게시물이 충분히 많아지면 사라져요.</p>
+        <p>휴대폰에서는 아래로 스크롤할 때 검색창과 필터가 위로 숨겨져 더 많은 게시물을 볼 수 있어요. 위로 살짝 스크롤하면 다시 나타나요. 맨 위로 바로 이동하려면 <strong>장터</strong> 탭을 다시 탭하세요.</p>
+        <h2>검색</h2>
+        <p>상단의 <strong>장터 검색...</strong>에 검색어를 입력하세요. 작은 휴대폰 화면에서는 <strong>검색</strong>으로만 표시될 수도 있어요. 검색 기능은 관련 단어도 함께 찾아요: &quot;과일&quot;을 검색하면 &quot;레몬&quot;도 찾아줘요. 중국어, 일본어, 태국어 단어도 검색되며, 내가 차단한 사람이 올린 게시물은 제외돼요. 오프라인 상태에서는 휴대폰에 이미 저장된 내용을 검색해요.</p>
+        <p>검색창에 단어가 입력되어 있는 동안에는 <strong>이 검색을 홈에 저장</strong> 버튼이 나타나요. 이 버튼을 누르면 검색어, 특정 항목만 보고 있었던 경우 <strong>제공</strong> 또는 <strong>요청</strong>, 카테고리, 거리가 포함된 저장된 검색어를 추가할 수 있도록 홈이 열려요. <strong>행사</strong>나 <strong>설문</strong> 아래에서는 이 버튼이 나타나지 않아요. &quot;홈&quot;을 참조하세요.</p>
+        <h2>필터</h2>
+        <p>검색창 아래 버튼 행에서 볼 항목을 선택할 수 있어요:</p>
+        <ul>
+            <li><strong>전체</strong>, <strong>제공</strong>, 또는 <strong>요청</strong>.</li>
+            <li><strong>추천:</strong> <strong>관심사 맞춤 설정</strong>에서 별표 표시한 카테고리의 게시물(홈에서 설정한 것과 동일한 별표)과 내가 참석하기로 했거나 관심이 있다고 표시한 다가오는 행사예요.</li>
+            <li><strong>행사</strong> 및 <strong>설문</strong>.</li>
+        </ul>
+        <p>두 번째 행은 검색 범위를 좁혀줘요. 휴대폰에서:</p>
+        <ul>
+            <li><strong>모든 카테고리:</strong> 음식, 공구, 정원 등 하나의 카테고리를 선택하세요.</li>
+            <li><strong>거리:</strong> 특정 지점으로부터 일정 거리 내에 있는 게시물만 표시해요. &quot;내 주변 항목 찾기&quot;를 참조하세요.</li>
+            <li><strong>신뢰:</strong> 아직 거래를 하지 않은 멤버(<strong>창립 멤버</strong>), <strong>새내기</strong>, 또는 특정 신뢰 배지 이상의 멤버가 올린 게시물만 표시해요.</li>
+            <li><strong>콩 전용:</strong> 일부 현금을 함께 요구하는 게시물을 숨겨요.</li>
+        </ul>
+        <p>웹 앱에서는 버튼이 <strong>카테고리</strong>, <strong>거리</strong>, <strong>🌱 신규 멤버</strong>(아직 거래를 하지 않은 멤버), <strong>🫘 콩 전용</strong>이에요. 웹 앱에는 신뢰 필터가 없어요.</p>
+        <p>모임에 가입되어 있다면 모임 버튼 행도 함께 나타나요. <strong>모든 그룹 및 공개</strong>는 모든 항목을 보여주며, 특정 모임 버튼을 누르면 해당 모임 전용 게시물만 표시돼요. 웹 앱에서는 모임 목록이 버튼 행 대신 드롭다운으로 제공돼요.</p>
+        <p>휴대폰에서 일치하는 항목이 없으면 <strong>모든 필터 초기화</strong>를 탭하세요. 웹 앱에서는 빈 목록에 <strong>항목이 없어요</strong>라고 표시되며 해당 버튼은 없어요.</p>
+        <p>휴대폰에서 아래로 스크롤했을 때 검색어나 필터가 적용되어 있다면 상단의 작은 칩에 해당 내용이 표시돼요. 칩을 탭하면 내용을 변경할 수 있어요. 칩의 <strong>✕</strong>를 누르면 검색어와 모든 필터가 지워져요.</p>
+        <p><strong>내 거래</strong> 옆의 버튼은 목록의 표시 방식을 목록 보기, 격자 보기, 또는 요약 보기로 변경해 줘요.</p>
+        <h2>게시물에 표시되는 내용</h2>
+        <ul>
+            <li>사진 또는 카테고리 그림;</li>
+            <li><strong>제공</strong> 또는 <strong>요청</strong>;</li>
+            <li>콩으로 매긴 가격, 시간당 가격인 경우 <strong>/시간</strong> 포함;</li>
+            <li>각 거래 후에도 게시물이 계속 유지되는 경우 <strong>반복</strong>;</li>
+            <li>연료비나 재료비 등으로 현금이 일부 필요한 경우 <strong>현금 포함</strong>;</li>
+            <li>특정 모임에만 공개된 경우 자물쇠 아이콘과 모임 이름;</li>
+            <li>게시자의 이름과 신뢰 배지 및 별점. 아직 거래하지 않은 멤버에게는 <strong>창립 멤버</strong>가 표시돼요.</li>
+        </ul>
+        <p>게시물을 탭하여 여세요.</p>
+        <h2>게시물 화면에서</h2>
+        <ul>
+            <li><strong>메시지</strong>와 상대방 이름: 거래를 확정하기 전에 질문할 수 있어요.</li>
+            <li>상대방 이름을 탭하여 프로필, 후기, 신뢰도를 확인하세요.</li>
+            <li>사기, 불쾌한 내용, 허위 정보이거나 아동을 위험에 빠뜨리는 게시물인 경우 <strong>게시물 신고</strong>를 누르세요(<strong>아동 안전</strong>).</li>
+            <li>휴대폰에서 해당 사용자의 게시물과 대화를 숨기려면 <strong>사용자 차단</strong>을 누르세요. 관리자에게도 알림이 가요. &quot;멤버 차단하기&quot;를 참조하세요.</li>
+        </ul>
+        <p>웹 앱에서는 게시물 버튼이 <strong>💬 메시지</strong> 및 <strong>🚩 신고</strong>로 표시돼요. 사용자 차단은 상대방 프로필에서 할 수 있어요.</p>
+        <p>글로벌 커뮤니티에서 게시물에는 콩으로 매긴 가격이 없어요: 대신 보답으로 무엇을 원하는지 적혀 있어요. 가격이 표시될 자리에는 &quot;🏘️ 로컬 커뮤니티에서는 콩으로 매긴 가격이에요 ›&quot;라고 나와요. 게시물을 신청하는 대신 <strong>요청 · 콩 안전 보관 🏘️</strong>가 표시돼요: 탭하면 로컬 커뮤니티에서 거래가 어떻게 작동하는지 볼 수 있어요. 상대방에게 메시지를 보내는 기능은 다른 곳과 동일하게 작동해요. &quot;콩과 글로벌 커뮤니티&quot;를 참조하세요.</p>
+        <p>게시물을 저장하거나 공유하는 기능은 아직 지원되지 않아요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>홈</strong><span>홈의 구성, 휴대폰과 웹 앱에 표시되는 카드, 카드 추가·이동·삭제, 관심사 선택, 로그아웃 시 개인정보 보호 안내예요.</span></a></li>
+            <li><a href="posting.html"><strong>제공 또는 요청 등록하기</strong><span>내가 해줄 수 있거나 나눌 수 있는 것, 또는 구하는 것을 등록해 보세요.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>단계별 거래 진행 방식</strong><span>제공과 요청에서 요청부터 지급 완료까지의 과정, 후기 작성 안내예요.</span></a></li>
+            <li><a href="near-you.html"><strong>내 주변 항목 찾기</strong><span>내 위치나 직접 선택한 장소의 일정 거리 내에 있는 게시글만 모아보세요.</span></a></li>
+            <li><a href="trust-badges.html"><strong>신뢰 배지</strong><span>새내기, 주민, 지기, 어르신 배지의 의미와 배지가 특정 권한을 잠금 해제하는 것이 아닌 이유를 안내해요.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>콩과 글로벌 커뮤니티</strong><span>글로벌 커뮤니티의 목적, 여러 커뮤니티와의 관계, 🏘️ 지역 커뮤니티 표시, 샘플 커뮤니티 Example Valley, 콩이 대기하는 이유와 로컬 커뮤니티 시작·찾기 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

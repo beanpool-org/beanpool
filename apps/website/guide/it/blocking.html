@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloccare qualcuno — BeanPool members' guide</title>
+    <meta name="description" content="Nascondi i post e i messaggi di qualcuno e ripristinali in seguito se lo desideri.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Impostazioni e sicurezza</a></p>
+        <h1>Bloccare qualcuno</h1>
+        <p class="lede">Nascondi i post e i messaggi di qualcuno e ripristinali in seguito se lo desideri.</p>
+        <h2>Come bloccare</h2>
+        <ul>
+            <li>Sul loro profilo: tocca <strong>Blocca</strong>, oppure <strong>Blocca</strong> e il loro nome più in basso.</li>
+            <li>Su uno dei loro post (app per telefono): tocca <strong>Blocca utente</strong>. Un post nell'app web non ha il pulsante di blocco.</li>
+            <li>Da una chat: tocca il loro nome in alto per aprire il profilo, poi <strong>Blocca</strong>. Nell'app web, una chat con una persona ha anch'essa <strong>Blocca</strong> in alto.</li>
+        </ul>
+        <p>Nell'app per telefono, conferma con <strong>Blocca utente</strong>. Nell'app web, il browser ti chiede di confermare: fai clic su <strong>OK</strong>.</p>
+        <h2>Cosa comporta</h2>
+        <ul>
+            <li>I loro post nel Mercato vengono nascosti alla tua vista.</li>
+            <li>Scompaiono dalle tue chat e dall'elenco Persone, e non potete inviarvi messaggi. Nell'app per telefono, una persona che avevi aggiunto compare ancora nella scheda <strong>Amici</strong>: vedi sotto &quot;Cosa non comporta&quot;. L'app web li nasconde da ogni elenco.</li>
+            <li>I loro post nel Polso continuano a essere visibili. Sul telefono, anche i loro pin sulla Mappa restano visibili. La Mappa dell'app web li nasconde.</li>
+            <li>Nel tuo Mastro, i fagioli provenienti da loro mostrano la dicitura &quot;Fagioli da un membro che hai bloccato&quot; invece della nota che avevano inviato.</li>
+            <li>Viene inviata una segnalazione ai moderatori della tua comunità, che possono esaminare la situazione.</li>
+        </ul>
+        <h2>Cosa fa la tua comunità al riguardo</h2>
+        <p>La tua comunità applica quanto segue per i blocchi salvati per te. Oggi questo riguarda i blocchi effettuati nell'app web. Un blocco effettuato nell'app per telefono rimane su quel telefono, e la tua comunità non ne è a conoscenza.</p>
+        <ul>
+            <li>I loro messaggi diretti non ti raggiungono mai. La tua comunità non te li recapita, su nessun telefono o computer, e non ricevi notifiche né conteggi di messaggi non letti per essi.</li>
+            <li>Se aprono una nuova chat con te, non appare tra le tue chat.</li>
+            <li>Se li sblocchi, nulla di quanto inviato mentre erano bloccati ti verrà recapitato. Ti raggiungeranno solo i messaggi inviati successivamente.</li>
+            <li>Se reagiscono a uno dei tuoi messaggi o modificano un loro vecchio messaggio, tu non lo vedi.</li>
+            <li>Non ricevi notifiche quando scrivono in una chat di gruppo, anche quando ti menzionano con @.</li>
+            <li>Se chiedono di fare un accordo su un tuo annuncio, la richiesta attende nei tuoi accordi senza alcuna notifica. Se non rispondi, scade dopo 7 giorni, sempre senza alcuna notifica.</li>
+            <li>Se accettano subito una tua Offerta, non ricevi alcuna notifica, e nessuna notifica se poi annullano quell'accordo. L'accordo compare comunque tra i tuoi accordi, e i relativi messaggi nella tua chat con loro, come per chiunque. I loro fagioli vengono vincolati e restituiti come di consueto.</li>
+            <li>Non possono creare un annuncio rivolto esclusivamente a te.</li>
+            <li>Non puoi aggiungerli. Se ti aggiungono, non vieni avvisato. Se ti avevano aggiunto, la riga &quot;ti ha aggiunto&quot; nella scheda Persone scompare. I tuoi amici non ti vedono più come contatto comune sul profilo della persona bloccata.</li>
+            <li>Se ti inviano fagioli con una nota, i fagioli arrivano per intero e la nota no. Vedi invece &quot;Fagioli da un membro che hai bloccato&quot;, e continuerai a vederlo anche dopo averli sbloccati.</li>
+        </ul>
+        <h2>Cosa non comporta</h2>
+        <ul>
+            <li>L'altra persona non viene avvisata. Per lei, i messaggi risultano inviati, così come le note che accompagnano i fagioli.</li>
+            <li>Non interrompe l'amicizia: se l'avevi aggiunta, è ancora tua amica, e se i tuoi contatti sono impostati su Amici continua a vederli. Per interrompere anche questo legame, apri <strong>Gestisci utenti bloccati</strong> (sul web, <strong>Gestisci membri bloccati</strong>; vedi &quot;Sbloccare&quot; sotto) e tocca <strong>Rimuovi anche dagli amici</strong> sotto il suo nome. Compare solo per chi hai aggiunto tu. La persona rimane bloccata. Può accorgersi della rimozione.</li>
+            <li>Le chat di gruppo, le chat di eventi e le chat di progetti e imprese sono condivise: tutti i partecipanti vedono gli stessi messaggi. I loro messaggi inviati lì continuano a comparire, a te come a tutti gli altri.</li>
+            <li>Un accordo già in corso con loro prosegue come prima, con i relativi avvisi e notifiche.</li>
+            <li>Se hai già scambiato con loro in precedenza, possono comunque inviarti fagioli. Ogni fagiolo arriva, senza alcuna notifica.</li>
+            <li>Gli avvisi della tua comunità arrivano comunque, anche se avviati da loro. Ad esempio, vieni avvisato se qualcuno apre una votazione per sostituirti come coordinatore principale di un gruppo, e ricevi i messaggi dei responsabili della comunità.</li>
+            <li>Possono ancora vedere i tuoi post.</li>
+            <li>Nell'app per telefono, il blocco è conservato su questo telefono, solo per il tuo account. Un altro account su questo telefono non eredita i tuoi blocchi.</li>
+            <li>Nell'app per telefono, se esci o sostituisci l'account del telefono con un altro, i tuoi blocchi rimangono sul telefono. Se rientri con lo stesso account sono ancora lì.</li>
+            <li>Nell'app per telefono, se reinstalli l'app o usi un altro telefono, dovrai bloccarli di nuovo.</li>
+            <li>Nell'app web, la tua comunità conserva i tuoi blocchi collegati al tuo account. Accedi da qualsiasi browser e torneranno. Uscire non lascia alcuna traccia su quel computer. Vedi &quot;Usare BeanPool nel browser web&quot;.</li>
+            <li>I gestori del server della tua comunità possono vedere chi hai bloccato nell'app web, così come possono vedere le segnalazioni.</li>
+            <li>L'app per telefono e l'app web conservano elenchi separati. Un blocco nell'una non compare nell'altra.</li>
+        </ul>
+        <h2>Sbloccare</h2>
+        <ul>
+            <li>Apri <strong>Impostazioni</strong>. Sotto <strong>NOTE LEGALI E PRIVACY</strong>, tocca <strong>Gestisci utenti bloccati</strong>.</li>
+            <li>Tocca <strong>Sblocca</strong> accanto a un nome, o <strong>Sblocca tutti</strong>.</li>
+        </ul>
+        <p>Nell'app web, il blocco e lo sblocco richiedono una connessione alla tua comunità. Senza connessione, l'app lo segnala e nulla cambia. Riprova quando sarai di nuovo online.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>Segnalare un problema</strong><span>Segnala ai moderatori della comunità un post, un evento, un post su Polso, un progetto o un'impresa.</span></a></li>
+            <li><a href="messages.html"><strong>Messaggi</strong><span>Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.</span></a></li>
+            <li><a href="privacy.html"><strong>La tua privacy</strong><span>Cosa possono vedere gli altri su di te e le impostazioni per controllarlo.</span></a></li>
+            <li><a href="getting-help.html"><strong>Chiedere aiuto</strong><span>Dove guardare quando hai un dubbio e a chi rivolgerti.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

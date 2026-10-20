@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sự kiện — BeanPool members' guide</title>
+    <meta name="description" content="Tạo sự kiện trực tiếp hoặc trực tuyến, một lần hoặc lặp lại; xác nhận tham gia, nhận nhắc nhở, chia sẻ và chủ trì sự kiện.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Chung</a></p>
+        <h1>Sự kiện</h1>
+        <p class="lede">Tạo sự kiện trực tiếp hoặc trực tuyến, một lần hoặc lặp lại; xác nhận tham gia, nhận nhắc nhở, chia sẻ và chủ trì sự kiện.</p>
+        <h2>Tìm kiếm sự kiện</h2>
+        <ul>
+            <li>Trên <strong>Chợ</strong>, nhấn <strong>Sự kiện</strong>. Chọn <strong>Hôm nay</strong>, <strong>Cuối tuần này</strong> hoặc <strong>7 ngày tới</strong>.</li>
+            <li>Trên <strong>Bản đồ</strong>, các sự kiện là những ghim màu tím. Trên điện thoại, nhấn <strong>Sự kiện</strong> để chỉ xem các sự kiện. Trong ứng dụng web, các sự kiện luôn hiển thị ở đó, và các thẻ chọn ngày sẽ giúp thu hẹp phạm vi tìm kiếm.</li>
+        </ul>
+        <h2>Sự kiện của bạn</h2>
+        <p>Trên <strong>Chợ</strong>, nhấn <strong>★ Dành cho bạn</strong>. <strong>Sự kiện của bạn</strong> là mục đầu tiên: mọi sự kiện mà bạn đã đánh dấu là <strong>Sẽ tham gia</strong> hoặc <strong>Quan tâm</strong>, sắp xếp theo thứ tự sự kiện diễn ra sớm nhất lên trước. Nhấn vào một sự kiện để mở nó ra.</p>
+        <p>Mục này chỉ xuất hiện khi bạn có sự kiện sắp diễn ra, và chỉ lưu các câu trả lời của chính bạn — không ai khác có thể nhìn thấy.</p>
+        <h2>Tham gia sự kiện</h2>
+        <p>Trên trang sự kiện, nhấn <strong>Sẽ tham gia</strong> hoặc <strong>Quan tâm</strong>. Nhấn lại vào lựa chọn của bạn để hủy bỏ.</p>
+        <p>Khi bạn <strong>Sẽ tham gia</strong>:</p>
+        <ul>
+            <li>bạn có thể đọc <strong>Ghi chú cho những người tham gia</strong> của người tổ chức, sau khi người tổ chức cho bạn vào (nếu người tổ chức đã chọn thiết lập đó);</li>
+            <li>bạn có thể mở <strong>chat sự kiện</strong>. Xem &quot;Chat sự kiện&quot;;</li>
+            <li>đối với sự kiện trực tuyến, bạn sẽ thấy <strong>Liên kết tham gia</strong> và nút <strong>Tham gia</strong>, theo cùng điều kiện như phần ghi chú.</li>
+        </ul>
+        <p>Nhấn vào sự kiện để xem toàn bộ thông tin, và <strong>Hiển thị trên bản đồ</strong>. Trên điện thoại, thao tác này sẽ mở ứng dụng bản đồ của bạn. Trong ứng dụng web, vị trí sẽ hiển thị trên Bản đồ.</p>
+        <h2>Nhận nhắc nhở</h2>
+        <p>Khi bạn chọn <strong>Sẽ tham gia</strong> hoặc <strong>Quan tâm</strong>, sự kiện sẽ hiển thị <strong>Nhắc tôi</strong> và khoảng thời gian trước khi sự kiện bắt đầu mà bạn sẽ được thông báo — <strong>1 ngày trước (mặc định của bạn)</strong> cho đến khi bạn thay đổi.</p>
+        <ul>
+            <li>Nhấn <strong>Thay đổi</strong> để chọn <strong>1 tuần trước</strong>, <strong>1 ngày trước</strong>, <strong>2 giờ trước</strong>, <strong>1 giờ trước</strong> hoặc <strong>30 phút trước</strong>. Bạn có thể chọn nhiều mốc thời gian.</li>
+            <li>Bỏ chọn tất cả để không nhận nhắc nhở cho sự kiện này.</li>
+            <li>Sau đó nhấn <strong>Lưu cho sự kiện này</strong>. Lựa chọn chỉ được lưu khi bạn nhấn nút này.</li>
+            <li>Nhấn <strong>Dùng mặc định</strong> để quay lại lựa chọn thông thường của bạn.</li>
+        </ul>
+        <p>Để thay đổi lựa chọn thông thường của bạn cho mọi sự kiện, xem &quot;Thông báo&quot;.</p>
+        <p>Các lời nhắc sẽ gửi đến dưới dạng cảnh báo trên điện thoại cùng với các cảnh báo Chợ của bạn, vì vậy chúng sẽ dừng lại nếu bạn tắt các cảnh báo đó. Bạn không bao giờ bị nhắc nhở về một sự kiện đã bị hủy hoặc đã kết thúc, và không bao giờ bị nhắc về mốc thời gian đã trôi qua trước thời điểm bạn chọn tham gia.</p>
+        <h2>Chia sẻ sự kiện với người khác</h2>
+        <p>Mở sự kiện và nhấn <strong>Chia sẻ</strong>. Bảng chia sẻ thông thường trên điện thoại của bạn sẽ mở ra cùng với tên sự kiện, thời gian, địa điểm và liên kết. Trên máy tính, liên kết sẽ được sao chép sẵn để bạn dán.</p>
+        <p>Bất kỳ ai nhấn vào liên kết đó đều mở được sự kiện — trong ứng dụng nếu họ đã cài đặt, hoặc trên ứng dụng web nếu chưa có. Người chưa thuộc cộng đồng của bạn sẽ được chuyển đến trang tham gia của cộng đồng. Trên trình duyệt web, cộng đồng toàn cầu sẽ hiển thị sự kiện cho họ trước như một khách ghé thăm nhìn thấy, và mở lại sự kiện sau khi họ đã tham gia.</p>
+        <h2>Thêm sự kiện vào lịch của bạn</h2>
+        <p>Mở sự kiện và nhấn <strong>Thêm vào lịch</strong>.</p>
+        <ul>
+            <li>Trên <strong>ứng dụng web</strong>, một tệp lịch sẽ được tải xuống. Hãy mở tệp đó và ứng dụng lịch của bạn sẽ đề xuất thêm sự kiện.</li>
+            <li>Trên <strong>iPhone</strong>, tệp tương tự được chuyển đến điện thoại của bạn, hiển thị tùy chọn <strong>Thêm vào Lịch</strong>.</li>
+            <li>Trên <strong>Android</strong>, Google Calendar sẽ mở ra với thông tin sự kiện đã được điền sẵn. Hãy kiểm tra và lưu lại.</li>
+        </ul>
+        <p>Mục lịch sẽ chứa tên, thời gian, địa điểm và liên kết quay lại sự kiện. Nếu sau đó người tổ chức đổi thời gian, lịch của bạn sẽ không tự động cập nhật theo — ứng dụng vẫn sẽ nhắc nhở bạn, và chính sự kiện luôn hiển thị thời gian mới.</p>
+        <h2>Tạo sự kiện</h2>
+        <ul>
+            <li>Nhấn <strong>+ ĐĂNG TIN</strong> trên tab Chợ hoặc trên Bản đồ, sau đó chọn <strong>Sự kiện</strong>.</li>
+            <li>Nhập <strong>Tiêu đề</strong>, và thời điểm <strong>Bắt đầu</strong>. <strong>Kết thúc</strong> là tùy chọn; sự kiện sẽ mặc định kéo dài 2 giờ trừ khi bạn thay đổi.</li>
+            <li>Thời gian được tính theo múi giờ riêng của sự kiện, lấy từ vị trí ghim. Khi múi giờ đó khác với múi giờ của bạn, một dòng chữ bên dưới thời gian sẽ nêu tên múi giờ đó. Nhấn <strong>Thay đổi</strong> bên cạnh nếu thông tin không đúng.</li>
+            <li><strong>Lặp lại:</strong> chọn tần suất lặp lại của sự kiện, chẳng hạn như hàng tuần vào ngày đó hoặc mỗi tháng một lần, hoặc để ở chế độ <strong>Không lặp lại</strong>. <strong>Cho đến ngày</strong> là tùy chọn: nếu để trống, sự kiện sẽ lặp lại cho đến khi bạn hủy.</li>
+            <li>Chọn <strong>Tại một địa điểm</strong> hoặc <strong>Trực tuyến</strong>. Đối với sự kiện trực tuyến, sẽ không có địa điểm và không có ghim: thay vào đó hãy thêm <strong>Liên kết tham gia</strong>. Chỉ bạn và những người tham gia mới nhìn thấy liên kết này (nếu bạn bật chế độ duyệt người vào, chỉ những người bạn cho vào mới thấy). Thời gian diễn ra sự kiện theo múi giờ của bạn, và những người khác sẽ thấy theo múi giờ của họ, có ghi chú <strong>giờ của bạn</strong>.</li>
+            <li><strong>Tên địa điểm</strong>, ví dụ như &quot;Hội trường thị trấn&quot;.</li>
+            <li>Đặt ghim trên bản đồ: nhấn vào bản đồ, tìm kiếm trong <strong>Tìm địa chỉ</strong>, hoặc nhấn <strong>Dùng vị trí của tôi</strong>. Nhấn <strong>Ước lượng (~100 m)</strong> nếu bạn không muốn hiển thị vị trí chính xác. Xem &quot;Vị trí ghim của bạn&quot;.</li>
+            <li>Nhập <strong>Mô tả</strong>, và thêm ảnh nếu bạn thích.</li>
+            <li><strong>Ghi chú cho những người tham gia:</strong> mọi người nhấn Sẽ tham gia đều thấy ghi chú này, trừ khi bạn tích chọn <strong>Chỉ những người tôi cho vào mới thấy ghi chú và đoạn chat</strong> (mặc định được tích chọn ban đầu trên cộng đồng toàn cầu, nơi bất kỳ ai cũng có thể tham gia trong một phút): khi đó chỉ những người bạn cho vào mới thấy ghi chú và đoạn chat sự kiện. Đây là nơi phù hợp để ghi địa chỉ chính xác hoặc mã mở cổng; tên địa điểm thì dành cho tất cả mọi người.</li>
+            <li><strong>Ai có thể nhìn thấy:</strong> toàn bộ cộng đồng của bạn, hoặc một nhóm.</li>
+            <li>Nếu bạn quản lý một dự án hoặc doanh nghiệp, hoặc là người điều phối của một nhóm, mục <strong>ĐĂNG DƯỚI TÊN</strong> cho phép bạn đăng sự kiện dưới danh nghĩa của nhóm hoặc doanh nghiệp đó. Một nhóm chỉ tổ chức sự kiện cho riêng các thành viên của mình; một doanh nghiệp tổ chức sự kiện cho toàn thể cộng đồng, vì vậy sự kiện của doanh nghiệp không bao giờ chỉ giới hạn trong nhóm.</li>
+            <li>Nhấn <strong>Tạo</strong>. Sự kiện của bạn sẽ xuất hiện trên Chợ và trên Bản đồ.</li>
+        </ul>
+        <p>Trong ứng dụng web, ô tiêu đề là <strong>What's happening</strong>, các nút ghim là <strong>📍 Vị trí của tôi</strong> và <strong>📌 Thả ghim</strong>, và nút cuối cùng là <strong>Tạo sự kiện</strong>.</p>
+        <p>Bạn có thể có tối đa 5 sự kiện sắp diễn ra cùng một lúc. Các sự kiện của nhóm được tính vào giới hạn của nhóm, và sự kiện của doanh nghiệp được tính vào giới hạn của doanh nghiệp.</p>
+        <h2>Quản lý sự kiện của bạn</h2>
+        <p>Mở sự kiện của bạn. Với tư cách là người tổ chức, bạn có thể:</p>
+        <ul>
+            <li>xem <strong>Người tham gia</strong>, và cho mọi người vào: <strong>Cho vào</strong> bên cạnh tên (nhấn lại để rút lại), hoặc <strong>Cho tất cả vào</strong>. Bạn bè của chính bạn sẽ được tự động cho vào ngay khi họ nhấn Sẽ tham gia. Nếu bạn bỏ chọn <strong>Chỉ những người tôi cho vào mới thấy ghi chú và đoạn chat</strong>, tất cả những người tham gia sẽ thấy ghi chú và đoạn chat cho đến thời điểm đó, và đoạn chat sẽ thông báo rằng người tổ chức đã mở quyền truy cập;</li>
+            <li><strong>Chỉnh sửa sự kiện</strong>. Nếu bạn thay đổi thời gian hoặc địa điểm, tất cả những người tham gia sẽ được thông báo;</li>
+            <li><strong>Sao chép sang ngày mới</strong>, để tổ chức lại sự kiện;</li>
+            <li><strong>Hủy sự kiện</strong>, sau đó xác nhận (<strong>Hủy sự kiện</strong> một lần nữa trên điện thoại, <strong>OK</strong> trong ứng dụng web). Tất cả những người tham gia đều thấy sự kiện đã bị hủy, và đoạn chat chuyển sang chế độ chỉ đọc.</li>
+        </ul>
+        <h2>Sự kiện lặp lại</h2>
+        <p>Một sự kiện lặp lại sẽ hiển thị biểu tượng <strong>↻</strong> và tần suất bên cạnh ngày diễn ra, chẳng hạn như <strong>Hàng thứ Sáu</strong> hoặc <strong>Hàng tháng vào ngày 16</strong>. Thẻ sự kiện hiển thị ngày tiếp theo; mở thẻ để xem <strong>Các ngày tiếp theo</strong>.</p>
+        <p>Nếu bạn là người tổ chức sự kiện, mỗi ngày diễn ra tiếp theo sẽ có các tùy chọn:</p>
+        <ul>
+            <li><strong>Hủy ngày này:</strong> chỉ ngày hôm đó bị hủy. Tất cả những người tham gia vào ngày hôm đó sẽ được thông báo.</li>
+            <li><strong>Chỉ đổi ngày này:</strong> ngày hôm đó bị hủy và bạn tạo một sự kiện một lần vào một ngày khác.</li>
+            <li><strong>Khôi phục lại:</strong> ngày đã hủy sẽ được kích hoạt lại.</li>
+        </ul>
+        <p>Nút <strong>Hủy sự kiện</strong> sẽ hủy bỏ mọi ngày diễn ra, và đoạn chat chuyển sang chế độ chỉ đọc. Cho đến khi đó, đoạn chat vẫn mở giữa các ngày diễn ra sự kiện cho đến ngày cuối cùng; nếu không có <strong>Cho đến ngày</strong>, đoạn chat sẽ vẫn mở cho đến khi bạn hủy sự kiện.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>Chat sự kiện</strong><span>Trò chuyện với người tổ chức và tất cả những người tham gia sự kiện.</span></a></li>
+            <li><a href="notifications.html"><strong>Thông báo</strong><span>Chọn thông báo gửi đến điện thoại của bạn và thời điểm sự kiện nhắc nhở.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Vị trí ghim của bạn</strong><span>Ai thấy vị trí các bài đăng và sự kiện của bạn, và cách giữ riêng tư cho ngôi nhà.</span></a></li>
+            <li><a href="map-pins.html"><strong>Những gì bản đồ hiển thị</strong><span>Các ghim trên Bản đồ, ý nghĩa màu sắc của chúng và các nút xung quanh.</span></a></li>
+            <li><a href="polls.html"><strong>Thăm dò</strong><span>Hỏi cộng đồng một câu hỏi nhanh. Thăm dò thể hiện ý kiến; tự chúng không làm thay đổi điều gì.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

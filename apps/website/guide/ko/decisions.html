@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>의사결정 투표 — BeanPool members' guide</title>
+    <meta name="description" content="진행 중인 의사결정을 찾고, 투표하고, 투표를 변경하고, 결과를 확인하세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">공유지</a></p>
+        <h1>의사결정 투표</h1>
+        <p class="lede">진행 중인 의사결정을 찾고, 투표하고, 투표를 변경하고, 결과를 확인하세요.</p>
+        <h2>위치</h2>
+        <p><strong>공유지</strong>를 탭한 다음 <strong>결정</strong>을 탭하세요. 진행 중인 결정은 <strong>진행 중인 결정</strong> 아래에 있어요.</p>
+        <p>결정은 구속력이 있어요: 통과되면 커뮤니티 서버가 자체적으로 이를 집행해요. 관리자는 멤버들이 읽을 수 있는 서면 사유를 제시해야만 중단할 수 있어요. 누가 투표할 수 있는지, 얼마나 많은 투표율이 필요한지, 얼마나 많은 찬성이 필요한지에 대한 규칙은 &quot;규칙 및 의사결정 방식&quot;에 나와 있어요.</p>
+        <p>글로벌 커뮤니티에는 결정이 없어요. 12개 단어나 로그인으로 누구나 가입할 수 있으므로 한 사람이 여러 계정으로 투표 결과를 좌우할 수 있기 때문이에요. 대신 중재자가 관리해요: &quot;문제 신고하기&quot;를 참조하세요. 결정은 로컬 커뮤니티의 고유한 기능이에요. 설문은 어디에서나 계속 작동해요.</p>
+        <p>글로벌 커뮤니티에서는 작동 방식을 볼 수 있도록 로컬 커뮤니티의 예시 결정이 <strong>🏘️ 로컬 커뮤니티</strong> 표시와 함께 <strong>공유지</strong>에 나타나요. <strong>찬성 투표</strong> 및 <strong>반대 투표</strong> 버튼은 왜 투표가 로컬 커뮤니티에만 있는지 설명하며, 실제 투표가 반영되지 않아요. &quot;콩과 글로벌 커뮤니티&quot;를 참조하세요.</p>
+        <h2>결정 읽기</h2>
+        <p>각 결정에는 다음이 표시돼요:</p>
+        <ul>
+            <li>어떤 내용인지, 통과되면 무슨 일이 일어나는지;</li>
+            <li>투표수가 계산되는 방식: 1인 1표, 또는 공유지 콩에 관한 결정인 경우 보이스 크레딧;</li>
+            <li>남은 기간. 투표는 7일 동안 진행돼요;</li>
+            <li><strong>투표율:</strong> 필요한 투표수 및 충족 여부;</li>
+            <li><strong>집계:</strong> 지금까지의 찬성과 반대, 그리고 필요한 찬성 비율.</li>
+        </ul>
+        <h2>투표하기</h2>
+        <ul>
+            <li><strong>찬성 투표</strong> 또는 <strong>반대 투표</strong>를 탭하세요. 휴대폰에서는 앱에 <strong>투표 완료</strong>가 표시돼요. 웹 앱에서는 카드가 업데이트돼요.</li>
+            <li>그런 다음 카드에 &quot;찬성에 투표했습니다&quot;와 같이 내가 투표한 내용이 표시돼요.</li>
+            <li>마감 전에 마음이 바뀌면 <strong>반대로 변경</strong>과 같은 다른 버튼을 탭하세요.</li>
+        </ul>
+        <p>모든 결정은 <strong>비밀 투표</strong>예요. 멤버들은 총합만 볼 수 있으며, 누가 어떻게 투표했는지는 절대 볼 수 없어요. 내 투표는 나에게만 보여요.</p>
+        <h2>공유지의 콩에 관한 결정</h2>
+        <p>이러한 결정은 <strong>보이스 크레딧</strong>을 사용해요. 보이스 크레딧은 완료된 거래에서 얻으며, 각 결정마다 새로 부여돼요. <strong>−</strong>와 <strong>+</strong>를 사용하여 행사할 표 수를 선택하세요. 표 수가 많을수록 더 많은 크레딧이 들어요: 2표는 4크레딧, 3표는 9크레딧이 들어요.</p>
+        <p>아직 거래를 완료하지 않았다면 이러한 결정에는 투표할 수 없어요. 투표가 시작되기 전에 가입했고 신용이 동결되지 않은 상태라면 다른 결정에는 여전히 투표할 수 있어요.</p>
+        <h2>결과</h2>
+        <p><strong>결정 이력</strong>을 탭하세요. <strong>전체</strong>, <strong>집행 완료</strong>, <strong>실패</strong>, 또는 <strong>무효</strong>를 선택하세요. 각각 최종 투표율과 집계 결과, 그리고 예를 들어 투표 참여자가 너무 적었다는 등 어떤 일이 있었는지 보여줘요.</p>
+        <h2>추가 정보</h2>
+        <p>공유지의 콩과 투표가 작동하는 방식에 대한 안내는 휴대폰의 공유지 제목 옆 <strong>ⓘ</strong>를 탭하세요. 웹 앱에서는 <strong>장부</strong>를 열고 <strong>지갑</strong>을 탭한 다음 <strong>공유 풀 ⓘ</strong>를 탭하세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>의사결정 제안하기</strong><span>커뮤니티에 구속력 있는 결정을 제안해 보세요.</span></a></li>
+            <li><a href="rules.html"><strong>규칙 및 의사결정 방식</strong><span>투표, 참여율, 비밀 투표, 투표 자격, 활동 정지, 멤버 제명, 운영자 및 소집자와 대표 소집자 안내예요.</span></a></li>
+            <li><a href="polls.html"><strong>설문</strong><span>커뮤니티에 간단한 질문을 올려보세요. 설문은 의견을 모으는 용도이며 그 자체로 결정을 바꾸지는 않아요.</span></a></li>
+            <li><a href="commons-fund.html"><strong>공유지 기금</strong><span>커뮤니티의 공유 콩: 기금의 출처와 사용 방법 안내예요.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>상단 바</strong><span>콩 표시, 확인이 필요한 알림 아이콘, 오른쪽 상단의 버튼 안내예요.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>콩과 글로벌 커뮤니티</strong><span>글로벌 커뮤니티의 목적, 여러 커뮤니티와의 관계, 🏘️ 지역 커뮤니티 표시, 샘플 커뮤니티 Example Valley, 콩이 대기하는 이유와 로컬 커뮤니티 시작·찾기 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

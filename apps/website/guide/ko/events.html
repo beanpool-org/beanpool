@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>행사 — BeanPool members' guide</title>
+    <meta name="description" content="오프라인이나 온라인에서 일회성 또는 반복 행사를 만들고, 참석 여부 표시, 알림 받기, 공유 및 주최자 운영 안내예요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">공유지</a></p>
+        <h1>행사</h1>
+        <p class="lede">오프라인이나 온라인에서 일회성 또는 반복 행사를 만들고, 참석 여부 표시, 알림 받기, 공유 및 주최자 운영 안내예요.</p>
+        <h2>행사 찾기</h2>
+        <ul>
+            <li><strong>장터</strong>에서 <strong>행사</strong>를 탭하세요. <strong>오늘</strong>, <strong>이번 주말</strong>, 또는 <strong>앞으로 7일</strong>을 선택하세요.</li>
+            <li><strong>지도</strong>에서 행사는 보라색 핀으로 표시돼요. 휴대폰에서는 <strong>행사</strong>를 탭하여 행사만 볼 수 있어요. 웹 앱에서는 항상 표시되며, 날짜 칩을 사용해 범위를 좁힐 수 있어요.</li>
+        </ul>
+        <h2>내 행사</h2>
+        <p><strong>장터</strong>에서 <strong>★ 맞춤</strong>을 탭하세요. <strong>내 행사</strong>가 가장 먼저 표시돼요: 내가 <strong>참석</strong> 또는 <strong>관심 있음</strong>으로 표시한 모든 행사가 가장 빠른 날짜 순으로 나와요. 하나를 탭하여 여세요.</p>
+        <p>다가오는 일정이 있을 때만 표시되며, 내 답변만 담겨 있어 다른 사람은 볼 수 없어요.</p>
+        <h2>참석하기</h2>
+        <p>행사에서 <strong>참석</strong> 또는 <strong>관심 있음</strong>을 탭하세요. 선택한 항목을 다시 탭하면 지워져요.</p>
+        <p><strong>참석</strong> 상태일 때:</p>
+        <ul>
+            <li>주최자가 참석자 승인을 설정한 경우, 주최자가 승인하면 주최자의 <strong>참석자를 위한 안내 메모</strong>를 읽을 수 있어요;</li>
+            <li><strong>행사 대화</strong>를 열 수 있어요. &quot;행사 대화&quot;를 참조하세요;</li>
+            <li>온라인 행사의 경우, 메모와 동일한 조건으로 <strong>참여 링크</strong>와 <strong>참여</strong> 버튼이 보여요.</li>
+        </ul>
+        <p>행사를 탭하면 모든 내용과 <strong>지도에서 보기</strong>를 볼 수 있어요. 휴대폰에서는 지도 앱이 열려요. 웹 앱에서는 지도 탭에 해당 장소가 표시돼요.</p>
+        <h2>알림 받기</h2>
+        <p><strong>참석</strong> 또는 <strong>관심 있음</strong>을 누르면 행사에 <strong>알림 받기</strong>와 시작 전 언제 알림을 받을지가 표시돼요 — 변경하기 전까지는 <strong>1일 전 (내 기본값)</strong>이에요.</p>
+        <ul>
+            <li><strong>변경</strong>을 탭하여 <strong>1주일 전</strong>, <strong>1일 전</strong>, <strong>2시간 전</strong>, <strong>1시간 전</strong>, 또는 <strong>30분 전</strong>을 선택하세요. 둘 이상을 선택할 수도 있어요.</li>
+            <li>이 행사에 대한 알림을 받지 않으려면 아무것도 선택하지 마세요.</li>
+            <li>그런 다음 <strong>이 행사에 저장</strong>을 탭하세요. 탭하기 전까지는 선택 내용이 저장되지 않아요.</li>
+            <li>평소 선택으로 되돌리려면 <strong>기본값 사용</strong>을 탭하세요.</li>
+        </ul>
+        <p>모든 행사에 대한 기본 선택을 변경하려면 &quot;알림&quot;을 참조하세요.</p>
+        <p>알림은 장터 알림과 함께 휴대폰 알림으로 도착하므로, 장터 알림을 끄면 중단돼요. 취소되었거나 이미 종료된 행사에 대한 알림은 오지 않으며, 참석 의사를 밝혔을 때 이미 지나간 시간에 대해서도 알림이 오지 않아요.</p>
+        <h2>다른 사람에게 알리기</h2>
+        <p>행사를 열고 <strong>공유</strong>를 탭하세요. 휴대폰의 일반적인 공유 시트가 열리며 행사 이름, 일시, 장소 및 링크가 포함돼요. 컴퓨터에서는 링크가 복사되어 붙여넣을 수 있어요.</p>
+        <p>해당 링크를 누르는 사람은 누구나 행사를 열 수 있어요 — 앱이 있으면 앱에서, 없으면 웹 앱에서 열려요. 커뮤니티에 가입하지 않은 사람은 가입 페이지로 이동해요. 웹 브라우저에서 글로벌 커뮤니티는 방문자가 보는 방식으로 행사를 먼저 보여주고, 가입한 후에 다시 열어줘요.</p>
+        <h2>캘린더에 추가하기</h2>
+        <p>행사를 열고 <strong>캘린더에 추가</strong>를 탭하세요.</p>
+        <ul>
+            <li><strong>웹 앱</strong>에서는 캘린더 파일이 다운로드돼요. 파일을 열면 캘린더 앱에서 일정을 추가할 수 있어요.</li>
+            <li><strong>iPhone</strong>에서는 동일한 파일이 휴대폰으로 전달되어 <strong>캘린더에 추가</strong>가 표시돼요.</li>
+            <li><strong>Android</strong>에서는 행사가 이미 입력된 상태로 Google 캘린더가 열려요. 확인하고 저장하세요.</li>
+        </ul>
+        <p>캘린더 일정에는 이름, 시간, 장소 및 행사로 돌아가는 링크가 포함돼요. 주최자가 나중에 시간을 변경하더라도 캘린더 일정은 함께 변경되지 않아요 — 앱이 여전히 알림을 보내주며, 행사 자체에는 항상 새 시간이 표시돼요.</p>
+        <h2>행사 만들기</h2>
+        <ul>
+            <li>장터 탭이나 지도에서 <strong>+ 게시물 추가</strong>를 탭한 다음 <strong>행사</strong>를 탭하세요.</li>
+            <li><strong>제목</strong>과 <strong>시작</strong> 일시를 입력하세요. <strong>종료</strong>는 선택 사항이에요. 변경하지 않으면 2시간 후로 설정돼요.</li>
+            <li>시간은 핀에서 가져온 행사 자체의 시간대로 표시돼요. 내 시간대와 다를 경우 시간 아래에 해당 시간대 이름이 표시돼요. 틀렸다면 옆의 <strong>변경</strong>을 탭하세요.</li>
+            <li><strong>반복:</strong> 해당 요일마다 매주 또는 매월 1회와 같이 반복 주기를 선택하거나 <strong>반복 안 함</strong>으로 두세요. <strong>종료일</strong>은 선택 사항이에요: 비워 두면 취소할 때까지 행사가 반복돼요.</li>
+            <li><strong>오프라인 장소에서</strong> 또는 <strong>온라인</strong>을 선택하세요. 온라인 행사에는 장소와 핀이 없어요: 대신 <strong>참여 링크</strong>를 추가하세요. 나와 참석하는 사람들에게만 보여요(참석자를 승인하는 경우, 내가 승인한 사람에게만 보임). 시간은 내 시간대로 설정되며, 다른 모든 사람에게는 <strong>내 시간</strong>으로 표시된 각자의 시간대로 보여요.</li>
+            <li>&quot;마을회관&quot;과 같은 <strong>장소 이름</strong>을 입력하세요.</li>
+            <li>지도에 핀을 놓으세요: 지도를 탭하거나, <strong>주소 찾기</strong>로 검색하거나, <strong>내 위치 사용</strong>을 탭하세요. 정확한 위치를 표시하고 싶지 않다면 <strong>대략적 위치 (~100 m)</strong>를 탭하세요. &quot;내 핀 위치 설정&quot;을 참조하세요.</li>
+            <li><strong>설명</strong>을 입력하고, 원하는 경우 사진을 추가하세요.</li>
+            <li><strong>참석자를 위한 안내 메모:</strong> 참석을 누른 모든 사람에게 보여요. 단, <strong>내가 승인한 사람만 메모와 대화를 볼 수 있어요</strong>에 체크한 경우는 예외예요(누구나 1분 만에 가입할 수 있는 글로벌 커뮤니티에서는 기본으로 체크되어 있음): 이 경우 내가 승인한 사람에게만 메모와 행사 대화가 보여요. 정확한 주소나 대문 비밀번호를 적기에 좋은 공간이에요. 장소 이름은 모든 사람에게 공개돼요.</li>
+            <li><strong>공개 대상:</strong> 커뮤니티 전체, 또는 특정 모임 1개.</li>
+            <li>프로젝트나 기업을 운영하거나 모임의 주최자인 경우, <strong>게시자 선택</strong>을 통해 해당 단체의 이름으로 행사를 등록할 수 있어요. 모임은 자체 멤버만을 위해 주최해요. 기업은 전체 커뮤니티를 위해 주최하므로 기업 행사는 모임 전용으로 설정할 수 없어요.</li>
+            <li><strong>만들기</strong>를 탭하세요. 내 행사가 장터와 지도에 등록돼요.</li>
+        </ul>
+        <p>웹 앱에서는 제목 상자가 <strong>어떤 일인가요?</strong>이고, 핀 버튼은 <strong>📍 내 위치</strong> 및 <strong>📌 핀 고정</strong>이며, 마지막 버튼은 <strong>이벤트 생성</strong>이에요.</p>
+        <p>동시에 다가오는 행사를 최대 5개까지 등록할 수 있어요. 모임의 행사는 모임의 한도에 계산되고, 기업의 행사는 기업의 한도에 계산돼요.</p>
+        <h2>행사 운영하기</h2>
+        <p>내 행사를 여세요. 주최자는 다음을 할 수 있어요:</p>
+        <ul>
+            <li><strong>참석자 목록</strong>을 확인하고 사람들을 승인하기: 이름 옆의 <strong>들여보내기</strong>(다시 탭하면 취소) 또는 <strong>모두 승인하기</strong>. 내 친구들은 참석을 누르면 자동으로 승인돼요. <strong>내가 승인한 사람만 메모와 대화를 볼 수 있어요</strong> 체크를 해제하면 지금까지 참석한 모든 사람에게 메모와 대화가 보이며, 대화방에 주최자가 대화를 공개했다는 안내가 표시돼요;</li>
+            <li><strong>이벤트 수정</strong>. 시간이나 장소를 변경하면 참석하는 모든 사람에게 알림이 가요;</li>
+            <li><strong>새 날짜로 복사</strong>, 행사를 다시 진행하기 위해 복사해요;</li>
+            <li><strong>이벤트 취소</strong>, 취소를 확인해요(휴대폰에서는 <strong>이벤트 취소</strong>를 다시 누르고, 웹 앱에서는 <strong>확인</strong>을 누름). 참석하는 모든 사람에게 취소되었음이 보이며, 대화방은 읽기 전용이 돼요.</li>
+        </ul>
+        <h2>반복 행사</h2>
+        <p>반복 행사에는 날짜 옆에 <strong>↻</strong> 아이콘과 <strong>매주 금요일</strong> 또는 <strong>매월 16일</strong>과 같은 반복 주기가 표시돼요. 행사 카드에는 다음 일정이 표시되며, 카드를 열면 <strong>다음 일정</strong>을 볼 수 있어요.</p>
+        <p>내가 주최하는 경우, 각 다음 일정에는 다음 옵션이 있어요:</p>
+        <ul>
+            <li><strong>이 일정 취소하기:</strong> 해당 날짜만 취소돼요. 그날 참석하는 모든 사람에게 알림이 가요.</li>
+            <li><strong>이 일정만 변경하기:</strong> 해당 날짜가 취소되고 다른 날짜에 일회성 행사를 만들어요.</li>
+            <li><strong>다시 살리기:</strong> 취소된 일정을 다시 진행해요.</li>
+        </ul>
+        <p><strong>이벤트 취소</strong>는 모든 일정을 취소하며, 대화방은 읽기 전용이 돼요. 그전까지 대화방은 마지막 일정까지 일정 사이에 계속 열려 있어요. <strong>종료일</strong>이 없으면 행사를 취소할 때까지 계속 열려 있어요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>행사 대화</strong><span>주최자 및 행사 참여자들과 함께 대화를 나눠보세요.</span></a></li>
+            <li><a href="notifications.html"><strong>알림</strong><span>휴대폰으로 받을 알림과 행사 미리림 시점을 선택하세요.</span></a></li>
+            <li><a href="pin-locations.html"><strong>내 핀 위치 설정</strong><span>내 게시글과 행사의 위치를 볼 수 있는 사람과 집 주소를 안전하게 지키는 방법이에요.</span></a></li>
+            <li><a href="map-pins.html"><strong>지도에 표시되는 항목</strong><span>지도의 핀과 색상별 의미, 주변 버튼 안내예요.</span></a></li>
+            <li><a href="polls.html"><strong>설문</strong><span>커뮤니티에 간단한 질문을 올려보세요. 설문은 의견을 모으는 용도이며 그 자체로 결정을 바꾸지는 않아요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

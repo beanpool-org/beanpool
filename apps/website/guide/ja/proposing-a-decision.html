@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>決定の提案 — BeanPool members' guide</title>
+    <meta name="description" content="コミュニティ全体に拘束力のある決定事項を提案します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">コモンズ</a></p>
+        <h1>決定の提案</h1>
+        <p class="lede">コミュニティ全体に拘束力のある決定事項を提案します。</p>
+        <h2>開始する前に</h2>
+        <ul>
+            <li>決定は、コミュニティのサーバーが実行できる事柄のためのものです（メンバーの除名や一時停止、誰かのクレジットの凍結や凍結解除、誰が推薦できるかの決定、コモンズからの豆の支払いなど）。その他の事柄については、代わりにアンケートを開始してください。</li>
+            <li>決定によってコミュニティのサーバーのオーナーや管理者を除名または一時停止することはできません。「ルールと決定の仕組み」を参照してください。</li>
+            <li>取引を1件完了するか、管理者があなたに信頼バッジを付与すると提案できるようになります。コミュニティの管理者は常に提案できます。推薦だけでは不十分です。</li>
+            <li>同時に進行できる決定は1人1件のみです。</li>
+            <li>グローバルコミュニティには決定が存在しないため、そこで提案できるものはありません。「決定への投票」を参照してください。</li>
+        </ul>
+        <h2>提案の手順</h2>
+        <ul>
+            <li><strong>コモンズ</strong>をタップし、<strong>決定</strong>をタップして、<strong>+ 決定を提案</strong>をタップします。</li>
+            <li>対象を選択します：<strong>メンバー</strong>または<strong>コモンズプール</strong>。</li>
+            <li><strong>タイトル</strong>：1行で入力します（例：「ツールライブラリに200 豆を付与」など）。</li>
+            <li><strong>説明と提案理由</strong>：理由を10文字以上で説明します。わかりやすく簡潔に書いてください。メンバーはここに書かれた内容を読んで投票します。</li>
+            <li>その下の一覧から、具体的に何を実行するかを選択します。例えばメンバーの場合：メンバーの除名、メンバーの一時停止、クレジットの凍結。コモンズの場合：プロジェクトまたは事業体に豆を提供、生活困窮支援金、プロジェクトまたは事業体の債務を返済。</li>
+            <li>対象者や、豆の支払いがある場合はその数量を入力します。プロジェクトや事業体への助成金の場合、その鍵（長いコード）を入力します（どちらのアプリにも選択用の一覧はありません）。債務の返済や代表の交代の場合は、一覧内のプロジェクトや事業体をタップするか、その鍵を入力します。</li>
+            <li><strong>コミュニティ決定を提案</strong>をタップします。</li>
+        </ul>
+        <p>Webアプリでは、ボタンは<strong>+ 決定事項を提案</strong>（または<strong>決定</strong>を開いている際のコモンズ上部の<strong>+ 提案</strong>）と<strong>決定事項を提出</strong>になり、入力欄は<strong>説明と提案理由</strong>になります。</p>
+        <p>投票はすぐに開始され、7日間行われます。</p>
+        <h2>助成金の上限額</h2>
+        <p>事業体への助成金や生活困窮支援金は、コモンズが支払える額を超えることはできません。申請できる上限額は以下の合計です：</p>
+        <ul>
+            <li>コモンズが現在保有している額、</li>
+            <li>加えて、過去30日間にコモンズに入ったすべての豆（マーケット手数料、流通手数料、その他支払われた豆）。</li>
+        </ul>
+        <p>その30日間にコモンズから支払われた豆は差し引かれません。それ以上の額を申請した場合、誰かが投票する前にアプリが受け付けず、現在申請できる上限額を提示します。コモンズに豆が入るにつれて、その上限額は増加します。</p>
+        <p>これにより待機列が滞るのを防ぎます。コモンズの資金が不足している状態で助成金が可決された場合、豆が集まるのを待つことになり、一度に待機できる助成金は1件のみです。「ルールと決定の仕組み」を参照してください。</p>
+        <h2>アプリに拒否された場合</h2>
+        <ul>
+            <li><strong>先に取引を完了してください</strong>（スマートフォン）：まだ提案できません。Webアプリでは<strong>+ 決定事項を提案</strong>ボタンがグレーアウトされ、その上の行に理由が表示されます。</li>
+            <li><strong>上限に達しました</strong>（スマートフォン）：すでに進行中の決定があります。それが締め切られるのをお待ちください。Webアプリでもボタンがグレーアウトされ、理由を説明する行が表示されます。</li>
+            <li><strong>A community vote can't remove or suspend an owner or admin of this community's server:</strong> 選択した相手がサーバーを管理しています。オーナーが先にその役職を解除する必要があります。</li>
+            <li><strong>This grant is bigger than the Commons could pay:</strong> 表示された金額以下の額を申請するか、より多くの豆が入ってくるのをお待ちください。</li>
+            <li><strong>無効な金額です</strong>（Webアプリでは「正の有効な助成金の豆の数量を入力してください。」）：豆の数量を入力してください。</li>
+            <li><strong>エラー：</strong> 説明が10文字以上入力されているか確認してください。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>決定への投票</strong><span>進行中の決定事項を確認し、投票や投票内容の変更を行い、結果を確認できます。</span></a></li>
+            <li><a href="rules.html"><strong>ルールと決定の仕組み</strong><span>投票、投票率、秘密投票、投票権、停止処分、メンバーの除名、運営者、まとめ役および代表まとめ役について説明します。</span></a></li>
+            <li><a href="polls.html"><strong>アンケート</strong><span>コミュニティに手軽に質問できます。アンケートは意見を把握するためのもので、それ自体で何かが変更されることはありません。</span></a></li>
+            <li><a href="enterprises.html"><strong>プロジェクトと事業体</strong><span>独自の豆を持つ共同の取り組みです。探す、支援する、または新しく立ち上げることができます。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

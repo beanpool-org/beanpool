@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>지도에 표시되는 항목 — BeanPool members' guide</title>
+    <meta name="description" content="지도의 핀과 색상별 의미, 주변 버튼 안내예요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">지도</a></p>
+        <h1>지도에 표시되는 항목</h1>
+        <p class="lede">지도의 핀과 색상별 의미, 주변 버튼 안내예요.</p>
+        <h2>핀</h2>
+        <p>탭 행에서 <strong>지도</strong>를 탭하세요. 지도에 커뮤니티의 게시물이 표시돼요:</p>
+        <ul>
+            <li><strong>초록색 핀:</strong> 제공.</li>
+            <li><strong>주황색 핀:</strong> 요청.</li>
+            <li><strong>달력이 있는 보라색 핀:</strong> 아직 종료되지 않은 행사.</li>
+        </ul>
+        <p>핀에는 게시물의 카테고리 그림이 표시돼요. 여러 제공과 요청이 가까이 모여 있는 곳은 숫자가 적힌 원으로 합쳐져요. 원은 휴대폰에서는 파란색, 웹 앱에서는 짙은 회색이에요. 확대하면 하나씩 볼 수 있어요. 행사는 항상 개별적으로 표시돼요.</p>
+        <p>사람과 모임은 지도에 표시되지 않아요. 웹 앱에서는 장소를 설정한 기업이 해당 사진이 들어간 사각형 핀으로 표시돼요. 탭하면 기업이 열려요.</p>
+        <p>설문도 지도에 표시되지 않아요. 한 가지 예외로 휴대폰의 글로벌 커뮤니티에서는 설문 작성자의 지역에 설문이 핀으로 표시될 수 있어요. 주황색 요청 핀처럼 보이며, <strong>전체</strong> 아래에서만 보여요.</p>
+        <h2>핀 탭하기</h2>
+        <ul>
+            <li><strong>제공 또는 요청:</strong> 카드에 제목과 등록한 사람이 표시돼요. 열어보려면 <strong>상세 보기</strong>를 탭하세요. 휴대폰에서는 상대방 이름을 탭하여 프로필을 볼 수 있어요. 지도를 탭하거나 <strong>✕</strong>를 누르면 카드가 닫혀요.</li>
+            <li><strong>행사:</strong> 카드에 일시, 장소, 참석자 수가 표시돼요. <strong>이벤트 보기</strong>를 탭하세요. 웹 앱에서는 버튼이 <strong>상세 보기</strong>로 되어 있으며, 카드에서 바로 <strong>참석</strong> 또는 <strong>관심 있음</strong>을 탭할 수도 있어요.</li>
+        </ul>
+        <h2>필터</h2>
+        <p>휴대폰의 지도 상단에서:</p>
+        <ul>
+            <li><strong>전체</strong>, <strong>제공</strong>, <strong>요청</strong>, 또는 <strong>행사</strong>. 지우려면 <strong>✕</strong>를 탭하세요.</li>
+            <li>하나의 카테고리만 보려면 <strong>모든 카테고리</strong>를 누르세요.</li>
+            <li>행사의 경우: <strong>전체</strong>, <strong>오늘</strong>, <strong>이번 주말</strong>, 또는 <strong>앞으로 7일</strong>. 지도 화면이 해당 행사에 맞게 이동해요.</li>
+        </ul>
+        <p>웹 앱의 지도에는 행사 날짜 칩만 있어요: <strong>오늘</strong>, <strong>이번 주말</strong>, <strong>앞으로 7일</strong>, <strong>모든 이벤트</strong>예요. 커뮤니티에 다가오는 행사가 있을 때만 표시돼요.</p>
+        <h2>왼쪽 버튼들</h2>
+        <ul>
+            <li>휴대폰에서는 달 또는 태양 아이콘: 다크 모드 또는 라이트 모드 지도.</li>
+            <li>과녁 모양 아이콘: 내 현재 위치 표시. 처음 사용할 때 앱에서 위치 정보 사용 권한을 요청해요.</li>
+            <li><strong>+</strong> 및 <strong>−</strong>: 확대/축소.</li>
+        </ul>
+        <p>주황색 원은 커뮤니티가 서비스를 제공하는 지역 범위를 나타내요.</p>
+        <h2>지도에서 게시물 추가하기</h2>
+        <p><strong>+ 게시물 추가</strong>를 탭하세요. 웹 앱에서는 오른쪽 하단의 둥근 <strong>+</strong>를 탭하세요. &quot;제공 또는 요청 등록하기&quot;를 참조하세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>내 핀 위치 설정</strong><span>내 게시글과 행사의 위치를 볼 수 있는 사람과 집 주소를 안전하게 지키는 방법이에요.</span></a></li>
+            <li><a href="near-you.html"><strong>내 주변 항목 찾기</strong><span>내 위치나 직접 선택한 장소의 일정 거리 내에 있는 게시글만 모아보세요.</span></a></li>
+            <li><a href="events.html"><strong>행사</strong><span>오프라인이나 온라인에서 일회성 또는 반복 행사를 만들고, 참석 여부 표시, 알림 받기, 공유 및 주최자 운영 안내예요.</span></a></li>
+            <li><a href="posting.html"><strong>제공 또는 요청 등록하기</strong><span>내가 해줄 수 있거나 나눌 수 있는 것, 또는 구하는 것을 등록해 보세요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

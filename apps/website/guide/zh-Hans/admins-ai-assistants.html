@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>当管理员使用 AI 助手时 — BeanPool members' guide</title>
+    <meta name="description" content="所有者或管理员的 AI 助手可以读取关于你的哪些信息、绝不会看到什么，以及数据传输给谁。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">设置与安全</a></p>
+        <h1>当管理员使用 AI 助手时</h1>
+        <p class="lede">所有者或管理员的 AI 助手可以读取关于你的哪些信息、绝不会看到什么，以及数据传输给谁。</p>
+        <p>你所在社区的所有者可以将其自己的 AI 助手（例如 Claude 或 ChatGPT）连接到社区服务器，以协助他们维护社区：例如询问有哪些事项需要处理，或总结未解决的举报。管理员也可以这样做：他们将社区地址添加到自己的助手并在此手机上予以批准。他们自行进行连接，并可以随时断开连接。连接成功后会通知其他所有者。</p>
+        <h2>AI 助手可以读取关于你的哪些信息</h2>
+        <p>助手看到的内容远少于管理员在“设置”中看到的内容。能获取哪些内容由你社区的服务器决定，而非助手。</p>
+        <ul>
+            <li><strong>如果有人举报了你或你的刊登</strong>，且管理员索取该举报的文字详情：举报给出的原因、你刊登的标题和描述，以及你的 BeanPool 姓名。绝不会包含举报人的信息。</li>
+            <li><strong>如果你申请加入</strong>，且管理员索取申请留言：你随申请发送的姓名和留言，以及你说明的来源社区。绝不会包含你的照片或密钥。</li>
+            <li><strong>整个社区的总计数据</strong>，例如有多少位成员以及流通中有多少颗豆子。绝不会包含你的余额。</li>
+        </ul>
+        <h2>绝不会看到的内容</h2>
+        <p>你的消息和聊天、你的余额和交易、你的密钥、你的地址、你的照片、成员姓名列表，以及谁举报了任何人。它无法更改任何关于你的信息：它不能将你移除、禁言、下架你的刊登或批准你的加入申请。这些操作均由人工完成。管理员可以在“设置”中或其手机上操作，而加入申请则由应用中任何拥有邀请权限的成员进行回复。</p>
+        <p>助手可以针对举报给出处理建议，例如保留你的刊登还是将其下架。除非其所服务的管理员亲自查阅举报并予以批准，否则不会发生任何变更；一如既往，你收到的任何相关通知均来自你所在社区的版主。</p>
+        <h2>谁会接收到这些数据</h2>
+        <p>助手读取的内容会传输至运营该助手的公司，就像你自己将内容粘贴到 AI 对话中一样。只有在管理员的助手发出索取请求时，服务器才会发送举报内容或加入留言，并标明这是来自成员的文字而非指令。</p>
+        <p>如果你不希望自己的举报或加入留言被 AI 读取，可以向你的管理员询问他们是如何使用 AI 助手的。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>管理员可见内容</strong><span>在管理员保留实名名单的社区中：名单记录的内容、谁可以查看、服务器保留哪些数据以及确认身份的含义。</span></a></li>
+            <li><a href="reporting.html"><strong>举报问题</strong><span>向社区协调员反映帖子、活动、动态内容、项目或企业方面的问题。</span></a></li>
+            <li><a href="privacy.html"><strong>个人隐私</strong><span>他人能看到的关于你的信息，以及控制这些信息的设置项。</span></a></li>
+            <li><a href="joining.html"><strong>加入 BeanPool</strong><span>两种加入方式：凭成员邀请加入本地社区，或在开放时凭 12 个助记词或一次登录加入全球社区。申请加入社区以及如何邀请他人。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

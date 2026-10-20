@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>العثور على أشياء قريبة منك — BeanPool members' guide</title>
+    <meta name="description" content="إظهار المنشورات فقط ضمن مسافة معينة منك، أو من أي مكان تختاره.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">الخريطة</a></p>
+        <h1>العثور على أشياء قريبة منك</h1>
+        <p class="lede">إظهار المنشورات فقط ضمن مسافة معينة منك، أو من أي مكان تختاره.</p>
+        <h2>في علامة تبويب السوق</h2>
+        <ul>
+            <li>اضغط على <strong>السوق</strong>، ثم <strong>المسافة</strong> في الصف الثاني من المرشحات. ولا يكون موجودًا أثناء اختيار <strong>الفعاليات</strong>.</li>
+            <li>يفتح <strong>الموقع والنطاق</strong> (<strong>تحديد الموقع ونصف القطر</strong> في تطبيق الويب). لاستخدام مكان وجودك، اضغط على زر الهدف. أو اضغط على الخريطة، أو اسحب الدبوس لاختيار مركز آخر.</li>
+            <li>اختر المسافة عبر <strong>نطاق البحث</strong>: من 100 متر إلى 50 كيلومترًا.</li>
+            <li>اضغط على <strong>تطبيق</strong>. يعرض الزر بعد ذلك المسافة، مثل <strong>5 كم</strong>.</li>
+            <li>للعودة إلى كل شيء، افتحه مرة أخرى واضغط على <strong>إعادة تعيين</strong>. في تطبيق الويب يمكنك أيضًا الضغط على <strong>✕</strong> على <strong>المسافة</strong>.</li>
+        </ul>
+        <p>على الهاتف، تُعرض المنشورات التي ليس لها موقع دائمًا. وفي تطبيق الويب، تخفيها <strong>المسافة</strong>، باستثناء الاستطلاعات. وفي المجتمع العالمي، يستبعدها تطبيق الويب أيضًا أثناء عرض القائمة القريبة منك (أدناه).</p>
+        <p>إذا كان متصفحك يسمح بالفعل لـ BeanPool باستخدام موقعك، فيمكن لأداة الاختيار أن تفتح على مكان وجودك الآن. وإن لم يكن كذلك، فإنها تفتح على نقطة ثابتة. تحقق من الدبوس، أو اضغط على زر الهدف أو الخريطة، قبل الضغط على <strong>تطبيق</strong>. وفي المجتمع العالمي، يرسل تطبيق الويب المركز الذي اخترته إلى المجتمع، مقربًا إلى حوالي 11 مترًا.</p>
+        <p>على الهاتف، تفتح أداة الاختيار على آخر مركز اخترته، أو على نقطة ثابتة، لذا اضغط على زر الهدف أولاً.</p>
+        <h2>على الخريطة</h2>
+        <p>لا تحتوي الخريطة على مرشح مسافة خاص بها. اضغط على زر الهدف على اليسار لترى أين أنت، ثم تجول في الأرجاء وكبّر وصغّر.</p>
+        <h2>في المجتمع العالمي، في تطبيق الويب</h2>
+        <p>يحتوي المجتمع العالمي على قوائم من كل مكان، لذا يبدأ <strong>السوق</strong> و<strong>الخريطة</strong> في تطبيق الويب من مكان قريب منك:</p>
+        <ul>
+            <li>مع اختيار <strong>المسافة</strong> في السوق، يعرض كلاهما أقرب القوائم ضمنها، الأقرب أولاً. وتعرض الخريطة ما يصل إلى 200 دبوس.</li>
+            <li>بدون تحديد مسافة، يعرضان أقرب القوائم في حدود 250 كم من منطقتك: المكان التقريبي الذي تقدمه للمجتمع عند الانضمام، أو لاحقًا في <strong>الإعدادات</strong>، تحت <strong>منطقتك</strong>. يوضح سطر أعلى قائمة السوق: <strong>الأقرب إلى منطقتك أولاً، في حدود 250 كم.</strong> اضغط على <strong>عرض في كل مكان</strong> لرؤية الأحدث من كل مكان، واضغط على <strong>بالقرب من منطقتك</strong> للعودة.</li>
+            <li>في حال عدم وجود أي منهما، ترى الأحدث من كل مكان، ويفتح خيار <strong>تعرف على ما هو قريب منك</strong> أداة اختيار المسافة. ويوضح سطر أعلى قائمة السوق أيًا من هذه تشاهده. ومع تحديد <strong>المسافة</strong> لا يوجد زر: افتح <strong>المسافة</strong> واضغط على <strong>إعادة تعيين</strong>. وستعود حينئذٍ بالقرب من منطقتك، أو، بدون تحديد منطقة، ترى الأحدث من كل مكان.</li>
+            <li>تعرض كل قائمة مدى بعدها، مثل <strong>📍 12 كم</strong>. قوائمك الخاصة موجودة دائمًا على الخريطة، وفي السوق بالقرب من منطقتك، أينما كانت. ومع تحديد <strong>المسافة</strong>، يعرض السوق فقط ما يقع ضمنها، بما في ذلك قوائمك.</li>
+            <li>أثناء عرض القائمة القريبة منك، تُستبعد المنشورات التي ليس لها موقع. والاستطلاع من شخص لم يحدد منطقته هو أحدها. لرؤيتها، أعد تعيين <strong>المسافة</strong> إذا كنت قد اخترت واحدة، ثم اضغط على <strong>عرض في كل مكان</strong>.</li>
+            <li>تحت <strong>الفعاليات</strong>، لا يتم أبدًا تقليص القائمة حسب منطقتك أو <strong>المسافة</strong> الخاصة بك، كما كان من قبل.</li>
+            <li>إذا لم يكن هناك شيء قريب، توضح الخريطة ذلك، مع خيار <strong>عرض في كل مكان</strong>. بعد ذلك، يعيد خيار <strong>بالقرب من منطقتك</strong> (أو <strong>بالقرب من المكان الذي اخترته</strong>) الأقرب مجددًا.</li>
+        </ul>
+        <p>يبحث بحث تطبيق الويب فقط في القوائم المعروضة على الشاشة. ويعرض خيار <strong>عرض في كل مكان</strong> أحدث القوائم من كل مكان، وليس كل قائمة، لذا فإن القائمة البعيدة وغير الجديدة لن تظهر في البحث. وفي كل مجتمع آخر، لا يقصر تطبيق الويب السوق أو الخريطة على منطقتك؛ بل يعرضان أحدث 50 قائمة تم تغييرها وقوائمك الخاصة، ويبحث البحث في تلك القوائم فقط.</p>
+        <h2>في المجتمع العالمي، على الهاتف</h2>
+        <p>يحتفظ الهاتف بالقوائم الأقرب إلى منطقتك: حتى 500 قائمة، في حدود 250 كم. كما يحتفظ بقوائمك الخاصة، وأي قائمة لديك صفقة أو دردشة أو إجابة عليها. ويعرض السوق والخريطة ما يحتفظ به الهاتف. وفي حالة عدم تحديد منطقة، فإنه يحتفظ بأحدث القوائم بدلاً من ذلك، ويوضح سطر أعلى السوق ذلك. انظر &quot;منطقتك&quot;.</p>
+        <h2>فعاليات قريبة منك</h2>
+        <p>على الهاتف، تعرض بطاقات الفعاليات مدى بعدها بمجرد السماح للتطبيق باستخدام موقعك. وفي تطبيق الويب، تعرضها من المركز الذي اخترته في <strong>المسافة</strong>. وفي المجتمع العالمي، إذا لم تكن قد اخترت مركزًا، فإنها تعرضها من منطقتك (وليس تحت <strong>الفعاليات</strong>). وعلى الخريطة، يعرضها تطبيق الويب منك بمجرد الضغط على الهدف.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>تصفح السوق</strong><span>ابحث عن العروض والطلبات باستخدام البحث، والتصنيفات، والمسافة.</span></a></li>
+            <li><a href="map-pins.html"><strong>ما تعرضه الخريطة</strong><span>الدبابيس على الخريطة، وما تعنيه ألوانها، والأزرار التي حولها.</span></a></li>
+            <li><a href="pin-locations.html"><strong>أين يوضع دبوسك</strong><span>من يرى أماكن منشوراتك وفعالياتك، وكيف تحافظ على خصوصية منزلك.</span></a></li>
+            <li><a href="events.html"><strong>الفعاليات</strong><span>أنشئ فعالية في مكان ما أو عبر الإنترنت، لمرة واحدة أو متكررة؛ وأكد حضورك، وتلقَّ تذكيرًا، وشاركها، وأدرها بصفتك المضيف.</span></a></li>
+            <li><a href="your-area.html"><strong>منطقتك</strong><span>المكان التقريبي الذي يستخدمه المجتمع العالمي ليعرض لك المنشورات القريبة منك، وكيفية تغييره أو مسحه.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

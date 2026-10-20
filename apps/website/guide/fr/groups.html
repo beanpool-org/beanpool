@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Groupes — BeanPool members' guide</title>
+    <meta name="description" content="Vos groupes et leurs discussions, y échanger, créer un groupe, inviter des personnes, rejoindre sur invitation et les votes internes au groupe.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Échanges</a></p>
+        <h1>Groupes</h1>
+        <p class="lede">Vos groupes et leurs discussions, y échanger, créer un groupe, inviter des personnes, rejoindre sur invitation et les votes internes au groupe.</p>
+        <h2>Ce qu'est un groupe</h2>
+        <p>Un groupe est un espace destiné à quelques personnes plutôt qu'à l'ensemble de la communauté : votre rue, une équipe de jardinage, une chorale, une guilde. Chaque groupe possède sa propre discussion. Certains groupes détiennent des haricots : un projet ou une entreprise (voir « Entreprises »). Les autres (un cercle social, un groupe de travail, une guilde) n'en détiennent aucun. Faire partie d'un groupe ne modifie ni votre confiance ni votre droit de vote général.</p>
+        <p>Les personnes qui veillent sur un groupe de discussion sont ses <strong>coordinateurs</strong> ; l'un d'eux est le <strong>coordinateur principal</strong>. Ils ne détiennent aucun haricot.</p>
+        <h2>Vos groupes</h2>
+        <p>Touchez <strong>Échanges</strong>, puis <strong>Groupes</strong>. Tous les groupes dont vous faites partie y sont listés, le message le plus récent en premier, avec les projets que vous menez ou auxquels vous collaborez (🎯), les entreprises que vous gérez (🥖) et les événements que vous organisez ou auxquels vous participez (📅). La discussion d'une entreprise est son fil public : chaque membre de votre communauté peut le lire. Voir «Messages». Chaque groupe affiche son dernier message et le nombre de messages non lus. Dans une discussion chiffrée, la ligne indique qui a écrit en dernier et <strong>🔒 Message</strong>, et non le contenu textuel.</p>
+        <ul>
+            <li>Le chiffre sur <strong>Groupes</strong> en haut cumule vos messages non lus, à l'exception des discussions mises en sourdine.</li>
+            <li>Touchez un groupe pour ouvrir sa discussion. Cela le marque comme lu.</li>
+            <li>Tirez la liste vers le bas pour l'actualiser.</li>
+        </ul>
+        <p>Sur le téléphone, cette même liste figure dans <strong>Communs</strong>, sous <strong>Groupes</strong>, sous l'intitulé <strong>Vos groupes</strong>, sans le décompte des non-lus. Elle ouvre les mêmes discussions.</p>
+        <h2>Créer un groupe</h2>
+        <ul>
+            <li>Sur le téléphone, dans <strong>Échanges</strong>, sous <strong>Groupes</strong>, touchez <strong>Nouveau groupe</strong>. Ou dans <strong>Communs</strong>, sous <strong>Groupes</strong>, touchez le bouton rond <strong>+</strong>. Les deux ouvrent le même formulaire <strong>Créer un groupe</strong>. (Sur l'onglet <strong>Projets</strong> ou <strong>Entreprises</strong>, le <strong>+</strong> permet plutôt de créer un projet ou une entreprise.)</li>
+            <li>Dans l'application web, ouvrez <strong>Communs</strong>, puis <strong>Groupes</strong>, et touchez <strong>+ Créer un groupe</strong>. Vous restez ensuite sur <strong>Communs</strong>. Pour inviter du monde, ouvrez le groupe et touchez <strong>Inviter des personnes</strong>. Vous pouvez également ouvrir <strong>Discussion</strong>, toucher <strong>Groupes</strong>, puis <strong>Nouveau groupe</strong> : cela vous conduit directement dans la discussion du nouveau groupe.</li>
+            <li>Donnez-lui un <strong>Nom du groupe</strong>, jusqu'à 60 caractères, et si vous le souhaitez, un champ <strong>Objectif / Description</strong>, jusqu'à 300 caractères : l'utilité du groupe et à qui il s'adresse.</li>
+            <li>Choisissez une <strong>Catégorie</strong> : <strong>Cercle social</strong>, <strong>Général</strong>, <strong>Groupe de travail</strong> ou <strong>Guilde</strong>. Sur le téléphone, <strong>Cercle social</strong> est sélectionné d'office. Dans l'application web, c'est <strong>Groupe de travail</strong>.</li>
+            <li>Choisissez une <strong>Règle d'adhésion</strong> : <strong>Ouvert</strong>, <strong>Demander à rejoindre</strong> ou <strong>Sur invitation seulement</strong>.</li>
+            <li>Touchez <strong>Créer le groupe</strong>. Vous en devenez le <strong>coordinateur principal</strong>. Sur le téléphone, l'application vous amène directement dans la discussion du nouveau groupe.</li>
+        </ul>
+        <p>Vous pouvez créer jusqu'à 5 groupes par tranche de 24 heures.</p>
+        <p>Des haricots sont en jeu ? Créez plutôt un projet ou une entreprise, depuis le bas des catégories : sur le téléphone <strong>Créer un projet ou une entreprise</strong>, sur le web <strong>Créer un projet</strong> ou <strong>Créer une entreprise</strong>. Voir « Entreprises ».</p>
+        <h2>Inviter des personnes</h2>
+        <p>Vous pouvez inviter des personnes sur le téléphone et dans l'application web. Sur le téléphone, la discussion d'un nouveau groupe vous demande : <strong>Qui souhaitez-vous inviter ?</strong></p>
+        <ul>
+            <li>Touchez <strong>Inviter des personnes</strong>, cochez les personnes souhaitées, et touchez le bouton en bas (par exemple <strong>Inviter 2 personnes</strong>).</li>
+            <li>Ou touchez <strong>Pas maintenant</strong> pour passer cette étape.</li>
+        </ul>
+        <p>Plus tard, un coordinateur peut inviter des personnes depuis le menu <strong>⋮</strong> de la discussion, via <strong>Inviter des personnes</strong>. Dans l'application web, un coordinateur ouvre le groupe, clique sur <strong>Inviter des personnes</strong>, coche les personnes et clique sur le bouton en bas de la même façon. Chaque personne invitée voit le groupe dans <strong>Communs</strong>, sous <strong>Groupes</strong>, avec la mention <strong>INVITÉ</strong> dans l'application mobile (sur le téléphone, dans une communauté sans onglet <strong>Communs</strong>, sous <strong>Trouver des groupes</strong> dans <strong>Échanges</strong>). L'application web n'affiche pas encore de badge d'invitation : la personne ouvre le groupe et clique sur <strong>Accepter l'invitation</strong>. Lorsqu'elle rejoint, la discussion l'indique.</p>
+        <h2>La discussion du groupe</h2>
+        <ul>
+            <li>Sur le téléphone, touchez le nom du groupe en haut de la discussion pour voir la fiche du groupe : ses membres, <strong>Quitter le groupe</strong>, et pour les coordinateurs, <strong>Outils de coordination</strong>. Dans l'application web, touchez le nom du groupe en haut de sa discussion, ou ouvrez le groupe depuis <strong>Communs</strong>, sous <strong>Groupes</strong>.</li>
+            <li>Le menu <strong>⋮</strong> propose <strong>Inviter des personnes</strong> (coordinateurs), <strong>Mettre en sourdine les notifications</strong> (ou <strong>Réactiver les notifications</strong>), <strong>Rechercher dans cette discussion</strong>, <strong>Confirmer le nouveau téléphone</strong> et <strong>Infos du groupe</strong>. La recherche s'exécute sur votre téléphone, et non sur le serveur de votre communauté.</li>
+            <li>Les arrivées, départs et changements de rôles apparaissent dans la discussion sous la forme de petites lignes grises.</li>
+            <li>Écrivez <strong>@</strong> suivi du nom d'un membre pour l'alerter. Voir « Mentions ».</li>
+            <li>Le message le plus récent s'affiche juste au-dessus du champ de saisie, et y reste quand le clavier apparaît. Faites défiler vers le haut pour lire l'historique ; un nouveau message entrant patiente sans vous faire descendre brutalement.</li>
+        </ul>
+        <p>La discussion d'un groupe est chiffrée de bout en bout : seuls les membres du groupe peuvent la lire, et non les personnes qui administrent le serveur de votre communauté. Au-dessus du champ de saisie, il est mentionné <strong>Chiffrement de bout en bout</strong>. Le serveur de votre communauté voit toujours qui a écrit, à quel moment, qui a été mentionné, à quel message chaque ligne répond, ainsi que les réactions sous forme d'émojis.</p>
+        <ul>
+            <li>Vous ne voyez la discussion qu'à partir du jour où vous avez rejoint. Rien de ce qui a été écrit avant ne vous est montré, et votre téléphone ne détient jamais la clé correspondante. Vous voyez toujours les lignes grises antérieures, mais aucun texte de quiconque.</li>
+            <li>Lorsque quelqu'un est retiré ou quitte le groupe, celui-ci génère une nouvelle clé. Dans un groupe de 10 personnes ou plus, la discussion indique <strong>Sécurisation de la discussion pour N personnes…</strong> pendant que votre téléphone la génère.</li>
+            <li>Un message qui ne peut pas être verrouillé n'est pas envoyé. Il affiche <strong>! non distribué</strong>, et une ligne au-dessus du champ de message peut en expliquer la raison. Touchez-le pour <strong>Renvoyer</strong> ou <strong>Ignorer</strong>.</li>
+            <li>Un message dont l'auteur ne peut pas être vérifié comme membre du groupe s'affiche comme <strong>Non vérifié</strong>, sans auteur identifiable, avec <strong>Ce message n'a pas pu être vérifié.</strong> Un message dont la clé n'est pas encore parvenue à votre téléphone indique <strong>En attente de la clé de ce message.</strong></li>
+            <li>Si le serveur de votre communauté est plus ancien et ne gère pas encore le chiffrement des discussions de groupe, la discussion indique que le serveur peut la lire, et qu'elle sera verrouillée dès sa mise à jour. Lors de la mise à jour, les messages antérieurs lisibles par le serveur sont retirés, et une ligne dans la discussion vous en informe. Chaque message antérieur indique alors <strong>Un message antérieur a été supprimé lors du verrouillage de cette discussion</strong>, et plusieurs à la suite sont regroupés en une seule ligne, par exemple <strong>11 messages antérieurs ont été supprimés lors du verrouillage de cette discussion</strong>.</li>
+        </ul>
+        <p>Dans l'application web, vos discussions de groupe se trouvent dans <strong>Discussion</strong>, repérées par l'icône 👥. Vous pouvez y lire et y écrire, avec le chiffrement de bout en bout comme sur le téléphone : répondre, réagir, modifier pendant 15 minutes et chercher dans la discussion. La mise en sourdine, <strong>Supprimer</strong> et <strong>Retirer</strong> ne sont disponibles que sur le téléphone. Dans l'application web, cliquez sur le nom du groupe en haut de sa discussion pour ouvrir la fiche du groupe ; un coordinateur peut y inviter des personnes. La discussion d'une entreprise n'est pas chiffrée : voir «Messages».</p>
+        <h2>Échanger dans la discussion d'un groupe</h2>
+        <p>La discussion d'un groupe fonctionne exactement comme un échange individuel. Touchez un message pour faire apparaître de petits boutons ronds à côté :</p>
+        <ul>
+            <li><strong>Répondre</strong> cite le message au-dessus de votre saisie suivante. Touchez la citation pour remonter au message source.</li>
+            <li><strong>Réagir</strong> ouvre sept émojis. Un par personne ; touchez-le à nouveau pour le retirer. Les réactions s'affichent sous forme de badge sous le message.</li>
+            <li><strong>Modifier</strong>, sur vos propres messages, pendant 15 minutes. Le message affiche alors <strong>modifié</strong>.</li>
+            <li><strong>Supprimer</strong>, sur vos propres messages, à tout moment. L'application demande une fois <strong>Supprimer pour tout le monde ?</strong>, puis le message indique <strong>Ce message a été supprimé</strong> aux yeux de tous les membres du groupe.</li>
+            <li><strong>Retirer</strong>, pour les coordinateurs, sur le message de n'importe qui d'autre. L'application demande confirmation une fois, puis le message affiche <strong>Supprimé par un coordinateur</strong>. Votre propre message relève de <strong>Supprimer</strong>, et non de <strong>Retirer</strong>.</li>
+        </ul>
+        <p>Deux messages consécutifs ou plus supprimés par leurs auteurs apparaissent sur une seule ligne, comme <strong>3 messages ont été supprimés</strong>. Deux ou plusieurs retirés par un coordinateur apparaissent sous la forme <strong>3 messages supprimés par un coordinateur</strong>.</p>
+        <p>Sous votre propre message : une horloge pendant l'envoi, une coche dès que le serveur du groupe l'a reçu, ou <strong>! non distribué</strong> s'il n'a pas pu partir — touchez-le pour <strong>Renvoyer</strong> ou <strong>Ignorer</strong>. Il n'y a pas de double coche bleue dans un groupe : un groupe n'a pas un lecteur unique.</p>
+        <p>Les photos ne peuvent pas être envoyées dans la discussion d'un groupe, et un accord ne peut pas y être engagé. Les deux relèvent d'un échange individuel entre deux personnes. Voir «Messages».</p>
+        <p>Un <strong>observateur</strong> peut lire la discussion mais ne peut pas y écrire, ni réagir, ni répondre.</p>
+        <p>Le serveur de votre communauté doit être à jour pour permettre la réponse, les réactions, la modification et la suppression. Si ce n'est pas le cas, l'application affiche <strong>Pas encore disponible dans cette communauté</strong> — cela vaut la peine d'en parler à la personne administrant le serveur.</p>
+        <p>Tout autre refus du serveur s'exprime dans ses propres termes, et l'application vous présente ces mots plutôt que cette formule générale. « A removed message cannot be edited » signifie qu'un coordinateur l'a retiré pendant votre saisie, non que votre serveur est en retard.</p>
+        <h2>Messages antérieurs à votre changement de téléphone</h2>
+        <p>Lorsque votre compte migre vers un nouveau téléphone avec une nouvelle clé, les messages de groupe antérieurs étaient verrouillés avec la clé de votre ancien téléphone. Dans la discussion de chaque groupe, une ligne indique <strong>🔒 N messages antérieurs à votre changement de téléphone. Déverrouiller →</strong>. Touchez-la :</p>
+        <ul>
+            <li><strong>J'ai mon ancien téléphone ou mes 12 mots précédents</strong> : saisissez vos 12 anciens mots sur le nouveau téléphone, et les messages antérieurs se déverrouillent. Votre ancien téléphone affiche <strong>Ce compte a été transféré sur un nouveau téléphone</strong>, avec un bouton pour afficher ces mots après déverrouillage de l'appareil. Ce sont vos propres mots : ne les tapez que sur votre propre nouveau téléphone, jamais sur un appareil qu'un tiers vous tend.</li>
+            <li><strong>Demander à un membre du groupe de confirmer ce téléphone</strong> : votre nouveau téléphone affiche un code. Rencontrez un membre du groupe en personne ; il ouvre le menu de la discussion du groupe, touchez <strong>Confirmer le nouveau téléphone</strong> et le scanne. Son téléphone remet au vôtre les clés antérieures qu'il détient pour vos groupes communs.</li>
+            <li><strong>Les laisser verrouillés</strong> : rien ne change. Vos propres messages de cette période apparaissent sous votre nom, sans leur texte.</li>
+        </ul>
+        <p><strong>Lorsque vous confirmez le nouveau téléphone d'un tiers</strong>, votre téléphone confronte le code avec ce qu'il a gardé en mémoire de l'ancienne clé de cette personne. Ne confirmez un nouveau téléphone que pour quelqu'un avec qui vous avez déjà échangé dans ce groupe, sur ce téléphone, et uniquement quand l'appareil est entre ses mains : quiconque le tient pourra lire les messages antérieurs auxquels vous avez accès. Si votre téléphone affiche <strong>Ne continuez pas ; prévenez un propriétaire</strong>, arrêtez-vous. Cela signifie que ce que votre téléphone a constaté auparavant ne correspond pas aux indications actuelles du serveur. Il l'indique également, de façon définitive, pour quelqu'un ayant modifié son nom après que votre téléphone l'a connu : pour un téléphone, un nouveau nom sur une clé s'apparente à un nom d'inconnu placé dessus, un téléphone ayant vu les deux noms ne peut donc plus jamais le confirmer en personne. Ses 12 anciens mots fonctionnent toujours, tout comme un membre dont le téléphone n'a jamais vu que le nouveau nom. Un téléphone qui vient d'être restauré à partir de ses 12 mots, ou qui n'a jamais ouvert ce groupe, dispose de trop peu d'éléments pour vérifier : il indique qu'il n'a jamais connu l'ancienne clé, ou peut se fier aux indications du serveur. Laissez un membre ayant déjà échangé avec cette personne procéder à la confirmation.</p>
+        <p>À la fin, votre téléphone détaille ce qui s'est passé : <strong>Terminé</strong> uniquement s'il a transmis chaque clé, <strong>3 sur 5 transmis</strong> si le serveur en a refusé certaines. Lorsque le serveur indique que le nouveau téléphone en détient déjà quelques-unes, votre téléphone précise que <strong>la communauté l'indique</strong>, car il ne peut pas examiner l'autre téléphone : si le nouveau téléphone ne parvient toujours pas à lire ces messages, prévenez un propriétaire.</p>
+        <h2>Rejoindre un groupe</h2>
+        <p>Sur le téléphone, dans <strong>Communs</strong>, sous <strong>Groupes</strong>, la rubrique <strong>Groupes que vous pourriez rejoindre</strong> liste les groupes dont vous ne faites pas partie. Filtrez-les par catégorie avec les boutons situés au-dessus de la liste. Dans l'application web, <strong>Groupes</strong> liste tous les groupes visibles, les vôtres étant marqués par votre rôle ; <strong>Mes groupes</strong> ne montre que les vôtres. Chacun présente le début de sa description. Ouvrez un groupe pour la lire en entier, puis :</p>
+        <ul>
+            <li><strong>Rejoindre le groupe</strong> s'il est ouvert à tous ;</li>
+            <li><strong>Demander à rejoindre</strong> si un coordinateur doit approuver les membres. Vous voyez <strong>Demande en attente d'approbation</strong> jusqu'à sa décision.</li>
+        </ul>
+        <p>Sur le téléphone, un groupe que vous avez demandé à rejoindre n'apparaît dans aucune liste tant qu'un coordinateur ne vous a pas accepté. Sur le web, il reste dans la liste avec la mention <strong>En attente</strong>.</p>
+        <p>Un groupe <strong>Sur invitation seulement</strong> est masqué pour toute personne qui n'en est pas membre ou qui n'y est pas invitée.</p>
+        <p>Sur le téléphone, une communauté locale sans haricots n'a pas d'onglet <strong>Communs</strong>. Touchez alors <strong>Échanges</strong>, puis <strong>Groupes</strong>, puis <strong>Trouver des groupes</strong> : cela ouvre la même liste. Avant de faire partie du moindre groupe, le lien s'intitule <strong>Trouver un groupe à rejoindre</strong>. La communauté globale dispose de l'onglet <strong>Communs</strong> : ses groupes s'y trouvent, sous un exemple issu d'une communauté locale (voir « Haricots et communauté globale »).</p>
+        <p>Si un coordinateur vous a retiré d'un groupe, vous ne pouvez pas le rejoindre à nouveau par vous-même.</p>
+        <p>Tant que votre compte est suspendu, vous ne pouvez pas créer de groupe, en rejoindre un, demander à en rejoindre un, ni accepter d'invitation, et un coordinateur ne peut pas approuver une demande formulée par vous auparavant. Les groupes dont vous faites déjà partie restent acquis. Dès que la suspension prend fin, vous pouvez à nouveau créer ou rejoindre des groupes.</p>
+        <h2>Rejoindre sur invitation</h2>
+        <p>Un groupe où vous êtes invité apparaît dans <strong>Communs</strong>, sous <strong>Groupes</strong>, marqué <strong>INVITÉ</strong> dans l'application mobile. Sur le téléphone, dans une communauté sans onglet <strong>Communs</strong>, il figure sous <strong>Trouver des groupes</strong> dans <strong>Échanges</strong>. Touchez-le pour consulter l'invitation : qui vous a invité, quel est l'objet du groupe, qui y participe (pour un groupe sur invitation, combien de membres) et qui peut lire sa discussion. Sur le téléphone :</p>
+        <ul>
+            <li>Touchez <strong>Rejoindre le groupe</strong>. Vous arrivez dans sa discussion.</li>
+            <li>Touchez <strong>Pas maintenant</strong> pour décider plus tard. L'invitation reste en attente.</li>
+            <li>S'il indique <strong>Cette invitation n'est plus valable</strong>, elle a été retirée. Demandez à la personne concernée de vous réinviter.</li>
+            <li>S'il indique <strong>Impossible d'ouvrir ce groupe</strong>, votre téléphone n'a pas pu joindre le serveur de votre communauté. Touchez <strong>Réessayer</strong>.</li>
+        </ul>
+        <p>L'application web n'affiche pas encore les badges d'invitation. Ouvrez le groupe dans <strong>Communs</strong>, sous <strong>Groupes</strong>, et touchez <strong>Accepter l'invitation</strong>. Vous le rejoignez et restez sur la page du groupe.</p>
+        <h2>Publier dans un groupe</h2>
+        <p>Sur le web, ouvrez le groupe dans <strong>Communs</strong>, sous <strong>Groupes</strong>, et touchez <strong>Publier dans</strong> suivi de son nom. L'application mobile ne permet pas encore de publier directement dans un groupe dont vous faites déjà partie. Seuls les membres du groupe voient l'annonce. Elle apparaît dans le Marché avec un cadenas et le nom du groupe.</p>
+        <h2>Les coordinateurs et le coordinateur principal</h2>
+        <p>Un coordinateur veille sur le groupe. La personne qui l'a créé en est le <strong>coordinateur principal</strong>, et la fiche du groupe la désigne ainsi, par exemple <strong>Coordinateur principal : Ali</strong>. Dans la liste des membres, sa ligne est marquée <strong>RESPONSABLE</strong>.</p>
+        <p>Dans les <strong>Outils de coordination</strong>, tout coordinateur peut :</p>
+        <ul>
+            <li>modifier la règle d'adhésion ;</li>
+            <li><strong>Approuver</strong> ou <strong>Refuser</strong> les demandes d'adhésion.</li>
+        </ul>
+        <p>À côté d'un nom dans les <strong>Membres</strong>, tout coordinateur peut :</p>
+        <ul>
+            <li>modifier le rôle d'un membre ou d'un observateur (<strong>Rôle</strong> sur le téléphone, un menu déroulant sur le web), y compris le nommer coordinateur ;</li>
+            <li>retirer un membre ou un observateur (<strong>✕</strong>).</li>
+        </ul>
+        <p>Un coordinateur retire une publication depuis la publication elle-même, et sur le téléphone un message directement dans la discussion. Le nom et la description d'un groupe ne peuvent pas encore être modifiés dans l'application.</p>
+        <p>Seul le <strong>coordinateur principal</strong> peut retirer un coordinateur ou lui retirer son rôle. À côté d'une ligne sur laquelle vous n'avez pas de prise, aucun bouton <strong>Rôle</strong> ou <strong>✕</strong> n'apparaît — l'application vous signale ainsi que cette action ne vous appartient pas.</p>
+        <p><strong>Personne ne peut destituer le coordinateur principal, ni lui retirer sa fonction.</strong> Ni un autre coordinateur, ni un administrateur de la communauté. En dehors d'une transmission volontaire par le responsable lui-même, seul un vote du groupe peut désigner un nouveau coordinateur principal. Voir « Votes au sein d'un groupe ».</p>
+        <p><strong>Transmettre la coordination principale.</strong> Le responsable peut passer la main. Sur le téléphone, touchez <strong>Transmettre</strong> dans les <strong>Outils de coordination</strong>, ou l'icône de bouclier à côté du nom d'un membre. Dans l'application web, touchez <strong>Désigner comme principal</strong> à côté de son nom. Choisissez un autre coordinateur ou un membre — un membre devient coordinateur en même temps. Un observateur ne peut pas devenir responsable ; nommez-le d'abord membre ou coordinateur. Une fois l'opération effectuée, vous ne pouvez plus reprendre la main unilatéralement.</p>
+        <p><strong>Quitter le groupe en tant que responsable.</strong> Transmettez d'abord la coordination principale ; le téléphone vous le propose lorsque vous touchez <strong>Quitter le groupe</strong>, et l'application web vous le demande expressément. S'il n'y a personne d'autre dans le groupe, vous pouvez simplement partir.</p>
+        <p>Le dernier coordinateur ne peut ni démissionner ni partir tant qu'une autre personne se trouve encore dans le groupe.</p>
+        <p><strong>Lorsqu'un coordinateur est suspendu.</strong> Si votre communauté suspend le compte d'un coordinateur, aucun outil de coordination ne fonctionne pour lui jusqu'à la fin de la suspension : approbations, invitations, modifications de rôles, suppressions de membres, d'annonces ou de messages, modification du groupe, transmission de la coordination. L'application indique que son compte est suspendu et qu'il reste coordinateur. Rien ne lui est retiré : il reste coordinateur, le responsable reste responsable, et tout redevient opérationnel dès la fin de la suspension. Il peut toujours quitter le groupe, sauf s'il en est le coordinateur principal et que d'autres personnes s'y trouvent encore.</p>
+        <p>Le groupe continue de fonctionner entre-temps. Ses membres continuent de discuter et de publier, et chacun peut toujours rejoindre un groupe ouvert. Tout autre coordinateur peut continuer d'exercer toutes les fonctions mentionnées ci-dessus ; seuls les pouvoirs exclusifs du responsable sont en suspens. Les demandes d'adhésion et les nouvelles invitations attendent un coordinateur. Tout membre peut toujours signaler une annonce ou une personne aux modérateurs de votre communauté. Si le coordinateur suspendu est le seul coordinateur du groupe, il en est le responsable, et aucune action effectuée pendant la suspension ne compte comme activité : 30 jours après sa dernière activité, le groupe peut élire un nouveau responsable par vote, comme détaillé ci-dessous.</p>
+        <p><strong>Quand le coordinateur principal est inactif.</strong> Après 30 jours sans aucune activité du responsable, le groupe dispose d'un second moyen d'élire un nouveau responsable. (Ses membres peuvent également voter pour un nouveau responsable à tout moment, sauf sur la communauté globale : voir « Votes au sein d'un groupe ».) Ouvrez le groupe et observez juste au-dessus des <strong>Membres</strong> : un volet y apparaît, nommant le responsable et la durée de son absence. Rien ne s'affiche tant que le responsable est actif — en dehors d'une ligne rappelant l'issue du dernier vote, qui reste visible pendant deux semaines après sa clôture.</p>
+        <p>Ceux qui votent sont les <strong>autres coordinateurs</strong> du groupe — ou ses <strong>membres</strong>, lorsqu'aucun autre coordinateur n'avait été nommé coordinateur au jour de la dernière activité du responsable. Quiconque a rejoint le groupe, ou a été nommé coordinateur après ce jour-là, ne participe pas au vote. Toute personne habilitée à voter peut toucher <strong>Proposer</strong> à côté d'un nom dans ce volet, y compris le sien ; proposer équivaut à un vote Oui de sa part. Chaque votant voit alors <strong>Oui</strong> et <strong>Non</strong>. Une confirmation vous est demandée, car un vote est irréversible, et vous ne voyez que les totaux — jamais qui a voté dans quel sens. Le scrutin dure 14 jours et est adopté si plus de la moitié des votants répondent Oui. En cas d'adoption, l'ancien responsable reste coordinateur si les autres coordinateurs ont voté, et devient simple membre si ce sont les membres qui ont voté. Si le responsable inactif réapparaît et effectue une action dans l'application, le scrutin se clôture immédiatement. Sur le téléphone, avec les notifications autorisées, le simple fait d'ouvrir l'application compte comme activité. Tant que le compte du responsable est suspendu, aucune de ses actions ne compte. Les observateurs voient le panneau mais ne votent pas, pas plus que le responsable inactif.</p>
+        <p>Le détail complet des règles figure dans « Décisions », sous « Coordinateur principal inactif ».</p>
+        <p><strong>Pendant qu'un groupe vote sur un nouveau responsable.</strong> Qu'il s'agisse de ce scrutin ou de l'un des scrutins internes au groupe décrits ci-dessous, aucun coordinateur ne peut retirer la personne pressentie pour devenir responsable, ni réduire son rôle, tant que le vote n'est pas clos. L'application le formule clairement dans ses propres termes. Cette personne peut toujours partir d'elle-même, et un vote du groupe peut toujours la retirer.</p>
+        <h2>Votes au sein d'un groupe</h2>
+        <p>Les membres d'un groupe peuvent voter ensemble sur les affaires propres au groupe. Ouvrez le groupe (sur le téléphone, touchez son nom en haut de sa discussion ; sur le web, ouvrez-le dans <strong>Communs</strong>, sous <strong>Groupes</strong>) : ses scrutins figurent sous <strong>Décisions</strong>, en haut de page. Seules les personnes du groupe peuvent les voir.</p>
+        <p>Sur la communauté globale, un groupe ne dispose d'aucun vote interne propre ni de bouton <strong>Proposer un vote</strong> ; seul le vote de remplacement pour responsable inactif y fonctionne.</p>
+        <p>Touchez <strong>Proposer un vote</strong> et choisissez l'objet du scrutin :</p>
+        <ul>
+            <li><strong>Choisir un nouveau coordinateur principal</strong> : n'importe quel membre du groupe sauf un observateur, vous-même compris.</li>
+            <li><strong>Nommer quelqu'un coordinateur</strong>, ou <strong>Rétrograder un coordinateur en membre</strong>. Un vote ne modifie jamais le rôle du responsable ; pour changer de responsable, votez pour en désigner un nouveau.</li>
+            <li><strong>Retirer quelqu'un</strong> du groupe. Pas le responsable, ni vous-même : pour partir, quittez le groupe.</li>
+            <li><strong>Modifier qui peut rejoindre</strong> : ouvert à tous, demande préalable avec validation par un coordinateur, ou sur invitation uniquement.</li>
+            <li><strong>Fermer le groupe.</strong> Sa discussion reste consultable, mais n'accepte plus de nouveaux messages, publications ni membres, et ses autres scrutins ouverts prennent fin. Ses annonces sont retirées du Marché.</li>
+        </ul>
+        <p>Donnez-lui un titre et indiquez-en le motif, puis touchez <strong>Ouvrir le vote</strong>. Un vote ne déplace jamais de haricots : un groupe n'en détient aucun. Il ne peut pas non plus modifier le statut d'un membre dans la communauté générale ; cela relève d'une Décision communautaire.</p>
+        <p><strong>Qui vote.</strong> Chaque personne qui était membre ou coordinateur du groupe au moment de l'ouverture du scrutin, y compris le responsable et la personne qui l'a proposé. Les observateurs regardent : ils voient les votes mais ne disposent pas de bouton Oui ou Non. Quelqu'un qui rejoint le groupe après l'ouverture du scrutin n'y participe pas. Un groupe composé d'une seule personne n'ayant personne avec qui voter, le bouton <strong>Proposer un vote</strong> n'apparaît pas. Vous ne pouvez porter qu'un seul vote ouvert à la fois dans un même groupe.</p>
+        <p><strong>Conditions d'adoption.</strong> Plus de la moitié des membres habilités doivent prendre part au vote. L'exclusion d'un membre et la fermeture du groupe requièrent 60 % de votes favorables ; les autres requièrent la majorité absolue (plus de 50 %). Un scrutin dure 7 jours, ou prend fin plus tôt dès lors que l'issue mathématique ne peut plus changer. Dès son adoption, l'application applique la décision de façon autonome. Une nouvelle nomination, un changement de rôle, un retrait ou une fermeture s'inscrit dans la discussion sous la forme d'une fine ligne grise ; une nouvelle règle d'adhésion s'affiche sur la page du groupe.</p>
+        <p><strong>Ce que vous voyez.</strong> Tant qu'un scrutin est ouvert, chacun voit combien de membres ont voté, mais pas leur choix. Les scores Oui et Non apparaissent à la clôture. Un vote exprimé ne peut plus être modifié. Personne ne voit qui a voté quoi. Toutefois, dans un groupe très restreint, le résultat et la participation peuvent le laisser deviner : si trois personnes votent et que le score final est 3–0, chacun sait comment les autres ont voté.</p>
+        <p><strong>Notification.</strong> Chaque personne inscrite sur le scrutin, à l'exception de son auteur, reçoit une notification lors de son ouverture, sauf si elle a mis la discussion du groupe en sourdine ou désactivé les notifications de discussion. Elle ne cite aucun nom ni aucun groupe : elle indique <strong>Un vote s'est ouvert dans l'un de vos groupes.</strong> Touchez-la et le groupe s'ouvre sur ses <strong>Décisions</strong>. Sur l'Accueil, un vote ouvert auquel vous n'avez pas encore répondu apparaît sous <strong>Requiert votre attention</strong> et ouvre également le groupe.</p>
+        <p><strong>Mouvements de membres.</strong> Quelqu'un qui quitte le groupe pendant un vote quitte également le scrutin, et son vote s'en trouve retiré. Une personne qu'un coordinateur retire ou rétrograde au rang d'observateur pendant un vote reste inscrite sur ce scrutin : elle conserve son vote déjà émis, et peut toujours voter si elle ne l'avait pas encore fait. Retirer des membres ne permet donc jamais d'influencer un vote. S'il reste moins de deux personnes inscrites, le vote prend fin sans conclusion.</p>
+        <p><strong>Un groupe fermé</strong> porte la mention <strong>Fermé</strong> sur sa page, accompagnée de la phrase « Le groupe a été fermé par vote de ses membres. Ses échanges restent consultables. » Sa discussion, ses votes et la liste de ses participants restent consultables en lecture seule ; rien de nouveau ne peut y être ajouté.</p>
+        <h2>Bientôt disponible</h2>
+        <ul>
+            <li>Destitution d'un coordinateur principal malveillant par une Décision communautaire. Prévu dans une mise à jour ultérieure.</li>
+            <li>Signalement visuel des invitations sur la liste web des groupes.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Messages</strong><span>Lancer une discussion, envoyer des photos, répondre, réagir, modifier, supprimer, mettre en sourdine et ce qui reste privé.</span></a></li>
+            <li><a href="mute.html"><strong>Mettre en sourdine</strong><span>Couper le son d'un échange — individuel, de groupe ou d'entreprise — pendant 8 heures, une semaine ou pour toujours.</span></a></li>
+            <li><a href="mentions.html"><strong>Mentions (@nom)</strong><span>Alerter une personne dans un groupe en écrivant @ suivi de son nom.</span></a></li>
+            <li><a href="enterprises.html"><strong>Projets et entreprises</strong><span>Initiatives partagées avec leurs propres haricots : en trouver une, en soutenir une ou en lancer une.</span></a></li>
+            <li><a href="event-chat.html"><strong>Chat événement</strong><span>Échanger avec l'hôte et tous les participants à un événement.</span></a></li>
+            <li><a href="posting.html"><strong>Publier Offre ou Demande</strong><span>Proposez un service ou un bien, ou exprimez un besoin que vous recherchez.</span></a></li>
+            <li><a href="decisions.html"><strong>Voter une Décision</strong><span>Trouver les Décisions ouvertes, voter, modifier votre vote et voir les résultats.</span></a></li>
+            <li><a href="keepers.html"><strong>Gestionnaires</strong><span>Les personnes qui font vivre une entreprise et s'engagent pour elle. Comment rejoindre, s'opposer et se retirer.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

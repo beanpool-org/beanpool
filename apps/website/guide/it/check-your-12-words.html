@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Le 12 parole e le chiavi del server (proprietari) — BeanPool members' guide</title>
+    <meta name="description" content="Per i proprietari della comunità. Verificare le 12 parole, prendere il controllo o ripristinare il server dal telefono e la verifica automatica del telefono.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Impostazioni e sicurezza</a></p>
+        <h1>Le 12 parole e le chiavi del server (proprietari)</h1>
+        <p class="lede">Per i proprietari della comunità. Verificare le 12 parole, prendere il controllo o ripristinare il server dal telefono e la verifica automatica del telefono.</p>
+        <h2>A chi è rivolto</h2>
+        <p>Solo ai <strong>proprietari</strong> di una comunità. Se non sei un proprietario, non vedrai nulla di tutto questo.</p>
+        <h2>Perché viene chiesto ai proprietari</h2>
+        <p>Il server della tua comunità conserva una copia bloccata delle sue chiavi, per trasferire la comunità su un altro server se il proprio viene perso, e anche i suoi backup sono bloccati. Sono bloccati sugli account dei proprietari: un qualsiasi proprietario può aprirli con il proprio telefono (vedi Prendere il controllo o ripristinare con il telefono, sotto). Se perdi il telefono, le tue 12 parole ripristinano il tuo account, e con esso la tua chiave per la serratura del server e per i suoi backup. Questo conta soprattutto il giorno in cui il server stesso non c'è più.</p>
+        <p>Quindi l'app chiede a ciascun proprietario, ogni tanto, di verificare di avere ancora le 12 parole corrette. Puoi scegliere <strong>Più tardi</strong>. Nulla viene mai bloccato, e puoi continuare a fare tutto ciò che fa un proprietario.</p>
+        <h2>Quando lo chiede l'app</h2>
+        <ul>
+            <li>Una volta, poco dopo essere diventato proprietario.</li>
+            <li>Di nuovo 12 mesi dopo l'ultima verifica.</li>
+        </ul>
+        <p>Mostra una scheda nella parte superiore del Mercato (nella web app, in cima a ogni schermata tranne la Mappa): <strong>Verifica ora</strong> o <strong>Più tardi</strong>. <strong>Più tardi</strong> mette via la scheda fino alla prossima scadenza. Puoi effettuare la verifica in qualsiasi momento da <strong>Impostazioni</strong>: sotto <strong>CHIAVI DELLA COMUNITÀ</strong>, tocca <strong>Verifica le tue 12 parole</strong> (nella web app, <strong>Verifica ora</strong>).</p>
+        <h2>Come verificare</h2>
+        <ul>
+            <li>Prendi il tuo foglio con le 12 parole.</li>
+            <li>Scrivile in ordine, separate da spazi. Le maiuscole e gli spazi extra non contano.</li>
+            <li>Tocca <strong>Verifica le mie parole</strong>.</li>
+        </ul>
+        <p>Se sono corrette, l'app dice <strong>Queste sono le parole corrette.</strong> Se no: <strong>Queste non sono le parole per questo account.</strong> Non dice quale parola sia errata, quindi controlla il foglio e riscrivile tutte.</p>
+        <p>Su un telefono senza una copia delle tue 12 parole (uno ripristinato con un account di accesso), le parole corrette mostrano anche <strong>Salvale su questo telefono</strong>. Toccalo e <strong>Visualizza frase di recupero</strong> le mostrerà da quel momento in poi. È la stessa verifica e lo stesso salvataggio di <strong>Aggiungi le tue 12 parole a questo telefono</strong> (vedi &quot;Le tue 12 parole&quot;).</p>
+        <p>Non riesci a trovarle? Se questo telefono le possiede ancora, <strong>Impostazioni</strong>, poi <strong>Visualizza frase di recupero</strong>, le mostra. Riscrivile di nuovo su carta, poi fai la verifica. Su un telefono senza una copia, l'app lo segnala: quando le trovi, verificale qui, poi salvale.</p>
+        <h2>Cosa viene inviato e cosa no</h2>
+        <ul>
+            <li>La verifica avviene sul tuo telefono (o nel tuo browser, nella web app). Le tue parole non vengono mai inviate da nessuna parte. Il campo viene svuotato non appena la verifica risponde, e quando lasci la schermata. Vengono salvate solo se tocchi <strong>Salvale su questo telefono</strong>, e in tal caso solo su questo telefono.</li>
+            <li>Quando le parole sono corrette, il tuo telefono comunica al server della tua comunità solo che hai effettuato la verifica e quando, con la firma del tuo account.</li>
+            <li>I proprietari e gli amministratori vedono, nelle Impostazioni del server, la data di &quot;12 parole verificate&quot; di ciascun proprietario, oppure &quot;non ancora&quot;. È una tua dichiarazione: il server non può vedere né verificare le tue parole.</li>
+        </ul>
+        <h2>Prendere il controllo o ripristinare con il telefono</h2>
+        <p>Se il server della tua comunità va perso, chiunque gestisca il server di riserva (o un nuovo server che ripristina un backup) può chiedere a un proprietario di aprire le chiavi bloccate. Un qualsiasi proprietario è sufficiente. È necessaria la versione più recente dell'app BeanPool. Anche la web app funziona se si apre ancora, ma risiede all'indirizzo della tua comunità, che potrebbe non essere raggiungibile insieme al server: l'app per telefono è quella su cui fare affidamento.</p>
+        <ul>
+            <li>Nelle Impostazioni del server, scelgono <strong>Take over as the main server</strong>, poi <strong>I understand: use an owner's phone</strong>, o <strong>Open with an owner's phone</strong> durante il ripristino di un backup. Sul loro schermo appare un codice.</li>
+            <li>Nell'app: <strong>Impostazioni</strong>, sotto <strong>CHIAVI DELLA COMUNITÀ</strong>, tocca <strong>Prendi il controllo o ripristina con questo telefono</strong>, e inquadra il codice con la fotocamera. Se la pagina del server è aperta sul tuo stesso telefono, toccare il suo link produce lo stesso effetto. Nella web app, copia il link dal loro schermo e incollalo sotto <strong>Prendi il controllo o ripristina con questo browser</strong> in <strong>Impostazioni</strong>.</li>
+            <li>L'app mostra quale comunità, quale server e cosa accadrà. Se il tuo server principale risponde ancora, lo segnala in rosso: un passaggio di controllo serve solo per un server che è davvero perso.</li>
+            <li>Tocca <strong>Sblocca per prendere il controllo</strong> (o <strong>Sblocca il backup</strong>). Il telefono richiede prima il proprio sblocco: impronta digitale, volto o PIN. La web app non ha questo passaggio, ed è per questo che l'app per telefono è il luogo più sicuro per la chiave di un proprietario.</li>
+            <li>Il tuo telefono apre la propria parte della serratura e consegna la chiave a quel server, bloccata in modo che solo quel server possa leggerla. Il tuo telefono non vede mai le chiavi del server né il backup.</li>
+            <li>In un passaggio di controllo, la persona al server conferma quindi sul proprio schermo. La comunità viene informata del trasferimento e del fatto che hai aperto le chiavi.</li>
+        </ul>
+        <p>L'app rifiuta, e spiega il motivo, se il blocco appartiene a un'altra comunità, se non è bloccato per te, se il codice del server è scaduto (dura 10 minuti e funziona una sola volta), o se le chiavi non sono state bloccate dal server della tua comunità.</p>
+        <h2>Il telefono verifica la serratura da solo</h2>
+        <p>Ogni volta che il blocco della tua comunità cambia (un proprietario viene aggiunto o rimosso, viene creato un nuovo codice di recupero), la tua app verifica, silenziosamente, se potrebbe ancora aprire la sua parte. La apre, getta via la chiave immediatamente e riferisce al server se ha funzionato. Non ti viene chiesto nulla.</p>
+        <p>I proprietari e gli amministratori lo vedono nelle Impostazioni del server, accanto alla data delle tue 12 parole: <strong>their phone opened the current lock</strong>, con la data, o che ha aperto l'ultima volta una versione precedente. Se dice che il tuo telefono <strong>could NOT open</strong> la serratura, verifica le tue 12 parole e chiedi a un altro proprietario di controllare le Impostazioni del server.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Le tue 12 parole</strong><span>Le 12 parole sono la chiave del tuo account. Perché sono importanti, dove trovarle, come custodirle e come aggiungere un accesso come metodo secondario.</span></a></li>
+            <li><a href="recovery.html"><strong>Recuperare il tuo account</strong><span>Ripristina il tuo account su un nuovo telefono e proteggilo con un metodo di accesso collegato.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

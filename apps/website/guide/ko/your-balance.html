@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 잔액 및 거래 내역 — BeanPool members' guide</title>
+    <meta name="description" content="보유 콩 수량, 거래 대기 중인 수량, 모든 거래와 선물 내역이에요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">장부</a></p>
+        <h1>내 잔액 및 거래 내역</h1>
+        <p class="lede">보유 콩 수량, 거래 대기 중인 수량, 모든 거래와 선물 내역이에요.</p>
+        <h2>화면 열기</h2>
+        <p>탭 행에서 <strong>장부</strong>를 탭하세요. 잔액은 오른쪽 상단에 <strong>콩</strong> 단위로 표시돼요. 0 미만일 수도 있어요. &quot;내 신용 한도&quot;를 참조하세요.</p>
+        <p>글로벌 커뮤니티에는 콩이 없으므로, 장부에는 <strong>🏘️ 로컬 커뮤니티</strong> 표시가 붙은 로컬 커뮤니티 예시 골짜기의 예시 멤버가 표시돼요. 해당 버튼들은 왜 콩이 로컬 커뮤니티에만 존재하는지 설명하며 실제로 전송되지 않아요. &quot;콩과 글로벌 커뮤니티&quot;를 참조하세요.</p>
+        <p>장부에는 두 개의 탭이 있어요: <strong>등급</strong>(내 신뢰, &quot;신뢰 배지&quot; 참조)과 <strong>지갑</strong>이에요. 휴대폰에서는 잔액을 탭하면 지갑으로 바로 이동해요.</p>
+        <h2>지갑 탭</h2>
+        <ul>
+            <li><strong>내 잔액</strong>, 그리고 1시간당 40 콩 기준으로 대략 몇 시간의 도움 가치인지가 표시돼요.</li>
+            <li><strong>공유지:</strong> 커뮤니티의 공동 풀이에요.</li>
+            <li><strong>신용 한도:</strong> 0 미만으로 얼마나 내려갈 수 있는지를 나타내요.</li>
+            <li>진행 중인 거래에 묶여 있는 콩이 있다면 그 수량이 표시돼요.</li>
+            <li><strong>커뮤니티 순환:</strong> 콩을 보유하고 있을 때 표시돼요. &quot;유통 수수료&quot;를 참조하세요.</li>
+            <li><strong>프로젝트 약정:</strong> 프로젝트에 약정한 콩이 있다면 표시돼요.</li>
+            <li><strong>콩 보내기:</strong> 선물을 보내요. &quot;선물 보내기&quot;를 참조하세요.</li>
+        </ul>
+        <p>웹 앱에서는 지갑 탭이 더 단순해요: <strong>마이너스 한도</strong>, <strong>공유 풀</strong>, <strong>콩 보내기</strong>, <strong>커뮤니티 순환</strong>이 있어요. 내 잔액은 장부 상단에 표시돼요.</p>
+        <h2>최근 거래 내역</h2>
+        <p>모든 거래, 선물, 수수료 내역이 최신순으로 메모, 시간, 플러스/마이너스 표시와 함께 나와요. 휴대폰에서는 각 줄에 누구와의 거래였는지도 표시돼요. 웹 앱에서는 <strong>보냄</strong> 또는 <strong>받음</strong>으로 표시돼요. 메모에 게시물이 언급되어 있다면 <strong>제공 글 보기</strong>를 탭하여 해당 게시물을 열 수 있어요.</p>
+        <p>내 잔액과 이러한 거래 내역은 나만 볼 수 있어요. 커뮤니티의 다른 사람은 아무도 읽을 수 없어요. <strong>CSV 내보내기</strong>(웹 앱에서는 <strong>내 내역 내보내기</strong>)를 통해 내 거래 내역을 파일로 저장할 수 있어요.</p>
+        <p>목록에는 아직 검색이나 필터 기능이 없어요.</p>
+        <h2>ⓘ 버튼</h2>
+        <p>휴대폰에서 잔액 옆의 <strong>ⓘ</strong>를 탭하면 잔액과 신용 한도에 대한 짧은 설명을 볼 수 있어요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>내 신용 한도</strong><span>잔액이 마이너스로 내려갈 수 있는 범위와 한도 상향 방식이에요.</span></a></li>
+            <li><a href="gifts.html"><strong>선물 보내기</strong><span>거래 없이 다른 멤버에게 콩을 선물해 보세요.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>유통 수수료</strong><span>콩의 활발한 유통을 위해 큰 잔액에 부과되는 소액의 월간 수수료예요. 처음 200콩까지는 무료예요.</span></a></li>
+            <li><a href="my-deals.html"><strong>내 거래</strong><span>진행 중인 모든 거래, 내가 올린 게시글, 지난 거래 내역을 한곳에서 확인하세요.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>콩과 글로벌 커뮤니티</strong><span>글로벌 커뮤니티의 목적, 여러 커뮤니티와의 관계, 🏘️ 지역 커뮤니티 표시, 샘플 커뮤니티 Example Valley, 콩이 대기하는 이유와 로컬 커뮤니티 시작·찾기 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

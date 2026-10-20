@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>பரிமாற்றத்தில் சிக்கல் எழும்போது — BeanPool members' guide</title>
+    <meta name="description" content="பரிமாற்றத்தை ரத்துசெய்தல் மற்றும் உடன்பாடு எட்டப்படாதபோது என்ன நடக்கும் என்பது.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">சந்தை</a></p>
+        <h1>பரிமாற்றத்தில் சிக்கல் எழும்போது</h1>
+        <p class="lede">பரிமாற்றத்தை ரத்துசெய்தல் மற்றும் உடன்பாடு எட்டப்படாதபோது என்ன நடக்கும் என்பது.</p>
+        <h2>முதலில் பேசுங்கள்</h2>
+        <p>பெரும்பாலான சிக்கல்கள் ஒரு தவறான புரிதலாகும். பதிவில் <strong>செய்தி</strong> என்பதைத் தட்டி பேசித் தீருங்கள்.</p>
+        <h2>ரத்து செய்தல்</h2>
+        <ul>
+            <li><strong>ஒப்புக்கொள்ளப்படுவதற்கு முன்:</strong> கேட்ட நபர் <strong>கோரிக்கையைத் திரும்பப் பெறு</strong> என்பதைத் தட்டுகிறார். ஒரு தேவையைப் பதிவிட்ட நபர் <strong>மறு</strong>, பின்னர் <strong>மறு</strong> என்பதைத் தட்டுகிறார், மேலும் ஒரு சிறிய செய்தியையும் சேர்க்கலாம். யாரும் பதிலளிக்காத ஒரு கோரிக்கை 7 நாட்களுக்குப் பிறகு தானாகவே முடிவடையும்.</li>
+            <li><strong>பயறுகள் வைப்பில் இருக்கும் போது:</strong> உங்கள் இருவரில் எவரும் <strong>பொறுப்புடைமைப் பிடிப்பை ரத்து செய்</strong> என்பதைத் தட்டி, பின்னர் <strong>ஆம், ரத்து செய்</strong> என்பதைத் தட்டலாம். வைப்பில் உள்ள அனைத்துப் பயறுகளும் பணம் செலுத்துபவருக்கே திரும்பச் செல்லும், மேலும் பதிவு மீண்டும் சந்தைக்குச் செல்லும். மற்ற நபருக்குத் தெரிவிக்கப்படும்.</li>
+        </ul>
+        <p>இணைய செயலியில், <strong>கோரிக்கையைத் திரும்பப் பெறு</strong> என்பது <strong>சலுகையை ரத்துசெய்</strong> ஆகவும், <strong>மறு</strong> என்பது செய்தி எதுவும் இல்லாமல் உடனடியாக நிராகரிப்பதாகவும் இருக்கும். வைக்கப்பட்ட வர்த்தகத்தை அங்கே திரும்பப் பெற, <strong>வைப்பை ரத்துசெய்</strong> என்பதைத் தட்டி, பின்னர் <strong>சரி</strong> என்பதைத் தட்டவும்.</p>
+        <p>பயறுகள் விடுவிக்கப்படுவதற்கு முன்பு எந்த நேரத்திலும், எந்தவொரு நபரும் தனியாக ரத்து செய்யலாம். வேலை முடிந்த பிறகும் இது பொருந்தும். அது உங்களுக்கு நேர்ந்தால், அவர்களிடம் பேசுங்கள், பின்னர் உங்கள் சமூகத்தின் நிர்வாகிகளிடம் பேசுங்கள்.</p>
+        <h2>நீங்கள் உடன்பட முடியாத போது</h2>
+        <p>செயலியில் &quot;தகராறு&quot; பொத்தான் எதுவும் இல்லை. உதவிக்கு உங்கள் சமூகத்தின் நிர்வாகிகளிடம் கேளுங்கள். அவர்கள் அதன் சேவையகத்தைப் பார்த்துக் கொள்கிறார்கள், மேலும் சிக்கிய வர்த்தகத்தை மூன்று வழிகளில் ஒன்றில் அவர்களால் தீர்க்க முடியும்:</p>
+        <ul>
+            <li>விற்பனையாளருக்குப் பணம் செலுத்துதல் (வழக்கமான 1.5% கட்டணம் பொருந்தும்);</li>
+            <li>அனைத்துப் பயறுகளையும் மீண்டும் வாங்குபவருக்கே வழங்குதல்;</li>
+            <li>அவற்றை சரிபாதியாகப் பிரித்தல்.</li>
+        </ul>
+        <p>ஓர் நிர்வாகி தாம் ஒரு பகுதியாக உள்ள வர்த்தகத்தையோ அல்லது தாம் பராமரிக்கும் ஒரு கூட்டு முயற்சி சம்பந்தப்பட்ட ஒன்றையோ தீர்க்க முடியாது.</p>
+        <p>உங்கள் இருவருக்கும் ஓர் எச்சரிக்கை (&quot;உங்கள் வர்த்தகங்களில் ஒன்றில் செய்தி உள்ளது.&quot;) மற்றும் அது எவ்வாறு தீர்க்கப்பட்டது என்பதைக் கூறும் ஒரு வரி உங்கள் அரட்டையில் கிடைக்கும். அரட்டை வரி நிர்வாகியை அவர்களின் அழைப்புப் பெயரால் குறிப்பிடும், அல்லது &quot;ஒரு சமூக நிர்வாகி&quot; என்று கூறும். எச்சரிக்கை யாரையும் பெயரிடாது.</p>
+        <h2>யாராவது நேர்மையாக இல்லையென்றால்</h2>
+        <ul>
+            <li>நியாயமான மதிப்பாய்வை விடுங்கள். குறைந்த நட்சத்திரங்கள் அவர்கள் ஈட்டும் நம்பிக்கையைக் குறைக்கின்றன.</li>
+            <li>அவர்களின் பதிவைப் புகாரளிக்கவும், அல்லது அவர்களை முடக்கவும். &quot;சிக்கலைப் புகாரளித்தல்&quot; மற்றும் &quot;ஒருவரை முடக்குதல்&quot; என்பதைப் பார்க்கவும்.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>பரிமாற்றம் படிநிலைகள்</strong><span>கேட்பது முதல் பணம் பெறுவது வரை, உதவி மற்றும் தேவைக்கான நடைமுறைகள், மற்றும் மதிப்பாய்வு இடுதல்.</span></a></li>
+            <li><a href="getting-help.html"><strong>உதவி பெறுதல்</strong><span>சந்தேகம் வரும்போது எங்கு பார்ப்பது மற்றும் யாரிடம் கேட்பது.</span></a></li>
+            <li><a href="reporting.html"><strong>சிக்கலைப் புகாரளித்தல்</strong><span>ஒரு பதிவு, நிகழ்வு, துடிப்புப் பதிவு, திட்டம் அல்லது கூட்டு முயற்சி குறித்து நடுவர்களிடம் தெரிவிக்கவும்.</span></a></li>
+            <li><a href="rules.html"><strong>விதிகளும் முடிவுகள் செயல்படும் விதமும்</strong><span>வாக்களிப்பு, பங்கேற்பு, ரகசிய வாக்கெடுப்பு, வாக்களிக்கத் தகுதியானவர்கள், இடைநீக்கம், உறுப்பினரை நீக்குதல், பொறுப்பாளர்கள் மற்றும் ஒருங்கிணைப்பாளர்கள்.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

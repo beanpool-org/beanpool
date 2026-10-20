@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ইভেন্টসমূহ — BeanPool members' guide</title>
+    <meta name="description" content="একটি নির্দিষ্ট স্থানে বা অনলাইনে, একবার বা পুনরাবৃত্তিমূলক ইভেন্ট তৈরি করুন; যাচ্ছেন জানান, রিমাইন্ডার পান, শেয়ার করুন এবং হোস্ট হিসেবে পরিচালনা করুন।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">সম্পদ</a></p>
+        <h1>ইভেন্টসমূহ</h1>
+        <p class="lede">একটি নির্দিষ্ট স্থানে বা অনলাইনে, একবার বা পুনরাবৃত্তিমূলক ইভেন্ট তৈরি করুন; যাচ্ছেন জানান, রিমাইন্ডার পান, শেয়ার করুন এবং হোস্ট হিসেবে পরিচালনা করুন।</p>
+        <h2>ইভেন্ট খোঁজা</h2>
+        <ul>
+            <li><strong>বাজার</strong>-এ, <strong>ইভেন্টসমূহ</strong>-এ ট্যাপ করুন। <strong>আজ</strong>, <strong>এই সপ্তাহান্তে</strong> বা <strong>পরবর্তী ৭ দিন</strong> বেছে নিন।</li>
+            <li><strong>মানচিত্র</strong>-এ, ইভেন্টগুলো বেগুনি রঙের পিন। ফোনে, কেবল সেগুলো দেখতে <strong>ইভেন্টসমূহ</strong>-এ ট্যাপ করুন। ওয়েব অ্যাপে সেগুলো সবসময় থাকে, এবং তারিখের চিপগুলো সেগুলো নির্দিষ্ট করে।</li>
+        </ul>
+        <h2>আপনার ইভেন্টসমূহ</h2>
+        <p><strong>বাজার</strong>-এ, <strong>★ আপনার জন্য</strong>-তে ট্যাপ করুন। <strong>আপনার ইভেন্টসমূহ</strong> এতে প্রথম বিষয়: আপনি যেগুলোতে <strong>যাচ্ছি</strong> বা <strong>আগ্রহী</strong> বলেছেন তার সবকিছু, সবচেয়ে নিকটবর্তীটি প্রথমে। একটি খুলতে সেটিতে ট্যাপ করুন।</p>
+        <p>আপনার আসন্ন কিছু থাকলেই কেবল এটি সেখানে থাকে, এবং এটি কেবল আপনার নিজস্ব উত্তরগুলো ধারণ করে — অন্য কেউ এটি দেখতে পারে না।</p>
+        <h2>যাওয়া</h2>
+        <p>কোনো ইভেন্টে, <strong>যাচ্ছি</strong> বা <strong>আগ্রহী</strong>-তে ট্যাপ করুন। আপনার পছন্দটি সরাতে আবার ট্যাপ করুন।</p>
+        <p>আপনি যখন <strong>যাচ্ছি</strong>:</p>
+        <ul>
+            <li>আপনি হোস্টের <strong>যাঁরা যাচ্ছেন তাঁদের জন্য নোট</strong> পড়তে পারবেন, যখন হোস্ট আপনাকে ভেতরে যেতে দেন, যেখানে হোস্ট সেটি বেছে নিয়েছেন;</li>
+            <li>আপনি <strong>ইভেন্ট চ্যাট</strong> খুলতে পারেন। &quot;ইভেন্ট চ্যাট&quot; দেখুন;</li>
+            <li>কোনো অনলাইন ইভেন্টের জন্য, আপনি নোটের মতো একই শর্তে এর <strong>যোগদানের লিঙ্ক</strong> এবং একটি <strong>যোগ দিন</strong> বোতাম দেখতে পাবেন।</li>
+        </ul>
+        <p>সবকিছু দেখতে ইভেন্টটিতে ট্যাপ করুন, এবং <strong>মানচিত্রে দেখান</strong>। ফোনে এটি আপনার মানচিত্র অ্যাপটি খোলে। ওয়েব অ্যাপে এটি মানচিত্রে স্থানটি দেখায়।</p>
+        <h2>রিমাইন্ডার পাওয়া</h2>
+        <p>আপনি যখন <strong>যাচ্ছি</strong> বা <strong>আগ্রহী</strong>, তখন ইভেন্টটি <strong>আমাকে মনে করিয়ে দিন</strong> এবং এটি শুরু হওয়ার কতক্ষণ আগে আপনাকে জানানো হবে তা দেখায় — আপনি পরিবর্তন না করা পর্যন্ত <strong>১ দিন আগে (আপনার ডিফল্ট)</strong>।</p>
+        <ul>
+            <li><strong>১ সপ্তাহ আগে</strong>, <strong>১ দিন আগে</strong>, <strong>২ ঘণ্টা আগে</strong>, <strong>১ ঘণ্টা আগে</strong> বা <strong>৩০ মিনিট আগে</strong> বেছে নিতে <strong>পরিবর্তন</strong>-এ ট্যাপ করুন। আপনি একাধিক টিক দিতে পারেন।</li>
+            <li>এই ইভেন্টের জন্য কোনো রিমাইন্ডার না পেতে কোনোটিতে টিক দেবেন না।</li>
+            <li>তারপর <strong>এই ইভেন্টের জন্য সংরক্ষণ করুন</strong>-এ ট্যাপ করুন। আপনি সংরক্ষণ না করা পর্যন্ত কোনো টিক সংরক্ষিত হয় না।</li>
+            <li>আপনার স্বাভাবিক পছন্দে ফিরিয়ে আনতে <strong>আমার ডিফল্ট ব্যবহার করুন</strong>-এ ট্যাপ করুন।</li>
+        </ul>
+        <p>প্রতিটি ইভেন্টের জন্য আপনার স্বাভাবিক পছন্দ পরিবর্তন করতে, &quot;বিজ্ঞপ্তি&quot; দেখুন।</p>
+        <p>রিমাইন্ডারগুলো আপনার মার্কেটপ্লেস সতর্কতার সাথে আপনার ফোনে সতর্কতা হিসেবে আসে, তাই আপনি সেগুলো বন্ধ করলে এগুলোও বন্ধ হয়ে যায়। বাতিল হওয়া বা শেষ হয়ে যাওয়া কোনো ইভেন্টের জন্য আপনাকে কখনই মনে করিয়ে দেওয়া হয় না, এবং আপনি আসার কথা বলার সময় যে সময়টি ইতিমধ্যে পেরিয়ে গেছে সে সম্পর্কেও কখনই নয়।</p>
+        <h2>কাউকে এটি জানানো</h2>
+        <p>ইভেন্টটি খুলুন এবং <strong>শেয়ার করুন</strong>-এ ট্যাপ করুন। ইভেন্টের নাম, কখন হবে, কোথায় হবে এবং একটি লিঙ্কসহ আপনার ফোনের সাধারণ শেয়ার শিট খোলে। কম্পিউটারে, আপনার পেস্ট করার জন্য লিঙ্কটি অনুলিপি করা হয়।</p>
+        <p>যে কেউ সেই লিঙ্কে ট্যাপ করলে ইভেন্টটি খোলে — তাদের কাছে থাকলে অ্যাপে, অন্যথায় ওয়েব অ্যাপে। আপনার কমিউনিটিতে নেই এমন কেউ এর যোগদানের পাতায় পৌঁছান। একটি ওয়েব ব্রাউজারে, গ্লোবাল কমিউনিটি প্রথমে তাদের ইভেন্টটি দেখায়, যেমন একজন দর্শনার্থী দেখেন, এবং তারা যোগদানের পর এটি আবার খোলে।</p>
+        <h2>এটি আপনার ক্যালেন্ডারে রাখা</h2>
+        <p>ইভেন্টটি খুলুন এবং <strong>ক্যালেন্ডারে যোগ করুন</strong>-এ ট্যাপ করুন।</p>
+        <ul>
+            <li><strong>ওয়েব অ্যাপ</strong>-এ, একটি ক্যালেন্ডার ফাইল ডাউনলোড হয়। এটি খুলুন এবং আপনার ক্যালেন্ডার ইভেন্টটি যোগ করার প্রস্তাব দেয়।</li>
+            <li>একটি <strong>iPhone</strong>-এ, একই ফাইলটি আপনার ফোনে দেওয়া হয়, যা <strong>Add to Calendar</strong> প্রস্তাব করে।</li>
+            <li><strong>Android</strong>-এ, ইভেন্টটি ইতিমধ্যে পূরণ করা অবস্থায় Google Calendar খোলে। এটি পরীক্ষা করুন এবং সংরক্ষণ করুন।</li>
+        </ul>
+        <p>এন্ট্রিটিতে নাম, সময়, স্থান এবং ইভেন্টের লিঙ্ক থাকে। হোস্ট পরবর্তীতে সময় পরিবর্তন করলে, আপনার ক্যালেন্ডার সেটির সাথে পরিবর্তিত হয় না — অ্যাপটি এখনও আপনাকে মনে করিয়ে দেবে, এবং ইভেন্টটি নিজেই সর্বদা নতুন সময় দেখায়।</p>
+        <h2>একটি ইভেন্ট তৈরি করা</h2>
+        <ul>
+            <li>বাজার ট্যাব বা মানচিত্রে <strong>+ পোস্ট যোগ করুন</strong>-এ ট্যাপ করুন, তারপর <strong>ইভেন্ট</strong>-এ।</li>
+            <li><strong>শিরোনাম</strong>, এবং কখন এটি <strong>শুরু</strong> হয়। <strong>শেষ</strong> ঐচ্ছিক; আপনি পরিবর্তন না করলে এটি ২ ঘণ্টা পর হয়।</li>
+            <li>সময়গুলো ইভেন্টের নিজস্ব সময় অঞ্চলে থাকে, যা পিন থেকে নেওয়া হয়। যখন সেটি আপনার নিজস্ব অঞ্চল না হয়, তখন সময়ের নিচের একটি লাইন সেটির নাম দেয়। এটি ভুল হলে এর পাশের <strong>পরিবর্তন</strong>-এ ট্যাপ করুন।</li>
+            <li><strong>পুনরাবৃত্তি:</strong> এটি কত ঘন ঘন আসে তা বেছে নিন, যেমন সেই দিন প্রতি সপ্তাহে বা মাসে একবার, অথবা এটিকে <strong>পুনরাবৃত্তি হয় না</strong>-তে রেখে দিন। <strong>পর্যন্ত</strong> ঐচ্ছিক: এটি খালি রাখুন এবং আপনি বাতিল না করা পর্যন্ত ইভেন্টটি পুনরাবৃত্ত হয়।</li>
+            <li><strong>নির্দিষ্ট স্থানে</strong> বা <strong>অনলাইনে</strong> বেছে নিন। একটি অনলাইন ইভেন্টের জন্য কোনো স্থান বা পিন থাকে না: তার পরিবর্তে একটি <strong>যোগদানের লিঙ্ক</strong> যোগ করুন। কেবল আপনি এবং যারা যাচ্ছেন তারা এটি দেখতে পান (যেখানে আপনি লোকেদের প্রবেশ করতে দেন, কেবল যাদের আপনি প্রবেশ করতে দেন)। এর সময়গুলো আপনার নিজস্ব সময় অঞ্চলে থাকে, এবং অন্য সবাই তাদের সময় অঞ্চলে তা দেখতে পান, যা <strong>আপনার সময়</strong> হিসেবে চিহ্নিত।</li>
+            <li><strong>স্থানের নাম</strong>, যেমন &quot;টাউন হল&quot;।</li>
+            <li>মানচিত্রে পিনটি রাখুন: মানচিত্রে ট্যাপ করুন, <strong>একটি ঠিকানা খুঁজুন</strong> অনুসন্ধান করুন, বা <strong>আমার লোকেশন ব্যবহার করুন</strong>-এ ট্যাপ করুন। আপনি সঠিক স্থানটি দেখাতে না চাইলে <strong>আনুমানিক (~১০০ মি)</strong>-এ ট্যাপ করুন। &quot;পিনের অবস্থান&quot; দেখুন।</li>
+            <li>একটি <strong>বিবরণ</strong>, এবং চাইলে একটি ছবি।</li>
+            <li><strong>যাঁরা যাচ্ছেন তাঁদের জন্য নোট:</strong> যারা 'যাচ্ছি' ট্যাপ করেন তারা সবাই এটি দেখতে পান, যদি না আপনি <strong>কেবল যাদের অনুমতি দেব তারাই নোট ও চ্যাট দেখতে পাবে</strong>-তে টিক দেন (গ্লোবাল কমিউনিটিতে শুরুতে টিক দেওয়া থাকে, যেখানে যে কেউ এক মিনিটে যোগ দিতে পারেন): সেক্ষেত্রে কেবল আপনি যাদের প্রবেশ করতে দেন তারা এটি এবং ইভেন্ট চ্যাট দেখতে পান। সঠিক ঠিকানা বা গেট কোডের জন্য একটি ভালো জায়গা; স্থানের নাম সবার জন্য।</li>
+            <li><strong>কে এটি দেখতে পারেন:</strong> আপনার পুরো কমিউনিটি, বা একটি গ্রুপ।</li>
+            <li>আপনি কোনো প্রকল্প বা উদ্যোগ পরিচালনা করলে বা কোনো গ্রুপের আহ্বায়ক হলে, <strong>হিসেবে পোস্ট করুন</strong> আপনাকে এর নামে ইভেন্টটি পোস্ট করতে দেয়। একটি গ্রুপ কেবল তার নিজস্ব সদস্যদের জন্য হোস্ট করে; একটি উদ্যোগ পুরো কমিউনিটির জন্য হোস্ট করে, তাই কোনো উদ্যোগের ইভেন্ট কখনই কেবল গ্রুপভিত্তিক হয় না।</li>
+            <li><strong>তৈরি করুন</strong>-এ ট্যাপ করুন। আপনার ইভেন্টটি বাজারে এবং মানচিত্রে প্রদর্শিত হয়।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে শিরোনামের বাক্সটি হলো <strong>কী ঘটছে</strong>, পিনের বোতামগুলো হলো <strong>📍 My location</strong> এবং <strong>📌 Drop a pin</strong>, এবং শেষ বোতামটি হলো <strong>ইভেন্ট তৈরি করুন</strong>।</p>
+        <p>আপনার একসাথে ৫টি আসন্ন ইভেন্ট থাকতে পারে। একটি গ্রুপের ইভেন্টগুলো গ্রুপের বিপরীতে এবং একটি উদ্যোগের ইভেন্টগুলো উদ্যোগের বিপরীতে গণনা করা হয়।</p>
+        <h2>আপনার ইভেন্ট পরিচালনা করা</h2>
+        <p>আপনার ইভেন্ট খুলুন। হোস্ট হিসেবে আপনি পারেন:</p>
+        <ul>
+            <li><strong>কারা যাচ্ছেন</strong> দেখতে, এবং লোকেদের ঢুকতে দিতে: একটি নামের পাশে <strong>ঢুকতে দিন</strong> (ফিরিয়ে নিতে আবার ট্যাপ করুন), বা <strong>সবাইকে ঢুকতে দিন</strong>। আপনার নিজস্ব বন্ধুরা 'যাচ্ছি' ট্যাপ করার সাথে সাথে তাদের ঢুকতে দেওয়া হয়। আপনি যদি <strong>কেবল যাদের অনুমতি দেব তারাই নোট ও চ্যাট দেখতে পাবে</strong> আনটিক করেন, তবে যারা যাচ্ছেন তারা সবাই নোটটি এবং এ পর্যন্ত হওয়া চ্যাট দেখতে পান, এবং চ্যাটটি বলে যে হোস্ট এটি উন্মুক্ত করেছেন;</li>
+            <li><strong>ইভেন্ট সম্পাদনা করুন</strong>। আপনি সময় বা স্থান পরিবর্তন করলে, যারা যাচ্ছেন তাদের সবাইকে জানানো হয়;</li>
+            <li>পুনরায় আয়োজন করতে, <strong>নতুন তারিখে অনুলিপি করুন</strong>;</li>
+            <li><strong>ইভেন্ট বাতিল করুন</strong>, তারপর নিশ্চিত করুন (ফোনে আবার <strong>ইভেন্ট বাতিল করুন</strong>, ওয়েব অ্যাপে <strong>ঠিক আছে</strong>)। যারা যাচ্ছেন তারা সবাই দেখতে পান এটি বাতিল করা হয়েছে, এবং এর চ্যাট কেবল পড়ার জন্য হয়ে যায়।</li>
+        </ul>
+        <h2>পুনরাবৃত্তিমূলক ইভেন্টসমূহ</h2>
+        <p>একটি পুনরাবৃত্তিমূলক ইভেন্ট তার তারিখের পাশে <strong>↻</strong> এবং কত ঘন ঘন তা দেখায়, যেমন <strong>প্রতি শুক্রবার</strong> বা <strong>প্রতি মাসের ১৬ তারিখ</strong>। এর কার্ডটি পরবর্তী তারিখ দেখায়; <strong>পরবর্তী তারিখসমূহ</strong> দেখতে এটি খুলুন।</p>
+        <p>আপনি এটি হোস্ট করলে, পরবর্তী প্রতিটি তারিখের থাকে:</p>
+        <ul>
+            <li><strong>এই তারিখটি বাতিল করুন:</strong> কেবল সেই দিনটি বাতিল করা হয়। সেই দিন যারা যাচ্ছেন তাদের সবাইকে জানানো হয়।</li>
+            <li><strong>শুধুমাত্র এই তারিখটি পরিবর্তন করুন:</strong> সেই দিনটি বাতিল করা হয় এবং আপনি অন্য তারিখে একটি একক ইভেন্ট তৈরি করেন।</li>
+            <li><strong>ফিরিয়ে আনুন:</strong> একটি বাতিল করা তারিখ আবার চালু হয়।</li>
+        </ul>
+        <p><strong>ইভেন্ট বাতিল করুন</strong> প্রতিটি তারিখ বাতিল করে, এবং এর চ্যাট কেবল পড়ার জন্য হয়ে যায়। ততক্ষণ পর্যন্ত তারিখগুলোর মাঝে চ্যাট খোলা থাকে, শেষ তারিখ পর্যন্ত; কোনো <strong>পর্যন্ত</strong> না থাকলে, আপনি ইভেন্টটি বাতিল না করা পর্যন্ত এটি খোলা থাকে।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>ইভেন্ট চ্যাট</strong><span>যারা যাচ্ছেন তাদের সকলের জন্য একটি গ্রুপ চ্যাট এবং এটি কীভাবে অন্যান্য চ্যাটের থেকে আলাদা।</span></a></li>
+            <li><a href="notifications.html"><strong>বিজ্ঞপ্তিসমূহ</strong><span>কোন সতর্কতাগুলো আপনার ফোনে পৌঁছাবে এবং ইভেন্টগুলো কখন আপনাকে মনে করিয়ে দেবে তা নির্বাচন করুন।</span></a></li>
+            <li><a href="pin-locations.html"><strong>আপনার পিন যেখানে থাকে</strong><span>কে আপনার পোস্ট এবং ইভেন্টের অবস্থান দেখতে পারে, এবং আপনার বাড়ি কীভাবে ব্যক্তিগত রাখবেন।</span></a></li>
+            <li><a href="map-pins.html"><strong>মানচিত্র যা দেখায়</strong><span>মানচিত্রের পিনগুলো, তাদের রঙের অর্থ এবং তাদের চারপাশের বোতামগুলো।</span></a></li>
+            <li><a href="polls.html"><strong>পোল</strong><span>কমিউনিটিকে একটি দ্রুত প্রশ্ন জিজ্ঞাসা করুন। পোল মতামত দেখায়; তারা নিজেরা কিছু পরিবর্তন করে না।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ギフトを送る — BeanPool members' guide</title>
+    <meta name="description" content="取引を伴わずに、誰かに豆をプレゼントします。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">台帳</a></p>
+        <h1>ギフトを送る</h1>
+        <p class="lede">取引を伴わずに、誰かに豆をプレゼントします。</p>
+        <h2>ギフトを送るための条件</h2>
+        <ul>
+            <li>マーケットで取引を1件完了している必要があります。1〜2豆のみの取引は小さすぎるためカウントされません。</li>
+            <li>保有している豆からのみ贈ることができます。ギフトによって残高がゼロ未満（マイナス）になることはありません。</li>
+        </ul>
+        <p>条件を満たすまでは、ボタンに不足している条件が表示されます（<strong>完了した取引が1件必要</strong>や<strong>プラスの残高が必要</strong>など）。</p>
+        <p>あなたの信頼バッジは関係ありません。</p>
+        <h2>送金の手順</h2>
+        <ul>
+            <li><strong>台帳</strong>をタップし、<strong>ウォレット</strong>をタップして、<strong>豆を送る</strong>をタップします。</li>
+            <li><strong>受取人を選択...</strong>をタップし、相手の名前を検索してタップします。</li>
+            <li><strong>金額</strong>を入力します。必要に応じて「トマトをありがとう」などの<strong>メモ</strong>を追加します。</li>
+            <li><strong>受取人の受取額</strong>を確認します。ギフトには手数料がかからないため、全額が相手に届きます。</li>
+            <li><strong>送金の確認</strong>をタップします。スマートフォンでは<strong>送信完了！</strong>と表示され、Webアプリではフォームが閉じて取引履歴にギフトが表示されます。</li>
+        </ul>
+        <p>ギフトを取り消すことはできません。送信する前に相手の名前をよく確認してください。</p>
+        <h2>知っておくべきこと</h2>
+        <ul>
+            <li>ギフトでは信頼は構築されません。完了した取引によってのみ信頼が構築されます。</li>
+            <li>お休みモード中でもギフトを送ることができます。</li>
+            <li>24時間以内に最大100件の支払いが可能です。ギフト、購入、提供の購入申請、求めに対する手伝いの承認、プロジェクトへの豆のプレッジ、および他のコミュニティからの購入がすべてカウントされます。事業体に対する運営者の裏付けは豆を移動させないため、支払いには該当しません（1日20件のプレッジ変更の1つとしてのみカウントされます）。そのうち最大30件を、過去に支払ったことのない相手に送ることができます。過去に支払ったことのある相手への支払いは引き続き機能します。受け取りが制限されることは決してありません。制限に達した場合、アプリにどの制限か、およびいつ再び支払いできるかが表示されます。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-balance.html"><strong>残高と履歴</strong><span>保有している豆の数、保留中の分、すべての取引とギフトの履歴です。</span></a></li>
+            <li><a href="credit-line.html"><strong>信用枠</strong><span>残高をどこまでマイナスにできるか、またその枠がどのように増えるかを説明します。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPoolの仕組み</strong><span>豆、取引、提供と求め、そしてクレジットについてわかりやすく説明します。</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>取引のステップ</strong><span>問い合わせから支払いまで、提供と求めの双方について、そしてレビューの記入方法を説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

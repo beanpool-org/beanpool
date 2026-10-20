@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Propor uma Decisão — BeanPool members' guide</title>
+    <meta name="description" content="Peça à comunidade para decidir algo de forma vinculativa.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Bens comuns</a></p>
+        <h1>Propor uma Decisão</h1>
+        <p class="lede">Peça à comunidade para decidir algo de forma vinculativa.</p>
+        <h2>Antes de começar</h2>
+        <ul>
+            <li>Uma Decisão serve para algo que o servidor da sua comunidade possa executar: remover ou suspender um membro, congelar ou descongelar o crédito de alguém, escolher quem pode dar aval ou pagar feijões dos Bens comuns. Para qualquer outra coisa, crie uma Enquete.</li>
+            <li>Uma Decisão não pode remover ou suspender um proprietário ou administrador do servidor da sua comunidade. Consulte &quot;Regras e decisões&quot;.</li>
+            <li>Você pode fazer uma proposta depois de concluir uma troca ou se um administrador tiver concedido um emblema de confiança a você. Os administradores da sua comunidade sempre podem propor. Apenas um aval não é suficiente.</li>
+            <li>Você pode ter uma Decisão aberta por vez.</li>
+            <li>A comunidade global não tem Decisões, portanto não há o que propor por lá. Consulte &quot;Votar em uma Decisão&quot;.</li>
+        </ul>
+        <h2>Fazer uma proposta</h2>
+        <ul>
+            <li>Toque em <strong>Bens comuns</strong>, depois em <strong>Decidir</strong> e em <strong>+ Propor uma decisão</strong>.</li>
+            <li>Escolha sobre o que é: <strong>Membro</strong> ou <strong>Fundo dos Bens comuns</strong>.</li>
+            <li><strong>Título:</strong> uma linha, como &quot;Conceder 200 feijões à Biblioteca de Ferramentas&quot;.</li>
+            <li><strong>Descrição e justificativa:</strong> explique o motivo, em pelo menos 10 caracteres. Escreva de forma clara. As pessoas votam com base no que leem aqui.</li>
+            <li>Na lista abaixo disso, escolha exatamente o que deve acontecer. Por exemplo, para um membro: Remover membro, Suspender membro ou Congelar crédito. Para os Bens comuns: Conceder feijões a um projeto ou empreendimento, Subsídio de emergência ou Quitar dívida de projeto ou empreendimento.</li>
+            <li>Preencha para quem é e a quantidade de feijões, se houver. Para um subsídio a um projeto ou empreendimento, você digita a chave dele, um código longo: nenhum dos aplicativos tem uma lista para selecioná-lo. Para quitar uma dívida ou substituir um líder, toque no projeto ou empreendimento na lista ou digite a chave dele.</li>
+            <li>Toque em <strong>Enviar decisão comunitária</strong>.</li>
+        </ul>
+        <p>No aplicativo web, os botões são <strong>+ Propor Decisão</strong> (ou <strong>+ Propor</strong> no topo de Bens comuns, enquanto <strong>Decidir</strong> estiver aberto) e <strong>Enviar Decisão</strong>, e o campo é <strong>Descrição e justificativa</strong>.</p>
+        <p>A votação é aberta imediatamente e dura 7 dias.</p>
+        <h2>Qual o valor máximo de um subsídio</h2>
+        <p>Um subsídio para um empreendimento ou um auxílio emergencial não pode ser maior do que os Bens comuns poderiam pagar. O valor máximo que você pode solicitar é:</p>
+        <ul>
+            <li>o que os Bens comuns possuem agora,</li>
+            <li>mais cada feijão que entrou neles nos últimos 30 dias: a taxa de mercado, a taxa de circulação e quaisquer outros feijões recolhidos.</li>
+        </ul>
+        <p>Os feijões pagos pelos Bens comuns nesses 30 dias não são deduzidos. Se você solicitar mais, o aplicativo recusará antes que qualquer pessoa vote e informará o máximo que você pode pedir no momento. Esse valor aumenta à medida que feijões entram nos Bens comuns.</p>
+        <p>Isso mantém a fila livre. Se um subsídio for aprovado quando os Bens comuns estiverem com saldo insuficiente, ele aguardará a entrada de feijões, e apenas um subsídio pode aguardar por vez. Consulte &quot;Regras e decisões&quot;.</p>
+        <h2>Se o aplicativo recusar</h2>
+        <ul>
+            <li><strong>Complete uma troca primeiro</strong> (no celular): você ainda não pode fazer propostas. No aplicativo web, o botão <strong>+ Propor Decisão</strong> fica esmaecido e uma linha acima explica o motivo.</li>
+            <li><strong>Limite atingido</strong> (no celular): você já tem uma Decisão aberta. Aguarde até que ela seja encerrada. No aplicativo web, o botão também fica esmaecido aqui, com uma linha explicando o motivo.</li>
+            <li><strong>Uma votação da comunidade não pode remover ou suspender um proprietário ou administrador do servidor desta comunidade:</strong> a pessoa que você escolheu administra o servidor. Um proprietário pode remover a função dela primeiro.</li>
+            <li><strong>Este subsídio é maior do que os Bens comuns poderiam pagar:</strong> solicite no máximo o valor indicado ou aguarde a entrada de mais feijões.</li>
+            <li><strong>Valor inválido</strong> (no aplicativo web, &quot;Digite um valor positivo válido de concessão em feijões&quot;): preencha a quantidade de feijões.</li>
+            <li><strong>Erro:</strong> verifique se a sua descrição tem pelo menos 10 caracteres.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Votar em uma Decisão</strong><span>Encontre Decisões abertas, vote, altere seu voto e veja os resultados.</span></a></li>
+            <li><a href="rules.html"><strong>Regras e decisões</strong><span>Votação, quórum, voto secreto, quem pode votar, suspensão, remoção de membros, custódios, coordenadores e coordenadores principais.</span></a></li>
+            <li><a href="polls.html"><strong>Enquetes</strong><span>Faça uma pergunta rápida à comunidade. Enquetes mostram opiniões; não mudam nada sozinhas.</span></a></li>
+            <li><a href="enterprises.html"><strong>Projetos e empreendimentos</strong><span>Iniciativas conjuntas com feijões próprios: encontre uma, apoie ou crie a sua.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

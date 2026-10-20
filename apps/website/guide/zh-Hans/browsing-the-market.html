@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>浏览市集 — BeanPool members' guide</title>
+    <meta name="description" content="通过搜索、分类筛选和距离范围查找提供与需求。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市集</a></p>
+        <h1>浏览市集</h1>
+        <p class="lede">通过搜索、分类筛选和距离范围查找提供与需求。</p>
+        <h2>市集标签页</h2>
+        <p>在标签页栏中点按<strong>市集</strong>。你将看到所在社区成员提供和寻找的内容，按发布时间倒序排列，并按发布日期分组。</p>
+        <p>在手机上，活动排在最前面。如果你已经允许应用使用你的位置信息，列表和紧凑视图会改为在<strong>距离最近优先</strong>下按距离由近到远展示刊登，投票则显示在<strong>投票</strong>下方。<strong>为你推荐</strong>保持其自带的排序规则。向下拉动列表即可刷新。</p>
+        <p>在 Web 应用中，市集以卡片形式打开。在列表和紧凑视图中，活动位于其发布的日期下方。在本地社区中，Web 应用不会将最近的内容置于首位。</p>
+        <p>在全球社区中，Web 应用会优先显示离你较近的刊登：在你设置的<strong>距离</strong>范围内或在你所在区域 250 公里范围内的最近刊登（该区域是你加入社区时或在<strong>设置</strong>中向社区提供的粗略位置），每项均标有具体距离。列表上方的一行提示会说明当前显示的内容。在你所在区域附近时，它会提供<strong>显示所有地区</strong>以查看来自各地的最新刊登。设置了<strong>距离</strong>后，打开<strong>距离</strong>并点按<strong>重置</strong>即可返回你的区域，然后点按<strong>显示所有地区</strong>。在手机上，全球社区会保留离你所在区域最近的刊登，因此市集展示的正是这些内容。参见“查找附近的内容”。</p>
+        <p>在全球社区中，当刊登数量较少时，市集还会显示几张标有<strong>示例</strong>的卡片。这些卡片是虚拟生成的，用于展示人们发布的内容，无法打开或回复。一旦有足够的真实刊登，它们就会自动消失。</p>
+        <p>在手机上，当你向下滚动时，搜索栏和筛选条件会滑开，以便你查看更多刊登。向上稍作滚动即可重新出现。如需快速返回顶部，再次点按<strong>市集</strong>即可。</p>
+        <h2>搜索</h2>
+        <p>在顶部的<strong>搜索市集...</strong>中输入内容。在小屏幕手机上它可能仅显示为<strong>搜索</strong>。搜索功能还能匹配相关词汇：例如输入“fruit”可以找到“lemon”。它同样支持中文、日文和泰文搜索，并会自动排除你已屏蔽人员的刊登。在没有网络连接时，它会搜索已保存在你手机上的内容。</p>
+        <p>当搜索框中有字词时，会出现<strong>将此搜索保存到首页</strong>按钮。它会打开首页，并准备好添加保存的搜索：包含你的搜索词、仅查看一项时的<strong>提供</strong>或<strong>需求</strong>、分类以及距离。在<strong>活动</strong>或<strong>投票</strong>下方没有该按钮。参见“首页”。</p>
+        <h2>筛选条件</h2>
+        <p>搜索栏下方的一排按钮用于选择你所看到的内容：</p>
+        <ul>
+            <li><strong>全部</strong>、<strong>提供</strong>或<strong>需求</strong>。</li>
+            <li><strong>为你推荐：</strong>在<strong>自定义兴趣</strong>中加星标的分类下的刊登（与你在首页设置的星标完全一致），以及即将举行的活动中你表示要参加或感兴趣的活动。</li>
+            <li><strong>活动</strong>和<strong>投票</strong>。</li>
+        </ul>
+        <p>第二排筛选条件用于进一步缩小范围。在手机上：</p>
+        <ul>
+            <li><strong>全部分类：</strong>选取单一分类，例如食物、工具或花园。</li>
+            <li><strong>距离：</strong>仅显示距离某地点一定范围内的刊登。参见“查找附近的内容”。</li>
+            <li><strong>Trust：</strong>仅显示尚未进行过交易的成员（<strong>创始成员</strong>）、<strong>新人</strong>或至少拥有某种信任徽章的成员的刊登。</li>
+            <li><strong>仅限豆子：</strong>隐藏同时需要收取部分现金的刊登。</li>
+        </ul>
+        <p>在 Web 应用中，这些按钮为<strong>分类</strong>、<strong>距离</strong>、<strong>🌱 新成员</strong>（尚未交易过的成员）和 <strong>🫘 仅限豆子</strong>。Web 应用中没有信任筛选器。</p>
+        <p>如果你加入了群组，还会显示一排群组按钮。<strong>All Groups &amp; Public</strong> 显示所有内容；某个群组的按钮仅显示该群组的刊登。在 Web 应用中，群组显示在下拉菜单中，而非排成一行。</p>
+        <p>在手机上，如果没有匹配项，点按<strong>清除所有筛选</strong>。在 Web 应用中，空列表会显示<strong>未找到任何内容</strong>，且没有此类按钮。</p>
+        <p>在手机上，当你向下滚动且启用了搜索或筛选时，顶部的小标签会显示当前启用的条件。点按标签即可进行更改。点按标签上的 <strong>✕</strong> 可清除搜索及所有筛选。</p>
+        <p><strong>我的交易</strong>旁边的按钮可更改列表的显示样式：列表、网格或紧凑视图。</p>
+        <h2>刊登展示的内容</h2>
+        <ul>
+            <li>照片，或该分类的代表图片；</li>
+            <li><strong>提供</strong>或<strong>需求</strong>；</li>
+            <li>豆子价格，如果按小时计价则附带 <strong>/小时</strong>；</li>
+            <li>如果在每笔交易后仍保持有效，则标有 <strong>RECURRING</strong>；</li>
+            <li>如果发布者还需要少量现金（用于燃油或材料费），则标有 <strong>CASH TOO</strong>；</li>
+            <li>如果仅对特定群组可见，则显示一把锁和群组名称；</li>
+            <li>发布者是谁，附带其信任徽章和星级。尚未交易过的成员显示为 <strong>创始成员</strong>。</li>
+        </ul>
+        <p>点按刊登即可将其打开。</p>
+        <h2>刊登详情页面</h2>
+        <ul>
+            <li><strong>发消息</strong> 和对方姓名：在承诺交易前先提出疑问。</li>
+            <li>点按对方姓名可查看其个人资料、评价和信任值。</li>
+            <li><strong>举报帖子：</strong>如果涉及诈骗、冒犯性内容、误导信息或危及儿童（<strong>儿童安全</strong>）。</li>
+            <li><strong>屏蔽用户：</strong>在你的手机上隐藏对方的刊登和聊天。这同时会通知你的管理员。参见“屏蔽他人”。</li>
+        </ul>
+        <p>在 Web 应用中，刊登详情页上的按钮为 <strong>💬 发消息</strong> 和 <strong>🚩 举报</strong>。屏蔽他人可在其个人资料页面进行。</p>
+        <p>在全球社区中，刊登没有豆子价格：它会说明发布者希望换取什么回报。在原本显示价格的位置，会显示“🏘️ 在本地社区中，这以豆子标价 ›”。刊登不会提供直接申请的选项，而是显示 <strong>请求 · 豆子安全保管 🏘️</strong>：点按它可以了解本地社区中的交易如何运作。向对方发送消息的功能与任何其他地方相同。参见“豆子与全球社区”。</p>
+        <p>你目前尚无法保存或分享刊登。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>首页</strong><span>首页是什么、在手机与网页版上显示的卡片、如何添加、移动或移除卡片、选择兴趣偏好以及退出登录时的隐私保护。</span></a></li>
+            <li><a href="posting.html"><strong>发布提供或需求</strong><span>发布你能做或能给予的事情，或者你正在寻找的东西。</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>交易步骤详解</strong><span>从发起询问到完成付款，针对提供与需求的流程，以及留下评价。</span></a></li>
+            <li><a href="near-you.html"><strong>查找附近的内容</strong><span>仅显示距离你或你选择的任意地点一定范围内的帖子。</span></a></li>
+            <li><a href="trust-badges.html"><strong>信任徽章</strong><span>新人、居民、管家和长者。它们的含义以及为什么它们不解锁任何权限。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆子与全球社区</strong><span>全球社区的用途、众多社区中的一员，以及你在那里看到的内容：🏘️ 本地社区标记、示例社区 Example Valley、为什么豆子在那里等待，以及如何发起或寻找本地社区。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Über Beschlüsse abstimmen — BeanPool members' guide</title>
+    <meta name="description" content="Offene Entscheidungen finden, abstimmen, Stimme ändern und Ergebnisse einsehen.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Gemeingut</a></p>
+        <h1>Über Beschlüsse abstimmen</h1>
+        <p class="lede">Offene Entscheidungen finden, abstimmen, Stimme ändern und Ergebnisse einsehen.</p>
+        <h2>Wo</h2>
+        <p>Tippe auf <strong>Gemeingut</strong> und dann auf <strong>Entscheiden</strong>. Offene Beschlüsse findest du unter <strong>Offene Beschlüsse</strong>.</p>
+        <p>Ein Beschluss ist verbindlich: Wird er angenommen, führt der Server deiner Community ihn selbstständig aus. Ein Admin kann einen Beschluss nur stoppen, indem er eine schriftliche Begründung angibt, die die Mitglieder lesen können. Die Regeln darüber, wer abstimmen kann, wie viel Beteiligung erforderlich ist und wie viel Ja benötigt wird, findest du in „Regeln und Entscheidungen“.</p>
+        <p>Die globale Community hat keine Beschlüsse. Jeder kann ihr beitreten, mit 12 Wörtern oder einer Anmeldung, sodass eine einzelne Person mit mehreren Konten dort eine Abstimmung beeinflussen könnte. Stattdessen kümmern sich ihre Moderatoren um sie: Siehe „Ein Problem melden“. Beschlüsse gehören zu lokalen Communitys. Umfragen funktionieren weiterhin überall.</p>
+        <p>In der globalen Community zeigt das <strong>Gemeingut</strong> einen Beispiel-Beschluss aus einer lokalen Community, gekennzeichnet mit <strong>🏘️ Lokale Gemeinschaft</strong>, damit du siehst, wie ein Beschluss funktioniert. Dessen Schaltflächen <strong>Mit JA stimmen</strong> und <strong>Mit NEIN stimmen</strong> erklären, warum Abstimmungen in einer lokalen Community stattfinden, und geben keine Stimme ab. Siehe „Bohnen &amp; globale Community“.</p>
+        <h2>Einen Beschluss lesen</h2>
+        <p>Jeder Beschluss zeigt:</p>
+        <ul>
+            <li>worum es geht und was passiert, wenn er angenommen wird;</li>
+            <li>wie die Stimmen zählen: ein Mitglied eine Stimme oder Stimmguthaben für Beschlüsse über die Bohnen des Gemeinguts;</li>
+            <li>wie viel Zeit verbleibt. Die Abstimmung läuft 7 Tage lang;</li>
+            <li><strong>Beteiligung:</strong> wie viele Stimmen erforderlich sind und ob sie bereits erreicht wurden;</li>
+            <li><strong>Ergebnis:</strong> das bisherige Ja und Nein und wie viel Ja erforderlich ist.</li>
+        </ul>
+        <h2>Abstimmen</h2>
+        <ul>
+            <li>Tippe auf <strong>Mit JA stimmen</strong> oder <strong>Mit NEIN stimmen</strong>. Auf dem Smartphone meldet die App <strong>Stimme erfasst</strong>. In der Web-App aktualisiert sich die Karte.</li>
+            <li>Die Karte zeigt anschließend an, wie du abgestimmt hast, etwa „Du hast mit Ja gestimmt“.</li>
+            <li>Um deine Meinung vor dem Ende der Abstimmung zu ändern, tippe auf die andere Schaltfläche, etwa <strong>Zu Nein ändern</strong>.</li>
+        </ul>
+        <p>Jeder Beschluss ist eine <strong>geheime Wahl</strong>. Mitglieder sehen die Gesamtzahlen, niemals wer wie abgestimmt hat. Deine eigene Stimme wird nur dir angezeigt.</p>
+        <h2>Beschlüsse über die Bohnen des Gemeinguts</h2>
+        <p>Diese verwenden <strong>Stimmguthaben</strong>. Du erhältst Stimmguthaben aus deinen abgeschlossenen Handelsgeschäften, jeweils neu für jeden Beschluss. Verwende <strong>−</strong> und <strong>+</strong>, um zu wählen, wie viele Stimmen du vergeben möchtest. Mehr Stimmen kosten mehr: 2 Stimmen kosten 4 Guthaben, 3 Stimmen kosten 9.</p>
+        <p>Wenn du noch keinen Handel abgeschlossen hast, kannst du bei diesen Beschlüssen nicht abstimmen. Bei den anderen Beschlüssen kannst du weiterhin abstimmen, sofern du vor deren Eröffnung beigetreten bist und dein Kredit nicht eingefroren ist.</p>
+        <h2>Ergebnisse</h2>
+        <p>Tippe auf <strong>Beschlussverlauf</strong>. Wähle <strong>Alle</strong>, <strong>Ausgeführt</strong>, <strong>Abgelehnt</strong> oder <strong>Ungültig</strong>. Jeder Eintrag zeigt die endgültige Beteiligung und das Ergebnis sowie den Ausgang, zum Beispiel dass zu wenige Personen abgestimmt haben.</p>
+        <h2>Mehr erfahren</h2>
+        <p>Tippe auf dem Smartphone auf das <strong>ⓘ</strong> neben dem Titel „Gemeingut“, um zu erfahren, wie die Bohnen des Gemeinguts und die Abstimmungen funktionieren. Öffne in der Web-App das <strong>Buch</strong>, tippe auf <strong>Wallet</strong> und dann auf <strong>Gemeinschaftspool ⓘ</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>Beschluss vorschlagen</strong><span>Die Community bitten, eine verbindliche Entscheidung zu treffen.</span></a></li>
+            <li><a href="rules.html"><strong>Regeln und Entscheidungen</strong><span>Abstimmungen, Beteiligung, geheime Wahl, Stimmberechtigung, Suspendierung, Ausschluss, Verwalter sowie Koordinatoren und Hauptkoordinatoren.</span></a></li>
+            <li><a href="polls.html"><strong>Umfragen</strong><span>Der Community eine schnelle Frage stellen. Umfragen zeigen Meinungen, ändern aber allein nichts.</span></a></li>
+            <li><a href="commons-fund.html"><strong>Das Gemeingut</strong><span>Die geteilten Bohnen deiner Community: woher sie kommen und wie sie verwendet werden.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Die Leiste oben</strong><span>Die Bohne, kleine Symbole bei Handlungsbedarf und die Schaltflächen oben rechts.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Bohnen &amp; globale Community</strong><span>Wozu die globale Community dient, eine unter vielen, und was du dort siehst: 🏘️ Lokale Community, Beispieltal, warum Bohnen warten, und wie du lokale Gruppen findest.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

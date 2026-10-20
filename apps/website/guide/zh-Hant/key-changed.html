@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>若對話提示對方金鑰已變更 — BeanPool members' guide</title>
+    <meta name="description" content="對話停止傳送的原因、如何與對方核對安全金鑰代碼，以及何時可以繼續交流。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">聊天</a></p>
+        <h1>若對話提示對方金鑰已變更</h1>
+        <p class="lede">對話停止傳送的原因、如何與對方核對安全金鑰代碼，以及何時可以繼續交流。</p>
+        <h2>這是什麼意思</h2>
+        <p>兩人之間的每則訊息都經過加密鎖定，只有對方的雙手所持的手機才能開啟。訊息是鎖定在對方的<strong>金鑰</strong>上，而非對方的姓名上。你的手機會記住它一直以來將你的對話鎖定在哪個金鑰上。</p>
+        <p>如果你所在的社群現在為對方指定了不同的金鑰，你的手機會停下來並通知你，而不是默默發送給新金鑰。在聊天室頂部，你會看到<strong>「Ben」背後的金鑰已變更。</strong>訊息輸入方塊會反灰，並提示傳送已暫停。</p>
+        <p>你與他們先前的歷史訊息通常仍可照常閱讀。在剛還原或重新設定的手機上，來自新金鑰的訊息會顯示為<strong>使用新金鑰傳送。在你繼續後顯示。</strong>直到你做出決定。</p>
+        <p>這適用於手機應用程式。網頁版應用程式目前尚不具備金鑰記憶功能。</p>
+        <h2>為何會發生這種情況</h2>
+        <ul>
+            <li><strong>對方更換了新手機並重新產生金鑰。</strong>這是最常見的原因。他們的舊金鑰已失效，因此擁有了一把新金鑰。</li>
+            <li><strong>出現異常狀況。</strong>社群伺服器會列出每個聊天室中的成員名單。如果伺服器企圖讀取你的訊息，可能會在你的朋友姓名背後放上其他人的金鑰。姓名看起來正確，但金鑰不對。</li>
+        </ul>
+        <p>你的手機自身無法區分這兩種情況。但你可以透過金鑰代碼進行分辨。</p>
+        <h2>與對方核對金鑰代碼</h2>
+        <ul>
+            <li>橫幅會顯示一組代碼：20 位數字，分為五組，每組四位。</li>
+            <li>請對方開啟<strong>設定</strong>，然後開啟<strong>帳號保護</strong>，並將<strong>我的金鑰代碼</strong>唸給你聽。</li>
+            <li><strong>我的金鑰代碼</strong>僅在手機應用程式上提供。如果對方僅使用網頁版應用程式，他們目前無法唸給你聽：請點選<strong>先不要</strong>，直到他們能夠開啟手機應用程式為止。</li>
+            <li>請<strong>當面核對，或透過電話、視訊通話</strong>（確認對方為本人）核對。不要透過 BeanPool 訊息核對：如果金鑰有誤，回覆訊息的人也有可能是冒充者。</li>
+            <li>如果每一位數字都相符，請勾選<strong>我已與 Ben 確認：其「設定」中的金鑰代碼與此相符。</strong>，然後點選<strong>使用新金鑰繼續</strong>。</li>
+        </ul>
+        <p>自此之後，你的訊息將發送給新金鑰。橫幅以及<strong>聊天</strong>中該對話上的<strong>金鑰已變更</strong>標籤都會消失，且先前的歷史訊息仍可照常閱讀。</p>
+        <p>此代碼並非機密資訊。可以安全大聲唸出。</p>
+        <h2>如果代碼不符，或無法核對</h2>
+        <p>點選<strong>先不要</strong>。不會傳送任何內容，也不會發生任何變更。你可以稍後再返回該聊天室。</p>
+        <p>已暫停的聊天室可能會保持暫停狀態，直到你選擇繼續為止。沒有其他方式可以在其中繼續對話：社群只會為你們兩人保留一個聊天室，因此與同一個人發起新對話只會開啟這個相同的聊天室。</p>
+        <p>如果代碼不符，請勿繼續。請告知對方以及社群管理員：可能有人企圖讀取你們的訊息。</p>
+        <h2>如果橫幅沒有提供可繼續的金鑰</h2>
+        <p>有時社群在兩人對話中沒有為對方列出單一金鑰：而是列出多個或沒有列出。此時沒有可用於繼續的金鑰，因此橫幅會提示此情況並僅提供<strong>先不要</strong>選項。不會傳送任何內容。請當面或透過通話與對方溝通。當社群名單變更時，你的手機會自動再次檢查該對話，且與同一個人發起的新對話就是這個相同的聊天室。</p>
+        <h2>如果橫幅顯示手機正從頭檢查對話</h2>
+        <p>從 12 個助記詞還原手機，或更新應用程式後，你的手機會對照自身持有的早期訊息檢查每個對話。如果那些訊息來自與社群目前為該人提供的不同金鑰，橫幅會以<strong>此手機正在從頭開始檢查此聊天，就如同還原或更新應用程式後所做的一樣。</strong>開頭。請按照上述方式與對方核對代碼。在你重設社群的聊天記憶後，橫幅則會改為以<strong>此社群的聊天記憶已重設，因此手機正在從頭檢查此聊天。</strong>開頭。</p>
+        <h2>聊天記憶</h2>
+        <p>你的手機會為每個社群保留一份小型的記憶：記錄你的每個對話對應哪把金鑰，以及哪些對話是私人的。它保存在手機上，且社群伺服器自身無法將對話轉移到其他金鑰：只有你可以在橫幅上進行確認。當你登出時它仍保留在手機上，因此登出並重新登入不會將其清除。手機絕不會自行將其重設。</p>
+        <p>你可以為單一社群重設聊天記憶：開啟<strong>設定</strong>，在<strong>帳號與身分</strong>下點選<strong>聊天記憶</strong>，點選該社群旁的<strong>重設</strong>，閱讀警告訊息，然後再次點選<strong>重設</strong>。應用程式只有在提示無法讀取該記憶且重試無效時，才會指引你來到此處。</p>
+        <p>重設後，你的手機會根據其持有的訊息，從頭重新檢查該社群中的每個對話。訊息來自與社群目前提供之金鑰不同的對話，會再次顯示橫幅，並以<strong>此社群的聊天記憶已重設，因此手機正在從頭檢查此聊天。</strong>開頭。請按照上述方式與對方核對代碼。</p>
+        <p>重設後有兩件事可能會發生變更，在確認前警告訊息會加以說明：因金鑰變更而暫停的對話可能會以新金鑰開啟，從「聊天」中消失的私人對話可能會重新顯示為社群可閱讀的群組對話。在發送訊息前，請務必先核對金鑰代碼，或確認聊天中的成員。</p>
+        <p>重設無法解決手機無法對應到單一金鑰的對話：它會再次檢查並再次停止。請改為按照上述方式與對方核對代碼。</p>
+        <p>這是在手機應用程式上的功能。網頁版應用程式沒有聊天記憶。</p>
+        <h2>如果橫幅顯示手機無法將對話對應到單一金鑰</h2>
+        <p>有時對話中早期的訊息是鎖定在手機無法對應到單一個人的金鑰上。訊息方塊上方會顯示<strong>此手機無法將此聊天對應到單一金鑰，因此已關閉傳送功能。</strong>且橫幅會顯示社群目前為該人列出的金鑰代碼。</p>
+        <p>部分訊息可能仍會顯示。它們可能並非來自對話名稱所標示的人員：對方自己先前的訊息可能會顯示為<strong>無法驗證此訊息，因此不予顯示。</strong>即使在你選擇繼續之後，那些訊息仍會維持該狀態。</p>
+        <p>請按照上述方式當面或透過通話與對方核對代碼。如果相符，請勾選核取方塊並點選<strong>使用新金鑰繼續</strong>：自此之後，你的訊息將發送給該金鑰。如果代碼不符，或你無法核對，請點選<strong>先不要</strong>。與同一個人發起的新對話就是這個相同的聊天室，因此沒有其他方法可以嘗試。如果社群沒有為他們列出單一金鑰，橫幅僅會提供<strong>先不要</strong>，且當社群名單變更時，你的手機會自動再次檢查該對話。</p>
+        <h2>手機能夠檢查與無法檢查的內容</h2>
+        <p>你的手機會對照自身已持有的訊息來檢查對話。還原後的手機，或在更新時的現有手機，僅由伺服器在傳送內容時隱瞞或包圍對話最舊部分的方式所引導。在更新後，已經持有該最舊部分的手機不會受到伺服器發送的任何內容所引導。</p>
+        <p>因此，剛還原或剛更新的手機可能會在對話的金鑰上受到誤導。橫幅無法完全排除這種可能性。<strong>請務必當面確認變更後的金鑰</strong>，或透過確認為本人的通話進行確認。</p>
+        <h2>如果社群提供了日期</h2>
+        <p>當你的社群能夠證明該帳號已重新產生金鑰時，橫幅會加以說明，例如：<strong>此社群顯示該帳號已於 2026 年 10 月 3 日重新產生金鑰。</strong>這有助於你理解發生了什麼事，但不能取代核對代碼：因為伺服器也可能偽造該說法。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>訊息</strong><span>發起聊天、傳送相片、回覆、表情回應、編輯、刪除、靜音以及隱私說明。</span></a></li>
+            <li><a href="your-12-words.html"><strong>你的 12 個助記詞</strong><span>這 12 個助記词是你帳號的金鑰。它們為何重要、在哪裡找到、如何安全保存，以及新增登入方式作為備用復原途徑。</span></a></li>
+            <li><a href="people.html"><strong>成員與好友</strong><span>尋找社群成員、新增好友以及為他人背書擔保。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

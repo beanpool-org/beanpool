@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat événement — BeanPool members' guide</title>
+    <meta name="description" content="Échanger avec l'hôte et tous les participants à un événement.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Échanges</a></p>
+        <h1>Chat événement</h1>
+        <p class="lede">Échanger avec l'hôte et tous les participants à un événement.</p>
+        <h2>Qui y participe</h2>
+        <p>Chaque événement possède sa propre discussion. L'hôte et toutes les personnes ayant touché <strong>J'y vais</strong> peuvent la lire et y écrire. Lorsque l'hôte valide les entrées, il s'agit des participants acceptés par l'hôte : tant que ce n'est pas le cas, la discussion indique <strong>La discussion s'ouvre dès que l'hôte vous accepte.</strong> Si vous passez à <strong>Ça m'intéresse</strong>, ou touchez à nouveau <strong>J'y vais</strong> pour annuler, vous quittez la discussion. L'hôte y est toujours présent.</p>
+        <h2>L'ouvrir</h2>
+        <ul>
+            <li>Ouvrez l'événement et touchez <strong>Ouvrir le chat de l'événement</strong>.</li>
+            <li>Ou retrouvez-la dans <strong>Échanges</strong>, sous <strong>Groupes</strong>, marquée du repère 📅 <strong>Événement</strong>. Dans l'application web, elle se trouve dans l'onglet <strong>Discussion</strong>, avec vos autres échanges.</li>
+        </ul>
+        <p>En haut, un encadré épinglé affiche la <strong>Note pour les participants</strong> de l'hôte, telle que l'adresse exacte. Touchez le nom de l'événement tout en haut (dans l'application web, <strong>Voir l'événement</strong>) pour revenir à la fiche de l'événement.</p>
+        <h2>Écrire</h2>
+        <p>Tapez dans <strong>Envoyer un message à tous les participants…</strong> et touchez le bouton d'envoi. Vous pouvez envoyer jusqu'à 30 messages par minute. Le message le plus récent se place juste au-dessus du champ de saisie et y reste lorsque le clavier s'ouvre.</p>
+        <h2>Bon à savoir</h2>
+        <ul>
+            <li>Les discussions d'événements ne sont pas chiffrées de bout en bout. L'hôte, tous les participants (lorsque l'hôte valide les accès, ceux qu'il a acceptés), et les personnes administrant le serveur de votre communauté peuvent les lire. La discussion le précise au-dessus du champ de saisie.</li>
+            <li>L'hôte peut retirer n'importe quel message. Touchez-le, puis <strong>Retirer</strong>. Il indique alors « supprimé par l'hôte ».</li>
+            <li>Une discussion d'événement ne permet ni réponse directe, ni réactions, ni modification, ni suppression de son propre message — à la différence d'un échange individuel ou d'une discussion de groupe. Demandez à l'hôte de retirer un message que vous regrettez. Si vous supprimez votre compte, chaque message écrit par vous ici affichera <strong>Ce message a été supprimé</strong>.</li>
+            <li>Lorsque l'événement prend fin ou est annulé, la discussion passe en lecture seule. La discussion d'un événement récurrent reste ouverte entre les dates : jusqu'à sa dernière date si l'hôte a défini une mention <strong>Jusqu'au</strong>, et jusqu'à ce que l'hôte annule l'événement dans le cas contraire. Trente jours après la fin, elle disparaît.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="events.html"><strong>Événements</strong><span>Créer un événement, sur place ou en ligne, unique ou récurrent ; s'inscrire, recevoir un rappel, le partager et le gérer en tant qu'hôte.</span></a></li>
+            <li><a href="messages.html"><strong>Messages</strong><span>Lancer une discussion, envoyer des photos, répondre, réagir, modifier, supprimer, mettre en sourdine et ce qui reste privé.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Emplacement du repère</strong><span>Qui voit l'emplacement de vos annonces et événements, et comment préserver l'intimité de votre domicile.</span></a></li>
+            <li><a href="reporting.html"><strong>Signaler un problème</strong><span>Alerter les modérateurs de votre communauté à propos d'une annonce, d'un événement, d'une publication du Pouls, d'un projet ou d'une entreprise.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>পোল — BeanPool members' guide</title>
+    <meta name="description" content="কমিউনিটিকে একটি দ্রুত প্রশ্ন জিজ্ঞাসা করুন। পোল মতামত দেখায়; তারা নিজেরা কিছু পরিবর্তন করে না।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">সম্পদ</a></p>
+        <h1>পোল</h1>
+        <p class="lede">কমিউনিটিকে একটি দ্রুত প্রশ্ন জিজ্ঞাসা করুন। পোল মতামত দেখায়; তারা নিজেরা কিছু পরিবর্তন করে না।</p>
+        <h2>পোল নাকি সিদ্ধান্ত?</h2>
+        <p>একটি <strong>পোল</strong> জিজ্ঞাসা করে মানুষ কী ভাবেন: &quot;রবিবার নাকি শনিবারের বাজার?&quot;। এটি নিজ থেকে কিছুই পরিবর্তন করে না। বাধ্যতামূলক কোনো কিছুর জন্য একটি সিদ্ধান্তের প্রস্তাব করুন।</p>
+        <p>গ্লোবাল কমিউনিটিতে প্রতিটি পোল বলে <strong>একটি অনানুষ্ঠানিক পোল; এতে কোনো সিদ্ধান্ত হয় না</strong>। ১২টি শব্দ বা সাইন-ইন দিয়ে যে কেউ এতে যোগ দিতে পারেন, তাই একাধিক অ্যাকাউন্টধারী একজন ব্যক্তি গণনায় প্রভাব ফেলতে পারেন, এবং সেখানে কোনো সিদ্ধান্ত নেই। এর নিচে, &quot;🏘️ একটি স্থানীয় সম্প্রদায়ে একটি সিদ্ধান্ত বাধ্যতামূলক ›&quot; ব্যাখ্যা করে কেন ভোট কেবল স্থানীয় কমিউনিটিতেই বাধ্যতামূলক হয়।</p>
+        <p>সেখানে একটি বেনামী পোল বন্ধ হয়ে গেলে, এটি এও বলে যে এর কতগুলো ভোট <strong>নতুন বা 12-শব্দের অ্যাকাউন্ট</strong> থেকে এসেছে, উদাহরণস্বরূপ &quot;১২টি ভোটের মধ্যে ৫টি নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে এসেছে&quot;। প্রতিটি ভোট ভোটদানের সময় অ্যাকাউন্টের যে অবস্থা ছিল সেভাবেই গণনা করা হয়: একটি নতুন অ্যাকাউন্ট হলো সেটি যাতে তখনও নতুন অ্যাকাউন্টের সীমাবদ্ধতা ছিল, এবং একটি ১২-শব্দের অ্যাকাউন্ট হলো ১২টি শব্দ দিয়ে তৈরি যা কোনো সাইন-ইন যোগ করেনি। যখন অন্তত ৩টি ভোট নতুন বা ১২-শব্দের অ্যাকাউন্ট থেকে আসে এবং অন্য ভোটগুলো হয় শূন্য অথবা অন্তত ৩টি হয়, তখন প্রতিটি উত্তর এও বলে যে তার নিজস্ব ভোটের কতটি এমন ছিল। প্রতিটি ভোট এখনও গণনা করা হয়, এবং কে ভোট দিয়েছেন তা কিছুই দেখায় না।</p>
+        <p>একটি পোল উন্মুক্ত থাকা অবস্থায় এটি এ সম্পর্কে কিছুই বলে না। যদি বলত, তবে প্রতিটি ভোটের পর পোল পরীক্ষা করা কেউ বলে দিতে পারতেন প্রতিটি ভোট কোন ধরনের অ্যাকাউন্ট থেকে এসেছে এবং এটি কী বেছে নিয়েছে। একটি উন্মুক্ত ভোট খোলা বা বন্ধ যাই হোক না কেন কখনই এটি বলে না: এটি দেখায় কে ভোট দিয়েছেন, তাই গণনাটি বলে দিত প্রতিটি ভোটারের কোন ধরনের অ্যাকাউন্ট রয়েছে। কোনো গ্রুপের পোলও এটি বলে না, এবং কোনো স্থানীয় কমিউনিটির পোলও বলে না।</p>
+        <h2>একটি পোল শুরু করা</h2>
+        <ul>
+            <li>বাজার ট্যাব বা মানচিত্রে <strong>+ পোস্ট যোগ করুন</strong>-এ ট্যাপ করুন।</li>
+            <li><strong>কমিউনিটি পোল</strong> বেছে নিন।</li>
+            <li><strong>প্রশ্ন</strong> লিখুন।</li>
+            <li>সাহায্যকারী হলে <strong>প্রসঙ্গ / নোট</strong> যোগ করুন। এটি ঐচ্ছিক।</li>
+            <li>২ থেকে ৪টি <strong>বিকল্পসমূহ</strong> লিখুন। আরও বিকল্পের জন্য <strong>+ বিকল্প যোগ করুন</strong>-এ ট্যাপ করুন।</li>
+            <li>এটি কতদিন চলবে তা বেছে নিন: <strong>৩ দিন</strong>, <strong>৭ দিন</strong> বা <strong>১৪ দিন</strong>।</li>
+            <li>আপনি <strong>তৈরি করুন</strong> ট্যাপ করার আগে এটি একটি <strong>উন্মুক্ত ভোট</strong> কিনা তা বেছে নিন। এটি বন্ধ রাখলে পোলটি বেনামী হয়। এটিতে টিক দিলে সদস্যরা দেখতে পান কে কী বেছে নিয়েছেন। পোলটি পোস্ট করার পর আপনি এটি পরিবর্তন করতে পারবেন না।</li>
+            <li><strong>তৈরি করুন</strong>-এ ট্যাপ করুন।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে এর ধরন হলো <strong>🗳️ পোল</strong>, নোটগুলো হলো <strong>পটভূমি / প্রসঙ্গ</strong>, বিকল্পের বোতামটি হলো <strong>+ বিকল্প যোগ করুন</strong> এবং শেষ বোতামটি হলো <strong>🗳️ পোল তৈরি করুন</strong>। ওয়েব মানচিত্রে, গোলাকার <strong>+</strong>-এ ট্যাপ করুন।</p>
+        <p>আপনার একসাথে একটি পোল উন্মুক্ত থাকতে পারে, এবং একটি কমিউনিটিতে একসাথে ৫টি উন্মুক্ত থাকতে পারে। একটি পোল শুরু করতে বা উত্তর দিতে আপনার ক্রেডিট স্থগিত না থাকা প্রয়োজন।</p>
+        <h2>পোল খোঁজা এবং উত্তর দেওয়া</h2>
+        <p>পোলগুলো বাজারে থাকে। কেবল পোল দেখতে শীর্ষ সারিতে <strong>পোলসমূহ</strong>-এ ট্যাপ করুন।</p>
+        <ul>
+            <li>এটি বেছে নিতে একটি উত্তরে ট্যাপ করুন। পোল বন্ধ না হওয়া পর্যন্ত আপনার সিদ্ধান্ত পরিবর্তন করতে অন্যটিতে ট্যাপ করুন।</li>
+            <li>কার্ডটি দেখায় কতজন প্রতিটি উত্তর বেছে নিয়েছেন।</li>
+        </ul>
+        <h2>কে দেখতে পারেন আপনি কীভাবে ভোট দিয়েছেন</h2>
+        <p>প্রতিটি পোল অংশগ্রহণের উপরে বলে এটি কোন ধরনের:</p>
+        <ul>
+            <li><strong>বেনামী</strong> (সাধারণ ধরন): সবাই কেবল দেখেন কতজন প্রতিটি উত্তর বেছে নিয়েছেন। কে কী বেছে নিয়েছেন তা কেউ দেখতে পান না, যিনি এটি শুরু করেছিলেন তিনিও না।</li>
+            <li><strong>উন্মুক্ত ভোট:</strong> যিনি এটি শুরু করেছিলেন তিনি ভোটারদের দেখানোর সিদ্ধান্ত নিয়েছেন। কে কী বেছে নিয়েছেন তা দেখতে সদস্যরা <strong>ভোটারদের দেখুন</strong> (ওয়েব অ্যাপে <strong>ভোটারদের দেখান</strong>)-এ ট্যাপ করতে পারেন। সাময়িক বরখাস্তকৃত একজন সদস্য স্থগিতাদেশ শেষ না হওয়া পর্যন্ত কেবল মোট সংখ্যা দেখেন।</li>
+        </ul>
+        <p>আপনার কমিউনিটির সার্ভার পরিচালনাকারী মালিক এবং অ্যাডমিনরা তখনও সেখানে সংরক্ষিত প্রতিটি ভোট দেখতে পারেন।</p>
+        <h2>সময় শেষের আগেই পোল বন্ধ করা</h2>
+        <p>আপনি এটি শুরু করে থাকলে, <strong>পোল বন্ধ করুন</strong>-এ ট্যাপ করুন, তারপর নিশ্চিত করতে আবার <strong>পোল বন্ধ করুন</strong>-এ ট্যাপ করুন (ওয়েব অ্যাপে <strong>ঠিক আছে</strong>)।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>সিদ্ধান্তে ভোট দেওয়া</strong><span>উন্মুক্ত সিদ্ধান্তসমূহ খুঁজুন, ভোট দিন, আপনার ভোট পরিবর্তন করুন এবং ফলাফল দেখুন।</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>সিদ্ধান্ত প্রস্তাব করা</strong><span>কমিউনিটিকে কোনো বিষয়ে বাধ্যতামূলক সিদ্ধান্ত নিতে বলুন।</span></a></li>
+            <li><a href="events.html"><strong>ইভেন্টসমূহ</strong><span>একটি নির্দিষ্ট স্থানে বা অনলাইনে, একবার বা পুনরাবৃত্তিমূলক ইভেন্ট তৈরি করুন; যাচ্ছেন জানান, রিমাইন্ডার পান, শেয়ার করুন এবং হোস্ট হিসেবে পরিচালনা করুন।</span></a></li>
+            <li><a href="rules.html"><strong>নিয়ম ও সিদ্ধান্ত যেভাবে হয়</strong><span>ভোটদান, উপস্থিতি, গোপন ব্যালট, কারা ভোট দিতে পারবেন, স্থগিতাদেশ, সদস্য অপসারণ, রক্ষক এবং আহ্বায়ক ও প্রধান আহ্বায়ক।</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>শিম ও বিশ্বব্যাপী কমিউনিটি</strong><span>বিশ্বব্যাপী কমিউনিটি কী উদ্দেশ্যে, অনেকের মাঝে একটি কমিউনিটি, এবং সেখানে আপনি কী দেখতে পান: 🏘️ স্থানীয় সম্প্রদায় চিহ্নিতকারী, উদাহরণ উপত্যকা নমুনা কমিউনিটি, কেন শিম সেখানে অপেক্ষা করে, এবং কীভাবে স্থানীয় কমিউনিটি শুরু করবেন বা খুঁজবেন।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

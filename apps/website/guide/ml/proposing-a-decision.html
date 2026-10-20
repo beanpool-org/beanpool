@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>തീരുമാനം നിർദ്ദേശിക്കൽ — BeanPool members' guide</title>
+    <meta name="description" content="നിർബന്ധിതമായ ഒരു കാര്യത്തിൽ തീരുമാനം എടുക്കാൻ കമ്മ്യൂണിറ്റിയോട് ആവശ്യപ്പെടുക.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">പൊതു</a></p>
+        <h1>തീരുമാനം നിർദ്ദേശിക്കൽ</h1>
+        <p class="lede">നിർബന്ധിതമായ ഒരു കാര്യത്തിൽ തീരുമാനം എടുക്കാൻ കമ്മ്യൂണിറ്റിയോട് ആവശ്യപ്പെടുക.</p>
+        <h2>ആരംഭിക്കുന്നതിന് മുമ്പ്</h2>
+        <ul>
+            <li>നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിന് നടപ്പിലാക്കാൻ കഴിയുന്ന കാര്യങ്ങൾക്കാണ് ഒരു തീരുമാനം: ഒരു അംഗത്തെ നീക്കം ചെയ്യൽ അല്ലെങ്കിൽ സസ്‌പെൻഡ് ചെയ്യൽ, ഒരാളുടെ ക്രെഡിറ്റ് മരവിപ്പിക്കൽ അല്ലെങ്കിൽ മരവിപ്പിച്ചത് ഒഴിവാക്കൽ, ആർക്കൊക്കെ ശുപാർശ നൽകാം എന്ന് തിരഞ്ഞെടുക്കൽ, അല്ലെങ്കിൽ കോമൺസിൽ നിന്ന് പയർ നൽകൽ. മറ്റെന്തിനും, പകരം ഒരു പോൾ ആരംഭിക്കുക.</li>
+            <li>ഒരു തീരുമാനത്തിന് നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിലെ ഒരു ഉടമയെയോ അഡ്മിനെയോ നീക്കം ചെയ്യാനോ സസ്‌പെൻഡ് ചെയ്യാനോ കഴിയില്ല. &quot;നിയമങ്ങളും തീരുമാനങ്ങൾ എടുക്കുന്ന രീതിയും&quot; കാണുക.</li>
+            <li>നിങ്ങൾ ഒരു ഇടപാട് പൂർത്തിയാക്കുകയോ അല്ലെങ്കിൽ ഒരു അഡ്മിൻ നിങ്ങൾക്ക് ഒരു ട്രസ്റ്റ് ബാഡ്ജ് നൽകുകയോ ചെയ്തുകഴിഞ്ഞാൽ നിങ്ങൾക്ക് നിർദ്ദേശിക്കാം. നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ അഡ്മിൻമാർക്ക് എപ്പോഴും നിർദ്ദേശിക്കാം. ഒരു ശുപാർശ മാത്രം ഇതിന് പര്യാപ്തമല്ല.</li>
+            <li>നിങ്ങൾക്ക് ഒരേസമയം ഒരു തുറന്ന തീരുമാനം മാത്രമേ ഉണ്ടാകൂ.</li>
+            <li>ആഗോള കമ്മ്യൂണിറ്റിയിൽ തീരുമാനങ്ങൾ ഇല്ല, അതിനാൽ അവിടെ നിർദ്ദേശിക്കാൻ ഒന്നുമില്ല. &quot;തീരുമാനത്തിൽ വോട്ട് ചെയ്യൽ&quot; കാണുക.</li>
+        </ul>
+        <h2>നിർദ്ദേശിക്കുന്നത് എങ്ങനെ</h2>
+        <ul>
+            <li><strong>കോമൺസ്</strong> ടാപ്പ് ചെയ്യുക, തുടർന്ന് <strong>തീരുമാനിക്കുക</strong>, തുടർന്ന് <strong>+ ഒരു തീരുമാനം നിർദ്ദേശിക്കുക</strong>.</li>
+            <li>അത് എന്തിനെക്കുറിച്ചാണെന്ന് തിരഞ്ഞെടുക്കുക: <strong>അംഗം</strong> അല്ലെങ്കിൽ <strong>കോമൺസ് പൂൾ</strong>.</li>
+            <li><strong>ശീർഷകം:</strong> ഒരു വരി, &quot;Grant 200 beans to the Tool Library&quot; പോലെ.</li>
+            <li><strong>വിവരണവും കാരണങ്ങളും:</strong> എന്തുകൊണ്ടെന്ന് കുറഞ്ഞത് 10 അക്ഷരങ്ങളിൽ വിശദീകരിക്കുക. അത് വ്യക്തമായി പറയുക. ഇവിടെ വായിക്കുന്നതിനാണ് ആളുകൾ വോട്ട് ചെയ്യുന്നത്.</li>
+            <li>അതിന് താഴെയുള്ള ലിസ്റ്റിൽ നിന്ന്, എന്താണ് സംഭവിക്കേണ്ടതെന്ന് കൃത്യമായി തിരഞ്ഞെടുക്കുക. ഉദാഹരണത്തിന്, ഒരു അംഗത്തിനായി: അംഗത്തെ നീക്കം ചെയ്യുക, അംഗത്തെ സസ്‌പെൻഡ് ചെയ്യുക അല്ലെങ്കിൽ ക്രെഡിറ്റ് മരവിപ്പിക്കുക. കോമൺസിനായി: ഒരു പ്രോജക്റ്റിനോ സംരംഭത്തിനോ പയർ നൽകുക, ദുരിതാശ്വാസ ഗ്രാന്റ്, അല്ലെങ്കിൽ ഒരു പ്രോജക്റ്റിന്റെയോ സംരംഭത്തിന്റെയോ കടം വീട്ടുക.</li>
+            <li>ഇത് ആർക്കാണെന്നും, പയർ ഉണ്ടെങ്കിൽ എത്രയെന്നും പൂരിപ്പിക്കുക. ഒരു പ്രോജക്റ്റിനോ സംരംഭത്തിനോ ഉള്ള ഒരു ഗ്രാന്റിനായി നിങ്ങൾ അതിന്റെ കീ, ഒരു നീണ്ട കോഡ് ടൈപ്പ് ചെയ്യുക: ഒരു ആപ്പിലും ഇത് തിരഞ്ഞെടുക്കാൻ ലിസ്റ്റ് ഇല്ല. ഒരു കടം വീട്ടാനോ അല്ലെങ്കിൽ ഒരു ലീഡിനെ മാറ്റാനോ, ലിസ്റ്റിലെ പ്രോജക്റ്റിലോ സംരംഭത്തിലോ ടാപ്പ് ചെയ്യുക, അല്ലെങ്കിൽ അതിന്റെ കീ ടൈപ്പ് ചെയ്യുക.</li>
+            <li><strong>കമ്മ്യൂണിറ്റി തീരുമാനം സമർപ്പിക്കുക</strong> ടാപ്പ് ചെയ്യുക.</li>
+        </ul>
+        <p>വെബ് ആപ്പിൽ ബട്ടണുകൾ <strong>+ തീരുമാനം നിർദ്ദേശിക്കുക</strong> (അല്ലെങ്കിൽ <strong>തീരുമാനിക്കുക</strong> തുറന്നിരിക്കുമ്പോൾ കോമൺസിന്റെ മുകളിലുള്ള <strong>+ നിർദ്ദേശിക്കുക</strong>), <strong>തീരുമാനം സമർപ്പിക്കുക</strong> എന്ന് കാണിക്കുന്നു, കൂടാതെ ബോക്സ് <strong>വിവരണവും കാരണവും</strong> ആണ്.</p>
+        <p>വോട്ടിംഗ് ഉടനടി തുറക്കുകയും 7 ദിവസം പ്രവർത്തിക്കുകയും ചെയ്യുന്നു.</p>
+        <h2>ഒരു ഗ്രാന്റ് എത്ര വലുതാകാം</h2>
+        <p>ഒരു സംരംഭത്തിനുള്ള ഗ്രാന്റോ ദുരിതാശ്വാസ ഗ്രാന്റോ കോമൺസിന് നൽകാൻ കഴിയുന്നതിലും വലുതായിരിക്കരുത്. നിങ്ങൾക്ക് ചോദിക്കാൻ കഴിയുന്ന പരമാവധി തുക:</p>
+        <ul>
+            <li>ഇപ്പോൾ കോമൺസിൽ ഉള്ളത്,</li>
+            <li>ഒപ്പം കഴിഞ്ഞ 30 ദിവസത്തിനുള്ളിൽ അതിലേക്ക് വന്ന ഓരോ പയറും: മാർക്കറ്റ് ഫീസ്, സർക്കുലേഷൻ ഫീസ്, നൽകിയ മറ്റേതൊരു പയറും.</li>
+        </ul>
+        <p>ആ 30 ദിവസത്തിനുള്ളിൽ കോമൺസിൽ നിന്ന് നൽകിയ പയറുകൾ ഇതിൽ നിന്ന് കുറയ്ക്കില്ല. നിങ്ങൾ കൂടുതൽ ചോദിച്ചാൽ, ആരെങ്കിലും വോട്ട് ചെയ്യുന്നതിന് മുമ്പ് തന്നെ ആപ്പ് നിരസിക്കുകയും, ഇപ്പോൾ നിങ്ങൾക്ക് ചോദിക്കാൻ കഴിയുന്ന പരമാവധി തുക പറയുകയും ചെയ്യും. കോമൺസിലേക്ക് പയർ വരുമ്പോൾ ആ തുക വർദ്ധിക്കുന്നു.</p>
+        <p>ഇത് ക്യൂ ഒഴിവായി നിലനിർത്തുന്നു. കോമൺസിൽ കുറവുള്ളപ്പോൾ ഒരു ഗ്രാന്റ് പാസ്സായാൽ, അത് പയറിനായി കാത്തിരിക്കുന്നു, ഒരേസമയം ഒരു ഗ്രാന്റിന് മാത്രമേ കാത്തിരിക്കാൻ കഴിയൂ. &quot;നിയമങ്ങളും തീരുമാനങ്ങൾ എടുക്കുന്ന രീതിയും&quot; കാണുക.</p>
+        <h2>ആപ്പ് നിരസിക്കുകയാണെങ്കിൽ</h2>
+        <ul>
+            <li><strong>ആദ്യം ഒരു ഇടപാട് പൂർത്തിയാക്കുക</strong> (ഫോണിൽ): നിങ്ങൾക്ക് ഇതുവരെ നിർദ്ദേശിക്കാൻ കഴിയില്ല. വെബ് ആപ്പിൽ <strong>+ തീരുമാനം നിർദ്ദേശിക്കുക</strong> ബട്ടൺ ഗ്രേ കളറിലായിരിക്കും, അതിന് മുകളിലുള്ള ഒരു വരി എന്തുകൊണ്ടെന്ന് വിശദീകരിക്കും.</li>
+            <li><strong>പരിധി കഴിഞ്ഞു</strong> (ഫോണിൽ): നിങ്ങൾക്ക് ഇതിനകം ഒരു തുറന്ന തീരുമാനമുണ്ട്. അത് അവസാനിക്കുന്നത് വരെ കാത്തിരിക്കുക. വെബ് ആപ്പിലും ഇവിടെ ബട്ടൺ ഗ്രേ കളറിലായിരിക്കും, ഒപ്പം എന്തുകൊണ്ടെന്ന് പറയുന്ന ഒരു വരിയും ഉണ്ടാകും.</li>
+            <li><strong>A community vote can't remove or suspend an owner or admin of this community's server:</strong> നിങ്ങൾ തിരഞ്ഞെടുത്ത വ്യക്തിയാണ് സെർവർ നടത്തുന്നത്. ഒരു ഉടമയ്ക്ക് അവരുടെ റോൾ ആദ്യം നീക്കം ചെയ്യാം.</li>
+            <li><strong>This grant is bigger than the Commons could pay:</strong> അത് പറയുന്ന തുകയിൽ കൂടുതൽ ചോദിക്കാതിരിക്കുക, അല്ലെങ്കിൽ കൂടുതൽ പയർ വരുന്നത് വരെ കാത്തിരിക്കുക.</li>
+            <li><strong>അസാധുവായ തുക</strong> (വെബ് ആപ്പിൽ, &quot;പയറിൽ സാധുവായ പോസിറ്റീവ് ഗ്രാന്റ് തുക നൽകുക&quot;): എത്ര പയർ എന്ന് പൂരിപ്പിക്കുക.</li>
+            <li><strong>പിശക്:</strong> നിങ്ങളുടെ വിവരണത്തിൽ കുറഞ്ഞത് 10 അക്ഷരങ്ങളുണ്ടെന്ന് ഉറപ്പാക്കുക.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>തീരുമാനത്തിൽ വോട്ട് ചെയ്യൽ</strong><span>തുറന്ന തീരുമാനങ്ങൾ കണ്ടെത്തുക, വോട്ട് ചെയ്യുക, വോട്ട് മാറ്റുക, ഫലങ്ങൾ കാണുക.</span></a></li>
+            <li><a href="rules.html"><strong>നിയമങ്ങളും തീരുമാനങ്ങൾ എടുക്കുന്ന രീതിയും</strong><span>വോട്ടിംഗ്, പങ്കാളിത്തം, രഹസ്യ ബാലറ്റ്, ആർക്കൊക്കെ വോട്ട് ചെയ്യാം, സസ്പെൻഷൻ, അംഗത്തെ നീക്കം ചെയ്യൽ, സൂക്ഷിപ്പുകാർ, കൺവീനർമാരും മുഖ്യ കൺവീനർമാരും.</span></a></li>
+            <li><a href="polls.html"><strong>പോളുകൾ</strong><span>കമ്മ്യൂണിറ്റിയോട് പെട്ടെന്ന് ഒരു ചോദ്യം ചോദിക്കുക. പോളുകൾ അഭിപ്രായം കാണിക്കുന്നു; അവ സ്വന്തമായി ഒന്നും മാറ്റുന്നില്ല.</span></a></li>
+            <li><a href="enterprises.html"><strong>പ്രോജക്റ്റുകളും സംരംഭങ്ങളും</strong><span>സ്വന്തമായി പയറുകളുള്ള സംരംഭങ്ങൾ: ഒരെണ്ണം കണ്ടെത്തുക, പിന്തുണയ്ക്കുക, അല്ലെങ്കിൽ ആരംഭിക്കുക.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yang bisa dilihat admin — BeanPool members' guide</title>
+    <meta name="description" content="Dalam komunitas yang adminnya menyimpan daftar nama: apa yang tercatat tentangmu, siapa yang bisa membacanya, apa yang disimpan server, dan arti status terkonfirmasi.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Pengaturan dan keamanan</a></p>
+        <h1>Yang bisa dilihat admin</h1>
+        <p class="lede">Dalam komunitas yang adminnya menyimpan daftar nama: apa yang tercatat tentangmu, siapa yang bisa membacanya, apa yang disimpan server, dan arti status terkonfirmasi.</p>
+        <h2>Daftar nama</h2>
+        <p>Admin di beberapa komunitas menyimpan <strong>daftar nama</strong>: siapa para anggotanya, berdasarkan nama asli, seperti halnya komite LETS menyimpan daftar keanggotaan. Tidak setiap komunitas menyimpannya. Tanyakan kepada adminmu apakah komunitasmu menyimpannya.</p>
+        <p>Sebuah entri memuat namamu dan, terkadang, catatan singkat yang ditulis admin, seperti bagaimana komunitas mengenalmu. Tidak ada hal lain: tidak ada alamat, tidak ada tanggal lahir, tidak ada nomor identitas.</p>
+        <h2>Siapa yang dapat membacanya</h2>
+        <p><strong>Hanya pemilik dan admin komunitasmu, di ponsel mereka sendiri.</strong> Namamu disegel di ponsel admin sebelum dikirim ke server komunitasmu. Server menyimpan teks yang teracak: cadangan, salinan, BeanPool, atau siapa pun yang mencuri database tidak memegang apa pun yang dapat dibaca.</p>
+        <p>Siapa pun yang menjalankan server tidak dapat membacanya. Ponsel para admin hanya memberikan kunci daftar nama kepada admin yang ponselnya telah diperiksa oleh admin lain, lewat panggilan atau secara langsung, dan hanya menerima kunci baru dari mereka. Hal ini bertumpu pada para admin: admin yang memeriksa ponsel orang yang salah, ponsel admin yang disusupi seseorang, atau ponsel yang hilang sebelum admin menghapus kuncinya, dapat membuat orang lain membaca nama-nama tersebut. Demikian juga ponsel admin yang dihalangi oleh pengelola server untuk mengetahui bahwa seorang admin telah dikeluarkan: hingga ponsel itu mengetahuinya, apa yang ditulisnya dapat dibaca dengan kunci yang dimiliki admin yang telah dikeluarkan tersebut. Admin yang ponselnya masih menampilkan admin yang telah dikeluarkan akan menghapus kuncinya secara manual, dan ponsel tersebut kemudian membuat kunci baru tanpa mereka atau tidak menulis apa pun.</p>
+        <p><strong>Anggota lain tidak melihat nama-nama tersebut.</strong> Mereka melihat nama BeanPool milikmu, seperti biasa.</p>
+        <p>Seorang admin dapat membuat salinan PDF dari daftar tersebut di ponsel mereka, untuk disimpan dengan aman. Begitu dibuat, salinan itu menjadi tanggung jawab mereka untuk menjaganya dengan aman, seperti halnya daftar di atas kertas. Setiap kali daftar dibuka atau disalin, admin lain dapat melihat siapa yang melakukannya dan kapan.</p>
+        <h2>Dikonfirmasi</h2>
+        <p>Seorang admin dapat <strong>mengonfirmasimu</strong>: mereka menyatakan akunmu adalah orang yang ada pada entri tersebut. Hanya seseorang yang mengenalmu yang seharusnya melakukan itu, dan di beberapa komunitas dua admin harus sepakat.</p>
+        <ul>
+            <li>Konfirmasi tidak memuat nama. Server mencatat akun mana, entri mana, dan admin mana, tidak pernah siapa dirimu.</li>
+            <li>Ini bukan lencana percaya, dan untuk saat ini tidak mengubah hal lain di dalam aplikasi.</li>
+            <li>Jika seorang admin mengundangmu berdasarkan nama, bergabung dengan undangan mereka mengonfirmasimu terhadap entrimu, oleh admin tersebut. &quot;Terkonfirmasi&quot; hanya berarti bahwa seorang admin menyatakan akun ini adalah orang yang ada pada entri tersebut.</li>
+            <li>Jika kamu mengganti ponsel yang hilang dan akunmu berpindah ke kunci baru, konfirmasimu berpindah bersamanya.</li>
+            <li>Jika kamu keluar atau menghapus akunmu, konfirmasimu berakhir. Entrimu tetap berada di daftar admin sampai seorang admin menghapusnya: mintalah kepada mereka.</li>
+            <li>Jika kamu terkonfirmasi dan kamu keluar, dikeluarkan, atau menghapus akunmu saat kamu berhutang Kacang, Sarana Bersama menutupi hutang tersebut seperti biasa. Daftar admin juga menyimpan catatan pada entrimu mengenai berapa hutangmu, alasan, dan kapan, selama 3 tahun, dan para admin melihatnya di samping namamu di ponsel mereka. Tidak ada yang dapat dikonfirmasi terhadap entri tersebut sampai hutang tersebut dibayar kembali, dilunasi dengan bekerja, atau diikhlaskan.</li>
+        </ul>
+        <h2>Yang tidak diperlihatkan daftar nama kepada para admin</h2>
+        <p>Daftar tersebut memuat nama dan catatan, serta akun mana milik siapa. Selain catatan di atas mengenai hutang yang kamu tinggalkan, daftar itu tidak memperlihatkan saldo atau transaksimu kepada siapa pun (seorang admin dapat melihat saldomu dalam kasus-kasus di bawah ini, dan beberapa dari transaksimu: lihat akhir halaman ini). Lihat &quot;Privasimu&quot; untuk apa yang dapat dilihat anggota dan admin di luar itu.</p>
+        <h2>Yang kamu setujui dalam komunitas yang dikenal</h2>
+        <p>Sebuah komunitas yang mengonfirmasi para anggotanya, <strong>komunitas yang dikenal</strong>, bekerja seperti cara kerja LETS selama ini: para admin mengawasi hutang yang bertambah terlalu besar atau bertahan terlalu lama. Ketika kamu bergabung dengan salah satunya, layar bergabung menyebutkan secara tepat kapan, dalam angka komunitasmu, misalnya:</p>
+        <p>&quot;Di komunitas ini, admin dapat melihat saldomu jika melewati 50% dari limit kreditmu atau jika kamu tetap dalam keadaan debet selama 60 hari tanpa penjualan. Begitulah cara kerja LETS selama ini. Setiap kali admin membuka daftar anggota yang melewati batasan tersebut, dan setiap kali admin melihat saldomu saat mengeluarkanmu, hal itu dicatat dalam log. Dalam pemungutan suara untuk mengeluarkanmu, setiap orang yang dapat memilih melihat saldomu dan hutang apa pun, hanya dalam pemungutan suara tersebut, dan pemeriksaan tersebut tidak dicatat dalam log. Kamu dapat menarik kembali persetujuan ini kapan saja di Pengaturan. Apa pun yang kamu pilih, admin mana pun dapat melihat beberapa transaksimu: transaksi yang belum selesai atau yang diselesaikan oleh admin (dengan siapa, postingan, harga, dan obrolan empat mata milikmu dengan mereka, yang tidak dapat dibaca admin jika bersifat pribadi), sehingga transaksi yang macet dapat diselesaikan; transaksi yang Kacangnya tertahan saat seorang anggota dikeluarkan pada server yang lebih lama (status transaksi, postingan, harga, tanggalnya, Kacang yang tertahan, berapa banyak pembayaran yang melaluinya, serta jumlah dan catatan pembayaran terakhir); peringatan penipuan yang menyebut namamu jika kamu dan seorang anggota saling membeli secara bolak-balik, dengan jumlah yang kira-kira seimbang, melewati batas, beserta total Kacang dan seberapa seimbang transaksi ke masing-masing pihak; peringatan yang menyebut namamu, beserta total Kacang dan berapa banyak anggota yang kamu undang yang belum pernah bertransaksi dengan siapa pun selain dirimu, jika anggota yang kamu undang mengirimimu Kacang melewati batas dalam jumlah hari tertentu, atau jika kamu adalah salah satu dari anggota tersebut; peringatan yang menyebut namamu, beserta seberapa banyak transaksi kelompok tersebut dilakukan antar sesama anggota tetapi tanpa Kacang, jika kamu berada dalam kelompok anggota yang setidaknya separuhnya adalah anggota baru, yang sebagian besar bertransaksi satu sama lain; dan peringatan yang menyebut namamu jika tidak ada Kacang yang masuk atau keluar dari akunmu selama sejumlah hari tertentu. Setiap pemeriksaan pada salah satu transaksi tersebut dicatat dalam log, beserta siapa yang memeriksa, kapan, dan transaksi mana; pemeriksaan pada peringatan yang menyebut namamu dicatat saat pertama kali setiap admin membukanya, dan lagi pada pemeriksaan pertama admin tersebut setelah 24 jam, dan pemeriksaan di antaranya tidak menambah baris baru. Pemilik dan para admin dapat melihat log tersebut. Statistik anggota yang dilihat admin menunjukkan berapa banyak postingan yang kamu miliki dan pesan yang telah kamu kirimkan, dan dari transaksi hanya total seluruh komunitas, bukan milikmu. Setiap anggota, termasuk admin, melihat profil percayamu: berapa banyak transaksimu yang selesai dan berapa banyak yang dibatalkan, serta bagian yang selesai, berapa banyak pembayaran Kacang yang telah kamu kirimkan atau terima dari anggota ditambah transaksi yang telah kamu selesaikan, dengan berapa banyak anggota berbeda kamu telah membayar, dibayar, atau bertransaksi, berapa banyak pembayaran dan transaksi yang telah kamu lakukan dengan anggota yang sedang melihat, serta Poin Percayamu. Hal itu tidak dicatat dalam log, karena setiap anggota dapat melihatnya. Tidak ada hal lain dari transaksimu. Siapa pun yang menjalankan server komunitas ini memegang seluruh databasenya, termasuk saldo dan transaksimu, serta cadangan, snapshot, dan salinan siaganya.&quot;</p>
+        <p>Menyetujui hal itu adalah persetujuanmu. Kemudian, dan hanya selama seorang admin telah mengonfirmasimu:</p>
+        <ul>
+            <li>Jika saldomu melewati salah satu dari kedua batasan tersebut, akunmu muncul di ponsel para admin beserta saldomu, sehingga admin yang mengenalmu dapat berbicara denganmu. Daftar tersebut tidak menampilkan hal lain tentangmu, dan tidak menampilkan transaksimu.</li>
+            <li>Setiap kali seorang admin membuka daftar tersebut, admin lain dan pemilik dapat melihat siapa yang membukanya dan kapan.</li>
+            <li>Jika kamu belum setuju, atau belum ada yang mengonfirmasimu, atau komunitasmu tidak mengonfirmasi anggota, daftar tersebut tidak pernah menampilkanmu.</li>
+        </ul>
+        <p>Jika kamu bergabung sebelum komunitasmu memintanya, aplikasimu akan menawarkannya kepadamu. Menolak, atau tidak menjawab, tidak mengubah apa pun: kamu tetap menjadi anggota. Jika komunitas mengubah batasannya nanti, aplikasimu akan menanyakannya lagi kepadamu.</p>
+        <p>Kamu dapat menarik kembali persetujuanmu kapan saja: buka <strong>Pengaturan</strong>, tempat aplikasimu menampilkan apa yang kamu setujui dan kapan, lalu ketuk <strong>Tarik kembali</strong>. Sejak saat itu kamu keluar dari daftar. Komunitasmu menyimpan catatan bahwa kamu telah setuju dan bahwa kamu telah menarik kembali persetujuan, dan kamu dapat menyetujuinya lagi nanti.</p>
+        <h2>Kapan seorang admin tetap melihat saldomu</h2>
+        <p>Apakah kamu menyetujui sesuatu atau tidak, di komunitas mana pun:</p>
+        <ul>
+            <li><strong>Ketika seorang admin menghapus akunmu.</strong> Admin yang mulai menghapus akunmu melihat saldomu dan berapa banyak transaksi yang sedang kamu buka, sehingga apa yang kamu pegang atau berhutang dapat diselesaikan. Admin lainnya dan pemilik dapat melihat siapa yang melihat, saldo siapa yang dilihat, dan kapan.</li>
+            <li><strong>Ketika komunitasmu melakukan pemungutan suara untuk mengeluarkanmu.</strong> Setiap orang yang dapat memberikan suara di dalamnya melihat saldomu dan hutang apa pun, hanya dalam pemungutan suara tersebut. Admin atau pemilik yang tidak dapat memberikan suara di dalamnya tidak melihatnya di sana. Pemeriksaan tersebut tidak dicatat dalam log.</li>
+            <li><strong>Siapa pun yang menjalankan server komunitasmu</strong> memegang seluruh databasenya, termasuk saldo dan transaksimu, serta cadangan, snapshot, dan salinan siaganya.</li>
+        </ul>
+        <h2>Yang dapat dilihat admin mana pun tentang transaksimu</h2>
+        <p>Apakah kamu menyetujui sesuatu atau tidak, di komunitas mana pun, admin mana pun dapat melihat:</p>
+        <ul>
+            <li><strong>Transaksi yang belum selesai, atau yang diselesaikan oleh admin.</strong> Kedua anggota, postingan, harga, dan pesan dalam obrolan empat mata kedua anggota. Seorang admin tidak dapat membaca obrolan pribadi, hanya melihat siapa yang menulis dan kapan. Ini agar admin dapat menyelesaikan transaksi yang macet.</li>
+            <li><strong>Transaksi yang Kacangnya tertahan saat seorang anggota dikeluarkan pada server yang lebih lama.</strong> Status transaksi, postingan, harga, tanggalnya, Kacang yang tertahan, berapa banyak pembayaran yang melaluinya, serta jumlah dan catatan pembayaran terakhir, sehingga pemilik dapat menghapus pembukuan Kacang yang tertahan tersebut.</li>
+            <li><strong>Peringatan penipuan yang menyebut nama anggota,</strong> dengan Kacang. Satu peringatan menyebut dua anggota yang saling membeli secara bolak-balik, dengan jumlah yang kira-kira seimbang, melewati batas. Peringatan ini menampilkan total Kacang dan seberapa seimbang transaksi ke masing-masing pihak. Peringatan lainnya menyebut seorang anggota dan anggota yang mereka undang, ketika anggota tersebut mengirimkan Kacang melewati batas dalam jumlah hari tertentu. Peringatan ini menampilkan total Kacang dan berapa banyak anggota yang mereka undang yang belum pernah bertransaksi dengan siapa pun selain mereka.</li>
+            <li><strong>Peringatan penipuan yang menyebut sekelompok anggota,</strong> yang setidaknya separuhnya adalah anggota baru, yang sebagian besar bertransaksi satu sama lain. Peringatan ini menampilkan seberapa banyak transaksi kelompok tersebut dilakukan antar sesama anggota, tetapi tanpa Kacang.</li>
+            <li><strong>Peringatan yang menyebut anggota yang tidak memiliki Kacang yang masuk atau keluar</strong> selama sejumlah hari tertentu.</li>
+        </ul>
+        <p><strong>Setiap pemeriksaan pada salah satu transaksi tersebut dicatat dalam log:</strong> siapa yang melihat, kapan, dan pada transaksi mana. <strong>Pemeriksaan pada peringatan yang menyebut seorang anggota dicatat dalam log</strong> saat pertama kali setiap admin membukanya, dan lagi pada pemeriksaan pertama admin tersebut setelah 24 jam; pemeriksaan di antaranya tidak menambah baris baru. Pemilik dan para admin dapat melihat log tersebut di Kesehatan komunitas, sebagai daftarnya sendiri di samping daftar siapa yang melihat saldo. Pemeriksaan yang dilakukan oleh token otomatisasi (skrip yang disiapkan oleh pemilik) dinyatakan demikian: barisnya bertuliskan &quot;by token&quot; dan nama token tersebut, di samping pemilik yang membuatnya.</p>
+        <p>Statistik anggota yang dilihat para admin menunjukkan berapa banyak postingan yang dimiliki setiap anggota dan pesan yang telah mereka kirimkan, dan dari transaksi hanya total seluruh komunitas: berapa banyak transaksi yang selesai atau dibatalkan dan berapa total nilai dari transaksi yang selesai, tidak pernah milik satu anggota saja.</p>
+        <p>Setiap anggota, termasuk para admin, melihat <strong>profil percaya</strong> milik setiap anggota: berapa banyak transaksimu yang selesai dan berapa banyak yang dibatalkan, serta bagian yang selesai, berapa banyak pembayaran Kacang yang telah kamu kirimkan atau terima dari anggota ditambah transaksi yang telah kamu selesaikan, dengan berapa banyak anggota berbeda kamu telah membayar, dibayar, atau bertransaksi, berapa banyak pembayaran dan transaksi yang telah kamu lakukan dengan anggota yang sedang melihat, serta Poin Percayamu. Hal ini tidak dicatat dalam log, karena setiap anggota dapat melihatnya.</p>
+        <p>Tidak ada hal lain dari transaksimu.</p>
+        <h2>Asisten AI milik admin</h2>
+        <p>Seorang pemilik atau admin dapat menghubungkan asisten AI mereka sendiri ke server untuk membantu mereka. Asisten ini melihat lebih sedikit daripada mereka: tidak pernah melihat pesanmu, saldo, transaksi, kunci, foto, atau daftar nama, dan tidak pernah melihat siapa yang melaporkan siapa pun. Lihat &quot;Saat seorang admin menggunakan asisten AI&quot;.</p>
+        <h2>Menanyakan tentang entrimu</h2>
+        <p>Kamu dapat menanyakan kepada adminmu apa yang tertulis pada entrimu, untuk memperbaikinya, atau untuk menghapusnya saat kamu tidak lagi menjadi anggota komunitas. Merekalah yang menyimpan daftar tersebut, bukan BeanPool.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>Privasimu</strong><span>Apa yang bisa dilihat orang lain tentangmu, dan pengaturan yang mengaturnya.</span></a></li>
+            <li><a href="joining.html"><strong>Bergabung ke BeanPool</strong><span>Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Keluar atau menghapus akun</strong><span>Keluar dari ponsel ini, atau hapus akunmu secara permanen, dan apa yang terjadi pada kacangmu.</span></a></li>
+            <li><a href="admins-ai-assistants.html"><strong>Saat admin memakai asisten AI</strong><span>Apa yang bisa dibaca asisten AI milik admin atau pemilik tentangmu, apa yang tidak pernah dilihatnya, dan siapa yang menerimanya.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

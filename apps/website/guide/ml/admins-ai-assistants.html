@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>അഡ്മിൻ AI അസിസ്റ്റന്റ് ഉപയോഗിക്കുമ്പോൾ — BeanPool members' guide</title>
+    <meta name="description" content="ഉടമയുടെയോ അഡ്മിന്റെയോ AI അസിസ്റ്റന്റിന് വായിക്കാൻ കഴിയുന്നവ, ഒരിക്കലും കാണാത്തവ, ആർക്കൊക്കെ ലഭിക്കുന്നു എന്നത്.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">ക്രമീകരണങ്ങളും സുരക്ഷയും</a></p>
+        <h1>അഡ്മിൻ AI അസിസ്റ്റന്റ് ഉപയോഗിക്കുമ്പോൾ</h1>
+        <p class="lede">ഉടമയുടെയോ അഡ്മിന്റെയോ AI അസിസ്റ്റന്റിന് വായിക്കാൻ കഴിയുന്നവ, ഒരിക്കലും കാണാത്തവ, ആർക്കൊക്കെ ലഭിക്കുന്നു എന്നത്.</p>
+        <p>നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ ഉടമകൾക്ക് കമ്മ്യൂണിറ്റിയുടെ സെർവറിലേക്ക് അവരുടെ സ്വന്തം AI അസിസ്റ്റന്റിനെ (ഉദാഹരണത്തിന് Claude അല്ലെങ്കിൽ ChatGPT) ബന്ധിപ്പിക്കാൻ കഴിയും, അത് പരിപാലിക്കാൻ അവരെ സഹായിക്കുന്നതിന്: എന്താണ് അവരുടെ ശ്രദ്ധ ആവശ്യമുള്ളതെന്ന് ചോദിക്കാനോ തുറന്ന റിപ്പോർട്ടുകൾ സംഗ്രഹിക്കാനോ ഇത് സഹായിക്കുന്നു. അഡ്മിൻമാർക്കും ഇത് ചെയ്യാം: അവർ അവരുടെ അസിസ്റ്റന്റിലേക്ക് നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ വിലാസം ചേർക്കുകയും അവരുടെ ഫോണിൽ അത് അംഗീകരിക്കുകയും ചെയ്യുന്നു. അവർ അത് സ്വയം ബന്ധിപ്പിക്കുന്നു, അവർക്ക് എപ്പോൾ വേണമെങ്കിലും അത് വിച്ഛേദിക്കാനും കഴിയും. ഒരെണ്ണം ബന്ധിപ്പിക്കുമ്പോൾ മറ്റ് ഉടമകളെ അറിയിക്കും.</p>
+        <h2>നിങ്ങളെക്കുറിച്ച് ഇതിന് വായിക്കാൻ കഴിയുന്നവ</h2>
+        <p>ക്രമീകരണങ്ങളിൽ ഒരു അഡ്മിൻ കാണുന്നതിനേക്കാൾ വളരെ കുറച്ച് മാത്രമേ ഒരു അസിസ്റ്റന്റ് കാണുന്നുള്ളൂ. അതിന് എന്ത് ലഭിക്കണമെന്ന് തീരുമാനിക്കുന്നത് അസിസ്റ്റന്റല്ല, നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറാണ്.</p>
+        <ul>
+            <li><strong>ആരെങ്കിലും നിങ്ങളെയോ നിങ്ങളുടെ പോസ്റ്റിനെയോ റിപ്പോർട്ട് ചെയ്യുകയും</strong>, അഡ്മിൻ റിപ്പോർട്ടിലെ വാക്കുകൾ ആവശ്യപ്പെടുകയും ചെയ്താൽ: നൽകിയിട്ടുള്ള കാരണം, നിങ്ങളുടെ പോസ്റ്റിന്റെ തലക്കെട്ടും വിവരണവും, നിങ്ങളുടെ BeanPool പേരും. ആരാണ് റിപ്പോർട്ട് ചെയ്തതെന്ന് ഒരിക്കലും കാണിക്കില്ല.</li>
+            <li><strong>നിങ്ങൾ ചേരാൻ അഭ്യർത്ഥിക്കുകയും</strong>, അഡ്മിൻ ആ സന്ദേശങ്ങൾ ആവശ്യപ്പെടുകയും ചെയ്താൽ: നിങ്ങളുടെ അഭ്യർത്ഥനയോടൊപ്പം നിങ്ങൾ അയച്ച പേരും സന്ദേശവും, നിങ്ങൾ വന്നതായി പറഞ്ഞ കമ്മ്യൂണിറ്റിയും. നിങ്ങളുടെ ഫോട്ടോയോ കീ-യോ ഒരിക്കലും ലഭിക്കില്ല.</li>
+            <li>എത്ര അംഗങ്ങളുണ്ടെന്നും എത്ര പയറുകൾ വിനിമയത്തിലുണ്ടെന്നും പോലെയുള്ള <strong>മുഴുവൻ കമ്മ്യൂണിറ്റിയുടെയും ആകെത്തുകകൾ</strong>. നിങ്ങളുടെ ബാലൻസ് ഒരിക്കലും കാണിക്കില്ല.</li>
+        </ul>
+        <h2>ഇത് ഒരിക്കലും കാണാത്തവ</h2>
+        <p>നിങ്ങളുടെ സന്ദേശങ്ങളും ചാറ്റുകളും, നിങ്ങളുടെ ബാലൻസും ഇടപാടുകളും, നിങ്ങളുടെ കീകൾ, നിങ്ങളുടെ വിലാസം, നിങ്ങളുടെ ഫോട്ടോകൾ, പേരുകളുടെ ലിസ്റ്റ്, ആരെങ്കിലും മറ്റൊരാളെ റിപ്പോർട്ട് ചെയ്തോ എന്നത്. ഇതിന് നിങ്ങളെക്കുറിച്ച് ഒന്നും മാറ്റാൻ കഴിയില്ല: ഇതിന് നിങ്ങളെ നീക്കം ചെയ്യാനോ, മ്യൂട്ട് ചെയ്യാനോ, നിങ്ങളുടെ പോസ്റ്റ് ഒഴിവാക്കാനോ നിങ്ങളുടെ ചേരൽ അഭ്യർത്ഥനയ്ക്ക് മറുപടി നൽകാനോ കഴിയില്ല. അവ ആളുകൾ ചെയ്യുന്നതാണ്. ഒരു അഡ്മിൻ അവ ക്രമീകരണങ്ങളിലോ അവരുടെ ഫോണിലോ ചെയ്യുന്നു, ക്ഷണിക്കാൻ അനുവാദമുള്ള ഏത് അംഗത്തിനും ആപ്പിൽ ചേരൽ അഭ്യർത്ഥനയ്ക്ക് മറുപടി നൽകാനാകും.</p>
+        <p>ഒരു റിപ്പോർട്ടിനെക്കുറിച്ച് എന്തുചെയ്യണമെന്ന് ഒരു അസിസ്റ്റന്റിന് നിർദ്ദേശിക്കാം, ഉദാഹരണത്തിന് നിങ്ങളുടെ പോസ്റ്റ് നിലനിർത്തണോ അതോ ഒഴിവാക്കണോ എന്ന്. ഇത് പ്രവർത്തിക്കുന്ന അഡ്മിൻ റിപ്പോർട്ട് വായിച്ച് അംഗീകരിക്കുന്നത് വരെ ഒന്നും സംഭവിക്കില്ല; ഇതിനെക്കുറിച്ച് നിങ്ങൾ കേൾക്കുന്നതെന്തും എപ്പോഴും എന്നപോലെ നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ മോഡറേറ്റർമാരിൽ നിന്നാണ് വരുന്നത്.</p>
+        <h2>ഇത് ആർക്കൊക്കെ ലഭിക്കുന്നു</h2>
+        <p>നിങ്ങൾ സ്വയം ഒരു AI ചാറ്റിൽ എന്തെങ്കിലും ഒട്ടിക്കുമ്പോൾ സംഭവിക്കുന്നത് പോലെ, അസിസ്റ്റന്റ് വായിക്കുന്നത് അത് പ്രവർത്തിപ്പിക്കുന്ന കമ്പനിയിലേക്ക് പോകുന്നു. അഡ്മിന്റെ അസിസ്റ്റന്റ് ആവശ്യപ്പെടുമ്പോൾ മാത്രമേ സെർവർ ഒരു റിപ്പോർട്ടിലെ വാക്കുകളോ ചേരൽ സന്ദേശമോ അയക്കൂ, അത് നിർദ്ദേശങ്ങളായല്ല, അംഗത്തിൽ നിന്നുള്ള വാക്കുകളായി അടയാളപ്പെടുത്തിയാണ് അയക്കുന്നത്.</p>
+        <p>നിങ്ങളുടെ റിപ്പോർട്ടോ ചേരൽ സന്ദേശമോ ഒരു AI വായിക്കരുതെന്ന് നിങ്ങൾ ആഗ്രഹിക്കുന്നുവെങ്കിൽ, നിങ്ങളുടെ അഡ്മിൻമാർ അത് എങ്ങനെ ഉപയോഗിക്കുന്നു എന്ന് അവരോട് ചോദിക്കുക.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>അഡ്മിൻമാർക്ക് കാണാൻ കഴിയുന്നത്</strong><span>അഡ്മിൻമാർ പേരുവിവരങ്ങൾ സൂക്ഷിക്കുന്ന കമ്മ്യൂണിറ്റിയിൽ: നിങ്ങളെക്കുറിച്ചുള്ള വിവരങ്ങൾ, വായിക്കാൻ കഴിയുന്നവർ, സെർവർ സൂക്ഷിക്കുന്നവ, സ്ഥിരീകരിക്കപ്പെടുന്നതിന്റെ അർത്ഥം.</span></a></li>
+            <li><a href="reporting.html"><strong>പ്രശ്നം റിപ്പോർട്ട് ചെയ്യൽ</strong><span>ഒരു പോസ്റ്റ്, ഇവന്റ്, പൾസ് പോസ്റ്റ്, പ്രോജക്റ്റ് അല്ലെങ്കിൽ സംരംഭത്തെക്കുറിച്ച് മോഡറേറ്റർമാരെ അറിയിക്കുക.</span></a></li>
+            <li><a href="privacy.html"><strong>സ്വകാര്യത</strong><span>നിങ്ങളെക്കുറിച്ച് മറ്റുള്ളവർക്ക് എന്തൊക്കെ കാണാം, അത് നിയന്ത്രിക്കുന്ന ക്രമീകരണങ്ങൾ.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool-ൽ ചേരൽ</strong><span>രണ്ട് വഴികൾ: അംഗത്തിന്റെ ക്ഷണത്തിലൂടെ ഒരു കമ്മ്യൂണിറ്റിയിൽ, അല്ലെങ്കിൽ തുറക്കുമ്പോൾ 12 രഹസ്യ വാക്കുകളോ ഒറ്റ സൈൻ-ഇൻ വഴിയോ ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയിൽ. ചേരാൻ അഭ്യർത്ഥിക്കലും മറ്റുള്ളവരെ ക്ഷണിക്കലും.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

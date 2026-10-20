@@ -93,3 +93,54 @@ export function parseNewPostParam(value: string | undefined | null): 'chooser' |
     const match = NEW_POST_TYPES.find(o => o.id === value);
     return match ? match.id : null;
 }
+
+/**
+ * Whether a draft in storage was written by a tool door (source: 'tool' and a non-empty tool id).
+ * Set only by the tool host's doors (apps/native/tools/doors.ts).
+ */
+export function isToolDraft(draft: unknown): boolean {
+    if (!draft || typeof draft !== 'object') return false;
+    const d = draft as Record<string, unknown>;
+    const tool = d.tool ?? d.toolId;
+    return d.source === 'tool' && typeof tool === 'string' && tool.trim().length > 0;
+}
+
+/**
+ * Strip the tool marker from a draft so that subsequent opens ask "Unfinished post?"
+ * as a member's own draft would.
+ */
+export function clearDraftToolMarker<T extends Record<string, unknown>>(draft: T): T {
+    const next = { ...draft };
+    delete next.source;
+    delete next.tool;
+    delete next.toolId;
+    return next;
+}
+
+/**
+ * Whether a draft is restorable on the current community (has matching anchorUrl and some content).
+ */
+export function isRestorableDraft(draft: unknown, anchorUrl: string | null): boolean {
+    if (!draft || typeof draft !== 'object') return false;
+    const d = draft as Record<string, unknown>;
+    if (d.anchorUrl !== anchorUrl) return false;
+    const title = typeof d.postTitle === 'string' ? d.postTitle.trim() : '';
+    const desc = typeof d.postDescription === 'string' ? d.postDescription.trim() : '';
+    const photos = Array.isArray(d.postPhotos) ? d.postPhotos.length : (d.postPhotos ? 1 : 0);
+    return !!(title || desc || photos);
+}
+
+export type DraftOpenDecision = 'open-tool' | 'ask-unfinished' | 'start-fresh';
+
+/**
+ * What `openComposer` in map.tsx should do with a saved draft:
+ * - `open-tool` — the draft came from a tool door, open it immediately without asking
+ * - `ask-unfinished` — the draft is a member's unfinished post, ask whether to continue or start fresh
+ * - `start-fresh` — no restorable draft for this community, start a fresh composer
+ */
+export function decideDraftOpen(draft: unknown, anchorUrl: string | null): DraftOpenDecision {
+    if (!isRestorableDraft(draft, anchorUrl)) return 'start-fresh';
+    if (isToolDraft(draft)) return 'open-tool';
+    return 'ask-unfinished';
+}
+

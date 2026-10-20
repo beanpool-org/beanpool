@@ -159,10 +159,13 @@ function ledgerAddsUp(step: string): void {
         `the ledger adds up after ${step} (drift ${a.drift}, stranded ${a.strandedEscrows}, not a number ${a.badBalances})`);
 }
 
-/** The notices this server kept for `to` since `since` (ms), newest last: what the member's phone is told. */
-function toldSince(to: Id, since: number): Array<{ title: string; body: string }> {
-    return db.prepare('SELECT title, body FROM push_notices WHERE recipient = ? AND sent_at >= ? ORDER BY sent_at, rowid').all(to.pk, Math.floor(since / 1000)) as any[];
+/** Where the notices this server keeps end now (pushMark), to read only the ones after it (toldSince). */
+const pushMark = (): number => (db.prepare('SELECT COALESCE(MAX(rowid), 0) AS m FROM push_notices').get() as { m: number }).m;
+/** The notices this server kept for `to` after `mark`, oldest first: what the member's phone is told. */
+function toldSince(to: Id, mark: number): Array<{ title: string; body: string }> {
+    return db.prepare('SELECT title, body FROM push_notices WHERE recipient = ? AND rowid > ? ORDER BY rowid').all(to.pk, mark) as any[];
 }
+const OUT_ON_LOAN = (title: string) => (n: { title: string; body: string }) => n.title === '📦 Out on loan' && n.body === `"${title}" is out on loan now. Ask again when it's back.`;
 async function settle(): Promise<void> { await new Promise(r => setTimeout(r, 150)); }
 
 async function main(): Promise<void> {
@@ -356,17 +359,27 @@ async function main(): Promise<void> {
     console.log('\n— 5. Two borrowers race');
     const askA = await ask(alice, wheelbarrow, 2);
     const askB = await ask(bob, wheelbarrow, 2);
-    const t5 = Date.now();
+    const t5 = pushMark();
     const yesA = await agree(dave, askA.body.transaction.id);
     await settle();
-    const told = toldSince(bob, t5 - 1000);
-    assert(yesA.status === 200 && txRow(askB.body.transaction.id).status === 'rejected'
-        && told.some(n => n.title === '📦 Out on loan' && n.body === '"Wheelbarrow" is out on loan now. Ask again when it\'s back.'),
-        `Dave lends it to Alice: Bob's waiting request is closed and he is told it's out (${JSON.stringify(told.slice(-1))})`);
+    const told = toldSince(bob, t5);
+    assert(yesA.status === 200 && txRow(askB.body.transaction.id).status === 'rejected' && told.filter(OUT_ON_LOAN('Wheelbarrow')).length === 1
+        && !toldSince(alice, t5).some(OUT_ON_LOAN('Wheelbarrow')),
+        `Dave lends it to Alice: Bob's waiting request is closed and he is told it's out, Alice isn't (${JSON.stringify(told)})`);
     const yesB = await agree(dave, askB.body.transaction.id);
     assert(yesB.status === 400 && postRow(wheelbarrow).accepted_by === alice.pk, `Bob's closed request can't be agreed after (${brief(yesB)})`);
     await returned(alice, askA.body.transaction.id);
     assert(backOnBoard(wheelbarrow), 'back');
+    const waitC = await ask(cy, wheelbarrow, 2);
+    const waitB = await ask(bob, wheelbarrow, 2);
+    const t5b = pushMark();
+    const bobTakes = await take(bob, wheelbarrow, 2);
+    await settle();
+    assert(bobTakes.status === 200 && txRow(waitC.body.transaction.id).status === 'rejected' && txRow(waitB.body.transaction.id).status === 'rejected'
+        && toldSince(cy, t5b).filter(OUT_ON_LOAN('Wheelbarrow')).length === 1 && !toldSince(bob, t5b).some(OUT_ON_LOAN('Wheelbarrow')),
+        `Bob takes it in one step: Cy, who was waiting, is told it's out; Bob, whose own request it closes, isn't (${brief(bobTakes)})`);
+    await returned(bob, bobTakes.body.transaction.id);
+    assert(backOnBoard(wheelbarrow), 'back again');
     const r5 = { bob: bal(bob.pk), cy: bal(cy.pk) };
     const raced = await Promise.all([take(bob, ladder, 2), take(cy, ladder, 2)]);
     const winners = raced.filter(r => r.status === 200);
@@ -528,12 +541,12 @@ async function main(): Promise<void> {
     await agree(bob, lingerSale.body.transaction.id);
     db.prepare("UPDATE marketplace_transactions SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-8 days') WHERE id IN (?, ?, ?)")
         .run(lingerFree, lingerFee, lingerSale.body.transaction.id);
-    const t11 = Date.now();
+    const t11 = pushMark();
     runMarketplaceHygiene();
     await settle();
-    const toAlice = toldSince(alice, t11 - 1000).filter(n => n.title.startsWith('⏳'));
-    const toBob = toldSince(bob, t11 - 1000).filter(n => n.title.startsWith('⏳'));
-    const toCy = toldSince(cy, t11 - 1000).filter(n => n.title.startsWith('⏳'));
+    const toAlice = toldSince(alice, t11).filter(n => n.title.startsWith('⏳'));
+    const toBob = toldSince(bob, t11).filter(n => n.title.startsWith('⏳'));
+    const toCy = toldSince(cy, t11).filter(n => n.title.startsWith('⏳'));
     assert(toAlice.length === 1 && toAlice[0].title === '⏳ Is it back?'
         && toAlice[0].body === 'Is Dave\'s "Cordless drill (18V)" back? Once it is, confirm the return to finish the loan.',
         `a loan asks the borrower whether it's back (${JSON.stringify(toAlice)})`);

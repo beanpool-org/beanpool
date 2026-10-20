@@ -867,8 +867,9 @@ export function acceptPost(
     };
 
     const oneAtATime = !post.repeatable || lendable;
+    // Not the one taking it, whose own request waiting on it is closed by this too.
     const waitingBorrowers = lendable
-        ? db.prepare(`SELECT buyer_pubkey FROM marketplace_transactions WHERE post_id=? AND status='requested'`).all(post.id) as Array<{ buyer_pubkey: string }>
+        ? db.prepare(`SELECT buyer_pubkey FROM marketplace_transactions WHERE post_id=? AND status='requested' AND buyer_pubkey != ?`).all(post.id, buyerPublicKey) as Array<{ buyer_pubkey: string }>
         : [];
 
     cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);

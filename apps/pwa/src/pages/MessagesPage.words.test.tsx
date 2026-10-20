@@ -310,8 +310,9 @@ describe('Talk follows a language switch live (Settings → Language, the first 
         const russianDate = formatDate(new Date(bobDm.createdAt), 'day-month-year');
         expect(russianDate).not.toBe('14 Oct 2026');
         expect(screen.getByText(russianDate)).toBeInTheDocument();
-        // A sentence with no Russian yet reads in English (never blank); members' words as they wrote them.
-        expect(screen.getByText('Action Needed: Review Partner')).toBeInTheDocument();
+        // The review prompt in Russian once it is drafted, else in English (never blank); members' words as they wrote them.
+        const reviewPrompt = (ruWords as unknown as Record<string, unknown>)['Action Needed: Review Partner'];
+        expect(screen.getByText(typeof reviewPrompt === 'string' ? reviewPrompt : 'Action Needed: Review Partner')).toBeInTheDocument();
         expect(screen.getByText('Garden crew')).toBeInTheDocument();
         expect(screen.getByText('Sourdough loaf')).toBeInTheDocument();
 

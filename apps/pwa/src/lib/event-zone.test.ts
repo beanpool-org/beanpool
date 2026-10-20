@@ -1,7 +1,8 @@
 /**
  * The event form's zone helpers (DESIGN-event-times §3, slice 2) and the edit payload with a stored clock.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { formatDate, pseudoLocalise, setLanguage, zoneLabelFor, zonePlaceFor } from '@beanpool/core';
 import {
     approxInstantMs, eventAdjustedWords, eventClockBody, eventLinkProblem, eventZoneLine, zoneOptionText, zoneOptions,
 } from './event-zone';
@@ -69,11 +70,65 @@ describe('the DST words (§3, §7)', () => {
         expect(eventAdjustedWords({
             start: { kind: 'gap', asked: '2026-10-04T02:30', saved: '2026-10-04T03:30' },
             end: { kind: 'overlap', asked: '2027-04-04T02:30', saved: '2027-04-04T02:30' },
-        }, 'Sydney time')).toEqual([
+        }, 'Australia/Sydney', 660)).toEqual([
             '2:30 does not exist on 4 Oct in Sydney (clocks go forward). It was saved as 3:30.',
             'The end, 2:30, happens twice on 4 Apr in Sydney (clocks go back). The first one is used.',
         ]);
-        expect(eventAdjustedWords(undefined, 'Sydney time')).toEqual([]);
+        expect(eventAdjustedWords(undefined, 'Australia/Sydney', 660)).toEqual([]);
+    });
+});
+
+describe("the zone in the member's language: the place from core, never cut from a label", () => {
+    afterEach(() => setLanguage('en'));
+    /** French's "{place} time": a label that does not end in " time" (the drafting round writes the real one). */
+    const FR = [{ '{place} time': 'heure de {place}' }];
+    /** A zone this device named (its own zone, or an edited event's stored one): its label in the member's language. */
+    const named = (tz: string, offsetMinutes: number) => ({ tz, label: zoneLabelFor(tz, offsetMinutes), offsetMinutes });
+
+    it('in English, exactly as before', () => {
+        expect(zoneOptionText(named('Australia/Sydney', 660))).toBe('Sydney (UTC+11)');
+        expect(zoneOptionText(named('Etc/GMT-1', 60))).toBe('UTC+1 (UTC+1)');
+        expect(eventZoneLine(true, named('Australia/Sydney', 660), 'device', null)).toEqual({ label: 'Sydney time', why: 'device' });
+    });
+
+    it('in French, the picker names the place alone, and the line says a zone from the node in French', () => {
+        setLanguage('fr', FR);
+        const sydney = named('Australia/Sydney', 660);
+        expect(sydney.label).toBe('heure de Sydney');
+        expect(zoneOptionText(sydney)).toBe('Sydney (UTC+11)');
+        expect(zoneOptions([sydney, LAGOS]).map(o => o.text)).toEqual(['Lagos (UTC+1)', 'Sydney (UTC+11)']);
+        // The node's zones carry its words, in English ("Lagos time").
+        expect(eventZoneLine(false, LAGOS, 'pin', 'Australia/Sydney')).toEqual({ label: 'heure de Lagos', why: 'pin' });
+        expect(eventZoneLine(true, sydney, 'device', 'Australia/Sydney')).toEqual({ label: 'heure de Sydney', why: 'device' });
+    });
+
+    it('in the pseudo-locale, a picker entry is "{place} ({offset})" with the place as core gives it', () => {
+        setLanguage('xx');
+        const sydney = named('Australia/Sydney', 660);
+        const entry = pseudoLocalise('{place} ({offset})').replace('{place}', zonePlaceFor('Australia/Sydney', 660)).replace('{offset}', 'UTC+11');
+        expect(zoneOptionText(sydney)).toBe(entry);
+        expect(zoneOptionText(sydney)).not.toContain(sydney.label);
+    });
+
+    it('the DST words in the pseudo-locale, naming the place as core gives it', () => {
+        setLanguage('xx');
+        const said = (english: string, v: Record<string, string>) => Object.entries(v).reduce((s, [k, x]) => s.split(`{${k}}`).join(x), pseudoLocalise(english));
+        const oct4 = formatDate(new Date(Date.UTC(2026, 9, 4)), 'day-month', { utc: true });
+        const apr4 = formatDate(new Date(Date.UTC(2027, 3, 4)), 'day-month', { utc: true });
+        expect(eventAdjustedWords({
+            start: { kind: 'gap', asked: '2026-10-04T02:30', saved: '2026-10-04T03:30' },
+            end: { kind: 'overlap', asked: '2027-04-04T02:30', saved: '2027-04-04T02:30' },
+        }, 'Australia/Sydney', 660)).toEqual([
+            said('{time} does not exist on {date} in {place} (clocks go forward). It was saved as {saved}.', { time: '2:30', date: oct4, place: 'Sydney', saved: '3:30' }),
+            said('The end, {time}, happens twice on {date} in {place} (clocks go back). The first one is used.', { time: '2:30', date: apr4, place: 'Sydney' }),
+        ]);
+        expect(eventAdjustedWords({
+            start: { kind: 'overlap', asked: '2027-04-04T02:30', saved: '2027-04-04T02:30' },
+            end: { kind: 'gap', asked: '2026-10-04T02:30', saved: '2026-10-04T03:30' },
+        }, 'Etc/GMT-1', 60)).toEqual([
+            said('{time} happens twice on {date} in {place} (clocks go back). The first one is used.', { time: '2:30', date: apr4, place: 'UTC+1' }),
+            said('The end, {time}, does not exist on {date} in {place} (clocks go forward). It was saved as {saved}.', { time: '2:30', date: oct4, place: 'UTC+1', saved: '3:30' }),
+        ]);
     });
 });
 

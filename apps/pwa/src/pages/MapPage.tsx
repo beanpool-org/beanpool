@@ -965,8 +965,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     function tellAdjusted(adjusted: Parameters<typeof eventAdjustedWords>[0], post: MarketplacePost | undefined) {
         const tz = post?.eventTz || eventZone?.tz;
         if (!adjusted || !tz) return;
-        const label = eventZone?.tz === tz ? eventZone.label : zoneLabelFor(tz, offsetMinutesOf(post?.eventStartLocal, post?.eventStartAt));
-        const words = eventAdjustedWords(adjusted, label);
+        const offset = eventZone?.tz === tz ? eventZone.offsetMinutes : offsetMinutesOf(post?.eventStartLocal, post?.eventStartAt);
+        const words = eventAdjustedWords(adjusted, tz, offset);
         if (words.length > 0) alert(words.join('\n\n'));
     }
 

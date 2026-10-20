@@ -17,10 +17,11 @@ import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
-import type { FeatureMode } from '@beanpool/core';
+import { formatNumber, t, tn, word, type FeatureMode, type WordKey } from '@beanpool/core';
 import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
 import { EnterpriseCard } from '../components/EnterpriseCard';
 import { LocalCommunityAction } from '../components/LocalCommunityMark';
+import { Sentence } from '../components/Sentence';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -35,8 +36,38 @@ interface Props {
     isMember?: boolean | null;
 }
 
-/** Shown when the browser cannot read or decode the picked photo (resizePhotoFile rejected). */
-const PHOTO_READ_ERROR = 'That photo could not be read. Please choose another one.';
+/** Shown when the browser cannot read or decode the picked photo (resizePhotoFile rejected): a word() key, put through t() where shown. */
+const PHOTO_WORDS = { readError: word('That photo could not be read. Please choose another one.') } as const;
+
+/**
+ * A group's kind, join policy and the viewer's role as the node names them: word() keys (the phone's), shown through
+ * t(). Any other name is shown as the node wrote it. The tables' own names only (a "constructor" is not one).
+ */
+const CATEGORY_WORDS: Readonly<Record<string, WordKey>> = {
+    social: word('social', 'group category'), general: word('general', 'group category'), working_group: word('working group', 'group category'),
+    project: word('project', 'group category'), guild: word('guild', 'group category'),
+};
+const JOIN_POLICY_WORDS: Readonly<Record<string, WordKey>> = {
+    open: word('open', 'join policy'), request_to_join: word('request to join', 'join policy'), invite_only: word('invite only', 'join policy'),
+};
+const ROLE_WORDS: Readonly<Record<string, WordKey>> = {
+    convenor: word('convenor', 'group role badge'), member: word('member', 'group role badge'), observer: word('observer', 'group role badge'),
+};
+const own = (table: object, name: string) => Object.prototype.hasOwnProperty.call(table, name);
+const named = (table: Readonly<Record<string, WordKey>>, name: string, asWritten: string) => (own(table, name) ? t(table[name]) : asWritten);
+
+/** The section tabs and the Groups list's chips: word() keys, shown through t(). */
+const SECTION_TABS = [
+    { key: 'decide', emoji: '🗳️', label: word('Decide') },
+    { key: 'groups', emoji: '👥', label: word('Groups') },
+] as const;
+const GROUP_CHIPS: Array<{ key: string; label: WordKey }> = [
+    { key: 'all', label: word('All') },
+    { key: 'my_groups', label: word('My groups') },
+    { key: 'projects', label: word('🌱 Projects') },
+    { key: 'enterprises', label: word('🏛️ Enterprises') },
+    { key: 'chat', label: word('👥 Chat groups') },
+];
 
 /** Today in the member's own calendar, as a date field reads it (YYYY-MM-DD): a project can't end before it. */
 const localToday = (): string => {
@@ -181,7 +212,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 setAllMembersList((membersData as MemberSummary[]).map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
             }
         } catch (err: any) {
-            setError(err.message || 'Failed to fetch community enterprises');
+            setError(err.message || t('Failed to fetch community enterprises'));
         } finally {
             setLoading(false);
         }
@@ -238,11 +269,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 .then((resized) => {
                     if (pick !== photoPick.current) return;
                     setNewPhotos([resized]); // Single avatar
-                    setCreateError((shown) => (shown === PHOTO_READ_ERROR ? null : shown));
+                    setCreateError((shown) => (shown === t(PHOTO_WORDS.readError) ? null : shown));
                 })
                 .catch((err) => {
                     console.warn('[ProjectsPage] Could not read the picked photo:', err);
-                    if (pick === photoPick.current) setCreateError(PHOTO_READ_ERROR);
+                    if (pick === photoPick.current) setCreateError(t(PHOTO_WORDS.readError));
                 })
                 .finally(() => {
                     if (pick === photoPick.current) setPreparingPhoto(false);
@@ -255,15 +286,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         e.preventDefault();
         if (!identity || creating || preparingPhoto) return;
         if (!newTitle.trim()) {
-            setCreateError('Title is required');
+            setCreateError(t('Title is required'));
             return;
         }
         if (!newDescription.trim()) {
-            setCreateError('Purpose statement is required (docs/the-commons.md §2.1)');
+            setCreateError(t('Purpose statement is required (docs/the-commons.md §2.1)'));
             return;
         }
         if (newLifecycle === 'bounded' && (!newGoal || Number(newGoal) <= 0)) {
-            setCreateError('A project needs a goal in Beans');
+            setCreateError(t('A project needs a goal in Beans'));
             return;
         }
 
@@ -293,7 +324,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             setNewPhotos([]);
             await fetchEnterprises();
         } catch (err: any) {
-            setCreateError(err.message || 'Failed to propose enterprise');
+            setCreateError(err.message || t('Failed to propose enterprise'));
         } finally {
             setCreating(false);
         }
@@ -352,18 +383,21 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 No ground of its own, nor the two rows under it: the screen sits on the doodle wallpaper
                 like Home and the Market (index.css "Doodle wallpaper"); the cards keep their fills. */}
             <header className="px-4 pt-4 pb-3 flex flex-col gap-3">
+                {/* min-w-0 and break-words: a longer language's title and button wrap where they are, never off a 320 px screen.
+                    The button is not min-w-0 (max 50 %, so a longer language's word still breaks), and the row has no gap
+                    beside it, as before: English's "Commons" and "Propose" both stay whole at 320 px with 1.3x text. */}
                 <div className={`max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center ${decisionsMode === 'preview' && activeSection === 'decide' ? 'flex-wrap gap-3' : ''}`}>
-                    <div className={decisionsMode === 'preview' && activeSection === 'decide' ? 'min-w-0' : undefined}>
+                    <div className="min-w-0">
                         <h1 className="text-xl font-bold text-nature-950 dark:text-white tracking-tight flex items-center gap-2">
-                            <span>🌱</span> The Commons
+                            <span>🌱</span> <span className="min-w-0 break-words">{t('The Commons')}</span>
                         </h1>
-                        <p className="text-nature-700 dark:text-nature-300 text-sm mt-0.5">Community decisions, the Commons, and your groups: projects, enterprises and more</p>
+                        <p className="text-nature-700 dark:text-nature-300 text-sm mt-0.5">{t('Community decisions, the Commons, and your groups: projects, enterprises and more')}</p>
                     </div>
                     {identity && (
                         decisionsMode === 'preview' && activeSection === 'decide' ? (
                             <LocalCommunityAction
                                 feature="decisions"
-                                label="+ Propose"
+                                label={t('+ Propose')}
                                 onNearYou={onNavigate ? () => onNavigate('home') : undefined}
                                 onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined}
                             />
@@ -372,11 +406,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 onClick={() => {
                                     if (activeSection === 'decide') {
                                         if (!canProposeDecision) {
-                                            alert('You can propose a Decision once you have completed a trade.');
+                                            alert(t('You can propose a Decision once you have completed a trade.'));
                                             return;
                                         }
                                         if (hasOpenDecision) {
-                                            alert('You already have an open decision (limit 1 open decision per author).');
+                                            alert(t('You already have an open decision (limit 1 open decision per author).'));
                                             return;
                                         }
                                         setShowProposeDecision(true);
@@ -387,9 +421,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         setCreateError(null);
                                     }
                                 }}
-                                className="bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
+                                className="max-w-[50%] break-words leading-tight bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                             >
-                                {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
+                                {activeSection === 'groups' ? t('+ Create Group') : t('+ Propose')}
                             </button>
                         )
                     )}
@@ -408,25 +442,25 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     {enterprisesMode !== 'preview' && (
                         <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${!showsOwnVoiceCredits ? 'col-span-2' : ''}`}>
                             <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                                Commons Pool
+                                {t('Commons Pool')}
                             </div>
                             <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
-                                {balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0).toFixed(2) : '0.00'} 🫘
+                                {formatNumber(balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0) : 0, 2)} 🫘
                             </div>
                         </div>
                     )}
                     {showsOwnVoiceCredits && (
                         <div className={`bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 ${enterprisesMode === 'preview' ? 'col-span-2' : ''}`} data-testid="voice-credits-card">
                             <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                                Voice credits for money votes
+                                {t('Voice credits for money votes')}
                             </div>
                             <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
                                 {Math.floor(myPoolVoting?.voiceCredits ?? 0)}
                             </div>
                             <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
                                 {myPoolVoting && !myPoolVoting.hasCompletedTrade
-                                    ? 'Opens after your first completed trade'
-                                    : 'From completed trades · N votes cost N×N'}
+                                    ? t('Opens after your first completed trade')
+                                    : t('From completed trades · N votes cost N×N')}
                             </div>
                         </div>
                     )}
@@ -440,10 +474,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
                     Groups off a 320px screen at 1.3x text. */}
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
-                    {([
-                        { key: 'decide', emoji: '🗳️', label: 'Decide' },
-                        { key: 'groups', emoji: '👥', label: 'Groups' },
-                    ] as const).map(tab => (
+                    {SECTION_TABS.map(tab => (
                         <button
                             key={tab.key}
                             onClick={() => setActiveSection(tab.key)}
@@ -461,7 +492,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     </span>
                                 )}
                             </span>
-                            <span className="leading-tight">{tab.label}</span>
+                            <span className="leading-tight">{t(tab.label)}</span>
                         </button>
                     ))}
                 </div>
@@ -474,13 +505,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {activeSection === 'groups' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
                         <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
-                            {[
-                                { key: 'all', label: 'All' },
-                                { key: 'my_groups', label: 'My groups' },
-                                { key: 'projects', label: '🌱 Projects' },
-                                { key: 'enterprises', label: '🏛️ Enterprises' },
-                                { key: 'chat', label: '👥 Chat groups' },
-                            ].filter(option => !enterprisesPreview || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
+                            {GROUP_CHIPS.filter(option => !enterprisesPreview || (option.key !== 'projects' && option.key !== 'enterprises')).map(option => (
                                 <button
                                     key={option.key}
                                     onClick={() => setGroupCategoryFilter(option.key)}
@@ -490,7 +515,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
                                     }`}
                                 >
-                                    {option.label}
+                                    {t(option.label)}
                                 </button>
                             ))}
                         </div>
@@ -508,11 +533,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         onRefresh={fetchEnterprises}
                         onOpenPropose={() => {
                             if (!canProposeDecision) {
-                                alert('You can propose a Decision once you have completed a trade.');
+                                alert(t('You can propose a Decision once you have completed a trade.'));
                                 return;
                             }
                             if (hasOpenDecision) {
-                                alert('You already have an open decision (limit 1 open decision per author).');
+                                alert(t('You already have an open decision (limit 1 open decision per author).'));
                                 return;
                             }
                             setShowProposeDecision(true);
@@ -530,28 +555,31 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 <>
                 <div className="px-4 pt-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
                     <div className="p-3 bg-white dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 rounded-xl text-xs text-nature-800 dark:text-nature-300 leading-relaxed">
-                        👥 <strong>Groups:</strong> A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.
+                        <Sentence
+                            text={t('👥 {label} A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.')}
+                            parts={{ label: <strong>{t('Groups:')}</strong> }}
+                        />
                     </div>
                 </div>
                 {showChatGroups && (
                 <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4" data-testid="commons-chat-groups">
 
                     {loadingGroups ? (
-                        <div className="py-12 text-center text-sm text-nature-600 dark:text-nature-400">Loading groups...</div>
+                        <div className="py-12 text-center text-sm text-nature-600 dark:text-nature-400">{t('Loading groups...')}</div>
                     ) : filteredGroups.length === 0 ? (
                         <div className="text-center py-16 px-4 bg-white dark:bg-nature-950/40 rounded-2xl border border-nature-200 dark:border-nature-800/80">
                             <div className="text-4xl mb-3">👥</div>
-                            <h3 className="text-base font-bold text-nature-950 dark:text-white mb-1">No groups found</h3>
+                            <h3 className="text-base font-bold text-nature-950 dark:text-white mb-1">{t('No groups found')}</h3>
                             <p className="text-xs text-nature-600 dark:text-nature-400 max-w-xs mx-auto mb-4">
                                 {groupCategoryFilter === 'my_groups'
-                                    ? 'You have not joined any groups yet.'
-                                    : 'Start a working group, guild, or team to coordinate discussions.'}
+                                    ? t('You have not joined any groups yet.')
+                                    : t('Start a working group, guild, or team to coordinate discussions.')}
                             </p>
                             <button
                                 onClick={() => setShowCreateGroupModal(true)}
                                 className="px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-xs font-bold transition-colors"
                             >
-                                + Create a Group
+                                {t('+ Create a Group')}
                             </button>
                         </div>
                     ) : (
@@ -561,7 +589,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     key={g.id}
                                     role="button"
                                     tabIndex={0}
-                                    aria-label={`View details for group ${g.name}`}
+                                    aria-label={t('View details for group {name}', { name: g.name })}
                                     onClick={() => setSelectedGroupForDetail(g)}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' || e.key === ' ') {
@@ -576,11 +604,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             <h4 className="font-extrabold text-base text-nature-950 dark:text-white truncate">{g.name}</h4>
                                             <div className="flex items-center gap-2 mt-1">
                                                 <span className="text-[11px] font-bold text-nature-600 dark:text-nature-400 capitalize">
-                                                    🏷️ {g.category.replace(/_/g, ' ')}
+                                                    🏷️ {named(CATEGORY_WORDS, g.category, g.category.replace(/_/g, ' '))}
                                                 </span>
                                                 <span className="text-nature-600 dark:text-nature-400">•</span>
                                                 <span className="text-[11px] text-nature-600 dark:text-nature-400">
-                                                    {g.memberCount || 0} {g.memberCount === 1 ? 'member' : 'members'}
+                                                    {tn(g.memberCount || 0, '{n} member', '{n} members')}
                                                 </span>
                                             </div>
                                         </div>
@@ -590,11 +618,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                     ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                     : 'bg-nature-800 text-nature-300'
                                             }`}>
-                                                {g.viewerRole}
+                                                {named(ROLE_WORDS, g.viewerRole, g.viewerRole)}
                                             </span>
                                         ) : g.viewerStatus === 'pending_approval' ? (
                                             <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink">
-                                                Pending
+                                                {t('Pending', undefined, 'join request')}
                                             </span>
                                         ) : null}
                                     </div>
@@ -606,8 +634,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     )}
 
                                     <div className="flex items-center justify-between pt-1 border-t border-nature-100 dark:border-nature-900 text-[11px] text-nature-600 dark:text-nature-400">
-                                        <span>Join: {g.joinPolicy.replace(/_/g, ' ')}</span>
-                                        <span className="text-emerald-700 dark:text-emerald-500 font-bold hover:underline">View Details →</span>
+                                        <span>{t('Join: {policy}', { policy: named(JOIN_POLICY_WORDS, g.joinPolicy, g.joinPolicy.replace(/_/g, ' ')) })}</span>
+                                        <span className="text-emerald-700 dark:text-emerald-500 font-bold hover:underline">{t('View Details →')}</span>
                                     </div>
                                 </div>
                             ))}
@@ -616,7 +644,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 </div>
                 )}
                 {!showEnterprises ? null : loading ? (
-                <div className="p-8 text-center text-nature-600 dark:text-nature-500">Loading enterprises…</div>
+                <div className="p-8 text-center text-nature-600 dark:text-nature-500">{t('Loading enterprises…')}</div>
                 ) : error ? (
                     <div className="p-8 text-center text-red-700 dark:text-red-500">{error}</div>
                 ) : filteredEnterprises.length === 0 ? (
@@ -625,9 +653,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     !beansOn ? null : (
                     <div className="p-8 text-center text-nature-500 max-w-md mx-auto my-12">
                         <p className="text-4xl opacity-50 mb-3">🌱</p>
-                        <p className="text-base font-bold text-nature-950 dark:text-white mb-1">No enterprises found</p>
+                        <p className="text-base font-bold text-nature-950 dark:text-white mb-1">{t('No enterprises found')}</p>
                         <p className="text-sm text-nature-600 dark:text-nature-400 mb-6">
-                            Got an idea that benefits the community? Start an enterprise or propose a project to get started.
+                            {t('Got an idea that benefits the community? Start an enterprise or propose a project to get started.')}
                         </p>
                         {identity && (
                             <button
@@ -637,7 +665,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 }}
                                 className="bg-bp-sage-fill hover:bg-bp-sage-hover text-bp-sage-on px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
                             >
-                                + Propose a Project
+                                {t('+ Propose a Project')}
                             </button>
                         )}
                     </div>
@@ -667,11 +695,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     >
                         <div className="flex justify-between items-center">
                             <h2 id="propose-modal-title" className="text-lg font-black text-white">
-                                Propose an Enterprise / Project
+                                {t('Propose an Enterprise / Project')}
                             </h2>
                             <button
                                 type="button"
-                                aria-label="Close dialog"
+                                aria-label={t('Close dialog')}
                                 onClick={() => setShowNewModal(false)}
                                 className="text-nature-400 hover:text-white text-lg font-bold min-w-[44px] min-h-[44px] flex items-center justify-center -mr-2"
                             >
@@ -689,7 +717,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {/* Lifecycle choice: Bounded Project vs Ongoing Enterprise */}
                             <div>
                                 <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-2">
-                                    Initiative Type
+                                    {t('Initiative Type')}
                                 </label>
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
@@ -701,8 +729,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
                                         }`}
                                     >
-                                        <span>🌱 Project</span>
-                                        <span className="text-[10px] font-normal opacity-80">A leader, a goal, an end date</span>
+                                        <span>{t('🌱 Project')}</span>
+                                        <span className="text-[10px] font-normal opacity-80">{t('A leader, a goal, an end date')}</span>
                                     </button>
                                     <button
                                         type="button"
@@ -713,8 +741,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
                                         }`}
                                     >
-                                        <span>🏛️ Enterprise</span>
-                                        <span className="text-[10px] font-normal opacity-80">Keepers; it keeps going</span>
+                                        <span>{t('🏛️ Enterprise')}</span>
+                                        <span className="text-[10px] font-normal opacity-80">{t('Keepers; it keeps going')}</span>
                                     </button>
                                 </div>
                             </div>
@@ -722,12 +750,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {/* Title */}
                             <div>
                                 <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
-                                    Name / Title
+                                    {t('Name / Title')}
                                 </label>
                                 <input
                                     type="text"
                                     required
-                                    placeholder="e.g. Community Tool Shed or Shade House"
+                                    placeholder={t('e.g. Community Tool Shed or Shade House')}
                                     value={newTitle}
                                     onChange={(e) => setNewTitle(e.target.value)}
                                     className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -737,12 +765,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {/* Purpose Statement (required per docs §2.1) */}
                             <div>
                                 <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
-                                    Purpose Statement <span className="text-emerald-400">*</span>
+                                    {t('Purpose Statement')} <span className="text-emerald-400">*</span>
                                 </label>
                                 <textarea
                                     required
                                     rows={3}
-                                    placeholder="State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November')"
+                                    placeholder={t("State clearly what this enterprise exists to do (e.g. 'We build and maintain a communal shade house by November')")}
                                     value={newDescription}
                                     onChange={(e) => setNewDescription(e.target.value)}
                                     className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -754,14 +782,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
-                                            Goal Amount (🫘 Beans)
+                                            {t('Goal Amount (🫘 Beans)')}
                                         </label>
                                         <input
                                             type="number"
                                             required
                                             min="1"
                                             step="1"
-                                            placeholder="e.g. 500"
+                                            placeholder={t('e.g. {amount}', { amount: 500 })}
                                             value={newGoal}
                                             onChange={(e) => setNewGoal(e.target.value === '' ? '' : Number(e.target.value))}
                                             className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -769,7 +797,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
-                                            Deadline (Optional)
+                                            {t('Deadline (Optional)')}
                                         </label>
                                         <input
                                             type="date"
@@ -785,7 +813,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             {/* Photo / Avatar upload */}
                             <div>
                                 <label className="block text-xs font-bold text-nature-400 uppercase tracking-wider mb-1">
-                                    Cover Photo / Avatar (Optional)
+                                    {t('Cover Photo / Avatar (Optional)')}
                                 </label>
                                 <input
                                     type="file"
@@ -795,13 +823,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 />
                                 {newPhotos.length > 0 && (
                                     <div className="mt-2 flex items-center gap-2">
-                                        <img src={newPhotos[0]} alt="Preview" className="w-12 h-12 rounded-xl object-cover border border-nature-700" />
+                                        <img src={newPhotos[0]} alt={t('Preview')} className="w-12 h-12 rounded-xl object-cover border border-nature-700" />
                                         <button
                                             type="button"
                                             onClick={() => setNewPhotos([])}
                                             className="text-xs text-red-400 hover:underline"
                                         >
-                                            Remove photo
+                                            {t('Remove photo')}
                                         </button>
                                     </div>
                                 )}
@@ -813,14 +841,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     onClick={() => setShowNewModal(false)}
                                     className="flex-1 py-2.5 rounded-xl border border-nature-700 text-nature-300 font-bold text-sm hover:bg-nature-800"
                                 >
-                                    Cancel
+                                    {t('Cancel')}
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={creating || preparingPhoto}
                                     className="flex-1 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm disabled:opacity-50"
                                 >
-                                    {creating ? 'Submitting…' : preparingPhoto ? 'Preparing photo…' : 'Propose Enterprise 🌱'}
+                                    {creating ? t('Submitting…') : preparingPhoto ? t('Preparing photo…') : t('Propose Enterprise 🌱')}
                                 </button>
                             </div>
                         </form>

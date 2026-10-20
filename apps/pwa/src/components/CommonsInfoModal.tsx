@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { formatNumber, t, tn, word } from '@beanpool/core';
+import { Sentence } from './Sentence';
 
 /**
  * CommonsInfoModal — Explains the Community Commons fund mechanics:
@@ -13,14 +15,22 @@ const BRACKETS = [
     { min: 2000, max: Infinity, rate: 2.5, color: '#ef4444' },
 ];
 
+// word() keys (the phone's), put through t() where they are shown.
 const FLOW_STEPS = [
-    { icon: '🤝', label: 'My Trade', desc: 'Credits transacted through community exchange' },
-    { icon: '٪', label: 'Transaction Fee', desc: 'Flat 1.5% fee on completed marketplace trades (direct member transfers are free)' },
-    { icon: '🌿', label: 'Circulation Fee', desc: 'Progressive monthly contribution from positive balances' },
-    { icon: '🏛️', label: 'Commons Pool', desc: 'Community fund growing from all community and circulation fee contributions' },
-    { icon: '🗳️', label: 'Decisions & Polls', desc: 'Binding Decisions and feed Polls (1m1v for roles/polls; QV for pool grants)' },
-    { icon: '🚀', label: 'Enterprises & Grants', desc: 'Passed initiatives funded automatically from the Commons Pool' },
+    { icon: '🤝', label: word('My Trade'), desc: word('Credits transacted through community exchange') },
+    { icon: '٪', label: word('Transaction Fee'), desc: word('Flat 1.5% fee on completed marketplace trades (direct member transfers are free)') },
+    { icon: '🌿', label: word('Circulation Fee'), desc: word('Progressive monthly contribution from positive balances') },
+    { icon: '🏛️', label: word('Commons Pool'), desc: word('Community fund growing from all community and circulation fee contributions') },
+    { icon: '🗳️', label: word('Decisions & Polls'), desc: word('Binding Decisions and feed Polls (1m1v for roles/polls; QV for pool grants)') },
+    { icon: '🚀', label: word('Enterprises & Grants'), desc: word('Passed initiatives funded automatically from the Commons Pool') },
 ];
+
+/** The worked example's sums, numbers in the language's way: "200 × 0% = 0.0 + 300 × 1.0% = 3.0 + 100 × 1.5% = 1.5". */
+function exampleWorking(): string {
+    return ([[200, 0, 0], [300, 1, 3], [100, 1.5, 1.5]] as const)
+        .map(([amount, rate, fee]) => `${formatNumber(amount)} × ${formatNumber(rate, rate === 0 ? 0 : 1)}% = ${formatNumber(fee, 1)}`)
+        .join(' + ');
+}
 
 interface Props {
     isOpen: boolean;
@@ -59,17 +69,17 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
                     <div className="flex items-center gap-2">
                         <span className="text-xl" aria-hidden="true">🏛️</span>
-                        <h2 id="commons-modal-title" className="font-bold text-nature-900 dark:text-white text-lg">Community Commons</h2>
+                        <h2 id="commons-modal-title" className="font-bold text-nature-900 dark:text-white text-lg">{t('Community Commons')}</h2>
                     </div>
-                    <button type="button" onClick={onClose} className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer text-lg font-bold p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl transition-colors" aria-label="Close information modal">✕</button>
+                    <button type="button" onClick={onClose} className="min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center text-nature-500 hover:text-nature-900 dark:hover:text-white bg-transparent border-none cursor-pointer text-lg font-bold p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-xl transition-colors" aria-label={t('Close information modal')}>✕</button>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-1 p-3 pb-0" role="tablist" aria-label="Commons information tabs">
+                <div className="flex gap-1 p-3 pb-0" role="tablist" aria-label={t('Commons information tabs')}>
                     {[
-                        { id: 'flow' as const, label: '🌊 How It Works' },
-                        { id: 'brackets' as const, label: '📊 Circulation Fees' },
-                        { id: 'qv' as const, label: '🗳️ Voting' },
+                        { id: 'flow' as const, icon: '🌊', label: t('How It Works') },
+                        { id: 'brackets' as const, icon: '📊', label: t('Circulation Fees') },
+                        { id: 'qv' as const, icon: '🗳️', label: t('Voting') },
                     ].map(tab => (
                         <button
                             key={tab.id}
@@ -90,7 +100,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                 transition: 'all 0.2s',
                             }}
                         >
-                            {tab.label}
+                            {tab.icon} {tab.label}
                         </button>
                     ))}
                 </div>
@@ -100,9 +110,9 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                     {activeTab === 'flow' && (
                         <div>
                             <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16, lineHeight: 1.5 }}>
-                                The Community Commons is a self-sustaining fund that redistributes value back to the community through democratically-voted projects.
+                                {t('The Community Commons is a self-sustaining fund that redistributes value back to the community through democratically-voted projects.')}
                                 <span style={{ display: 'block', marginTop: 10, color: '#10b981', fontWeight: 600 }}>
-                                    <span aria-hidden="true">🌱 </span>100% Community-Owned: All collected fees remain inside the pool for local grants and solvency—never taken for private profit.
+                                    <span aria-hidden="true">🌱 </span>{t('100% Community-Owned: All collected fees remain inside the pool for local grants and solvency—never taken for private profit.')}
                                 </span>
                             </p>
 
@@ -115,8 +125,8 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                     marginBottom: 16,
                                     textAlign: 'center',
                                 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: 1 }}>Current Commons Balance</div>
-                                    <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginTop: 4 }}>{commonsBalance.toFixed(2)} 🫘</div>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: 1 }}>{t('Current Commons Balance')}</div>
+                                    <div style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginTop: 4 }}>{formatNumber(commonsBalance, 2)} 🫘</div>
                                 </div>
                             )}
 
@@ -134,8 +144,8 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                         }}>
                                             <span style={{ fontSize: 24 }} aria-hidden="true">{step.icon}</span>
                                             <div>
-                                                <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>{step.label}</div>
-                                                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{step.desc}</div>
+                                                <div style={{ fontWeight: 800, fontSize: 14, color: '#fff' }}>{t(step.label)}</div>
+                                                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{t(step.desc)}</div>
                                             </div>
                                         </div>
                                         {i < FLOW_STEPS.length - 1 && (
@@ -152,20 +162,26 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                 borderRadius: 12,
                                 border: '1px solid rgba(255, 255, 255, 0.05)',
                             }}>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Solvency & Account Pruning</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>{t('Solvency & Account Pruning')}</div>
                                 <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 12, lineHeight: 1.5 }}>
-                                    As a zero-sum mutual credit network, pruning inactive accounts requires balancing the ledger:
+                                    {t('As a zero-sum mutual credit network, pruning inactive accounts requires balancing the ledger:')}
                                 </p>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
                                     <span style={{ fontSize: 18, marginTop: 1 }} aria-hidden="true">🛡️</span>
                                     <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.4 }}>
-                                        <strong style={{ color: '#fff' }}>Bad Debt Payouts:</strong> If an inactive account is pruned with a negative balance, the Commons Pool pays off their outstanding debt to maintain zero-sum equilibrium.
+                                        <Sentence
+                                            text={t('{label} If an inactive account is pruned with a negative balance, the Commons Pool pays off their outstanding debt to maintain zero-sum equilibrium.')}
+                                            parts={{ label: <strong style={{ color: '#fff' }}>{t('Bad Debt Payouts:')}</strong> }}
+                                        />
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                                     <span style={{ fontSize: 18, marginTop: 1 }} aria-hidden="true">✅</span>
                                     <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.4 }}>
-                                        <strong style={{ color: '#fff' }}>Surplus Reclaims:</strong> If an inactive account is pruned with a positive balance, the community reclaims the surplus, transferring it into the Commons Pool to recycle the dormant value.
+                                        <Sentence
+                                            text={t('{label} If an inactive account is pruned with a positive balance, the community reclaims the surplus, transferring it into the Commons Pool to recycle the dormant value.')}
+                                            parts={{ label: <strong style={{ color: '#fff' }}>{t('Surplus Reclaims:')}</strong> }}
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -175,8 +191,10 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                     {activeTab === 'brackets' && (
                         <div>
                             <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16, lineHeight: 1.5 }}>
-                                Circulation Fee is a <strong style={{ color: '#fff' }}>progressive monthly contribution</strong> from positive balances.
-                                Like progressive fee brackets, only the portion of your balance within each tier is charged at that tier's rate.
+                                <Sentence
+                                    text={t("Circulation Fee is a {contribution} from positive balances. Like progressive fee brackets, only the portion of your balance within each tier is charged at that tier's rate.")}
+                                    parts={{ contribution: <strong style={{ color: '#fff' }}>{t('progressive monthly contribution')}</strong> }}
+                                />
                             </p>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -192,7 +210,7 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                         }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                                                 <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{range} 🫘</span>
-                                                <span style={{ fontSize: 14, fontWeight: 900, color: b.color }}>{b.rate}%</span>
+                                                <span style={{ fontSize: 14, fontWeight: 900, color: b.color }}>{t('{rate}%', { rate: b.rate })}</span>
                                             </div>
                                             <div style={{ height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' }}>
                                                 <div style={{
@@ -215,10 +233,16 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                 borderRadius: 10,
                                 border: '1px solid rgba(59, 130, 246, 0.2)',
                             }}>
-                                <div style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', marginBottom: 4 }}>Example</div>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', marginBottom: 4 }}>{t('Example')}</div>
                                 <div style={{ fontSize: 13, color: '#d1d5db', lineHeight: 1.5 }}>
-                                    A balance of <strong style={{ color: '#fff' }}>600 🫘</strong> pays:<br />
-                                    200 × 0% = 0.0 + 300 × 1.0% = 3.0 + 100 × 1.5% = 1.5 = <strong style={{ color: '#10b981' }}>4.5 🫘/month</strong>
+                                    <Sentence
+                                        text={t('A balance of {amount} {currency} pays:')}
+                                        parts={{ amount: <strong style={{ color: '#fff' }}>{formatNumber(600)}</strong>, currency: <strong style={{ color: '#fff' }}>🫘</strong> }}
+                                    /><br />
+                                    <Sentence
+                                        text={t('{working} = {total} {currency}/month', { working: exampleWorking() })}
+                                        parts={{ total: <strong style={{ color: '#10b981' }}>{formatNumber(4.5, 1)}</strong>, currency: <strong style={{ color: '#10b981' }}>🫘</strong> }}
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -227,7 +251,10 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                     {activeTab === 'qv' && (
                         <div>
                             <p style={{ fontSize: 13, color: '#9ca3af', marginBottom: 16, lineHeight: 1.5 }}>
-                                <strong style={{ color: '#fff' }}>Quadratic Voting</strong> ensures fair allocation — many small voices outweigh a few large ones.
+                                <Sentence
+                                    text={t('{qv} ensures fair allocation — many small voices outweigh a few large ones.')}
+                                    parts={{ qv: <strong style={{ color: '#fff' }}>{t('Quadratic Voting')}</strong> }}
+                                />
                             </p>
 
                             <div style={{
@@ -237,9 +264,9 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                 border: '1px solid rgba(139, 92, 246, 0.2)',
                                 marginBottom: 16,
                             }}>
-                                <div style={{ fontSize: 11, fontWeight: 800, color: '#a78bfa', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>Formula</div>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: '#a78bfa', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>{t('Formula')}</div>
                                 <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', textAlign: 'center', fontFamily: 'monospace' }}>
-                                    Cost = Votes²
+                                    {t('Cost = Votes²')}
                                 </div>
                             </div>
 
@@ -254,17 +281,21 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                         borderRadius: 8,
                                         border: '1px solid rgba(255,255,255,0.05)',
                                     }}>
-                                        <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{n} vote{n > 1 ? 's' : ''}</span>
-                                        <span style={{ fontSize: 14, fontWeight: 900, color: '#a78bfa' }}>{n * n} credits</span>
+                                        <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{tn(n, '{n} vote', '{n} votes')}</span>
+                                        {/* English writes one form for both, as it always has. */}
+                                        <span style={{ fontSize: 14, fontWeight: 900, color: '#a78bfa' }}>{tn(n * n, '{n} credits', '{n} credits')}</span>
                                     </div>
                                 ))}
                             </div>
 
                             <div style={{ marginTop: 16 }}>
-                                <div style={{ fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>How Credits Are Earned</div>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: '#10b981', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>{t('How Credits Are Earned')}</div>
                                 <p style={{ fontSize: 13, color: '#d1d5db', lineHeight: 1.5 }}>
-                                    Voice credits come from your <strong style={{ color: '#fff' }}>completed trades</strong> — the beans you have traded with other members, counted up to a cap per trading partner. You get the full amount again on every Decision about community money; they are never used up. Voting on community money opens after your first completed trade.
-                                    The more you trade and contribute, the more voice you earn in shaping community projects.
+                                    <Sentence
+                                        text={t('Voice credits come from your {trades} — the beans you have traded with other members, counted up to a cap per trading partner. You get the full amount again on every Decision about community money; they are never used up. Voting on community money opens after your first completed trade.')}
+                                        parts={{ trades: <strong style={{ color: '#fff' }}>{t('completed trades')}</strong> }}
+                                    />
+                                    <span> {t('The more you trade and contribute, the more voice you earn in shaping community projects.')}</span>
                                 </p>
                             </div>
 
@@ -275,14 +306,15 @@ export function CommonsInfoModal({ isOpen, onClose, commonsBalance }: Props) {
                                 borderRadius: 10,
                                 border: '1px solid rgba(245, 158, 11, 0.2)',
                             }}>
-                                <div style={{ fontSize: 11, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 4 }}>Process</div>
+                                <div style={{ fontSize: 11, fontWeight: 800, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 4 }}>{t('Process')}</div>
                                 <div style={{ fontSize: 12, color: '#d1d5db', lineHeight: 1.5 }}>
-                                    1. Members with a completed trade or earned standing, and node admins, can propose a Decision<br />
-                                    2. Voting opens at once and runs for 7 days; members who joined before it opened can vote<br />
-                                    3. Ballots are secret — everyone sees the totals and their own vote<br />
-                                    4. Votes on community money cost voice credits from your completed trades; other Decisions are one member, one vote<br />
-                                    5. Voting closes → passed Decisions execute automatically<br />
-                                    <em style={{ color: '#9ca3af' }}>Fund release is self-executing by the node when quorum and majority are met.</em>
+                                    {/* One step a line, each whole in the member's language. */}
+                                    <span className="block">{t('1. Members with a completed trade or earned standing, and node admins, can propose a Decision')}</span>
+                                    <span className="block">{t('2. Voting opens at once and runs for 7 days; members who joined before it opened can vote')}</span>
+                                    <span className="block">{t('3. Ballots are secret — everyone sees the totals and their own vote')}</span>
+                                    <span className="block">{t('4. Votes on community money cost voice credits from your completed trades; other Decisions are one member, one vote')}</span>
+                                    <span className="block">{t('5. Voting closes → passed Decisions execute automatically')}</span>
+                                    <em style={{ color: '#9ca3af' }}>{t('Fund release is self-executing by the node when quorum and majority are met.')}</em>
                                 </div>
                             </div>
                         </div>

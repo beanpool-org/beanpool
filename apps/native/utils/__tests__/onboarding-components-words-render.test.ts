@@ -137,6 +137,7 @@ import { RecoveryKitButtons } from '../../components/RecoveryKitButtons';
 import { CopyClearsNote, NoScreenLockNote } from '../../components/WordsOnScreen';
 import { protectionFrom } from '../protection-state';
 import { VAULT_MESSAGES } from '../vault';
+import { SsoSignInError } from '../sso-signin';
 import { noVault, useVault } from './fake-vault';
 
 const WORDS = 'apple banana cherry delta eagle fabric garden hollow island jungle kettle lemon'.split(' ');
@@ -289,6 +290,15 @@ describe('the sign-in sheet (SsoEnrolSheet)', () => {
         await mount(open());
         expect(host!.textContent).toContain(pseudoLocalise('Connecting with {provider}...').replace('{provider}', 'Google'));
         check('the sheet, connecting');
+    });
+    it("a sign-in that timed out: the sheet's sentence and the timeout's, the provider as sso-signin.ts writes it", async () => {
+        const timedOut = Promise.reject(new SsoSignInError('provider', 'google sign-in timed out.'));
+        timedOut.catch(() => {});
+        sheet.answer = timedOut;
+        await mount(open());
+        const reason = pseudoLocalise('{provider} sign-in timed out.').replace('{provider}', 'google');
+        expect(host!.textContent).toContain(pseudoLocalise('{provider} sign-in failed: {reason}').replace('{provider}', 'Google').replace('{reason}', reason));
+        check('the sheet, timed out');
     });
     for (const vault of [true, false]) {
         it(`${vault ? 'a vault build' : 'a community build'}: linked over another account's sign-in, stays up until Done`, async () => {

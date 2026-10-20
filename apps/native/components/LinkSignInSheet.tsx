@@ -9,6 +9,7 @@ import { linkSignIn, LINK_MESSAGES, type LinkAnswer, type LinkRefusal } from '..
 import { finishOneWayBack } from '../utils/one-way-back';
 import { signInCopiesAt } from '../utils/vault-config';
 import type { BeanPoolIdentity } from '../utils/identity';
+import { welcomeLineWords } from './welcome/welcome-lines';
 import { t, word, type WordKey } from '@beanpool/core';
 
 /**
@@ -21,8 +22,9 @@ import { t, word, type WordKey } from '@beanpool/core';
  *
  * utils/join-link.ts signs the link and stays off the words layer (core recovery-path-files' rule), so its sentences are
  * translated here: a refusal by its exact English (LINK_REFUSAL_WORDS), the added notice as linkedNotice writes it
- * (utils/__tests__/key-components-words-render.test.ts holds both to join-link.ts). A refusal with a time in it, and an
- * error a sign-in throws, are shown as they came.
+ * (utils/__tests__/key-components-words-render.test.ts holds both to join-link.ts). A refusal with a time in it is shown
+ * as it came. An error a sign-in throws is read through welcome's table, as the enrol sheet reads it (welcome-lines.ts):
+ * the sign-in files' own sentences in the member's language, a provider's own words as they came.
  */
 
 /** join-link.ts LINK_MESSAGES, with `{when}` as `sentence()` writes it when there is no time: "later". */
@@ -152,7 +154,7 @@ export function LinkSignInSheet({
                 setStep('choose');
                 return;
             }
-            setMessage((e as Error)?.message || t('Your sign-in could not be added, and nothing was changed. Please try again.'));
+            setMessage((e as Error)?.message ? welcomeLineWords((e as Error).message) : t('Your sign-in could not be added, and nothing was changed. Please try again.'));
             setStep('error');
         } finally {
             setNotice(null);

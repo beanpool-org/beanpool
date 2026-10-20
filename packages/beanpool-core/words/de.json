@@ -2,7 +2,7 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -672,5 +672,14 @@
   "I thrive in spontaneous, novel settings": "Ich mag spontane, abwechslungsreiche Umgebungen",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "Ich habe Geduld für unterschiedliche Tempi und achte auf eine harmonische Atmosphäre.",
   "I push for faster progress when needed": "Wenn nötig, treibe ich das Tempo an",
-  "I push for higher standards when needed": "Wenn nötig, poche ich auf höhere Standards"
+  "I push for higher standards when needed": "Wenn nötig, poche ich auf höhere Standards",
+  "Type an amount.": "Gib einen Betrag ein.",
+  "The amount can’t be below 0.": "Der Betrag darf nicht unter 0 liegen.",
+  "Type the amount without thousands separators, like {example}.": "Gib den Betrag ohne Tausendertrennzeichen ein, wie {example}.",
+  "Type one decimal mark at most, like {example}.": "Gib höchstens ein Dezimaltrennzeichen ein, wie {example}.",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "one": "Gib höchstens {n} Nachkommastelle ein, wie {example}.",
+    "other": "Gib höchstens {n} Nachkommastellen ein, wie {example}."
+  },
+  "Type the amount as a number, like {example}.": "Gib den Betrag als Zahl ein, wie {example}."
 }

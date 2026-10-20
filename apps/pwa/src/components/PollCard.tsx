@@ -22,10 +22,9 @@ import { type PollOption, type PollVoteRecord } from '../lib/marketplace';
 import { votePoll, closePoll, type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
-import { INFORMAL_POLL_NOTE } from '../lib/informal-polls';
 import { marked, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine, type LocalCommunityWays } from './LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, t, tn, upperCase } from '@beanpool/core';
 import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
 
 interface PollCardProps {
@@ -67,7 +66,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     const openVote = livePost.pollOpenVote === true || (livePost.pollOpenVote === undefined && Array.isArray(livePost.pollVotes) && livePost.pollVotes.length > 0);
     const isAuthor = Boolean(identity?.publicKey && livePost.authorPublicKey === identity.publicKey);
     const isClosed = livePost.status === 'completed' || (livePost.pollClosesAt ? new Date(livePost.pollClosesAt).getTime() <= Date.now() : false);
-    const authorName = livePost.authorCallsign || (livePost.authorPublicKey ? livePost.authorPublicKey.slice(0, 6) : 'Anonymous');
+    const authorName = livePost.authorCallsign || (livePost.authorPublicKey ? livePost.authorPublicKey.slice(0, 6) : t('Anonymous'));
     const avatarSrc = resolveAvatarUrl((livePost as any).authorAvatarUrl || (livePost as any).author_avatar);
 
     const rawOptions = livePost.pollOptions;
@@ -95,11 +94,11 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
 
     const handleVote = async (optionId: string) => {
         if (isClosed) {
-            setError('This poll has ended and can no longer receive votes.');
+            setError(t('This poll has ended and can no longer receive votes.'));
             return;
         }
         if (!identity) {
-            setError('Please connect your member identity to vote.');
+            setError(t('Please connect your member identity to vote.'));
             return;
         }
 
@@ -112,14 +111,14 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             }
             onVoteSuccess?.();
         } catch (err: any) {
-            setError(err.message || 'Could not record your vote.');
+            setError(err.message || t('Could not record your vote.'));
         } finally {
             setVotingOptionId(null);
         }
     };
 
     const handleClosePoll = async () => {
-        if (!window.confirm('Are you sure you want to close this poll early? No more votes will be accepted.')) {
+        if (!window.confirm(t('Are you sure you want to close this poll early? No more votes will be accepted.'))) {
             return;
         }
 
@@ -134,22 +133,22 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             }
             onVoteSuccess?.();
         } catch (err: any) {
-            setError(err.message || 'Failed to close poll.');
+            setError(err.message || t('Failed to close poll.'));
         } finally {
             setIsClosing(false);
         }
     };
 
     const formatTimeRemaining = () => {
-        if (isClosed) return 'Closed';
+        if (isClosed) return t('Closed', undefined, 'poll');
         const closesAt = livePost.pollClosesAt;
-        if (!closesAt) return 'Active';
+        if (!closesAt) return t('Active', undefined, 'poll');
         const diffMs = new Date(closesAt).getTime() - Date.now();
-        if (diffMs <= 0) return 'Closed';
+        if (diffMs <= 0) return t('Closed', undefined, 'poll');
         const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        if (diffHours < 24) return `Closes in ${diffHours}h`;
+        if (diffHours < 24) return t('Closes in {n}h', { n: diffHours });
         const diffDays = Math.floor(diffHours / 24);
-        return `Closes in ${diffDays}d`;
+        return t('Closes in {n}d', { n: diffDays });
     };
 
     return (
@@ -158,7 +157,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 font-black text-[10px] tracking-wider uppercase px-2.5 py-1 rounded-lg border border-purple-300/40">
-                        <span aria-hidden="true">🗳️ </span>POLL
+                        <span aria-hidden="true">🗳️ </span>{t('POLL')}
                     </span>
                     <span
                         className={`text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border ${
@@ -176,11 +175,11 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                         type="button"
                         onClick={handleClosePoll}
                         disabled={isClosing}
-                        aria-label={isClosing ? 'Closing poll...' : 'Close poll'}
+                        aria-label={isClosing ? t('Closing poll...') : t('Close poll')}
                         aria-busy={isClosing}
                         className="text-xs font-bold text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-900/40 rounded-lg px-3 py-2 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                     >
-                        {isClosing ? 'Closing...' : 'Close Poll'}
+                        {isClosing ? t('Closing...') : t('Close Poll')}
                     </button>
                 )}
             </div>
@@ -191,7 +190,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                 <button
                     type="button"
                     onClick={() => onOpenProfile?.(livePost.authorPublicKey)}
-                    aria-label={`View ${authorName}'s profile`}
+                    aria-label={t("View {name}'s profile", { name: authorName })}
                     className="flex items-center gap-2 cursor-pointer group bg-transparent border-0 p-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                 >
                     {avatarSrc ? (
@@ -202,11 +201,11 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                         />
                     ) : (
                         <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 flex items-center justify-center text-[10px] font-black">
-                            {authorName.charAt(0).toUpperCase()}
+                            {upperCase(authorName.charAt(0))}
                         </div>
                     )}
                     <span className="text-xs font-bold text-nature-600 dark:text-nature-300 group-hover:text-nature-900 dark:group-hover:text-white transition-colors">
-                        {authorName} {isAuthor && <span className="text-blue-600 dark:text-blue-400 font-extrabold">(You)</span>}
+                        {authorName} {isAuthor && <span className="text-blue-600 dark:text-blue-400 font-extrabold">{t('(You)')}</span>}
                     </span>
                 </button>
             </div>
@@ -241,7 +240,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                 aria-valuenow={pct}
                                 aria-valuemin={0}
                                 aria-valuemax={100}
-                                aria-label={`${opt.text}: ${pct}% of votes`}
+                                aria-label={t('{option}: {pct}% of votes', { option: opt.text, pct })}
                                 className={`absolute top-0 bottom-0 left-0 transition-all duration-500 rounded-l-xl ${
                                     isVoted
                                         ? 'bg-purple-200/70 dark:bg-purple-800/50'
@@ -251,8 +250,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                             />
 
                             {/* Option Row Content */}
-                            <div className="relative z-10 flex items-center justify-between gap-3 text-xs">
-                                <div className="flex items-center gap-2 min-w-0">
+                            {/* The answer keeps at least three-fifths of the row; a percentage a longer language writes wider than
+                                the rest drops to its own line rather than cutting what the member wrote. */}
+                            <div className="relative z-10 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs">
+                                <div className="flex items-center gap-2 min-w-0 flex-1 basis-3/5">
                                     <div
                                         aria-hidden="true"
                                         className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 border text-[9px] font-black ${
@@ -268,9 +269,9 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                     </span>
                                 </div>
 
-                                <div className="flex items-center gap-2 flex-shrink-0 text-right">
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-auto text-right">
                                     <span className="font-black text-nature-700 dark:text-nature-300">
-                                        {isVotingThis ? 'Voting...' : `${pct}%`}
+                                        {isVotingThis ? t('Voting...') : t('{rate}%', { rate: pct })}
                                     </span>
                                     <span className="text-[10px] text-nature-400 dark:text-nature-400">
                                         ({count})
@@ -315,13 +316,14 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* On the global community: a show of opinion, never a decision. Said to visitors too, before they join to vote. */}
             {informal && (
             <p className="mb-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300" data-testid="poll-informal-note">
-                <span aria-hidden="true">💬 </span>{INFORMAL_POLL_NOTE}
+                {/* lib/informal-polls.ts INFORMAL_POLL_NOTE, the phone's key (utils/node-profile.ts). */}
+                <span aria-hidden="true">💬 </span>{t('An informal poll; it decides nothing')}
             </p>
             )}
             {/* Decisions live in a local community here: where one would bind, said once under the note (design §1 row 7). */}
             {decisionsMarked && (
             <div className="mb-1" data-testid="poll-decision-line">
-                <LocalCommunityLine feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} {...localWays} />
+                <LocalCommunityLine feature="decisions" text={t(LOCAL_COMMUNITY_LINES.poll)} {...localWays} />
             </div>
             )}
 
@@ -336,11 +338,11 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* Which ballot this is, said before anyone votes: anonymous unless its creator made it an open vote. */}
             {!visitor && (openVote ? (
             <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-open-ballot-note">
-                <span aria-hidden="true">👁️ </span>Open vote: members can see who chose what
+                <span aria-hidden="true">👁️ </span>{t('Open vote: members can see who chose what')}
             </p>
             ) : (
             <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-anonymous-note">
-                <span aria-hidden="true">🔒 </span>Anonymous: everyone sees only the totals
+                <span aria-hidden="true">🔒 </span>{t('Anonymous: everyone sees only the totals')}
             </p>
             ))}
 
@@ -354,7 +356,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* Footer: Turnout and Voter List Toggle */}
             <div className="mt-auto pt-2 border-t border-nature-100 dark:border-nature-800 flex items-center justify-between text-xs text-nature-500 dark:text-nature-400">
                 <span className="font-semibold">
-                    <span aria-hidden="true">📊 </span>{totalVotes} vote{totalVotes === 1 ? '' : 's'} cast
+                    <span aria-hidden="true">📊 </span>{tn(totalVotes, '{n} vote cast', '{n} votes cast')}
                 </span>
 
                 {!visitor && openVote && votesList.length > 0 && (
@@ -365,7 +367,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                         aria-controls="poll-voters-list"
                         className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer py-2 px-2.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/40 min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
                     >
-                        {showVoters ? 'Hide Voters ▲' : `Show Voters (${votesList.length}) ▼`}
+                        {showVoters ? t('Hide Voters ▲') : t('Show Voters ({n}) ▼', { n: votesList.length })}
                     </button>
                 )}
             </div>
@@ -374,7 +376,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {!visitor && openVote && showVoters && votesList.length > 0 && (
                 <div id="poll-voters-list" className="mt-2.5 pt-2 border-t border-purple-100 dark:border-purple-900/40 max-h-36 overflow-y-auto space-y-1 text-xs">
                     <p className="text-[10px] uppercase tracking-wider font-extrabold text-nature-400 mb-1">
-                        Open vote
+                        {t('Open vote')}
                     </p>
                     {votesList.map((vote, idx) => {
                         const opt = optionsById.get(vote.optionId);
@@ -399,7 +401,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             {/* Village Notice */}
             {!visitor && (
             <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-400 text-center">
-                <span aria-hidden="true">ℹ️ </span>{openVote ? 'Open vote' : 'Anonymous vote'} · Re-voting overwrites choice
+                <span aria-hidden="true">ℹ️ </span>{openVote ? t('Open vote · Re-voting overwrites choice') : t('Anonymous vote · Re-voting overwrites choice')}
             </p>
             )}
         </div>

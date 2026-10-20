@@ -1126,8 +1126,20 @@ router.post('/api/community/register', async (ctx) => {
         ctx.body = { error: 'publicKey and callsign are required' };
         return;
     }
-    const member = registerMember(publicKey, callsign.slice(0, 20));
-    ctx.body = { success: true, member };
+    try {
+        const member = registerMember(publicKey, callsign.slice(0, 20));
+        if (!member) {
+            ctx.status = 400;
+            ctx.body = { error: 'Failed to register member' };
+            return;
+        }
+        ctx.body = { success: true, member };
+    } catch (e: any) {
+        // registerMember turns every refusal into null (above); anything it throws is a server fault, so 500.
+        console.error('❌ Server Error registering member:', e);
+        ctx.status = 500;
+        ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
+    }
 });
 
 // ===================== INVITE API (PUBLIC) =====================

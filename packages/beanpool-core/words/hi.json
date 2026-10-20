@@ -2,7 +2,7 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -672,5 +672,14 @@
   "I thrive in spontaneous, novel settings": "मैं नए और सहज माहौल में खूब खिलता हूँ",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "मैं अलग-अलग गतियों के प्रति धैर्य रखता हूँ और समुदाय में सौहार्दपूर्ण माहौल बनाए रखने को महत्व देता हूँ।",
   "I push for faster progress when needed": "ज़रूरत पड़ने पर मैं काम में तेज़ी लाने पर ज़ोर देता हूँ",
-  "I push for higher standards when needed": "ज़रूरत पड़ने पर मैं काम के बेहतर स्तर पर ज़ोर देता हूँ"
+  "I push for higher standards when needed": "ज़रूरत पड़ने पर मैं काम के बेहतर स्तर पर ज़ोर देता हूँ",
+  "Type an amount.": "कोई राशि लिखें।",
+  "The amount can’t be below 0.": "राशि 0 से कम नहीं हो सकती।",
+  "Type the amount without thousands separators, like {example}.": "राशि बिना हज़ार विभाजक के लिखें, जैसे {example}।",
+  "Type one decimal mark at most, like {example}.": "अधिक से अधिक एक दशमलव बिंदु लिखें, जैसे {example}।",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "one": "अधिक से अधिक {n} दशमलव अंक लिखें, जैसे {example}।",
+    "other": "अधिक से अधिक {n} दशमलव अंक लिखें, जैसे {example}।"
+  },
+  "Type the amount as a number, like {example}.": "राशि को संख्या के रूप में लिखें, जैसे {example}।"
 }

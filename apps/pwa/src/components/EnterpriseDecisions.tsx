@@ -15,10 +15,17 @@ import {
     beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
     scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, wageNoteWords,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
+    t, tn,
 } from '@beanpool/core';
 import {
     getEnterpriseDecisions, proposeEnterpriseDecision, voteEnterpriseDecision, getGroupDecisions, proposeGroupDecision, voteGroupDecision,
 } from '../lib/api';
+
+/** Sentences marked in core (scoped-decision.ts), translated here where they are shown (the phone's keys). */
+const LINES = { someone: GROUP_SOMEONE, groupNote: GROUP_DECISIONS_NOTE, smallRoll: SMALL_ROLL_BALLOT_NOTE };
+
+/** A person on a chooser: their name as they wrote it, and "(you)" in the member's language. */
+const personLabel = (name: string, isMe: boolean) => (isMe ? t('{name} (you)', { name }) : name);
 
 export interface EnterpriseDecisionsProps {
     treasuryKey: string;
@@ -38,15 +45,18 @@ const btnNo = `${btn} border border-nature-300 dark:border-nature-600 bg-white d
 
 export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle }: EnterpriseDecisionsProps) {
     const roll: RollPerson[] = useMemo(() => keepers.filter(k => !k.suspended)
-        .map(k => ({ pubkey: k.publicKey, name: k.callsign || 'A keeper', role: k.role })), [keepers]);
-    const nameOf = useCallback((pk: string) => keepers.find(k => k.publicKey === pk)?.callsign || 'a member', [keepers]);
+        .map(k => ({ pubkey: k.publicKey, name: k.callsign || t('A keeper'), role: k.role })), [keepers]);
+    // ⚡ Bolt: O(1) Map lookup for keeper callsigns instead of O(K) .find() scans
+    const keepersMap = useMemo(() => new Map(keepers.map(k => [k.publicKey, k])), [keepers]);
+    const nameOf = useCallback((pk: string) => keepersMap.get(pk)?.callsign || t('a member'), [keepersMap]);
     const read = useCallback(() => getEnterpriseDecisions(treasuryKey), [treasuryKey]);
     const cast = useCallback((id: string, support: boolean) => voteEnterpriseDecision(treasuryKey, id, support), [treasuryKey]);
     return (
         <ScopedDecisions
             id="enterprise-decisions" read={read} cast={cast} nameOf={nameOf} lifecycle={lifecycle}
-            note={<>Votes among this {lifecycle === 'bounded' ? "project's leader and collaborators" : "enterprise's keepers"}. More than half must vote.
-                {' '}7 days, or sooner once the answer can't change.</>}
+            note={lifecycle === 'bounded'
+                ? t("Votes among this project's leader and collaborators. More than half must vote. 7 days, or sooner once the answer can't change.")
+                : t("Votes among this enterprise's keepers. More than half must vote. 7 days, or sooner once the answer can't change.")}
             propose={myPubkey ? (close, done) => (
                 <ProposeScopedDecision treasuryKey={treasuryKey} me={myPubkey} roll={roll} balance={balance} earnedSurplus={earnedSurplus} lifecycle={lifecycle}
                     onClose={close} onDone={done} />
@@ -68,12 +78,12 @@ export interface GroupDecisionsProps {
 /** A chat group's votes (slice S3), on its info: the same block, its own form (no recipient, no amount). */
 export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, onChanged }: GroupDecisionsProps) {
     // Someone removed lands here with no roster (people is []): the card's own names, then plain words (#1794 N7).
-    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || GROUP_SOMEONE, [people]);
+    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || t(LINES.someone), [people]);
     const read = useCallback(() => getGroupDecisions(groupId), [groupId]);
     const cast = useCallback((id: string, support: boolean) => voteGroupDecision(groupId, id, support), [groupId]);
     return (
         <ScopedDecisions
-            id="group-decisions" read={read} cast={cast} nameOf={nameOf} note={GROUP_DECISIONS_NOTE} onChanged={onChanged}
+            id="group-decisions" read={read} cast={cast} nameOf={nameOf} note={t(LINES.groupNote)} onChanged={onChanged}
             propose={myPubkey ? (close, done, list) => (
                 // Only the people the node takes in a vote (no suspended member, #1784 review N2).
                 <ProposeGroupDecision groupId={groupId} me={myPubkey}
@@ -120,7 +130,7 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
             await load();
             onChanged?.();
         } catch (e) {
-            setVoteError(e instanceof Error && e.message ? e.message : 'Your vote was not counted. Try again in a moment.');
+            setVoteError(e instanceof Error && e.message ? e.message : t('Your vote was not counted. Try again in a moment.'));
         } finally {
             setBusyId(null);
         }
@@ -129,13 +139,14 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
     return (
         <section aria-labelledby={`${id}-heading`} data-testid={id}
             className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-2xl p-4 space-y-3 min-w-0">
-            <h3 id={`${id}-heading`} className="m-0 text-xs font-black tracking-wide text-nature-600 dark:text-nature-300">DECISIONS</h3>
+            <h3 id={`${id}-heading`} className="m-0 text-xs font-black tracking-wide text-nature-600 dark:text-nature-300">{t('DECISIONS')}</h3>
             <p className="m-0 text-sm text-nature-700 dark:text-nature-300 break-words">{note}</p>
             {list.watching === true && !list.closedAt && (
-                <p className="m-0 text-sm text-nature-700 dark:text-nature-300 break-words">You watch this group, so you see its votes but don't vote.</p>
+                <p className="m-0 text-sm text-nature-700 dark:text-nature-300 break-words">{t("You watch this group, so you see its votes but don't vote.")}</p>
             )}
             {[...open, ...closed].map(d => {
-                const mine = d.myVote ? (d.myVote.support === true || d.myVote.support === 1 ? 'Yes' : 'No') : null;
+                // What the member's vote was, never words: the line and the buttons say it in the member's language.
+                const mine = d.myVote ? (d.myVote.support === true || d.myVote.support === 1 ? 'yes' : 'no') : null;
                 const isOpen = d.status === 'open';
                 return (
                     <article key={d.id} data-testid="scoped-decision" className="border-t border-nature-200 dark:border-nature-700 pt-3 min-w-0">
@@ -145,26 +156,26 @@ function ScopedDecisions({ id, read, cast, nameOf, note, lifecycle, propose, onC
                             <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300 break-words whitespace-pre-wrap" data-testid="scoped-why">{d.description}</p>
                         )}
                         <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">
-                            Proposed by {nameOf(d.authorPubkey, d.names)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}
+                            {t('Proposed by {name} · {when}', { name: nameOf(d.authorPubkey, d.names), when: isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d) })}
                         </p>
                         <p className="m-0 mt-1 text-sm font-semibold text-nature-900 dark:text-nature-100 break-words" data-testid="scoped-tally">{scopedTallyWords(d)}</p>
-                        {mine && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">You voted {mine}.</p>}
+                        {mine && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">{mine === 'yes' ? t('You voted Yes.') : t('You voted No.')}</p>}
                         {/* The vote's own roll, frozen when it opened, says who votes: never who is in the group now. */}
                         {isOpen && !mine && d.canVote === true && (
                             <div className="flex flex-wrap gap-2 mt-2">
                                 <button type="button" className={`${btnYes} flex-1 min-w-[6rem]`} disabled={busyId === d.id}
-                                    onClick={() => vote(d, true)} aria-label={`Vote Yes on ${d.title}`}>Yes</button>
+                                    onClick={() => vote(d, true)} aria-label={t('Vote Yes on {title}', { title: d.title })}>{t('Yes')}</button>
                                 <button type="button" className={`${btnNo} flex-1 min-w-[6rem]`} disabled={busyId === d.id}
-                                    onClick={() => vote(d, false)} aria-label={`Vote No on ${d.title}`}>No</button>
+                                    onClick={() => vote(d, false)} aria-label={t('Vote No on {title}', { title: d.title })}>{t('No')}</button>
                             </div>
                         )}
                     </article>
                 );
             })}
             {voteError && <p role="alert" className="m-0 text-sm text-amber-700 dark:text-amber-400 break-words">{voteError}</p>}
-            {list.decisions.length > 0 && list.rollSize <= 4 && <p className="m-0 text-xs text-nature-700 dark:text-nature-300 break-words">{SMALL_ROLL_BALLOT_NOTE}</p>}
+            {list.decisions.length > 0 && list.rollSize <= 4 && <p className="m-0 text-xs text-nature-700 dark:text-nature-300 break-words">{t(LINES.smallRoll)}</p>}
             {list.canPropose && !!propose && !proposing && (
-                <button type="button" className={`${btnNo} w-full`} onClick={() => setProposing(true)}>Propose a vote</button>
+                <button type="button" className={`${btnNo} w-full`} onClick={() => setProposing(true)}>{t('Propose a vote')}</button>
             )}
             {proposing && propose?.(() => setProposing(false), () => { setProposing(false); void load(); onChanged?.(); }, list)}
         </section>
@@ -203,7 +214,7 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
                 : { title: title.trim(), description: why.trim(), effect, subject: person.pubkey });
             onDone();
         } catch (e) {
-            setError(e instanceof Error && e.message ? e.message : 'The vote was not opened. Try again in a moment.');
+            setError(e instanceof Error && e.message ? e.message : t('The vote was not opened. Try again in a moment.'));
         } finally {
             setBusy(false);
         }
@@ -218,10 +229,10 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
     return (
         <form data-testid="propose-scoped-decision" className="border-t border-nature-200 dark:border-nature-700 pt-3 min-w-0"
             onSubmit={e => { e.preventDefault(); void send(); }} aria-labelledby="propose-scoped-heading">
-            <h4 id="propose-scoped-heading" className="m-0 text-base font-black text-nature-900 dark:text-nature-100">Propose a vote</h4>
-            <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300 break-words">Everyone on the roll votes. It runs 7 days, or ends sooner once the answer can't change.</p>
+            <h4 id="propose-scoped-heading" className="m-0 text-base font-black text-nature-900 dark:text-nature-100">{t('Propose a vote')}</h4>
+            <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300 break-words">{t("Everyone on the roll votes. It runs 7 days, or ends sooner once the answer can't change.")}</p>
             <fieldset className="m-0 p-0 border-0 min-w-0">
-                <legend className={label}>What should happen?</legend>
+                <legend className={label}>{t('What should happen?')}</legend>
                 <div className="flex flex-wrap gap-2" role="radiogroup">
                     {effects.map(e => (
                         <button key={e} type="button" role="radio" aria-checked={effect === e} className={chip(effect === e)}
@@ -230,24 +241,24 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
                 </div>
             </fieldset>
             <fieldset className="m-0 p-0 border-0 min-w-0">
-                <legend className={label}>{effect === 'pay_out' ? 'Pay whom?' : effect === 'remove_keeper' ? 'Remove whom?' : 'Who should lead?'}</legend>
+                <legend className={label}>{effect === 'pay_out' ? t('Pay whom?') : effect === 'remove_keeper' ? t('Remove whom?') : t('Who should lead?')}</legend>
                 {choices.length === 0
-                    ? <p className="m-0 text-sm text-nature-700 dark:text-nature-300">Nobody on the roll can be chosen for this.</p>
+                    ? <p className="m-0 text-sm text-nature-700 dark:text-nature-300">{t('Nobody on the roll can be chosen for this.')}</p>
                     : (
                         <div className="flex flex-wrap gap-2" role="radiogroup">
                             {choices.map(p => (
                                 <button key={p.pubkey} type="button" role="radio" aria-checked={who === p.pubkey} className={chip(who === p.pubkey)}
-                                    onClick={() => setWho(p.pubkey)}>{p.name}{p.pubkey === me ? ' (you)' : ''}</button>
+                                    onClick={() => setWho(p.pubkey)}>{personLabel(p.name, p.pubkey === me)}</button>
                             ))}
                         </div>
                     )}
             </fieldset>
             {effect === 'pay_out' && (
                 <>
-                    <label className={label} htmlFor="scoped-amount">How many Beans?</label>
+                    <label className={label} htmlFor="scoped-amount">{t('How many Beans?')}</label>
                     <input id="scoped-amount" className={input} inputMode="decimal" placeholder="40" value={amountText}
                         onChange={e => setAmountText(e.target.value)} aria-describedby="scoped-amount-help" />
-                    <p id="scoped-amount-help" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300">It holds {beansHeld(balance)} Beans now.</p>
+                    <p id="scoped-amount-help" className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300">{tn(Number(beansHeld(balance)), 'It holds {n} Beans now.', 'It holds {n} Beans now.')}</p>
                     {amountError && <p className="m-0 mt-1 text-sm text-amber-700 dark:text-amber-400 break-words">{amountError}</p>}
                     {amount && 'amount' in amount && person && (
                         <p className="m-0 mt-1 text-sm text-nature-900 dark:text-nature-100 break-words" data-testid="scoped-fee">{payOutFeeWords(amount.amount, person.name)}</p>
@@ -255,16 +266,16 @@ export function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSu
                     <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">{wageNoteWords(wageSurplus, lifecycle)}</p>
                 </>
             )}
-            <label className={label} htmlFor="scoped-title">Title</label>
-            <input id="scoped-title" className={input} maxLength={120} placeholder="Pay Ali for the stall repairs" value={title} onChange={e => setTitle(e.target.value)} />
-            <label className={label} htmlFor="scoped-why">Why?</label>
-            <textarea id="scoped-why" className={`${input} min-h-[4.5rem]`} placeholder="Say why, in a sentence or two." value={why} onChange={e => setWhy(e.target.value)} />
+            <label className={label} htmlFor="scoped-title">{t('Title')}</label>
+            <input id="scoped-title" className={input} maxLength={120} placeholder={t('Pay Ali for the stall repairs')} value={title} onChange={e => setTitle(e.target.value)} />
+            <label className={label} htmlFor="scoped-why">{t('Why?')}</label>
+            <textarea id="scoped-why" className={`${input} min-h-[4.5rem]`} placeholder={t('Say why, in a sentence or two.')} value={why} onChange={e => setWhy(e.target.value)} />
             {error && <p role="alert" className="m-0 mt-2 text-sm text-amber-700 dark:text-amber-400 break-words">{error}</p>}
             <div className="flex flex-wrap gap-2 mt-3">
                 <button type="submit" className={`${btnYes} flex-1 min-w-[8rem]`} disabled={!ready || busy} aria-busy={busy}>
-                    {busy ? 'Opening…' : 'Open the vote'}
+                    {busy ? t('Opening…') : t('Open the vote')}
                 </button>
-                <button type="button" className={`${btnNo} flex-1 min-w-[6rem]`} onClick={onClose}>Cancel</button>
+                <button type="button" className={`${btnNo} flex-1 min-w-[6rem]`} onClick={onClose}>{t('Cancel')}</button>
             </div>
         </form>
     );
@@ -299,7 +310,7 @@ export function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose,
             await proposeGroupDecision(groupId, { title: title.trim(), description: why.trim(), ...proposal });
             onDone();
         } catch (e) {
-            setError(e instanceof Error && e.message ? e.message : 'The vote was not opened. Try again in a moment.');
+            setError(e instanceof Error && e.message ? e.message : t('The vote was not opened. Try again in a moment.'));
         } finally {
             setBusy(false);
         }
@@ -314,10 +325,10 @@ export function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose,
     return (
         <form data-testid="propose-group-decision" className="border-t border-nature-200 dark:border-nature-700 pt-3 min-w-0"
             onSubmit={e => { e.preventDefault(); void send(); }} aria-labelledby="propose-group-heading">
-            <h4 id="propose-group-heading" className="m-0 text-base font-black text-nature-900 dark:text-nature-100">Propose a vote</h4>
-            <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300 break-words">The group's members and convenors vote. It runs 7 days, or ends sooner once the answer can't change.</p>
+            <h4 id="propose-group-heading" className="m-0 text-base font-black text-nature-900 dark:text-nature-100">{t('Propose a vote')}</h4>
+            <p className="m-0 mt-1 text-sm text-nature-700 dark:text-nature-300 break-words">{t("The group's members and convenors vote. It runs 7 days, or ends sooner once the answer can't change.")}</p>
             <fieldset className="m-0 p-0 border-0 min-w-0">
-                <legend className={label}>What should happen?</legend>
+                <legend className={label}>{t('What should happen?')}</legend>
                 <div className="flex flex-wrap gap-2" role="radiogroup">
                     {offered.map(c => (
                         <button key={c} type="button" role="radio" aria-checked={choice === c} className={chip(choice === c)}
@@ -331,14 +342,14 @@ export function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose,
                     <div className="flex flex-wrap gap-2" role="radiogroup">
                         {pickable.map(p => (
                             <button key={p.pubkey} type="button" role="radio" aria-checked={who === p.pubkey} className={chip(who === p.pubkey)}
-                                onClick={() => setWho(p.pubkey)}>{p.name}{p.pubkey === me ? ' (you)' : ''}</button>
+                                onClick={() => setWho(p.pubkey)}>{personLabel(p.name, p.pubkey === me)}</button>
                         ))}
                     </div>
                 </fieldset>
             )}
             {choice === 'join_policy' && (
                 <fieldset className="m-0 p-0 border-0 min-w-0">
-                    <legend className={label}>Who should be able to join?</legend>
+                    <legend className={label}>{t('Who should be able to join?')}</legend>
                     <div className="flex flex-wrap gap-2" role="radiogroup">
                         {joinPolicyChoices(joinPolicy).map(p => (
                             <button key={p} type="button" role="radio" aria-checked={policy === p} className={chip(policy === p)}
@@ -349,19 +360,19 @@ export function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose,
             )}
             {choice === 'close' && (
                 <p className="m-0 mt-2 text-sm text-nature-900 dark:text-nature-100 break-words">
-                    If it passes, the group takes no new messages, posts or members, and its other open votes end. Its chat stays to read.
+                    {t('If it passes, the group takes no new messages, posts or members, and its other open votes end. Its chat stays to read.')}
                 </p>
             )}
-            <label className={label} htmlFor="group-vote-title">Title</label>
-            <input id="group-vote-title" className={input} maxLength={120} placeholder="Ada leads the guild" value={title} onChange={e => setTitle(e.target.value)} />
-            <label className={label} htmlFor="group-vote-why">Why?</label>
-            <textarea id="group-vote-why" className={`${input} min-h-[4.5rem]`} placeholder="Say why, in a sentence or two." value={why} onChange={e => setWhy(e.target.value)} />
+            <label className={label} htmlFor="group-vote-title">{t('Title')}</label>
+            <input id="group-vote-title" className={input} maxLength={120} placeholder={t('Ada leads the guild')} value={title} onChange={e => setTitle(e.target.value)} />
+            <label className={label} htmlFor="group-vote-why">{t('Why?')}</label>
+            <textarea id="group-vote-why" className={`${input} min-h-[4.5rem]`} placeholder={t('Say why, in a sentence or two.')} value={why} onChange={e => setWhy(e.target.value)} />
             {error && <p role="alert" className="m-0 mt-2 text-sm text-amber-700 dark:text-amber-400 break-words">{error}</p>}
             <div className="flex flex-wrap gap-2 mt-3">
                 <button type="submit" className={`${btnYes} flex-1 min-w-[8rem]`} disabled={!ready || busy} aria-busy={busy}>
-                    {busy ? 'Opening…' : 'Open the vote'}
+                    {busy ? t('Opening…') : t('Open the vote')}
                 </button>
-                <button type="button" className={`${btnNo} flex-1 min-w-[6rem]`} onClick={onClose}>Cancel</button>
+                <button type="button" className={`${btnNo} flex-1 min-w-[6rem]`} onClick={onClose}>{t('Cancel')}</button>
             </div>
         </form>
     );

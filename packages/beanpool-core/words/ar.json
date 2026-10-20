@@ -2,7 +2,7 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct)",
     "review": "machine",
     "reviewed": false,
     "updated": "2026-10-19",
@@ -804,5 +804,18 @@
   "I thrive in spontaneous, novel settings": "أزدهر في البيئات العفوية والمتجددة",
   "I am patient with different paces and value keeping the community atmosphere harmonious.": "أتحلى بالصبر تجاه وتيرة العمل المختلفة وأحرص على بقاء جو المجتمع متناغمًا.",
   "I push for faster progress when needed": "أدفع نحو إنجاز أسرع عند الحاجة",
-  "I push for higher standards when needed": "أدعو لمعايير أعلى عند الحاجة"
+  "I push for higher standards when needed": "أدعو لمعايير أعلى عند الحاجة",
+  "Type an amount.": "اكتب مبلغًا.",
+  "The amount can’t be below 0.": "لا يمكن أن يكون المبلغ أقل من 0.",
+  "Type the amount without thousands separators, like {example}.": "اكتب المبلغ بدون فواصل آلاف، مثل {example}.",
+  "Type one decimal mark at most, like {example}.": "اكتب علامة عشرية واحدة على الأكثر، مثل {example}.",
+  "Type at most {n} decimal, like {example}.|Type at most {n} decimals, like {example}.": {
+    "zero": "اكتب {n} منزلة عشرية على الأكثر، مثل {example}.",
+    "one": "اكتب منزلة عشرية واحدة على الأكثر، مثل {example}.",
+    "two": "اكتب منزلتين عشريتين على الأكثر، مثل {example}.",
+    "few": "اكتب {n} منازل عشرية على الأكثر، مثل {example}.",
+    "many": "اكتب {n} منزلة عشرية على الأكثر، مثل {example}.",
+    "other": "اكتب {n} منزلة عشرية على الأكثر، مثل {example}."
+  },
+  "Type the amount as a number, like {example}.": "اكتب المبلغ كرقم، مثل {example}."
 }

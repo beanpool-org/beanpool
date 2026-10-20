@@ -53,11 +53,12 @@ function toolParams(all: Record<string, string | string[] | undefined>): Record<
 }
 
 export default function ToolRoute() {
-    const all = useLocalSearchParams<Record<string, string>>();
+    const all = useLocalSearchParams<{ id?: string | string[]; screen?: string | string[] }>();
     const { colors } = useTheme();
-    const id = typeof all.id === 'string' ? all.id : '';
+    const id = typeof all.id === 'string' ? all.id : Array.isArray(all.id) ? all.id[0] ?? '' : '';
     const tool = phoneTool(id);
-    const screenName = typeof all.screen === 'string' && all.screen ? all.screen : tool?.manifest.screens[0] ?? '';
+    const screenParam = typeof all.screen === 'string' ? all.screen : Array.isArray(all.screen) ? all.screen[0] ?? '' : '';
+    const screenName = screenParam || tool?.manifest.screens[0] || '';
     const Screen = useMemo(() => {
         if (!tool || !tool.manifest.screens.includes(screenName)) return null;
         try {

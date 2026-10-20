@@ -47,8 +47,9 @@ export function SignOutEverywhere({ onSignedOut }: { onSignedOut: () => void }) 
                 <div className="space-y-3">
                     <p className="text-sm text-nature-200 m-0">{SIGN_OUT_EVERYWHERE_WARNING}</p>
                     <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={() => void go()} disabled={busy} className={`${btn} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on border-bp-cta-fill`}>
-                            {busy ? 'Signing out…' : 'Yes, sign me out everywhere'}
+                        <button type="button" onClick={() => void go()} disabled={busy} aria-busy={busy} className={`${btn} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on border-bp-cta-fill flex items-center justify-center gap-2`}>
+                            {busy && <span className="animate-spin" aria-hidden="true">🔄</span>}
+                            <span>{busy ? 'Signing out…' : 'Yes, sign me out everywhere'}</span>
                         </button>
                         <button type="button" onClick={() => { setConfirming(false); setError(null); }} disabled={busy} className={`${btn} bg-nature-800 text-nature-200 border-nature-700`}>
                             Cancel

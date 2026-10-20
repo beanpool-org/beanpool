@@ -5,3 +5,9 @@
 /guide/guide.json
   Access-Control-Allow-Origin: *
   Cache-Control: public, max-age=600
+
+# One rule per path: Cloudflare joins every rule that matches, and a doubled "*, *" is refused by browsers.
+/guide/*/guide.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: public, max-age=600
+

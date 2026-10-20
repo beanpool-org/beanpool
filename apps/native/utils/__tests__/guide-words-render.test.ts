@@ -112,11 +112,12 @@ vi.mock('../use-communities', () => ({
 }));
 
 import {
-    GUIDE_SLUGS, guideSourceHash, inCapitalsOf, manualSections, pseudoLocalise, sectionPages, relatedPages, searchGuide, setLanguage, splitBold,
-    type GuideTitles, type Lang, type UiLang,
+    GUIDE_SLUGS, guideBodyHash, guideCacheKey, guideSourceHash, inCapitalsOf, manualSections, pseudoLocalise, sectionPages, relatedPages, searchGuide, setLanguage, splitBold,
+    type GuideTitles, type Lang, type UiLang, type Guide,
 } from '@beanpool/core';
 import { LanguageProvider, useWords } from '../../components/LanguageProvider';
 import { getBundledGuide } from '../guide';
+import { resetGuideSessionForTests } from '../use-guide';
 import { displayColumns, titleCap, TITLE_FLOOR_COLUMNS } from '../../../../packages/beanpool-guide/src/titles.mjs';
 import BeanPoolSheet from '../../app/beanpool';
 import GuideSectionScreen from '../../app/guide/section/[id]';
@@ -128,6 +129,7 @@ const ENGLISH_BODY = 'This page is in English for now.';
 let host: HTMLDivElement;
 let root: Root;
 beforeEach(() => {
+    resetGuideSessionForTests();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -282,6 +284,45 @@ describe("the guide in the pseudo-locale at 320 dp with 1.3× text: every title 
         // Fourteen columns of the widest letters this measure knows, at the row title's 16 × 1.3, in the narrowest row.
         expect(widthOf('m'.repeat(TITLE_FLOOR_COLUMNS), 16 * SCALE)).toBeLessThanOrEqual(COLUMN.sheet);
     });
+
+    it('a page behind in the pseudo-locale: the new line and toggle at 320 dp with 1.3× text, none cut', async () => {
+        const page = GUIDE.guides[0];
+        const staleHash = '0000000000000000';
+        const xxGuide: Guide = {
+            schema: GUIDE.schema,
+            version: 1,
+            language: 'xx',
+            hash: '1234567890abcdef',
+            sections: [{ id: page.section, title: 'Section', summary: 'Summary', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: page.title,
+                summary: page.summary,
+                section: page.section,
+                related: [],
+                sourceHash: staleHash,
+                blocks: [{ type: 'p', text: 'Cuerpo en pseudo.' }],
+            }],
+        };
+        globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(xxGuide) })) as unknown as typeof fetch;
+        params.value = { slug: page.slug };
+        await renderIn('xx', GuideScreen);
+        const newerNote = host.querySelector('[data-testid="guide-newer-note"]');
+        expect(newerNote?.textContent).toBe(xx('This page is newer in English.'));
+        const toggle = host.querySelector('[data-testid="guide-toggle-english"]');
+        expect(toggle?.textContent).toBe(xx('Read in English'));
+        const header = [xx('This page is newer in English.'), xx('Read in English')];
+        expect(tooWide(header, COLUMN.pageHeader)).toEqual([]);
+        expect(cut(header)).toEqual([]);
+        expect(bypassing(['Cuerpo en pseudo.'])).toEqual([]);
+
+        // When toggled to English, check "Show translation" fits too
+        await act(async () => { (toggle as HTMLElement).click(); });
+        await settle();
+        expect(toggle?.textContent).toBe(xx('Show translation'));
+        expect(tooWide([xx('Show translation')], COLUMN.pageHeader)).toEqual([]);
+        expect(cut([xx('Show translation')])).toEqual([]);
+    });
 });
 
 describe('the guide in Portuguese: a titles file as the drafting round writes it', () => {
@@ -379,5 +420,131 @@ describe('the guide in Turkish: the section line in the capitals of its own word
         await renderIn('tr', GuideScreen);
         expect(spanWith('YENİ BAŞLAYANLAR İÇİN')).toBeTruthy();
         expect(spanWith('YENI BAŞLAYANLAR IÇIN')).toBeUndefined();
+    });
+});
+
+describe('the three page states in the mobile app: current, behind with toggle, missing, and offline fallback', () => {
+    const page = GUIDE.guides[0];
+    const otherPage = GUIDE.guides[1];
+    const currentHash = guideBodyHash(page.blocks);
+    const staleHash = '0000000000000000';
+
+    it('current state: matching source-hash renders translated body without english or newer notes', async () => {
+        const ptGuide: Guide = {
+            schema: GUIDE.schema,
+            version: 1,
+            language: 'pt',
+            hash: '1234567890abcdef',
+            sections: [{ id: page.section, title: 'Início', summary: 'Resumo.', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: 'Página traduzida',
+                summary: 'Resumo da página.',
+                section: page.section,
+                related: [],
+                sourceHash: currentHash,
+                blocks: [{ type: 'p', text: 'Corpo traduzido atual.' }],
+            }],
+        };
+        globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(ptGuide) })) as unknown as typeof fetch;
+        params.value = { slug: page.slug };
+        await renderIn('pt', GuideScreen);
+        expect(host.textContent).toContain('Corpo traduzido atual.');
+        expect(host.querySelector('[data-testid="guide-english-note"]')).toBeNull();
+        expect(host.querySelector('[data-testid="guide-newer-note"]')).toBeNull();
+    });
+
+    it('behind state: older source-hash renders translated body with newer note and toggle to read English', async () => {
+        const ptGuide: Guide = {
+            schema: GUIDE.schema,
+            version: 1,
+            language: 'pt',
+            hash: '1234567890abcdef',
+            sections: [{ id: page.section, title: 'Início', summary: 'Resumo.', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: 'Página traduzida',
+                summary: 'Resumo da página.',
+                section: page.section,
+                related: [],
+                sourceHash: staleHash,
+                blocks: [{ type: 'p', text: 'Corpo traduzido antigo.' }],
+            }],
+        };
+        globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(ptGuide) })) as unknown as typeof fetch;
+        params.value = { slug: page.slug };
+        await renderIn('pt', GuideScreen);
+        expect(host.textContent).toContain('Corpo traduzido antigo.');
+        expect(host.querySelector('[data-testid="guide-newer-note"]')).not.toBeNull();
+        const toggle = host.querySelector('[data-testid="guide-toggle-english"]');
+        expect(toggle?.textContent).toBe('Read in English');
+
+        // Toggle to English
+        await act(async () => { (toggle as HTMLElement).click(); });
+        await settle();
+        expect(toggle?.textContent).toBe('Show translation');
+        const englishLines = page.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).map((t) => splitBold(t).map((s) => s.text).join(''));
+        expect(Array.from(host.querySelectorAll('[lang="en"]')).map((e) => e.textContent)).toEqual(englishLines);
+
+        // Toggle back to Portuguese
+        await act(async () => { (toggle as HTMLElement).click(); });
+        await settle();
+        expect(toggle?.textContent).toBe('Read in English');
+        expect(host.textContent).toContain('Corpo traduzido antigo.');
+    });
+
+    it('missing state: untranslated page renders English body with english note', async () => {
+        titles.pt = {
+            sections: {},
+            pages: { [otherPage.slug]: { title: { text: 'Título traduzido', sourceHash: guideSourceHash(otherPage.title) } } },
+        } satisfies GuideTitles;
+        const ptGuide: Guide = {
+            schema: GUIDE.schema,
+            version: 1,
+            language: 'pt',
+            hash: '1234567890abcdef',
+            sections: [{ id: page.section, title: 'Início', summary: 'Resumo.', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: 'Página traduzida',
+                summary: 'Resumo da página.',
+                section: page.section,
+                related: [],
+                sourceHash: currentHash,
+                blocks: [{ type: 'p', text: 'Corpo traduzido atual.' }],
+            }],
+        };
+        globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(ptGuide) })) as unknown as typeof fetch;
+        params.value = { slug: otherPage.slug };
+        await renderIn('pt', GuideScreen);
+        expect(host.querySelector('[data-testid="guide-english-note"]')).not.toBeNull();
+        expect(host.querySelector('[data-testid="guide-newer-note"]')).toBeNull();
+        const englishLines = otherPage.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).map((t) => splitBold(t).map((s) => s.text).join(''));
+        expect(Array.from(host.querySelectorAll('[lang="en"]')).map((e) => e.textContent)).toEqual(englishLines);
+    });
+
+    it('offline fallback: fetch failure falls back to cached guide or English without error', async () => {
+        globalThis.fetch = vi.fn(async () => { throw new TypeError('Network request failed'); }) as typeof fetch;
+        const ptGuide: Guide = {
+            schema: GUIDE.schema,
+            version: 1,
+            language: 'pt',
+            hash: '1234567890abcdef',
+            sections: [{ id: page.section, title: 'Início', summary: 'Resumo.', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: 'Página em cache',
+                summary: 'Resumo da página.',
+                section: page.section,
+                related: [],
+                sourceHash: currentHash,
+                blocks: [{ type: 'p', text: 'Corpo em cache offline.' }],
+            }],
+        };
+        store.map.set(guideCacheKey('pt'), JSON.stringify(ptGuide));
+        params.value = { slug: page.slug };
+        await renderIn('pt', GuideScreen);
+        expect(host.textContent).toContain('Corpo em cache offline.');
+        expect(host.querySelector('[data-testid="guide-english-note"]')).toBeNull();
     });
 });

@@ -30,7 +30,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { GUIDE_LANGS, checkInline } from './guide.mjs';
+import { GUIDE_LANGS, checkInline, loadGuide, guideBodyHash } from './guide.mjs';
 
 /** The file in content/<lang>/ that holds a language's titles. */
 export const TITLES_FILE = 'manifest.json';
@@ -108,8 +108,10 @@ export function readGuideTitles(contentDir) {
             continue;
         }
         // A dotfile is the system's, not ours: a Mac's Finder leaves .DS_Store in a folder it has opened (gitignored).
-        for (const name of fs.readdirSync(dir).filter(n => !n.startsWith('.')).sort()) {
-            if (name !== TITLES_FILE) problems.push(`${rel(lang, name)}: a language's folder holds only ${TITLES_FILE} (its titles); translated page bodies are slice S5b`);
+        // Section folders holding translated page bodies (slice S5b) are checked by checkLanguagePages.
+        for (const dirent of fs.readdirSync(dir, { withFileTypes: true }).filter(n => !n.name.startsWith('.')).sort((a, b) => a.name.localeCompare(b.name))) {
+            if (dirent.isDirectory()) continue;
+            if (dirent.name !== TITLES_FILE) problems.push(`${rel(lang, dirent.name)}: a language's folder holds only ${TITLES_FILE} and section folders for translated pages`);
         }
         try {
             files[lang] = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -214,4 +216,72 @@ export function draftGuideTitles(guide, file) {
         (out[group][e.id] ??= {})[e.field] = { text: e.english, sourceHash: hash };
     }
     return out;
+}
+
+/**
+ * Draft a translated guide page in content/<lang>/<section>/<slug>.md shape:
+ * front matter with slug, title, summary, related, optional video, help, and source-hash
+ * (sha256 hex of the English body blocks canonical JSON), followed by the English body.
+ */
+export function draftGuidePage(contentDir, lang, slug) {
+    if (!GUIDE_LANGS.includes(lang)) {
+        throw new Error(`unknown language "${lang}"; must be one of ${GUIDE_LANGS.join(', ')}`);
+    }
+    const englishGuide = loadGuide(contentDir);
+    const page = englishGuide.guides.find(g => g.slug === slug);
+    if (!page) {
+        throw new Error(`page "${slug}" does not exist in the guide`);
+    }
+    const section = englishGuide.sections.find(s => s.id === page.section);
+    if (!section) {
+        throw new Error(`section "${page.section}" for page "${slug}" not found`);
+    }
+    const englishFile = path.join(contentDir, section.id, `${slug}.md`);
+    if (!fs.existsSync(englishFile)) {
+        throw new Error(`file "${englishFile}" not found`);
+    }
+    const englishRaw = fs.readFileSync(englishFile, 'utf8').replace(/\r\n/g, '\n');
+    const lines = englishRaw.split('\n');
+    let bodyStart = -1;
+    let sepCount = 0;
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i] === '---') {
+            sepCount++;
+            if (sepCount === 2) {
+                bodyStart = i + 1;
+                break;
+            }
+        }
+    }
+    const rawBody = bodyStart >= 0 ? lines.slice(bodyStart).join('\n').trim() : '';
+    const bodyHash = guideBodyHash(page);
+
+    // Check if manifest.json has translated title, summary, or help
+    let title = page.title;
+    let summary = page.summary;
+    let help = page.help;
+    const manifestPath = path.join(contentDir, lang, TITLES_FILE);
+    if (fs.existsSync(manifestPath)) {
+        try {
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            const p = manifest.pages?.[slug];
+            if (p?.title?.text && p.title.sourceHash === guideSourceHash(page.title)) title = p.title.text;
+            if (p?.summary?.text && p.summary.sourceHash === guideSourceHash(page.summary)) summary = p.summary.text;
+            if (page.help && p?.help?.text && p.help.sourceHash === guideSourceHash(page.help)) help = p.help.text;
+        } catch { /* ignore */ }
+    }
+
+    const frontMatter = [
+        '---',
+        `slug: ${slug}`,
+        `title: ${title}`,
+        `summary: ${summary}`,
+        ...(page.related?.length ? [`related: ${page.related.join(', ')}`] : []),
+        ...(page.video ? [`video: ${page.video}`] : []),
+        ...(help ? [`help: ${help}`] : []),
+        `source-hash: ${bodyHash}`,
+        '---',
+    ].join('\n');
+
+    return `${frontMatter}\n\n${rawBody}\n`;
 }

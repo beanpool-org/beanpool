@@ -26,6 +26,14 @@ export const GUIDE_SCHEMA = 2;
 export const GUIDE_URL = 'https://beanpool.org/guide/guide.json';
 export const GUIDE_CACHE_KEY = 'beanpool_member_guide_v2';
 
+export function guideUrl(lang: string = 'en'): string {
+    return lang === 'en' ? GUIDE_URL : `https://beanpool.org/guide/${lang}/guide.json`;
+}
+
+export function guideCacheKey(lang: string = 'en'): string {
+    return lang === 'en' ? GUIDE_CACHE_KEY : `${GUIDE_CACHE_KEY}:${lang}`;
+}
+
 /** The pages the BeanPool sheet links to by name, above the manual. */
 export const GUIDE_SLUGS = { howItWorks: 'how-it-works', rules: 'rules', faq: 'faq', whatsNew: 'whats-new' } as const;
 /** The section that holds the four guides above; every other section is the how-to manual. */
@@ -57,6 +65,16 @@ export interface GuidePage<B = GuideBlock> {
      * finds the page by these too, and a Learn video matches the English title.
      */
     english?: { title?: string; summary?: string; help?: string };
+    sourceHash?: string;
+    'source-hash'?: string;
+    /** English blocks kept when a page is shown in another language, for English search and "Read in English". */
+    englishBlocks?: B[];
+    /** Whether the translated body is current, behind the English body, or missing. */
+    bodyState?: 'current' | 'behind' | 'missing';
+    /** Whether the translated body is behind today's English body. */
+    newerInEnglish?: boolean;
+    /** Whether the body remains English while in another language. */
+    bodyInEnglish?: boolean;
 }
 
 export type OperatorGuidePage = GuidePage<OperatorGuideBlock>;
@@ -75,6 +93,7 @@ export interface Guide<P = GuidePage> {
     schema: number;
     version: number;
     hash: string;
+    language?: string;
     sections: GuideSection[];
     guides: P[];
 }
@@ -167,6 +186,12 @@ function validate(raw: unknown, allowImages: boolean): OperatorGuide | null {
         if (typeof page.video === 'string') out.video = page.video;
         // Optional and tolerant: a help line that isn't one is left out (the sheet falls back to the summary), never the guide.
         if (isText(page.help, 160)) out.help = page.help as string;
+        const sh = (typeof page.sourceHash === 'string' && /^[0-9a-f]{16}$/.test(page.sourceHash)) ? page.sourceHash
+            : (typeof page['source-hash'] === 'string' && /^[0-9a-f]{16}$/.test(page['source-hash'])) ? page['source-hash'] : undefined;
+        if (sh) {
+            out.sourceHash = sh;
+            out['source-hash'] = sh;
+        }
         guides.push(out);
     }
 
@@ -191,9 +216,13 @@ function validate(raw: unknown, allowImages: boolean): OperatorGuide | null {
     for (const page of guides) {
         const home = sections.find(s => s.id === page.section);
         if (!home || !home.slugs.includes(page.slug)) return null;
-        if (!page.related.every(r => r !== page.slug && seen.has(r))) return null;
+        const isLangGuide = typeof g.language === 'string';
+        if (!isLangGuide && !page.related.every(r => r !== page.slug && seen.has(r))) return null;
+        if (isLangGuide && !page.related.every(r => r !== page.slug && SLUG_RE.test(r))) return null;
     }
-    return { schema: GUIDE_SCHEMA, version: g.version, hash: g.hash, sections, guides };
+    const result: OperatorGuide = { schema: GUIDE_SCHEMA, version: g.version, hash: g.hash, sections, guides };
+    if (typeof g.language === 'string') result.language = g.language;
+    return result;
 }
 
 /** The newer of two copies; the first wins a tie. */
@@ -230,17 +259,68 @@ export async function refreshGuideFromWebsite(
     storage: GuideStorage,
     fetchImpl: GuideFetch,
     timeoutMs = 8000,
+    lang = 'en',
 ): Promise<Guide | null> {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = setTimeout(() => controller?.abort(), timeoutMs);
     try {
-        const res = await fetchImpl(GUIDE_URL, { signal: controller?.signal, headers: { Accept: 'application/json' } });
+        const url = guideUrl(lang);
+        const cacheKey = guideCacheKey(lang);
+        const res = await fetchImpl(url, { signal: controller?.signal, headers: { Accept: 'application/json' } });
         if (!res.ok) return null;
         const text = await res.text();
         if (text.length > GUIDE_MAX_BYTES) return null;
         const remote = validateGuide(JSON.parse(text));
         if (!remote || remote.version <= current.version) return null;
-        try { await storage.setItem(GUIDE_CACHE_KEY, JSON.stringify(remote)); } catch { /* shown now; cached next time */ }
+        try { await storage.setItem(cacheKey, JSON.stringify(remote)); } catch { /* shown now; cached next time */ }
+        return remote;
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/** Bundled or cached copy of a language's guide, or null if not yet cached. */
+export async function loadCachedLanguageGuide(
+    storage: GuideStorage,
+    lang: string,
+): Promise<Guide | null> {
+    if (lang === 'en' || (!isLang(lang) && lang !== 'xx')) return null;
+    try {
+        const raw = await storage.getItem(guideCacheKey(lang));
+        if (!raw) return null;
+        const g = validateGuide(JSON.parse(raw));
+        if (!g || g.language !== lang) return null;
+        return g;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Fetch a language's guide from the website (beanpool.org/guide/<lang>/guide.json).
+ * Saves to storage under GUIDE_CACHE_KEY + ':' + lang only when newer than current.
+ * Never throws.
+ */
+export async function refreshLanguageGuideFromWebsite(
+    current: Guide | null,
+    storage: GuideStorage,
+    fetchImpl: GuideFetch,
+    lang: string,
+    timeoutMs = 8000,
+): Promise<Guide | null> {
+    if (lang === 'en' || (!isLang(lang) && lang !== 'xx')) return null;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => controller?.abort(), timeoutMs);
+    try {
+        const res = await fetchImpl(guideUrl(lang), { signal: controller?.signal, headers: { Accept: 'application/json' } });
+        if (!res.ok) return null;
+        const text = await res.text();
+        if (text.length > GUIDE_MAX_BYTES) return null;
+        const remote = validateGuide(JSON.parse(text));
+        if (!remote || remote.language !== lang || (current && remote.version <= current.version)) return null;
+        try { await storage.setItem(guideCacheKey(lang), JSON.stringify(remote)); } catch { /* shown now; cached next time */ }
         return remote;
     } catch {
         return null;
@@ -345,7 +425,8 @@ export function searchGuide<P extends GuidePage<OperatorGuideBlock> = GuidePage>
         // A page shown in the member's language is found by its English too: a member may type either.
         const title = [...words(page.title), ...(page.english?.title ? words(page.english.title) : [])];
         const summary = [...words(page.summary), ...(page.english?.summary ? words(page.english.summary) : [])];
-        const blocks = blockTexts(page).map(b => ({ ...b, words: words(b.text) }));
+        const allBlocks = page.englishBlocks ? [...page.blocks, ...page.englishBlocks] : page.blocks;
+        const blocks = blockTexts({ blocks: allBlocks as readonly OperatorGuideBlock[] }).map(b => ({ ...b, words: words(b.text) }));
         let score = 0;
         let firstHit: { text: string; term: string } | null = null;
         let everyTerm = true;
@@ -473,6 +554,18 @@ export function guideSourceHash(english: string): string {
     return hash;
 }
 
+/**
+ * The hash of an English page body (the canonical JSON of its blocks): the first 16 hex digits of sha256.
+ * Both the build and the client apps compute this from the page's blocks.
+ */
+export function guideBodyHash(pageOrBlocks: { blocks: readonly OperatorGuideBlock[] } | readonly OperatorGuideBlock[]): string {
+    const blocks: readonly OperatorGuideBlock[] = Array.isArray(pageOrBlocks)
+        ? (pageOrBlocks as readonly OperatorGuideBlock[])
+        : (pageOrBlocks as { blocks: readonly OperatorGuideBlock[] }).blocks;
+    const canonical = blocks.map((b: OperatorGuideBlock) => b.type === 'ul' ? { type: 'ul', items: b.items } : { type: b.type, text: (b as { text: string }).text });
+    return guideSourceHash(JSON.stringify(canonical));
+}
+
 const ownObject = (o: unknown, key: string): Record<string, unknown> => {
     if (!o || typeof o !== 'object' || !Object.prototype.hasOwnProperty.call(o, key)) return {};
     const v = (o as Record<string, unknown>)[key];
@@ -489,11 +582,18 @@ function translatedLine(entry: unknown, english: string, max: number): string | 
 
 /**
  * The guide with its titles, summaries and help lines in `lang` wherever `titles` (that language's titles file) has a
- * current translation, else English; in the pseudo-locale, every one pseudo-localised. English, or a tag BeanPool does
- * not write, gives the guide itself. Each line shown in another language keeps its English in `english`. The bodies
- * are the English ones (see guidePageBodyInEnglish). Never throws: a titles file it can't read leaves the English.
+ * current translation, else English; in the pseudo-locale, every one pseudo-localised.
+ * When `translatedGuide` (slice S5b) holds translated pages:
+ *   - matching source-hash: shows translated body;
+ *   - behind: shows translated body with newerInEnglish = true;
+ *   - missing / none: shows English body with bodyInEnglish = true.
  */
-export function guideInLanguage<P extends GuidePage<OperatorGuideBlock>>(guide: Guide<P>, lang: UiLang, titles?: unknown): Guide<P> {
+export function guideInLanguage<P extends GuidePage<OperatorGuideBlock>>(
+    guide: Guide<P>,
+    lang: UiLang,
+    titles?: unknown,
+    translatedGuide?: Guide | null,
+): Guide<P> {
     const pseudo = lang === PSEUDO_LANG;
     if (!pseudo && (!isLang(lang) || lang === 'en')) return guide;
     try {
@@ -501,6 +601,12 @@ export function guideInLanguage<P extends GuidePage<OperatorGuideBlock>>(guide: 
             pseudo ? pseudoLocalise(english) : translatedLine(entry, english, max);
         const sectionTitles = ownObject(titles, 'sections');
         const pageTitles = ownObject(titles, 'pages');
+        const translatedPages = new Map<string, GuidePage<OperatorGuideBlock>>();
+        if (translatedGuide && (!translatedGuide.language || translatedGuide.language === lang) && Array.isArray(translatedGuide.guides)) {
+            for (const tp of translatedGuide.guides) {
+                if (tp && typeof tp.slug === 'string') translatedPages.set(tp.slug, tp as GuidePage<OperatorGuideBlock>);
+            }
+        }
         let changed = false;
         const sections = guide.sections.map((s): GuideSection => {
             const e = ownObject(sectionTitles, s.id);
@@ -515,13 +621,53 @@ export function guideInLanguage<P extends GuidePage<OperatorGuideBlock>>(guide: 
         });
         const guides = guide.guides.map((p): P => {
             const e = ownObject(pageTitles, p.slug);
-            const title = line(e.title, p.title, 120);
-            const summary = line(e.summary, p.summary, 300);
+            const tp = translatedPages.get(p.slug);
+            let title = line(e.title, p.title, 120);
+            let summary = line(e.summary, p.summary, 300);
             const help = p.help !== undefined ? line(e.help, p.help, 160) : null;
-            if (title === null && summary === null && help === null) return p;
+            let blocks = p.blocks;
+            let englishBlocks: typeof p.blocks | undefined = undefined;
+            let bodyState: 'current' | 'behind' | 'missing';
+            let newerInEnglish: boolean;
+            let bodyInEnglish: boolean;
+            let sourceHash = p.sourceHash;
+
+            if (tp) {
+                const enHash = guideBodyHash(p);
+                const tpHash = tp.sourceHash ?? tp['source-hash'];
+                sourceHash = tpHash;
+                const isCurrent = tpHash === enHash;
+                englishBlocks = p.blocks;
+                blocks = tp.blocks as typeof p.blocks;
+                if (!title && tp.title) title = tp.title;
+                if (!summary && tp.summary) summary = tp.summary;
+                bodyInEnglish = false;
+                if (isCurrent) {
+                    bodyState = 'current';
+                    newerInEnglish = false;
+                } else {
+                    bodyState = 'behind';
+                    newerInEnglish = true;
+                }
+            } else {
+                bodyState = 'missing';
+                bodyInEnglish = title !== null || summary !== null;
+                newerInEnglish = false;
+            }
+
+            if (title === null && summary === null && help === null && !tp && !translatedGuide) return p;
             changed = true;
             return {
-                ...p, title: title ?? p.title, summary: summary ?? p.summary, ...(help !== null ? { help } : {}),
+                ...p,
+                title: title ?? p.title,
+                summary: summary ?? p.summary,
+                ...(help !== null ? { help } : {}),
+                blocks,
+                ...(englishBlocks ? { englishBlocks } : {}),
+                bodyState,
+                newerInEnglish,
+                bodyInEnglish,
+                ...(sourceHash ? { sourceHash, 'source-hash': sourceHash } : {}),
                 english: {
                     ...(title !== null ? { title: p.title } : {}),
                     ...(summary !== null ? { summary: p.summary } : {}),
@@ -536,11 +682,23 @@ export function guideInLanguage<P extends GuidePage<OperatorGuideBlock>>(guide: 
 }
 
 /**
- * Whether a page's title or summary is in the member's language over its English body: the page then says so in one line
- * at its top ("This page is in English for now."). Every body is English until slice S5b.
+ * Whether a page's body is in English while shown in another language (missing translation or offline fallback).
+ * A translated page (current or behind) returns false.
  */
 export function guidePageBodyInEnglish(page: GuidePage<OperatorGuideBlock>): boolean {
+    if (page.bodyInEnglish === false || page.newerInEnglish) return false;
+    if (page.bodyInEnglish === true) return true;
     return page.english?.title !== undefined || page.english?.summary !== undefined;
+}
+
+/** Whether a translated page is behind the English body ("This page is newer in English."). */
+export function guidePageNewerInEnglish(page: GuidePage<OperatorGuideBlock>): boolean {
+    return !!page.newerInEnglish;
+}
+
+/** Whether a page's body is current, behind the English body, or missing a translation. */
+export function guidePageBodyState(page: GuidePage<OperatorGuideBlock>): 'current' | 'behind' | 'missing' {
+    return page.bodyState ?? 'missing';
 }
 
 // ─── The "BeanPool" entry points ─────────────────────────────────────────────

@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from 'react';
 import bundledGuide from '@beanpool/guide/generated/guide.json';
 import {
     validateGuide, loadLocalGuide, refreshGuideFromWebsite, guideInLanguage,
+    loadCachedLanguageGuide, refreshLanguageGuideFromWebsite,
     learnVideosFromFeed, type Guide, type GuideStorage, type LoadedGuide, type LearnVideo,
 } from '@beanpool/core';
 import { getPulseFeed } from './api';
@@ -45,9 +46,19 @@ let sessionGuide: LoadedGuide | null = null;
 let lastCheckAt = 0;
 const listeners = new Set<(g: LoadedGuide) => void>();
 
+// Cached language guides by language code
+const sessionLangGuides = new Map<string, Guide | null>();
+const langListeners = new Set<(lang: string, g: Guide | null) => void>();
+const lastLangCheckAt = new Map<string, number>();
+
 function publish(next: LoadedGuide) {
     sessionGuide = next;
     listeners.forEach(l => l(next));
+}
+
+function publishLang(lang: string, next: Guide | null) {
+    sessionLangGuides.set(lang, next);
+    langListeners.forEach(l => l(lang, next));
 }
 
 async function startRefresh() {
@@ -60,6 +71,24 @@ async function startRefresh() {
     if (remote) publish({ guide: remote, source: 'website' });
 }
 
+async function startLangRefresh(lang: string) {
+    if (lang === 'en' || typeof fetch !== 'function') return;
+    const now = Date.now();
+    const lastCheck = lastLangCheckAt.get(lang) ?? 0;
+    if (now - lastCheck < RECHECK_MS) return;
+
+    let current = sessionLangGuides.get(lang);
+    if (current === undefined) {
+        current = await loadCachedLanguageGuide(guideStorage, lang);
+        publishLang(lang, current);
+    }
+    lastLangCheckAt.set(lang, now);
+    const remote = await refreshLanguageGuideFromWebsite(current, guideStorage, (url, init) => fetch(url, init), lang);
+    if (remote) {
+        publishLang(lang, remote);
+    }
+}
+
 /**
  * A guide with its titles, summaries and help lines in the language the screens are in now, wherever that language's
  * titles file has a current translation, else English (core's guideInLanguage). For a reader outside the guide screens
@@ -67,7 +96,8 @@ async function startRefresh() {
  */
 export function inShownLanguage(guide: Guide): Guide {
     const lang = shownLanguage();
-    return guideInLanguage(guide, lang, guideTitlesFor(lang));
+    const langGuide = sessionLangGuides.get(lang) ?? null;
+    return guideInLanguage(guide, lang, guideTitlesFor(lang), langGuide);
 }
 
 /**
@@ -77,13 +107,32 @@ export function inShownLanguage(guide: Guide): Guide {
 export function useGuide(): LoadedGuide {
     const [loaded, setLoaded] = useState<LoadedGuide>(() => sessionGuide ?? { guide: getBundledGuide(), source: 'bundled' });
     const [lang] = useLanguage();
+    const [, setLangGuideTick] = useState(0);
+
+    const langGuide = lang === 'en' ? null : (sessionLangGuides.get(lang) ?? null);
+
     useEffect(() => {
         listeners.add(setLoaded);
         if (sessionGuide) setLoaded(sessionGuide);
         startRefresh().catch(() => { /* keep what is on screen */ });
         return () => { listeners.delete(setLoaded); };
     }, []);
-    return useMemo(() => ({ ...loaded, guide: guideInLanguage(loaded.guide, lang, guideTitlesFor(lang)) }), [loaded, lang]);
+
+    useEffect(() => {
+        const onLangUpdate = (updatedLang: string) => {
+            if (updatedLang === lang) setLangGuideTick(t => t + 1);
+        };
+        langListeners.add(onLangUpdate);
+        if (lang !== 'en') {
+            startLangRefresh(lang).catch(() => {});
+        }
+        return () => { langListeners.delete(onLangUpdate); };
+    }, [lang]);
+
+    return useMemo(() => ({
+        ...loaded,
+        guide: guideInLanguage(loaded.guide, lang, guideTitlesFor(lang), langGuide),
+    }), [loaded, lang, langGuide]);
 }
 
 // The videos in this community's Pulse → Learn lane, for the guide's "Watch" links. Extra only: an empty list
@@ -119,6 +168,8 @@ export function useLearnVideos(): LearnVideo[] {
 export function resetGuideSessionForTests() {
     sessionGuide = null;
     lastCheckAt = 0;
+    sessionLangGuides.clear();
+    lastLangCheckAt.clear();
     learnVideos = null;
     learnPending = null;
 }

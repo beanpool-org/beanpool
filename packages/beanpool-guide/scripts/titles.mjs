@@ -8,6 +8,9 @@
 //   node scripts/titles.mjs --draft <lang>   the lines <lang> is missing or holds stale, in its file's shape, with the
 //                                            English as "text" and today's sourceHash: translate each "text" and merge
 //                                            the entries into content/<lang>/manifest.json.
+//   node scripts/titles.mjs --draft-page <lang> <slug>
+//                                            the English page's front matter and body with source-hash, ready to
+//                                            translate into content/<lang>/<section>/<slug>.md.
 //
 // Run from anywhere: pnpm --filter @beanpool/guide titles. The draft is JSON for a file or an agent, so run it with node
 // (node packages/beanpool-guide/scripts/titles.mjs --draft <lang> > draft.json): pnpm --filter prints its own banner
@@ -16,10 +19,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadGuide, GUIDE_LANGS } from '../src/guide.mjs';
-import { readGuideTitles, checkGuideTitles, draftGuideTitles } from '../src/titles.mjs';
+import { readGuideTitles, checkGuideTitles, draftGuideTitles, draftGuidePage } from '../src/titles.mjs';
 
 const CONTENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'content');
-const USAGE = 'Usage: node scripts/titles.mjs [--draft <lang>]';
+const USAGE = 'Usage: node scripts/titles.mjs [--draft <lang> | --draft-page <lang> <slug>]';
 
 function main(args) {
     const guide = loadGuide(CONTENT_DIR);
@@ -32,6 +35,21 @@ function main(args) {
         }
         console.log(JSON.stringify(draftGuideTitles(guide, read.files[lang]), null, 2));
         return 0;
+    }
+    if (args[0] === '--draft-page') {
+        const lang = args[1];
+        const slug = args[2];
+        if (args.length !== 3 || !GUIDE_LANGS.includes(lang) || !slug) {
+            console.error(`${USAGE}\n<lang> is one of ${GUIDE_LANGS.join(', ')}`);
+            return 2;
+        }
+        try {
+            process.stdout.write(draftGuidePage(CONTENT_DIR, lang, slug));
+            return 0;
+        } catch (e) {
+            console.error(e.message);
+            return 1;
+        }
     }
     if (args.length) {
         console.error(USAGE);

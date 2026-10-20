@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, OPERATOR_PAGES_ON_WEBSITE, expectedOutputs, sourceGuides } from '../scripts/build.mjs';
-import { parseGuideMarkdown, renderWebsite, renderOperatorsWebsite, contentHash, loadGuide, GUIDE_SCHEMA } from '../src/guide.mjs';
+import { parseGuideMarkdown, renderWebsite, renderOperatorsWebsite, contentHash, loadGuide, GUIDE_SCHEMA, GUIDE_LANGS, loadLanguagePages, checkLanguagePages, renderLanguageWebsite, guideBodyHash, guideSourceHash } from '../src/guide.mjs';
 
 // Two copies of each collection are tested. What a page SAYS is pinned on the pages themselves (sourceGuides), so the
 // PR that changes the words changes the pin with them. The website and the bundles are tested on the PUBLISHED copy
@@ -491,4 +492,235 @@ test('the manual names no removed button, page or route (owner-delete: no wipe, 
         for (const w of gone) if (text.includes(w.toLowerCase())) found.push(`${f}: ${w}`);
     }
     assert.deepEqual(found, []);
+});
+
+test('translated page front matter: source-hash must be 16 hex digits, required when isTranslated', () => {
+    const valid = [
+        '---',
+        'slug: home',
+        'title: Inicio',
+        'summary: Un resumen en español.',
+        'related: rules',
+        'source-hash: 0123456789abcdef',
+        '---',
+        '',
+        'El cuerpo de la página.',
+    ].join('\n');
+    const parsed = parseGuideMarkdown(valid, 'es/getting-started/home.md', { isTranslated: true });
+    assert.equal(parsed.slug, 'home');
+    assert.equal(parsed.title, 'Inicio');
+    assert.equal(parsed.sourceHash, '0123456789abcdef');
+    assert.equal(parsed['source-hash'], '0123456789abcdef');
+
+    // Missing source-hash
+    const missingHash = valid.replace('source-hash: 0123456789abcdef\n', '');
+    assert.throws(() => parseGuideMarkdown(missingHash, 'es/getting-started/home.md', { isTranslated: true }), /front matter needs "source-hash"/);
+
+    // Invalid source-hash format
+    const badHash = valid.replace('0123456789abcdef', 'not-a-hex-hash');
+    assert.throws(() => parseGuideMarkdown(badHash, 'es/getting-started/home.md', { isTranslated: true }), /"source-hash" must be 16 hex digits/);
+
+    const shortHash = valid.replace('0123456789abcdef', '01234567');
+    assert.throws(() => parseGuideMarkdown(shortHash, 'es/getting-started/home.md', { isTranslated: true }), /"source-hash" must be 16 hex digits/);
+
+    // Unknown front matter field
+    const unknownField = valid.replace('---', '---\nextra: value');
+    assert.throws(() => parseGuideMarkdown(unknownField, 'es/getting-started/home.md', { isTranslated: true }), /unknown front matter "extra"/);
+});
+
+test('checkLanguagePages validates structure, slugs, source-hash and related links', () => {
+    const englishGuide = loadGuide(CONTENT_DIR);
+    const homePage = englishGuide.guides.find(g => g.slug === 'home');
+    const validHash = guideBodyHash(homePage);
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-lang-check-'));
+    try {
+        const esDir = path.join(dir, 'es');
+        fs.mkdirSync(path.join(esDir, 'getting-started'), { recursive: true });
+        fs.writeFileSync(path.join(esDir, 'manifest.json'), '{ "sections": {}, "pages": {} }');
+
+        // Valid page
+        const pageContent = [
+            '---',
+            'slug: home',
+            'title: Inicio',
+            'summary: Resumen.',
+            'related: rules',
+            `source-hash: ${validHash}`,
+            '---',
+            '',
+            'Cuerpo.',
+        ].join('\n');
+        fs.writeFileSync(path.join(esDir, 'getting-started', 'home.md'), pageContent);
+
+        assert.deepEqual(checkLanguagePages(dir, 'es', englishGuide), []);
+
+        // Stray file directly in language folder
+        fs.writeFileSync(path.join(esDir, 'random.txt'), 'hello');
+        assert.match(checkLanguagePages(dir, 'es', englishGuide)[0], /random\.txt: a language's folder holds only manifest\.json/);
+        fs.rmSync(path.join(esDir, 'random.txt'));
+
+        // Invalid section name
+        fs.mkdirSync(path.join(esDir, 'non-existent-section'), { recursive: true });
+        assert.match(checkLanguagePages(dir, 'es', englishGuide)[0], /"non-existent-section" is not a section in the guide/);
+        fs.rmSync(path.join(esDir, 'non-existent-section'), { recursive: true });
+
+        // Non-.md file in section folder
+        fs.writeFileSync(path.join(esDir, 'getting-started', 'notes.txt'), 'notes');
+        assert.match(checkLanguagePages(dir, 'es', englishGuide)[0], /only \.md files are allowed/);
+        fs.rmSync(path.join(esDir, 'getting-started', 'notes.txt'));
+
+        // Slug not in that section
+        fs.writeFileSync(path.join(esDir, 'getting-started', 'rules.md'), pageContent.replace('slug: home', 'slug: rules'));
+        assert.match(checkLanguagePages(dir, 'es', englishGuide)[0], /"rules" is not a page in section "getting-started"/);
+        fs.rmSync(path.join(esDir, 'getting-started', 'rules.md'));
+
+        // Slug mismatch between filename and front matter
+        fs.writeFileSync(path.join(esDir, 'getting-started', 'home.md'), pageContent.replace('slug: home', 'slug: faq'));
+        assert.match(checkLanguagePages(dir, 'es', englishGuide)[0], /slug "faq" must match the file name "home"/);
+
+        // Invalid related page
+        fs.writeFileSync(path.join(esDir, 'getting-started', 'home.md'), pageContent.replace('related: rules', 'related: non-existent-page'));
+        assert.match(checkLanguagePages(dir, 'es', englishGuide)[0], /related page "non-existent-page" does not exist in the guide/);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('loadLanguagePages and renderLanguageWebsite render HTML and guide.json, showing stale note when behind', () => {
+    const englishGuide = loadGuide(CONTENT_DIR);
+    const homePage = englishGuide.guides.find(g => g.slug === 'home');
+    const validHash = guideBodyHash(homePage);
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-lang-render-'));
+    try {
+        const ruDir = path.join(dir, 'ru');
+        fs.mkdirSync(path.join(ruDir, 'getting-started'), { recursive: true });
+        fs.writeFileSync(path.join(ruDir, 'manifest.json'), '{ "sections": {}, "pages": {} }');
+
+        // Page with older source-hash (stale/behind)
+        const staleHash = '0000000000000000';
+        const pageContent = [
+            '---',
+            'slug: home',
+            'title: Главная',
+            'summary: Описание.',
+            'related: rules',
+            `source-hash: ${staleHash}`,
+            '---',
+            '',
+            'Текст на русском.',
+        ].join('\n');
+        fs.writeFileSync(path.join(ruDir, 'getting-started', 'home.md'), pageContent);
+
+        const loaded = loadLanguagePages(dir, 'ru', englishGuide, { version: 1 });
+        assert.ok(loaded);
+        assert.equal(loaded.language, 'ru');
+        assert.equal(loaded.version, 1);
+        assert.equal(loaded.guides.length, 1);
+        assert.equal(loaded.guides[0].slug, 'home');
+        assert.equal(loaded.guides[0].sourceHash, staleHash);
+
+        const rendered = renderLanguageWebsite(loaded, englishGuide);
+        assert.ok(rendered['guide.json']);
+        assert.ok(rendered['home.html']);
+        assert.ok(rendered['home.html'].includes('<html lang="ru">'));
+        assert.ok(rendered['home.html'].includes('This page is newer in English.'));
+        assert.ok(rendered['home.html'].includes('Текст на русском.'));
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('loadLanguagePages preserves canonical section and slug order defined by englishGuide', () => {
+    const englishGuide = loadGuide(CONTENT_DIR);
+    const firstSec = englishGuide.sections[0];
+    const secondSec = englishGuide.sections[1];
+    if (!firstSec || !secondSec || firstSec.slugs.length < 2) return;
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-lang-order-'));
+    try {
+        const ptDir = path.join(dir, 'pt');
+        // Intentionally create second section first on filesystem
+        fs.mkdirSync(path.join(ptDir, secondSec.id), { recursive: true });
+        fs.mkdirSync(path.join(ptDir, firstSec.id), { recursive: true });
+
+        const makePage = (slug, related) => [
+            '---',
+            `slug: ${slug}`,
+            `title: Título ${slug}`,
+            'summary: Resumo.',
+            `related: ${related}`,
+            'source-hash: 0123456789abcdef',
+            '---',
+            '',
+            `Texto de ${slug}.`,
+        ].join('\n');
+
+        // Intentionally write slugs in reverse order
+        const [s1, s2] = [firstSec.slugs[0], firstSec.slugs[1]];
+        fs.writeFileSync(path.join(ptDir, firstSec.id, `${s2}.md`), makePage(s2, s1));
+        fs.writeFileSync(path.join(ptDir, firstSec.id, `${s1}.md`), makePage(s1, s2));
+        const s3 = secondSec.slugs[0];
+        fs.writeFileSync(path.join(ptDir, secondSec.id, `${s3}.md`), makePage(s3, s1));
+
+        const loaded = loadLanguagePages(dir, 'pt', englishGuide, { version: 1 });
+        assert.ok(loaded);
+        // Sections must match english order
+        assert.deepEqual(loaded.sections.map(s => s.id), [firstSec.id, secondSec.id]);
+        // Slugs in first section must match english order, not alphabetical or creation order
+        assert.deepEqual(loaded.sections[0].slugs, [s1, s2]);
+        assert.deepEqual(loaded.guides.map(g => g.slug), [s1, s2, s3]);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('loadLanguagePages falls back to English section title and summary when manifest translations are stale', () => {
+    const englishGuide = loadGuide(CONTENT_DIR);
+    const sec = englishGuide.sections[0];
+    const slug = sec.slugs[0];
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-lang-titles-'));
+    try {
+        const esDir = path.join(dir, 'es');
+        fs.mkdirSync(path.join(esDir, sec.id), { recursive: true });
+
+        // manifest with a fresh title translation and a stale summary translation
+        const manifest = {
+            sections: {
+                [sec.id]: {
+                    title: { text: 'Título Traducido', sourceHash: guideSourceHash(sec.title) },
+                    summary: { text: 'Resumen Obsoleto', sourceHash: '0000000000000000' },
+                },
+            },
+            pages: {},
+        };
+        fs.writeFileSync(path.join(esDir, 'manifest.json'), JSON.stringify(manifest));
+
+        const relatedSlug = slug === 'rules' ? 'home' : 'rules';
+        const pageContent = [
+            '---',
+            `slug: ${slug}`,
+            'title: Página',
+            'summary: Resumen.',
+            `related: ${relatedSlug}`,
+            `source-hash: ${guideSourceHash('test')}`,
+            '---',
+            '',
+            'Cuerpo en español.',
+        ].join('\n');
+        fs.writeFileSync(path.join(esDir, sec.id, `${slug}.md`), pageContent);
+
+        const loaded = loadLanguagePages(dir, 'es', englishGuide, { version: 1 });
+        assert.ok(loaded);
+        const loadedSec = loaded.sections.find(s => s.id === sec.id);
+        assert.ok(loadedSec);
+        // Valid sourceHash adopts translation:
+        assert.equal(loadedSec.title, 'Título Traducido');
+        // Stale sourceHash falls back to English:
+        assert.equal(loadedSec.summary, sec.summary);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });

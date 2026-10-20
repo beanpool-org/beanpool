@@ -8,7 +8,7 @@ import { CONTENT_DIR, sourceGuides, titleProblems } from '../scripts/build.mjs';
 import { loadGuide, GUIDE_LANGS } from '../src/guide.mjs';
 import {
     guideSourceHash, displayColumns, titleCap, titleEntries, readGuideTitles, checkGuideTitles, draftGuideTitles,
-    TITLES_FILE, TITLE_FLOOR_COLUMNS,
+    draftGuidePage, TITLES_FILE, TITLE_FLOOR_COLUMNS,
 } from '../src/titles.mjs';
 
 // The guide's titles and summaries in the member's language (slice S5a): content/<lang>/manifest.json, checked against
@@ -217,4 +217,30 @@ test('a dotfile in a language folder is not a stray file', () => {
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });
     }
+});
+
+test('a section directory in a language folder is allowed by readGuideTitles', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'guide-titles-sec-'));
+    try {
+        for (const lang of GUIDE_LANGS) {
+            fs.mkdirSync(path.join(dir, lang));
+            fs.writeFileSync(path.join(dir, lang, TITLES_FILE), '{ "sections": {}, "pages": {} }');
+        }
+        fs.mkdirSync(path.join(dir, 'pt', 'getting-started'));
+        assert.deepEqual(readGuideTitles(dir).problems, []);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('draftGuidePage formats front matter with source-hash and body for translation', () => {
+    const draft = draftGuidePage(CONTENT_DIR, 'es', 'home');
+    assert.ok(draft.startsWith('---\n'));
+    assert.ok(draft.includes('slug: home\n'));
+    assert.ok(draft.includes('source-hash: '));
+    assert.match(draft, /source-hash: [0-9a-f]{16}/);
+    assert.ok(draft.includes('## What Home is'));
+    // Throws on unknown language or non-existent slug
+    assert.throws(() => draftGuidePage(CONTENT_DIR, 'xx', 'home'), /unknown language "xx"/);
+    assert.throws(() => draftGuidePage(CONTENT_DIR, 'es', 'non-existent-slug'), /does not exist in the guide/);
 });

@@ -7,7 +7,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from '../ThemeContext';
 import { useGuide } from '../../utils/use-guide';
 import { useWords } from '../../components/LanguageProvider';
-import { isMachineDraft } from '../../components/LanguagePicker';
 import { findGuidePage, findGuideSection, relatedPages, findGuideVideo, splitBold, guidePageBodyInEnglish, guidePageNewerInEnglish } from '../../utils/guide';
 import { useLearnVideos } from '../../utils/use-learn-videos';
 import { inCapitalsOf, t } from '@beanpool/core';
@@ -23,7 +22,7 @@ export { ErrorBoundary };
 export default function GuideScreen() {
     const { theme, colors } = useTheme();
     const insets = useSafeAreaInsets();
-    const { lang } = useWords();
+    const { isMachineDraft } = useWords();
     const params = useLocalSearchParams<{ slug?: string | string[] }>();
     const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug;
     const { guide } = useGuide();
@@ -41,7 +40,8 @@ export default function GuideScreen() {
     const englishShown = showEnglish && newerInEnglish && !!page?.englishBlocks;
     const blocksToRender = englishShown ? page!.englishBlocks! : page?.blocks ?? [];
     const currentBodyLanguage = (englishShown || bodyInEnglish) ? 'en' : undefined;
-    const showDraftNote = !!page && !bodyInEnglish && !englishShown && isMachineDraft(lang);
+    const isTranslatedBody = !!page && (page.bodyState === 'current' || page.bodyState === 'behind');
+    const showDraftNote = isTranslatedBody && !englishShown && isMachineDraft;
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },

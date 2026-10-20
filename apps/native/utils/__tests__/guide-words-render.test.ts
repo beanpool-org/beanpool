@@ -534,6 +534,30 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         expect(Array.from(host.querySelectorAll('[lang="en"]')).map((e) => e.textContent)).toEqual(englishLines);
     });
 
+    it('missing state without translated title has no draft line', async () => {
+        titles.pt = { sections: {}, pages: {} } satisfies GuideTitles;
+        const ptGuide: Guide = {
+            schema: GUIDE.schema,
+            version: 1,
+            language: 'pt',
+            hash: '1234567890abcdef',
+            sections: [{ id: page.section, title: 'Início', summary: 'Resumo.', slugs: [page.slug] }],
+            guides: [{
+                slug: page.slug,
+                title: 'Página traduzida',
+                summary: 'Resumo da página.',
+                section: page.section,
+                related: [],
+                sourceHash: currentHash,
+                blocks: [{ type: 'p', text: 'Corpo traduzido atual.' }],
+            }],
+        };
+        globalThis.fetch = vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(ptGuide) })) as unknown as typeof fetch;
+        params.value = { slug: otherPage.slug };
+        await renderIn('pt', GuideScreen);
+        expect(host.querySelector('[data-testid="guide-draft-note"]')).toBeNull();
+    });
+
     it('offline fallback: fetch failure falls back to cached guide or English without error', async () => {
         globalThis.fetch = vi.fn(async () => { throw new TypeError('Network request failed'); }) as typeof fetch;
         const ptGuide: Guide = {

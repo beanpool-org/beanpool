@@ -185,12 +185,16 @@ function postHiddenNoNewDeal(): Error {
 // an ordinary deal on a lendable Offer: one borrower at a time (the listing is `pending` while it is out, as a one-off
 // Offer is under its deal), and back to `active` when the deal is done, called off or ruled on, never `completed`. A Free
 // loan is a deal of 0 Beans, which every door already allows; the 1.5% to the Commons is taken at the payout as on every
-// deal. The four places that decide a listing's fate after a deal: approvePostRequest and acceptPost (one at a time),
-// completePostTransaction and resolveEscrowDispute's release and split (back on the board). cancelPostTransaction and the
-// refund ruling put every listing back already.
+// deal. A loan is always asked for, and the lender says yes first (Marty, 2026-10-21): acceptPost refuses a lendable Offer
+// before anything is held, so approvePostRequest is the one door a loan opens at (one at a time). The places that put it
+// back on the board after: completePostTransaction and resolveEscrowDispute's release and split. cancelPostTransaction
+// and the refund ruling put every listing back already.
 
 /** The refusal to anyone who asks for a lendable Offer while it is out. */
 export const LOAN_OUT_ERROR = "It's out on loan right now. Ask again when it's back.";
+/** The refusal to a one-step accept of a lendable Offer, from any app or the API: it is asked for, never taken. */
+export const LEND_ASK_FIRST_ERROR = 'Ask to borrow it: the lender says yes first.';
+export const LEND_ASK_FIRST_CODE = 'lend_ask_first';
 /** A loan's length (its deal's quantity, @beanpool/core loanDays) below a day. */
 export const LOAN_TOO_SHORT_ERROR = 'A loan is for at least 1 day.';
 /** A loan longer than its lender's longest (posts.lend_max_days). */
@@ -200,6 +204,10 @@ export function loanTooLongError(maxDays: number): string {
 
 function loanOut(): Error {
     return Object.assign(new Error(LOAN_OUT_ERROR), { status: 409, statusCode: 409, code: 'loan_out' });
+}
+
+function lendAskFirst(): Error {
+    return Object.assign(new Error(LEND_ASK_FIRST_ERROR), { status: 409, statusCode: 409, code: LEND_ASK_FIRST_CODE });
 }
 
 /** A listing row that takes one deal at a time: a one-off Offer or Need, and a lendable Offer (which is repeatable too). */
@@ -731,6 +739,10 @@ export function acceptPost(
         if (out && !postOutOfSight(out, buyerPublicKey) && !hiddenFromCaller(out.hidden_by_reports_at, out.author_pubkey, buyerPublicKey)) throw loanOut();
         throw new Error('Post not found or not active');
     }
+    // A lendable Offer is asked for: the lender says yes first (requestPost, then approvePostRequest). Refused here, to anyone
+    // who may see it, before anything is held, whoever they are: a member the lender has blocked is told the same words, and
+    // their request waits unanswered as any blocked member's does.
+    if (post.lendable) throw lendAskFirst();
     assertAccountOpen(post.authorPublicKey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
     if (authorMember?.is_treasury) {
@@ -787,10 +799,7 @@ export function acceptPost(
     if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
     }
-    // As requestPost: a loan's days are kept on its deal whatever the fee.
-    const lendable = post.lendable === true;
-    if (lendable) assertLoanLength(post.priceType, post.lendMaxDays, hours);
-    const keptHours = post.priceType !== 'fixed' || (lendable && hours != null) ? hours : undefined;
+    const keptHours = post.priceType !== 'fixed' ? hours : undefined;
 
     const buyer = getMember(db, buyerPublicKey);
     const finalCredits = post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
@@ -866,11 +875,7 @@ export function acceptPost(
         createdAt: new Date().toISOString()
     };
 
-    const oneAtATime = !post.repeatable || lendable;
-    // Not the one taking it, whose own request waiting on it is closed by this too.
-    const waitingBorrowers = lendable
-        ? db.prepare(`SELECT buyer_pubkey FROM marketplace_transactions WHERE post_id=? AND status='requested' AND buyer_pubkey != ?`).all(post.id, buyerPublicKey) as Array<{ buyer_pubkey: string }>
-        : [];
+    const oneAtATime = !post.repeatable;
 
     cb.ensureTransactionConversation(post.id, buyerPublicKey, post.authorPublicKey);
 
@@ -933,7 +938,6 @@ export function acceptPost(
         'marketplace',
         'market.request'
     );
-    tellWaitingBorrowers(cb, waitingBorrowers, post.authorPublicKey, post);
 
     return tx;
 }

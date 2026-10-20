@@ -49,7 +49,7 @@ If you keep an enterprise, or help run a project, its page has **Operator contro
 Pausing and closing it are in the same panel in the web app. On the phone they are in a card of their own below it, **Season & lifecycle controls**, which shows only the buttons you can use:
 
 - **Pause for Season:** any keeper. Its listings pause so nobody can buy, and its credit line stays where it is, for up to 90 days. **Resume Enterprise** (**Resume Project**) ends the pause.
-- **Start Wind-Up:** the lead keeper, the only keeper or a community admin. It closes the enterprise after a 7-day wait. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.
+- **Start Wind-Up:** the lead keeper, the only keeper or a community admin. A 7-day wait starts; nothing closes the enterprise by itself. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.
 - **Finalise Wind-Up:** once the 7 days are up, the lead keeper, the only keeper or a community admin finishes closing it. See "Rules and how decisions work".
 
 Before a project reaches its goal, its leader can also cancel it, and every pledge goes back.

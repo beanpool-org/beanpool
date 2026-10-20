@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息 — BeanPool members' guide</title>
+    <meta name="description" content="发起对话、发送照片、回复、表情回应、编辑、删除、静音以及隐私说明。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">对话</a></p>
+        <h1>消息</h1>
+        <p class="lede">发起对话、发送照片、回复、表情回应、编辑、删除、静音以及隐私说明。</p>
+        <h2>你的聊天</h2>
+        <p><strong>对话</strong>顶部有三个按钮：<strong>消息</strong>、<strong>群组</strong>和<strong>成员</strong>。</p>
+        <p>在标签栏中点击<strong>对话</strong>，然后点击<strong>消息</strong>。你与各成员的聊天都会列在那里。需要你处理的交易排在顶部，位于<strong>需要处理</strong>下方。</p>
+        <p>属于群组、企业或活动的聊天位于<strong>群组</strong>下方，不在此处。参见“群组”。</p>
+        <ul>
+            <li>使用<strong>搜索聊天、帖子、伙伴...</strong>进行搜索。</li>
+            <li>筛选按钮可按<strong>最近</strong>或<strong>未读</strong>排序（如果所在社区使用豆子，还可按每笔交易涉及的豆子数量从高到低或从低到高排序），并且可以仅显示<strong>仅未读</strong>或<strong>仅好友</strong>。</li>
+            <li>在手机上，当你向下滚动时，搜索栏和筛选按钮会自动滑出隐藏。稍微向上滚动它们就会重新出现。再次点击<strong>对话</strong>可快速返回顶部。</li>
+        </ul>
+        <p>在网页版中，这对应的是<strong>聊天</strong>标签页。它列出你的所有聊天，包括群组和活动聊天，顶部设有<strong>全部</strong>、<strong>交易明细</strong>、<strong>直接转账</strong>和<strong>群组</strong>选项，但没有搜索或筛选功能。</p>
+        <h2>发起聊天</h2>
+        <ul>
+            <li>从帖子发起：点击<strong>发送消息</strong>及该人姓名。</li>
+            <li>从<strong>对话</strong>发起：点击铅笔按钮，然后通过姓名查找该成员。在全球社区中，“新消息”会列出与你交易过的成员以及你的好友。若要查找其他人，请输入其姓名的至少 2 个字母。</li>
+            <li>从你的好友发起：进入<strong>对话</strong>，然后点击<strong>成员</strong>，再点击<strong>好友</strong>，并点击姓名旁的消息按钮。</li>
+        </ul>
+        <p>在网页版中，点击 <strong>✉️ 新私信</strong>，或帖子上的 <strong>💬 发消息</strong> 按钮。你的好友位于<strong>成员</strong>标签页下。</p>
+        <h2>发送消息</h2>
+        <ul>
+            <li>在<strong>发消息...</strong>框中输入内容并点击发送按钮。</li>
+            <li>若要发送照片，请点击 <strong>+</strong>，然后选择<strong>相机</strong>或<strong>相册</strong>。在网页版中，点击 <strong>📎</strong> 按钮，或者直接将图片粘贴或拖入聊天中——应用会先向你展示预览图片，你已输入的任何内容都会作为图片说明一同发送。照片只能在两人之间的私聊中发送。</li>
+        </ul>
+        <p>消息下方的勾号标记：</p>
+        <ul>
+            <li>单个勾号：已发送；</li>
+            <li>两个蓝色勾号：已读；</li>
+            <li>时钟图标：正在发送；</li>
+            <li><strong>未送达</strong>：发送失败。点击它可选择<strong>重新发送</strong>或<strong>放弃</strong>。</li>
+        </ul>
+        <p>时钟图标和<strong>未送达</strong>仅在手机上显示。在网页版中，发送失败的消息会保留在输入框中，应用会显示相应提示。</p>
+        <h2>回复、表情回应、编辑与删除</h2>
+        <p>在手机上，点击某条消息。旁边会出现圆形小按钮：</p>
+        <ul>
+            <li><strong>回复</strong>会在你接下来输入的内容上方引用该消息。点击已发送消息中的引用内容可跳回所回复的消息。</li>
+            <li><strong>回应</strong>会打开 7 个表情符号。点击一个即可添加，再次点击即可收回。每人限选一个回应表情；点击其他表情可进行替换。回应表情会以小徽章形式显示在消息下方。</li>
+            <li><strong>编辑</strong>，仅针对你自己的消息，在发送后 15 分钟内可用。该消息随后会显示<strong>已编辑</strong>。照片无法编辑。</li>
+            <li><strong>删除</strong>，仅针对你自己的消息，随时可用——没有时间限制。系统会确认一次<strong>为所有人删除？</strong>。之后该消息对双方均显示为<strong>此消息已被删除</strong>，且任何人都无法对其发表表情回应或回复。</li>
+        </ul>
+        <p>相同的按钮也出现在群聊中。参见“群组”。</p>
+        <p>在网页版中，<strong>回复</strong>、<strong>回应</strong>和<strong>编辑</strong>是每条消息上的小字按钮，并且没有<strong>删除</strong>功能：请在手机应用中删除消息。</p>
+        <p>删除操作也会将消息文字从社区服务器中移除，因此日后登录的新手机绝不会看到它们。</p>
+        <h2>静音对话</h2>
+        <p>点击右上角的 <strong>⋯</strong>（群聊中为 <strong>⋮</strong>），然后点击<strong>静音通知</strong>：可选择<strong>8 小时</strong>、<strong>1 周</strong>或<strong>始终</strong>。点击同一按钮并选择<strong>取消静音</strong>即可恢复。网页版目前尚不支持静音聊天。参见“静音对话”。</p>
+        <h2>隐私说明</h2>
+        <ul>
+            <li>两人之间的私聊受<strong>端到端加密</strong>保护：它在你的手机上加密锁定，在对方手机上解密解锁，因此所在社区的服务器无法阅读。在手机上，聊天顶部会显示<strong>端到端加密</strong>。其中的照片也是加密的，你的编辑内容同样如此。</li>
+            <li>每条消息还会锁定其发送者、该具体消息、所属聊天，如果属于回复，还会锁定其回复的目标消息。因此，服务器无法将你的消息伪装成对方发送的消息、将其作为新消息再次发送，或将你的回复指向其他消息。若服务器试图这样做，应用会在聊天正中间以不归属任何人的方式显示<strong>🔒 此消息无法验证，因此未予显示。</strong>，而非显示具体文字。被服务器调换的照片则显示为<strong>🔒 图片不可用</strong>。</li>
+            <li>如果服务器将一条消息放入其他聊天中，应用会在该聊天中予以拒绝。当你与同一人的两个聊天合并为一个时，每条消息都会携带其来源聊天信息。自本次更新以来发送的消息下方会显示<strong>从另一段对话移至此处。</strong>。在此之前发送的消息则会显示旧版本提示行（见下文）。</li>
+            <li>每条消息还会记住其作者在书写该消息时所持有的最新消息。如果服务器将其显示在该最新消息之前，其下方会显示<strong>未按编写顺序显示。</strong>。在同一瞬间书写的两条消息（彼此并无先后顺序）以任意顺序呈现时均不会显示此提示。</li>
+            <li>两人聊天中任何未加密锁定的内容绝不会作为任何一方的话语显示：它会在聊天正中间显示为<strong>⚠️ 此消息未加密，因此 BeanPool 无法确认发送者。</strong>，其文字内容不予显示。你的聊天列表也会显示同一提示行。</li>
+            <li>社区管理员从服务器管理页面向你发送的消息未经加密锁定，且不属于私密消息。它会显示在聊天正中间，绝不会显示为某个人的个人消息，其下方附有<strong>来自你的社区管理员。此非私密消息：社区服务器可读取。</strong></li>
+            <li>在本次更新之前由任何应用发送的消息在锁定加密时均不包含这些校验：服务器此前可能曾更改过它们的发件人表象，或重复发送过某条消息。这些消息仍可打开，并且无论位于聊天何处，每条消息下方都会显示<strong>发送自旧版本应用：BeanPool 无法确认发送者。</strong>。仍在使用旧版应用的用户必须完成更新才能阅读来自已更新应用的消息。</li>
+            <li>回复会按照被回复消息自身的展示方式来呈现该目标消息。仅当目标消息成功打开时才会标明作者姓名，并在下方携带该消息的提示行（例如旧版本提示）。对于服务器通知，作者署名为<strong>通知</strong>；对于管理员消息，署名为<strong>你的社区管理员</strong>。任何未能打开或未经加密锁定的内容均引用为<strong>未确认</strong>，并附带替代其文字内容的提示行。</li>
+            <li>因此，仅凭服务器自身无法伪造你们任何一方发表未曾写过的话语。但它依然可以截留消息、延迟送达，或将其显示为<strong>此消息已被删除</strong>。它可以展示已编辑消息的原有文字而非修改后的新文字：二者确实都出自发件人之手。它能看到每条消息回复了哪条消息，但无法在不被察觉的情况下篡改该回复关系。它可以以任何一方的名义添加或移除表情回应：因为表情回应未经加密锁定。而且它可以在聊天中添加自身通知。通知以通知形式展示，被引用时署名为<strong>通知</strong>，在你的聊天列表中显示为<strong>通知：</strong>，绝不会冒充你们任何一方。</li>
+            <li>加密锁定仅能证明消息来自你们两人中的一人，而无法区分具体是哪一位：对方在服务器运营人员的协助下，可能会以你的名义发布言论。</li>
+            <li>所有这一切都建立在你的应用掌握了对方真实密钥的基础之上，该密钥与加密机制本身一样来自社区服务器。在网页版中，这还取决于社区服务器发送到你浏览器的应用代码本身。而手机应用则来自应用商店。</li>
+            <li>无法加密锁定的消息不会被发送。如果应用尚无法找到对方的密钥，或者锁定失败，你输入的文字会保留在输入框中，并附带一行提示说明此情况。请稍后重发。社区服务器同样会拒收两人之间未加密锁定的消息。</li>
+            <li>BeanPool 在聊天中添加的有关交易的通知均未加密：为交易暂扣的豆子、放行支付的豆子、取消时退还的豆子、具体数额，以及管理员如何解决卡住的交易及原因。运行社区服务器的人可以阅读这些通知。</li>
+            <li>服务器还知道是谁在何时向谁发送了消息、每条消息回复了哪条消息，并能看到表情回应。旧版应用在没有加密锁定的情况下发送的消息在服务器上依然可读。</li>
+            <li>群聊在手机和网页版中同样受到<strong>端到端加密</strong>保护：只有群组成员可以阅读，运行社区服务器的人无法查阅。输入框上方会标明 <strong>端到端加密</strong>。所在社区的服务器仍能看到是谁在何时发言、提及了谁、每行消息回复了哪条消息以及表情回应。你只能看到自你加入之日起的群聊内容：在此之前编写的任何内容均不显示，且你的手机永远不会持有其解密密钥。无法加密锁定的消息不会被发送。无法核验为成员所写的行内容会以不归属任何人的方式显示为<strong>无法验证此消息。</strong>。如果所在社区的服务器版本较旧且尚不支持加密锁定群聊，聊天界面会说明此情况，并且服务器可以阅读该内容。当服务器更新后，那些早期消息将被移除，且聊天中会有一行提示说明此情况。参见“群组”。</li>
+            <li>在网页版中，群聊的工作机制完全相同，但你无法在群聊中发送照片。</li>
+            <li>企业和活动聊天均未加密。运行社区服务器的人可以阅读它们，且服务器能够以任何人的名义在其中发言。</li>
+            <li>两人之间的私聊绝不可能被转变为上述未加密聊天。一旦你的应用将某个聊天识别为两人私聊，或者其中包含加密消息，无论服务器如何标示，它都将始终保持为私聊：它只能作为该私聊打开并执行上述所有校验，且你在其中发送的内容始终处于加密锁定状态。从未接触过该聊天且未收到其任何加密消息的手机或浏览器则无法辨别：对其而言，此类聊天看起来与服务器可读的普通群聊无异。在网页版中，这也适用于在此之后退出登录过的浏览器、无痕窗口，或网站数据已被清除的浏览器：网页版会遗忘哪些聊天属于两人私聊。手机应用则始终保留该列表。</li>
+            <li>删除消息是请求社区服务器将其替换。它无法撤回别人已经阅读的副本或已截取的屏幕截图。</li>
+            <li>注销你的账户会对你在各类聊天中撰写的所有消息执行相同处理，并删除你发送的照片。参见“离开或注销账户”。</li>
+            <li>活动聊天还可供主办方和所有参与者阅读（在由主办方审核准入的活动中，为经主办方准入的成员）。</li>
+            <li>企业的聊天可供所在社区的任何成员阅读。它是企业的公开讨论区，与其页面上展示的完全一致，社区中的任何人也均可在其中发言。它不是管理者的私密聊天。</li>
+        </ul>
+        <h2>在聊天中屏蔽某人</h2>
+        <p>点击聊天顶部对方的姓名。其个人资料随即打开。点击<strong>屏蔽</strong>，然后点击<strong>屏蔽用户</strong>。在网页版中，点击聊天顶部的<strong>屏蔽</strong>，然后点击<strong>确定</strong>。参见“屏蔽成员”。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>成员与好友</strong><span>查找社区成员、添加好友以及为他人背书担保。</span></a></li>
+            <li><a href="blocking.html"><strong>屏蔽成员</strong><span>向自己隐藏某人的帖子和消息，并可在日后取消屏蔽。</span></a></li>
+            <li><a href="event-chat.html"><strong>活动聊天</strong><span>与活动组织者及所有参与者交流。</span></a></li>
+            <li><a href="groups.html"><strong>群组</strong><span>你的群组及群聊、在其中交流、创建群组、邀请成员、凭邀请加入以及群组内部投票。</span></a></li>
+            <li><a href="mute.html"><strong>静音对话</strong><span>将个人、群组或企业的对话静音 8 小时、一周或永久静音。</span></a></li>
+            <li><a href="the-top-bar.html"><strong>顶部栏</strong><span>豆子图标、有待处理事项时显示的小图标，以及右上角的按钮。</span></a></li>
+            <li><a href="key-changed.html"><strong>若对话提示对方密钥已变更</strong><span>对话停止发送的原因、如何与对方核对安全密钥代码，以及何时可以继续交流。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

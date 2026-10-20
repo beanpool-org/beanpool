@@ -178,9 +178,13 @@ export function expectedOutputs() {
 
 // ─── The commit a change starts from ───────────────────────────────────────────
 
+// A published copy can pass 1 MiB (Tamil, Malayalam and Bengali do: 3 bytes a letter), execFileSync's default maxBuffer.
+// Past it the call throws, this returns null, and `git show` of a copy main has reads as "never published".
+const GIT_MAX_BUFFER = 256 * 1024 * 1024;
+
 function git(...args) {
     try {
-        return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: GIT_MAX_BUFFER }).trim();
     } catch {
         return null;
     }

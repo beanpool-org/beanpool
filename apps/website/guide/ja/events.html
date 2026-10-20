@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>イベント — BeanPool members' guide</title>
+    <meta name="description" content="対面またはオンライン、単発または定期的なイベントを作成し、参加表明、リマインダー受け取り、共有、主催者としての運営を行います。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">コモンズ</a></p>
+        <h1>イベント</h1>
+        <p class="lede">対面またはオンライン、単発または定期的なイベントを作成し、参加表明、リマインダー受け取り、共有、主催者としての運営を行います。</p>
+        <h2>イベントを探す</h2>
+        <ul>
+            <li><strong>マーケット</strong>で、<strong>イベント</strong>をタップします。<strong>今日</strong>、<strong>今週末</strong>、または<strong>今後7日間</strong>を選択します。</li>
+            <li><strong>地図</strong>では、イベントは紫色のピンで表示されます。スマートフォンでは、<strong>イベント</strong>をタップするとイベントのみが表示されます。Webアプリでは常に表示されており、日付チップで絞り込むことができます。</li>
+        </ul>
+        <h2>あなたのイベント</h2>
+        <p><strong>マーケット</strong>で、<strong>★ おすすめ</strong>をタップします。一番上に<strong>あなたのイベント</strong>が表示されます。<strong>参加</strong>または<strong>興味あり</strong>と回答したすべてのイベントが、開催日が近い順に表示されます。タップして開きます。</p>
+        <p>これは今後の予定がある場合にのみ表示され、自分自身の回答のみが保持されます（他の人に見られることはありません）。</p>
+        <h2>参加する</h2>
+        <p>イベントで、<strong>参加</strong>または<strong>興味あり</strong>をタップします。もう一度タップすると選択が解除されます。</p>
+        <p><strong>参加</strong>にしている場合：</p>
+        <ul>
+            <li>主催者が承認制を選択している場合、主催者があなたを承認した後に、主催者の<strong>参加者への連絡事項</strong>を読むことができます。</li>
+            <li><strong>イベントチャット</strong>を開くことができます。「イベントトーク」を参照してください。</li>
+            <li>オンラインイベントの場合、連絡事項と同じ条件で、<strong>参加リンク</strong>と<strong>参加</strong>ボタンが表示されます。</li>
+        </ul>
+        <p>イベントをタップするとすべての詳細が表示され、<strong>地図で表示</strong>をタップできます。スマートフォンでは地図アプリが開きます。Webアプリでは地図上に場所が表示されます。</p>
+        <h2>リマインダーを受け取る</h2>
+        <p><strong>参加</strong>または<strong>興味あり</strong>にしている場合、イベントに<strong>通知</strong>が表示され、開始のどれくらい前に通知されるかが示されます（変更するまでは<strong>1日前（デフォルト）</strong>）。</p>
+        <ul>
+            <li><strong>変更</strong>をタップして、<strong>1週間前</strong>、<strong>1日前</strong>、<strong>2時間前</strong>、<strong>1時間前</strong>、または<strong>30分前</strong>を選択します。複数にチェックを入れることも可能です。</li>
+            <li>このイベントの通知を受け取らない場合は、すべてチェックを外します。</li>
+            <li>その後、<strong>このイベント向けに保存</strong>をタップします。タップするまでチェックは保存されません。</li>
+            <li><strong>デフォルトを使用</strong>をタップすると、通常の設定に戻ります。</li>
+        </ul>
+        <p>すべてのイベントに対する通常の設定を変更するには、「通知設定」を参照してください。</p>
+        <p>リマインダーはスマートフォンの通知としてマーケットプレイスの通知とともに届くため、それらをオフにすると停止します。中止されたイベントや終了したイベント、また参加を表明した時点ですでに過ぎていた時間について通知されることはありません。</p>
+        <h2>他の人に教える</h2>
+        <p>イベントを開き、<strong>共有</strong>をタップします。スマートフォンの通常の共有シートが開き、イベントの名前、日時、場所、およびリンクが表示されます。パソコンでは、貼り付けられるようにリンクがコピーされます。</p>
+        <p>そのリンクをタップした人は誰でもイベントを開くことができます（アプリがあればアプリで、なければWebアプリで）。あなたのコミュニティに所属していない人は、その参加ページに移動します。Webブラウザでは、グローバルコミュニティは訪問者に見える形で最初にイベントを表示し、参加すると再びイベントを開きます。</p>
+        <h2>カレンダーに追加する</h2>
+        <p>イベントを開き、<strong>カレンダーに追加</strong>をタップします。</p>
+        <ul>
+            <li><strong>Webアプリ</strong>では、カレンダーファイルがダウンロードされます。それを開くと、カレンダーにイベントを追加する画面が表示されます。</li>
+            <li><strong>iPhone</strong>では、同じファイルが端末に渡され、<strong>カレンダーに追加</strong>が表示されます。</li>
+            <li><strong>Android</strong>では、イベントがあらかじめ入力された状態でGoogleカレンダーが開きます。確認して保存します。</li>
+        </ul>
+        <p>登録情報には、名前、日時、場所、およびイベントへのリンクが含まれます。主催者が後から日時を変更してもカレンダーは自動で変更されませんが、アプリは引き続き通知を行い、イベント自体にも常に新しい日時が表示されます。</p>
+        <h2>イベントを作成する</h2>
+        <ul>
+            <li>マーケットタブまたは地図で<strong>+ 投稿を作成</strong>をタップし、次に<strong>イベント</strong>をタップします。</li>
+            <li><strong>タイトル</strong>、および<strong>開始日時</strong>を設定します。<strong>終了日時</strong>は任意です。変更しない限り2時間後になります。</li>
+            <li>日時はピンの位置から取得されたイベント独自のタイムゾーンで設定されます。あなたのタイムゾーンと異なる場合は、日時の下の行にその旨が表示されます。間違っている場合はその横の<strong>変更</strong>をタップします。</li>
+            <li><strong>繰り返し</strong>：毎週その曜日、月に1回など、どのくらいの頻度で繰り返すかを選択するか、<strong>繰り返さない</strong>のままにします。<strong>終了日</strong>は任意です。空白にしておくと、中止するまでイベントが繰り返されます。</li>
+            <li><strong>現地の場所で</strong>または<strong>オンライン</strong>を選択します。オンラインイベントには場所やピンはありません。代わりに<strong>参加リンク</strong>を追加します。それはあなたと参加者のみに表示されます（承認制の場合は、あなたが承認した人のみに表示されます）。その日時はあなたのタイムゾーンで設定され、他のメンバーには各自のタイムゾーンで<strong>あなたの時間</strong>とマークされて表示されます。</li>
+            <li>「町民会館」などの<strong>場所の名称</strong>を入力します。</li>
+            <li>地図上にピンを配置します。地図をタップするか、<strong>住所を検索</strong>で検索するか、<strong>現在地を使用</strong>をタップします。正確な地点を表示したくない場合は、<strong>おおよその位置（約100m）</strong>をタップします。「ピンの位置」を参照してください。</li>
+            <li><strong>説明</strong>を入力し、必要に応じて写真を追加します。</li>
+            <li><strong>参加者への連絡事項</strong>：<strong>承認した人だけにメモとチャットを表示する</strong>にチェックを入れない限り、参加をタップした全員に表示されます（誰でもすぐに参加できるグローバルコミュニティでは、最初はチェックが入っています）。チェックを入れると、あなたが承認した人のみに連絡事項とイベントチャットが表示されます。正確な住所やゲートコードを記載するのに適しています。場所の名称は全員に公開されます。</li>
+            <li><strong>閲覧可能な範囲</strong>：コミュニティ全体、または1つのグループ。</li>
+            <li>プロジェクトや事業体の運営者を担当している場合、またはグループのまとめ役である場合、<strong>投稿者名義</strong>でその名義でイベントを投稿できます。グループはそのメンバー向けにのみ主催します。事業体はコミュニティ全体向けに主催するため、事業体のイベントがグループ限定になることはありません。</li>
+            <li><strong>作成</strong>をタップします。イベントがマーケットと地図に表示されます。</li>
+        </ul>
+        <p>Webアプリでは、タイトル欄は<strong>What's happening</strong>、ピンボタンは<strong>📍 My location</strong>と<strong>📌 Drop a pin</strong>、最後のボタンは<strong>Create Event</strong>です。</p>
+        <p>同時に開催できる今後のイベントは5件までです。グループのイベントはグループの枠にカウントされ、事業体のイベントは事業体の枠にカウントされます。</p>
+        <h2>イベントの運営</h2>
+        <p>イベントを開きます。主催者として以下の操作が可能です：</p>
+        <ul>
+            <li><strong>参加者</strong>の確認と、メンバーの承認：名前の横の<strong>承認する</strong>（もう一度タップすると取り消し）、または<strong>全員を承認する</strong>。あなた自身の友達は、参加をタップすると自動的に承認されます。<strong>承認した人だけにメモとチャットを表示する</strong>のチェックを外すと、参加者全員にこれまでの連絡事項とチャットが表示され、主催者が公開したことがチャットに表示されます。</li>
+            <li><strong>イベントを編集</strong>：日時や場所を変更すると、参加者全員に通知されます。</li>
+            <li><strong>新しい日程にコピー</strong>：再度開催するためにコピーします。</li>
+            <li><strong>イベントを中止</strong>：タップして確認します（スマートフォンでは再度<strong>イベントを中止</strong>、Webアプリでは<strong>OK</strong>）。参加者全員に中止されたことが表示され、チャットは読み取り専用になります。</li>
+        </ul>
+        <h2>定期イベント</h2>
+        <p>定期イベントには<strong>↻</strong>が表示され、日付の横に<strong>毎週金曜日</strong>や<strong>毎月16日</strong>などの頻度が表示されます。そのカードには次回の日程が表示されます。開くと<strong>次回以降の日程</strong>を確認できます。</p>
+        <p>あなたが主催者の場合、次回以降の各日程に以下が表示されます：</p>
+        <ul>
+            <li><strong>この日程を中止する</strong>：その日のみが中止されます。その日の参加者全員に通知されます。</li>
+            <li><strong>この日程のみ変更する</strong>：その日が中止され、別の日程で単発のイベントを作成します。</li>
+            <li><strong>再開する</strong>：中止された日程が再開されます。</li>
+        </ul>
+        <p><strong>イベントを中止</strong>するとすべての日程が中止され、チャットは読み取り専用になります。それまでは、最後の日程まで各回の間もチャットは開いたままになります。<strong>終了日</strong>がない場合は、イベントを中止するまで開いたままになります。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>イベントトーク</strong><span>主催者やイベント参加者全員と会話できます。</span></a></li>
+            <li><a href="notifications.html"><strong>通知設定</strong><span>スマートフォンに届く通知と、イベントのリマインダーを受け取るタイミングを選択します。</span></a></li>
+            <li><a href="pin-locations.html"><strong>ピンの位置</strong><span>投稿やイベントの場所が誰に表示されるか、自宅のプライバシーを守る方法について説明します。</span></a></li>
+            <li><a href="map-pins.html"><strong>地図の見方</strong><span>地図上のピン、色の意味、ピン周囲のボタンについて説明します。</span></a></li>
+            <li><a href="polls.html"><strong>アンケート</strong><span>コミュニティに手軽に質問できます。アンケートは意見を把握するためのもので、それ自体で何かが変更されることはありません。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Поиск поблизости — BeanPool members' guide</title>
+    <meta name="description" content="Показ объявлений только в пределах выбранного расстояния от вас или любой указанной точки.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Карта</a></p>
+        <h1>Поиск поблизости</h1>
+        <p class="lede">Показ объявлений только в пределах выбранного расстояния от вас или любой указанной точки.</p>
+        <h2>На вкладке «Рынок»</h2>
+        <ul>
+            <li>Нажмите <strong>Рынок</strong>, затем <strong>Расстояние</strong> во второй строке фильтров. Эта кнопка отсутствует, если выбран фильтр <strong>События</strong>.</li>
+            <li>Откроется окно <strong>Геопозиция и радиус</strong> (<strong>Задать местоположение и радиус</strong> в веб-приложении). Чтобы использовать своё текущее местоположение, нажмите кнопку с прицелом. Либо нажмите на карту или перетащите метку, чтобы выбрать другой центр.</li>
+            <li>Выберите расстояние с помощью параметра <strong>Радиус поиска</strong>: от 100 метров до 50 километров.</li>
+            <li>Нажмите <strong>Применить</strong>. После этого на кнопке отобразится выбранное расстояние, например <strong>5 км</strong>.</li>
+            <li>Чтобы вернуться к показу всех объявлений, откройте окно снова и нажмите <strong>Сбросить</strong>. В веб-приложении также можно нажать значок <strong>✕</strong> на кнопке <strong>Расстояние</strong>.</li>
+        </ul>
+        <p>На телефоне объявления без указания местоположения показываются всегда. В веб-приложении фильтр <strong>Расстояние</strong> скрывает их, за исключением опросов. В глобальном сообществе веб-приложение также исключает их, пока включён показ поблизости от вас (см. ниже).</p>
+        <p>Если ваш браузер уже имеет доступ к данным о местоположении, окно выбора может сразу открыться в вашей текущей точке. Если нет — оно откроется в фиксированной точке. Проверьте положение метки либо нажмите кнопку с прицелом или на карту перед тем, как нажать <strong>Применить</strong>. В глобальном сообществе веб-приложение отправляет выбранный вами центр сообществу с округлением примерно до 11 метров.</p>
+        <p>На телефоне окно выбора открывается на последней выбранной вами точке или в фиксированном месте, поэтому сначала нажмите кнопку с прицелом.</p>
+        <h2>На Карте</h2>
+        <p>На самой карте нет отдельного фильтра расстояния. Нажмите кнопку с прицелом слева, чтобы увидеть своё местоположение, затем осмотритесь вокруг и измените масштаб.</p>
+        <h2>В глобальном сообществе в веб-приложении</h2>
+        <p>В глобальном сообществе есть объявления со всего мира, поэтому в веб-приложении разделы <strong>Рынок</strong> и <strong>Карта</strong> изначально показывают то, что находится рядом с вами:</p>
+        <ul>
+            <li>Если на Рынке задано <strong>Расстояние</strong>, оба раздела показывают ближайшие публикации в пределах этого радиуса, начиная с самых близких. На Карте отображается до 200 меток.</li>
+            <li>Если расстояние не задано, они показывают ближайшие публикации в радиусе 250 км от вашего района — приблизительного места, указанного при вступлении или позже в <strong>Настройках</strong> в разделе <strong>Ваш район</strong>. Строка над списком на Рынке сообщает: <strong>Сначала ближайшие к вам, в радиусе 250 км.</strong> Нажмите <strong>Показывать отовсюду</strong>, чтобы увидеть самые свежие публикации со всего мира, и <strong>Рядом с вами</strong>, чтобы вернуться к списку поблизости.</li>
+            <li>Если не задано ни то, ни другое, вы видите самые свежие публикации со всего мира, а кнопка <strong>Посмотреть, что рядом</strong> открывает выбор расстояния. Строка над списком на Рынке показывает, какой именно режим сейчас включён. При активном фильтре <strong>Расстояние</strong> отдельной кнопки нет: откройте <strong>Расстояние</strong> и нажмите <strong>Сбросить</strong>. После этого вы вернётесь к показу рядом с вашим районом, либо (если район не задан) увидите свежие публикации со всего мира.</li>
+            <li>В каждом объявлении указано расстояние до него, например <strong>📍 12 км</strong>. Ваши собственные публикации всегда видны на Карте и на Рынке рядом с вашим районом, где бы они ни находились. При включённом фильтре <strong>Расстояние</strong> Рынок показывает только то, что попадает в заданный радиус, включая ваши объявления.</li>
+            <li>Пока включён список поблизости, объявления без геопозиции не отображаются. Опрос от участника, не указавшего свой район — один из таких примеров. Чтобы увидеть их, сбросьте фильтр <strong>Расстояние</strong> (если он был задан), затем нажмите <strong>Показывать отовсюду</strong>.</li>
+            <li>Во вкладке <strong>События</strong> список никогда не обрезается по вашему району или <strong>Расстоянию</strong>, как и раньше.</li>
+            <li>Если поблизости ничего нет, Карта сообщит об этом и предложит кнопку <strong>Показывать отовсюду</strong>. Затем кнопка <strong>Рядом с вами</strong> (или <strong>Рядом с указанным местом</strong>) вернёт показ ближайших.</li>
+        </ul>
+        <p>Поиск в веб-приложении ищет только среди объявлений, отображаемых на экране. Кнопка <strong>Показывать отовсюду</strong> показывает самые свежие объявления со всего мира, а не абсолютно все, поэтому удалённое и не новое объявление не появится в поиске. Во всех остальных сообществах веб-приложение не фильтрует Рынок и Карту по вашему району: они показывают 50 недавно изменённых объявлений и ваши собственные, и поиск работает только по ним.</p>
+        <h2>В глобальном сообществе на телефоне</h2>
+        <p>Телефон хранит объявления, ближайшие к вашему району: до 500 объявлений в радиусе 250 км. Он также сохраняет ваши собственные публикации и любые объявления, по которым у вас есть сделка, чат или отклик. Рынок и Карта отображают то, что сохранено на телефоне. Если район не указан, телефон сохраняет самые свежие объявления со всего мира, о чём сообщает строка над Рынком. См. «Ваш район».</p>
+        <h2>События рядом с вами</h2>
+        <p>На телефоне на карточках событий отображается расстояние до них, как только вы разрешите приложению доступ к геопозиции. В веб-приложении расстояние рассчитывается от центра, выбранного в фильтре <strong>Расстояние</strong>. В глобальном сообществе, если центр не выбран, расстояние рассчитывается от вашего района (кроме раздела <strong>События</strong>). На Карте в веб-приложении расстояние от вас отображается после нажатия кнопки с прицелом.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>Обзор Рынка</strong><span>Поиск Предложений и Спроса с фильтрами по категориям и расстоянию.</span></a></li>
+            <li><a href="map-pins.html"><strong>Метки на Карте</strong><span>Метки на Карте, значение цветов и кнопки управления вокруг них.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Местоположение метки</strong><span>Кто видит координаты ваших объявлений и событий, и как сохранить домашний адрес в тайне.</span></a></li>
+            <li><a href="events.html"><strong>События</strong><span>Создание событий очно или онлайн, разовых или регулярных; отметка участия, напоминания, репосты и проведение в роли ведущего.</span></a></li>
+            <li><a href="your-area.html"><strong>Ваш район</strong><span>Приблизительное место, по которому глобальное сообщество находит объявления рядом, и как его сменить или очистить.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

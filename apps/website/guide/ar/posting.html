@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نشر عرض أو طلب — BeanPool members' guide</title>
+    <meta name="description" content="انشر شيئًا يمكنك فعله أو تقديمه، أو شيئًا تبحث عنه.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">السوق</a></p>
+        <h1>نشر عرض أو طلب</h1>
+        <p class="lede">انشر شيئًا يمكنك فعله أو تقديمه، أو شيئًا تبحث عنه.</p>
+        <h2>العرض أولاً</h2>
+        <p>في المجتمع الذي يستخدم فاصوليا، يجب أن تكون قد نشرت <strong>عرضًا</strong> واحدًا على الأقل قبل أن تتمكن من نشر <strong>طلب</strong> أو قبول عرض شخص آخر. فالجميع يقدم شيئًا. كما يحدد عدد العروض التي تعرضها مدى إمكانية نزولك تحت الصفر. انظر &quot;حد الائتمان الخاص بك&quot;.</p>
+        <p>وحيث لا توجد فاصوليا، كما هو الحال في المجتمع العالمي، يمكن أن يكون أول منشور لك طلبًا.</p>
+        <h2>قبل أن تبدأ</h2>
+        <p>في المجتمع الذي يستخدم فاصوليا، تحتاج إلى اسم وصورة للملف الشخصي. وحيث لا توجد فاصوليا، يكفي الاسم. وإذا كان هناك شيء مفقود، يطلب منك التطبيق <strong>إعداد الملف الشخصي</strong> أولاً.</p>
+        <h2>النشر</h2>
+        <ul>
+            <li>اضغط على <strong>+ إضافة منشور</strong> في علامة تبويب السوق أو الخريطة.</li>
+            <li>اختر <strong>عرض</strong> أو <strong>طلب</strong>. يفتح النموذج على الخريطة.</li>
+            <li><strong>العنوان:</strong> بضع كلمات، حتى 50 حرفًا على الهاتف. &quot;رغيف خبز مخمر&quot;، &quot;توصيلة إلى المدينة أيام الجمعة&quot;.</li>
+            <li><strong>الفئة:</strong> اختر الفئة الأقرب.</li>
+            <li><strong>الوصف:</strong> ماذا ومتى وأين، وأي شيء يجب أن يعرفه الناس.</li>
+            <li><strong>الصور:</strong> صورة واحدة على الأقل، وحتى خمس صور. اضغط على <strong>الكاميرا</strong> أو <strong>المعرض</strong>. وحيث لا توجد فاصوليا، تكون صور الطلب اختيارية.</li>
+            <li><strong>الموقع:</strong> اضغط على <strong>موقعي</strong>، أو <strong>إسقاط دبوس</strong> واضغط على الخريطة، ثم <strong>تأكيد الدبوس</strong>. يمكن لكل عضو في مجتمعك رؤية الدبوس، لذا ضعه بالقرب منك بدلاً من باب منزلك إذا كنت تفضل ذلك. انظر &quot;أين يوضع دبوسك&quot;.</li>
+            <li><strong>السعر:</strong> عدد من الفاصوليا. اضغط على زر الوحدة لاختيار <strong>الإجمالي</strong> أو <strong>/ساعة</strong>. اضغط على <strong>مجانًا</strong> لتقديمه دون مقابل. يقدم الزر أيضًا <strong>/يوم</strong>، و<strong>/أسبوع</strong> و<strong>/شهر</strong>، لكن المنشور الجديد لا يحتفظ بها بعد: بل يُحفظ كسعر إجمالي. اختر <strong>الإجمالي</strong> واذكر المدة في الوصف.</li>
+            <li>اضغط على <strong>نشر عرض</strong> أو <strong>نشر حاجة</strong>.</li>
+        </ul>
+        <p>حتى يتم ملء كل ما يلزم، يخبرك الزر بما ينقص، مثل <strong>إضافة صورة</strong> أو <strong>حدد سعرًا</strong>.</p>
+        <p>في تطبيق الويب تختلف الخطوات قليلاً:</p>
+        <ul>
+            <li>اضغط على زر <strong>+</strong> على الخريطة (المسمى <strong>منشور جديد</strong>)، أو <strong>+ إضافة منشور</strong> في السوق.</li>
+            <li>لوضع دبوسك، اضغط على <strong>موقعي</strong>، أو اضغط على <strong>إسقاط دبوس</strong> ثم اضغط على الخريطة. لا يوجد خيار <strong>تأكيد الدبوس</strong>.</li>
+            <li>السعر عبارة عن مربع أرقام وقائمة وحدات. لا يوجد زر <strong>مجانًا</strong>: اكتب 0 لتقديمه دون مقابل.</li>
+            <li>لا يحتوي العنوان على حد أقصى قدره 50 حرفًا.</li>
+            <li>يُكتب على الزر <strong>موقع الخريطة مطلوب</strong> أو <strong>املأ الحقول المطلوبة</strong> طالما كان هناك شيء مفقود. كما يظل باللون الرمادي حتى تضيف صورة واحدة على الأقل.</li>
+            <li>لا يحتفظ النموذج بمسودة.</li>
+        </ul>
+        <h2>في المجتمع العالمي</h2>
+        <p>لا توجد فاصوليا في المجتمع العالمي، لذا لا يحتوي المنشور هناك على سعر. ولا يحتوي النموذج على <strong>السعر</strong>: اذكر في الوصف ما ترغب في الحصول عليه في المقابل، أو أنه مجاني. وحيثما يكون السعر، يذكر نموذج تطبيق الويب، ونموذج الهاتف لتغيير المنشور، &quot;🏘️ في المجتمع المحلي يكون هذا سعرًا بالفاصوليا ›&quot;: اضغط عليه لمعرفة السبب. انظر &quot;فاصوليا والمجتمع العالمي&quot;.</p>
+        <p>يمكن لزوار المجتمع العالمي رؤية صور هذه القائمة ومنطقتها التقريبية قبل الانضمام. فهم يرون كلمات المنشور وصوره ومكانه التقريبي، دون رؤية اسمك أو وجهك أو موقعك الدقيق. في تطبيق الويب، يوضح النموذج ذلك أسفل الصور. ويرى أعضاء المجتمع العالمي موقعك في حدود كيلومتر تقريبًا.</p>
+        <h2>لست متأكدًا مما يجب فرضه؟</h2>
+        <p>على الهاتف، اضغط على <strong>لست متأكدًا مما يجب فرضه؟</strong> أسفل السعر. في تطبيق الويب، لا يحتوي النموذج على مثل هذا السطر: افتح <strong>💡 دليل التسعير</strong> في السوق بدلاً من ذلك. دليل تقريبي: 40 فاصوليا تعادل حوالي ساعة واحدة من وقت شخص ما. يحتوي <strong>دليل تسعير المجتمع</strong> على تقديرات للعديد من الأشياء اليومية. على الهاتف، يؤدي الضغط على أحدها إلى تعبئة عرض لك. وفي تطبيق الويب، يؤدي الضغط على أحدها إلى فتح نموذج منشور جديد على الخريطة دون تعبئة أي شيء.</p>
+        <p>أسفل السعر ترى ما ستتلقاه بعد خصم رسوم السوق البالغة 1.5%. وليس على الهدايا أي رسوم.</p>
+        <h2>خيارات إضافية</h2>
+        <ul>
+            <li><strong>قابل للتكرار:</strong> يظل المنشور معروضًا بعد كل صفقة، ويمكن لعدة أشخاص إجراؤها في وقت واحد. مفيد للتوصيل الأسبوعي أو الخبز كل سبت.</li>
+            <li><strong>مطلوب نقد أيضًا:</strong> حدد هذا الخيار إذا كنت بحاجة أيضًا إلى بعض النقود للوقود أو المواد. لا يتعامل التطبيق مع النقود مطلقًا؛ بل ترتبان ذلك بينكما.</li>
+            <li><strong>إلى أين يصل هذا؟</strong> فقط إذا كان مجتمعك يتداول مع مجتمعات أخرى: احتفظ بالمنشور هنا، أو شاركه على نطاق أوسع.</li>
+        </ul>
+        <p>على الهاتف، يحتفظ التطبيق بمسودة أثناء الكتابة. وإذا غادرت وعدت، يسألك عما إذا كنت تريد <strong>متابعة</strong> أو <strong>بدء من جديد</strong>.</p>
+        <h2>النشر في مجموعة فقط</h2>
+        <p>افتح <strong>المشاع</strong>، ثم <strong>المجموعات</strong>، ثم مجموعتك، واضغط على <strong>النشر في</strong> واسم المجموعة. وتلك المجموعة وحدها هي التي تراه. على الهاتف لا يحتوي هذا النموذج الأقصر على صور ولا موقع. وفي تطبيق الويب يفتح النموذج المعتاد على الخريطة، مضبوطًا على المجموعة.</p>
+        <h2>تغيير منشور أو إزالته</h2>
+        <p>افتح منشورك. إذا لم تكن هناك صفقة جارية عليه:</p>
+        <ul>
+            <li><strong>تعديل المنشور</strong> يغير الكلمات والفئة والسعر والصور. اضغط على <strong>حفظ</strong>. لا يمكن تغيير الموقع؛ احذف المنشور وانشره مرة أخرى بدلاً من ذلك.</li>
+            <li><strong>إيقاف العرض مؤقتًا</strong> يخفي العرض لفترة من الوقت. <strong>تفعيل العرض</strong> يعيده مجددًا. لا يمكن إيقاف الطلبات مؤقتًا.</li>
+            <li><strong>حذف المنشور</strong> يزيله. ويرى أي شخص لا يزال يطلبه أن طلبه محدد كـ مرفوض.</li>
+        </ul>
+        <p>أثناء طلب شخص ما لمنشورك، لا يزال بإمكانك تغيير كلماته وصوره، ولكن ليس سعره: يخبرك التطبيق بذلك. وأثناء حجز الفاصوليا على منشور، لا يمكنك تعديله على الإطلاق. والاستثناء هو المنشور القابل للتكرار (يمكن أن يحتوي على عدة صفقات في وقت واحد): لا يزال بإمكانك تغيير كلماته وصوره، ولكن ليس سعره. ولتغيير السعر، ارفض تلك الصفقة أو ألغِها أولاً.</p>
+        <p>في المجتمع المحلي، لا تنتهي صلاحية المنشورات. احذفها عند الانتهاء منها.</p>
+        <p>في المجتمع العالمي، تتم أرشفة القائمة بعد 90 يومًا من آخر تغيير لها: فتخرج من السوق وتُحذف صورها. وحفظها عبر <strong>تعديل المنشور</strong> يحتفظ بها لمدة 90 يومًا أخرى. انظر &quot;حدود المجتمع العالمي&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>الصفقة، خطوة بخطوة</strong><span>من الطلب إلى استلام الدفع، للعرض وللطلب، وترك تقييم.</span></a></li>
+            <li><a href="my-deals.html"><strong>صفقاتي</strong><span>مكان واحد لكل معاملة تشارك فيها، وكل منشور لديك، وتداولاتك السابقة.</span></a></li>
+            <li><a href="map-pins.html"><strong>ما تعرضه الخريطة</strong><span>الدبابيس على الخريطة، وما تعنيه ألوانها، والأزرار التي حولها.</span></a></li>
+            <li><a href="credit-line.html"><strong>حد الائتمان الخاص بك</strong><span>إلى أي مدى يمكنك النزول تحت الصفر، وكيف ينمو هذا الحد.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

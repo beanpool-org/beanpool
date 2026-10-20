@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>আপনার 12টি শব্দ ও সার্ভারের চাবি (মালিকরা) — BeanPool members' guide</title>
+    <meta name="description" content="কমিউনিটির মালিকদের জন্য। আপনার 12টি শব্দ পরীক্ষা করা, ফোন দিয়ে সার্ভার পরিচালনা বা পুনরুদ্ধার করা এবং ফোন নিজে যে যাচাই করে।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">সেটিংস ও নিরাপত্তা</a></p>
+        <h1>আপনার 12টি শব্দ ও সার্ভারের চাবি (মালিকরা)</h1>
+        <p class="lede">কমিউনিটির মালিকদের জন্য। আপনার 12টি শব্দ পরীক্ষা করা, ফোন দিয়ে সার্ভার পরিচালনা বা পুনরুদ্ধার করা এবং ফোন নিজে যে যাচাই করে।</p>
+        <h2>এটি কাদের জন্য</h2>
+        <p>কেবল সম্প্রদায়ের <strong>মালিকদের</strong> জন্য। আপনি মালিক না হলে এর কিছুই দেখতে পাবেন না।</p>
+        <h2>মালিকদের কেন জিজ্ঞাসা করা হয়</h2>
+        <p>আপনার সম্প্রদায়ের নিজস্ব সার্ভার হারিয়ে গেলে সম্প্রদায়কে অন্য সার্ভারে স্থানান্তর করার জন্য সার্ভারটি তার চাবিগুলোর একটি লক করা কপি রাখে, এবং এর ব্যাকআপগুলোও লক করা থাকে। সেগুলো মালিকদের অ্যাকাউন্টের সাথে লক করা থাকে: যেকোনো একজন মালিক তাদের ফোন দিয়ে সেগুলো খুলতে পারেন (নিচে আপনার ফোন দিয়ে দায়িত্ব গ্রহণ বা পুনরুদ্ধার করা দেখুন)। আপনি যদি ফোন হারিয়ে ফেলেন, তবে আপনার ১২টি ইংরেজি শব্দ আপনার অ্যাকাউন্ট ফিরিয়ে আনে, এবং তার সাথে সার্ভারের লক ও ব্যাকআপের চাবিও ফেরত আসে। যেদিন সার্ভার নিজেই হারিয়ে যায় সেদিন এটি সবচেয়ে বেশি গুরুত্বপূর্ণ হয়ে ওঠে।</p>
+        <p>তাই অ্যাপটি প্রতিটি মালিককে মাঝেমধ্যে যাচাই করতে বলে যে তাদের কাছে এখনও সঠিক ১২টি শব্দ রয়েছে কিনা। আপনি <strong>পরে</strong> বলতে পারেন। কোনো কিছুই কখনও অবরুদ্ধ হয় না, এবং একজন মালিক যা করেন তার সবকিছু আপনি চালিয়ে যেতে পারেন।</p>
+        <h2>অ্যাপটি কখন জানতে চায়</h2>
+        <ul>
+            <li>একবার, আপনি মালিক হওয়ার কিছুদিন পরে।</li>
+            <li>আবার, আপনার শেষ পরীক্ষার ১২ মাস পর।</li>
+        </ul>
+        <p>এটি বাজারের শীর্ষে একটি কার্ড দেখায় (ওয়েব অ্যাপে মানচিত্র ছাড়া প্রতিটি স্ক্রিনের শীর্ষে): <strong>এখনই পরীক্ষা করুন</strong> বা <strong>পরে</strong>। <strong>পরে</strong> নির্বাচন করলে কার্ডটি পরবর্তী নির্ধারিত সময় না আসা পর্যন্ত লুকিয়ে রাখা হয়। আপনি <strong>সেটিংস</strong> থেকে যেকোনো সময় পরীক্ষা করতে পারেন: <strong>কমিউনিটি চাবিসমূহ</strong>-এর অধীনে, <strong>আপনার ১২টি শব্দ পরীক্ষা করুন</strong> (ওয়েব অ্যাপে, <strong>এখনই পরীক্ষা করুন</strong>)-এ ট্যাপ করুন।</p>
+        <h2>যেভাবে পরীক্ষা করবেন</h2>
+        <ul>
+            <li>১২টি ইংরেজি শব্দ লেখা আপনার কাগজটি নিন।</li>
+            <li>সেগুলোর মাঝে ফাঁকা স্থান দিয়ে ক্রমানুসারে টাইপ করুন। বড় হাতের অক্ষর এবং অতিরিক্ত ফাঁকা স্থান কোনো সমস্যা নয়।</li>
+            <li><strong>আমার শব্দগুলো পরীক্ষা করুন</strong>-এ ট্যাপ করুন।</li>
+        </ul>
+        <p>সেগুলো সঠিক হলে, অ্যাপটি বলে <strong>এগুলোই সঠিক শব্দ।</strong> যদি না হয়: <strong>এগুলো এই অ্যাকাউন্টের শব্দ নয়।</strong> কোন শব্দটি ভুল তা এটি বলে না, তাই কাগজটি দেখুন এবং সবগুলো আবার টাইপ করুন।</p>
+        <p>আপনার ১২টি শব্দের কোনো কপি নেই এমন ফোনে (সাইন-ইন অ্যাকাউন্ট দিয়ে পুনরুদ্ধার করা ফোনে), সঠিক শব্দগুলো <strong>সেগুলো এই ফোনে সংরক্ষণ করুন</strong> বিকল্পটিও নিয়ে আসে। এতে ট্যাপ করুন এবং <strong>পুনরুদ্ধার শব্দগুচ্ছ দেখুন</strong> তখন থেকে সেগুলো প্রদর্শন করবে। এটি <strong>এই ফোনে আপনার ১২টি শব্দ যোগ করুন</strong>-এর মতোই একই পরীক্ষা এবং একই সংরক্ষণ ব্যবস্থা (&quot;আপনার 12টি শব্দ&quot; দেখুন)।</p>
+        <p>খুঁজে পাচ্ছেন না? এই ফোনে এখনও সেগুলো থাকলে, <strong>সেটিংস</strong>, তারপর <strong>পুনরুদ্ধার শব্দগুচ্ছ দেখুন</strong> সেগুলো দেখায়। সেগুলো আবার লিখে রাখুন, তারপর পরীক্ষা করুন। কোনো কপি না থাকা ফোনে অ্যাপটি তা জানিয়ে দেয়: যখন আপনি সেগুলো খুঁজে পাবেন, এখানে পরীক্ষা করুন, তারপর সংরক্ষণ করুন।</p>
+        <h2>কী পাঠানো হয় এবং কী পাঠানো হয় না</h2>
+        <ul>
+            <li>এই পরীক্ষা আপনার ফোনে (বা ওয়েব অ্যাপের ক্ষেত্রে আপনার ব্রাউজারে) ঘটে। আপনার শব্দগুলো কখনই কোথাও পাঠানো হয় না। পরীক্ষার উত্তর আসার সাথে সাথেই এবং আপনি স্ক্রিন ছেড়ে চলে গেলে বক্সটি খালি হয়ে যায়। আপনি যদি <strong>সেগুলো এই ফোনে সংরক্ষণ করুন</strong>-এ ট্যাপ করেন কেবল তখনই সেগুলো সংরক্ষিত হয়, এবং কেবল এই ফোনেই থাকে।</li>
+            <li>শব্দগুলো সঠিক হলে, আপনার ফোন আপনার সম্প্রদায়ের সার্ভারকে কেবল এইটুকু জানায় যে আপনি পরীক্ষা করেছেন এবং কখন করেছেন, যা আপনার অ্যাকাউন্ট দিয়ে স্বাক্ষরিত থাকে।</li>
+            <li>মালিক এবং অ্যাডমিনরা সার্ভারের সেটিংসে প্রতিটি মালিকের &quot;১২টি শব্দ পরীক্ষিত&quot; তারিখ বা &quot;এখনও হয়নি&quot; দেখতে পান। এটি আপনার নিজস্ব বক্তব্য: সার্ভার আপনার শব্দগুলো দেখতে বা পরীক্ষা করতে পারে না।</li>
+        </ul>
+        <h2>আপনার ফোন দিয়ে দায়িত্ব গ্রহণ বা পুনরুদ্ধার করা</h2>
+        <p>আপনার সম্প্রদায়ের সার্ভার হারিয়ে গেলে, যিনি এর স্ট্যান্ডবাই সার্ভার চালান (বা ব্যাকআপ পুনরুদ্ধারকারী একটি নতুন সার্ভার চালান) তিনি লক করা চাবিগুলো খোলার জন্য একজন মালিককে অনুরোধ করতে পারেন। যেকোনো একজন মালিকই যথেষ্ট। আপনার BeanPool অ্যাপের সর্বশেষ সংস্করণ প্রয়োজন। ওয়েব অ্যাপটি এখনও খুললে তাও কাজ করে, তবে এটি আপনার সম্প্রদায়ের নিজস্ব ঠিকানায় থাকে যা সার্ভারের সাথেই বন্ধ থাকতে পারে: তাই ফোন অ্যাপটির ওপরই নির্ভর করা উচিত।</p>
+        <ul>
+            <li>সার্ভারের সেটিংসে তারা <strong>Take over as the main server</strong> নির্বাচন করেন, তারপর ব্যাকআপ পুনরুদ্ধারের সময় <strong>I understand: use an owner's phone</strong> অথবা <strong>Open with an owner's phone</strong> নির্বাচন করেন। তাদের স্ক্রিনে একটি কোড প্রদর্শিত হয়।</li>
+            <li>অ্যাপে: <strong>সেটিংস</strong>, <strong>কমিউনিটি চাবিসমূহ</strong>-এর অধীনে, <strong>এই ফোনটি দিয়ে দায়িত্ব গ্রহণ বা পুনরুদ্ধার করুন</strong>-এ ট্যাপ করুন এবং ক্যামেরাটি কোডের দিকে তাক করুন। সার্ভারের পৃষ্ঠাটি যদি আপনার নিজস্ব ফোনে খোলা থাকে, তবে এর লিঙ্কে ট্যাপ করলেও একই কাজ হয়। ওয়েব অ্যাপে, তাদের স্ক্রিন থেকে লিঙ্কটি অনুলিপি করুন এবং <strong>সেটিংস</strong>-এ <strong>এই ব্রাউজার দিয়ে দায়িত্ব গ্রহণ করুন বা পুনরুদ্ধার করুন</strong>-এর অধীনে পেস্ট করুন।</li>
+            <li>অ্যাপটি দেখায় কোন সম্প্রদায়, কোন সার্ভার এবং কী ঘটবে। আপনার প্রধান সার্ভার এখনও সাড়া দিলে তা লাল রঙে প্রদর্শিত হয়: দায়িত্ব গ্রহণ কেবল এমন সার্ভারের জন্যই প্রযোজ্য যা সত্যিই হারিয়ে গেছে।</li>
+            <li><strong>দায়িত্ব গ্রহণের জন্য আনলক করুন</strong> (বা <strong>ব্যাকআপ আনলক করুন</strong>)-এ ট্যাপ করুন। আপনার ফোন প্রথমে তার নিজস্ব আনলক চায়: আঙুলের ছাপ, মুখমণ্ডল বা পিন। ওয়েব অ্যাপে এমন কোনো ধাপ নেই, যে কারণে একজন মালিকের চাবির জন্য ফোন অ্যাপটি আরও নিরাপদ স্থান।</li>
+            <li>আপনার ফোন লকের নিজস্ব অংশটি খুলে ফেলে এবং সেই সার্ভারকে চাবিটি হস্তান্তর করে, এমনভাবে লক করে যাতে কেবল সেই সার্ভারই এটি পড়তে পারে। আপনার ফোন কখনই সার্ভারের চাবি বা ব্যাকআপ দেখতে পায় না।</li>
+            <li>দায়িত্ব গ্রহণের সময়, সার্ভারে থাকা ব্যক্তি এরপর তাদের স্ক্রিনে নিশ্চিত করেন। সম্প্রদায়কে জানানো হয় যে এটি স্থানান্তরিত হয়েছে এবং আপনি চাবিগুলো খুলেছেন।</li>
+        </ul>
+        <p>লকটি অন্য সম্প্রদায়ের হলে, এটি আপনার সাথে লক করা না থাকলে, সার্ভারের কোডের মেয়াদ শেষ হয়ে গেলে (এটি ১০ মিনিট স্থায়ী হয় এবং একবার কাজ করে), বা চাবিগুলো আপনার সম্প্রদায়ের নিজস্ব সার্ভার দ্বারা লক করা না থাকলে অ্যাপটি প্রত্যাখ্যান করে এবং কারণ জানায়।</p>
+        <h2>আপনার ফোন নিজে থেকেই লক পরীক্ষা করে</h2>
+        <p>প্রতিবার আপনার সম্প্রদায়ের লক পরিবর্তিত হলে (একজন মালিক যুক্ত বা অপসারিত হলে, একটি নতুন পুনরুদ্ধার কোড তৈরি করা হলে), আপনার অ্যাপটি নিঃশব্দে পরীক্ষা করে দেখে যে এটি এখনও তার অংশটি খুলতে পারে কিনা। এটি খোলে, তাৎক্ষণিকভাবে চাবিটি ফেলে দেয় এবং এটি কাজ করেছে কিনা তা সার্ভারকে জানায়। আপনার কাছ থেকে কিছুই চাওয়া হয় না।</p>
+        <p>মালিক এবং অ্যাডমিনরা সার্ভারের সেটিংসে আপনার ১২টি শব্দের তারিখের পাশে এটি দেখতে পান: <strong>their phone opened the current lock</strong> তারিখসহ, অথবা এটি সর্বশেষ কোনো পুরোনো লক খুলেছিল। যদি এটি বলে যে আপনার ফোন <strong>could NOT open</strong> লকটি খুলতে পারেনি, তবে আপনার ১২টি শব্দ পরীক্ষা করুন এবং অন্য একজন মালিককে সার্ভারের সেটিংস দেখতে বলুন।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>আপনার 12টি শব্দ</strong><span>12টি শব্দ আপনার অ্যাকাউন্টের চাবিকাঠি। কেন এগুলো গুরুত্বপূর্ণ, কোথায় পাবেন, কীভাবে নিরাপদ রাখবেন এবং ফিরে আসার দ্বিতীয় উপায় হিসেবে সাইন-ইন যোগ করবেন।</span></a></li>
+            <li><a href="recovery.html"><strong>অ্যাকাউন্ট পুনরুদ্ধার</strong><span>নতুন ফোনে আপনার অ্যাকাউন্ট পুনরুদ্ধার করুন এবং একটি সাইন-ইন অ্যাকাউন্ট দিয়ে এটিকে সুরক্ষিত করুন।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

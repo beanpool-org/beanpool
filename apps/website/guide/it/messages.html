@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messaggi — BeanPool members' guide</title>
+    <meta name="description" content="Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Messaggi</h1>
+        <p class="lede">Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.</p>
+        <h2>Le tue chat</h2>
+        <p><strong>Parla</strong> ha tre pulsanti in alto: <strong>Messaggi</strong>, <strong>Gruppi</strong> e <strong>Persone</strong>.</p>
+        <p>Tocca <strong>Parla</strong> nella riga delle schede, poi <strong>Messaggi</strong>. Le tue chat con le persone sono elencate lì. Gli scambi che richiedono il tuo intervento sono in cima, sotto <strong>Azione richiesta</strong>.</p>
+        <p>Le chat che appartengono a un gruppo, a un'impresa o a un evento si trovano sotto <strong>Gruppi</strong>, non qui. Vedi &quot;Gruppi&quot;.</p>
+        <ul>
+            <li>Cerca con <strong>Cerca chat, annunci, partner...</strong>.</li>
+            <li>Il pulsante di filtro ordina per <strong>Recenti</strong> o <strong>Non letti</strong> (e, dove la tua comunità usa i fagioli, in base ai fagioli di ciascuno scambio, dal più alto o dal più basso), e può mostrare <strong>Solo non letti</strong> o <strong>Solo amici</strong>.</li>
+            <li>Sul telefono, la ricerca e il pulsante di filtro scorrono via man mano che scorri verso il basso. Scorri un po' verso l'alto e ricompariranno. Tocca nuovamente <strong>Parla</strong> per tornare in cima.</li>
+        </ul>
+        <p>Nella web app questa è la scheda <strong>Chat</strong>. Elenca tutte le tue chat, comprese quelle dei gruppi e degli eventi, con <strong>Tutti</strong>, <strong>Transazioni</strong>, <strong>Diretti</strong> e <strong>Gruppi</strong> in alto, e non dispone di ricerca o filtri.</p>
+        <h2>Avviare una chat</h2>
+        <ul>
+            <li>Da un annuncio: tocca <strong>Messaggio</strong> e il nome della persona.</li>
+            <li>Da <strong>Parla</strong>: tocca il pulsante con la matita, poi trova la persona per nome. Nella comunità globale, Nuovo messaggio elenca le persone con cui hai fatto scambi e i tuoi amici. Per trovare chiunque altro, digita almeno 2 lettere del suo nome.</li>
+            <li>Dai tuoi amici: <strong>Parla</strong>, poi <strong>Persone</strong>, poi <strong>Amici</strong>, e tocca il pulsante del messaggio accanto a un nome.</li>
+        </ul>
+        <p>Nella web app, usa <strong>✉️ Nuovo MD</strong>, oppure il pulsante <strong>💬 Messaggio</strong> su un annuncio. I tuoi amici si trovano sotto la scheda <strong>Persone</strong>.</p>
+        <h2>Inviare</h2>
+        <ul>
+            <li>Scrivi in <strong>Messaggio...</strong> e tocca il pulsante di invio.</li>
+            <li>Per inviare una foto, tocca <strong>+</strong>, poi <strong>Fotocamera</strong> o <strong>Galleria</strong>. Nella web app, usa il pulsante <strong>📎</strong>, oppure incolla o trascina un'immagine direttamente nella chat: ti mostra prima l'immagine e qualsiasi cosa tu abbia già digitato la accompagnerà come didascalia. Le foto possono essere inviate solo nelle chat tra due persone.</li>
+        </ul>
+        <p>Le spunte sotto il tuo messaggio:</p>
+        <ul>
+            <li>una spunta: inviato;</li>
+            <li>due spunte blu: letto;</li>
+            <li>un orologio: ancora in fase di invio;</li>
+            <li><strong>non recapitato</strong>: non è riuscito. Toccalo per fare <strong>Invia di nuovo</strong> o <strong>Scarta</strong>.</li>
+        </ul>
+        <p>L'orologio e <strong>non recapitato</strong> sono sul telefono. Nella web app un messaggio non riuscito rimane nella casella e l'app lo segnala.</p>
+        <h2>Rispondi, reagisci, modifica, elimina</h2>
+        <p>Sul telefono, tocca un messaggio. Piccoli pulsanti rotondi compaiono accanto ad esso:</p>
+        <ul>
+            <li><strong>Rispondi</strong> lo cita sopra ciò che scriverai successivamente. Tocca la citazione in un messaggio inviato per tornare a ciò a cui risponde.</li>
+            <li><strong>Reagisci</strong> apre sette emoji. Toccane una per aggiungerla, toccala di nuovo per ritirarla. Una sola reazione a testa; toccarne una diversa la sostituisce. Le reazioni compaiono come un piccolo distintivo sotto il messaggio.</li>
+            <li><strong>Modifica</strong>, sui tuoi messaggi, per 15 minuti dopo l'invio. Il messaggio mostra poi <strong>modificato</strong>. Le foto non possono essere modificate.</li>
+            <li><strong>Elimina</strong>, sui tuoi messaggi, in qualsiasi momento: non c'è limite di tempo. Chiede <strong>Eliminare per tutti?</strong> una sola volta. Il messaggio riporta poi <strong>Questo messaggio è stato eliminato</strong> per entrambi, e nessuno può reagire o rispondere ad esso.</li>
+        </ul>
+        <p>Gli stessi pulsanti sono presenti nella chat di un gruppo. Vedi &quot;Gruppi&quot;.</p>
+        <p>Nella web app, <strong>Rispondi</strong>, <strong>Reagisci</strong> e <strong>Modifica</strong> sono piccole parole su ciascun messaggio, e non c'è <strong>Elimina</strong>: elimina un messaggio dall'app per telefono.</p>
+        <p>L'eliminazione rimuove le parole anche dal server della tua comunità, così un nuovo telefono che effettua l'accesso in seguito non le vedrà mai.</p>
+        <h2>Disattivare l'audio di una chat</h2>
+        <p>Tocca <strong>⋯</strong> in alto a destra (<strong>⋮</strong> nella chat di un gruppo), poi <strong>Disattiva notifiche</strong>: <strong>Per 8 ore</strong>, <strong>Per una settimana</strong> o <strong>Sempre</strong>. Tocca lo stesso pulsante e <strong>Attiva notifiche</strong> per annullare. La web app non può ancora disattivare l'audio di una chat. Vedi &quot;Silenziare chat&quot;.</p>
+        <h2>Cosa è privato</h2>
+        <ul>
+            <li>Una chat tra due persone è protetta da <strong>crittografia end-to-end</strong>: viene protetta sul tuo telefono e decifrata sul loro, così il server della tua comunità non può leggerla. Sul telefono, la chat mostra <strong>Crittografato end-to-end</strong> in alto. Anche le foto al suo interno sono crittografate, così come le tue modifiche.</li>
+            <li>Ogni messaggio è inoltre associato a chi lo ha inviato, a quel singolo messaggio, alla sua chat e, se si tratta di una risposta, al messaggio a cui risponde. Quindi il server non può mostrare il tuo messaggio come se fosse dell'altra persona, inviarlo di nuovo come nuovo messaggio, né associare la tua risposta a un messaggio differente. Laddove tenti di farlo, l'app mostra <strong>Impossibile verificare questo messaggio, quindi non viene mostrato.</strong> al centro della chat, senza autore, al posto del testo. Una foto che il server sostituisce con un'altra riporta <strong>Immagine non disponibile</strong>.</li>
+            <li>Se il server inserisce un messaggio in un'altra chat, l'app lo rifiuta. Quando due delle tue chat con la stessa persona vengono unite in una sola, ciascun messaggio porta con sé la chat da cui proviene. Un messaggio inviato da questo aggiornamento in poi mostra la dicitura <strong>Spostato qui da un'altra conversazione.</strong> sotto di esso. Uno inviato prima mostra invece la riga della versione precedente (vedi sotto).</li>
+            <li>Ogni messaggio ricorda inoltre il messaggio più recente che l'autore aveva a disposizione quando lo ha scritto. Se il server lo mostra prima di quello, sotto di esso compare <strong>Mostrato non in ordine cronologico.</strong> Due messaggi scritti nello stesso momento, nessuno dei due successivo all'altro, possono arrivare in entrambi gli ordini senza tale dicitura.</li>
+            <li>Qualsiasi elemento in una chat tra due persone che non sia protetto non viene mai mostrato come parole di alcuna delle due persone: al centro della chat compare <strong>Questo messaggio non era crittografato, quindi BeanPool non può confermare chi lo ha scritto.</strong> e il suo testo non viene mostrato. Il tuo elenco delle chat mostra la stessa riga.</li>
+            <li>Un messaggio inviato dagli amministratori della tua comunità dalla pagina di amministrazione del server non è protetto e non è un messaggio privato. Viene mostrato al centro della chat, mai come messaggio personale di qualcuno, con sotto la dicitura <strong>Dagli amministratori della tua comunità. Non è un messaggio privato: il server della comunità può leggerlo.</strong>.</li>
+            <li>I messaggi inviati prima di questo aggiornamento, da qualsiasi app, venivano protetti senza queste verifiche: il server avrebbe potuto alterare l'apparente mittente, o inviarne uno di nuovo. Si aprono comunque, e ciascuno riporta sotto la dicitura <strong>Inviato da una versione precedente dell'app: BeanPool non può confermare chi lo ha scritto.</strong>, ovunque si trovi nella chat. Chi utilizza ancora un'app precedente non può leggere i messaggi inviati da un'app aggiornata finché non effettua l'aggiornamento.</li>
+            <li>Una risposta mostra il messaggio a cui risponde nello stesso modo in cui viene mostrato il messaggio stesso. Riporta il nome dell'autore solo quando il suo messaggio si è aperto, e include la riga di quel messaggio sotto di esso, come quella della versione precedente. Riporta <strong>Avviso</strong> per uno degli avvisi del server e <strong>Gli amministratori della tua comunità</strong> per il messaggio degli amministratori. Qualsiasi elemento che non si è aperto o non è stato protetto viene citato come <strong>Non confermato</strong>, con la riga che sostituisce le sue parole.</li>
+            <li>Pertanto, il server da solo non può far sembrare che uno di voi due abbia scritto parole che non ha scritto. Può comunque trattenere un messaggio, recapitarlo in ritardo, o farlo apparire come <strong>Questo messaggio è stato eliminato</strong>. Può mostrare le parole precedenti di un messaggio modificato invece di quelle nuove: entrambe appartengono realmente al mittente. Vede a quale messaggio risponde ciascun messaggio, ma non può modificarlo senza che ciò sia visibile. Può aggiungere o rimuovere una reazione emoji a nome di una delle due persone: le reazioni non sono protette. E può aggiungere i propri avvisi a una chat. Un avviso viene mostrato come tale, viene citato come <strong>Avviso</strong> e riporta <strong>Avviso:</strong> nel tuo elenco delle chat, mai a nome di uno di voi due.</li>
+            <li>La protezione garantisce che il messaggio provenga da uno di voi due, non da quale dei due: l'altra persona, con l'aiuto di chi gestisce il tuo server, potrebbe inserire parole a tuo nome.</li>
+            <li>Tutto questo si basa sul fatto che la tua app disponga della chiave reale dell'altra persona, ottenuta dal server della tua comunità, come avviene per la crittografia stessa. Nella web app si basa inoltre sull'app stessa, che il server della tua comunità invia al tuo browser. L'app per telefono proviene dall'app store.</li>
+            <li>Un messaggio che non può essere protetto non viene inviato. Se l'app non riesce ancora a trovare la chiave dell'altra persona, o la cifratura fallisce, le tue parole rimangono nella casella di testo con una riga che spiega il motivo. Invia nuovamente tra poco. Il server della tua comunità rifiuta inoltre qualsiasi messaggio tra due persone che non sia protetto.</li>
+            <li>Gli avvisi che BeanPool aggiunge a una chat in merito a uno scambio non sono crittografati: fagioli trattenuti per lo scambio, erogati o restituiti in caso di annullamento, l'importo e le modalità con cui un amministratore ha risolto uno scambio bloccato e il relativo motivo. Chi gestisce il server della tua comunità può leggerli.</li>
+            <li>Il server sa inoltre chi ha inviato messaggi a chi e quando, a quale messaggio risponde ciascuno di essi, e vede le reazioni emoji. Un messaggio inviato da una versione precedente dell'app senza protezione rimane leggibile sul server.</li>
+            <li>Anche la chat di un gruppo è protetta da <strong>crittografia end-to-end</strong>, sul telefono e nella web app: solo i membri del gruppo possono leggerla, mentre chi gestisce il server della tua comunità non può. Sopra la casella di testo viene indicato che è <strong>Crittografato end-to-end</strong>. Il server della tua comunità vede comunque chi ha scritto, quando, chi è stato menzionato, a quale messaggio risponde ciascuna riga e le reazioni emoji. Vedi la chat di un gruppo solo a partire dal giorno in cui ti sei unito: nulla di quanto scritto prima viene mostrato, e il tuo telefono non possiede mai la chiave corrispondente. Un messaggio che non può essere protetto non viene inviato. Una riga di cui non è possibile verificare la provenienza da un membro riporta <strong>Impossibile verificare questo messaggio.</strong>, senza autore. Se il server della tua comunità è meno recente e non può ancora proteggere le chat di gruppo, la chat lo segnala, e il server può leggerla. Quando il server viene aggiornato, quei messaggi precedenti vengono rimossi e una riga nella chat lo comunica. Vedi &quot;Gruppi&quot;.</li>
+            <li>Nella web app la chat di un gruppo funziona allo stesso modo, ma non puoi inviarvi foto.</li>
+            <li>Le chat delle imprese e degli eventi non sono crittografate. Chi gestisce il server della tua comunità può leggerle, e il server potrebbe scrivervi a nome di chiunque.</li>
+            <li>Una chat tra due persone non potrà mai essere trasformata in una di quelle. Una volta che la tua app ha riconosciuto una chat come chat tra due persone, o contiene un messaggio crittografato, rimane tale, indipendentemente da quanto affermi il server: si apre solo come quella chat, con tutti i controlli sopra descritti, e ciò che invii al suo interno è sempre protetto. Un telefono o un browser che non ha mai visto la chat, e a cui non viene fornito nessuno dei suoi messaggi crittografati, non può saperlo: a esso, tale chat apparirà come una qualsiasi chat di gruppo, leggibile dal server. Nella web app questo vale anche per un browser dal quale sia stato effettuato il logout, una finestra anonima o un browser di cui siano stati cancellati i dati del sito: la web app dimentica quali chat fossero tra due persone. L'app per telefono conserva invece tale elenco.</li>
+            <li>L'eliminazione di un messaggio chiede al server della tua comunità di sostituirlo. Non può raggiungere una copia che qualcuno ha già letto, né uno screenshot.</li>
+            <li>L'eliminazione del tuo account fa la stessa cosa per ogni messaggio che hai scritto, in qualsiasi tipo di chat, ed elimina le foto che hai inviato. Vedi &quot;Lasciare o eliminare l'account&quot;.</li>
+            <li>La chat di un evento può essere letta anche dall'organizzatore e da tutti i partecipanti (laddove l'organizzatore approvi l'ingresso delle persone, da coloro che ha ammesso).</li>
+            <li>La chat di un'impresa può essere letta da qualsiasi membro della tua comunità. È la discussione pubblica dell'impresa, la stessa mostrata dalla sua pagina, e chiunque nella comunità può scrivervi. Non è una chat privata per i suoi custodi.</li>
+        </ul>
+        <h2>Bloccare qualcuno da una chat</h2>
+        <p>Tocca il suo nome in cima alla chat. Si apre il suo profilo. Tocca <strong>Blocca</strong>, poi <strong>Blocca utente</strong>. Nella web app, tocca <strong>Blocca</strong> in cima alla chat, poi <strong>OK</strong>. Vedi &quot;Bloccare qualcuno&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>Persone e amici</strong><span>Trovare membri della comunità, i loro profili e badge di fiducia, e contrassegnare gli amici per accorgersi se qualcuno esce.</span></a></li>
+            <li><a href="blocking.html"><strong>Bloccare qualcuno</strong><span>Nascondi i post e i messaggi di qualcuno e ripristinali in seguito se lo desideri.</span></a></li>
+            <li><a href="event-chat.html"><strong>Chat di eventi</strong><span>Parla con gli organizzatori e con tutti i partecipanti all'evento.</span></a></li>
+            <li><a href="groups.html"><strong>Gruppi</strong><span>I tuoi gruppi e le loro chat, conversare, creare un gruppo, invitare persone, entrare su invito e le votazioni interne del gruppo.</span></a></li>
+            <li><a href="mute.html"><strong>Silenziare chat</strong><span>Silenzia una chat — di una persona, di un gruppo o di un'impresa — per 8 ore, una settimana o per sempre.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Barra in alto</strong><span>Il fagiolo, le piccole icone che segnalano quando qualcosa richiede attenzione e i pulsanti in alto a destra.</span></a></li>
+            <li><a href="key-changed.html"><strong>Quando cambia una chiave o un nome</strong><span>Perché una chat smette di inviare, come verificare il codice con l'altra persona e quando proseguire.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

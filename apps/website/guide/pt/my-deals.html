@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meus acordos — BeanPool members' guide</title>
+    <meta name="description" content="Um só lugar para cada troca em andamento, cada anúncio ativo e suas trocas passadas.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Mercado</a></p>
+        <h1>Meus acordos</h1>
+        <p class="lede">Um só lugar para cada troca em andamento, cada anúncio ativo e suas trocas passadas.</p>
+        <h2>Como abrir</h2>
+        <p>Toque em <strong>Meus acordos</strong> no topo da aba Mercado. Um número vermelho sobre ele indica a quantidade de acordos em andamento.</p>
+        <p>Na comunidade global não há acordos, então <strong>Meus acordos</strong> mostra três exemplos de acordos de uma comunidade local, Example Valley, marcados como <strong>🏘️ Comunidade local</strong>: um aguardando você, um com os feijões retidos com segurança e um concluído. Seus botões explicam por que os acordos vivem em uma comunidade local, e não alteram nada. Consulte &quot;Feijões e comunidade global&quot;.</p>
+        <h2>Três abas</h2>
+        <ul>
+            <li><strong>Em andamento:</strong> acordos em curso e solicitações aguardando resposta. Cada um mostra a sua situação: <strong>Em custódia</strong> (os feijões estão retidos), <strong>Ação necessária</strong> (alguém solicitou e você precisa responder) ou <strong>Aguardando aprovação</strong> (você solicitou e está aguardando a pessoa).</li>
+            <li><strong>Meus anúncios:</strong> suas Ofertas e Pedidos que estão ativos ou <strong>PAUSADO</strong>. Uma publicação solicitada por alguém exibe <strong>Ação necessária</strong>.</li>
+            <li><strong>Histórico:</strong> acordos concluídos, cancelados e recusados. Escolha <strong>Tudo</strong>, <strong>Recebidos</strong> ou <strong>Oferecidos</strong>. Cada um mostra a data, o valor e a outra pessoa.</li>
+        </ul>
+        <p>No aplicativo web, <strong>Em andamento</strong> lista apenas acordos com feijões retidos, de modo que solicitações aguardando resposta não aparecem ali. <strong>Minhas publicações</strong> mostra apenas seus anúncios ativos, cada um marcado como <strong>Ativo</strong>: anúncios pausados não são listados.</p>
+        <p>Toque em um acordo em <strong>Em andamento</strong> ou <strong>Meus anúncios</strong> para abrir a publicação. É lá que você aceita, conclui ou cancela um acordo. Uma solicitação que ninguém responde encerra por conta própria após 7 dias.</p>
+        <h2>Avaliações</h2>
+        <p>Uma troca concluída em <strong>Histórico</strong> possui o botão <strong>Revisar</strong>. Depois que você avalia, ele passa a exibir <strong>Editar</strong>, e você pode alterar suas estrelas.</p>
+        <p>No aplicativo web, o botão diz <strong>Deixar avaliação</strong>, e apenas até você avaliar aquela troca. Para alterar uma avaliação por lá, abra a publicação.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Um acordo passo a passo</strong><span>Do contato inicial ao pagamento, para uma Oferta e um Pedido, e avaliação.</span></a></li>
+            <li><a href="posting.html"><strong>Publicar Oferta ou Pedido</strong><span>Publique algo que você pode fazer ou oferecer, ou algo que esteja procurando.</span></a></li>
+            <li><a href="your-balance.html"><strong>Seu saldo e histórico</strong><span>Quantos feijões você tem, o que está retido e cada troca e presente.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Se um acordo der errado</strong><span>Cancelar um acordo e o que acontece quando vocês não chegam a um consenso.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Barra superior</strong><span>O feijão, os pequenos ícones que avisam quando algo precisa de você e os botões no canto superior direito.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

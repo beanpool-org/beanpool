@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رأی‌گیری در تصمیمات — BeanPool members' guide</title>
+    <meta name="description" content="یافتن تصمیمات باز، رأی دادن، تغییر رأی و مشاهده نتایج.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">مشاع</a></p>
+        <h1>رأی‌گیری در تصمیمات</h1>
+        <p class="lede">یافتن تصمیمات باز، رأی دادن، تغییر رأی و مشاهده نتایج.</p>
+        <h2>کجا</h2>
+        <p>روی <strong>مشاع</strong>، سپس <strong>تصمیم‌گیری</strong> بزنید. تصمیمات باز زیر <strong>تصمیم‌گیری‌های باز</strong> قرار دارند.</p>
+        <p>یک تصمیم الزام‌آور است: اگر تصویب شود، سرور جامعه شما خودبه‌خود آن را اجرا می‌کند. یک مدیر تنها با ارائه دلیلی کتبی که اعضا بتوانند بخوانند می‌تواند جلوی آن را بگیرد. قوانین مربوط به اینکه چه کسی می‌تواند رأی دهد، چه مقدار مشارکت لازم است و چه مقدار رأی موافق نیاز است در «قوانین و نحوه تصمیم‌گیری» آمده است.</p>
+        <p>جامعه جهانی هیچ تصمیمی ندارد. هر کسی می‌تواند با ۱۲ کلمه یا ورود به حساب به آن بپیوندد، بنابراین یک نفر با چندین حساب می‌تواند نتیجه رأی‌گیری را در آنجا تغییر دهد. در عوض مدیران ناظر آن را اداره می‌کنند: «گزارش مشکل» را ببینید. تصمیمات متعلق به جوامع محلی هستند. نظرسنجی‌ها همچنان در همه‌جا کار می‌کنند.</p>
+        <p>در جامعه جهانی، <strong>مشاع</strong> یک نمونه تصمیم از یک جامعه محلی را با برچسب <strong>🏘️ Local community</strong> نشان می‌دهد تا بتوانید نحوه کارکرد آن را ببینید. دکمه‌های <strong>رأی موافق</strong> و <strong>رأی مخالف</strong> آن توضیح می‌دهند که چرا رأی‌گیری در یک جامعه محلی قرار دارد، و هیچ رأیی ثبت نمی‌کنند. «لوبیا و جامعه جهانی» را ببینید.</p>
+        <h2>خواندن یک تصمیم</h2>
+        <p>هر تصمیم موارد زیر را نشان می‌دهد:</p>
+        <ul>
+            <li>موضوع آن چیست، و در صورت تصویب چه اتفاقی خواهد افتاد؛</li>
+            <li>آرا چگونه شمرده می‌شوند: یک عضو یک رأی، یا اعتبار رأی برای تصمیمات مربوط به لوبیاهای مشاع؛</li>
+            <li>چه مدت باقی مانده است. رأی‌گیری به مدت ۷ روز ادامه دارد؛</li>
+            <li><strong>میزان مشارکت:</strong> به چه تعداد رأی نیاز دارد، و آیا تاکنون به آن رسیده است یا خیر؛</li>
+            <li><strong>شمارش:</strong> موافق و مخالف تاکنون، و به چه مقدار رأی موافق نیاز دارد.</li>
+        </ul>
+        <h2>رأی دادن</h2>
+        <ul>
+            <li>روی <strong>رأی موافق</strong> یا <strong>رأی مخالف</strong> بزنید. در تلفن، برنامه عبارت <strong>رأی ثبت شد</strong> را نشان می‌دهد. در برنامه تحت وب، کارت به‌روزرسانی می‌شود.</li>
+            <li>سپس کارت آنچه رأی داده‌اید را نشان می‌دهد، مانند «به موافق رأی دادید».</li>
+            <li>برای تغییر نظر خود پیش از بسته شدن، روی دکمه دیگر بزنید، مانند <strong>تغییر به مخالف</strong>.</li>
+        </ul>
+        <p>هر تصمیم یک <strong>رأی‌گیری مخفی</strong> است. اعضا مجموع آرا را می‌بینند، هرگز اینکه چه کسی چگونه رأی داده است را نمی‌بینند. رأی خود شما فقط به خودتان نشان داده می‌شود.</p>
+        <h2>تصمیمات مربوط به لوبیاهای مشاع</h2>
+        <p>این تصمیمات از <strong>اعتبار رأی</strong> استفاده می‌کنند. اعتبار رأی را از معاملات تکمیل‌شده خود دریافت می‌کنید، که برای هر تصمیم تازه است. از <strong>−</strong> و <strong>+</strong> برای انتخاب تعداد آرایی که می‌خواهید بدهید استفاده کنید. آرای بیشتر هزینه بیشتری دارند: ۲ رأی ۴ اعتبار هزینه دارد، ۳ رأی ۹ اعتبار هزینه دارد.</p>
+        <p>اگر هنوز معامله‌ای را تکمیل نکرده‌اید، نمی‌توانید در این موارد رأی دهید. همچنان می‌توانید در سایر تصمیمات رأی دهید، به شرطی که قبل از باز شدن آن‌ها پیوسته باشید و اعتبار شما مسدود نشده باشد.</p>
+        <h2>نتایج</h2>
+        <p>روی <strong>تاریخچه تصمیم‌گیری‌ها</strong> بزنید. یکی از گزینه‌های <strong>همه</strong>، <strong>اجراشده</strong>، <strong>ردشده</strong> یا <strong>باطل‌شده</strong> را انتخاب کنید. هر کدام میزان مشارکت و شمارش نهایی را نشان می‌دهد، و اینکه چه اتفاقی افتاد، به عنوان مثال اینکه افراد بسیار کمی رأی دادند.</p>
+        <h2>اطلاعات بیشتر</h2>
+        <p>در تلفن، روی <strong>ⓘ</strong> کنار عنوان مشاع بزنید تا از نحوه کارکرد لوبیاهای مشاع و رأی‌گیری مطلع شوید. در برنامه تحت وب، <strong>دفتر کل</strong> را باز کنید، روی <strong>کیف پول</strong> بزنید، سپس روی <strong>صندوق مشترک ⓘ</strong> بزنید.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>پیشنهاد یک تصمیم</strong><span>از جامعه بخواهید تصمیمی الزام‌آور بگیرد.</span></a></li>
+            <li><a href="rules.html"><strong>قوانین و نحوه تصمیم‌گیری</strong><span>رأی‌گیری، مشارکت، آرای مخفی، واجدین شرایط رأی، تعلیق، حذف عضو، مدیران و هماهنگ‌کنندگان و هماهنگ‌کنندگان ارشد.</span></a></li>
+            <li><a href="polls.html"><strong>نظرسنجی‌ها</strong><span>یک پرسش سریع از جامعه. نظرسنجی‌ها افکار را نشان می‌دهند؛ خودبه‌خود تغییری نمی‌دهند.</span></a></li>
+            <li><a href="commons-fund.html"><strong>مشاع</strong><span>لوبیای مشترک جامعه شما: از کجا می‌آید و چگونه هزینه می‌شود.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>نوار بالا</strong><span>لوبیا، نمادهای کوچک نشان‌دهنده نیاز به توجه شما، و دکمه‌های بالا سمت راست.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>لوبیا و جامعه جهانی</strong><span>کاربرد جامعه جهانی، جامعه‌ای در میان بسیار، و آنچه می‌بینید: علامت 🏘️ جامعه محلی، جامعه نمونه دره نمونه، دلیل انتظار لوبیا در آنجا و نحوه شروع یا یافتن جامعه محلی.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

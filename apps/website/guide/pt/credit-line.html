@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sua linha de crédito — BeanPool members' guide</title>
+    <meta name="description" content="Até quanto você pode ficar abaixo de zero e como esse valor aumenta.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Registro</a></p>
+        <h1>Sua linha de crédito</h1>
+        <p class="lede">Até quanto você pode ficar abaixo de zero e como esse valor aumenta.</p>
+        <h2>O que é</h2>
+        <p>Sua linha de crédito permite que você gaste mais feijões do que possui e fique abaixo de zero. É uma promessa de ajudar outras pessoas mais tarde. Ficar abaixo de zero não custa nada: não há juros.</p>
+        <h2>Onde encontrar</h2>
+        <p>No <strong>Registro</strong>, abaixo do seu saldo, uma barra mostra onde você está:</p>
+        <ul>
+            <li>zero fica no meio;</li>
+            <li>a extremidade esquerda é o <strong>seu limite</strong>, o valor mais baixo que você pode atingir;</li>
+            <li>as marcas à esquerda mostram até onde as suas Ofertas permitem que você vá;</li>
+            <li>após <strong>+200</strong> à direita é onde tem início a taxa de circulação.</li>
+        </ul>
+        <p>No celular, toque na barra para abrir <strong>Informações do controle deslizante</strong>, que explica cada parte.</p>
+        <h2>Como é liberada</h2>
+        <p>Ela começa no zero. É liberada quando você conclui sua primeira troca no mercado (uma troca de apenas 1 ou 2 feijões é pequena demais para contar), ou quando alguém designado para receber novatos garante um aval para você. Até lá, o Registro exibe <strong>Ainda sem linha de crédito</strong>. Você ainda pode negociar usando os feijões que possui.</p>
+        <h2>Como aumenta</h2>
+        <ul>
+            <li><strong>Confiança:</strong> trocas concluídas constroem confiança, especialmente com várias pessoas diferentes. Consulte &quot;Limite de 500 feijões&quot;.</li>
+            <li><strong>Avaliações:</strong> estrelas só podem reduzir a confiança obtida. Uma média de 5 estrelas mantém o total integral; uma média menor desconta uma parte.</li>
+            <li>O limite máximo que qualquer linha de crédito atinge é de 2.000 feijões. Uma comunidade que confirma seus membros pode definir um teto maior, de até 5.000 (veja abaixo).</li>
+        </ul>
+        <h2>Suas Ofertas definem quanto você pode usar</h2>
+        <p>Você só pode usar da sua linha de crédito o equivalente ao que suas Ofertas ativas permitirem:</p>
+        <ul>
+            <li>nenhuma Oferta: nada;</li>
+            <li>1 Oferta: até −200;</li>
+            <li>2: −500;</li>
+            <li>3: −1.000;</li>
+            <li>4: −1.500;</li>
+            <li>5: −2.000.</li>
+        </ul>
+        <p>A linha abaixo da barra informa você, por exemplo: &quot;Publique uma Oferta para abrir sua linha de crédito&quot;.</p>
+        <h2>Em uma comunidade de membros conhecidos</h2>
+        <p>Algumas comunidades têm administradores que conhecem cada membro pelo nome. Se a sua ativou <strong>o piso conhecido</strong>, um membro confirmado por um administrador recebe uma linha de crédito imediatamente: 1.000 feijões, a menos que a sua comunidade tenha escolhido outro valor. Isso equivale a cerca de 25 horas de trabalho confiadas pela comunidade a você.</p>
+        <ul>
+            <li>Uma Oferta ativa permite que você use todo esse valor. Sem nenhuma Oferta, você não pode usá-lo.</li>
+            <li>A confiança obtida ao negociar se soma a isso, até o teto da sua comunidade (2.000 feijões, a menos que tenha escolhido mais, até 5.000).</li>
+            <li>Um administrador pode definir um limite menor para você, por exemplo enquanto você for novo. Isso nunca retira feijões de você: se você já estiver abaixo dele, os gastos são pausados até que você volte a ficar acima.</li>
+            <li>Se você estiver abatendo uma dívida de uma conta anterior, os feijões que você receber acima de 0 vão para os Bens comuns até que a dívida seja quitada. Seu Registro informa quanto resta. Você também pode pagar uma parte ou todo o valor por conta própria em <strong>Registro → Pagar aos Bens comuns</strong>: seu código de pagamento de volta já vem preenchido ali (ou digite o código fornecido por um administrador). O que você pagar com o código é abatido da dívida imediatamente e, quando não restar nada, a dívida estará quitada: nada mais será descontado, nem por pagamento nem do que você receber. Um pagamento sem o código vai para os Bens comuns, mas não abate a sua dívida, e o aplicativo avisa sobre isso: para que ele conte, peça a um administrador para computá-lo na sua dívida com o respectivo código de referência. Até que ele faça isso, a dívida continua sendo abatida: na próxima vez que você receber feijões, o restante será retirado do que você tiver acima de 0. O valor na mensagem do administrador é o saldo devedor de quando ele a compartilhou: se restar menos agora, o servidor recusará um pagamento maior, informará quanto resta e nada será pago. Se o aplicativo informar que um pagamento pode ter sido concluído, toque em <strong>Tentar novamente</strong> na mesma tela: o mesmo pagamento nunca é cobrado duas vezes. Se você sair dessa tela, verifique seu Registro antes de pagar novamente.</li>
+        </ul>
+        <h2>Congelada pelos administradores</h2>
+        <p>Os administradores da sua comunidade podem congelar a linha de crédito de um membro: ela toda ou, em uma comunidade de membros conhecidos, a parte proveniente de ser membro confirmado.</p>
+        <ul>
+            <li>Se congelarem ela toda, ou se a parte confirmada for toda a linha que você tem, o Registro exibirá <strong>Sua linha de crédito está congelada</strong>: você não pode gastar entrando no negativo enquanto o congelamento durar, mas ainda pode vender, receber feijões e gastar o que tiver acima de zero. Se você estava no negativo quando congelaram, o Registro também exibirá quantos feijões negativos você possui: vender ou receber feijões traz você de volta e, assim que você estiver acima de zero, poderá gastar o que possui.</li>
+            <li>Se congelarem a parte confirmada e você também tiver crédito decorrente de um aval, de negociações ou de um subsídio, a barra continua ali, com um aviso abaixo de que a parte confirmada está congelada e o restante funciona como antes. Se você estiver abaixo do que restou, o Registro também exibirá <strong>Gastos pausados</strong> (abaixo).</li>
+        </ul>
+        <p>Seu nível não muda: é aquele que a sua linha de crédito proporciona quando não está congelada, mesmo se os administradores tiverem definido a sua linha acima ou abaixo da média da comunidade, tanto no seu perfil quanto em seus anúncios. Para perguntar o motivo ou solicitar o desbloqueio, fale com um dos administradores.</p>
+        <h2>Gastos pausados</h2>
+        <p>Se você ficar abaixo do que as suas Ofertas permitem, por exemplo porque retirou uma Oferta, o Registro exibirá <strong>Gastos pausados</strong>. Você ainda pode arrecadar e vender. Publique uma Oferta ou ganhe feijões para voltar a subir, e a restrição será removida. Nada é retirado de você.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>Emblemas</strong><span>Recém-chegado, Morador, Guardião e Ancião. O que significam e por que não desbloqueiam nada.</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>Limite de 500 feijões</strong><span>Por que negociar com várias pessoas constrói mais confiança do que negociar muito com apenas uma.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Como o BeanPool funciona</strong><span>Feijões, trocas, ofertas e pedidos, e crédito, em palavras simples.</span></a></li>
+            <li><a href="posting.html"><strong>Publicar Oferta ou Pedido</strong><span>Publique algo que você pode fazer ou oferecer, ou algo que esteja procurando.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

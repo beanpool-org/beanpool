@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mga Mensahe — BeanPool members' guide</title>
+    <meta name="description" content="Magsimula ng chat, magpadala ng larawan, sumagot, mag-react, mag-edit, magbura, mag-mute, at ano ang pribado.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Usapan</a></p>
+        <h1>Mga Mensahe</h1>
+        <p class="lede">Magsimula ng chat, magpadala ng larawan, sumagot, mag-react, mag-edit, magbura, mag-mute, at ano ang pribado.</p>
+        <h2>Iyong mga chat</h2>
+        <p>Ang <strong>Usapan</strong> ay may tatlong button sa itaas: <strong>Mga Mensahe</strong>, <strong>Mga Grupo</strong> at <strong>Mga Tao</strong>.</p>
+        <p>I-tap ang <strong>Usapan</strong> sa hanay ng mga tab, pagkatapos ay <strong>Mga Mensahe</strong>. Ang iyong mga chat sa mga tao ay nakalista roon. Ang mga kasunduang nangangailangan sa iyo ay nasa itaas, sa ilalim ng <strong>Kinakailangang Aksyon</strong>.</p>
+        <p>Ang mga chat na kabilang sa isang grupo, negosyo, o kaganapan ay nasa ilalim ng <strong>Mga Grupo</strong>, hindi rito. Tingnan ang &quot;Mga Grupo&quot;.</p>
+        <ul>
+            <li>Maghanap gamit ang <strong>Maghanap sa mga chat, post, partner...</strong>.</li>
+            <li>Inaayos ng filter button ayon sa <strong>Kamakailan</strong> o <strong>Hindi Pa Nababasa</strong> (at, kung saan gumagamit ang iyong komunidad ng Munggo, ayon sa Munggo sa bawat kasunduan, pinakamataas o pinakamababa muna), at maaaring magpakita ng <strong>Hindi Pa Nababasa Lang</strong> o <strong>Mga Kaibigan Lang</strong>.</li>
+            <li>Sa telepono, ang button sa paghahanap at pag-filter ay dumudulas palayo habang nag-i-scroll ka pababa. Mag-scroll pataas nang kaunti at babalik ang mga ito. I-tap ang <strong>Usapan</strong> muli upang lumukso sa itaas.</li>
+        </ul>
+        <p>Sa web app ito ang tab na <strong>Usapan</strong>. Inililista nito ang lahat ng iyong mga chat, mga grupo at kaganapan din, na may <strong>Lahat</strong>, <strong>Mga Transaksyon</strong>, <strong>Direkta</strong> at <strong>Mga Grupo</strong> sa itaas, at wala itong paghahanap o filter.</p>
+        <h2>Pagsisimula ng chat</h2>
+        <ul>
+            <li>Mula sa isang post: i-tap ang <strong>Mensahe</strong> at ang pangalan ng tao.</li>
+            <li>Mula sa <strong>Usapan</strong>: i-tap ang button na lapis, pagkatapos ay hanapin ang tao ayon sa pangalan. Sa pandaigdigang komunidad, inililista ng Bagong Mensahe ang mga taong nakatransaksyon mo at ang iyong mga kaibigan. Upang makahanap ng sinumang iba pa, mag-type ng hindi bababa sa 2 titik ng kanilang pangalan.</li>
+            <li>Mula sa iyong mga kaibigan: <strong>Usapan</strong>, pagkatapos ay <strong>Mga Tao</strong>, pagkatapos ay <strong>Mga kaibigan</strong>, at i-tap ang button ng mensahe sa tabi ng pangalan.</li>
+        </ul>
+        <p>Sa web app, gamitin ang <strong>✉️ Bagong DM</strong>, o ang button na <strong>💬 Mensahe</strong> sa isang post. Ang iyong mga kaibigan ay nasa ilalim ng tab na <strong>Mga Tao</strong>.</p>
+        <h2>Pagpapadala</h2>
+        <ul>
+            <li>Mag-type sa <strong>Mensahe...</strong> at i-tap ang send button.</li>
+            <li>Upang magpadala ng larawan, i-tap ang <strong>+</strong>, pagkatapos ay <strong>Kamera</strong> o <strong>Galerya</strong>. Sa web app, gamitin ang button na <strong>📎</strong>, o i-paste o i-drag ang isang larawan nang diretso sa chat — ipinapakita muna nito sa iyo ang larawan, at anumang na-type mo na ay sasama rito bilang caption. Ang mga larawan ay maaari lamang ipadala sa mga chat sa pagitan ng dalawang tao.</li>
+        </ul>
+        <p>Ang mga tsek sa ilalim ng iyong mensahe:</p>
+        <ul>
+            <li>isang tsek: naipadala;</li>
+            <li>dalawang asul na tsek: nabasa na;</li>
+            <li>isang orasan: ipinapadala pa rin;</li>
+            <li><strong>hindi naihatid</strong>: nabigo ito. I-tap ito upang <strong>Ipadala Muli</strong> o <strong>I-discard</strong> ito.</li>
+        </ul>
+        <p>Ang orasan at <strong>hindi naihatid</strong> ay nasa telepono. Sa web app, ang isang mensaheng nabigo ay nananatili sa kahon, at sinasabi ito ng app.</p>
+        <h2>Tumugon, mag-react, mag-edit, magbura</h2>
+        <p>Sa telepono, i-tap ang isang mensahe. May lilitaw na maliliit na bilog na button sa tabi nito:</p>
+        <ul>
+            <li>Ang <strong>Tumugon</strong> ay nagko-quote nito sa itaas ng susunod mong isusulat. I-tap ang quote sa isang naipadalang mensahe upang lumukso pabalik sa sinasagot nito.</li>
+            <li>Binubuksan ng <strong>Mag-react</strong> ang pitong emoji. I-tap ang isa upang idagdag ito, i-tap ito muli upang bawiin. Isang reaksyon para sa bawat isa; ang pag-tap sa iba ay nagpapalit nito. Ipinapakita ang mga reaksyon bilang isang maliit na badge sa ilalim ng mensahe.</li>
+            <li><strong>I-edit</strong>, sa sarili mong mga mensahe, sa loob ng 15 minuto pagkatapos mong ipadala ito. Ipinapakita ng mensahe pagkatapos ang <strong>na-edit</strong>. Hindi maaaring i-edit ang mga larawan.</li>
+            <li><strong>Burahin</strong>, sa sarili mong mga mensahe, anumang oras — walang limitasyon sa oras. Nagtatanong ito ng <strong>Burahin para sa lahat?</strong> nang isang beses. Ang mensahe ay mababasang <strong>Binura ang mensaheng ito</strong> para sa inyong dalawa, at walang sinuman ang makakapag-react dito o makakatugon dito.</li>
+        </ul>
+        <p>Ang parehong mga button ay nasa chat ng isang grupo. Tingnan ang &quot;Mga Grupo&quot;.</p>
+        <p>Sa web app, ang <strong>Tumugon</strong>, <strong>Mag-react</strong> at <strong>I-edit</strong> ay maliliit na salita sa bawat mensahe, at walang <strong>Burahin</strong>: burahin ang isang mensahe mula sa app sa telepono.</p>
+        <p>Inaalis din ng pagbura ang mga salita sa server ng iyong komunidad, kaya hindi na kailanman makikita ng isang bagong telepono na magsa-sign in mamaya ang mga ito.</p>
+        <h2>Pag-mute ng chat</h2>
+        <p>I-tap ang <strong>⋯</strong> sa kanang itaas (<strong>⋮</strong> sa chat ng isang grupo), pagkatapos ay <strong>I-mute ang mga abiso</strong>: <strong>Nang 8 oras</strong>, <strong>Nang isang linggo</strong> o <strong>Palagi</strong>. I-tap ang parehong button at <strong>I-unmute</strong> upang bawiin ito. Hindi pa maaaring mag-mute ng chat ang web app. Tingnan ang &quot;Pag-mute ng chat&quot;.</p>
+        <h2>Kung ano ang pribado</h2>
+        <ul>
+            <li>Ang isang chat sa pagitan ng dalawang tao ay <strong>naka-encrypt nang end-to-end</strong>: naka-lock ito sa iyong telepono at naka-unlock sa kanila, kaya hindi ito mababasa ng server ng iyong komunidad. Sa telepono, ipinapakita ng chat ang <strong>Naka-encrypt nang end-to-end</strong> sa itaas. Naka-encrypt din ang mga larawan dito, at gayundin ang iyong mga pag-edit.</li>
+            <li>Ang bawat mensahe ay naka-lock din sa kung sino ang nagpadala nito, sa isang mensaheng iyon, sa chat nito at, kung ito ay isang tugon, sa mensaheng sinasagot nito. Kaya hindi maipapakita ng server ang iyong mensahe bilang sa kabilang tao, ipadala itong muli bilang bagong mensahe, o ituro ang iyong sagot sa ibang mensahe. Kung saan ito sumusubok, ipinapakita ng app ang <strong>Hindi ma-verify ang mensaheng ito, kaya hindi ito ipinapakita.</strong> sa gitna ng chat, bilang walang nagmamay-ari, sa halip na ang mga salita. Ang isang larawang ipinagpalit ng server sa iba ay mababasang <strong>Hindi available ang larawan</strong>.</li>
+            <li>Kung maglalagay ang server ng mensahe sa ibang chat, tatanggihan ito ng app doon. Kapag ang dalawa sa iyong mga chat sa parehong tao ay pinagsama sa isa, dinadala ng bawat mensahe ang chat na pinanggalingan nito. Ang isa na ipinadala mula noong update na ito ay ipinapakita na may <strong>Inilipat dito mula sa ibang pag-uusap.</strong> sa ilalim. Ang isa na ipinadala bago ito ay nagpapakita ng linyang mas lumang bersyon sa halip (tingnan sa ibaba).</li>
+            <li>Naaalala rin ng bawat mensahe ang pinakabagong mensaheng mayroon ang sumulat nito noong isinulat nila ito. Kung ipapakita ito ng server bago ang isang iyon, mababasa rito ang <strong>Ipinapakita nang wala sa pagkakasunud-sunod kung kailan ito isinulat.</strong> sa ilalim. Ang dalawang mensaheng isinulat sa parehong sandali, walang nauna sa isa't isa, ay maaaring dumating sa alinmang pagkakasunud-sunod nang wala ito.</li>
+            <li>Anumang bagay sa isang chat sa pagitan ng dalawang tao na hindi naka-lock ay hindi kailanman ipinapakita bilang mga salita ng alinmang tao: mababasa rito ang <strong>Hindi naka-encrypt ang mensaheng ito, kaya hindi makumpirma ng BeanPool kung sino ang sumulat nito.</strong> sa gitna ng chat, at hindi ipinapakita ang mga salita nito. Ang iyong listahan ng mga chat ay nagpapakita ng parehong linya.</li>
+            <li>Ang isang mensaheng ipinadala sa iyo ng mga admin ng iyong komunidad mula sa admin page ng server ay hindi naka-lock, at hindi isang pribadong mensahe. Lumalabas ito sa gitna ng chat, hindi kailanman bilang sariling mensahe ninuman, na may <strong>Mula sa mga admin ng iyong komunidad. Hindi pribadong mensahe: mababasa ito ng server ng komunidad.</strong> sa ilalim.</li>
+            <li>Ang mga mensaheng ipinadala bago ang update na ito, ng anumang app, ay na-lock nang wala ang mga pagsusuring ito: maaaring binago ng server kung kanino nagmumula ang mga ito, o nagpadala muli ng isa. Bumubukas pa rin ang mga ito, at bawat isa ay mababasang <strong>Ipinadala mula sa mas lumang bersyon ng app: hindi makumpirma ng BeanPool kung sino ang sumulat nito.</strong> sa ilalim, saanman ito naroroon sa chat. Ang isang taong nasa mas lumang app pa rin ay hindi mababasa ang mga mensahe mula sa isang na-update hanggang sa mag-update sila.</li>
+            <li>Ipinapakita ng isang tugon ang mensaheng sinasagot nito sa paraang ipinapakita ang mismong mensaheng iyon. Pinapangalanan lamang nito ang sumulat kapag nabuksan ang kanilang mensahe, at dinadala ang linya ng mensaheng iyon sa ilalim, tulad ng sa mas lumang bersyon. Pinapangalanan nitong <strong>Paalala</strong> ang isa sa mga abiso ng server at <strong>Mga admin ng iyong komunidad</strong> para sa mensahe ng mga admin. Anumang hindi nabuksan o hindi na-lock ay kinokopya (quoted) bilang <strong>Hindi kumpirmado</strong>, kasama ang linyang kumakatawan sa mga salita nito.</li>
+            <li>Kaya ang server lamang ay hindi magagawang magmukhang sumulat ang sinuman sa inyo ng mga salitang hindi ninyo isinulat. Maaari pa rin nitong pigilan ang isang mensahe, ihatid ito nang huli, o gawin itong mababasang <strong>Binura ang mensaheng ito</strong>. Maaari nitong ipakita ang mga naunang salita ng isang na-edit na mensahe sa halip na ang mga bago: parehong talagang sa nagpadala ang mga ito. Nakikita nito kung aling mensahe ang sinasagot ng bawat mensahe, ngunit hindi mababago iyon nang hindi nakikita. Maaari itong magdagdag o mag-alis ng reaksyon ng emoji sa pangalan ng alinmang tao: hindi naka-lock ang mga reaksyon. At maaari itong magdagdag ng sarili nitong mga abiso sa isang chat. Ang isang abiso ay ipinapakita bilang isang abiso, kinokopya bilang <strong>Paalala</strong>, at mababasang <strong>Paalala:</strong> sa iyong listahan ng mga chat, hindi kailanman bilang sinuman sa inyo.</li>
+            <li>Pinapatunayan ng pag-lock na ang isang mensahe ay nagmula sa isa sa inyong dalawa, hindi kung alin: ang kabilang tao, sa tulong ng mga taong nagpapatakbo ng iyong server, ay maaaring maglagay ng mga salita sa iyong pangalan.</li>
+            <li>Nakasalalay ang lahat ng ito sa pagkakaroon ng iyong app ng tunay na key ng kabilang tao, na nakukuha nito mula sa server ng iyong komunidad, tulad ng mismong pag-encrypt. Sa web app nakasalalay din ito sa mismong app, na ipinapadala ng server ng iyong komunidad sa iyong browser. Ang app sa telepono ay nagmumula sa app store.</li>
+            <li>Ang isang mensaheng hindi mai-lock ay hindi ipinapadala. Kung hindi pa mahanap ng app ang key ng kabilang tao, o nabigo ang pag-lock, mananatili ang iyong mga salita sa kahon ng mensahe na may linyang nagsasabi nito. Magpadala muli sa ilang sandali. Tinatanggihan din ng server ng iyong komunidad ang isang mensahe sa pagitan ng dalawang tao na hindi naka-lock.</li>
+            <li>Ang mga abisong idinaragdag ng BeanPool sa isang chat tungkol sa isang kasunduan ay hindi naka-encrypt: Munggo na hawak para sa kalakalan, binayaran, o ibinalik kapag ito ay nakansela, ang halaga, at kung paano inayos ng isang admin ang isang nakatenggang kalakalan at bakit. Mababasa ang mga ito ng mga taong nagpapatakbo ng server ng iyong komunidad.</li>
+            <li>Alam din ng server kung sino ang nagpadala ng mensahe kanino, at kailan, aling mensahe ang sinasagot ng bawat isa, at nakikita ang mga reaksyon ng emoji. Ang isang mensaheng ipinadala ng mas lumang bersyon ng app nang walang lock ay nananatiling mababasa sa server.</li>
+            <li>Ang chat ng isang grupo ay <strong>naka-encrypt nang end-to-end</strong> din, sa telepono at sa web app: ang mga miyembro lamang ng grupo ang makakabasa nito, at ang mga taong nagpapatakbo ng server ng iyong komunidad ay hindi. Sa itaas ng kahon ng mensahe sinasabi nitong ito ay <strong>Naka-encrypt nang end-to-end</strong>. Nakikita pa rin ng server ng iyong komunidad kung sino ang sumulat, kailan, sino ang nabanggit, aling mensahe ang sinasagot ng bawat linya, at ang mga reaksyon ng emoji. Makikita mo lamang ang chat ng isang grupo mula sa araw na sumali ka: walang nakasulat bago noon ang ipinapakita, at hindi kailanman hawak ng iyong telepono ang susi para rito. Ang isang mensaheng hindi mai-lock ay hindi ipinapadala. Ang isang linyang hindi masuri bilang isinulat ng isang miyembro ay mababasang <strong>Hindi ma-verify ang mensaheng ito.</strong>, bilang walang nagmamay-ari. Kung mas luma ang server ng iyong komunidad at hindi pa makapag-lock ng mga group chat, sinasabi ito ng chat, at mababasa ito ng server. Kapag na-update ang server, aalisin ang mga naunang mensaheng iyon, at sinasabi ito ng isang linya sa chat. Tingnan ang &quot;Mga Grupo&quot;.</li>
+            <li>Sa web app ang chat ng isang grupo ay gumagana sa parehong paraan, ngunit hindi ka maaaring magpadala ng mga larawan dito.</li>
+            <li>Ang mga chat sa negosyo at kaganapan ay hindi naka-encrypt. Mababasa ang mga ito ng mga taong nagpapatakbo ng server ng iyong komunidad, at maaaring sumulat ang server sa mga ito sa pangalan ng sinuman.</li>
+            <li>Ang isang chat sa pagitan ng dalawang tao ay hindi kailanman maaaring gawing isa sa mga iyon. Kapag nakita na ng iyong app ang isang chat bilang isa sa pagitan ng dalawang tao, o nagtataglay ito ng isang naka-encrypt na mensahe, mananatili itong ganoon, anuman ang sabihin ng server: bumubukas lamang ito bilang chat na iyon, kasama ang lahat ng mga pagsusuri sa itaas, at ang ipinapadala mo rito ay palaging naka-lock. Ang isang telepono o browser na hindi pa nakakita sa chat, at walang ibinigay sa mga naka-encrypt na mensahe nito, ay hindi masasabi: para rito, ang ganoong chat ay mukhang chat ng anumang iba pang grupo, na mababasa ng server. Sa web app nalalapat din iyon para sa isang browser na na-sign out mula noon, isang pribadong window, o isa na na-clear ang site data: kinakalimutan ng web app kung aling mga chat ang nasa pagitan ng dalawang tao. Pinapanatili ng app sa telepono ang listahang iyon.</li>
+            <li>Ang pagbura ng isang mensahe ay humihiling sa server ng iyong komunidad na palitan ito. Hindi nito maabot ang isang kopyang nabasa na ng isang tao, o isang screenshot.</li>
+            <li>Ang pagbura sa iyong account ay gumagawa ng pareho sa bawat mensaheng isinulat mo, sa bawat uri ng chat, at binubura ang mga larawang ipinadala mo. Tingnan ang &quot;Pag-alis o pagbura ng account&quot;.</li>
+            <li>Ang chat ng isang kaganapan ay mababasa rin ng host at ng bawat pupunta (kung saan nagpapasok ang host ng mga tao, ang mga pinapasok ng host).</li>
+            <li>Ang chat ng isang negosyo ay mababasa ng sinumang miyembro ng iyong komunidad. Ito ang pampublikong talakayan ng negosyo, ang parehong ipinapakita ng pahina nito, at sinuman sa komunidad ay makakasulat din dito. Hindi ito pribadong chat para sa mga tagapangalaga nito.</li>
+        </ul>
+        <h2>Pag-block sa isang tao mula sa chat</h2>
+        <p>I-tap ang kanilang pangalan sa itaas ng chat. Bubukas ang kanilang profile. I-tap ang <strong>I-block</strong>, pagkatapos ay <strong>I-block ang User</strong>. Sa web app, i-tap ang <strong>I-block</strong> sa itaas ng chat, pagkatapos ay <strong>OK</strong>. Tingnan ang &quot;Pag-block ng sinuman&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>Mga tao at kaibigan</strong><span>Paghahanap ng mga miyembro ng iyong komunidad, kanilang mga profile at trust badge, at pagmarka ng mga kaibigan upang mapansin kapag umalis ang isa.</span></a></li>
+            <li><a href="blocking.html"><strong>Pag-block sa isang tao</strong><span>Itago ang mga post at mensahe ng isang tao mula sa iyo, at bawiin ito sa ibang pagkakataon.</span></a></li>
+            <li><a href="event-chat.html"><strong>Chat sa event</strong><span>Makipag-usap sa host at sa lahat ng pupunta sa isang event.</span></a></li>
+            <li><a href="groups.html"><strong>Mga Grupo</strong><span>Iyong mga grupo at kanilang mga chat, pakikipag-usap sa mga ito, pagsisimula ng grupo, pag-imbita ng tao, pagsali sa pamamagitan ng imbitasyon, at sariling botohan ng grupo.</span></a></li>
+            <li><a href="mute.html"><strong>Pag-mute ng chat</strong><span>Patahimikin ang chat — ng isang tao, ng grupo o ng negosyo — nang 8 oras, isang linggo, o permanente.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Bar sa itaas</strong><span>Ang munggo, ang maliliit na icon na nagpapakita kapag may kailangan sa iyo, at ang mga button sa kanang itaas.</span></a></li>
+            <li><a href="key-changed.html"><strong>Kapag nagbago ang susi o pangalan</strong><span>Bakit humihinto sa pagpapadala ang chat, paano susuriin ang key code sa kausap, at kailan magpapatuloy.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

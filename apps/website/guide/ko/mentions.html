@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>멘션 (@이름) — BeanPool members' guide</title>
+    <meta name="description" content="그룹 대화에서 @ 뒤에 이름을 입력하여 특정 멤버에게 알림을 보내보세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">대화</a></p>
+        <h1>멘션 (@이름)</h1>
+        <p class="lede">그룹 대화에서 @ 뒤에 이름을 입력하여 특정 멤버에게 알림을 보내보세요.</p>
+        <h2>누군가를 멘션하기</h2>
+        <p>그룹 대화에서 <strong>@</strong> 뒤에 앱에 표시되는 상대방의 이름을 적으세요(예: &quot;@Ana, 장갑 좀 가져다줄 수 있어?&quot;). 상대방이 대화방의 알림을 꺼두었더라도 내가 자신을 멘션했다는 알림을 받게 돼요.</p>
+        <ul>
+            <li>대소문자는 구분하지 않아요.</li>
+            <li>이름은 전체를 온전하게 입력해야 하며, 다른 글자와 이어져서는 안 돼요: &quot;@Anabel&quot;은 Ana에게 알림을 보내지 않아요.</li>
+            <li>모임에 속해 있는 멤버만 멘션할 수 있어요.</li>
+            <li>메시지 하나당 최대 20명까지 알림을 보낼 수 있어요.</li>
+            <li>메시지를 수정하여 이름을 추가하는 경우에는 알림이 가지 않아요.</li>
+        </ul>
+        <h2>멘션이 작동하는 곳</h2>
+        <p>그룹 대화에서만 작동해요. 게시글, 행사 대화, 1:1 대화에서는 지원되지 않아요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="groups.html"><strong>모임</strong><span>모임과 그룹 대화, 대화 나누기, 모임 개설, 멤버 초대, 초대로 가입 및 모임 자체 투표 안내예요.</span></a></li>
+            <li><a href="mute.html"><strong>대화 알림 끄기</strong><span>1:1 대화, 모임 대화, 기업 대화의 알림을 8시간, 1주일 또는 영구적으로 끌 수 있어요.</span></a></li>
+            <li><a href="messages.html"><strong>메시지</strong><span>대화 시작, 사진 전송, 답장, 반응, 수정, 삭제, 알림 끄기와 대화 보호 안내예요.</span></a></li>
+            <li><a href="notifications.html"><strong>알림</strong><span>휴대폰으로 받을 알림과 행사 미리림 시점을 선택하세요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

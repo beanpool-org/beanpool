@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>সিদ্ধান্ত প্রস্তাব করা — BeanPool members' guide</title>
+    <meta name="description" content="কমিউনিটিকে কোনো বিষয়ে বাধ্যতামূলক সিদ্ধান্ত নিতে বলুন।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">সম্পদ</a></p>
+        <h1>সিদ্ধান্ত প্রস্তাব করা</h1>
+        <p class="lede">কমিউনিটিকে কোনো বিষয়ে বাধ্যতামূলক সিদ্ধান্ত নিতে বলুন।</p>
+        <h2>আপনি শুরু করার আগে</h2>
+        <ul>
+            <li>একটি সিদ্ধান্ত এমন কিছুর জন্য যা আপনার কমিউনিটির সার্ভার বাস্তবায়ন করতে পারে: কোনো সদস্যকে সরানো বা সাময়িক বরখাস্ত করা, কারও ক্রেডিট স্থগিত করা বা পুনরায় চালু করা, কে সুপারিশ করতে পারেন তা নির্ধারণ করা, অথবা যৌথ তহবিল থেকে শিম প্রদান করা। অন্য যেকোনো কিছুর জন্য, তার পরিবর্তে একটি পোল শুরু করুন।</li>
+            <li>একটি সিদ্ধান্ত আপনার কমিউনিটির সার্ভারের কোনো মালিক বা অ্যাডমিনকে সরাতে বা সাময়িক বরখাস্ত করতে পারে না। &quot;নিয়ম ও সিদ্ধান্ত যেভাবে হয়&quot; দেখুন।</li>
+            <li>একবার একটি লেনদেন সম্পন্ন করলে, বা একজন অ্যাডমিন আপনাকে একটি আস্থার ব্যাজ দিলে আপনি প্রস্তাব করতে পারেন। আপনার কমিউনিটির অ্যাডমিনরা সর্বদা প্রস্তাব করতে পারেন। কেবল একটি সুপারিশই যথেষ্ট নয়।</li>
+            <li>আপনার একসাথে একটি উন্মুক্ত সিদ্ধান্ত থাকতে পারে।</li>
+            <li>গ্লোবাল কমিউনিটিতে কোনো সিদ্ধান্ত নেই, তাই সেখানে প্রস্তাব করার কিছু নেই। &quot;সিদ্ধান্তে ভোট দেওয়া&quot; দেখুন।</li>
+        </ul>
+        <h2>প্রস্তাব করা</h2>
+        <ul>
+            <li><strong>যৌথ তহবিল</strong>-এ ট্যাপ করুন, তারপর <strong>সিদ্ধান্ত গ্রহণ</strong>-এ, তারপর <strong>+ সিদ্ধান্তের প্রস্তাব দিন</strong>-এ।</li>
+            <li>এটি কী সম্পর্কিত তা বেছে নিন: <strong>সদস্য</strong> বা <strong>যৌথ তহবিল</strong>।</li>
+            <li><strong>শিরোনাম:</strong> এক লাইন, যেমন &quot;টুল লাইব্রেরিতে ২০০ শিম অনুদান দিন&quot;।</li>
+            <li><strong>বিবরণ ও যৌক্তিকতা:</strong> অন্তত ১০টি অক্ষরে কারণ ব্যাখ্যা করুন। এটি সহজ ভাষায় বলুন। মানুষ এখানে যা পড়েন তার ওপর ভিত্তি করেই ভোট দেন।</li>
+            <li>এর নিচের তালিকা থেকে বেছে নিন ঠিক কী ঘটা উচিত। উদাহরণস্বরূপ, কোনো সদস্যের জন্য: সদস্যকে সরান, সদস্য স্থগিত করুন বা ক্রেডিট ফ্রিজ করুন। যৌথ তহবিলের জন্য: কোনো প্রকল্প বা উদ্যোগকে শিম দিন, দুর্দশা অনুদান, অথবা কোনো প্রকল্প বা উদ্যোগের ঋণ পরিশোধ করুন।</li>
+            <li>এটি কার জন্য, এবং কোনো শিম থাকলে কতগুলো শিম তা পূরণ করুন। কোনো প্রকল্প বা উদ্যোগে অনুদানের জন্য আপনি এর কি (Key) টাইপ করেন, যা একটি দীর্ঘ কোড: কোনো অ্যাপেই এটি বেছে নেওয়ার তালিকা নেই। কোনো ঋণ পরিশোধ করতে বা কোনো প্রধানকে প্রতিস্থাপন করতে, তালিকার প্রকল্প বা উদ্যোগে ট্যাপ করুন, অথবা এর কি টাইপ করুন।</li>
+            <li><strong>কমিউনিটি সিদ্ধান্ত জমা দিন</strong>-এ ট্যাপ করুন।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে বোতামগুলো হলো <strong>+ সিদ্ধান্তের প্রস্তাব দিন</strong> (বা <strong>সিদ্ধান্ত গ্রহণ</strong> খোলা থাকা অবস্থায় যৌথ তহবিলের শীর্ষে <strong>+ প্রস্তাব করুন</strong>) এবং <strong>সিদ্ধান্ত জমা দিন</strong>, এবং বাক্সটি হলো <strong>বিবরণ ও যৌক্তিক কারণ</strong>।</p>
+        <p>ভোটদান সাথে সাথে উন্মুক্ত হয় এবং ৭ দিন চলে।</p>
+        <h2>একটি অনুদান কতটা বড় হতে পারে</h2>
+        <p>কোনো উদ্যোগে অনুদান বা দুর্দশা অনুদান যৌথ তহবিল যা দিতে পারে তার চেয়ে বড় হতে পারে না। আপনি সর্বোচ্চ যা চাইতে পারেন:</p>
+        <ul>
+            <li>যৌথ তহবিলে এখন যা জমা রয়েছে,</li>
+            <li>সাথে গত ৩০ দিনে এতে জমা হওয়া প্রতিটি শিম: বাজার ফি, সঞ্চালন ফি এবং অন্যান্য জমা হওয়া শিম।</li>
+        </ul>
+        <p>সেই ৩০ দিনে যৌথ তহবিল থেকে পরিশোধ করা শিম বাদ দেওয়া হয় না। আপনি এর বেশি চাইলে, কেউ ভোট দেওয়ার আগেই অ্যাপটি অস্বীকৃতি জানায় এবং আপনি এই মুহূর্তে সর্বোচ্চ কত চাইতে পারেন তা বলে দেয়। যৌথ তহবিলে শিম আসার সাথে সাথে সেই পরিমাণ বৃদ্ধি পায়।</p>
+        <p>এটি অপেক্ষমাণ লাইন মুক্ত রাখে। যৌথ তহবিলে ঘাটতি থাকা অবস্থায় কোনো অনুদান পাস হলে, এটি শিমের জন্য অপেক্ষা করে, এবং একসাথে কেবল একটি অনুদান অপেক্ষা করতে পারে। &quot;নিয়ম ও সিদ্ধান্ত যেভাবে হয়&quot; দেখুন।</p>
+        <h2>অ্যাপটি অস্বীকৃতি জানালে</h2>
+        <ul>
+            <li><strong>প্রথমে একটি লেনদেন সম্পন্ন করুন</strong> (ফোনে): আপনি এখনও প্রস্তাব করতে পারবেন না। ওয়েব অ্যাপে <strong>+ সিদ্ধান্তের প্রস্তাব দিন</strong> বোতামটি ধূসর হয়ে থাকে, এবং এর উপরের একটি লাইন কারণ ব্যাখ্যা করে।</li>
+            <li><strong>সীমায় পৌঁছেছেন</strong> (ফোনে): আপনার ইতিমধ্যে একটি উন্মুক্ত সিদ্ধান্ত রয়েছে। এটি বন্ধ হওয়া পর্যন্ত অপেক্ষা করুন। ওয়েব অ্যাপে বোতামটি এখানেও ধূসর হয়ে থাকে, এবং একটি লাইন কারণ জানিয়ে দেয়।</li>
+            <li><strong>একটি কমিউনিটি ভোট এই কমিউনিটির সার্ভারের কোনো মালিক বা অ্যাডমিনকে সরাতে বা সাময়িক বরখাস্ত করতে পারে না:</strong> আপনার বেছে নেওয়া ব্যক্তি সার্ভার পরিচালনা করেন। একজন মালিক প্রথমে তাদের ভূমিকা কেড়ে নিতে পারেন।</li>
+            <li><strong>এই অনুদানটি যৌথ তহবিল যা প্রদান করতে পারে তার চেয়ে বড়:</strong> এটি যে পরিমাণ উল্লেখ করে তার বেশি চাইবেন না, অথবা আরও শিম আসার জন্য অপেক্ষা করুন।</li>
+            <li><strong>অকার্যকর পরিমাণ</strong> (ওয়েব অ্যাপে, &quot;অনুগ্রহ করে শিমে একটি বৈধ ইতিবাচক অনুদানের পরিমাণ লিখুন&quot;): কতগুলো শিম তা পূরণ করুন।</li>
+            <li><strong>ত্রুটি:</strong> আপনার বিবরণ অন্তত ১০ অক্ষরের কিনা তা পরীক্ষা করুন।</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>সিদ্ধান্তে ভোট দেওয়া</strong><span>উন্মুক্ত সিদ্ধান্তসমূহ খুঁজুন, ভোট দিন, আপনার ভোট পরিবর্তন করুন এবং ফলাফল দেখুন।</span></a></li>
+            <li><a href="rules.html"><strong>নিয়ম ও সিদ্ধান্ত যেভাবে হয়</strong><span>ভোটদান, উপস্থিতি, গোপন ব্যালট, কারা ভোট দিতে পারবেন, স্থগিতাদেশ, সদস্য অপসারণ, রক্ষক এবং আহ্বায়ক ও প্রধান আহ্বায়ক।</span></a></li>
+            <li><a href="polls.html"><strong>পোল</strong><span>কমিউনিটিকে একটি দ্রুত প্রশ্ন জিজ্ঞাসা করুন। পোল মতামত দেখায়; তারা নিজেরা কিছু পরিবর্তন করে না।</span></a></li>
+            <li><a href="enterprises.html"><strong>প্রকল্প এবং উদ্যোগ</strong><span>নিজস্ব শিম সহ যৌথ উদ্যোগ: একটি খুঁজুন, সমর্থন দিন বা নিজে শুরু করুন।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 12개 단어와 서버 키 (소유자) — BeanPool members' guide</title>
+    <meta name="description" content="커뮤니티 소유자 안내예요. 내 12개 단어 확인, 휴대폰으로 서버 인계 또는 복원, 휴대폰이 스스로 수행하는 자동 확인 기능이에요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">설정 및 안전</a></p>
+        <h1>내 12개 단어와 서버 키 (소유자)</h1>
+        <p class="lede">커뮤니티 소유자 안내예요. 내 12개 단어 확인, 휴대폰으로 서버 인계 또는 복원, 휴대폰이 스스로 수행하는 자동 확인 기능이에요.</p>
+        <h2>대상 안내</h2>
+        <p>커뮤니티 <strong>소유자</strong>만을 위한 안내예요. 소유자가 아니라면 이 기능이 전혀 표시되지 않아요.</p>
+        <h2>소유자에게 확인을 요청하는 이유</h2>
+        <p>커뮤니티 서버는 기존 서버를 분실했을 때 커뮤니티를 다른 서버로 이전하기 위해 잠긴 암호화 키 사본을 보관하며, 백업 역시 잠겨 있어요. 이는 소유자 계정으로 잠겨 있으므로 소유자 중 누구든 자신의 휴대폰으로 열 수 있어요(아래 &quot;휴대폰으로 인계 또는 복원하기&quot; 참조). 휴대폰을 분실하더라도 12개 단어가 있으면 계정을 복원할 수 있고, 이를 통해 서버의 잠금 장치와 백업을 여는 키도 되찾을 수 있어요. 이는 서버 자체가 손실된 날 가장 중요한 역할을 해요.</p>
+        <p>따라서 앱은 각 소유자에게 올바른 12개 단어를 여전히 가지고 있는지 때때로 확인할 것을 요청해요. <strong>나중에</strong>를 선택할 수도 있어요. 어떤 기능도 차단되지 않으며 소유자로서의 모든 권한을 계속 행사할 수 있어요.</p>
+        <h2>앱이 확인을 요청하는 시점</h2>
+        <ul>
+            <li>소유자가 된 후 얼마 지나지 않아 한 번.</li>
+            <li>마지막으로 확인한 지 12개월 후 다시 한 번.</li>
+        </ul>
+        <p>장터 상단에 카드가 표시돼요(웹 앱에서는 지도를 제외한 모든 화면 상단에 표시됨): <strong>지금 확인</strong> 또는 <strong>나중에</strong>. <strong>나중에</strong>를 누르면 다음 예정일까지 카드가 숨겨져요. <strong>설정</strong>에서 언제든지 직접 확인할 수도 있어요: <strong>커뮤니티 키</strong> 아래에서 <strong>12개 단어 확인</strong>(웹 앱에서는 <strong>지금 확인</strong>)을 탭하세요.</p>
+        <h2>확인 방법</h2>
+        <ul>
+            <li>12개 단어가 적힌 종이를 준비하세요.</li>
+            <li>12개의 영어 단어를 공백으로 구분하여 순서대로 입력하세요. 대소문자나 추가 공백은 상관없어요.</li>
+            <li><strong>내 단어 확인</strong>을 탭하세요.</li>
+        </ul>
+        <p>단어가 올바르면 앱에 <strong>올바른 단어입니다</strong>라고 표시돼요. 틀렸다면 <strong>이 계정의 단어가 아닙니다.</strong>라고 표시돼요. 어떤 단어가 틀렸는지는 알려주지 않으므로 종이를 확인하고 전체를 다시 입력하세요.</p>
+        <p>12개 단어의 사본이 없는 휴대폰(로그인 계정으로 복원된 기기)에서 올바른 단어를 입력하면 <strong>이 휴대폰에 저장</strong> 버튼도 함께 나타나요. 이를 탭하면 이후부터 <strong>복구 문구 보기</strong>에 단어가 표시돼요. 이는 <strong>이 휴대폰에 12개 단어 추가</strong>와 동일한 확인 및 저장 절차예요(&quot;내 12개 단어&quot;를 참조하세요).</p>
+        <p>단어를 찾을 수 없나요? 이 휴대폰에 아직 단어가 남아 있다면 <strong>설정</strong>의 <strong>복구 문구 보기</strong>에서 확인할 수 있어요. 종이에 다시 적어둔 다음 확인하세요. 단어 사본이 없는 휴대폰인 경우 앱에서 그렇게 안내해요: 단어를 찾으면 여기서 확인한 다음 저장하세요.</p>
+        <h2>전송되는 정보와 전송되지 않는 정보</h2>
+        <ul>
+            <li>확인은 내 휴대폰(또는 웹 앱의 경우 브라우저) 내에서 로컬로 진행돼요. 내 단어는 어디로도 전송되지 않아요. 확인 결과가 나오자마자, 그리고 화면을 벗어나면 입력 상자가 즉시 비워져요. <strong>이 휴대폰에 저장</strong>을 탭할 때만 저장되며, 이때도 이 휴대폰에만 저장돼요.</li>
+            <li>단어가 맞으면 휴대폰은 커뮤니티 서버에 내 계정의 서명과 함께 단어를 확인했다는 사실과 확인 시간만 알려줘요.</li>
+            <li>소유자와 관리자는 서버 설정에서 각 소유자의 &quot;12개 단어 확인일&quot; 또는 &quot;아직 안 함&quot; 상태를 볼 수 있어요. 이는 소유자 본인의 진술일 뿐이며, 서버는 내 단어를 보거나 확인할 수 없어요.</li>
+        </ul>
+        <h2>휴대폰으로 인계 또는 복원하기</h2>
+        <p>커뮤니티 서버가 손실된 경우, 대기 서버를 운영하는 사람(또는 백업을 복원하는 새 서버 운영자)이 소유자에게 잠긴 키를 열어달라고 요청할 수 있어요. 소유자 중 한 명만 있으면 충분해요. 최신 버전의 BeanPool 앱이 필요해요. 웹 앱도 열리기만 한다면 작동하지만, 웹 앱은 서버와 함께 다운될 수 있는 커뮤니티 자체 주소에 있으므로 휴대폰 앱을 사용하는 것이 가장 확실해요.</p>
+        <ul>
+            <li>서버 설정에서 <strong>메인 서버로 인수</strong>를 선택한 후 <strong>이해했습니다: 소유자의 휴대폰 사용</strong>을 선택하거나, 백업을 복원할 때 <strong>소유자의 휴대폰으로 열기</strong>를 선택해요. 화면에 코드가 나타나요.</li>
+            <li>앱에서: <strong>설정</strong>의 <strong>커뮤니티 키</strong> 아래에서 <strong>이 휴대폰으로 인계 또는 복원</strong>을 탭하고 카메라로 코드를 비추세요. 본인 휴대폰에서 서버 페이지가 열려 있다면 링크를 탭해도 동일해요. 웹 앱에서는 화면의 링크를 복사하여 <strong>설정</strong>의 <strong>이 브라우저로 인계 또는 복원</strong> 아래에 붙여넣으세요.</li>
+            <li>앱에 어떤 커뮤니티인지, 어떤 서버인지, 어떤 일이 일어나는지 표시돼요. 메인 서버가 아직 응답하고 있다면 빨간색으로 그렇게 표시돼요: 인계는 서버가 완전히 사라진 경우에만 진행해야 해요.</li>
+            <li><strong>인수를 위해 잠금 해제</strong>(또는 <strong>백업 잠금 해제</strong>)를 탭하세요. 휴대폰이 먼저 자체 화면 잠금 해제(지문, 얼굴 인식 또는 PIN)를 요청해요. 웹 앱에는 이러한 단계가 없으므로 소유자의 키를 보관하기에 휴대폰 앱이 더 안전해요.</li>
+            <li>휴대폰이 자체 잠금 부분을 열고 해당 서버만 읽을 수 있도록 잠근 상태로 키를 서버에 전달해요. 휴대폰은 서버의 키나 백업을 직접 보지 않아요.</li>
+            <li>인계 시 서버 측 담당자가 화면에서 확인을 완료해요. 커뮤니티가 이전되었으며 내가 키를 열었다는 사실이 커뮤니티에 공지돼요.</li>
+        </ul>
+        <p>잠금 장치가 다른 커뮤니티의 것이거나, 나에게 잠긴 것이 아니거나, 서버 코드가 만료되었거나(10분 동안 유효하며 1회만 사용 가능), 키가 내 커뮤니티 서버에 의해 잠긴 것이 아니라면 앱이 거부하고 이유를 알려줘요.</p>
+        <h2>휴대폰이 스스로 수행하는 자동 확인</h2>
+        <p>커뮤니티의 잠금 장치가 변경될 때마다(소유자가 추가 또는 삭제되거나 새 복구 코드가 생성될 때), 앱은 자체 잠금 부분을 여전히 열 수 있는지 조용히 확인해요. 잠금을 열어보고 즉시 키를 폐기한 다음, 작동 여부를 서버에 알려줘요. 소유자에게 어떠한 입력도 요구하지 않아요.</p>
+        <p>소유자와 관리자는 서버 설정의 12개 단어 확인일 옆에서 이를 확인할 수 있어요: 날짜와 함께 <strong>휴대폰이 현재 잠금을 열었습니다</strong>라고 표시되거나, 마지막으로 열었던 이전 잠금 장치가 표시돼요. 휴대폰이 잠금을 <strong>열 수 없음</strong>으로 표시된다면 12개 단어를 확인하고 다른 소유자에게 서버 설정을 확인해 달라고 요청하세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>내 12개 단어</strong><span>12개 단어는 계정의 열쇠예요. 중요한 이유, 확인 위치, 안전하게 보관하는 법, 보조 복구 수단으로 간편 로그인을 추가하는 방법이에요.</span></a></li>
+            <li><a href="recovery.html"><strong>계정 복구하기</strong><span>새 휴대폰에서 계정을 복원하고, 간편 로그인 계정을 연결해 보호하세요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

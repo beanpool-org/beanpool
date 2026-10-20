@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>പോളുകൾ — BeanPool members' guide</title>
+    <meta name="description" content="കമ്മ്യൂണിറ്റിയോട് പെട്ടെന്ന് ഒരു ചോദ്യം ചോദിക്കുക. പോളുകൾ അഭിപ്രായം കാണിക്കുന്നു; അവ സ്വന്തമായി ഒന്നും മാറ്റുന്നില്ല.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">പൊതു</a></p>
+        <h1>പോളുകൾ</h1>
+        <p class="lede">കമ്മ്യൂണിറ്റിയോട് പെട്ടെന്ന് ഒരു ചോദ്യം ചോദിക്കുക. പോളുകൾ അഭിപ്രായം കാണിക്കുന്നു; അവ സ്വന്തമായി ഒന്നും മാറ്റുന്നില്ല.</p>
+        <h2>പോളോ അതോ തീരുമാനമോ?</h2>
+        <p>ആളുകൾ എന്ത് ചിന്തിക്കുന്നു എന്ന് ഒരു <strong>പോൾ</strong> ചോദിക്കുന്നു: &quot;ഞായറാഴ്ചയോ ശനിയാഴ്ചയോ മാർക്കറ്റ്?&quot;. ഇത് തനിയെ ഒന്നും മാറ്റുന്നില്ല. നിർബന്ധമായും നടപ്പിലാക്കേണ്ട കാര്യങ്ങൾക്ക്, ഒരു തീരുമാനം നിർദ്ദേശിക്കുക.</p>
+        <p>ആഗോള കമ്മ്യൂണിറ്റിയിൽ ഓരോ പോളും <strong>ഒരു അനൗദ്യോഗിക പോൾ; ഇത് ഒന്നും തീരുമാനിക്കുന്നില്ല</strong> എന്ന് പറയുന്നു. 12 വാക്കുകളോ സൈൻ-ഇന്നോ ഉപയോഗിച്ച് ആർക്കും ഇതിൽ ചേരാം, അതിനാൽ ഒന്നിലധികം അക്കൗണ്ടുകളുള്ള ഒരാൾക്ക് കണക്കുകളെ സ്വാധീനിക്കാൻ കഴിയും, അവിടെ തീരുമാനങ്ങൾ ഇല്ല. അതിന് താഴെ, &quot;🏘️ ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിൽ തീരുമാനം ബാധകമാണ് ›&quot; എന്നത് ഒരു വോട്ട് എന്തുകൊണ്ടാണ് പ്രാദേശിക കമ്മ്യൂണിറ്റിയിൽ മാത്രം ബാധകമാകുന്നത് എന്ന് വ്യക്തമാക്കുന്നു.</p>
+        <p>അവിടുത്തെ ഒരു അജ്ഞാത പോൾ അവസാനിക്കുമ്പോൾ, അതിലെ എത്ര വോട്ടുകൾ <strong>new or 12-word accounts</strong>-ൽ നിന്നാണ് വന്നതെന്നും ഇത് പറയുന്നു, ഉദാഹരണത്തിന് &quot;5 of 12 votes came from new or 12-word accounts&quot;. ഓരോ വോട്ടും അത് ചെയ്ത സമയത്തെ അക്കൗണ്ടിന്റെ നില അനുസരിച്ചാണ് കണക്കാക്കുന്നത്: പുതിയ അക്കൗണ്ട് പരിധികൾ ഇപ്പോഴുമുള്ള ഒന്നാണ് പുതിയ അക്കൗണ്ട്, സൈൻ-ഇൻ ചേർക്കാത്ത 12 വാക്കുകൾ കൊണ്ട് ഉണ്ടാക്കിയ ഒന്നാണ് 12-വാക്ക് അക്കൗണ്ട്. പുതിയതോ 12-വാക്ക് അക്കൗണ്ടുകളിൽ നിന്നോ കുറഞ്ഞത് 3 വോട്ടുകളെങ്കിലും വരുകയും മറ്റ് വോട്ടുകൾ ഒന്നുമില്ലാതിരിക്കുകയോ കുറഞ്ഞത് 3 എങ്കിലും ആകുകയോ ചെയ്യുമ്പോൾ, ഓരോ ഉത്തരത്തിലും അതിൽ എത്രയെണ്ണം അങ്ങനെ ഉള്ളവയാണെന്നും പറയുന്നു. എല്ലാ വോട്ടുകളും ഇപ്പോഴും കണക്കാക്കുന്നു, ആര് വോട്ട് ചെയ്തുവെന്ന് ഒന്നും കാണിക്കുന്നില്ല.</p>
+        <p>ഒരു പോൾ തുറന്നിരിക്കുമ്പോൾ ഇത് ഇതിനെക്കുറിച്ച് ഒന്നും പറയുന്നില്ല. അങ്ങനെ പറഞ്ഞിരുന്നെങ്കിൽ, ഓരോ വോട്ടിനും ശേഷം പോൾ പരിശോധിക്കുന്ന ഒരാൾക്ക് ഓരോ വോട്ടും ഏത് തരത്തിലുള്ള അക്കൗണ്ടിൽ നിന്നാണ് വന്നതെന്നും അത് എന്താണ് തിരഞ്ഞെടുത്തതെന്നും മനസ്സിലാക്കാൻ കഴിയുമായിരുന്നു. ഒരു പരസ്യ വോട്ട്, അത് തുറന്നതോ അവസാനിച്ചതോ ആകട്ടെ, ഇത് ഒരിക്കലും പറയുന്നില്ല: ആര് വോട്ട് ചെയ്തുവെന്ന് അത് കാണിക്കുന്നു, അതിനാൽ ആ കണക്ക് ഓരോ വോട്ടർക്കും ഏത് തരത്തിലുള്ള അക്കൗണ്ട് ഉണ്ടെന്ന് വെളിപ്പെടുത്തും. ഒരു ഗ്രൂപ്പിന്റെ പോളും ഇത് പറയുന്നില്ല, ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിലെ പോളും ഇത് പറയുന്നില്ല.</p>
+        <h2>ഒരു പോൾ ആരംഭിക്കുന്നത് എങ്ങനെ</h2>
+        <ul>
+            <li>Market ടാബിലോ Map-ലോ <strong>+ ADD POST</strong> ടാപ്പ് ചെയ്യുക.</li>
+            <li><strong>കമ്മ്യൂണിറ്റി പോൾ</strong> തിരഞ്ഞെടുക്കുക.</li>
+            <li><strong>Question</strong> എഴുതുക.</li>
+            <li>സഹായകരമാണെങ്കിൽ <strong>Context / Notes</strong> ചേർക്കുക. ഇത് ഓപ്ഷണൽ ആണ്.</li>
+            <li>2 മുതൽ 4 വരെ <strong>Options</strong> എഴുതുക. കൂടുതൽ ആവശ്യമെങ്കിൽ <strong>+ ഓപ്ഷൻ ചേർക്കുക</strong> ടാപ്പ് ചെയ്യുക.</li>
+            <li>ഇത് എത്ര സമയം പ്രവർത്തിക്കണമെന്ന് തിരഞ്ഞെടുക്കുക: <strong>3 Days</strong>, <strong>7 Days</strong> അല്ലെങ്കിൽ <strong>14 Days</strong>.</li>
+            <li><strong>ഉണ്ടാക്കുക</strong> ടാപ്പ് ചെയ്യുന്നതിന് മുമ്പ് ഇത് ഒരു <strong>പരസ്യ വോട്ട്</strong> ആണോ എന്ന് തിരഞ്ഞെടുക്കുക. അത് ഓഫ് ആയി വിട്ടാൽ പോൾ അജ്ഞാതമായിരിക്കും. ടിക്ക് ചെയ്താൽ ആര് എന്ത് തിരഞ്ഞെടുത്തു എന്ന് അംഗങ്ങൾക്ക് കാണാം. പോൾ പോസ്റ്റ് ചെയ്തതിന് ശേഷം നിങ്ങൾക്ക് ഇത് മാറ്റാൻ കഴിയില്ല.</li>
+            <li><strong>ഉണ്ടാക്കുക</strong> ടാപ്പ് ചെയ്യുക.</li>
+        </ul>
+        <p>വെബ് ആപ്പിൽ തരം <strong>🗳️ Poll</strong> എന്നാണ്, കുറിപ്പുകൾ <strong>Background / Context</strong> എന്നാണ്, ഓപ്ഷൻ ബട്ടൺ <strong>+ Add option</strong> എന്നാണ്, അവസാന ബട്ടൺ <strong>🗳️ Create Poll</strong> എന്നാണ്. വെബ് മാപ്പിൽ, വട്ടത്തിലുള്ള <strong>+</strong> ടാപ്പ് ചെയ്യുക.</p>
+        <p>നിങ്ങൾക്ക് ഒരേസമയം ഒരു പോൾ മാത്രമേ തുറന്നിരിക്കാൻ കഴിയൂ, ഒരു കമ്മ്യൂണിറ്റിക്ക് ഒരേസമയം 5 എണ്ണം തുറന്നിരിക്കാം. ഒരു പോൾ ആരംഭിക്കുന്നതിനോ ഉത്തരം നൽകുന്നതിനോ നിങ്ങൾക്ക് മരവിപ്പിക്കാത്ത ക്രെഡിറ്റ് ആവശ്യമാണ്.</p>
+        <h2>പോളുകൾ കണ്ടെത്തലും മറുപടി നൽകലും</h2>
+        <p>പോളുകൾ മാർക്കറ്റിലുണ്ട്. പോളുകൾ മാത്രം കാണാൻ മുകളിലെ വരിയിലുള്ള <strong>പോളുകൾ</strong> ടാപ്പ് ചെയ്യുക.</p>
+        <ul>
+            <li>തിരഞ്ഞെടുക്കാൻ ഒരു ഉത്തരത്തിൽ ടാപ്പ് ചെയ്യുക. പോൾ അവസാനിക്കുന്നത് വരെ, നിങ്ങളുടെ തീരുമാനം മാറ്റാൻ മറ്റൊന്നിൽ ടാപ്പ് ചെയ്യുക.</li>
+            <li>ഓരോ ഉത്തരവും എത്രപേർ തിരഞ്ഞെടുത്തു എന്ന് കാർഡ് കാണിക്കുന്നു.</li>
+        </ul>
+        <h2>നിങ്ങൾ എങ്ങനെ വോട്ട് ചെയ്തുവെന്ന് ആർക്കൊക്കെ കാണാനാകും</h2>
+        <p>പങ്കാളിത്തത്തിന് മുകളിലായി ഓരോ പോളും അത് ഏത് തരത്തിലുള്ളതാണെന്ന് പറയുന്നു:</p>
+        <ul>
+            <li><strong>അജ്ഞാതൻ</strong> (സാധാരണ തരം): ഓരോ ഉത്തരവും എത്രപേർ തിരഞ്ഞെടുത്തു എന്ന് മാത്രമേ എല്ലാവരും കാണൂ. ആര് എന്ത് തിരഞ്ഞെടുത്തു എന്ന് ആരും കാണില്ല, അത് ആരംഭിച്ച വ്യക്തി ഉൾപ്പെടെ.</li>
+            <li><strong>പരസ്യ വോട്ട്:</strong> അത് ആരംഭിച്ച വ്യക്തി വോട്ടർമാരെ കാണിക്കാൻ തിരഞ്ഞെടുത്തു. ആര് എന്ത് തിരഞ്ഞെടുത്തു എന്ന് കാണാൻ അംഗങ്ങൾക്ക് <strong>View voters</strong> (വെബ് ആപ്പിൽ <strong>Show Voters</strong>) ടാപ്പ് ചെയ്യാം. സസ്‌പെൻഡ് ചെയ്യപ്പെട്ട ഒരു അംഗം, സസ്‌പെൻഷൻ അവസാനിക്കുന്നത് വരെ ആകെത്തുക മാത്രമേ കാണൂ.</li>
+        </ul>
+        <p>നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവർ നടത്തുന്ന ഉടമകൾക്കും അഡ്മിൻമാർക്കും അവിടെ സൂക്ഷിച്ചിരിക്കുന്ന എല്ലാ വോട്ടുകളും ഇപ്പോഴും കാണാൻ കഴിയും.</p>
+        <h2>ഒരു പോൾ നേരത്തെ അവസാനിപ്പിക്കൽ</h2>
+        <p>നിങ്ങളാണ് ഇത് ആരംഭിച്ചതെങ്കിൽ, <strong>പോൾ അവസാനിപ്പിക്കുക</strong> ടാപ്പ് ചെയ്യുക, തുടർന്ന് സ്ഥിരീകരിക്കാൻ വീണ്ടും <strong>പോൾ അവസാനിപ്പിക്കുക</strong> ടാപ്പ് ചെയ്യുക (വെബ് ആപ്പിൽ <strong>ശരി</strong>).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>തീരുമാനത്തിൽ വോട്ട് ചെയ്യൽ</strong><span>തുറന്ന തീരുമാനങ്ങൾ കണ്ടെത്തുക, വോട്ട് ചെയ്യുക, വോട്ട് മാറ്റുക, ഫലങ്ങൾ കാണുക.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>തീരുമാനം നിർദ്ദേശിക്കൽ</strong><span>നിർബന്ധിതമായ ഒരു കാര്യത്തിൽ തീരുമാനം എടുക്കാൻ കമ്മ്യൂണിറ്റിയോട് ആവശ്യപ്പെടുക.</span></a></li>
+            <li><a href="events.html"><strong>ഇവന്റുകൾ</strong><span>ഒരു സ്ഥലത്തോ ഓൺലൈനിലോ ഒറ്റത്തവണയോ ആവർത്തിച്ചോ ഇവന്റ് ഉണ്ടാക്കുക; പങ്കെടുക്കുമെന്ന് അറിയിക്കുക, ഓർമ്മപ്പെടുത്തൽ നേടുക, പങ്കിടുക, ഹോസ്റ്റായി നടത്തുക.</span></a></li>
+            <li><a href="rules.html"><strong>നിയമങ്ങളും തീരുമാനങ്ങൾ എടുക്കുന്ന രീതിയും</strong><span>വോട്ടിംഗ്, പങ്കാളിത്തം, രഹസ്യ ബാലറ്റ്, ആർക്കൊക്കെ വോട്ട് ചെയ്യാം, സസ്പെൻഷൻ, അംഗത്തെ നീക്കം ചെയ്യൽ, സൂക്ഷിപ്പുകാർ, കൺവീനർമാരും മുഖ്യ കൺവീനർമാരും.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>പയറും ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയും</strong><span>ഗ്ലോബൽ കമ്മ്യൂണിറ്റിയുടെ ലക്ഷ്യം, പലതിൽ ഒരു കമ്മ്യൂണിറ്റി, അവിടെ കാണുന്ന കാര്യങ്ങൾ: 🏘️ പ്രാദേശിക കമ്മ്യൂണിറ്റി അടയാളം, മാതൃകാ കമ്മ്യൂണിറ്റിയായ Example Valley, പയർ അവിടെ കാത്തിരിക്കുന്നതിന്റെ കാരണം, പ്രാദേശിക കമ്മ്യൂണിറ്റി ആരംഭിക്കുന്നതോ കണ്ടെത്തുന്നതോ എങ്ങനെ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

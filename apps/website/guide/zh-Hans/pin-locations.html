@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>你的图钉位置 — BeanPool members' guide</title>
+    <meta name="description" content="谁能看到你的帖子和活动所在位置，以及如何保护家庭住址隐私。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">地图</a></p>
+        <h1>你的图钉位置</h1>
+        <p class="lede">谁能看到你的帖子和活动所在位置，以及如何保护家庭住址隐私。</p>
+        <h2>由你选择地点</h2>
+        <p>每项“提供”和“需求”在地图上都有一个地点。你在发布时进行选择：</p>
+        <ul>
+            <li><strong>我的位置</strong>使用你手机当前所在的实际位置。</li>
+            <li><strong>放置图钉</strong>允许你点按地图上的任意地点。</li>
+        </ul>
+        <p>你所在社区的每位成员都能看到该地点的图钉，精度在 10 米以内。应用不会自动为你模糊处理。未加入的人无法查看你所在社区的刊登。在全球社区中他们可以查看，但只能看到大致范围，绝看不到精确地点。</p>
+        <p>在全球社区中，其他成员看到的刊登图钉范围约为 1 公里左右；精确地点由你决定是否分享。在 Web 应用中，那里的新图钉初始会近似模糊到约 100 米：点按<strong>使用精确位置</strong>可保留你选择的地点。</p>
+        <p><strong>如果你在家中发布且不希望他人知道你的地址，请使用“放置图钉”并将其放置在附近的某个地点：</strong>街角、公园、商店等。达成一致后，你可以在消息中告知对方具体地点。</p>
+        <p>你无法在稍后移动“提供”或“需求”的图钉。如需修改，请删除该刊登并重新发布。发起人可以通过编辑活动来移动活动的图钉。</p>
+        <h2>活动</h2>
+        <p>创建活动时，先放置图钉，然后点按<strong>粗略位置（约 100 米）</strong>。随后图钉将仅显示其大致范围。如果你在此之后移动了图钉，请再次点按该选项。在全球社区中，新图钉初始即为粗略位置，点按<strong>使用精确位置</strong>可将其恢复到你放置的位置。在那里，只有活动发起人和能够查看说明的人才能看到精确地点；其他成员看到的范围约为 1 公里左右。</p>
+        <p>每个人都能看到活动的地点名称，因此请勿在此输入你的家庭住址。请将确切地址填写在<strong>给参与者的说明</strong>中。活动发起人可以阅读该说明，点按<strong>确定参加</strong>的每个人也都可以阅读，除非发起人勾选了<strong>只有我准入的人才能看到备注和聊天</strong>：勾选后仅限发起人准入的人员查看。在全球社区中，该复选框默认处于勾选状态。</p>
+        <h2>绝不显示的内容</h2>
+        <ul>
+            <li>你的自身位置。显示你当前位置的圆点仅出现在你自己的屏幕上。在手机上为蓝色，在 Web 应用中为绿色。</li>
+            <li>投票没有专属地点。在全球社区中，如果发布者设置了区域，投票会显示在发布者所在区域周围约 10 公里范围内。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="map-pins.html"><strong>地图图钉说明</strong><span>地图上的图钉、颜色代表的含义以及图钉周边的操作按钮。</span></a></li>
+            <li><a href="posting.html"><strong>发布提供或需求</strong><span>发布你能做或能给予的事情，或者你正在寻找的东西。</span></a></li>
+            <li><a href="events.html"><strong>活动</strong><span>在线下或线上发起一次性或周期性活动；报名参加、接收提醒、分享活动并作为主办方进行管理。</span></a></li>
+            <li><a href="privacy.html"><strong>个人隐私</strong><span>他人能看到的关于你的信息，以及控制这些信息的设置项。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

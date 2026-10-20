@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event-Chat — BeanPool members' guide</title>
+    <meta name="description" content="Ein Gruppenchat für alle Teilnehmenden und wie er sich von anderen Chats unterscheidet.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Event-Chat</h1>
+        <p class="lede">Ein Gruppenchat für alle Teilnehmenden und wie er sich von anderen Chats unterscheidet.</p>
+        <h2>Wer dabei ist</h2>
+        <p>Jede Veranstaltung hat ihren eigenen Chat. Der Gastgeber und alle, die auf <strong>Dabei</strong> getippt haben, können darin lesen und schreiben. Wenn der Gastgeber Teilnehmende einzeln zulässt, sind es die Teilnehmenden, die der Gastgeber hereingelassen hat: Bis dahin steht im Chat <strong>Der Chat öffnet sich, sobald der Gastgeber dich hereinlässt.</strong> Wenn du auf <strong>Interessiert</strong> wechselst oder erneut auf <strong>Dabei</strong> tippst, um deine Zusage zurückzunehmen, verlässt du den Chat. Der Gastgeber ist immer im Chat.</p>
+        <h2>Den Chat öffnen</h2>
+        <ul>
+            <li>Öffne die Veranstaltung und tippe auf <strong>Veranstaltungs-Chat öffnen</strong>.</li>
+            <li>Oder finde ihn im <strong>Chat</strong> unter <strong>Gruppen</strong>, gekennzeichnet mit 📅 <strong>Veranstaltung</strong>. In der Web-App befindet er sich im Reiter <strong>Chat</strong> bei deinen anderen Chats.</li>
+        </ul>
+        <p>Ganz oben zeigt ein angepinnter Kasten den <strong>Hinweis für Teilnehmende</strong> des Gastgebers an, beispielsweise die genaue Adresse. Tippe ganz oben auf den Namen der Veranstaltung (in der Web-App auf <strong>Veranstaltung anzeigen</strong>), um zur Veranstaltung zurückzukehren.</p>
+        <h2>Schreiben</h2>
+        <p>Schreibe in das Feld <strong>Nachricht an alle Teilnehmenden…</strong> und tippe auf die Senden-Schaltfläche. Du kannst bis zu 30 Nachrichten pro Minute senden. Die neueste Nachricht befindet sich direkt über dem Eingabefeld und bleibt dort sichtbar, wenn sich die Tastatur öffnet.</p>
+        <h2>Gut zu wissen</h2>
+        <ul>
+            <li>Event-Chats sind nicht Ende-zu-Ende-verschlüsselt. Der Gastgeber, alle Teilnehmenden (sofern der Gastgeber Teilnehmende zulässt: diejenigen, die hereingelassen wurden) sowie die Personen, die den Server deiner Community betreiben, können mitlesen. Der Chat weist über dem Eingabefeld darauf hin.</li>
+            <li>Der Gastgeber kann jede Nachricht entfernen: auf die Nachricht tippen, dann auf <strong>Entfernen</strong>. Dort steht dann „vom Gastgeber entfernt“.</li>
+            <li>Ein Event-Chat bietet keine Antworten, keine Reaktionen, kein Bearbeiten und kein Löschen eigener Nachrichten – anders als ein Chat mit einer Person oder ein Gruppenchat. Bitte den Gastgeber, etwas zu entfernen, wenn du es bereust. Wenn du dein Konto löschst, lautet jede von dir verfasste Nachricht hier <strong>Diese Nachricht wurde gelöscht</strong>.</li>
+            <li>Wenn die Veranstaltung endet oder abgesagt wird, wird der Chat schreibgeschützt. Der Chat einer wiederkehrenden Veranstaltung bleibt zwischen den Terminen geöffnet: bis zu ihrem letzten Termin, wenn der Gastgeber ein <strong>Bis</strong> festgelegt hat, und ansonsten, bis der Gastgeber die Veranstaltung absagt. Dreißig Tage nach dem Ende verschwindet der Chat.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="events.html"><strong>Veranstaltung</strong><span>Events vor Ort oder online erstellen, einmalig oder wiederkehrend; Teilnahme zusagen, Erinnerungen erhalten, teilen und leiten.</span></a></li>
+            <li><a href="messages.html"><strong>Nachrichten</strong><span>Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Wo dein Pin steht</strong><span>Wer sieht, wo deine Beiträge und Events sind, und wie dein Zuhause privat bleibt.</span></a></li>
+            <li><a href="reporting.html"><strong>Ein Problem melden</strong><span>Den Moderatoren deiner Community einen Beitrag, ein Event, einen Puls-Beitrag, ein Projekt oder einen Betrieb melden.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>알림 — BeanPool members' guide</title>
+    <meta name="description" content="휴대폰으로 받을 알림과 행사 미리림 시점을 선택하세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">설정 및 안전</a></p>
+        <h1>알림</h1>
+        <p class="lede">휴대폰으로 받을 알림과 행사 미리림 시점을 선택하세요.</p>
+        <h2>알림 선택하기</h2>
+        <ul>
+            <li><strong>설정</strong>을 여세요. <strong>앱 설정</strong> 아래에서 <strong>알림 설정</strong>을 탭하세요.</li>
+            <li>각 알림 유형을 켜거나 끄세요:</li>
+            <li><strong>다이렉트 메시지:</strong> 누군가 나에게 메시지를 보내거나, 내가 속한 그룹에서 글을 쓰거나, 나를 멘션할 때, 또는 내가 속한 그룹이나 공동체에서 투표가 열릴 때 알림을 받아요.</li>
+            <li><strong>장터 활동:</strong> 내 거래에 대한 요청, 승인 및 거절과 내가 신고한 게시물 또는 관리자가 삭제한 내 게시물에 대한 조치 결과를 알려줘요. 또한 참여 예정인 행사에 대한 소식, 커뮤니티 관리자의 공지사항, 내가 문의한 장소 근처에서 새로 시작되는 커뮤니티 소식도 포함돼요.</li>
+            <li><strong>신탁 보관 및 시스템:</strong> 콩의 신탁 보관, 해제 또는 문의 관련 소식을 받아요.</li>
+        </ul>
+        <p>웹 앱에서는 첫 번째 항목이 <strong>대화 메시지</strong>로 불리고, 세 번째 항목은 <strong>거래</strong>의 이름을 따서 명명되어 있어요. 이 설정들이 휴대폰에 도달하는 알림을 결정해요.</p>
+        <p>변경 사항은 자동으로 저장돼요. 커뮤니티 서버에 보관되므로 내 계정을 따라가요.</p>
+        <p>내 계정에 대한 두 가지 알림은 항상 전달되며 앱에 이를 끄는 스위치가 없어요. 다른 기기에서 내 계정이 방금 복원되었다는 알림과 관리자가 내 계정을 새 휴대폰으로 이전하기 시작했다는 알림이에요. 커뮤니티 서버를 운영하고 있다면 서버에 관한 알림도 항상 전달돼요.</p>
+        <h2>알림에 표시되는 내용</h2>
+        <p>휴대폰에 뜨는 알림은 어떤 종류의 소식인지만 간단히 표시해요. 예를 들면:</p>
+        <ul>
+            <li>&quot;새 메시지가 있습니다.&quot;</li>
+            <li>&quot;거래에 새로운 소식이 있습니다.&quot;</li>
+            <li>&quot;참여 예정인 행사가 곧 시작됩니다.&quot;</li>
+            <li>&quot;커뮤니티에서 보낸 공지사항이 있습니다.&quot;</li>
+        </ul>
+        <p>누가 보냈는지, 어떤 게시물인지, 콩이 몇 개인지, 커뮤니티의 공지 내용이 무엇인지는 절대 표시하지 않아요. 알림은 휴대폰으로 전달되는 과정에서 Apple, Google, Expo의 서버를 거치며 누구나 잠금 화면을 볼 수 있기 때문에, 나머지 상세 정보는 커뮤니티에만 안전하게 남겨둬요. 확인하려면 BeanPool을 여세요.</p>
+        <p>BeanPool은 알림에서 12개 단어나 비밀번호를 절대 요구하지 않아요.</p>
+        <h2>알림을 탭했을 때</h2>
+        <p>각 알림에는 나만을 위해 생성된 커뮤니티의 서명이 담겨 있어요. BeanPool은 어떤 작업을 수행하기 전에 이를 먼저 확인해요:</p>
+        <ul>
+            <li><strong>서명이 일치하는 경우:</strong> BeanPool은 커뮤니티에 알림의 내용을 확인하고, 현재 접속 중인 커뮤니티에서 온 것이라면 해당 화면을 열어요. 내가 속한 다른 커뮤니티에서 온 알림이라면 BeanPool이 마지막으로 보던 화면을 열어주므로, 해당 커뮤니티로 전환하여 확인하세요.</li>
+            <li><strong>서명이 일치하지 않는 경우:</strong> BeanPool은 아무것도 열지 않으며 다음과 같이 한 번 안내해요: &quot;해당 알림은 커뮤니티에서 보낸 것이 아닙니다. 내용을 무시하세요. BeanPool은 알림에서 12개 단어나 비밀번호를 절대 묻지 않습니다.&quot;</li>
+        </ul>
+        <p>BeanPool이 열려 있는 동안에는 서명이 확인되지 않은 알림은 전혀 표시되지 않으며, 이미 확인한 알림도 다시 표시되지 않아요.</p>
+        <p>휴대폰은 BeanPool이 확인하기 전에 알림의 문구를 먼저 화면에 표시해요. 따라서 내 휴대폰의 알림 주소를 알아낸 사람이 잠금 화면에 임의의 문구를 띄울 수도 있어요. 그러한 알림을 탭해도 아무 일도 일어나지 않으며 BeanPool이 이를 안내해요.</p>
+        <p>이 휴대폰에서 삭제한 커뮤니티에서 온 알림도 아무 일도 하지 않아요.</p>
+        <p>커뮤니티 서버가 아직 업데이트되지 않은 경우, 알림에 서명이 포함되지 않아요. BeanPool은 일반적인 문구(&quot;커뮤니티에서 새로운 소식이 있습니다.&quot;)로 알림을 표시하며, 알림을 탭하면 마지막으로 보던 화면이 열려요.</p>
+        <h2>BeanPool이 접속을 확인할 때 받는 공지사항</h2>
+        <p>휴대폰은 주기적으로 BeanPool이 백그라운드에서 커뮤니티와 접속을 확인할 수 있도록 해줘요. 내 게시물에 취해진 조치와 같이 아직 확인하지 않은 커뮤니티의 공지사항이 있다면, BeanPool이 휴대폰에 전체 내용을 한 번 표시해 줘요.</p>
+        <p>이는 커뮤니티 서버만 있으면 되므로 알림이 작동하지 않더라도 정상적으로 동작해요. 일반 알림보다는 늦게 도착하며, 약 15분에서 몇 시간 사이로 휴대폰이 전달 시점을 결정해요.</p>
+        <h2>행사 미리알림</h2>
+        <p>스위치 아래의 <strong>이벤트 알림</strong>에서는 내가 <strong>참여함</strong> 또는 <strong>관심 있음</strong>으로 표시한 행사가 시작되기 얼마 전에 알림을 받을지 설정해요. <strong>1주일 전</strong>, <strong>1일 전</strong>, <strong>2시간 전</strong>, <strong>1시간 전</strong> 또는 <strong>30분 전</strong>을 선택할 수 있으며(여러 개를 동시에 선택할 수도 있어요), 전혀 받지 않으려면 <strong>꺼짐</strong>를 선택하세요.</p>
+        <p>모든 회원은 <strong>1일</strong> 전으로 기본 설정되어 시작해요. 이는 일반적인 기본 선택이며, 각 행사 화면에서 개별 행사별로 다르게 설정할 수도 있어요. &quot;행사&quot;를 참고하세요.</p>
+        <p>미리알림은 <strong>장터 활동</strong> 알림과 함께 전달되므로, 해당 알림을 끄면 미리알림도 중단돼요. 취소되었거나 이미 종료된 행사, 또는 참석하겠다고 답했을 때 이미 지나간 시간에 대해서는 알림이 오지 않아요. 주최자가 행사 일정을 변경하면 미리알림도 그에 맞춰 함께 변경돼요.</p>
+        <h2>알림이 전혀 오지 않나요?</h2>
+        <p>휴대폰 자체의 설정에서 BeanPool의 알림 허용 상태를 확인해 보세요.</p>
+        <h2>대화방별 음소거</h2>
+        <p>그룹, 프로젝트 또는 공동체의 대화방을 개별적으로 8시간, 1주일 동안 또는 영구적으로 음소거할 수 있어요. &quot;대화 알림 끄기&quot;를 참고하세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="mute.html"><strong>대화 알림 끄기</strong><span>1:1 대화, 모임 대화, 기업 대화의 알림을 8시간, 1주일 또는 영구적으로 끌 수 있어요.</span></a></li>
+            <li><a href="messages.html"><strong>메시지</strong><span>대화 시작, 사진 전송, 답장, 반응, 수정, 삭제, 알림 끄기와 대화 보호 안내예요.</span></a></li>
+            <li><a href="my-deals.html"><strong>내 거래</strong><span>진행 중인 모든 거래, 내가 올린 게시글, 지난 거래 내역을 한곳에서 확인하세요.</span></a></li>
+            <li><a href="events.html"><strong>행사</strong><span>오프라인이나 온라인에서 일회성 또는 반복 행사를 만들고, 참석 여부 표시, 알림 받기, 공유 및 주최자 운영 안내예요.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>휴가 모드</strong><span>자리를 비울 때 휴가 모드를 켜면 제공 게시글이 숨겨지고 새 요청이 일시 중지돼요.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>상단 바</strong><span>콩 표시, 확인이 필요한 알림 아이콘, 오른쪽 상단의 버튼 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

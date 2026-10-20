@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ur by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>پروجیکٹس اور انٹرپرائزز — BeanPool members' guide</title>
+    <meta name="description" content="اپنی پھلیاں رکھنے والے مشترکہ منصوبے: تلاش کریں، حمایت کریں، یا خود شروع کریں۔">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">مشترکہ</a></p>
+        <h1>پروجیکٹس اور انٹرپرائزز</h1>
+        <p class="lede">اپنی پھلیاں رکھنے والے مشترکہ منصوبے: تلاش کریں، حمایت کریں، یا خود شروع کریں۔</p>
+        <h2>یہ کیا ہیں</h2>
+        <p>پروجیکٹس اور انٹرپرائزز ایسے گروپس ہیں جو پھلیاں رکھتے ہیں۔ ہر ایک کی اپنی پھلیاں، اپنی پیشکشیں اور ضروریات، اور اپنی کریڈٹ لائن ہوتی ہے۔</p>
+        <p>عالمی کمیونٹی پر کوئی انٹرپرائزز نہیں ہیں، اس لیے <strong>کامنز</strong> ایک مقامی کمیونٹی کی ایک مثال، مثال وادی بیکری (Example Valley Bakery) دکھاتا ہے، جس پر <strong>🏘️ Local community</strong> کا نشان ہے۔ اس کے بٹن، جیسے کہ <strong>وعدہ کریں</strong> اور <strong>روکیں</strong>، بتاتے ہیں کہ انٹرپرائزز مقامی کمیونٹی میں کیوں ہوتے ہیں، اور کچھ تبدیل نہیں کرتے۔ &quot;پھلیاں اور عالمی کمیونٹی&quot; دیکھیں۔</p>
+        <ul>
+            <li>ایک <strong>پروجیکٹ</strong> کا ایک لیڈر، پھلیوں میں ایک ہدف اور عام طور پر ایک آخری تاریخ ہوتی ہے: ایک نئی چھت کے لیے 500 پھلیاں اکٹھی کریں، نومبر تک شیڈ ہاؤس تعمیر کریں۔ اس کا <strong>لیڈر</strong> اسے چلاتا ہے؛ <strong>معاونین</strong> مدد کرتے ہیں۔ جب ہدف پورا ہو جاتا ہے، تو وعدے پروجیکٹ کے اکاؤنٹ میں چلے جاتے ہیں اور یہ مزید نہیں لیتا۔ جب کام مکمل ہو جاتا ہے، تو اس کا لیڈر اسے سمیٹ دیتا ہے۔ 7 دن بعد لیڈر اسے حتمی شکل دیتا ہے، اور جو بچ جاتا ہے وہ واپس کامنز میں چلا جاتا ہے۔</li>
+            <li>ایک <strong>انٹرپرائز</strong> جاری رہتا ہے اور کاروبار کرتا ہے: ایک ٹول لائبریری، انڈوں کا ریوڑ، مارکیٹ کا اسٹال۔ اس کے <strong>نگران</strong> مل کر اسے چلاتے ہیں اور اس کے پیچھے کھڑے ہوتے ہیں۔ ان میں سے ایک <strong>سربراہ نگران</strong> ہوتا ہے۔</li>
+        </ul>
+        <p>ایک انٹرپرائز کی اپنی روزانہ کی حدود ہوتی ہیں، جو کسی رکن سے دس گنا ہوتی ہیں: 1,000 ادائیگیاں، 300 ایسے لوگ جنہیں اس نے پہلے کبھی ادائیگی نہیں کی، 1,000 سودے منظور شدہ، 1,000 نئی پوسٹس اور 50,000 تبدیلیاں۔ ایک نگران اس کے لیے جو کچھ کرتا ہے وہ انٹرپرائز کے خلاف شمار ہوتا ہے، نگران کے اپنے خلاف نہیں۔ یہ اس کے خلاف بھی شمار ہوتا ہے جو وہ نگران ان تمام انٹرپرائزز کے لیے کرتا ہے جن کی وہ مل کر دیکھ بھال کرتا ہے، جس کی وہی حدود ہوتی ہیں: آپ جتنے بھی انٹرپرائزز کی دیکھ بھال کرتے ہیں، آپ اپنی حدود کے علاوہ ایک دن میں ان کے لیے ایک انٹرپرائز کے برابر کام کر سکتے ہیں۔ چنانچہ دو یا دو سے زیادہ نگرانوں والا انٹرپرائز اب بھی اپنی تمام حدود استعمال کر سکتا ہے۔ ایک بار جب کوئی انٹرپرائز دن کے لیے اپنی حدود میں سے ایک کو استعمال کر لیتا ہے، تو آپ اس کے لیے جو کام کرتے ہیں وہ انٹرپرائز کی بجائے آپ کی اپنی حدود کے خلاف شمار ہوتا ہے، گویا آپ نے یہ اپنے لیے کیا ہو۔ اگر آپ پھر اپنی کسی حد تک پہنچ جاتے ہیں، تو ایپ ایسا کہتی ہے اور انٹرپرائز کا نام بتاتی ہے۔ لہٰذا ایک نگران جو اپنا دن استعمال کر لیتا ہے وہ صرف خود کو روک سکتا ہے: باقی ہر نگران کے پاس اب بھی اپنی تمام حدود باقی ہوتی ہیں۔ انٹرپرائز کو چلانا ہمیشہ نگران کی اپنی تبدیلیوں کے خلاف شمار ہوتا ہے: نگرانوں کو شامل کرنا، ہٹانا یا تبدیل کرنا، دستبردار ہونا، موقوف کرنا، سمیٹنا، اور اس کے سودوں کو مکمل یا مسترد کرنا۔</p>
+        <h2>انہیں تلاش کرنا</h2>
+        <p><strong>کامنز</strong> پر ٹیپ کریں، پھر <strong>گروپس</strong> پر، اور <strong>منصوبے</strong> یا <strong>انٹرپرائزز</strong> چنیں۔ ہر ایک اپنی حیثیت، مقصد اور بیلنس دکھاتا ہے۔ فون پر، جن کی آپ دیکھ بھال کرتے ہیں وہ <strong>آپ کے گروپس</strong> کے تحت ہوتے ہیں۔ اسے کھولنے کے لیے کسی ایک پر ٹیپ کریں۔</p>
+        <h2>انٹرپرائز کا صفحہ کیا دکھاتا ہے</h2>
+        <p>ہر رکن دیکھ سکتا ہے:</p>
+        <ul>
+            <li>اس کا <strong>مقصد</strong>؛</li>
+            <li>اس کا <strong>بیلنس</strong>، کریڈٹ لائن، لائیو پیشکشیں اور فاضل رقم (surplus)؛</li>
+            <li><strong>آمدنی اور اخراجات</strong>: اندر اور باہر جانے والی ہر پھلی۔ اس کے نگران دیکھتے ہیں کہ کس نے ادائیگی کی یا کس کو ادائیگی کی گئی اور اس کے ساتھ موجود نوٹ؛ دوسرے اراکین رقمیں دیکھتے ہیں، اور اپنی ادائیگیاں مکمل تفصیل کے ساتھ؛</li>
+            <li>اس کے نگران؛</li>
+            <li>اس کی <strong>لسٹنگز</strong>، <strong>حالیہ سرگرمی</strong> اور ایک <strong>مباحثہ</strong> جس میں آپ لکھ سکتے ہیں۔</li>
+        </ul>
+        <p>سب سے نیچے، اگر کچھ غلط ہو تو <strong>انٹرپرائز کی اطلاع دیں</strong> (پروجیکٹ پر <strong>منصوبے کی اطلاع دیں</strong>)。</p>
+        <h2>انٹرپرائز کی حمایت کرنا</h2>
+        <ul>
+            <li><strong>کسی پروجیکٹ کے لیے پھلیوں کا وعدہ کریں:</strong> اس کے صفحے پر، فنڈنگ باکس کے نیچے، رقم درج کریں اور <strong>پھلیوں کا وعدہ کریں</strong> پر ٹیپ کریں۔ آپ کسی بھی 24 گھنٹے میں 20 وعدے کر سکتے ہیں یا تبدیل کر سکتے ہیں، جس میں نگران کی حمایت بھی شامل ہے، اور پھلیوں کا وعدہ آپ کی ادائیگیوں میں سے بھی ایک ہے۔ وعدے اس وقت تک امانت کے طور پر رکھے جاتے ہیں جب تک کہ پروجیکٹ اپنے ہدف تک نہ پہنچ جائے، اور پھر وہ سب انٹرپرائز کو چلے جاتے ہیں۔ اس کے بعد یہ مزید وعدے قبول نہیں کرتا، اور نہ ہی کوئی ایسا انٹرپرائز لیتا ہے جو ختم ہو رہا ہو یا بند ہو چکا ہو: اس کا صفحہ بتاتا ہے جہاں وعدے کا باکس تھا، اور آپ کی پھلیاں آپ کے پاس ہی رہتی ہیں۔ اگر کوئی پروجیکٹ اپنے ہدف تک پہنچنے سے پہلے منسوخ کر دیا جاتا ہے، تو ہر وعدہ اس شخص کو واپس چلا جاتا ہے جس نے اسے کیا تھا۔</li>
+            <li><strong>اس کے ساتھ تجارت کریں:</strong> اس کی پیشکشیں اور ضروریات ہر کسی کی طرح مارکیٹ میں ہوتی ہیں۔</li>
+            <li><strong>نگران بنیں:</strong> &quot;نگران&quot; دیکھیں۔</li>
+        </ul>
+        <h2>اگر آپ اس کی دیکھ بھال کرتے ہیں</h2>
+        <p>اگر آپ کسی انٹرپرائز کی دیکھ بھال کرتے ہیں، یا کسی پروجیکٹ کو چلانے میں مدد کرتے ہیں، تو اس کے صفحے پر <strong>آپریٹر کنٹرولز</strong> ہوتے ہیں:</p>
+        <ul>
+            <li><strong>پیشکش پوسٹ کریں</strong> اور <strong>ضرورت پوسٹ کریں:</strong> اس کے نام سے پوسٹ کریں۔</li>
+            <li><strong>مشترکہ سیکشن میں:</strong> اس کی کچھ اضافی رقم کامنز کو بھیجیں۔</li>
+            <li>ویب ایپ میں، <strong>نقشہ کی پن لگائیں</strong> اسے نقشے پر رکھتا ہے۔</li>
+        </ul>
+        <p>اسے موقوف کرنا اور بند کرنا ویب ایپ کے اسی پینل میں ہے۔ فون پر وہ اس کے نیچے اپنے ایک کارڈ، <strong>سیزن اور لائف سائیکل کنٹرولز</strong> میں ہیں، جو صرف وہی بٹن دکھاتا ہے جنہیں آپ استعمال کر سکتے ہیں:</p>
+        <ul>
+            <li><strong>موسم کے لیے موقوف کریں:</strong> کوئی بھی نگران۔ اس کی لسٹنگز موقوف ہو جاتی ہیں تاکہ کوئی خرید نہ سکے، اور اس کی کریڈٹ لائن 90 دن تک وہیں رہتی ہے جہاں وہ ہے۔ <strong>انٹرپرائز بحال کریں</strong> (<strong>منصوبہ بحال کریں</strong>) وقفے کو ختم کرتا ہے۔</li>
+            <li><strong>ختم کرنے کا عمل شروع کریں:</strong> سربراہ نگران، واحد نگران یا کمیونٹی ایڈمن۔ 7 دن کا انتظار شروع ہوتا ہے؛ کوئی بھی چیز از خود انٹرپرائز کو بند نہیں کرتی۔ کوئی بھی نگران یا کمیونٹی ایڈمن انتظار کے دوران <strong>ختم کرنے کا عمل روکیں</strong> پر ٹیپ کر سکتا ہے۔</li>
+            <li><strong>ختم کرنے کا عمل حتمی کریں:</strong> 7 دن پورے ہونے کے بعد، سربراہ نگران، واحد نگران یا کمیونٹی ایڈمن اسے بند کرنے کا عمل مکمل کرتا ہے۔ &quot;قواعد اور فیصلوں کا طریقہ کار&quot; دیکھیں۔</li>
+        </ul>
+        <p>کسی پروجیکٹ کے اپنے ہدف تک پہنچنے سے پہلے، اس کا لیڈر اسے منسوخ بھی کر سکتا ہے، اور ہر وعدہ واپس چلا جاتا ہے۔</p>
+        <h2>ایک شروع کرنا</h2>
+        <ul>
+            <li>ویب پر، <strong>کامنز</strong> پر ٹیپ کریں، پھر <strong>+ گروپ بنائیں</strong> پر، پھر <strong>پروجیکٹ شروع کریں</strong> یا <strong>ایک انٹرپرائز شروع کریں</strong> پر۔ فون ایپ میں، <strong>کامنز</strong> پر ٹیپ کریں، پھر <strong>گروپس</strong> پر، <strong>منصوبے</strong> یا <strong>انٹرپرائزز</strong> چنیں، پھر گول <strong>+</strong> بٹن پر۔</li>
+            <li><strong>پروجیکٹ</strong> یا <strong>انٹرپرائز</strong> منتخب کریں۔</li>
+            <li>اسے ایک <strong>نام</strong> اور <strong>مقصد کا بیان</strong> دیں۔</li>
+            <li>کسی پروجیکٹ کے لیے، <strong>فنڈنگ کا ہدف</strong> (ویب ایپ میں <strong>ہدف کی رقم</strong>) مقرر کریں اور اگر آپ چاہیں تو ایک آخری تاریخ بھی۔</li>
+            <li>اگر چاہیں تو تصویر شامل کریں۔</li>
+            <li><strong>اقدام شروع کریں</strong> (ویب ایپ میں <strong>انٹرپرائز تجویز کریں</strong>؛ یہ تب بھی فوراً شروع ہوتا ہے) پر ٹیپ کریں۔</li>
+        </ul>
+        <p>یہ فوراً شروع ہو جاتا ہے، اور آپ اس کے لیڈر (ایک پروجیکٹ) یا اس کے سربراہ نگران (ایک انٹرپرائز) ہوتے ہیں۔ ایک شروع کرنے کے لیے کوئی کمیونٹی ووٹ نہیں ہوتا۔</p>
+        <p>آپ کسی بھی 24 گھنٹے میں 3 پروجیکٹس یا انٹرپرائزز شروع کر سکتے ہیں، اور ایک وقت میں 20 چلا سکتے ہیں۔ اس سے آگے ایپ انکار کر دیتی ہے۔ اگر آپ کے 20 چل رہے ہیں، تو دوسرا شروع کرنے سے پہلے ایک کو سمیٹ لیں۔</p>
+        <p>نام، مقصد اور تصویر کو ابھی ایپ میں تبدیل نہیں کیا جا سکتا۔</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="keepers.html"><strong>نگران</strong><span>وہ لوگ جو انٹرپرائز چلاتے ہیں اور اس کی ذمہ داری لیتے ہیں۔ شامل ہونے، اعتراض کرنے اور دستبردار ہونے کا طریقہ۔</span></a></li>
+            <li><a href="commons-fund.html"><strong>مشترکہ فنڈ</strong><span>آپ کی کمیونٹی کی مشترکہ پھلیاں: وہ کہاں سے آتی ہیں، اور کیسے خرچ ہوتی ہیں۔</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>فیصلہ تجویز کرنا</strong><span>کمیونٹی سے کسی لازمی معاملے پر فیصلہ کرنے کی درخواست کریں۔</span></a></li>
+            <li><a href="rules.html"><strong>قواعد اور فیصلوں کا طریقہ کار</strong><span>ووٹنگ، ٹرن آؤٹ، خفیہ رائے شماری، کون ووٹ دے سکتا ہے، معطلی، رکن کو ہٹانا، نگران، اور کنوینرز و لیڈ کنوینرز۔</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>پھلیاں اور عالمی کمیونٹی</strong><span>عالمی کمیونٹی کس مقصد کے لیے ہے، کئی میں سے ایک کمیونٹی، اور آپ وہاں کیا دیکھتے ہیں: 🏘️ مقامی کمیونٹی کا نشان، مثالی کمیونٹی Example Valley، پھلیاں وہاں کیوں انتظار کرتی ہیں، اور مقامی کمیونٹی کیسے شروع یا تلاش کریں۔</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

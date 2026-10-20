@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>कार्यक्रम — BeanPool members' guide</title>
+    <meta name="description" content="किसी स्थान पर या ऑनलाइन, एक बार या दोहराए जाने वाला कार्यक्रम बनाएं; कहें कि आप जा रहे हैं, अनुस्मारक पाएं, इसे साझा करें, और आयोजक के रूप में चलाएं।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">साझा</a></p>
+        <h1>कार्यक्रम</h1>
+        <p class="lede">किसी स्थान पर या ऑनलाइन, एक बार या दोहराए जाने वाला कार्यक्रम बनाएं; कहें कि आप जा रहे हैं, अनुस्मारक पाएं, इसे साझा करें, और आयोजक के रूप में चलाएं।</p>
+        <h2>Finding events</h2>
+        <ul>
+            <li><strong>बाज़ार</strong> में, <strong>कार्यक्रम</strong> पर टैप करें। <strong>आज</strong>, <strong>इस सप्ताहांत</strong> या <strong>अगले 7 दिन</strong> चुनें।</li>
+            <li><strong>नक्शा</strong> पर, कार्यक्रम बैंगनी पिन होते हैं। फ़ोन पर, केवल उन्हें देखने के लिए <strong>कार्यक्रम</strong> पर टैप करें। वेब ऐप में वे हमेशा वहाँ होते हैं, और तारीख के विकल्प उन्हें सीमित करते हैं।</li>
+        </ul>
+        <h2>Your events</h2>
+        <p><strong>बाज़ार</strong> में, <strong>★ आपके लिए</strong> पर टैप करें। <strong>आपके कार्यक्रम</strong> इस पर पहली चीज़ है: वह सब कुछ जिसके लिए आपने कहा है कि आप <strong>जा रहे हैं</strong> या आपकी <strong>रुचि है</strong>, सबसे पहले होने वाला सबसे ऊपर। इसे खोलने के लिए किसी एक पर टैप करें।</p>
+        <p>यह केवल तभी वहाँ होता है जब आपका कोई आगामी कार्यक्रम हो, और यह केवल आपके अपने उत्तर रखता है — कोई अन्य इसे नहीं देख सकता।</p>
+        <h2>Going</h2>
+        <p>किसी कार्यक्रम पर, <strong>जा रहे हैं</strong> या <strong>रुचि है</strong> पर टैप करें। इसे हटाने के लिए अपनी पसंद पर फिर से टैप करें।</p>
+        <p>जब आप <strong>जा रहे हैं</strong>:</p>
+        <ul>
+            <li>आप आयोजक का <strong>जाने वाले लोगों के लिए नोट</strong> पढ़ सकते हैं, जब आयोजक आपको अंदर आने देता है, जहाँ आयोजक ने वह चुना हो;</li>
+            <li>आप <strong>कार्यक्रम चैट</strong> खोल सकते हैं। &quot;कार्यक्रम चैट&quot; देखें;</li>
+            <li>किसी ऑनलाइन कार्यक्रम के लिए, आप उसी शर्त पर इसका <strong>जुड़ने का लिंक</strong> और एक <strong>शामिल हों</strong> बटन देखते हैं जैसे नोट।</li>
+        </ul>
+        <p>सब कुछ देखने के लिए कार्यक्रम पर टैप करें, और <strong>नक्शे पर दिखाएं</strong> पर। फ़ोन पर यह आपका मैप्स ऐप खोलता है। वेब ऐप में यह नक्शा पर वह स्थान दिखाता है।</p>
+        <h2>Being reminded</h2>
+        <p>जब आप <strong>जा रहे हैं</strong> या आपकी <strong>रुचि है</strong>, तो कार्यक्रम <strong>मुझे याद दिलाएं</strong> और इसके शुरू होने से कितने समय पहले आपको बताया जाएगा — <strong>1 दिन पहले (आपका डिफ़ॉल्ट)</strong> जब तक आप इसे बदल नहीं देते — दिखाता है।</p>
+        <ul>
+            <li><strong>1 सप्ताह पहले</strong>, <strong>1 दिन पहले</strong>, <strong>2 घंटे पहले</strong>, <strong>1 घंटा पहले</strong> या <strong>30 मिनट पहले</strong> चुनने के लिए <strong>बदलें</strong> पर टैप करें। आप एक से अधिक पर सही का निशान लगा सकते हैं।</li>
+            <li>इस कार्यक्रम के लिए कोई अनुस्मारक न पाने के लिए किसी पर भी निशान न लगाएं।</li>
+            <li>फिर <strong>इस कार्यक्रम के लिए सहेजें</strong> पर टैप करें। जब तक आप ऐसा नहीं करते, निशान सहेजा नहीं जाता है।</li>
+            <li>इसे अपनी सामान्य पसंद पर वापस ले जाने के लिए <strong>मेरा डिफ़ॉल्ट इस्तेमाल करें</strong> पर टैप करें।</li>
+        </ul>
+        <p>प्रत्येक कार्यक्रम के लिए अपनी सामान्य पसंद बदलने के लिए, &quot;सूचनाएं&quot; देखें।</p>
+        <p>अनुस्मारक आपके मार्केटप्लेस अलर्ट के साथ आपके फ़ोन पर अलर्ट के रूप में आते हैं, इसलिए यदि आप उन्हें बंद कर देते हैं तो वे रुक जाते हैं। आपको कभी भी ऐसे कार्यक्रम के बारे में याद नहीं दिलाया जाता है जो रद्द कर दिया गया था या समाप्त हो चुका है, और कभी भी ऐसे समय के बारे में नहीं जो आपके आने की बात कहने पर पहले ही बीत चुका था।</p>
+        <h2>Telling someone about it</h2>
+        <p>कार्यक्रम खोलें और <strong>साझा करें</strong> पर टैप करें। कार्यक्रम के नाम, यह कब है, कहाँ है, और एक लिंक के साथ आपके फ़ोन की सामान्य शेयर शीट खुलती है। कंप्यूटर पर, आपके पेस्ट करने के लिए लिंक कॉपी हो जाता है।</p>
+        <p>कोई भी जो उस लिंक पर टैप करता है, वह कार्यक्रम को खोलता है — यदि उनके पास ऐप है तो ऐप में, अन्यथा वेब ऐप में। जो कोई आपके समुदाय में नहीं है, वह इसके शामिल होने वाले पृष्ठ पर पहुंचता है। एक वेब ब्राउज़र में, वैश्विक समुदाय उन्हें पहले कार्यक्रम दिखाता है, जैसा कि एक आगंतुक देखता है, और उनके शामिल होने के बाद इसे फिर से खोलता है।</p>
+        <h2>Putting it in your calendar</h2>
+        <p>कार्यक्रम खोलें और <strong>कैलेंडर में जोड़ें</strong> पर टैप करें।</p>
+        <ul>
+            <li><strong>वेब ऐप</strong> पर, एक कैलेंडर फ़ाइल डाउनलोड होती है। इसे खोलें और आपका कैलेंडर कार्यक्रम जोड़ने की पेशकश करता है।</li>
+            <li>एक <strong>iPhone</strong> पर, वही फ़ाइल आपके फ़ोन को सौंपी जाती है, जो <strong>कैलेंडर में जोड़ें</strong> की पेशकश करता है।</li>
+            <li><strong>Android</strong> पर, पहले से भरे हुए कार्यक्रम के साथ Google Calendar खुलता है। इसे जांचें और सहेजें।</li>
+        </ul>
+        <p>प्रविष्टि नाम, समय, स्थान और कार्यक्रम का लिंक साथ रखती है। यदि आयोजक बाद में समय बदलता है, तो आपका कैलेंडर इसके साथ नहीं बदलता है — ऐप फिर भी आपको याद दिलाएगा, और कार्यक्रम स्वयं हमेशा नया समय दिखाता है।</p>
+        <h2>Creating an event</h2>
+        <ul>
+            <li>बाज़ार टैब या नक्शा पर <strong>+ पोस्ट जोड़ें</strong> पर टैप करें, फिर <strong>कार्यक्रम</strong> पर।</li>
+            <li><strong>शीर्षक</strong>, और यह कब शुरू होता है। समाप्ति वैकल्पिक है; जब तक आप इसे बदल न दें यह 2 घंटे बाद होती है।</li>
+            <li>समय कार्यक्रम के अपने समय क्षेत्र में होता है, जो पिन से लिया जाता है। जब वह आपका अपना क्षेत्र नहीं होता है, तो समय के नीचे की एक पंक्ति उसका नाम बताती है। यदि यह गलत है तो इसके पास <strong>बदलें</strong> पर टैप करें।</li>
+            <li><strong>दोहराव:</strong> चुनें कि यह कितनी बार आता है, जैसे उस दिन प्रत्येक सप्ताह या महीने में एक बार, या इसे <strong>दोहराया नहीं जाता</strong> पर छोड़ दें। <strong>तक</strong> वैकल्पिक है: इसे खाली छोड़ दें और कार्यक्रम तब तक दोहराता है जब तक आप इसे रद्द नहीं करते।</li>
+            <li><strong>किसी स्थान पर</strong> या <strong>ऑनलाइन</strong> चुनें। किसी ऑनलाइन कार्यक्रम के लिए कोई स्थान और कोई पिन नहीं होता है: इसके बजाय एक <strong>जुड़ने का लिंक</strong> जोड़ें। केवल आप और जाने वाले लोग इसे देखते हैं (जहाँ आप लोगों को अंदर आने देते हैं, केवल वे लोग जिन्हें आप अंदर आने देते हैं)। इसका समय आपके अपने समय क्षेत्र में होता है, और बाकी सभी इसे अपने समय क्षेत्र में देखते हैं, जिस पर <strong>your time</strong> अंकित होता है।</li>
+            <li><strong>स्थान का नाम</strong>, जैसे &quot;Town hall&quot;।</li>
+            <li>पिन को नक्शे पर लगाएं: नक्शे पर टैप करें, <strong>पता खोजें</strong> खोजें, या <strong>मेरी लोकेशन इस्तेमाल करें</strong> पर टैप करें। यदि आप सटीक स्थान नहीं दिखाना चाहते हैं तो <strong>अनुमानित (~100 मी)</strong> पर टैप करें। &quot;आपका पिन कहाँ लगता है&quot; देखें।</li>
+            <li>एक <strong>विवरण</strong>, और यदि आप चाहें तो एक फ़ोटो।</li>
+            <li><strong>जाने वाले लोगों के लिए नोट:</strong> प्रत्येक व्यक्ति जो जा रहे हैं पर टैप करता है इसे देखता है, जब तक कि आप <strong>केवल जिन्हें मैं अंदर आने दूँ वे ही नोट और चैट देख सकते हैं</strong> पर सही का निशान न लगाएं (वैश्विक समुदाय पर शुरुआत में टिक किया हुआ, जहाँ कोई भी एक मिनट में शामिल हो सकता है): तब केवल वे लोग जिन्हें आप अंदर आने देते हैं इसे और कार्यक्रम चैट को देखते हैं। सटीक पते या गेट कोड के लिए एक अच्छी जगह; स्थान का नाम हर किसी के लिए है।</li>
+            <li><strong>इसे कौन देख सकता है:</strong> आपका पूरा समुदाय, या एक समूह।</li>
+            <li>यदि आप किसी प्रोजेक्ट या उद्यम को संभालते हैं या किसी समूह के संयोजक हैं, तो <strong>के रूप में पोस्ट करें</strong> आपको इसके नाम से कार्यक्रम पोस्ट करने देता है। एक समूह केवल अपने सदस्यों के लिए मेज़बानी करता है; एक उद्यम पूरे समुदाय के लिए मेज़बानी करता है, इसलिए किसी उद्यम का कार्यक्रम कभी केवल समूह के लिए नहीं होता है।</li>
+            <li><strong>बनाएँ</strong> पर टैप करें। आपका कार्यक्रम बाज़ार में और नक्शे पर है।</li>
+        </ul>
+        <p>वेब ऐप में शीर्षक बॉक्स <strong>क्या हो रहा है</strong> है, पिन बटन <strong>📍 मेरी लोकेशन</strong> और <strong>📌 पिन लगाएं</strong> हैं, और अंतिम बटन <strong>कार्यक्रम बनाएं</strong> है।</p>
+        <p>आप एक समय में 5 आगामी कार्यक्रम रख सकते हैं। किसी समूह के कार्यक्रम समूह के विरुद्ध गिने जाते हैं, और किसी उद्यम के उद्यम के विरुद्ध।</p>
+        <h2>Running your event</h2>
+        <p>अपना कार्यक्रम खोलें। मेज़बान के रूप में आप:</p>
+        <ul>
+            <li>देख सकते हैं कि <strong>कौन जा रहा है</strong>, और लोगों को अंदर आने दे सकते हैं: नाम के पास <strong>अंदर आने दें</strong> (इसे वापस लेने के लिए फिर से टैप करें), या <strong>सभी को अंदर आने दें</strong>। आपके अपने दोस्तों को उनके जा रहे हैं पर टैप करते ही अंदर आने दिया जाता है। यदि आप <strong>केवल जिन्हें मैं अंदर आने दूँ वे ही नोट और चैट देख सकते हैं</strong> से निशान हटा देते हैं, तो जाने वाले सभी लोग नोट और अब तक की चैट देखते हैं, और चैट कहती है कि मेज़बान ने इसे खोल दिया है;</li>
+            <li><strong>कार्यक्रम संपादित करें</strong>। यदि आप समय या स्थान बदलते हैं, तो जाने वाले सभी लोगों को बताया जाता है;</li>
+            <li>इसे फिर से चलाने के लिए, <strong>नई तारीख पर कॉपी करें</strong>;</li>
+            <li><strong>कार्यक्रम रद्द करें</strong>, फिर पुष्टि करें (फ़ोन पर फिर से <strong>कार्यक्रम रद्द करें</strong>, वेब ऐप में <strong>ठीक है</strong>)। जाने वाले सभी लोग देख सकते हैं कि यह रद्द हो गया है, और इसकी चैट केवल पढ़ने के लिए हो जाती है।</li>
+        </ul>
+        <h2>Repeating events</h2>
+        <p>एक दोहराया जाने वाला कार्यक्रम <strong>↻</strong> और अपनी तारीख के पास आवृत्ति दिखाता है, जैसे <strong>प्रत्येक शुक्रवार</strong> या <strong>प्रत्येक माह की 16 तारीख को</strong>। इसका कार्ड अगली तारीख दिखाता है; <strong>अगली तारीखें</strong> देखने के लिए इसे खोलें।</p>
+        <p>यदि आप इसकी मेज़बानी करते हैं, तो अगली प्रत्येक तारीख में होता है:</p>
+        <ul>
+            <li><strong>यह तारीख रद्द करें:</strong> केवल वह दिन रद्द होता है। उस दिन जाने वाले सभी लोगों को बताया जाता है।</li>
+            <li><strong>केवल यह तारीख बदलें:</strong> वह दिन रद्द हो जाता है और आप किसी अन्य तारीख पर एक बार का कार्यक्रम बनाते हैं।</li>
+            <li><strong>वापस लाएँ:</strong> एक रद्द की गई तारीख फिर से चालू हो जाती है।</li>
+        </ul>
+        <p><strong>कार्यक्रम रद्द करें</strong> प्रत्येक तारीख को रद्द कर देता है, और इसकी चैट केवल पढ़ने के लिए हो जाती है। तब तक चैट तारीखों के बीच खुली रहती है, अंतिम तारीख तक; बिना किसी <strong>तक</strong> के, यह तब तक खुली रहती है जब तक आप कार्यक्रम को रद्द नहीं करते।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>कार्यक्रम चैट</strong><span>आयोजक और कार्यक्रम में जाने वाले सभी लोगों से बात करें।</span></a></li>
+            <li><a href="notifications.html"><strong>सूचनाएं</strong><span>चुनें कि कौन से अलर्ट आपके फ़ोन तक पहुंचें, और कार्यक्रम आपको कब याद दिलाएं।</span></a></li>
+            <li><a href="pin-locations.html"><strong>आपका पिन कहाँ लगता है</strong><span>कौन देखता है कि आपके पोस्ट और कार्यक्रम कहाँ हैं, और अपने घर को निजी कैसे रखें।</span></a></li>
+            <li><a href="map-pins.html"><strong>नक्शा क्या दिखाता है</strong><span>नक्शे पर पिन, उनके रंगों का अर्थ, और उनके आस-पास के बटन।</span></a></li>
+            <li><a href="polls.html"><strong>मतसंग्रह</strong><span>समुदाय से एक त्वरित प्रश्न पूछें। पोल राय दिखाते हैं; वे स्वयं कुछ भी नहीं बदलते।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

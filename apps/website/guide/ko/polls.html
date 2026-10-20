@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>설문 — BeanPool members' guide</title>
+    <meta name="description" content="커뮤니티에 간단한 질문을 올려보세요. 설문은 의견을 모으는 용도이며 그 자체로 결정을 바꾸지는 않아요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">공유지</a></p>
+        <h1>설문</h1>
+        <p class="lede">커뮤니티에 간단한 질문을 올려보세요. 설문은 의견을 모으는 용도이며 그 자체로 결정을 바꾸지는 않아요.</p>
+        <h2>설문인가요 결정인가요?</h2>
+        <p><strong>설문</strong>은 사람들의 생각을 물어보는 기능이에요: &quot;장터를 일요일에 열까요, 토요일에 열까요?&quot;. 설문 자체로 무언가가 바뀌지는 않아요. 구속력이 있는 결정을 내리려면 결정을 제안하세요.</p>
+        <p>글로벌 커뮤니티에서는 각 설문에 <strong>의견 수렴용 설문이며 아무것도 공식 결정하지 않아요</strong>라고 표시돼요. 12개 단어나 로그인으로 누구나 가입할 수 있어 한 사람이 여러 계정으로 투표수를 조작할 수 있으므로 그곳에는 결정이 없어요. 설문 아래의 &quot;🏘️ 로컬 커뮤니티에서는 결정에 구속력이 있어요 ›&quot;는 왜 투표에 구속력이 로컬 커뮤니티에만 있는지 설명해 줘요.</p>
+        <p>글로벌 커뮤니티에서 익명 설문이 마감되면, <strong>새 계정 또는 12개 단어 계정</strong>에서 얼마나 많은 투표가 나왔는지도 표시돼요(예: &quot;12표 중 5표가 새 계정 또는 12개 단어 계정에서 나왔습니다&quot;). 각 투표는 투표 당시 계정의 상태로 계산돼요: 새 계정은 아직 새 계정 제한이 적용되던 계정이고, 12개 단어 계정은 12개 단어로 생성되어 로그인을 추가하지 않은 계정이에요. 새 계정 또는 12개 단어 계정에서 최소 3표 이상이 나왔고 다른 투표가 없거나 3표 이상인 경우, 각 답변별로도 해당 계정에서 몇 표가 나왔는지 표시돼요. 모든 투표는 여전히 정상 반영되며 누가 투표했는지는 표시되지 않아요.</p>
+        <p>설문이 진행되는 동안에는 이에 대해 아무것도 표시되지 않아요. 만약 표시된다면 매 투표마다 설문을 확인하는 사람이 각 투표가 어떤 유형의 계정에서 나왔는지, 어떤 선택을 했는지 알아낼 수 있기 때문이에요. 공개 투표는 진행 중이든 마감되었든 이를 표시하지 않아요: 공개 투표는 누가 투표했는지를 보여주므로, 투표수가 각 투표자의 계정 유형을 드러낼 수 있기 때문이에요. 모임 설문에서도 표시되지 않으며, 로컬 커뮤니티의 설문에서도 표시되지 않아요.</p>
+        <h2>설문 시작하기</h2>
+        <ul>
+            <li>장터 탭이나 지도에서 <strong>+ 게시물 추가</strong>를 탭하세요.</li>
+            <li><strong>커뮤니티 설문</strong>을 선택하세요.</li>
+            <li><strong>질문</strong>을 작성하세요.</li>
+            <li>도움이 된다면 <strong>배경 설명 / 메모</strong>를 추가하세요. 선택 사항이에요.</li>
+            <li>2~4개의 <strong>선택지</strong>를 작성하세요. 더 추가하려면 <strong>+ 선택지 추가</strong>를 탭하세요.</li>
+            <li>진행 기간을 선택하세요: <strong>3일</strong>, <strong>7일</strong>, 또는 <strong>14일</strong>.</li>
+            <li><strong>만들기</strong>를 탭하기 전에 <strong>공개 투표</strong> 여부를 선택하세요. 선택을 해제해 두면 설문이 익명으로 진행돼요. 선택하면 멤버들이 누가 무엇을 선택했는지 볼 수 있어요. 설문이 등록된 후에는 변경할 수 없어요.</li>
+            <li><strong>만들기</strong>를 탭하세요.</li>
+        </ul>
+        <p>웹 앱에서는 유형이 <strong>🗳️ 설문</strong>이고, 메모는 <strong>배경 / 맥락</strong>, 선택지 버튼은 <strong>+ 선택지 추가</strong>, 마지막 버튼은 <strong>🗳️ 설문 만들기</strong>예요. 웹 지도에서는 둥근 <strong>+</strong>를 탭하세요.</p>
+        <p>한 번에 1개의 설문만 진행할 수 있으며, 커뮤니티 전체에서는 동시에 5개까지 진행할 수 있어요. 설문을 시작하거나 답변하려면 신용이 동결되지 않은 상태여야 해요.</p>
+        <h2>설문 찾기 및 참여하기</h2>
+        <p>설문은 장터에 있어요. 상단 행에서 <strong>설문</strong>을 탭하면 설문만 볼 수 있어요.</p>
+        <ul>
+            <li>답변을 탭하여 선택하세요. 설문이 마감될 때까지 다른 답변을 탭하여 마음을 바꿀 수 있어요.</li>
+            <li>카드에는 각 답변을 선택한 인원수가 표시돼요.</li>
+        </ul>
+        <h2>내가 어떻게 투표했는지 볼 수 있는 사람</h2>
+        <p>각 설문에는 투표율 위에 어떤 유형인지 표시돼요:</p>
+        <ul>
+            <li><strong>익명</strong> (일반적인 유형): 모든 사람에게 각 답변을 선택한 인원수만 보여요. 설문을 시작한 사람을 포함하여 아무도 누가 무엇을 선택했는지 볼 수 없어요.</li>
+            <li><strong>공개 투표:</strong> 설문을 시작한 사람이 투표자를 공개하도록 선택한 경우예요. 멤버들은 <strong>투표자 보기</strong>(웹 앱에서는 <strong>투표자 보기</strong>)를 탭하여 누가 무엇을 선택했는지 볼 수 있어요. 활동 정지된 멤버는 정지가 끝날 때까지 총합만 볼 수 있어요.</li>
+        </ul>
+        <p>커뮤니티 서버를 운영하는 소유자와 관리자는 서버에 저장된 모든 투표를 계속 볼 수 있어요.</p>
+        <h2>설문 조기 마감하기</h2>
+        <p>내가 시작한 설문인 경우, <strong>설문 종료</strong>를 탭한 다음 <strong>설문 종료</strong>를 다시 탭하여 확인하세요(웹 앱에서는 <strong>확인</strong>).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>의사결정 투표</strong><span>진행 중인 의사결정을 찾고, 투표하고, 투표를 변경하고, 결과를 확인하세요.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>의사결정 제안하기</strong><span>커뮤니티에 구속력 있는 결정을 제안해 보세요.</span></a></li>
+            <li><a href="events.html"><strong>행사</strong><span>오프라인이나 온라인에서 일회성 또는 반복 행사를 만들고, 참석 여부 표시, 알림 받기, 공유 및 주최자 운영 안내예요.</span></a></li>
+            <li><a href="rules.html"><strong>규칙 및 의사결정 방식</strong><span>투표, 참여율, 비밀 투표, 투표 자격, 활동 정지, 멤버 제명, 운영자 및 소집자와 대표 소집자 안내예요.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>콩과 글로벌 커뮤니티</strong><span>글로벌 커뮤니티의 목적, 여러 커뮤니티와의 관계, 🏘️ 지역 커뮤니티 표시, 샘플 커뮤니티 Example Valley, 콩이 대기하는 이유와 로컬 커뮤니티 시작·찾기 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

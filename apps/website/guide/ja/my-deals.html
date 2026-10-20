@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自分の取引 — BeanPool members' guide</title>
+    <meta name="description" content="参加中のすべての取引、公開中の投稿、過去の取引を一か所で管理します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市場</a></p>
+        <h1>自分の取引</h1>
+        <p class="lede">参加中のすべての取引、公開中の投稿、過去の取引を一か所で管理します。</p>
+        <h2>開き方</h2>
+        <p>マーケットタブの上部にある<strong>自分の取引</strong>をタップします。赤い数字は進行中の取引の数を表します。</p>
+        <p>グローバルコミュニティには取引が存在しないため、<strong>自分の取引</strong>にはローカルコミュニティ（サンプルバレー）の3つのサンプル取引が<strong>🏘️ ローカルコミュニティ</strong>というマーク付きで表示されます（あなたの対応待ちのもの、豆が安全に預かられているもの、完了したものの3つです）。それらのボタンには取引がローカルコミュニティに存在する理由が表示され、何も変更されません。「豆とグローバルコミュニティ」を参照してください。</p>
+        <h2>3つのタブ</h2>
+        <ul>
+            <li><strong>進行中</strong>：進行中の取引、および返答待ちの申請。それぞれ現在の状況が表示されます：<strong>預かり中</strong>（豆が保留中）、<strong>対応が必要</strong>（相手から申請があり、返答が必要）、または<strong>承認待ち</strong>（あなたが申請し、相手の返答を待っている状態）。</li>
+            <li><strong>自分の投稿</strong>：公開中の提供や求め、または<strong>一時停止中</strong>のもの。誰かから申請があった投稿には<strong>対応が必要</strong>と表示されます。</li>
+            <li><strong>履歴</strong>：完了、キャンセル、および辞退された取引。<strong>すべて</strong>、<strong>受け取り</strong>、または<strong>ゆずり</strong>を選択します。それぞれ日付、金額、および相手が表示されます。</li>
+        </ul>
+        <p>Webアプリでは、<strong>進行中</strong>には豆が保留されている取引のみが一覧表示されるため、返答待ちの申請はそこには表示されません。<strong>自分の投稿</strong>には公開中の投稿のみが表示され、それぞれに<strong>有効</strong>とマークされます（一時停止中の投稿は一覧に表示されません）。</p>
+        <p><strong>進行中</strong>または<strong>自分の投稿</strong>の取引をタップして投稿を開きます。そこで取引の承諾、完了、またはキャンセルを行います。誰も返答しない申請は7日後に自動的に終了します。</p>
+        <h2>レビュー</h2>
+        <p><strong>履歴</strong>にある完了した取引には<strong>レビュー</strong>ボタンがあります。レビューを投稿した後は<strong>編集</strong>に変わり、星評価を変更できます。</p>
+        <p>Webアプリでは、その取引をレビューするまでボタンに<strong>レビューを書く</strong>と表示されます。Webアプリでレビューを変更するには、投稿を開いてください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>取引のステップ</strong><span>問い合わせから支払いまで、提供と求めの双方について、そしてレビューの記入方法を説明します。</span></a></li>
+            <li><a href="posting.html"><strong>提供や求めの投稿</strong><span>自分ができること・提供できるもの、または探しているものを投稿します。</span></a></li>
+            <li><a href="your-balance.html"><strong>残高と履歴</strong><span>保有している豆の数、保留中の分、すべての取引とギフトの履歴です。</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>取引で問題が起きたとき</strong><span>取引のキャンセルや、合意が得られない場合の対応について説明します。</span></a></li>
+            <li><a href="the-top-bar.html"><strong>トップバー</strong><span>豆のアイコン、確認が必要な項目を示す小さなアイコン、右上のボタンについて説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

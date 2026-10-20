@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorer le Marché — BeanPool members' guide</title>
+    <meta name="description" content="Trouver des Offres et Demandes grâce à la recherche, aux filtres et à la distance.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Marché</a></p>
+        <h1>Explorer le Marché</h1>
+        <p class="lede">Trouver des Offres et Demandes grâce à la recherche, aux filtres et à la distance.</p>
+        <h2>L'onglet Marché</h2>
+        <p>Touchez <strong>Marché</strong> dans la barre des onglets. Vous voyez ce que les membres de votre communauté proposent et recherchent, du plus récent au plus ancien, regroupé par jour de publication.</p>
+        <p>Sur le téléphone, les événements apparaissent en premier. Si vous avez déjà autorisé l'application à utiliser votre position, les vues en liste et compacte affichent les annonces les plus proches en premier, sous <strong>Les plus proches d'abord</strong>, avec les sondages sous <strong>Sondages</strong>. L'onglet <strong>Pour vous</strong> conserve son propre ordre. Tirez la liste vers le bas pour l'actualiser.</p>
+        <p>Dans l'application web, le Marché s'ouvre sous forme de cartes. Dans les vues en liste et compacte, les événements se placent sous le jour où ils ont été publiés. Sur une communauté locale, l'application web ne place pas les plus proches en premier.</p>
+        <p>Sur la communauté globale, l'application web présente d'abord les annonces proches de vous : les plus proches dans votre <strong>Distance</strong>, ou dans un rayon de 250 km de votre zone (le lieu approximatif que vous renseignez lors de votre inscription, ou dans les <strong>Paramètres</strong>), chacune indiquant son éloignement. Une ligne au-dessus de la liste précise l'option affichée. Près de votre zone, elle propose <strong>Afficher partout</strong> pour voir les annonces les plus récentes de partout. Avec une <strong>Distance</strong>, ouvrez <strong>Distance</strong> et touchez <strong>Réinitialiser</strong> pour revenir à votre zone, puis touchez <strong>Afficher partout</strong>. Sur le téléphone, la communauté globale conserve les annonces les plus proches de votre zone, et ce sont donc celles que le Marché affiche. Voir « Trouver près de chez vous ».</p>
+        <p>Sur la communauté globale, tant qu'il n'y a que peu d'annonces, le Marché affiche également quelques cartes marquées <strong>Exemple</strong>. Elles sont fictives, destinées à montrer ce que les membres publient, et ne peuvent être ni ouvertes ni traitées. Elles disparaissent dès qu'il y a suffisamment d'annonces réelles.</p>
+        <p>Sur le téléphone, la recherche et les filtres s'effacent lorsque vous faites défiler la page vers le bas, afin de laisser plus de place aux publications. Faites défiler un peu vers le haut et ils réapparaissent. Pour revenir tout en haut, touchez à nouveau <strong>Marché</strong>.</p>
+        <h2>Recherche</h2>
+        <p>Saisissez vos termes dans <strong>Rechercher sur le marché</strong> en haut. Sur un petit téléphone, il peut simplement être écrit <strong>Rechercher</strong>. La recherche trouve également les mots associés : « fruit » trouve « citron ». Elle fonctionne aussi avec les mots en chinois, en japonais et en thaï, et écarte les publications des personnes que vous avez bloquées. Sans connexion, elle recherche parmi ce qui est déjà présent sur votre téléphone.</p>
+        <p>Tant que des mots sont saisis dans la recherche, un bouton <strong>Enregistrer cette recherche sur l'Accueil</strong> apparaît. Il ouvre l'Accueil avec une recherche enregistrée prête à être ajoutée : vos mots, <strong>Offres</strong> ou <strong>Demandes</strong> si vous ne consultiez qu'une seule catégorie, la catégorie et la distance. Il n'y a pas de bouton sous <strong>Événements</strong> ou <strong>Sondages</strong>. Voir « Accueil ».</p>
+        <h2>Filtres</h2>
+        <p>La rangée de boutons sous la recherche permet de choisir ce que vous voyez :</p>
+        <ul>
+            <li><strong>Tout</strong>, <strong>Offres</strong> ou <strong>Demandes</strong>.</li>
+            <li><strong>Pour vous :</strong> publications dans les catégories que vous avez marquées d'une étoile sous <strong>Personnaliser les centres d'intérêt</strong> (les mêmes étoiles que vous définissez sur l'Accueil), ainsi que vos événements à venir, ceux pour lesquels vous avez indiqué participer ou être intéressé.</li>
+            <li><strong>Événements</strong> et <strong>Sondages</strong>.</li>
+        </ul>
+        <p>La deuxième rangée permet d'affiner. Sur le téléphone :</p>
+        <ul>
+            <li><strong>Toutes les catégories :</strong> choisissez une catégorie, comme Alimentation, Outils ou Jardin.</li>
+            <li><strong>Distance :</strong> uniquement les publications situées dans un certain rayon autour d'un point. Voir « Trouver près de chez vous ».</li>
+            <li><strong>Confiance :</strong> uniquement les publications des membres n'ayant pas encore conclu d'échange (<strong>Fondateurs</strong>), des <strong>Arrivants</strong>, ou des membres possédant au moins un certain badge de confiance.</li>
+            <li><strong>Haricots uniquement :</strong> masque les publications qui demandent également une part en espèces.</li>
+        </ul>
+        <p>Dans l'application web, les boutons sont <strong>Catégorie</strong>, <strong>Distance</strong>, <strong>🌱 Nouveaux membres</strong> (membres n'ayant pas encore conclu d'échange) et <strong>🫘 Haricots uniquement</strong>. Il n'y a pas de filtre Confiance.</p>
+        <p>Si vous appartenez à des groupes, une rangée de boutons de groupes apparaît également. <strong>Tous les groupes et public</strong> affiche tout ; le bouton d'un groupe n'affiche que les publications destinées à ce groupe. Dans l'application web, les groupes se trouvent dans un menu déroulant plutôt que dans une rangée.</p>
+        <p>Sur le téléphone, si rien ne correspond, touchez <strong>Effacer tous les filtres</strong>. Dans l'application web, une liste vide indique <strong>Aucune annonce trouvée</strong>, et il n'y a pas de bouton de ce type.</p>
+        <p>Sur le téléphone, après avoir fait défiler la page alors qu'une recherche ou un filtre est actif, une petite pastille en haut rappelle son intitulé. Touchez-la pour le modifier. Touchez <strong>✕</strong> dessus pour effacer la recherche et l'ensemble des filtres.</p>
+        <p>Le bouton situé à côté de <strong>Mes accords</strong> modifie le mode d'affichage : liste, grille ou compact.</p>
+        <h2>Ce que montre une annonce</h2>
+        <ul>
+            <li>une photo, ou l'image de sa catégorie ;</li>
+            <li><strong>OFFRE</strong> ou <strong>DEMANDE</strong> ;</li>
+            <li>le prix en haricots, avec <strong>/h</strong> si le tarif est horaire ;</li>
+            <li><strong>RÉCURRENT</strong> si elle reste active après chaque accord ;</li>
+            <li><strong>ESPÈCES AUSSI</strong> si la personne a également besoin d'un peu d'argent liquide, pour du carburant ou des fournitures ;</li>
+            <li>un cadenas et le nom d'un groupe si seul ce groupe peut la voir ;</li>
+            <li>l'auteur de la publication, avec son badge de confiance et ses étoiles. Un membre n'ayant pas encore conclu d'échange porte la mention <strong>FONDATEUR</strong>.</li>
+        </ul>
+        <p>Touchez une annonce pour l'ouvrir.</p>
+        <h2>Sur une annonce</h2>
+        <ul>
+            <li><strong>Message</strong> et son nom : posez une question avant de vous engager.</li>
+            <li>Touchez son nom pour consulter son profil, ses évaluations et sa confiance.</li>
+            <li><strong>Signaler l'annonce</strong> s'il s'agit d'une escroquerie, d'un contenu injurieux, trompeur ou mettant un enfant en danger (<strong>Protection de l'enfance</strong>).</li>
+            <li><strong>Bloquer l'utilisateur</strong> pour masquer ses publications et ses messages sur votre téléphone. Cela en informe également vos administrateurs. Voir « Bloquer quelqu'un ».</li>
+        </ul>
+        <p>Dans l'application web, les boutons sur une annonce sont <strong>💬 Message</strong> et <strong>🚩 Signaler</strong>. Le blocage d'une personne s'effectue depuis son profil.</p>
+        <p>Sur la communauté globale, une annonce ne comporte aucun prix en haricots : elle indique ce que la personne souhaiterait en échange. À la place du prix, il est écrit « 🏘️ Dans une communauté locale, c'est un prix en haricots › ». Au lieu de solliciter l'échange, l'annonce affiche <strong>Demande · Haricots retenus en sécurité 🏘️</strong> : touchez-le pour découvrir comment fonctionne un accord dans une communauté locale. Envoyer un message à la personne fonctionne comme partout ailleurs. Voir « Haricots et communauté globale ».</p>
+        <p>Vous ne pouvez pas encore enregistrer ou partager une annonce.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Accueil</strong><span>Ce qu'est l'Accueil, les cartes sur téléphone et sur le web, comment les ajouter, déplacer ou retirer, choisir vos centres d'intérêt et confidentialité à la déconnexion.</span></a></li>
+            <li><a href="posting.html"><strong>Publier Offre ou Demande</strong><span>Proposez un service ou un bien, ou exprimez un besoin que vous recherchez.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>Un accord pas à pas</strong><span>De la demande au règlement, pour une Offre et une Demande, et laisser une évaluation.</span></a></li>
+            <li><a href="near-you.html"><strong>Trouver près de chez vous</strong><span>Afficher uniquement les annonces à une certaine distance de vous ou d'un lieu choisi.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Badges de mérite</strong><span>Arrivant, Résident, Pilier et Doyen. Leur signification et pourquoi ils ne débloquent rien.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Haricots et communauté globale</strong><span>Le rôle de la communauté globale, une communauté parmi d'autres, et ce que vous y voyez : le repère 🏘️ Communauté locale, la communauté exemple Example Valley, l'attente des haricots et comment lancer ou trouver une communauté locale.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

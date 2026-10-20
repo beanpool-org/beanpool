@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>イベントトーク — BeanPool members' guide</title>
+    <meta name="description" content="主催者やイベント参加者全員と会話できます。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">トーク</a></p>
+        <h1>イベントトーク</h1>
+        <p class="lede">主催者やイベント参加者全員と会話できます。</p>
+        <h2>参加者</h2>
+        <p>すべてのイベントには専用のチャットがあります。主催者と、<strong>参加する</strong>をタップした全員が閲覧および書き込みを行えます。主催者が承認制にしている場合は、主催者によって承認された参加者のみが対象となります：承認されるまではチャットに<strong>主催者が承認するとチャットが開きます。</strong>と表示されます。<strong>気になる</strong>に変更するか、<strong>参加する</strong>をもう一度タップして解除すると、チャットから退出します。主催者は常にチャットに参加しています。</p>
+        <h2>チャットを開く</h2>
+        <ul>
+            <li>イベントを開き、<strong>イベントチャットを開く</strong>をタップします。</li>
+            <li>または、<strong>トーク</strong>の<strong>グループ</strong>の下にある📅 <strong>イベント</strong>の印が付いたものを見つけます。Webアプリでは、他のチャットと一緒に<strong>チャット</strong>タブの中にあります。</li>
+        </ul>
+        <p>上部の固定エリアには、正確な住所など、主催者による<strong>参加者への連絡事項</strong>が表示されます。一番上にあるイベント名（Webアプリでは<strong>イベントを表示</strong>）をタップすると、イベント画面に戻ります。</p>
+        <h2>書き込み</h2>
+        <p><strong>参加者全員にメッセージを送信…</strong>に入力し、送信ボタンをタップします。1分間に最大30件のメッセージを送信できます。最新のメッセージはメッセージ入力欄のすぐ上に表示され、キーボードが開いてもその位置にとどまります。</p>
+        <h2>知っておくべきこと</h2>
+        <ul>
+            <li>イベントチャットはエンドツーエンドで暗号化されていません。主催者、参加者全員（承認制の場合は主催者が承認した参加者）、およびコミュニティのサーバーを運用する人々が閲覧できます。メッセージ入力欄の上にその旨が表示されます。</li>
+            <li>主催者は任意のメッセージを削除できます。メッセージをタップし、<strong>削除</strong>をタップします。その後「主催者によって削除されました」と表示されます。</li>
+            <li>個人とのチャットやグループチャットとは異なり、イベントチャットには返信、リアクション、編集、および自分のメッセージの削除機能はありません。取り消したい発言がある場合は主催者に削除を依頼してください。あなたのアカウントを削除した場合、ここに書き込んだすべてのメッセージは<strong>このメッセージは削除されました</strong>と表示されます。</li>
+            <li>イベントが終了またはキャンセルされると、チャットは読み取り専用になります。定期開催イベントのチャットは開催日と開催日の間も開いたままになります：主催者が<strong>終了日</strong>を設定している場合は最終開催日まで、設定していない場合は主催者がイベントをキャンセルするまで継続します。終了から30日後にチャットは消去されます。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="events.html"><strong>イベント</strong><span>対面またはオンライン、単発または定期的なイベントを作成し、参加表明、リマインダー受け取り、共有、主催者としての運営を行います。</span></a></li>
+            <li><a href="messages.html"><strong>メッセージ</strong><span>チャットの開始、写真の送信、返信、リアクション、編集、削除、ミュート、公開範囲について説明します。</span></a></li>
+            <li><a href="pin-locations.html"><strong>ピンの位置</strong><span>投稿やイベントの場所が誰に表示されるか、自宅のプライバシーを守る方法について説明します。</span></a></li>
+            <li><a href="reporting.html"><strong>問題の通報</strong><span>投稿、イベント、パルスの投稿、プロジェクト、事業体についてコミュニティのモデレーターに通報します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

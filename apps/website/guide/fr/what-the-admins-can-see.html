@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ce que voient les admins — BeanPool members' guide</title>
+    <meta name="description" content="Dans une communauté où les administrateurs tiennent un registre de noms : ce qu'il contient sur vous, qui peut le lire, ce que garde le serveur et ce que signifie être confirmé.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Paramètres et sécurité</a></p>
+        <h1>Ce que voient les admins</h1>
+        <p class="lede">Dans une communauté où les administrateurs tiennent un registre de noms : ce qu'il contient sur vous, qui peut le lire, ce que garde le serveur et ce que signifie être confirmé.</p>
+        <h2>Le registre des noms</h2>
+        <p>Les administrateurs de certaines communautés tiennent un <strong>registre des noms</strong> : qui sont les membres, sous leur identité réelle, tout comme un comité de SEL (système d'échange local) tient une liste d'adhérents. Toutes les communautés n'en tiennent pas un. Demandez à vos administrateurs si c'est le cas de la vôtre.</p>
+        <p>Une fiche contient votre nom et, parfois, une courte note rédigée par un administrateur, indiquant par exemple comment la communauté vous connaît. Rien d'autre : ni adresse, ni date de naissance, ni numéro de pièce d'identité.</p>
+        <h2>Qui peut le lire</h2>
+        <p><strong>Uniquement les propriétaires et administrateurs de votre communauté, sur leurs propres téléphones.</strong> Votre nom est scellé cryptographiquement sur le téléphone d'un administrateur avant d'être transmis au serveur de votre communauté. Le serveur ne conserve que du texte brouillé : une sauvegarde, une copie, BeanPool, ou toute personne qui déroberait la base de données ne détient rien de lisible.</p>
+        <p>Quiconque gère le serveur ne peut pas le lire. Les téléphones des administrateurs ne transmettent les clés de la liste qu'aux administrateurs dont le téléphone a été vérifié par un autre administrateur, par appel ou en personne, et n'acceptent de nouvelles clés que de leur part. Cette sécurité repose sur les administrateurs : un administrateur qui vérifierait le mauvais téléphone, un téléphone d'administrateur auquel un tiers accède, ou un téléphone perdu avant que les administrateurs ne révoquent sa clé, peut permettre à quelqu'un d'autre de lire les noms. Il en va de même si la personne gérant le serveur empêche le téléphone d'un administrateur d'apprendre qu'un autre administrateur a été retiré : tant qu'il ne l'a pas appris, ce qu'il écrit peut être lu avec les clés que détenait l'administrateur retiré. Un administrateur dont le téléphone affiche toujours l'administrateur retiré supprime sa clé manuellement, et ce téléphone génère alors une nouvelle clé sans lui ou cesse d'écrire.</p>
+        <p><strong>Les autres membres ne voient pas ces noms.</strong> Ils voient votre nom BeanPool habituel, comme toujours.</p>
+        <p>Un administrateur peut créer une copie PDF de la liste sur son téléphone, pour la conserver en sécurité. Une fois générée, sa garde lui incombe, comme pour une liste papier. Chaque fois que la liste est ouverte ou copiée, les autres administrateurs peuvent voir qui l'a fait et à quel moment.</p>
+        <h2>Être confirmé</h2>
+        <p>Un administrateur peut vous <strong>confirmer</strong> : il atteste que votre compte correspond bien à la personne inscrite sur votre fiche. Seule une personne qui vous connaît doit le faire, et dans certaines communautés, deux administrateurs doivent être d'accord.</p>
+        <ul>
+            <li>Une confirmation ne mentionne aucun nom. Le serveur consigne quel compte, quelle entrée et quel administrateur, jamais qui vous êtes.</li>
+            <li>Il ne s'agit pas d'un badge de confiance, et pour l'instant cela ne modifie rien d'autre dans l'application.</li>
+            <li>Si un administrateur vous a invité nominativement, vous inscrire avec son invitation vous a confirmé sur votre fiche, par cet administrateur. « Confirmé » signifie uniquement qu'un administrateur certifie que ce compte est bien la personne désignée sur cette entrée.</li>
+            <li>Si vous remplacez un téléphone perdu et que votre compte adopte une nouvelle clé, votre confirmation suit automatiquement.</li>
+            <li>Si vous quittez la communauté ou supprimez votre compte, votre confirmation prend fin. Votre entrée reste sur la liste des administrateurs jusqu'à ce qu'un administrateur la supprime : demandez-leur de le faire.</li>
+            <li>Si vous êtes confirmé et que vous partez, êtes exclu ou supprimez votre compte alors que vous devez des haricots, les Communs couvrent la dette comme toujours. La liste des administrateurs conserve également sur votre entrée une note précisant ce que vous deviez, pourquoi et quand, pendant 3 ans, et les administrateurs la voient à côté de votre nom sur leurs téléphones. Personne ne peut être confirmé sur cette fiche tant que la dette n'est pas remboursée, compensée par du travail ou effacée.</li>
+        </ul>
+        <h2>Ce que la liste des noms ne montre pas aux administrateurs</h2>
+        <p>La liste contient des noms, des notes, et l'association entre chaque compte et chaque personne. En dehors de la note susmentionnée sur une dette laissée impayée, elle ne dévoile à personne votre solde ni vos échanges (un administrateur peut voir votre solde dans les situations décrites ci-dessous, ainsi que certains de vos échanges : voir la fin de cette page). Voir « Confidentialité » pour ce que les membres et les administrateurs peuvent voir par ailleurs.</p>
+        <h2>Ce que vous acceptez dans une communauté connue</h2>
+        <p>Une communauté qui confirme ses membres, une <strong>communauté connue</strong>, fonctionne comme un SEL l'a toujours fait : les administrateurs gardent un œil sur les dettes qui deviennent trop importantes ou durent trop longtemps. Lorsque vous en rejoignez une, l'écran d'inscription précise exactement les seuils, avec les chiffres propres à votre communauté, par exemple :</p>
+        <p>« Dans cette communauté, les administrateurs peuvent voir votre solde s'il dépasse 50 % de votre ligne de crédit ou si vous restez en débit pendant 60 jours sans réaliser de vente. C'est ainsi qu'un système d'échange local (SEL) a toujours fonctionné. Chaque fois qu'un administrateur ouvre la liste des membres ayant franchi ces seuils, et chaque fois qu'un administrateur consulte votre solde lors de votre exclusion, cette consultation est journalisée. Lors d'un vote sur votre exclusion, toutes les personnes qui peuvent y voter voient votre solde et votre éventuelle dette, uniquement dans ce vote, et ces consultations ne sont pas journalisées. Vous pouvez révoquer cet accord à tout moment dans les Paramètres. Quel que soit votre choix, tout administrateur peut voir certains de vos échanges : un échange qui n'est pas encore terminé ou qu'un administrateur a réglé (avec qui, l'annonce, le prix et votre discussion privée à deux, qu'ils ne peuvent pas lire si elle est privée), afin qu'un échange bloqué puisse être réglé ; un échange dont les haricots sont restés bloqués lors du retrait d'un membre sur un ancien serveur (le statut de l'échange, l'annonce, le prix, ses dates, les haricots restés bloqués, combien de paiements y ont transité, ainsi que le montant et la note du dernier paiement) ; une alerte de fraude qui vous mentionne si vous et un autre membre achetez l'un à l'autre dans les deux sens, de manière à peu près équivalente, au-delà d'un plafond, avec le total des haricots et l'équilibre des flux ; une alerte qui vous mentionne, avec le total des haricots et le nombre de membres invités par vous n'ayant échangé avec personne d'autre que vous, si des membres que vous avez invités vous envoient des haricots au-delà d'un plafond dans un délai défini en jours, ou si vous êtes l'un de ces membres ; une alerte qui vous mentionne, avec la part des échanges du groupe réalisée en son sein mais sans les montants en haricots, si vous faites partie d'un groupe de membres, dont au moins la moitié sont nouveaux, qui échangent principalement entre eux ; et une alerte qui vous mentionne si aucun haricot n'est entré ou sorti de votre compte depuis un nombre défini de jours. Chaque consultation de l'un de ces échanges est journalisée, en précisant qui a consulté, quand et quels échanges ; une consultation des alertes vous mentionnant est journalisée la première fois que chaque administrateur les ouvre, puis à la première consultation de cet administrateur après 24 heures, les consultations intermédiaires n'ajoutant aucune ligne. Le propriétaire et les administrateurs peuvent consulter ce journal. Les statistiques des membres que voient les administrateurs indiquent combien d'annonces vous avez en ligne et de messages vous avez envoyés, et pour les échanges uniquement les totaux de toute la communauté, jamais les vôtres. Chaque membre, administrateurs inclus, voit votre profil de confiance : combien de vos échanges ont été menés à terme et combien ont été annulés, la part menée à terme, combien de paiements en haricots vous avez envoyés ou reçus de membres plus les échanges menés à terme, avec combien de membres différents vous avez payé, été payé ou échangé, combien de paiements et d'échanges vous avez réalisés avec le membre qui consulte, ainsi que vos Points de confiance. Cela n'est pas journalisé, car chaque membre peut le voir. Rien d'autre de vos échanges. La personne qui administre le serveur de cette communauté détient l'intégralité de sa base de données, y compris votre solde et vos échanges, ainsi que ses sauvegardes, instantanés et copies de secours. »</p>
+        <p>Donner votre accord constitue votre consentement. Dès lors, et uniquement tant qu'un administrateur vous a confirmé :</p>
+        <ul>
+            <li>Si votre solde franchit l'un de ces seuils, votre compte apparaît sur le téléphone des administrateurs avec votre solde, afin qu'un administrateur qui vous connaît puisse engager le dialogue. Cette liste n'affiche rien d'autre sur vous, et aucun de vos échanges.</li>
+            <li>Chaque fois qu'un administrateur ouvre cette liste, les autres administrateurs et le propriétaire peuvent voir qui l'a ouverte et à quel moment.</li>
+            <li>Si vous n'avez pas donné votre accord, si personne ne vous a confirmé, ou si votre communauté ne confirme pas ses membres, cette liste ne vous affiche jamais.</li>
+        </ul>
+        <p>Si vous vous êtes inscrit avant que votre communauté ne mette cela en place, votre application vous le propose. Répondre non, ou ne pas répondre, ne change rien d'autre : vous restez membre. Si la communauté modifie ses seuils par la suite, votre application vous sollicite à nouveau.</p>
+        <p>Vous pouvez retirer votre consentement à tout moment : ouvrez les <strong>Paramètres</strong>, où votre application rappelle ce que vous avez accepté et à quelle date, et touchez <strong>Retirer</strong>. À partir de cet instant, vous disparaissez de la liste. Votre communauté conserve une trace de votre accord initial et de votre retrait, et vous pourrez accepter à nouveau plus tard.</p>
+        <h2>Quand un administrateur voit votre solde malgré tout</h2>
+        <p>Que vous ayez accepté ou non ces conditions, dans n'importe quelle communauté :</p>
+        <ul>
+            <li><strong>Lorsqu'un administrateur supprime votre compte.</strong> L'administrateur qui engage la suppression voit votre solde et le nombre d'échanges en cours, afin que ce que vous détenez ou devez puisse être réglé. Les autres administrateurs et le propriétaire peuvent voir qui a regardé le solde de qui, et à quelle date.</li>
+            <li><strong>Lorsque votre communauté vote sur votre exclusion.</strong> Toutes les personnes autorisées à voter dans ce scrutin voient votre solde et votre éventuelle dette, uniquement dans le cadre de ce vote. Un administrateur ou un propriétaire qui n'a pas le droit de vote ne les y voit pas. Ces consultations ne sont pas journalisées.</li>
+            <li><strong>La personne administrant le serveur de votre communauté</strong> détient l'intégralité de sa base de données, y compris votre solde et vos échanges, ainsi que ses sauvegardes, instantanés et copies de secours.</li>
+        </ul>
+        <h2>Ce que tout administrateur peut voir de vos échanges</h2>
+        <p>Que vous ayez ou non consenti, dans n'importe quelle communauté, tout administrateur peut voir :</p>
+        <ul>
+            <li><strong>Un échange non encore terminé, ou réglé par un administrateur.</strong> Les deux membres, l'annonce, le prix et les messages de la discussion privée à deux. Un administrateur ne peut pas lire une discussion privée, mais voit qui a écrit et quand. Cela permet à un administrateur de débloquer un échange en souffrance.</li>
+            <li><strong>Un échange dont les haricots sont restés bloqués lors de l'exclusion d'un membre sur un ancien serveur.</strong> Le statut de l'échange, l'annonce, le prix, ses dates, les haricots bloqués, le nombre de paiements intervenus, ainsi que le montant et la note du dernier paiement, pour qu'un propriétaire puisse apurer les haricots bloqués.</li>
+            <li><strong>Les alertes de fraude mentionnant des membres,</strong> avec les haricots. L'une désigne deux membres qui s'achètent mutuellement des biens ou services, de manière à peu près équivalente, au-delà d'une certaine limite. Elle indique le montant total en haricots et la répartition dans chaque sens. Une autre désigne un membre et les personnes qu'il a invitées, lorsque ces membres lui transfèrent des haricots au-delà d'un seuil dans un nombre de jours défini. Elle montre le total des haricots et combien de ces membres invités n'ont échangé avec personne d'autre.</li>
+            <li><strong>Une alerte de fraude désignant un groupe de membres,</strong> dont au moins la moitié sont récents, qui échangent principalement entre eux. Elle montre la part des échanges internes au groupe, sans afficher les montants en haricots.</li>
+            <li><strong>Une alerte désignant les membres pour lesquels aucun haricot n'a bougé</strong> depuis un nombre déterminé de jours.</li>
+        </ul>
+        <p><strong>Chaque consultation de l'un de ces échanges est journalisée :</strong> qui a consulté, à quelle date, et quels échanges ont été vus. <strong>Une consultation des alertes mentionnant un membre est journalisée</strong> la première fois que chaque administrateur les ouvre, puis à la première consultation de cet administrateur après 24 heures ; les consultations intermédiaires n'ajoutant aucune ligne. Le propriétaire et les administrateurs peuvent consulter ce journal dans Santé de la communauté, sous forme d'une liste distincte à côté de celle des consultations de soldes. Une consultation effectuée au moyen d'un jeton d'automatisation (un script configuré par un propriétaire) l'indique expressément : la ligne mentionne « by token » et le nom du jeton, à côté du propriétaire qui l'a créé.</p>
+        <p>Les statistiques des membres consultables par les administrateurs indiquent combien d'annonces chaque membre a en ligne et combien de messages il a envoyés, et pour les échanges seulement les totaux de l'ensemble de la communauté : combien d'échanges ont été menés à bien ou annulés et ce que les échanges terminés ont représenté, jamais les chiffres propres à un membre en particulier.</p>
+        <p>Chaque membre, administrateurs inclus, voit le <strong>profil de confiance</strong> de chaque membre : combien de ses échanges ont été finalisés et combien ont été annulés, la proportion finalisée, combien de paiements en haricots il a envoyés ou reçus de membres plus les échanges menés à terme, avec combien de membres distincts il a effectué des paiements ou des échanges, combien de paiements et d'échanges il a réalisés avec le membre qui consulte son profil, et ses Points de confiance. Cela n'est pas consigné dans un journal, car chaque membre peut le voir.</p>
+        <p>Rien d'autre de vos échanges.</p>
+        <h2>L'assistant IA d'un administrateur</h2>
+        <p>Un propriétaire ou un administrateur peut connecter son propre assistant IA au serveur pour l'épauler. Cet assistant en voit moins qu'eux : jamais vos messages, solde, échanges, clés, photos ou le registre des noms, et jamais l'auteur d'un signalement. Voir « Les admins et leurs assistants IA ».</p>
+        <h2>Se renseigner sur votre fiche</h2>
+        <p>Vous pouvez demander à vos administrateurs ce que contient votre fiche, pour la faire rectifier ou la supprimer si vous ne faites plus partie de la communauté. Ce sont eux qui conservent la liste, et non BeanPool.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>Confidentialité</strong><span>Ce que les autres voient de vous et les réglages qui le contrôlent.</span></a></li>
+            <li><a href="joining.html"><strong>Rejoindre BeanPool</strong><span>Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Quitter ou supprimer le compte</strong><span>Déconnectez-vous de ce téléphone ou supprimez définitivement votre compte, et découvrez ce que deviennent vos haricots.</span></a></li>
+            <li><a href="admins-ai-assistants.html"><strong>Assistant IA d'un admin</strong><span>Ce que l'assistant IA d'un propriétaire ou administrateur peut lire sur vous, ce qu'il ne voit jamais et qui le reçoit.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ur by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>آپ کی کریڈٹ لائن — BeanPool members' guide</title>
+    <meta name="description" content="آپ صفر سے کتنا نیچے جا سکتے ہیں، اور یہ حد کیسے بڑھتی ہے۔">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">کھاتہ</a></p>
+        <h1>آپ کی کریڈٹ لائن</h1>
+        <p class="lede">آپ صفر سے کتنا نیچے جا سکتے ہیں، اور یہ حد کیسے بڑھتی ہے۔</p>
+        <h2>یہ کیا ہے</h2>
+        <p>آپ کی کریڈٹ لائن آپ کو اپنے پاس موجود پھلیوں سے زیادہ خرچ کرنے اور صفر سے نیچے جانے کی اجازت دیتی ہے۔ یہ بعد میں دوسروں کی مدد کرنے کا ایک وعدہ ہے۔ صفر سے نیچے ہونے پر کچھ خرچ نہیں آتا: کوئی سود نہیں ہے۔</p>
+        <h2>اسے کہاں دیکھیں</h2>
+        <p><strong>لیجر</strong> پر، آپ کے بیلنس کے نیچے، ایک بار دکھاتی ہے کہ آپ کہاں ہیں:</p>
+        <ul>
+            <li>صفر درمیان میں ہے؛</li>
+            <li>بائیں جانب کا کنارہ <strong>آپ کی حد</strong> ہے، سب سے نیچے جتنا آپ جا سکتے ہیں؛</li>
+            <li>بائیں جانب کے نشانات دکھاتے ہیں کہ آپ کی پیشکشیں آپ کو کتنا نیچے جانے دیتی ہیں؛</li>
+            <li>دائیں جانب <strong>+200</strong> کے بعد وہ جگہ ہے جہاں سے گردشی فیس شروع ہوتی ہے۔</li>
+        </ul>
+        <p>فون پر، <strong>کریڈٹ سلائیڈر کی معلومات</strong> کے لیے بار پر ٹیپ کریں، جو ہر حصے کی وضاحت کرتی ہے۔</p>
+        <h2>یہ کیسے کھلتی ہے</h2>
+        <p>یہ صفر سے شروع ہوتی ہے۔ یہ اس وقت کھلتی ہے جب آپ مارکیٹ میں اپنا پہلا سودا مکمل کرتے ہیں (صرف 1 یا 2 پھلیوں کا سودا شمار ہونے کے لیے بہت چھوٹا ہوتا ہے)، یا جب نئے آنے والوں کو خوش آمدید کہنے کے لیے منتخب کردہ کوئی شخص آپ کی ضمانت دیتا ہے۔ تب تک لیجر کہتا ہے <strong>ابھی تک کوئی کریڈٹ لائن نہیں</strong>۔ آپ اپنے پاس موجود پھلیوں سے اب بھی تجارت کر سکتے ہیں۔</p>
+        <h2>یہ کیسے بڑھتی ہے</h2>
+        <ul>
+            <li><strong>اعتماد:</strong> مکمل شدہ سودے اعتماد پیدا کرتے ہیں، خاص طور پر بہت سے مختلف لوگوں کے ساتھ۔ &quot;500 پھلی پارٹنر کی حد&quot; دیکھیں۔</li>
+            <li><strong>درجہ بندیاں:</strong> ستارے صرف اس اعتماد کو کم کر سکتے ہیں جو آپ کماتے ہیں۔ اوسطاً 5 ستارے تمام اعتماد کو برقرار رکھتے ہیں؛ کم اوسط کچھ کم کر دیتی ہے۔</li>
+            <li>کسی بھی کریڈٹ لائن کی سب سے گہری حد 2,000 پھلیاں ہے۔ ایک کمیونٹی جو اپنے اراکین کی تصدیق کرتی ہے وہ اس سے زیادہ حد مقرر کر سکتی ہے، 5,000 تک (نیچے دیکھیں)۔</li>
+        </ul>
+        <h2>آپ کی پیشکشیں طے کرتی ہیں کہ آپ کتنا استعمال کر سکتے ہیں</h2>
+        <p>آپ اپنی کریڈٹ لائن کا صرف اتنا حصہ استعمال کر سکتے ہیں جتنا کہ آپ کی لائیو پیشکشیں اجازت دیتی ہیں:</p>
+        <ul>
+            <li>کوئی پیشکش نہیں: بالکل نہیں؛</li>
+            <li>1 پیشکش: −200 تک نیچے؛</li>
+            <li>2: −500؛</li>
+            <li>3: −1,000؛</li>
+            <li>4: −1,500؛</li>
+            <li>5: −2,000۔</li>
+        </ul>
+        <p>بار کے نیچے کی سطر آپ کو بتاتی ہے، مثال کے طور پر &quot;اپنی کریڈٹ لائن کھولنے کے لیے کوئی پیشکش لگائیں&quot;۔</p>
+        <h2>تصدیق شدہ (known) کمیونٹی میں</h2>
+        <p>کچھ کمیونٹیز کے ایڈمنز ہر رکن کو نام سے جانتے ہیں۔ اگر آپ کی کمیونٹی نے <strong>معلوم کم از کم حد (the known floor)</strong> فعال کی ہے، تو جس رکن کی کسی ایڈمن نے تصدیق کی ہو اسے فوراً ایک کریڈٹ لائن مل جاتی ہے: 1,000 پھلیاں الا یہ کہ آپ کی کمیونٹی نے کوئی اور رقم چنی ہو۔ یہ تقریباً 25 گھنٹے کا کام ہے جس کے لیے کمیونٹی آپ پر اعتماد کر رہی ہے۔</p>
+        <ul>
+            <li>ایک لائیو پیشکش آپ کو اس تمام کو استعمال کرنے کی اجازت دیتی ہے۔ بغیر کسی پیشکش کے، آپ اسے استعمال نہیں کر سکتے۔</li>
+            <li>تجارت کے ذریعے جو اعتماد آپ کماتے ہیں وہ اس میں شامل ہوتا ہے، آپ کی کمیونٹی کی زیادہ سے زیادہ حد تک (2,000 پھلیاں الا یہ کہ اس نے زیادہ کا انتخاب کیا ہو، 5,000 تک)۔</li>
+            <li>ایک ایڈمن آپ کے لیے ایک چھوٹی حد مقرر کر سکتا ہے، مثال کے طور پر جب آپ نئے ہوں۔ یہ آپ سے کبھی پھلیاں نہیں لیتی: اگر آپ پہلے ہی اس سے نیچے ہیں، تو خرچ اس وقت تک موقوف ہو جاتا ہے جب تک کہ آپ دوبارہ اس سے اوپر نہ آ جائیں۔</li>
+            <li>اگر آپ پچھلے اکاؤنٹ سے کوئی قرض چکا رہے ہیں، تو 0 سے اوپر وصول ہونے والی پھلیاں اس وقت تک کامنز کو جاتی ہیں جب تک کہ وہ ادا نہ ہو جائے۔ آپ کا لیجر بتاتا ہے کہ کتنا باقی ہے۔ آپ خود بھی اس میں سے کچھ یا تمام رقم <strong>لیجر → مشترکہ فنڈ کو ادا کریں</strong> میں ادا کر سکتے ہیں: آپ کا پے بیک کوڈ وہاں پہلے سے درج ہوتا ہے (یا وہ درج کریں جو ایڈمن آپ کو دیتا ہے)۔ کوڈ کے ساتھ جو کچھ آپ ادا کرتے ہیں وہ فوراً قرض سے منہا ہو جاتا ہے، اور جب کچھ نہیں بچتا تو قرض ادا ہو جاتا ہے: ادائیگی کے ذریعے یا آپ کو ملنے والی رقم سے مزید کچھ نہیں لیا جاتا۔ کوڈ کے بغیر کی گئی ادائیگی کامنز کو جاتی ہے لیکن آپ کے قرض سے منہا نہیں ہوتی، اور ایپ ایسا بتاتی ہے: اسے شمار کروانے کے لیے، کسی ایڈمن سے کہیں کہ وہ اس کے ریفرنس کے ساتھ اسے آپ کے قرض میں شمار کرے۔ جب تک وہ ایسا نہیں کرتے، قرض پر کام جاری رہتا ہے: اگلی بار جب آپ پھلیاں وصول کریں گے، تو باقی ماندہ رقم آپ کے 0 سے اوپر موجود بیلنس سے لے لی جائے گی۔ ایڈمن کے پیغام میں موجود رقم وہ تھی جو ان کے شیئر کرنے کے وقت باقی تھی: اگر اب کم باقی ہے، تو آپ کا سرور بڑی ادائیگی سے انکار کرتا ہے اور بتاتا ہے کہ کتنا باقی ہے، اور کچھ بھی ادا نہیں ہوتا۔ اگر ایپ کہتی ہے کہ ہو سکتا ہے ادائیگی ہو گئی ہو، تو اسی اسکرین پر <strong>دوبارہ کوشش کریں</strong> پر ٹیپ کریں: ایک ہی ادائیگی کبھی بھی دو بار ادا نہیں کی جاتی۔ اگر آپ نے وہ اسکرین چھوڑ دی ہے، تو دوبارہ ادائیگی کرنے سے پہلے اپنا لیجر چیک کریں۔</li>
+        </ul>
+        <h2>ایڈمنز کی طرف سے منجمد</h2>
+        <p>آپ کی کمیونٹی کے ایڈمنز کسی رکن کی کریڈٹ لائن منجمد کر سکتے ہیں: اس کی تمام، یا، کسی تصدیق شدہ کمیونٹی میں، وہ حصہ جو تصدیق شدہ رکن ہونے سے آتا ہے۔</p>
+        <ul>
+            <li>اگر وہ اس تمام کو منجمد کر دیتے ہیں، یا تصدیق شدہ حصہ ہی آپ کی کل کریڈٹ لائن ہے، تو لیجر کہتا ہے <strong>آپ کی کریڈٹ لائن منجمد کر دی گئی ہے</strong>: جب تک یہ رہے آپ ڈیبٹ میں خرچ نہیں کر سکتے، لیکن آپ پھر بھی پھلیاں فروخت اور وصول کر سکتے ہیں، اور صفر سے اوپر جو کچھ آپ کے پاس ہے اسے خرچ کر سکتے ہیں۔ اگر انہوں نے اسے منجمد کرتے وقت آپ ڈیبٹ میں تھے، تو لیجر یہ بھی بتاتا ہے کہ آپ پر کتنی پھلیاں واجب الادا ہیں: پھلیاں فروخت کرنا یا وصول کرنا آپ کو دوبارہ اوپر لے آتا ہے، اور ایک بار جب آپ صفر سے اوپر آ جاتے ہیں تو آپ اپنے پاس موجود رقم خرچ کر سکتے ہیں۔</li>
+            <li>اگر وہ تصدیق شدہ حصے کو منجمد کر دیتے ہیں اور آپ کے پاس ضمانت، تجارت یا گرانٹ سے بھی کریڈٹ موجود ہے، تو بار برقرار رہتی ہے، جس کے نیچے ایک نوٹ ہوتا ہے کہ تصدیق شدہ حصہ منجمد ہے اور باقی پہلے کی طرح کام کرتا ہے۔ اگر آپ باقی ماندہ رقم سے نیچے ہیں، تو لیجر <strong>خرچ کرنا موقوف ہے</strong> بھی کہتا ہے (نیچے)۔</li>
+        </ul>
+        <p>آپ کا لیول تبدیل نہیں ہوتا: یہ وہی ہے جو آپ کی کریڈٹ لائن آپ کو اس وقت دیتی ہے جب یہ منجمد نہ ہو، چاہے ایڈمنز نے آپ کی لائن کو کمیونٹی کی لائن سے کم یا زیادہ مقرر کیا ہو، آپ کے پروفائل اور آپ کی لسٹنگز دونوں پر یکساں۔ یہ پوچھنے کے لیے کہ کیوں، یا اسے دوبارہ کھولنے کے لیے، کسی ایڈمن سے رابطہ کریں۔</p>
+        <h2>خرچ کرنا موقوف ہے</h2>
+        <p>اگر آپ اس سے نیچے چلے جاتے ہیں جس کی آپ کی پیشکشیں اجازت دیتی ہیں، مثال کے طور پر اس لیے کہ آپ نے کوئی پیشکش ہٹا دی ہے، تو لیجر کہتا ہے <strong>خرچ کرنا موقوف ہے</strong>۔ آپ اب بھی کما اور فروخت کر سکتے ہیں۔ کوئی پیشکش پوسٹ کریں، یا کما کر واپس اوپر آئیں، اور یہ ختم ہو جاتا ہے۔ آپ سے کچھ بھی چھینا نہیں جاتا۔</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>ٹرسٹ بیجز</strong><span>نیا آنے والا، رہائشی، منتظم اور بزرگ۔ ان کے معنی، اور وہ کچھ کیوں نہیں کھولتے۔</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>500 پھلی پارٹنر کی حد</strong><span>کیوں بہت سے لوگوں کے ساتھ تجارت ایک کے ساتھ زیادہ تجارت کرنے سے زیادہ اعتماد پیدا کرتی ہے۔</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool کیسے کام کرتا ہے</strong><span>پھلیاں، تجارت، پیشکشیں اور ضروریات، اور کریڈٹ آسان الفاظ میں۔</span></a></li>
+            <li><a href="posting.html"><strong>پیشکش یا ضرورت پوسٹ کرنا</strong><span>کوئی ایسی چیز پوسٹ کریں جو آپ کر سکتے ہیں یا دے سکتے ہیں، یا جس کی آپ کو تلاش ہے۔</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

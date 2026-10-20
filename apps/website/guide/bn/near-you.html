@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>কাছাকাছি জিনিস খোঁজা — BeanPool members' guide</title>
+    <meta name="description" content="শুধুমাত্র আপনার একটি নির্দিষ্ট দূরত্বের মধ্যে, বা আপনার নির্বাচিত যেকোনো স্থানের পোস্ট দেখান।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">মানচিত্র</a></p>
+        <h1>কাছাকাছি জিনিস খোঁজা</h1>
+        <p class="lede">শুধুমাত্র আপনার একটি নির্দিষ্ট দূরত্বের মধ্যে, বা আপনার নির্বাচিত যেকোনো স্থানের পোস্ট দেখান।</p>
+        <h2>বাজার ট্যাবে</h2>
+        <ul>
+            <li><strong>বাজার</strong>-এ ট্যাপ করুন, তারপর ফিল্টারের দ্বিতীয় সারিতে <strong>দূরত্ব</strong>-এ। <strong>ইভেন্টসমূহ</strong> বেছে নেওয়া থাকলে এটি সেখানে থাকে না।</li>
+            <li><strong>অবস্থান ও ব্যাসার্ধ</strong> খোলে (ওয়েব অ্যাপে <strong>অবস্থান ও ব্যাসার্ধ নির্ধারণ করুন</strong>)। আপনি যেখানে আছেন তা ব্যবহার করতে লক্ষ্যচিহ্ন (টার্গেট) বোতামে ট্যাপ করুন। অথবা অন্য একটি কেন্দ্র বেছে নিতে মানচিত্রে ট্যাপ করুন, বা পিনটি টেনে আনুন।</li>
+            <li><strong>অনুসন্ধানের ব্যাসার্ধ</strong> দিয়ে দূরত্ব বেছে নিন: ১০০ মিটার থেকে ৫০ কিলোমিটার পর্যন্ত।</li>
+            <li><strong>প্রয়োগ করুন</strong>-এ ট্যাপ করুন। বোতামটি তখন দূরত্ব দেখায়, যেমন <strong>5km</strong>।</li>
+            <li>সবকিছুতে ফিরে যেতে, এটি আবার খুলুন এবং <strong>রিসেট</strong>-এ ট্যাপ করুন। ওয়েব অ্যাপে আপনি <strong>দূরত্ব</strong>-এর ওপরের <strong>✕</strong>-এও ট্যাপ করতে পারেন।</li>
+        </ul>
+        <p>ফোনে, কোনো অবস্থানহীন পোস্ট সর্বদা দেখানো হয়। ওয়েব অ্যাপে একটি <strong>দূরত্ব</strong> পোল ছাড়া বাকিগুলোকে লুকিয়ে রাখে। গ্লোবাল কমিউনিটিতে তালিকাটি আপনার কাছাকাছি থাকা অবস্থায় ওয়েব অ্যাপ সেগুলো বাদও দেয় (নিচে)।</p>
+        <p>আপনার ব্রাউজার ইতিমধ্যে BeanPool-কে আপনার অবস্থান ব্যবহারের অনুমতি দিয়ে থাকলে, পিকারটি আপনি এখন যেখানে আছেন সেখানে খুলতে পারে। তা না হলে, এটি একটি নির্দিষ্ট স্থানে খোলে। আপনি <strong>প্রয়োগ করুন</strong> ট্যাপ করার আগে পিনটি পরীক্ষা করুন, অথবা টার্গেট বোতাম বা মানচিত্রে ট্যাপ করুন। গ্লোবাল কমিউনিটিতে ওয়েব অ্যাপ আপনার বেছে নেওয়া কেন্দ্রটি প্রায় ১১ মিটারে রূপান্তর করে কমিউনিটিতে পাঠায়।</p>
+        <p>ফোনে পিকারটি আপনার সর্বশেষ বেছে নেওয়া কেন্দ্রে, অথবা একটি নির্দিষ্ট স্থানে খোলে, তাই প্রথমে টার্গেট বোতামে ট্যাপ করুন।</p>
+        <h2>মানচিত্রে</h2>
+        <p>মানচিত্রের নিজস্ব কোনো দূরত্বের ফিল্টার নেই। আপনি কোথায় আছেন তা দেখতে বাম পাশের টার্গেট বোতামে ট্যাপ করুন, তারপর চারপাশে তাকান এবং জুম করুন।</p>
+        <h2>গ্লোবাল কমিউনিটিতে, ওয়েব অ্যাপে</h2>
+        <p>গ্লোবাল কমিউনিটিতে সব জায়গার তালিকা থাকে, তাই ওয়েব অ্যাপের <strong>বাজার</strong> এবং <strong>মানচিত্র</strong> আপনার কাছাকাছি স্থান থেকে শুরু হয়:</p>
+        <ul>
+            <li>বাজারে একটি <strong>দূরত্ব</strong> বেছে নেওয়া থাকলে, উভয়ই এর ভেতরের সবচেয়ে কাছের তালিকাগুলো দেখায়, সবচেয়ে কাছেরগুলো প্রথমে। মানচিত্রটি ২০০টি পর্যন্ত পিন দেখায়।</li>
+            <li>কোনোটি বেছে না নিলে, সেগুলো আপনার এলাকার ২৫০ কিমি-এর ভেতরের সবচেয়ে কাছের তালিকাগুলো দেখায়: আপনি যোগদানের সময়, বা পরবর্তীতে <strong>সেটিংস</strong>-এ <strong>আপনার এলাকা</strong>-এর অধীনে যে আনুমানিক স্থানটি কমিউনিটিকে দেন। বাজারের তালিকার উপরের একটি লাইন বলে <strong>২৫০ কিমি-এর মধ্যে আপনার এলাকার সবচেয়ে কাছেরগুলো আগে।</strong> সব জায়গা থেকে নতুনগুলোর জন্য <strong>সর্বত্র দেখান</strong>-এ এবং ফিরে আসতে <strong>আপনার এলাকার কাছে</strong>-তে ট্যাপ করুন।</li>
+            <li>কোনোটিই না থাকলে, আপনি সব জায়গার নতুনগুলো দেখতে পান, এবং <strong>আপনার কাছে কী আছে দেখুন</strong> দূরত্বের পিকারটি খোলে। বাজারের তালিকার উপরের একটি লাইন বলে আপনি এগুলোর মধ্যে কোনটি দেখছেন। একটি <strong>দূরত্ব</strong> সেট থাকলে এর কোনো বোতাম থাকে না: <strong>দূরত্ব</strong> খুলুন এবং <strong>রিসেট</strong>-এ ট্যাপ করুন। আপনি তখন আবার আপনার এলাকার কাছে ফিরে যাবেন, অথবা কোনো এলাকা সেট না থাকলে আপনি সব জায়গার নতুনগুলো দেখতে পাবেন।</li>
+            <li>প্রতিটি তালিকা দেখায় এটি কত দূরে, যেমন <strong>📍 12 km</strong>। আপনার নিজস্ব তালিকাগুলো সর্বদা মানচিত্রে এবং আপনার এলাকার কাছাকাছি বাজারে থাকে, সেগুলো যেখানেই থাকুক না কেন। একটি <strong>দূরত্ব</strong> সেট থাকলে, বাজার কেবল এর ভেতরের জিনিসগুলো দেখায়, আপনারগুলোও।</li>
+            <li>তালিকাটি আপনার কাছাকাছি থাকা অবস্থায়, কোনো অবস্থান নেই এমন পোস্টগুলো বাদ দেওয়া হয়। যিনি তার এলাকা সেট করেননি এমন কারও পোল সেগুলোর একটি। সেগুলো দেখতে, আপনি কোনো দূরত্ব বেছে নিয়ে থাকলে <strong>দূরত্ব</strong> রিসেট করুন, তারপর <strong>সর্বত্র দেখান</strong>-এ ট্যাপ করুন।</li>
+            <li><strong>ইভেন্টসমূহ</strong>-এর অধীনে আগের মতোই তালিকাটি কখনই আপনার এলাকা বা আপনার <strong>দূরত্ব</strong> দ্বারা কাটছাঁট করা হয় না।</li>
+            <li>কাছাকাছি কিছু না থাকলে, মানচিত্র <strong>সর্বত্র দেখান</strong> সহ তা জানিয়ে দেয়। তারপর <strong>আপনার এলাকার কাছে</strong> (বা <strong>আপনার নির্বাচিত স্থানের কাছে</strong>) সবচেয়ে কাছেরগুলো ফিরিয়ে আনে।</li>
+        </ul>
+        <p>ওয়েব অ্যাপের অনুসন্ধান কেবল স্ক্রিনের তালিকাগুলোর মধ্যে খোঁজে। <strong>সর্বত্র দেখান</strong> সর্বত্র থেকে নতুন তালিকাগুলো দেখায়, প্রতিটির প্রতিটি নয়, তাই অনেক দূরের এবং নতুন নয় এমন কোনো তালিকা অনুসন্ধানে আসবে না। অন্য প্রতিটি কমিউনিটিতে ওয়েব অ্যাপ আপনার এলাকা দিয়ে বাজার বা মানচিত্রকে কাটছাঁট করে না। সেগুলো সবচেয়ে সম্প্রতি পরিবর্তিত ৫০টি তালিকা এবং আপনার নিজস্ব তালিকা দেখায়, এবং অনুসন্ধান কেবল সেগুলোর মধ্যেই খোঁজে।</p>
+        <h2>গ্লোবাল কমিউনিটিতে, ফোনে</h2>
+        <p>ফোনটি আপনার এলাকার সবচেয়ে কাছের তালিকাগুলো সংরক্ষণ করে: ২৫০ কিমি-এর মধ্যে ৫০০টি পর্যন্ত। এটি আপনার নিজস্ব তালিকাগুলো এবং যেগুলোতে আপনার চুক্তি, চ্যাট বা উত্তর রয়েছে সেগুলোও রাখে। বাজার এবং মানচিত্র দেখায় ফোনটি যা সংরক্ষণ করে। কোনো এলাকা সেট না থাকলে, এটি তার পরিবর্তে নতুন তালিকাগুলো রাখে, এবং বাজারের উপরের একটি লাইন তা জানিয়ে দেয়। &quot;আপনার এলাকা&quot; দেখুন।</p>
+        <h2>আপনার কাছাকাছি ইভেন্টসমূহ</h2>
+        <p>ফোনে, আপনি অ্যাপটিকে আপনার অবস্থান ব্যবহারের অনুমতি দেওয়ার পর ইভেন্ট কার্ডগুলো দেখায় সেগুলো কত দূরে। ওয়েব অ্যাপে সেগুলো <strong>দূরত্ব</strong>-এ আপনার বেছে নেওয়া কেন্দ্র থেকে দূরত্ব দেখায়। গ্লোবাল কমিউনিটিতে, আপনি কোনো একটি বেছে না নিয়ে থাকলে, সেগুলো আপনার এলাকা থেকে দূরত্ব দেখায় (<strong>ইভেন্টসমূহ</strong>-এর অধীনে নয়)। মানচিত্রে, আপনি টার্গেটে ট্যাপ করার পর ওয়েব অ্যাপ আপনার থেকে দূরত্ব দেখায়।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>বাজার ব্রাউজ করা</strong><span>অনুসন্ধান, ফিল্টার এবং দূরত্বের মাধ্যমে প্রস্তাবসমূহ ও প্রয়োজনসমূহ খুঁজুন।</span></a></li>
+            <li><a href="map-pins.html"><strong>মানচিত্র যা দেখায়</strong><span>মানচিত্রের পিনগুলো, তাদের রঙের অর্থ এবং তাদের চারপাশের বোতামগুলো।</span></a></li>
+            <li><a href="pin-locations.html"><strong>আপনার পিন যেখানে থাকে</strong><span>কে আপনার পোস্ট এবং ইভেন্টের অবস্থান দেখতে পারে, এবং আপনার বাড়ি কীভাবে ব্যক্তিগত রাখবেন।</span></a></li>
+            <li><a href="events.html"><strong>ইভেন্টসমূহ</strong><span>একটি নির্দিষ্ট স্থানে বা অনলাইনে, একবার বা পুনরাবৃত্তিমূলক ইভেন্ট তৈরি করুন; যাচ্ছেন জানান, রিমাইন্ডার পান, শেয়ার করুন এবং হোস্ট হিসেবে পরিচালনা করুন।</span></a></li>
+            <li><a href="your-area.html"><strong>আপনার এলাকা</strong><span>কাছাকাছি তালিকা দেখানোর জন্য বিশ্বব্যাপী কমিউনিটি যে আনুমানিক স্থান ব্যবহার করে, এবং কীভাবে তা পরিবর্তন বা মুছে ফেলবেন।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

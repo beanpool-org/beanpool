@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hạn mức tín dụng — BeanPool members' guide</title>
+    <meta name="description" content="Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Sổ cái</a></p>
+        <h1>Hạn mức tín dụng</h1>
+        <p class="lede">Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.</p>
+        <h2>Hạn mức tín dụng là gì</h2>
+        <p>Hạn mức tín dụng cho phép bạn chi tiêu nhiều hơn số đậu bạn hiện có và đưa số dư xuống dưới mức 0. Đó là lời hứa sẽ giúp đỡ người khác sau này. Việc số dư ở dưới mức 0 không tốn bất kỳ chi phí nào: không có lãi suất.</p>
+        <h2>Nơi xem hạn mức tín dụng</h2>
+        <p>Trên <strong>Sổ cái</strong>, bên dưới số dư của bạn, một thanh trượt sẽ hiển thị vị trí hiện tại của bạn:</p>
+        <ul>
+            <li>số 0 nằm ở chính giữa;</li>
+            <li>đầu bên trái là <strong>hạn mức của bạn</strong>, mức thấp nhất bạn có thể đạt tới;</li>
+            <li>các vạch đánh dấu bên trái hiển thị độ sâu mà các Lời đề nghị của bạn cho phép đạt tới;</li>
+            <li>vượt qua <strong>+200</strong> ở bên phải là nơi phí lưu thông bắt đầu được áp dụng.</li>
+        </ul>
+        <p>Trên điện thoại, nhấn vào thanh này để xem <strong>Thông tin thanh trượt tín dụng</strong>, giải thích từng phần.</p>
+        <h2>Cách mở hạn mức</h2>
+        <p>Hạn mức bắt đầu từ số 0. Nó mở ra khi bạn hoàn thành giao dịch đầu tiên trên chợ (giao dịch chỉ có 1 hoặc 2 đậu là quá nhỏ để được tính), hoặc khi một người được chọn để chào đón thành viên mới đứng ra bảo lãnh cho bạn. Cho đến lúc đó, Sổ cái sẽ báo <strong>Chưa có hạn mức tín dụng</strong>. Bạn vẫn có thể giao dịch bằng số đậu bạn đang có.</p>
+        <h2>Cách hạn mức tăng lên</h2>
+        <ul>
+            <li><strong>Sự tin cậy:</strong> các giao dịch đã hoàn tất giúp xây dựng lòng tin cậy, đặc biệt là với nhiều người khác nhau. Xem &quot;Hạn mức 500 đậu cho đối tác&quot;.</li>
+            <li><strong>Đánh giá:</strong> số sao chỉ có thể làm giảm bớt mức độ tin cậy bạn đã đạt được. Mức trung bình 5 sao giữ lại toàn bộ mức tin cậy; điểm trung bình thấp hơn sẽ trừ bớt một phần.</li>
+            <li>Mức tối đa của bất kỳ hạn mức tín dụng nào là 2.000 đậu. Một cộng đồng có xác nhận thành viên có thể đặt mức trần cao hơn, lên đến 5.000 (xem bên dưới).</li>
+        </ul>
+        <h2>Lời đề nghị quyết định mức bạn có thể sử dụng</h2>
+        <p>Bạn chỉ có thể sử dụng hạn mức tín dụng trong phạm vi mà các Lời đề nghị đang mở của bạn cho phép:</p>
+        <ul>
+            <li>không có Lời đề nghị: 0;</li>
+            <li>1 Lời đề nghị: xuống đến −200;</li>
+            <li>2: −500;</li>
+            <li>3: −1.000;</li>
+            <li>4: −1.500;</li>
+            <li>5: −2.000.</li>
+        </ul>
+        <p>Dòng chữ bên dưới thanh trượt sẽ cho bạn biết điều này, ví dụ &quot;Hãy đăng một lời đề nghị để mở hạn mức tín dụng của bạn&quot;.</p>
+        <h2>Trong cộng đồng quy định</h2>
+        <p>Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Nếu cộng đồng của bạn đã bật <strong>mức sàn quy định</strong>, một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn.</p>
+        <ul>
+            <li>Một Lời đề nghị đang mở cho phép bạn sử dụng toàn bộ hạn mức đó. Nếu không có Lời đề nghị nào, bạn không thể sử dụng.</li>
+            <li>Mức độ tin cậy bạn tích lũy qua giao dịch sẽ cộng thêm vào hạn mức, lên đến mức trần của cộng đồng bạn (2.000 Đậu trừ khi cộng đồng chọn mức cao hơn, lên đến 5.000).</li>
+            <li>Quản trị viên có thể đặt giới hạn nhỏ hơn cho bạn, ví dụ khi bạn là người mới. Điều đó không bao giờ lấy đi Đậu của bạn: nếu bạn đã ở dưới mức đó, việc chi tiêu sẽ tạm dừng cho đến khi số dư của bạn trở lại phía trên mức đó.</li>
+            <li>Nếu bạn đang trả nợ từ một tài khoản trước đó, số Đậu bạn nhận được trên mức 0 sẽ chuyển vào Commons cho đến khi trả hết nợ. Sổ cái của bạn sẽ cho biết còn lại bao nhiêu. Bạn cũng có thể tự mình trả một phần hoặc toàn bộ số nợ trong mục <strong>Sổ cái → Trả cho Commons</strong>: mã hoàn trả của bạn đã được điền sẵn ở đó (hoặc nhập mã do quản trị viên cung cấp cho bạn). Những gì bạn thanh toán kèm theo mã sẽ trừ ngay vào khoản nợ, và khi không còn nợ thì khoản nợ được giải quyết xong: không bị trừ thêm gì nữa, qua thanh toán hay từ số đậu bạn nhận được. Khoản thanh toán không kèm mã sẽ chuyển vào Commons nhưng không trừ vào khoản nợ của bạn, và ứng dụng sẽ thông báo điều đó: để được tính nợ, hãy nhờ quản trị viên ghi nhận khoản đó vào nợ của bạn cùng với mã tham chiếu. Cho đến khi họ thực hiện, khoản nợ vẫn tiếp tục được trả dần: lần tiếp theo bạn nhận được Đậu, phần còn lại sẽ được trích từ số đậu bạn nắm giữ trên mức 0. Số tiền trong tin nhắn của quản trị viên là số nợ còn lại tại thời điểm họ chia sẻ: nếu hiện tại số nợ còn ít hơn, máy chủ của bạn sẽ từ chối khoản thanh toán lớn hơn và thông báo số tiền còn lại, và không có gì bị trừ. Nếu ứng dụng báo một khoản thanh toán có thể đã được xử lý, hãy nhấn <strong>Thử lại</strong> trên cùng màn hình đó: một khoản thanh toán không bao giờ bị trừ hai lần. Nếu bạn đã rời khỏi màn hình đó, hãy kiểm tra Sổ cái trước khi thanh toán lại.</li>
+        </ul>
+        <h2>Bị quản trị viên đóng băng</h2>
+        <p>Quản trị viên cộng đồng có thể đóng băng hạn mức tín dụng của một thành viên: toàn bộ hạn mức, hoặc trong một cộng đồng quy định, là phần đến từ việc là thành viên đã được xác nhận.</p>
+        <ul>
+            <li>Nếu họ đóng băng toàn bộ, hoặc phần được xác nhận là tất cả hạn mức bạn có, Sổ cái sẽ báo <strong>Hạn mức tín dụng của bạn đã bị đóng băng</strong>: bạn không thể chi tiêu xuống mức âm trong thời gian này, nhưng bạn vẫn có thể bán và nhận Đậu, cũng như chi tiêu số đậu bạn đang có trên mức 0. Nếu bạn đang ở mức âm khi họ đóng băng, Sổ cái cũng cho biết bạn đang âm bao nhiêu Đậu: việc bán hàng hoặc nhận Đậu sẽ nâng số dư của bạn lên, và khi bạn đạt trên mức 0, bạn có thể chi tiêu số đậu bạn nắm giữ.</li>
+            <li>Nếu họ đóng băng phần được xác nhận và bạn cũng có tín dụng từ việc bảo lãnh, từ giao dịch hoặc từ một khoản tài trợ, thanh trượt vẫn giữ nguyên, kèm theo ghi chú bên dưới rằng phần được xác nhận đã bị đóng băng và phần còn lại vẫn hoạt động như trước. Nếu bạn ở dưới mức còn lại, Sổ cái cũng sẽ báo <strong>Tạm dừng chi tiêu</strong> (bên dưới).</li>
+        </ul>
+        <p>Cấp độ của bạn không thay đổi: đó là cấp độ mà hạn mức tín dụng mang lại cho bạn khi không bị đóng băng, ngay cả khi các quản trị viên đã đặt hạn mức của bạn thấp hơn hoặc cao hơn mức chung của cộng đồng, trên hồ sơ cũng như trên các tin đăng của bạn. Để hỏi lý do hoặc đề nghị mở lại hạn mức, hãy liên hệ với một trong các quản trị viên.</p>
+        <h2>Tạm dừng chi tiêu</h2>
+        <p>Nếu bạn vượt xuống dưới mức mà các Lời đề nghị của bạn cho phép, ví dụ do bạn đã gỡ bỏ một Lời đề nghị, Sổ cái sẽ báo <strong>Tạm dừng chi tiêu</strong>. Bạn vẫn có thể kiếm và bán hàng. Hãy đăng một Lời đề nghị, hoặc kiếm thêm đậu để đưa số dư lên, và trạng thái tạm dừng sẽ được gỡ bỏ. Không có gì bị lấy đi từ bạn.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>Huy hiệu tin cậy</strong><span>Người mới, Cư dân, Quản lý và Trưởng bối. Ý nghĩa của chúng và lý do chúng không mở khóa quyền hạn nào.</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>Hạn mức 500 đậu cho đối tác</strong><span>Lý do giao dịch với nhiều người giúp xây dựng lòng tin hơn là giao dịch nhiều với chỉ một người.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cách BeanPool hoạt động</strong><span>Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.</span></a></li>
+            <li><a href="posting.html"><strong>Đăng Lời đề nghị hoặc Nhu cầu</strong><span>Đăng thứ bạn có thể làm hoặc trao tặng, hoặc thứ bạn đang tìm kiếm.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

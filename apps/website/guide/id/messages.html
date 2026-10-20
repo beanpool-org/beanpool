@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pesan — BeanPool members' guide</title>
+    <meta name="description" content="Mulai obrolan, kirim foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Obrolan</a></p>
+        <h1>Pesan</h1>
+        <p class="lede">Mulai obrolan, kirim foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.</p>
+        <h2>Obrolan milikmu</h2>
+        <p><strong>Obrolan</strong> memiliki tiga tombol di bagian atas: <strong>Pesan</strong>, <strong>Grup</strong>, dan <strong>Orang</strong>.</p>
+        <p>Ketuk <strong>Obrolan</strong> pada deretan tab, lalu <strong>Pesan</strong>. Obrolanmu dengan orang-orang tercantum di sana. Kesepakatan yang memerlukan tindakanmu berada di bagian atas, di bawah <strong>Tindakan Diperlukan</strong>.</p>
+        <p>Obrolan milik grup, usaha, atau acara berada di bawah <strong>Grup</strong>, bukan di sini. Lihat &quot;Grup&quot;.</p>
+        <ul>
+            <li>Cari dengan <strong>Cari obrolan, postingan, mitra...</strong>.</li>
+            <li>Tombol filter mengurutkan berdasarkan <strong>Terbaru</strong> atau <strong>Belum dibaca</strong> (dan, jika komunitasmu menggunakan Kacang, berdasarkan Kacang di setiap kesepakatan, tertinggi atau terendah terlebih dahulu), dan dapat menampilkan <strong>Belum Dibaca Saja</strong> atau <strong>Teman Saja</strong>.</li>
+            <li>Di ponsel, tombol pencarian dan filter akan bergeser hilang saat kamu menggulir ke bawah. Gulir sedikit ke atas dan tombol-tombol tersebut akan muncul kembali. Ketuk <strong>Obrolan</strong> lagi untuk melompat ke bagian atas.</li>
+        </ul>
+        <p>Di aplikasi web ini adalah tab <strong>Obrolan</strong>. Tab ini mencantumkan semua obrolanmu, termasuk milik grup dan acara, dengan opsi <strong>Semua</strong>, <strong>Transaksi</strong>, <strong>Langsung</strong>, dan <strong>Grup</strong> di bagian atas, dan tidak memiliki fitur pencarian atau filter.</p>
+        <h2>Memulai obrolan</h2>
+        <ul>
+            <li>Dari sebuah postingan: ketuk <strong>Pesan</strong> dan nama orang tersebut.</li>
+            <li>Dari <strong>Obrolan</strong>: ketuk tombol pensil, lalu temukan orang tersebut berdasarkan nama. Pada komunitas seluruh dunia, Pesan Baru mencantumkan orang-orang yang pernah bertransaksi denganmu dan teman-temanmu. Untuk menemukan orang lain, ketik setidaknya 2 huruf dari nama mereka.</li>
+            <li>Dari teman-temanmu: <strong>Obrolan</strong>, lalu <strong>Orang</strong>, kemudian <strong>Teman</strong>, dan ketuk tombol pesan di samping sebuah nama.</li>
+        </ul>
+        <p>Di aplikasi web, gunakan <strong>✉️ DM Baru</strong>, atau tombol <strong>💬 Pesan</strong> pada sebuah postingan. Teman-temanmu berada di bawah tab <strong>Orang</strong>.</p>
+        <h2>Mengirim pesan</h2>
+        <ul>
+            <li>Ketik di <strong>Pesan...</strong> dan ketuk tombol kirim.</li>
+            <li>Untuk mengirim foto, ketuk <strong>+</strong>, lalu <strong>Kamera</strong> atau <strong>Galeri</strong>. Di aplikasi web, gunakan tombol <strong>📎</strong>, atau tempel atau seret gambar langsung ke dalam obrolan — aplikasi menampilkan gambar terlebih dahulu, dan apa pun yang sudah kamu ketik akan menyertainya sebagai keterangan foto. Foto hanya dapat dikirim dalam obrolan antara dua orang.</li>
+        </ul>
+        <p>Tanda centang di bawah pesanmu:</p>
+        <ul>
+            <li>satu centang: terkirim;</li>
+            <li>dua centang biru: telah dibaca;</li>
+            <li>ikon jam: masih mengirim;</li>
+            <li><strong>tidak terkirim</strong>: gagal. Ketuk pesan untuk <strong>Kirim ulang</strong> atau <strong>Buang</strong>.</li>
+        </ul>
+        <p>Ikon jam dan <strong>tidak terkirim</strong> ada di ponsel. Di aplikasi web, pesan yang gagal tetap berada di kotak pesan, dan aplikasi akan memberitahukan hal itu.</p>
+        <h2>Balas, reaksi, edit, hapus</h2>
+        <p>Di ponsel, ketuk sebuah pesan. Tombol bulat kecil muncul di sampingnya:</p>
+        <ul>
+            <li><strong>Balas</strong> mengutipnya di atas pesan yang kamu tulis berikutnya. Ketuk kutipan pada pesan terkirim untuk melompat kembali ke pesan yang dijawabnya.</li>
+            <li><strong>Beri reaksi</strong> membuka tujuh emoji. Ketuk salah satu untuk menambahkannya, ketuk lagi untuk membatalkannya. Satu reaksi untuk setiap orang; mengetuk emoji lain akan menggantinya. Reaksi muncul sebagai lencana kecil di bawah pesan.</li>
+            <li><strong>Edit</strong>, pada pesanmu sendiri, selama 15 menit setelah kamu mengirimnya. Pesan tersebut kemudian menampilkan keterangan disunting. Foto tidak dapat diedit.</li>
+            <li><strong>Hapus</strong>, pada pesanmu sendiri, kapan saja — tidak ada batas waktu. Aplikasi menanyakan <strong>Hapus untuk semua orang?</strong> sekali. Pesan tersebut kemudian terbaca <strong>Pesan ini telah dihapus</strong> bagi kalian berdua, dan tidak ada yang dapat bereaksi atau membalasnya.</li>
+        </ul>
+        <p>Tombol yang sama ada di obrolan grup. Lihat &quot;Grup&quot;.</p>
+        <p>Di aplikasi web, <strong>Balas</strong>, <strong>Beri reaksi</strong>, dan <strong>Edit</strong> berupa kata-kata kecil di setiap pesan, dan tidak ada tombol <strong>Hapus</strong>: hapus pesan dari aplikasi ponsel.</p>
+        <p>Menghapus pesan juga menghapus kata-katanya dari server komunitasmu, sehingga ponsel baru yang masuk kemudian tidak pernah melihatnya.</p>
+        <h2>Membisukan obrolan</h2>
+        <p>Ketuk <strong>⋯</strong> di kanan atas (<strong>⋮</strong> di obrolan grup), lalu <strong>Bisukan pemberitahuan</strong>: <strong>Selama 8 jam</strong>, <strong>Selama seminggu</strong>, atau <strong>Selalu</strong>. Ketuk tombol yang sama dan <strong>Bunyikan</strong> untuk membatalkannya. Aplikasi web belum dapat membisukan obrolan. Lihat &quot;Membisukan obrolan&quot;.</p>
+        <h2>Apa yang bersifat pribadi</h2>
+        <ul>
+            <li>Obrolan antara dua orang <strong>terenkripsi ujung-ke-ujung</strong>: obrolan dikunci di ponselmu dan dibuka di ponsel mereka, sehingga server komunitasmu tidak dapat membacanya. Di ponsel, obrolan menampilkan <strong>Terenkripsi ujung-ke-ujung</strong> di bagian atas. Foto di dalamnya juga dienkripsi, begitu pula suntinganmu.</li>
+            <li>Setiap pesan juga dikunci untuk orang yang mengirimnya, untuk pesan itu sendiri, untuk obrolannya, dan, jika itu adalah balasan, untuk pesan yang dijawabnya. Jadi server tidak dapat menampilkan pesanmu sebagai pesan orang lain, mengirimkannya lagi sebagai pesan baru, atau mengarahkan jawabanmu ke pesan yang berbeda. Jika server mencoba melakukannya, aplikasi menampilkan <strong>Pesan ini tidak dapat diverifikasi, jadi tidak ditampilkan.</strong> di tengah-tengah obrolan, tanpa pemilik, alih-alih menampilkan kata-katanya. Foto yang ditukar oleh server dengan foto lain terbaca <strong>Gambar tidak tersedia</strong>.</li>
+            <li>Jika server memasukkan pesan ke dalam obrolan lain, aplikasi akan menolaknya di sana. Ketika dua obrolanmu dengan orang yang sama digabungkan menjadi satu, setiap pesan membawa informasi obrolan asalnya. Pesan yang dikirim sejak pembaruan ini kemudian muncul dengan <strong>Dipindahkan ke sini dari percakapan lain.</strong> di bawahnya. Pesan yang dikirim sebelumnya menampilkan baris versi lebih lama sebagai gantinya (lihat di bawah).</li>
+            <li>Setiap pesan juga mengingat pesan terbaru yang dimiliki penulisnya saat mereka menulisnya. Jika server menampilkannya sebelum pesan tersebut, pesan terbaca <strong>Ditampilkan di luar urutan penulisannya.</strong> di bawahnya. Dua pesan yang ditulis pada saat yang sama, tidak ada yang setelah yang lain, dapat muncul dalam urutan mana pun tanpa tanda tersebut.</li>
+            <li>Apa pun dalam obrolan antara dua orang yang tidak terkunci tidak pernah ditampilkan sebagai kata-kata salah satu orang: pesan terbaca <strong>Pesan ini tidak dienkripsi, sehingga BeanPool tidak dapat memastikan siapa penulisnya.</strong> di tengah-tengah obrolan, dan kata-katanya tidak ditampilkan. Daftar obrolanmu menampilkan baris yang sama.</li>
+            <li>Pesan yang dikirimkan oleh admin komunitasmu dari halaman admin server tidak terkunci, dan bukan pesan pribadi. Pesan tersebut muncul di tengah-tengah obrolan, tidak pernah sebagai pesan pribadi seseorang, dengan <strong>Dari admin komunitasmu. Bukan pesan pribadi: server komunitas dapat membacanya.</strong> di bawahnya.</li>
+            <li>Pesan yang dikirim sebelum pembaruan ini, oleh aplikasi mana pun, dikunci tanpa pemeriksaan ini: server dapat mengubah dari siapa pesan tersebut tampak berasal, atau mengirimkannya lagi. Pesan tersebut masih bisa dibuka, dan semuanya terbaca <strong>Dikirim dari versi aplikasi yang lebih lama: BeanPool tidak dapat memastikan siapa penulisnya.</strong> di bawahnya, di mana pun posisinya di obrolan. Seseorang yang masih menggunakan aplikasi versi lama tidak dapat membaca pesan dari aplikasi yang telah diperbarui sampai mereka memperbaruinya.</li>
+            <li>Balasan menampilkan pesan yang dijawabnya sebagaimana pesan itu sendiri ditampilkan. Balasan menyebutkan nama penulis hanya saat pesan mereka terbuka, dan membawa baris pesan tersebut di bawahnya, seperti baris versi lebih lama. Balasan menyebutkan <strong>Pemberitahuan</strong> untuk salah satu pemberitahuan server dan <strong>Admin komunitasmu</strong> untuk pesan dari para admin. Apa pun yang tidak terbuka atau tidak terkunci dikutip sebagai <strong>Belum dikonfirmasi</strong>, dengan baris yang menggantikan kata-katanya.</li>
+            <li>Jadi server itu sendiri tidak dapat membuat salah satu dari kalian seolah menulis kata-kata yang tidak kalian tulis. Server masih dapat menahan pesan, mengirimkannya terlambat, atau membuatnya terbaca <strong>Pesan ini telah dihapus</strong>. Server dapat menampilkan kata-kata sebelum diedit alih-alih kata-kata yang baru: keduanya benar-benar berasal dari pengirim. Server melihat pesan mana yang dijawab oleh setiap pesan, tetapi tidak dapat mengubahnya tanpa terdeteksi. Server dapat menambah atau menghapus reaksi emoji atas nama salah satu orang: reaksi tidak dikunci. Dan server dapat menambahkan pemberitahuannya sendiri ke obrolan. Sebuah pemberitahuan muncul sebagai pemberitahuan, dikutip sebagai <strong>Pemberitahuan</strong>, dan terbaca <strong>Pemberitahuan:</strong> di daftar obrolanmu, tidak pernah sebagai salah satu dari kalian.</li>
+            <li>Penguncian membuktikan bahwa pesan berasal dari salah satu dari kalian berdua, bukan yang mana: orang lain tersebut, dengan bantuan orang-orang yang menjalankan servermu, dapat menuliskan kata-kata atas namamu.</li>
+            <li>Semua ini bergantung pada aplikasimu yang memiliki kunci asli orang lain tersebut, yang didapatkannya dari server komunitasmu, sebagaimana halnya enkripsi itu sendiri. Di aplikasi web, ini juga bergantung pada aplikasi itu sendiri, yang dikirimkan server komunitasmu ke browsermu. Aplikasi ponsel berasal dari toko aplikasi.</li>
+            <li>Pesan yang tidak dapat dikunci tidak akan dikirim. Jika aplikasi belum dapat menemukan kunci orang lain tersebut, atau penguncian gagal, kata-katamu tetap berada di kotak pesan dengan baris yang menyatakan demikian. Kirim lagi sebentar lagi. Server komunitasmu juga menolak pesan antara dua orang yang tidak terkunci.</li>
+            <li>Pemberitahuan yang ditambahkan BeanPool ke obrolan tentang suatu kesepakatan tidak dienkripsi: Kacang yang ditahan untuk transaksi, dibayarkan, atau dikembalikan saat transaksi dibatalkan, jumlahnya, serta bagaimana admin menyelesaikan transaksi yang macet dan alasannya. Orang-orang yang menjalankan server komunitasmu dapat membacanya.</li>
+            <li>Server juga mengetahui siapa yang mengirim pesan kepada siapa, dan kapan, pesan mana yang dijawab oleh masing-masing pesan, dan melihat reaksi emoji. Pesan yang dikirim oleh aplikasi versi lebih lama tanpa kunci enkripsi tetap dapat dibaca di server.</li>
+            <li>Obrolan grup juga <strong>terenkripsi ujung-ke-ujung</strong>, di ponsel dan di aplikasi web: hanya anggota grup yang dapat membacanya, dan orang-orang yang menjalankan server komunitasmu tidak dapat membacanya. Di atas kotak pesan tertera <strong>Terenkripsi ujung-ke-ujung</strong>. Server komunitasmu masih melihat siapa yang menulis, kapan, siapa yang disebut, pesan mana yang dijawab oleh setiap baris, dan reaksi emoji. Kamu melihat obrolan grup hanya sejak hari kamu bergabung: tidak ada yang ditulis sebelumnya yang ditampilkan, dan ponselmu tidak pernah memegang kuncinya. Pesan yang tidak dapat dikunci tidak akan dikirim. Baris yang tidak dapat dipastikan ditulis oleh seorang anggota terbaca <strong>Pesan ini tidak dapat diverifikasi.</strong>, tanpa pemilik. Jika server komunitasmu lebih lama dan belum dapat mengunci obrolan grup, obrolan menyatakan demikian, dan server dapat membacanya. Ketika server diperbarui, pesan-pesan sebelumnya tersebut akan dihapus, dan sebuah baris di obrolan menyatakan hal itu. Lihat &quot;Grup&quot;.</li>
+            <li>Di aplikasi web obrolan grup bekerja dengan cara yang sama, tetapi kamu tidak dapat mengirim foto di dalamnya.</li>
+            <li>Obrolan usaha dan acara tidak dienkripsi. Orang-orang yang menjalankan server komunitasmu dapat membacanya, dan server dapat menulis di dalamnya atas nama siapa pun.</li>
+            <li>Obrolan antara dua orang tidak akan pernah dapat diubah menjadi obrolan-obrolan tersebut. Begitu aplikasimu mengenali suatu obrolan sebagai obrolan antara dua orang, atau obrolan tersebut menyimpan pesan terenkripsi, obrolan itu akan tetap demikian, apa pun yang dikatakan server: obrolan hanya terbuka sebagai obrolan tersebut, dengan semua pemeriksaan di atas, dan apa yang kamu kirimkan di dalamnya selalu terkunci. Ponsel atau browser yang belum pernah melihat obrolan tersebut, dan tidak diberi pesan terenkripsinya, tidak dapat mengetahuinya: baginya, obrolan semacam itu tampak seperti obrolan grup lainnya, yang dapat dibaca oleh server. Di aplikasi web hal itu juga berlaku untuk browser yang telah keluar setelahnya, jendela pribadi (incognito), atau yang data situsnya telah dihapus: aplikasi web melupakan obrolan mana yang merupakan obrolan antara dua orang. Aplikasi ponsel tetap menyimpan daftar tersebut.</li>
+            <li>Menghapus pesan meminta server komunitasmu untuk menggantikannya. Tindakan ini tidak dapat menjangkau salinan yang telah dibaca seseorang, atau tangkapan layar.</li>
+            <li>Menghapus akunmu melakukan hal yang sama pada setiap pesan yang kamu tulis, di setiap jenis obrolan, dan menghapus foto-foto yang kamu kirimkan. Lihat &quot;Keluar atau menghapus akun&quot;.</li>
+            <li>Obrolan acara juga dapat dibaca oleh penyelenggara dan semua orang yang hadir (jika penyelenggara menyaring izin masuk, mereka yang telah diizinkan masuk oleh penyelenggara).</li>
+            <li>Obrolan usaha dapat dibaca oleh anggota mana pun di komunitasmu. Itu adalah diskusi publik usaha tersebut, diskusi yang sama yang ditampilkan di halamannya, dan siapa pun di komunitas dapat menulis di dalamnya juga. Itu bukan obrolan pribadi bagi para pengurusnya.</li>
+        </ul>
+        <h2>Memblokir seseorang dari obrolan</h2>
+        <p>Ketuk nama mereka di bagian atas obrolan. Profil mereka terbuka. Ketuk <strong>Blokir</strong>, lalu <strong>Blokir Pengguna</strong>. Di aplikasi web, ketuk <strong>Blokir</strong> di bagian atas obrolan, lalu <strong>Oke</strong>. Lihat &quot;Memblokir seseorang&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>Orang dan teman</strong><span>Mencari anggota komunitas, profil dan lencana mereka, serta menandai teman agar kamu tahu jika ada yang keluar.</span></a></li>
+            <li><a href="blocking.html"><strong>Memblokir seseorang</strong><span>Sembunyikan kiriman dan pesan seseorang darimu, dan batalkan pemblokiran nanti jika diinginkan.</span></a></li>
+            <li><a href="event-chat.html"><strong>Obrolan acara</strong><span>Mengobrol dengan tuan rumah dan semua orang yang menghadiri acara.</span></a></li>
+            <li><a href="groups.html"><strong>Grup</strong><span>Grupmu dan obrolannya, berbicara di dalamnya, membuat grup, mengundang orang, bergabung dengan undangan, dan pemungutan suara internal grup.</span></a></li>
+            <li><a href="mute.html"><strong>Bisukan obrolan</strong><span>Bisukan obrolan — perorangan, grup, atau usaha — selama 8 jam, seminggu, atau selamanya.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Bilah atas</strong><span>Ikon kacang, ikon kecil saat ada hal penting, dan tombol di kanan atas.</span></a></li>
+            <li><a href="key-changed.html"><strong>Saat kunci atau nama berubah</strong><span>Mengapa obrolan berhenti mengirim pesan, cara memeriksa kode kunci dengan orang tersebut, dan kapan harus melanjutkan.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

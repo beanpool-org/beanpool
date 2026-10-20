@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>取引相手ごとの500豆制限 — BeanPool members' guide</title>
+    <meta name="description" content="特定の人と多額の取引をするより、多くの人と取引する方が信頼を築ける理由を説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">台帳</a></p>
+        <h1>取引相手ごとの500豆制限</h1>
+        <p class="lede">特定の人と多額の取引をするより、多くの人と取引する方が信頼を築ける理由を説明します。</p>
+        <h2>制限される内容</h2>
+        <p>信頼が算出される際、任意の1人との取引は<strong>最大500豆まで</strong>カウントされます。同じ相手とそれを超えて取引を行うことも支払うことも引き続き可能ですが、それ以上信頼が加算されることはありません。</p>
+        <p>コモンズの豆に関する投票用のボイスクレジットにも、同じ制限が適用されます。</p>
+        <h2>制限されない内容</h2>
+        <p>誰かとの間で売買、贈呈、または受け取りができる金額が制限されることはありません。1日に実行できる支払い件数の制限内であれば（「ギフトを送る」を参照）、お互いが望むだけ特定の1人と取引することができます。</p>
+        <h2>理由</h2>
+        <p>信頼とは、多くの人々があなたとの取引を良いと認めたことを示すものであるべきだからです。2人の友人が豆を行き来させるだけで、自分たちだけで大きな信用枠を築くことができてはなりません。2人の間で多額の取引が行われ、豆が両者間でほぼ均等に流れている場合、その2人間の取引は一切カウントされません。</p>
+        <h2>どうすればよいか</h2>
+        <p>より多くの人々と取引してください。新しい取引相手が増えるたびに、あなたの信頼が高まります。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>信用枠</strong><span>残高をどこまでマイナスにできるか、またその枠がどのように増えるかを説明します。</span></a></li>
+            <li><a href="trust-badges.html"><strong>信頼バッジ</strong><span>新規、住民、世話人、長老。それぞれの意味と、特権が付与されるわけではない理由を説明します。</span></a></li>
+            <li><a href="decisions.html"><strong>決定への投票</strong><span>進行中の決定事項を確認し、投票や投票内容の変更を行い、結果を確認できます。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPoolの仕組み</strong><span>豆、取引、提供と求め、そしてクレジットについてわかりやすく説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

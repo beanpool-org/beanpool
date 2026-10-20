@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuzuia mtu — BeanPool members' guide</title>
+    <meta name="description" content="Ficha matangazo na ujumbe wa mtu usikuonekanie, na ubadilishe baadaye.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Mipangilio na usalama</a></p>
+        <h1>Kuzuia mtu</h1>
+        <p class="lede">Ficha matangazo na ujumbe wa mtu usikuonekanie, na ubadilishe baadaye.</p>
+        <h2>Kuzuia</h2>
+        <ul>
+            <li>Kwenye wasifu wake: gusa <strong>Zuia</strong>, au <strong>Zuia</strong> na jina lake chini zaidi.</li>
+            <li>Kwenye mojawapo ya machapisho yake (programu ya simu): gusa <strong>Mzuie Mtumiaji</strong>. Chapisho kwenye programu ya wavuti halina kitufe cha kuzuia.</li>
+            <li>Kutoka kwenye gumzo: gusa jina lake juu ili kufungua wasifu wake, kisha <strong>Zuia</strong>. Kwenye programu ya wavuti, gumzo na mtu mmoja pia lina <strong>Zuia</strong> juu kabisa.</li>
+        </ul>
+        <p>Kwenye programu ya simu, thibitisha kwa <strong>Mzuie Mtumiaji</strong>. Kwenye programu ya wavuti, kivinjari chako kinakuomba uthibitishe: gusa <strong>Sawa</strong>.</p>
+        <h2>Kile inachofanya</h2>
+        <ul>
+            <li>Machapisho yake Sokoni yanafichwa kwako.</li>
+            <li>Wanatoweka kutoka kwenye soga zako na kutoka kwenye orodha ya Watu, na hamwezi kutumiana ujumbe. Kwenye programu ya simu, mtu uliyekuwa umemwongeza bado anaonekana kwenye kichupo chako cha <strong>Marafiki</strong>: tazama &quot;Kile ambacho haifanyi&quot; hapa chini. Programu ya wavuti huwaficha kutoka kwenye kila orodha.</li>
+            <li>Machapisho yao ya Mwenendo bado yanaonyeshwa. Kwenye simu, pini zao kwenye Ramani bado zinaonyeshwa pia. Ramani ya programu ya wavuti huzificha.</li>
+            <li>Kwenye Leja yako, Maharagwe kutoka kwao huonyesha &quot;Maharagwe kutoka kwa mwanachama uliyemzuia&quot; badala ya dokezo lolote walilotuma.</li>
+            <li>Ripoti huenda kwa wasimamizi wa jumuiya yako, ambao wanaweza kulichunguza jambo hilo.</li>
+        </ul>
+        <h2>Kile ambacho jumuiya yako inafanya kulihusu</h2>
+        <p>Jumuiya yako hufanya hivi kwa vizuizi inavyokuwekea. Leo hilo ni kizuizi kilichofanywa katika programu ya wavuti. Kizuizi kilichofanywa katika programu ya simu hubaki kwenye simu hiyo, na jumuiya yako haijui kulihusu.</p>
+        <ul>
+            <li>Ujumbe wao wa moja kwa moja haukufikii kamwe. Jumuiya yako haikuletei, kwenye simu au kompyuta yoyote, na hupati arifa yoyote na hakuna hesabu ya jumbe ambazo hazijasomwa kwa ajili yao.</li>
+            <li>Wakianzisha soga mpya nawe, haionekani katika soga zako.</li>
+            <li>Ukiwaondolea kizuizi, hakuna walichotuma wakiwa wamezuiwa kitakachofika. Ni jumbe wanazotuma baada ya hapo pekee ndizo zitakazokufikia.</li>
+            <li>Wakionyesha hisia kwa mojawapo ya jumbe zako, au wakibadilisha mojawapo ya jumbe zao za zamani, huioni.</li>
+            <li>Hupati arifa wanapoandika katika soga ya kikundi, hata wanapokutaja kwa @.</li>
+            <li>Wakiomba biashara kwenye mojawapo ya orodha zako, ombi hilo linasubiri katika biashara zako bila arifa. Ukiliacha, linamalizika baada ya siku 7, pia bila arifa.</li>
+            <li>Wakikubali mojawapo ya Ofa zako mara moja, hupati arifa, na hupati yoyote ikiwa baadaye wataghairi biashara hiyo. Biashara bado inaonyeshwa katika biashara zako, na jumbe zake katika soga yako nao, kama ilivyo kwa mtu yeyote. Maharagwe yao yanazuiliwa na kurudishwa kama kawaida.</li>
+            <li>Hawawezi kutengeneza tangazo lililoelekezwa kwako tu.</li>
+            <li>Huwezi kuwaongeza. Wakikuongeza, huambiwi. Kama walikuwa wamekuongeza, mstari wa &quot;alikuongeza&quot; kwenye kichupo chako cha Watu huondoka. Marafiki zako hawakuoni tena kama muunganisho wa pamoja kwenye wasifu wa mtu uliyemzuia.</li>
+            <li>Wakikutumia Maharagwe yakiwa na dokezo, Maharagwe yanafika yote na dokezo halifiki. Unaona &quot;Maharagwe kutoka kwa mwanachama uliyemzuia&quot; badala yake, na bado utaona hivyo hata baada ya kuwaondolea kizuizi.</li>
+        </ul>
+        <h2>Kile ambacho haifanyi</h2>
+        <ul>
+            <li>Hawaambiwi. Kwao, jumbe zao zinaonekana zimetumwa, na madokezo yenye Maharagwe yao yanaonekana vivyo hivyo.</li>
+            <li>Haikatishi urafiki: ikiwa ulikuwa umewaongeza, bado ni rafiki yako, na ikiwa anwani yako imewekwa kwa Marafiki bado wanaiona. Ili kukatisha hilo pia, fungua <strong>Dhibiti Watumiaji Waliozuiwa</strong> (kwenye wavuti, <strong>Dhibiti Wanachama Waliozuiwa</strong>; tazama &quot;Kufungua kizuizi&quot; hapa chini) na uguse <strong>Pia ondoa kwenye marafiki</strong> chini ya jina lao. Huwepo tu kwa mtu uliyemwongeza. Wanabaki wamezuiwa. Wanaweza kutambua kuondolewa.</li>
+            <li>Mazungumzo ya kikundi, soga za matukio na mazungumzo ya miradi na biashara za pamoja yanashirikiwa: kila mtu aliyemo huona jumbe zilezile. Jumbe zao humo bado zinaonekana, kwako kama ilivyo kwa kila mtu mwingine.</li>
+            <li>Biashara ambayo tayari unayo nao inaendelea kama awali, ikiwa na taarifa na arifa zake.</li>
+            <li>Ikiwa umefanya biashara nao hapo awali, bado wanaweza kukutumia Maharagwe. Kila Haragwe linafika, bila arifa.</li>
+            <li>Taarifa kutoka kwa jumuiya yako bado zinafika, hata walipokuwa wamezianzisha wao. Kwa mfano, unaarifiwa wakati mtu anapofungua kura ya kuchukua nafasi yako kama mratibu mkuu wa kikundi, na unapata jumbe kutoka kwa watu wanaoendesha jumuiya yako.</li>
+            <li>Bado wanaweza kuona machapisho yako.</li>
+            <li>Katika programu ya simu, kizuizi huwekwa kwenye simu hii, kwa akaunti yako tu. Akaunti nyingine kwenye simu hii haipati vizuizi vyako.</li>
+            <li>Katika programu ya simu, ukiondoka, au ukibadilisha akaunti ya simu hii na nyingine, vizuizi vyako vinabaki kwenye simu. Ukirudi na akaunti ileile bado vipo hapo.</li>
+            <li>Katika programu ya simu, ukisakinisha upya programu au ukitumia simu nyingine, wazuie tena.</li>
+            <li>Kwenye programu ya wavuti, jumuiya yako huweka vizuizi vyako pamoja na akaunti yako. Ingia kwenye kivinjari chochote na vinarudi. Kuondoka hakuachi chochote kuwahusu kwenye kompyuta hiyo. Tazama &quot;Kutumia BeanPool kwenye kivinjari&quot;.</li>
+            <li>Watu wanaoendesha seva ya jumuiya yako wanaweza kuona uliyemzuia kwenye programu ya wavuti, kama wanavyoweza kuona ripoti.</li>
+            <li>Programu ya simu na programu ya wavuti huweka orodha tofauti. Kizuizi katika moja hakionekani katika nyingine.</li>
+        </ul>
+        <h2>Kufungua kizuizi</h2>
+        <ul>
+            <li>Fungua <strong>Mipangilio</strong>. Chini ya <strong>KISHERIA &amp; FARAGHA</strong>, gusa <strong>Dhibiti Watumiaji Waliozuiwa</strong>.</li>
+            <li>Gusa <strong>Ondoa kizuizi</strong> kando ya jina, au <strong>Ondoa Vizuizi Vyote</strong>.</li>
+        </ul>
+        <p>Kwenye programu ya wavuti, kuzuia na kuondoa kizuizi kunahitaji muunganisho kwenye jumuiya yako. Bila muunganisho, programu inasema hivyo na hakuna kinachobadilika. Jaribu tena ukiwa mtandaoni tena.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>Kuripoti tatizo</strong><span>Waambie wasimamizi wa jumuiya yako kuhusu tangazo, tukio, chapisho la Mwenendo, au mradi.</span></a></li>
+            <li><a href="messages.html"><strong>Ujumbe</strong><span>Anzisha soga, tuma picha, jibu, toa hisia, hariri, futa, nyamazisha, na mambo ya faragha.</span></a></li>
+            <li><a href="privacy.html"><strong>Faragha yako</strong><span>Kile wengine wanachoweza kuona kukuhusu, na mipangilio inayodhibiti.</span></a></li>
+            <li><a href="getting-help.html"><strong>Kupata usaidizi</strong><span>Mahali pa kuangalia unapokwama, na nani wa kumwuliza.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

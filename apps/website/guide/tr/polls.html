@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anketler — BeanPool members' guide</title>
+    <meta name="description" content="Topluluğa hızlı bir soru sorun. Anketler fikirleri gösterir; tek başlarına hiçbir şeyi değiştirmezler.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Ortak Alan</a></p>
+        <h1>Anketler</h1>
+        <p class="lede">Topluluğa hızlı bir soru sorun. Anketler fikirleri gösterir; tek başlarına hiçbir şeyi değiştirmezler.</p>
+        <h2>Anket mi, Karar mı?</h2>
+        <p>Bir <strong>Anket</strong> insanların ne düşündüğünü sorar: &quot;Pazar Pazar günü mü yoksa Cumartesi günü mü kurulsun?&quot;. Tek başına hiçbir şeyi değiştirmez. Bağlayıcı bir şey için bir Karar önerin.</p>
+        <p>Küresel toplulukta her anket <strong>Resmi olmayan bir anket; hiçbir şeye karar vermez</strong> der. 12 kelimeyle veya bir oturum açma yöntemiyle herkes katılabilir, bu nedenle birden fazla hesabı olan tek bir kişi sayımı etkileyebilir ve orada Kararlar yoktur. Altındaki &quot;🏘️ Yerel bir toplulukta bir Karar bağlayıcıdır ›&quot;, bir oylamanın neden yalnızca yerel bir toplulukta bağlayıcı olduğunu açıklar.</p>
+        <p>Oradaki anonim bir anket kapandığında, oylarının kaçının <strong>yeni veya 12 kelimelik hesaplar</strong>dan geldiğini de belirtir; örneğin &quot;12 oyun 5'i yeni veya 12 kelimelik hesaplardan geldi&quot;. Her oy, hesabın oy verdiği andaki durumuna göre sayılır: yeni bir hesap, yeni hesap limitlerine hâlâ sahip olan bir hesaptır ve 12 kelimelik bir hesap, 12 kelimeyle oluşturulmuş ve henüz bir oturum açma yöntemi eklenmemiş olan bir hesaptır. Oyların en az 3'ü yeni veya 12 kelimelik hesaplardan geldiğinde ve diğer oylar hiç yoksa ya da en az 3 ise, her yanıt da kendi oylarının kaçının bu hesaplardan geldiğini belirtir. Her oy yine de sayılır ve hiçbir şey kimin oy verdiğini göstermez.</p>
+        <p>Bir anket açıkken bu konuda hiçbir şey söylemez. Söylemiş olsaydı her oydan sonra anketi kontrol eden biri her oyun ne tür bir hesaptan geldiğini ve neyi seçtiğini anlayabilirdi. Açık bir oylama, açık veya kapalı olsun bunu asla söylemez: kimin oy verdiğini gösterir, bu nedenle sayım her seçmenin ne tür bir hesaba sahip olduğunu ortaya çıkarırdı. Bir grubun anketi de bunu söylemez; yerel bir topluluktaki bir anket de söylemez.</p>
+        <h2>Bir anket başlatma</h2>
+        <ul>
+            <li>Pazar sekmesinde veya Harita'da <strong>+ İLAN EKLE</strong>'ye dokunun.</li>
+            <li><strong>Topluluk Anketi</strong> seçeneğini belirleyin.</li>
+            <li><strong>Soru</strong>yu yazın.</li>
+            <li>Yardımcı olacaksa <strong>Bağlam / Notlar</strong> ekleyin. Bu isteğe bağlıdır.</li>
+            <li>2 ila 4 <strong>Seçenek</strong> yazın. Daha fazlası için <strong>+ Seçenek Ekle</strong>'ye dokunun.</li>
+            <li>Ne kadar süreceğini seçin: <strong>3 Gün</strong>, <strong>7 Gün</strong> veya <strong>14 Gün</strong>.</li>
+            <li><strong>Oluştur</strong>'a dokunmadan önce bunun bir <strong>Açık oylama</strong> olup olmayacağını seçin. Kapalı bırakırsanız anket anonim olur. İşaretlerseniz üyeler kimin neyi seçtiğini görebilir. Anket paylaşıldıktan sonra bunu değiştiremezsiniz.</li>
+            <li><strong>Oluştur</strong>'a dokunun.</li>
+        </ul>
+        <p>Web uygulamasında tür <strong>🗳️ Anket</strong>'tir, notlar <strong>Arka Plan / Bağlam</strong>'dır, seçenek düğmesi <strong>+ Seçenek ekle</strong>'dir ve son düğme <strong>🗳️ Anket Oluştur</strong> düğmesidir. Web Haritasında yuvarlak <strong>+</strong> işaretine dokunun.</p>
+        <p>Bir seferde açık bir anketiniz olabilir ve bir topluluğun aynı anda 5 açık anketi olabilir. Bir anket başlatmak veya yanıtlamak için dondurulmamış bir krediye ihtiyacınız vardır.</p>
+        <h2>Anketleri bulma ve yanıtlama</h2>
+        <p>Anketler Pazar'dadır. Yalnızca anketleri görmek için üst satırdaki <strong>Anketler</strong>'e dokunun.</p>
+        <ul>
+            <li>Seçmek için bir yanıta dokunun. Anket kapanana kadar fikrinizi değiştirmek için başka bir yanıta dokunun.</li>
+            <li>Kart, her yanıtı kaç kişinin seçtiğini gösterir.</li>
+        </ul>
+        <h2>Nasıl oy verdiğinizi kimler görebilir</h2>
+        <p>Her anket, katılım oranının üzerinde ne tür bir anket olduğunu belirtir:</p>
+        <ul>
+            <li><strong>Anonim</strong> (alışılmış tür): herkes yalnızca her yanıtı kaç kişinin seçtiğini görür. Anketi başlatan kişi dahil hiç kimse kimin neyi seçtiğini göremez.</li>
+            <li><strong>Açık oylama:</strong> anketi başlatan kişi oy verenleri göstermeyi seçmiştir. Üyeler, kimin neyi seçtiğini görmek için <strong>Oy verenleri gör</strong> (web uygulamasında <strong>Oy Verenleri Göster</strong>) seçeneğine dokunabilir. Askıya alınmış bir üye, askıya alma durumu sona erene kadar yalnızca toplamları görür.</li>
+        </ul>
+        <p>Topluluğunuzun sunucusunu işleten sahipler ve yöneticiler orada saklanan her oyu yine de görebilir.</p>
+        <h2>Bir anketi erken kapatma</h2>
+        <p>Anketi siz başlattıysanız <strong>Anketi Kapat</strong> seçeneğine dokunun, ardından onaylamak için tekrar <strong>Anketi Kapat</strong> seçeneğine dokunun (web uygulamasında <strong>Tamam</strong>).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Karara oy verme</strong><span>Açık Kararları bulun, oy verin, oyunuzu değiştirin ve sonuçları görün.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>Bir Karar önerme</strong><span>Topluluktan bağlayıcı bir karar almasını isteyin.</span></a></li>
+            <li><a href="events.html"><strong>Etkinlikler</strong><span>Bir mekanda veya çevrim içi, tek seferlik veya tekrarlayan bir etkinlik oluşturun; katılacağınızı belirtin, paylaşın ve ev sahibi olarak yönetin.</span></a></li>
+            <li><a href="rules.html"><strong>Kurallar ve karar alma süreci</strong><span>Oylama, katılım, gizli oylama, kimlerin oy verebileceği, askıya alma, üye çıkarma, sorumlular ve kolaylaştırıcılar.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Fasulye ve küresel topluluk</strong><span>Küresel topluluğun amacı, birçok topluluktan biri olması, orada gördükleriniz: 🏘️ Yerel topluluk işareti, örnek topluluk Example Valley, Fasulyelerin neden beklediği ve yerel topluluk başlatma veya bulma.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

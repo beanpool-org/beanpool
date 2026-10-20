@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kontostand und Historie — BeanPool members' guide</title>
+    <meta name="description" content="Wie viele Bohnen du hast, was gebunden ist und jeder Handel sowie jedes Geschenk.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Buch</a></p>
+        <h1>Kontostand und Historie</h1>
+        <p class="lede">Wie viele Bohnen du hast, was gebunden ist und jeder Handel sowie jedes Geschenk.</p>
+        <h2>Wie du es öffnest</h2>
+        <p>Tippe in der Tab-Leiste auf <strong>Buch</strong>. Dein Kontostand steht oben rechts in <strong>BOHNEN</strong>. Er kann unter null liegen; siehe „Dein Kreditrahmen“.</p>
+        <p>In der globalen Community gibt es keine Bohnen, daher zeigt das Buch ein Beispiel-Mitglied einer lokalen Community, Example Valley, gekennzeichnet mit <strong>🏘️ Lokale Gemeinschaft</strong>. Dessen Schaltflächen erklären, warum Bohnen in einer lokalen Community leben, und senden nichts. Siehe „Bohnen &amp; globale Community“.</p>
+        <p>Das Buch hat zwei Tabs: <strong>Stufen</strong> (dein Vertrauen, siehe „Vertrauensstufen“) und <strong>Wallet</strong>. Tippe auf dem Smartphone auf deinen Kontostand, um direkt zu Wallet zu gelangen.</p>
+        <h2>Der Tab „Wallet“</h2>
+        <ul>
+            <li><strong>Dein Guthaben</strong> und wie vielen Stunden Hilfe es ungefähr entspricht, bei 40 Bohnen pro Stunde.</li>
+            <li><strong>Gemeingut:</strong> der gemeinsame Pool deiner Community.</li>
+            <li><strong>Kreditrahmen:</strong> wie weit du unter null gehen könntest.</li>
+            <li>Wie viele deiner Bohnen in laufenden Deals gebunden sind, sofern welche vorhanden sind.</li>
+            <li><strong>Community-Umlauf:</strong> wird angezeigt, wenn du Bohnen besitzt. Siehe „Die Umlaufgebühr“.</li>
+            <li><strong>Projektbeiträge:</strong> Bohnen, die du für Projekte zugesagt hast, falls vorhanden.</li>
+            <li><strong>Bohnen senden:</strong> ein Geschenk senden. Siehe „Bohnen schenken“.</li>
+        </ul>
+        <p>In der Web-App ist der Tab „Wallet“ kompakter: <strong>Kreditlimit</strong>, <strong>Gemeinschaftspool</strong>, <strong>Bohnen senden</strong> und <strong>Community-Umlauf</strong>. Dein Kontostand befindet sich oben im Buch.</p>
+        <h2>Kürzliche Transaktionen</h2>
+        <p>Jeder Handel, jedes Geschenk und jede Gebühr, neueste zuerst, mit Notiz, Uhrzeit und Plus oder Minus. Auf dem Smartphone gibt jede Zeile auch an, mit wem die Transaktion stattfand; in der Web-App steht dort <strong>Gesendet</strong> oder <strong>Empfangen</strong>. Wenn eine Notiz einen Beitrag erwähnt, tippe auf <strong>Angebot ansehen</strong>, um ihn zu öffnen.</p>
+        <p>Nur du kannst deinen Kontostand und diese Transaktionen sehen. Niemand sonst in deiner Community kann sie lesen. <strong>CSV exportieren</strong> (<strong>Meine exportieren</strong> in der Web-App) speichert deine eigenen Transaktionen als Datei.</p>
+        <p>Die Liste bietet derzeit noch keine Such- oder Filterfunktionen.</p>
+        <h2>ⓘ-Schaltflächen</h2>
+        <p>Tippe auf dem Smartphone auf das <strong>ⓘ</strong> neben „Dein Guthaben“ für eine kurze Erklärung deines Guthabens und deines Rahmens.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>Dein Kreditrahmen</strong><span>Wie weit du ins Minus gehen kannst und wie dieser Rahmen wächst.</span></a></li>
+            <li><a href="gifts.html"><strong>Bohnen schenken</strong><span>Jemandem Bohnen ohne Gegenleistung senden.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>Die Umlaufgebühr</strong><span>Eine kleine monatliche Gebühr auf hohe Guthaben, damit Bohnen in Bewegung bleiben. Die ersten 200 sind frei.</span></a></li>
+            <li><a href="my-deals.html"><strong>Meine Deals</strong><span>Ein Ort für alle deine laufenden Deals, aktiven Beiträge und vergangenen Abschlüsse.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Bohnen &amp; globale Community</strong><span>Wozu die globale Community dient, eine unter vielen, und was du dort siehst: 🏘️ Lokale Community, Beispieltal, warum Bohnen warten, und wie du lokale Gruppen findest.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

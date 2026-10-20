@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vos 12 mots et clés (gestion) — BeanPool members' guide</title>
+    <meta name="description" content="Pour les propriétaires d'une communauté. Vérifier vos 12 mots, reprendre la main ou restaurer le serveur avec votre téléphone, et vérification automatique par le téléphone.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Paramètres et sécurité</a></p>
+        <h1>Vos 12 mots et clés (gestion)</h1>
+        <p class="lede">Pour les propriétaires d'une communauté. Vérifier vos 12 mots, reprendre la main ou restaurer le serveur avec votre téléphone, et vérification automatique par le téléphone.</p>
+        <h2>À qui cela s'adresse</h2>
+        <p>Uniquement aux <strong>propriétaires</strong> d'une communauté. Si vous n'êtes pas propriétaire, vous ne verrez rien de tout cela.</p>
+        <h2>Pourquoi les propriétaires sont sollicités</h2>
+        <p>Le serveur de votre communauté conserve une copie verrouillée de ses clés, afin de pouvoir transférer la communauté vers un autre serveur si le sien venait à disparaître, et ses sauvegardes sont également verrouillées. Elles sont associées aux comptes des propriétaires : n'importe quel propriétaire peut les ouvrir avec son téléphone (voir « Reprendre le contrôle ou restaurer avec votre téléphone » ci-dessous). Si vous perdez votre téléphone, vos 12 mots vous permettent de récupérer votre compte, et avec lui votre clé d'accès au verrou du serveur et à ses sauvegardes. C'est le jour où le serveur lui-même n'est plus accessible que cela compte le plus.</p>
+        <p>L'application invite donc chaque propriétaire, de temps à autre, à vérifier qu'il possède toujours les bons 12 mots. Vous pouvez choisir <strong>Plus tard</strong>. Rien n'est jamais bloqué, et vous pouvez continuer à accomplir tout ce qu'un propriétaire peut faire.</p>
+        <h2>Quand l'application le demande</h2>
+        <ul>
+            <li>Une fois, peu après que vous soyez devenu propriétaire.</li>
+            <li>Puis 12 mois après votre dernière vérification.</li>
+        </ul>
+        <p>Elle affiche une carte en haut du Marché (dans l'application web, en haut de chaque écran à l'exception de la Carte) : <strong>Vérifier maintenant</strong> ou <strong>Plus tard</strong>. <strong>Plus tard</strong> met la carte de côté jusqu'à la prochaine échéance. Vous pouvez faire la vérification à tout moment depuis les <strong>Paramètres</strong> : sous <strong>Clés de la communauté</strong>, touchez <strong>Vérifier vos 12 mots</strong> (dans l'application web, <strong>Vérifier maintenant</strong>).</p>
+        <h2>Comment vérifier</h2>
+        <ul>
+            <li>Munissez-vous de votre feuille papier portant les 12 mots.</li>
+            <li>Tapez-les dans l'ordre, séparés par des espaces. Les majuscules et les espaces superflus n'ont pas d'importance.</li>
+            <li>Touchez <strong>Vérifier mes mots</strong>.</li>
+        </ul>
+        <p>S'ils sont corrects, l'application indique <strong>Ce sont les bons mots.</strong> Sinon : <strong>Ce ne sont pas les mots associés à ce compte.</strong> Elle ne précise pas quel mot est erroné, vérifiez donc votre papier et saisissez-les à nouveau.</p>
+        <p>Sur un téléphone ne disposant pas d'une copie de vos 12 mots (un appareil restauré avec un compte de connexion), des mots corrects proposent également <strong>Les enregistrer sur ce téléphone</strong>. Touchez cette option et <strong>Afficher la phrase de récupération</strong> vous les présentera désormais. Il s'agit de la même vérification et du même enregistrement que dans <strong>Ajouter vos 12 mots à ce téléphone</strong> (voir « Vos 12 mots »).</p>
+        <p>Vous ne les retrouvez pas ? Si ce téléphone les conserve encore, ouvrez <strong>Paramètres</strong>, puis <strong>Afficher la phrase de récupération</strong> pour les voir. Recopiez-les à nouveau, puis faites la vérification. Sur un téléphone qui n'en possède pas de copie, l'application vous l'indique : lorsque vous les retrouverez, vérifiez-les ici, puis enregistrez-les.</p>
+        <h2>Ce qui est transmis, et ce qui ne l'est pas</h2>
+        <ul>
+            <li>La vérification s'exécute sur votre téléphone (ou dans votre navigateur, dans l'application web). Vos mots ne sont jamais envoyés nulle part. Le champ de saisie est vidé dès que la vérification donne son résultat, ainsi que dès que vous quittez l'écran. Ils ne sont enregistrés que si vous touchez <strong>Les enregistrer sur ce téléphone</strong>, et uniquement sur ce téléphone.</li>
+            <li>Quand les mots sont corrects, votre téléphone informe le serveur de votre communauté uniquement du fait que vous avez vérifié vos mots et à quelle date, avec la signature de votre compte.</li>
+            <li>Les propriétaires et administrateurs voient, dans les Paramètres du serveur, la date de vérification des 12 mots de chaque propriétaire, ou la mention « pas encore ». C'est votre propre déclaration : le serveur ne peut ni voir ni vérifier vos mots.</li>
+        </ul>
+        <h2>Reprendre le contrôle ou restaurer avec votre téléphone</h2>
+        <p>Si le serveur de votre communauté est perdu, la personne qui gère son serveur de secours (ou un nouveau serveur restaurant une sauvegarde) peut demander à un propriétaire d'ouvrir les clés verrouillées. Un seul propriétaire suffit. Vous avez besoin de la version la plus récente de l'application BeanPool. L'application web fonctionne également si elle s'ouvre encore, mais elle réside à l'adresse propre à votre communauté, qui est susceptible d'être tombée avec le serveur : c'est sur l'application mobile qu'il faut compter.</p>
+        <ul>
+            <li>Dans les Paramètres du serveur, elle choisit <strong>Prendre le contrôle comme serveur principal</strong>, puis <strong>J'ai compris : utiliser le téléphone d'un propriétaire</strong>, ou <strong>Ouvrir avec le téléphone d'un propriétaire</strong> lors de la restauration d'une sauvegarde. Un code s'affiche sur son écran.</li>
+            <li>Dans l'application : <strong>Paramètres</strong>, sous <strong>Clés de la communauté</strong>, touchez <strong>Reprendre le contrôle ou restaurer avec ce téléphone</strong>, et pointez l'appareil photo vers le code. Si la page du serveur est ouverte sur votre propre téléphone, toucher son lien produit le même effet. Dans l'application web, copiez le lien depuis son écran et collez-le sous <strong>Prendre le relais ou restaurer avec ce navigateur</strong> dans les <strong>Paramètres</strong>.</li>
+            <li>L'application affiche de quelle communauté il s'agit, quel serveur, et ce qui va se passer. Si votre serveur principal répond toujours, elle le signale en rouge : une reprise de contrôle n'est destinée qu'à un serveur réellement disparu.</li>
+            <li>Touchez <strong>Déverrouiller pour la prise de contrôle</strong> (ou <strong>Déverrouiller la sauvegarde</strong>). Votre téléphone sollicite son propre déverrouillage au préalable : empreinte, visage ou code PIN. L'application web ne dispose pas d'une telle étape, c'est pourquoi l'application mobile constitue l'endroit le plus sûr pour la clé d'un propriétaire.</li>
+            <li>Votre téléphone déverrouille sa propre partie du cadenas et remet la clé à ce serveur, chiffrée afin que seul ce serveur puisse la lire. Votre téléphone ne voit jamais les clés du serveur ni la sauvegarde.</li>
+            <li>Lors d'une prise de contrôle, la personne devant le serveur confirme alors sur son écran. La communauté est informée du transfert et du fait que vous avez ouvert les clés.</li>
+        </ul>
+        <p>L'application refuse, en expliquant la raison, si le verrou appartient à une autre communauté, s'il n'est pas verrouillé pour vous, si le code du serveur a expiré (il est valable 10 minutes et ne fonctionne qu'une seule fois), ou si les clés n'ont pas été verrouillées par le propre serveur de votre communauté.</p>
+        <h2>Votre téléphone vérifie le verrou de lui-même</h2>
+        <p>Chaque fois que le verrou de votre communauté est modifié (ajout ou retrait d'un propriétaire, création d'un nouveau code de récupération), votre application vérifie, en toute discrétion, qu'elle serait toujours en mesure d'ouvrir sa partie. Elle l'ouvre, efface immédiatement la clé, et indique au serveur si cela a fonctionné. Rien ne vous est demandé.</p>
+        <p>Les propriétaires et administrateurs le voient dans les Paramètres du serveur, à côté de la date de vos 12 mots : <strong>leur téléphone a ouvert le verrou actuel</strong>, avec la date, ou qu'il a ouvert un verrou plus ancien la dernière fois. S'il est indiqué que votre téléphone <strong>n'a PAS pu ouvrir</strong> le verrou, vérifiez vos 12 mots et demandez à un autre propriétaire de consulter les Paramètres du serveur.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Vos 12 mots</strong><span>Les 12 mots sont la clé de votre compte. Leur importance, où les trouver, comment les garder en sûreté et associer un compte de connexion en secours.</span></a></li>
+            <li><a href="recovery.html"><strong>Récupérer votre compte</strong><span>Restaurez votre compte sur un nouveau téléphone et protégez-le en associant un compte de connexion.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

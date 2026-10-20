@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Im Markt stöbern — BeanPool members' guide</title>
+    <meta name="description" content="Angebote und Gesuche über Suche, Filter und Entfernung finden.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Markt</a></p>
+        <h1>Im Markt stöbern</h1>
+        <p class="lede">Angebote und Gesuche über Suche, Filter und Entfernung finden.</p>
+        <h2>Der Tab „Markt“</h2>
+        <p>Tippe in der Tab-Leiste auf <strong>Markt</strong>. Du siehst, was die Menschen in deiner Community anbieten und suchen, neueste zuerst, gruppiert nach dem Tag der Veröffentlichung.</p>
+        <p>Auf dem Smartphone stehen Veranstaltungen an erster Stelle. Wenn du der App bereits erlaubt hast, deinen Standort zu verwenden, zeigen die Listen- und Kompaktansichten die Einträge stattdessen nach Nähe an, unter <strong>Nächste zuerst</strong>, mit Umfragen unter <strong>Umfragen</strong>. <strong>Für dich</strong> behält seine eigene Reihenfolge bei. Ziehe die Liste nach unten, um sie zu aktualisieren.</p>
+        <p>In der Web-App öffnet sich der Markt als Kacheln. In der Listen- und Kompaktansicht stehen Veranstaltungen unter dem Tag, an dem sie veröffentlicht wurden. In einer lokalen Community sortiert die Web-App nicht nach Nähe.</p>
+        <p>In der globalen Community zeigt die Web-App die Einträge in deiner Nähe zuerst an: die nächsten innerhalb deiner gewählten <strong>Entfernung</strong> oder im Umkreis von 250 km um deine Gegend (der ungefähre Ort, den du der Community beim Beitritt oder in den <strong>Einstellungen</strong> angibst), jeweils mit Entfernungsangabe. Eine Zeile über der Liste informiert darüber, welche Ansicht aktiv ist. Bei Anzeige nach Gegend gibt es <strong>Überall anzeigen</strong> für die neuesten von überall her. Bei gesetzter <strong>Entfernung</strong> öffne <strong>Entfernung</strong> und tippe auf <strong>Zurücksetzen</strong>, um zu deiner Gegend zurückzukehren, und tippe dann auf <strong>Überall anzeigen</strong>. Auf dem Smartphone behält die globale Community die Einträge, die deiner Gegend am nächsten liegen; genau diese zeigt der Markt an. Siehe „Dinge in der Nähe finden“.</p>
+        <p>Solange es in der globalen Community nur wenige Einträge gibt, zeigt der Markt auch einige mit <strong>Beispiel</strong> gekennzeichnete Karten an. Diese sind frei erfunden, um zu veranschaulichen, was Mitglieder veröffentlichen, und können weder geöffnet noch beantwortet werden. Sie verschwinden, sobald genügend echte Einträge vorhanden sind.</p>
+        <p>Auf dem Smartphone gleiten Suche und Filter beim Herunterscrollen aus dem Bild, sodass du mehr Beiträge siehst. Scrolle ein wenig nach oben, und sie erscheinen wieder. Um direkt ganz nach oben zu springen, tippe erneut auf <strong>Markt</strong>.</p>
+        <h2>Suche</h2>
+        <p>Tippe oben in <strong>Marktplatz durchsuchen...</strong> ein. Auf einem kleinen Smartphone steht dort möglicherweise nur <strong>Suche</strong>. Die Suche findet auch verwandte Begriffe: „Obst“ findet „Zitrone“. Sie findet auch Wörter auf Chinesisch, Japanisch und Thailändisch und lässt Beiträge von Personen aus, die du blockiert hast. Ohne Internetverbindung durchsucht sie das, was sich bereits auf deinem Smartphone befindet.</p>
+        <p>Sobald Wörter im Suchfeld stehen, erscheint die Schaltfläche <strong>Diese Suche auf der Startseite speichern</strong>. Sie öffnet die Startseite mit einer vorbereiteten gespeicherten Suche: deine Suchbegriffe, <strong>Angebote</strong> oder <strong>Gesuche</strong>, falls du nur eines davon ausgewählt hattest, die Kategorie und die Entfernung. Unter <strong>Veranstaltungen</strong> oder <strong>Umfragen</strong> gibt es diese Schaltfläche nicht. Siehe „Startseite“.</p>
+        <h2>Filter</h2>
+        <p>Die Zeile der Schaltflächen unter der Suche bestimmt, was du siehst:</p>
+        <ul>
+            <li><strong>Alle</strong>, <strong>Angebote</strong> oder <strong>Gesuche</strong>.</li>
+            <li><strong>Für dich:</strong> Beiträge in den Kategorien, die du unter <strong>Interessen anpassen</strong> mit einem Stern versehen hast (dieselben Sterne, die du auf der Startseite festlegst), sowie deine anstehenden Veranstaltungen, bei denen du angegeben hast, dass du teilnimmst oder interessiert bist.</li>
+            <li><strong>Veranstaltungen</strong> und <strong>Umfragen</strong>.</li>
+        </ul>
+        <p>Die zweite Zeile grenzt die Auswahl weiter ein. Auf dem Smartphone:</p>
+        <ul>
+            <li><strong>Alle Kategorien:</strong> Wähle eine einzelne Kategorie, wie Essen, Werkzeuge oder Garten.</li>
+            <li><strong>Entfernung:</strong> Nur Beiträge im Umkreis eines bestimmten Punktes. Siehe „Dinge in der Nähe finden“.</li>
+            <li><strong>Vertrauen:</strong> Nur Beiträge von Mitgliedern, die noch nicht gehandelt haben (<strong>Gründer</strong>), von <strong>Neulingen</strong> oder von Mitgliedern mit mindestens einem bestimmten Vertrauensabzeichen.</li>
+            <li><strong>Nur Bohnen:</strong> Blendet Beiträge aus, die zusätzlich etwas Bargeld verlangen.</li>
+        </ul>
+        <p>In der Web-App lauten die Schaltflächen <strong>Kategorie</strong>, <strong>Entfernung</strong>, <strong>🌱 Neue Mitglieder</strong> (Mitglieder, die noch nicht gehandelt haben) und <strong>🫘 Nur Bohnen</strong>. Einen Vertrauensfilter gibt es dort nicht.</p>
+        <p>Wenn du Gruppen angehörst, erscheint zudem eine Zeile mit Gruppenschaltflächen. <strong>👥 Alle Gruppen &amp; Öffentlich</strong> zeigt alles; die Schaltfläche einer Gruppe zeigt nur Beiträge für diese Gruppe. In der Web-App befinden sich die Gruppen in einem Dropdown-Menü anstelle einer Zeile.</p>
+        <p>Wenn auf dem Smartphone keine Einträge passen, tippe auf <strong>Alle Filter zurücksetzen</strong>. In der Web-App meldet eine leere Liste <strong>Keine Einträge gefunden</strong>, und eine solche Schaltfläche gibt es dort nicht.</p>
+        <p>Wenn du auf dem Smartphone nach unten gescrollt hast und eine Suche oder ein Filter aktiv ist, zeigt ein kleiner Chip oben an, worum es sich handelt. Tippe auf den Chip, um ihn zu ändern. Tippe auf das <strong>✕</strong> darauf, um die Suche und alle Filter zurückzusetzen.</p>
+        <p>Die Schaltfläche neben <strong>Meine Deals</strong> ändert das Erscheinungsbild der Liste: Liste, Raster oder kompakt.</p>
+        <h2>Was ein Beitrag anzeigt</h2>
+        <ul>
+            <li>ein Foto oder das Bild der Kategorie;</li>
+            <li><strong>ANGEBOT</strong> oder <strong>GESUCH</strong>;</li>
+            <li>den Preis in Bohnen, mit <strong>/Std.</strong>, wenn nach Stunden abgerechnet wird;</li>
+            <li><strong>WIEDERKEHREND</strong>, wenn er nach jedem Deal geöffnet bleibt;</li>
+            <li><strong>AUCH BARGELD</strong>, wenn die Person zusätzlich etwas Bargeld benötigt, für Treibstoff oder Material;</li>
+            <li>ein Schloss und einen Gruppennamen, wenn nur diese Gruppe den Beitrag sehen kann;</li>
+            <li>wer ihn veröffentlicht hat, mit dessen Vertrauensabzeichen und Sternen. Ein Mitglied, das noch nicht gehandelt hat, zeigt <strong>GRÜNDER</strong>.</li>
+        </ul>
+        <p>Tippe auf einen Beitrag, um ihn zu öffnen.</p>
+        <h2>Auf einem Beitrag</h2>
+        <ul>
+            <li><strong>Nachricht</strong> und der Name der Person: Stelle eine Frage, bevor du dich festlegst.</li>
+            <li>Tippe auf den Namen der Person, um ihr Profil, ihre Bewertungen und ihr Vertrauen zu sehen.</li>
+            <li><strong>Beitrag melden</strong>, wenn es sich um Betrug, Beleidigung oder Täuschung handelt oder ein Kind gefährdet wird (<strong>Kinderschutz</strong>).</li>
+            <li><strong>Benutzer blockieren</strong>, um die Beiträge und Chats dieser Person auf deinem Smartphone auszublenden. Dies benachrichtigt auch deine Admins. Siehe „Jemanden blockieren“.</li>
+        </ul>
+        <p>In der Web-App lauten die Schaltflächen auf einem Beitrag <strong>💬 Nachricht</strong> und <strong>🚩 Melden</strong>. Blockiere jemanden über dessen Profil.</p>
+        <p>In der globalen Community hat ein Beitrag keinen Preis in Bohnen: Dort steht, was die Person sich als Gegenleistung wünscht. Anstelle des Preises steht „🏘️ In einer lokalen Gemeinschaft ist dies ein Preis in Bohnen ›“. Anstelle der Kaufanfrage zeigt der Beitrag <strong>Anfrage · Bohnen sicher verwahrt 🏘️</strong>: Tippe darauf, um zu sehen, wie ein Deal in einer lokalen Community funktioniert. Nachrichten an die Person funktionieren wie überall sonst. Siehe „Bohnen &amp; globale Community“.</p>
+        <p>Das Speichern oder Teilen eines Beitrags ist derzeit noch nicht möglich.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Startseite</strong><span>Was die Startseite ist, welche Karten sie auf dem Smartphone und im Web zeigt, wie man sie anordnet oder entfernt, Interessen wählen und Datenschutz beim Abmelden.</span></a></li>
+            <li><a href="posting.html"><strong>Angebot oder Gesuch aufgeben</strong><span>Stelle etwas ein, das du tun oder geben kannst, oder etwas, das du suchst.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>Deal Schritt für Schritt</strong><span>Von der Anfrage bis zur Zahlung, für Angebote und Gesuche, und wie man eine Bewertung abgibt.</span></a></li>
+            <li><a href="near-you.html"><strong>Dinge in der Nähe finden</strong><span>Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Vertrauensstufen</strong><span>Neuling, Bewohner, Verwalter und Ältester. Was sie bedeuten und warum sie nichts freischalten.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Bohnen &amp; globale Community</strong><span>Wozu die globale Community dient, eine unter vielen, und was du dort siehst: 🏘️ Lokale Community, Beispieltal, warum Bohnen warten, und wie du lokale Gruppen findest.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

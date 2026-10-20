@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Membres et amis — BeanPool members' guide</title>
+    <meta name="description" content="Trouver des membres de votre communauté, ajouter des amis et parrainer quelqu'un.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Échanges</a></p>
+        <h1>Membres et amis</h1>
+        <p class="lede">Trouver des membres de votre communauté, ajouter des amis et parrainer quelqu'un.</p>
+        <h2>Trouver des personnes</h2>
+        <p>Touchez <strong>Échanges</strong>, puis <strong>Membres</strong>. Dans l'application web, touchez <strong>Membres</strong> dans la rangée d'onglets. Il y a trois boutons :</p>
+        <ul>
+            <li><strong>Amis :</strong> les personnes que vous avez ajoutées.</li>
+            <li><strong>Communauté :</strong> chaque membre. Recherchez par nom. Sur le téléphone, triez par <strong>Récents</strong>, <strong>Nom</strong>, <strong>Amis</strong>, <strong>De confiance</strong> ou <strong>Actifs</strong>. Sur la communauté globale, cela affiche les membres les plus proches de votre zone : saisissez au moins 2 lettres d'un nom pour trouver n'importe qui d'autre.</li>
+            <li><strong>Invitations :</strong> inviter une nouvelle personne. Voir « Rejoindre BeanPool ». Si vous n'avez pas encore adhéré, ce bouton indique <strong>S'inscrire</strong>. Lorsque des personnes ont demandé à rejoindre votre communauté, il indique leur nombre, et elles sont listées sous <strong>Demandes à rejoindre</strong>. Dans l'application web, ce bouton est toujours <strong>🎟️ Invitations</strong>, sans décompte ni liste <strong>Demandes à rejoindre</strong>.</li>
+        </ul>
+        <p>Touchez une personne pour voir son profil : ses évaluations et ses annonces, et, sur le téléphone dans une communauté avec des Beans, son badge de confiance et ses échanges. Voir « Votre profil ».</p>
+        <h2>Amis</h2>
+        <ul>
+            <li>Dans <strong>Communauté</strong>, touchez <strong>+ Ajouter</strong> à côté d'un nom. Il se transforme en <strong>Ajouté</strong>. Touchez <strong>Ajouté</strong> pour retirer cette personne. Dans l'application web, il se transforme en <strong>✓ Ami</strong>, sur lequel vous ne pouvez pas appuyer : pour retirer quelqu'un, utilisez <strong>Retirer</strong> sous <strong>Amis</strong>.</li>
+            <li>Dans <strong>Amis</strong>, touchez le bouton de message pour démarrer une discussion, ou le bouton de suppression, puis <strong>Retirer</strong>, pour retirer quelqu'un.</li>
+            <li>Quand quelqu'un vous ajoute, le haut de <strong>Amis</strong> indique qui, comme « Sam vous a ajouté », avec <strong>Ajouter en retour</strong>. Touchez son nom pour voir d'abord son profil. Il n'y a pas de notification. La ligne disparaît quand vous l'ajoutez en retour, ou après 30 jours. Jusqu'à 20 personnes sont affichées, puis le nombre de personnes restantes.</li>
+            <li>Vous pouvez ajouter jusqu'à 100 personnes par tranche de 24 heures. En retirer compte également. Si vous atteignez cette limite, l'application vous l'indique ainsi que le moment où vous pourrez à nouveau ajouter quelqu'un.</li>
+            <li>Vous ne pouvez pas ajouter une personne que vous avez bloquée : débloquez-la d'abord. Voir « Bloquer quelqu'un ».</li>
+        </ul>
+        <p>Les amis sont un raccourci pour vous. Si vous choisissez <strong>Amis</strong> pour vos coordonnées, seuls vos amis peuvent les voir. Voir « Votre profil ».</p>
+        <p>Personne d'autre ne peut lire votre liste d'amis. La personne que vous ajoutez voit que vous l'avez fait.</p>
+        <h2>Contacts en commun</h2>
+        <p>Le profil d'un membre peut afficher des <strong>contacts en commun</strong> : des personnes à qui vous pouvez demander des renseignements sur ce membre. Une personne y est affichée uniquement lorsque vous êtes mutuellement amis avec quelqu'un qui est lui-même mutuellement ami avec elle. Cela signifie que vous et cette personne vous êtes ajoutés l'un l'autre, et que cette personne et le membre se sont également ajoutés l'un l'autre. Ajouter quelqu'un de votre côté n'y fait jamais apparaître personne, pas plus que si quelqu'un vous ajoute unilatéralement. Jusqu'à 12 contacts sont affichés. Touchez un nom pour voir son profil.</p>
+        <p>Vous pouvez choisir de ne pas apparaître comme contact en commun pour autrui. Dans Paramètres, sous <strong>Mentions légales et confidentialité</strong>, désactivez <strong>M'afficher comme contact en commun</strong>. Personne ne voit alors votre nom à cet endroit, et vous n'êtes pas comptabilisé. Cette option est activée tant que vous ne la désactivez pas. Voir « Confidentialité ».</p>
+        <h2>Se porter garant pour quelqu'un</h2>
+        <p>Certains membres sont choisis par la communauté pour accueillir les nouveaux arrivants. Ils peuvent se porter garants pour un nouveau membre, ce qui lui accorde une petite ligne de crédit de départ. Sur le profil de la personne, ils touchent <strong>Se porter garant pour le membre</strong> et choisissent <strong>Léger</strong> (25), <strong>Standard</strong> (50) ou <strong>Étendu</strong> (100). Aucun Bean ne quitte le portefeuille du garant.</p>
+        <p>La désignation des personnes autorisées à se porter garantes relève d'un administrateur ou d'une Décision de la communauté, jamais d'un badge. Voir « Règles et décisions ».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Messages</strong><span>Lancer une discussion, envoyer des photos, répondre, réagir, modifier, supprimer, mettre en sourdine et ce qui reste privé.</span></a></li>
+            <li><a href="your-profile.html"><strong>Votre profil</strong><span>Votre nom, photo, quelques mots sur vous et qui peut voir vos coordonnées.</span></a></li>
+            <li><a href="joining.html"><strong>Rejoindre BeanPool</strong><span>Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.</span></a></li>
+            <li><a href="blocking.html"><strong>Bloquer quelqu'un</strong><span>Masquer les publications et messages d'une personne, et annuler ce blocage plus tard.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

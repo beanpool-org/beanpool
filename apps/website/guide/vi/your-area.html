@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khu vực bạn — BeanPool members' guide</title>
+    <meta name="description" content="Vị trí ước tính cộng đồng toàn cầu dùng để hiển thị các bài đăng ở gần bạn và cách đổi hoặc xóa.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Cài đặt và an toàn</a></p>
+        <h1>Khu vực bạn</h1>
+        <p class="lede">Vị trí ước tính cộng đồng toàn cầu dùng để hiển thị các bài đăng ở gần bạn và cách đổi hoặc xóa.</p>
+        <h2>Khu vực của bạn là gì</h2>
+        <p>Trên cộng đồng toàn cầu, khu vực của bạn là vị trí ước chừng nơi bạn đang ở: khoảng 10 km xung quanh một thị trấn hoặc một địa điểm, không bao giờ là vị trí chính xác của bạn. Cộng đồng toàn cầu sử dụng thông tin này để hiển thị cho bạn những gì đang được cung cấp ở gần bạn: 500 tin đăng gần nhất trong phạm vi 250 km xung quanh khu vực đó. Xem &quot;Nhiều hơn một cộng đồng&quot;.</p>
+        <p>Bạn cung cấp thông tin này khi tham gia, tại mục <strong>Bạn đang ở khoảng đâu?</strong>, bạn có thể bỏ qua bước này bằng <strong>Để sau</strong>. Bạn có thể thay đổi hoặc xóa thông tin này bất cứ lúc nào. Nó thuộc về tài khoản của bạn trong cộng đồng toàn cầu, vì vậy điện thoại của bạn và ứng dụng web đều dùng chung một khu vực.</p>
+        <p>Các cộng đồng khác của bạn không yêu cầu thông tin này. Một cộng đồng có máy chủ được thiết lập để hoạt động theo cách tương tự cũng sẽ hiển thị <strong>Khu vực của bạn</strong> trong Cài đặt của nó.</p>
+        <h2>Xem khu vực của bạn</h2>
+        <ul>
+            <li>Mở Cài đặt: nhấn vào nút có biểu tượng các thanh trượt ở góc trên bên phải màn hình (trên màn hình máy tính rộng, đó là biểu tượng bánh răng ở thanh bên trái).</li>
+            <li>Dưới mục <strong>Cài đặt ứng dụng</strong>, nhấn <strong>Khu vực của bạn</strong>. Trên điện thoại, mục này nằm ngay dưới <strong>Vị trí</strong>.</li>
+        </ul>
+        <p>Mục này sẽ ghi <strong>Khoảng 10 km quanh</strong> cùng thị trấn bạn đã nhập, hoặc hai con số nếu bạn đã sử dụng vị trí của mình, hoặc <strong>Chưa đặt</strong>. Tên của thị trấn chỉ được lưu trên điện thoại hoặc trong trình duyệt nơi bạn đã nhập, vì vậy ở những nơi khác bạn sẽ thấy hai con số. Nếu ứng dụng không thể kết nối tới cộng đồng, hàng đó sẽ ghi <strong>Không thể kiểm tra ngay bây giờ</strong>.</p>
+        <h2>Thay đổi khu vực</h2>
+        <ul>
+            <li>Trong <strong>Khu vực của bạn</strong>, dưới mục <strong>Bạn đang ở khoảng đâu?</strong>, nhấn <strong>Dùng vị trí của tôi</strong>, hoặc <strong>Nhập tên thị trấn hoặc khu phố</strong> và chọn thị trấn của bạn từ danh sách.</li>
+            <li>Khi đã lưu xong, bạn sẽ quay lại Cài đặt.</li>
+            <li><strong>Hủy</strong> (trong trình duyệt là <strong>← Quay lại Cài đặt</strong>) sẽ giữ nguyên như cũ.</li>
+        </ul>
+        <p>Điện thoại hoặc trình duyệt của bạn sẽ làm tròn vị trí đến khoảng 10 km trước khi gửi đi, và cộng đồng sẽ làm tròn lại một lần nữa, vì vậy vị trí chính xác của bạn không bao giờ được gửi đi hay lưu giữ. <strong>Dùng vị trí của tôi</strong> sẽ lấy một lần đọc vị trí hiện tại của bạn. Để tìm một thị trấn, nội dung bạn nhập sẽ được gửi đến OpenStreetMap, nơi cung cấp danh sách địa điểm.</p>
+        <p>Khi khu vực của bạn thay đổi, điện thoại của bạn sẽ hoán đổi các tin đăng mà nó lưu giữ lấy các tin ở gần khu vực mới trong lần đồng bộ tiếp theo. Nếu bạn thay đổi khu vực trong ứng dụng web hoặc trên một điện thoại khác, điện thoại của bạn sẽ cập nhật trong khoảng một giờ.</p>
+        <h2>Xóa khu vực</h2>
+        <ul>
+            <li>Trong <strong>Khu vực của bạn</strong>, nhấn <strong>Xóa</strong>. Nút này chỉ xuất hiện khi bạn đang có một khu vực.</li>
+        </ul>
+        <p>Nếu không có khu vực, bạn vẫn sử dụng cộng đồng toàn cầu như trước. Điện thoại của bạn lưu giữ 100 tin đăng mới nhất từ mọi nơi thay vì các tin ở gần bạn, và một dòng phía trên Chợ thông báo <strong>Bạn đang xem các bài đăng mới nhất trên toàn thế giới. Đặt khu vực của bạn để xem những gì ở gần bạn.</strong> Nhấn vào đó để thiết lập khu vực. Trong ứng dụng web, Chợ và Bản đồ hiển thị những tin mới nhất từ mọi nơi: xem &quot;Tìm kiếm thứ ở gần bạn&quot;.</p>
+        <h2>Ai thấy những gì</h2>
+        <ul>
+            <li>Các thành viên khác thấy bạn ở cách bao xa, và một cuộc khảo sát bạn tạo sẽ được hiển thị tại khu vực của bạn. Xem &quot;Quyền riêng tư&quot;.</li>
+            <li>Nếu không có khu vực, các thành viên ở gần sẽ không thấy cuộc khảo sát bạn tạo trong danh sách của họ, mặc dù họ vẫn có thể tìm thấy cuộc khảo sát bằng cách tìm kiếm.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="communities.html"><strong>Nhiều hơn một cộng đồng</strong><span>Thuộc về nhiều cộng đồng với một tài khoản, chuyển đổi qua lại, theo dõi cộng đồng đến địa chỉ mới và xem những gì cộng đồng toàn cầu hiển thị.</span></a></li>
+            <li><a href="privacy.html"><strong>Quyền riêng tư</strong><span>Những gì người khác có thể thấy về bạn và các cài đặt để kiểm soát điều đó.</span></a></li>
+            <li><a href="near-you.html"><strong>Tìm kiếm thứ ở gần bạn</strong><span>Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.</span></a></li>
+            <li><a href="joining.html"><strong>Tham gia BeanPool</strong><span>Hai cách tham gia: cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu khi mở, bằng 12 từ bí mật hoặc đăng nhập. Xin gia nhập và mời người khác.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Xem qua chợ</strong><span>Tìm Lời đề nghị và Nhu cầu bằng tìm kiếm, bộ lọc và khoảng cách.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>निर्णय पर मतदान — BeanPool members' guide</title>
+    <meta name="description" content="खुले निर्णय खोजें, वोट करें, अपना वोट बदलें, और परिणाम देखें।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">साझा</a></p>
+        <h1>निर्णय पर मतदान</h1>
+        <p class="lede">खुले निर्णय खोजें, वोट करें, अपना वोट बदलें, और परिणाम देखें।</p>
+        <h2>Where</h2>
+        <p><strong>साझा</strong> पर टैप करें, फिर <strong>निर्णय लें</strong> पर। खुले निर्णय <strong>सक्रिय निर्णय</strong> के अंतर्गत होते हैं।</p>
+        <p>एक निर्णय बाध्यकारी होता है: यदि यह पारित हो जाता है, तो आपके समुदाय का सर्वर इसे स्वयं पूरा करता है। कोई व्यवस्थापक केवल एक लिखित कारण देकर ही इसे रोक सकता है जिसे सदस्य पढ़ सकें। कौन वोट कर सकता है, कितनी भागीदारी की आवश्यकता है और कितने 'हाँ' की आवश्यकता है, इसके नियम &quot;नियम और निर्णय कैसे काम करते हैं&quot; में हैं।</p>
+        <p>वैश्विक समुदाय में कोई निर्णय नहीं होते हैं। कोई भी 12 शब्दों या साइन-इन के साथ इसमें शामिल हो सकता है, इसलिए कई खातों वाला एक व्यक्ति वहाँ वोट को प्रभावित कर सकता है। इसके मॉडरेटर इसके बजाय इसकी देखभाल करते हैं: &quot;समस्या की रिपोर्ट करना&quot; देखें। निर्णय स्थानीय समुदायों के होते हैं। पोल अभी भी हर जगह काम करते हैं।</p>
+        <p>वैश्विक समुदाय पर, <strong>साझा</strong> किसी स्थानीय समुदाय का एक उदाहरण निर्णय दिखाता है, जिस पर <strong>🏘️ Local community</strong> अंकित होता है, ताकि आप देख सकें कि यह कैसे काम करता है। इसके <strong>'हाँ' में वोट दें</strong> और <strong>'ना' में वोट दें</strong> बटन बताते हैं कि मतदान स्थानीय समुदाय में क्यों होता है, और कोई वोट नहीं डालते हैं। &quot;फलियाँ और वैश्विक समुदाय&quot; देखें।</p>
+        <h2>Reading a Decision</h2>
+        <p>प्रत्येक निर्णय दिखाता है:</p>
+        <ul>
+            <li>यह किस बारे में है, और यदि यह पारित होता है तो क्या होगा;</li>
+            <li>वोटों की गणना कैसे की जाती है: एक सदस्य एक वोट, या साझा की फलियों के बारे में निर्णयों के लिए वॉयस क्रेडिट;</li>
+            <li>कितना समय शेष है। मतदान 7 दिनों तक चलता है;</li>
+            <li><strong>भागीदारी:</strong> इसे कितने वोटों की आवश्यकता है, और क्या इसे अभी तक वे मिल चुके हैं;</li>
+            <li><strong>गणना:</strong> अब तक के हाँ और ना, और इसे कितने हाँ की आवश्यकता है।</li>
+        </ul>
+        <h2>Voting</h2>
+        <ul>
+            <li><strong>'हाँ' में वोट दें</strong> या <strong>'ना' में वोट दें</strong> पर टैप करें। फ़ोन पर, ऐप कहता है <strong>वोट दर्ज कर लिया गया</strong>। वेब ऐप में, कार्ड अपडेट हो जाता है।</li>
+            <li>कार्ड तब बताता है कि आपने क्या वोट दिया, जैसे &quot;आपने 'हाँ' में वोट दिया&quot;।</li>
+            <li>इसके बंद होने से पहले अपना विचार बदलने के लिए, दूसरे बटन पर टैप करें, जैसे कि <strong>'ना' में बदलें</strong>।</li>
+        </ul>
+        <p>प्रत्येक निर्णय एक <strong>गुप्त मतदान</strong> होता है। सदस्य कुल संख्या देखते हैं, कभी यह नहीं कि किसने किस तरह वोट दिया। आपका अपना वोट केवल आपको दिखाया जाता है।</p>
+        <h2>Decisions about the Commons' beans</h2>
+        <p>ये <strong>वॉयस क्रेडिट</strong> का उपयोग करते हैं। आपको अपने पूरे किए गए व्यापारों से वॉयस क्रेडिट मिलते हैं, प्रत्येक निर्णय के लिए नए सिरे से। कितने वोट देने हैं यह चुनने के लिए <strong>−</strong> और <strong>+</strong> का उपयोग करें। अधिक वोटों की लागत अधिक होती है: 2 वोटों की लागत 4 क्रेडिट होती है, 3 वोटों की लागत 9 होती है।</p>
+        <p>यदि आपने अभी तक कोई व्यापार पूरा नहीं किया है, तो आप इन पर वोट नहीं कर सकते। आप अभी भी अन्य निर्णयों पर वोट कर सकते हैं, बशर्ते आप उनके खुलने से पहले शामिल हुए हों और आपका क्रेडिट फ़्रीज़ न हो।</p>
+        <h2>Results</h2>
+        <p><strong>निर्णयों का इतिहास</strong> पर टैप करें। <strong>सभी</strong>, <strong>लागू किया गया</strong>, <strong>विफल</strong> या <strong>रद्द</strong> चुनें। प्रत्येक अंतिम भागीदारी और गणना दिखाता है, और क्या हुआ, उदाहरण के लिए बहुत कम लोगों ने वोट दिया।</p>
+        <h2>More</h2>
+        <p>साझा की फलियाँ और मतदान कैसे काम करते हैं, इसके लिए फ़ोन पर, साझा शीर्षक के पास <strong>ⓘ</strong> पर टैप करें। वेब ऐप में, <strong>खाता</strong> खोलें, <strong>वॉलेट</strong> पर टैप करें, फिर <strong>कॉमन्स पूल ⓘ</strong> पर।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>निर्णय का प्रस्ताव</strong><span>समुदाय से किसी बाध्यकारी बात पर निर्णय लेने के लिए कहें।</span></a></li>
+            <li><a href="rules.html"><strong>नियम और निर्णय कैसे होते हैं</strong><span>मतदान, उपस्थिति, गुप्त मतदान, कौन वोट कर सकता है, निलंबन, सदस्य को हटाना, व्यवस्थापक, और संयोजक व मुख्य संयोजक।</span></a></li>
+            <li><a href="polls.html"><strong>मतसंग्रह</strong><span>समुदाय से एक त्वरित प्रश्न पूछें। पोल राय दिखाते हैं; वे स्वयं कुछ भी नहीं बदलते।</span></a></li>
+            <li><a href="commons-fund.html"><strong>साझा कोष</strong><span>आपके समुदाय की साझा फलियाँ: वे कहाँ से आती हैं, और उन्हें कैसे खर्च किया जाता है।</span></a></li>
+            <li><a href="the-top-bar.html"><strong>शीर्ष पट्टी</strong><span>फली, छोटे आइकन जो दिखाते हैं कि कब किसी चीज़ को आपकी ज़रूरत है, और ऊपर दाईं ओर के बटन।</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>फलियाँ और वैश्विक समुदाय</strong><span>वैश्विक समुदाय किसलिए है, कई में से एक समुदाय, और आप वहाँ क्या देखते हैं: 🏘️ समुदाय मार्कर, उदाहरण समुदाय Example Valley, फलियाँ वहाँ क्यों प्रतीक्षा करती हैं, और स्थानीय समुदाय कैसे खोजें या शुरू करें।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

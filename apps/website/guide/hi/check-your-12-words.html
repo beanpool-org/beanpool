@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>आपके 12 शब्द और सर्वर की कुंजियाँ (स्वामी) — BeanPool members' guide</title>
+    <meta name="description" content="समुदाय के स्वामियों के लिए। अपने 12 शब्दों की जांच करना, अपने फ़ोन से सर्वर का कार्यभार संभालना या पुनर्स्थापित करना, और वह जांच जो आपका फ़ोन स्वयं करता है।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">सेटिंग्स और सुरक्षा</a></p>
+        <h1>आपके 12 शब्द और सर्वर की कुंजियाँ (स्वामी)</h1>
+        <p class="lede">समुदाय के स्वामियों के लिए। अपने 12 शब्दों की जांच करना, अपने फ़ोन से सर्वर का कार्यभार संभालना या पुनर्स्थापित करना, और वह जांच जो आपका फ़ोन स्वयं करता है।</p>
+        <h2>Who this is for</h2>
+        <p>केवल एक समुदाय के <strong>स्वामी</strong>। यदि आप स्वामी नहीं हैं, तो आप इसमें से कुछ भी नहीं देखेंगे।</p>
+        <h2>Why owners are asked</h2>
+        <p>आपके समुदाय का सर्वर अपनी कुंजियों की एक लॉक की गई प्रति रखता है, ताकि समुदाय के खो जाने की स्थिति में उसे किसी अन्य सर्वर पर ले जाया जा सके, और इसके बैकअप भी लॉक होते हैं। वे स्वामियों के खातों से लॉक होते हैं: कोई भी एक स्वामी अपने फ़ोन से उन्हें खोल सकता है (नीचे &quot;अपने फ़ोन से नियंत्रण लेना या पुनर्स्थापित करना&quot; देखें)। यदि आप अपना फ़ोन खो देते हैं, तो आपके 12 शब्द आपके खाते को वापस लाते हैं, और इसके साथ ही सर्वर के लॉक और उसके बैकअप की आपकी कुंजी भी वापस आ जाती है। यह उस दिन सबसे अधिक मायने रखता है जब सर्वर स्वयं चला जाता है।</p>
+        <p>इसलिए ऐप प्रत्येक स्वामी से, समय-समय पर, यह जांचने के लिए कहता है कि क्या उनके पास अभी भी सही 12 शब्द हैं। आप <strong>बाद में</strong> कह सकते हैं। कभी भी कुछ भी अवरुद्ध नहीं होता है, और आप वह सब कुछ करना जारी रख सकते हैं जो एक स्वामी करता है।</p>
+        <h2>When the app asks</h2>
+        <ul>
+            <li>एक बार, आपके स्वामी बनने के तुरंत बाद।</li>
+            <li>आपकी पिछली जांच के 12 महीने बाद फिर से।</li>
+        </ul>
+        <p>यह बाज़ार के शीर्ष पर एक कार्ड दिखाता है (वेब ऐप में, नक्शे को छोड़कर हर स्क्रीन के शीर्ष पर): <strong>अभी जांचें</strong> या <strong>बाद में</strong>। <strong>बाद में</strong> कार्ड को अगली बार आने तक हटा देता है। आप <strong>सेटिंग्स</strong> से किसी भी समय जांच कर सकते हैं: <strong>समुदाय चाबियां</strong> के तहत, <strong>अपने 12 शब्द जांचें</strong> पर टैप करें (वेब ऐप में, <strong>अभी जांचें</strong>)।</p>
+        <h2>How to check</h2>
+        <ul>
+            <li>12 शब्दों वाला अपना कागज़ प्राप्त करें।</li>
+            <li>उनके बीच रिक्त स्थान देकर उन्हें क्रम से टाइप करें। बड़े अक्षर और अतिरिक्त स्थान मायने नहीं रखते।</li>
+            <li><strong>मेरे शब्द जाँचें</strong> पर टैप करें।</li>
+        </ul>
+        <p>यदि वे सही हैं, तो ऐप कहता है <strong>ये सही शब्द हैं।</strong> यदि नहीं: <strong>ये इस खाते के शब्द नहीं हैं।</strong> यह यह नहीं बताता कि कौन सा शब्द गलत है, इसलिए कागज़ की जांच करें और उन सभी को फिर से टाइप करें।</p>
+        <p>बिना अपने 12 शब्दों की प्रतिलिपि वाले फ़ोन पर (साइन-इन खाते से पुनर्स्थापित किया गया फ़ोन), सही शब्द <strong>उन्हें इस फ़ोन पर सहेजें</strong> भी लाते हैं। उस पर टैप करें और <strong>रिकवरी वाक्यांश देखें</strong> तब से उन्हें दिखाता है। यह वही जांच और वही सहेजना है जो <strong>अपने 12 शब्द इस फ़ोन में जोड़ें</strong> के रूप में है (&quot;आपके 12 शब्द&quot; देखें)।</p>
+        <p>उन्हें नहीं ढूंढ पा रहे हैं? यदि इस फ़ोन में अभी भी वे हैं, तो <strong>सेटिंग्स</strong>, फिर <strong>रिकवरी वाक्यांश देखें</strong>, उन्हें दिखाता है। उन्हें फिर से लिख लें, फिर जांचें। बिना किसी प्रतिलिपि वाले फ़ोन पर, ऐप ऐसा कहता है: जब आप उन्हें ढूंढ लें, तो यहाँ उनकी जांच करें, फिर उन्हें सहेजें।</p>
+        <h2>What is sent, and what is not</h2>
+        <ul>
+            <li>जांच आपके फ़ोन पर होती है (या वेब ऐप में आपके ब्राउज़र में)। आपके शब्द कभी कहीं नहीं भेजे जाते। जैसे ही जांच उत्तर देती है, और जब आप स्क्रीन छोड़ते हैं, तो बॉक्स खाली हो जाता है। वे केवल तभी सहेजे जाते हैं जब आप <strong>उन्हें इस फ़ोन पर सहेजें</strong> पर टैप करते हैं, और तब केवल इसी फ़ोन पर।</li>
+            <li>जब शब्द सही होते हैं, तो आपका फ़ोन आपके समुदाय के सर्वर को केवल यह बताता है कि आपने जांच की, और कब की, आपके खाते से हस्ताक्षरित।</li>
+            <li>स्वामी और व्यवस्थापक सर्वर की सेटिंग्स में, प्रत्येक स्वामी की &quot;12 शब्द जाँचे गए&quot; तिथि, या &quot;अभी तक नहीं&quot; देखते हैं। यह आपका अपना बयान है: सर्वर आपके शब्दों को देख या जांच नहीं सकता है।</li>
+        </ul>
+        <h2>Taking over or restoring with your phone</h2>
+        <p>यदि आपके समुदाय का सर्वर खो जाता है, तो जो कोई भी इसका स्टैंडबाय सर्वर चलाता है (या बैकअप पुनर्स्थापित करने वाला एक नया सर्वर) किसी स्वामी से लॉक की गई चाबियाँ खोलने के लिए कह सकता है। कोई भी एक स्वामी पर्याप्त है। आपको BeanPool ऐप के नवीनतम संस्करण की आवश्यकता होगी। यदि वेब ऐप अभी भी खुलता है तो वह भी काम करता है, लेकिन वह आपके समुदाय के अपने पते पर रहता है, जो सर्वर के साथ बंद हो सकता है: फ़ोन ऐप वह है जिस पर भरोसा किया जा सकता है।</p>
+        <ul>
+            <li>सर्वर की सेटिंग्स पर, वे <strong>मुख्य सर्वर के रूप में नियंत्रण लें</strong> चुनते हैं, फिर <strong>मैं समझता हूँ: स्वामी के फ़ोन का उपयोग करें</strong>, या बैकअप पुनर्स्थापित करते समय <strong>स्वामी के फ़ोन से खोलें</strong> चुनते हैं। उनकी स्क्रीन पर एक कोड दिखाई देता है।</li>
+            <li>ऐप में: <strong>सेटिंग्स</strong>, <strong>समुदाय चाबियां</strong> के तहत, <strong>इस फ़ोन से नियंत्रण लें या पुनर्स्थापित करें</strong> पर टैप करें, और कैमरे को कोड की ओर इंगित करें। यदि सर्वर का पेज आपके अपने फ़ोन पर खुला है, तो उसके लिंक पर टैप करने से वही होता है। वेब ऐप में, उनकी स्क्रीन से लिंक कॉपी करें और इसे <strong>सेटिंग्स</strong> में <strong>इस ब्राउज़र से नियंत्रण लें या पुनर्स्थापित करें</strong> के तहत पेस्ट करें।</li>
+            <li>ऐप दिखाता है कि कौन सा समुदाय, कौन सा सर्वर, और क्या होगा। यदि आपका मुख्य सर्वर अभी भी उत्तर देता है, तो यह लाल रंग में ऐसा कहता है: टेक-ओवर केवल उसी सर्वर के लिए है जो वास्तव में चला गया है।</li>
+            <li><strong>टेक-ओवर के लिए अनलॉक करें</strong> (या <strong>बैकअप अनलॉक करें</strong>) पर टैप करें। आपका फ़ोन पहले अपना स्वयं का अनलॉक मांगता है: फ़िंगरप्रिंट, चेहरा या पिन। वेब ऐप में ऐसा कोई चरण नहीं है, यही कारण है कि किसी स्वामी की कुंजी के लिए फ़ोन ऐप अधिक सुरक्षित स्थान है।</li>
+            <li>आपका फ़ोन लॉक का अपना हिस्सा खोलता है और उस सर्वर को कुंजी सौंप देता है, जो लॉक होती है ताकि केवल वही सर्वर इसे पढ़ सके। आपका फ़ोन कभी भी सर्वर की चाबियों या बैकअप को नहीं देखता है।</li>
+            <li>टेक-ओवर पर, सर्वर पर मौजूद व्यक्ति अपनी स्क्रीन पर पुष्टि करता है। समुदाय को बताया जाता है कि यह स्थानांतरित हो गया है, और आपने चाबियां खोली हैं।</li>
+        </ul>
+        <p>यदि लॉक किसी अन्य समुदाय का है, यदि यह आपके लिए लॉक नहीं है, यदि सर्वर का कोड समाप्त हो गया है (यह 10 मिनट तक रहता है और एक बार काम करता है), या यदि चाबियां आपके समुदाय के अपने सर्वर द्वारा लॉक नहीं की गई थीं, तो ऐप मना कर देता है और कारण बताता है।</p>
+        <h2>Your phone checks the lock by itself</h2>
+        <p>हर बार जब आपके समुदाय का लॉक बदलता है (एक स्वामी जोड़ा या हटाया जाता है, एक नया रिकवरी कोड बनाया जाता है), तो आपका ऐप चुपचाप जांचता है कि क्या वह अभी भी अपना हिस्सा खोल सकता है। यह इसे खोलता है, कुंजी को तुरंत हटा देता है, और सर्वर को बताता है कि क्या इसने काम किया। आपसे कुछ भी नहीं पूछा जाता है।</p>
+        <p>स्वामी और व्यवस्थापक इसे सर्वर की सेटिंग्स में, आपके 12 शब्दों की तिथि के बगल में देखते हैं: <strong>उनके फ़ोन ने वर्तमान लॉक को खोला</strong>, तिथि के साथ, या यह कि इसने पिछली बार किसी पुराने लॉक को खोला था। यदि यह कहता है कि आपका फ़ोन लॉक को <strong>नहीं खोल सका</strong>, तो अपने 12 शब्दों की जांच करें, और किसी अन्य स्वामी से सर्वर की सेटिंग्स देखने के लिए कहें।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>आपके 12 शब्द</strong><span>12 शब्द आपके खाते की कुंजी हैं। वे क्यों महत्वपूर्ण हैं, उन्हें कहाँ खोजें, उन्हें सुरक्षित कैसे रखें, और वापसी के दूसरे रास्ते के रूप में साइन-इन जोड़ना।</span></a></li>
+            <li><a href="recovery.html"><strong>अपना खाता वापस पाना</strong><span>नए फ़ोन पर अपना खाता पुनर्स्थापित करें, और इसे साइन-इन खाते से सुरक्षित रखें।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

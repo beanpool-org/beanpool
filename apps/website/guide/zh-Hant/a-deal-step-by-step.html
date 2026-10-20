@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交易步驟詳解 — BeanPool members' guide</title>
+    <meta name="description" content="從發起詢問到完成付款，針對提供與需求的流程，以及留下評價。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市集</a></p>
+        <h1>交易步驟詳解</h1>
+        <p class="lede">從發起詢問到完成付款，針對提供與需求的流程，以及留下評價。</p>
+        <h2>核心概念</h2>
+        <p>當一筆交易開始時，付款方的豆子會<strong>受託保管</strong>。任何人都無法支出處於保管狀態的豆子。當工作完成後，付款方釋放這筆豆子，對方隨即收到款項。部分畫面稱這些豆子為「信用點」；兩者指的是相同的東西。</p>
+        <p>在任何 24 小時內，你最多可以請求、接受或核准 100 筆交易。你付款的交易也算作你每天 100 筆付款之一（參見「贈送豆子」）。釋放豆子、取消交易以及收款則絕不受限。</p>
+        <h2>接受他人的「提供」</h2>
+        <ul>
+            <li>開啟該「提供」並點擊<strong>接受提供</strong>。</li>
+            <li>如果是按小時收費，請輸入需要多少小時。</li>
+            <li>點擊<strong>確認</strong>。你的豆子會立即進入保管狀態，並通知賣家。無需等待賣家同意。</li>
+            <li>與賣家的聊天室隨即開啟。雙方商定時間與地點。</li>
+        </ul>
+        <p>你需要先發布過至少一則自己的「提供」。如果你尚未發布過，應用程式會提供<strong>建立提供</strong>。</p>
+        <h2>協助滿足他人的「需求」</h2>
+        <ul>
+            <li>開啟該「需求」並點擊<strong>提議滿足需求</strong>，然後點擊<strong>確認</strong>。</li>
+            <li>由發布者決定是否接受。在此之前，你可以點擊<strong>撤回申請</strong>。若對方在 7 天內未作回應，該請求會自動終止，且雙方都會收到通知。</li>
+            <li>發布者可在<strong>申請協助人數</strong>下方看到你的請求，並可選擇與你<strong>傳送訊息</strong>、<strong>拒絕</strong>或<strong>核准並預存</strong>。</li>
+            <li>當發布者核准時，對方的豆子會進入保管狀態。除非該刊登設為「可重複」，否則提出協助的其他所有人都會看到其請求標記為已婉拒。</li>
+        </ul>
+        <p>在網頁版應用程式中，<strong>撤回申請</strong>顯示為<strong>取消提供</strong>，<strong>核准並預存</strong>顯示為<strong>核准並存入託管</strong>。發布需求的人在該處只能選擇<strong>拒絕</strong>或核准：申請項目上沒有<strong>訊息</strong>按鈕。</p>
+        <h2>豆子受託保管期間</h2>
+        <p>雙方都會看到可供溝通的<strong>訊息</strong>按鈕，以及用以取消交易的<strong>取消代管</strong>。在網頁版應用程式中，只有非刊登發布者才能看到<strong>訊息</strong>，且取消按鈕為<strong>取消託管</strong>。</p>
+        <ul>
+            <li>完成工作，或移交物品。</li>
+            <li>付款方點擊<strong>撥付信用額度</strong>，然後再次點擊<strong>撥付信用額度</strong>進行確認。對於計時工作，付款方需先輸入實際工時。如果工時較少，剩餘豆子將退還給付款方。如果工時較多，則會從付款方扣除額外豆子。每一小時均按照成立交易時的費率支付。</li>
+            <li>賣家立即收到款項，扣除 1.5% 市集手續費（撥入你社群的公共板塊）。</li>
+        </ul>
+        <p>只有付款方才能釋放豆子。沒有時間限制：豆子將持續保持保管狀態，直到被釋放或交易被取消為止。一週後，以及之後的每週，付款方都會收到提醒。</p>
+        <p>當有人提出請求或豆子處於保管狀態時，刊登上的價格無法變更。該筆交易保留達成時的約定價格。若要變更價格，發布者需先婉拒或取消該交易。</p>
+        <h2>「可重複」刊登</h2>
+        <p>「可重複」刊登在每筆交易完成後會重新上架，且多個人可以同時對其進行交易。任何其他刊登則會標記為已結束。</p>
+        <h2>留下評價</h2>
+        <p>釋放豆子後，系統會提示付款方對該筆交易進行評分：1 到 5 顆星，以及一段簡短的選填評語。點擊<strong>送出評價</strong>，或點擊<strong>暫時略過</strong>。</p>
+        <p>雙方稍後亦可進行評分：在已結束的刊登（不包括會重新上架的「可重複」刊登）上點擊<strong>評分</strong>與姓名，或在「我的交易」的「歷史紀錄」中點擊<strong>檢查</strong>（在網頁版應用程式中為<strong>留下評價</strong>）。你可以修改評分；新的評分將取代舊評分。</p>
+        <p>你社群中的每個人都能閱讀評價的星級與文字。只有參與該交易的兩個人才能看到是誰撰寫的，以及這則評價針對的是哪筆交易。</p>
+        <p>星級評分至關重要。偏低的平均評分會減少對方從其交易中賺得的信任。請公正評價。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>我的交易</strong><span>集中管理你參與的每一筆交易、發布的每一則刊登以及過去的交易紀錄。</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>交易出現問題時</strong><span>取消交易，以及雙方無法達成共識時該如何處理。</span></a></li>
+            <li><a href="posting.html"><strong>發布提供或需求</strong><span>發布你能做或能給予的事情，或者你正在尋找的東西。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool 運作方式</strong><span>用通俗的話解釋豆子、交易、提供與需求以及信用。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

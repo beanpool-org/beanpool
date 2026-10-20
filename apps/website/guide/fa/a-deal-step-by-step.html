@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fa by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مراحل گام‌به‌گام یک معامله — BeanPool members' guide</title>
+    <meta name="description" content="از درخواست تا پرداخت، برای پیشنهاد و نیاز، و ثبت بازخورد.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">بازار</a></p>
+        <h1>مراحل گام‌به‌گام یک معامله</h1>
+        <p class="lede">از درخواست تا پرداخت، برای پیشنهاد و نیاز، و ثبت بازخورد.</p>
+        <h2>ایده کلی</h2>
+        <p>هنگامی که معامله‌ای شروع می‌شود، لوبیاهای فرد پرداخت‌کننده <strong>به صورت امانی نگهداری می‌شوند</strong>. هیچ‌کس نمی‌تواند لوبیاهای نگهداری‌شده را خرج کند. هنگامی که کار انجام شد، پرداخت‌کننده آن‌ها را آزاد می‌کند و به طرف مقابل پرداخت می‌شود. صفحه‌های برنامه در چند جا لوبیاها را «اعتبار» می‌نامند؛ هر دو به یک معنا هستند.</p>
+        <p>می‌توانید در هر ۲۴ ساعت تا ۱۰۰ معامله را درخواست کنید، بپذیرید یا تأیید کنید. معامله‌ای که بابت آن پرداخت می‌کنید نیز یکی از ۱۰۰ پرداخت روزانه شما محسوب می‌شود («ارسال هدیه» را ببینید). آزادسازی لوبیا، لغو کردن و دریافت پرداخت هرگز محدودیت ندارند.</p>
+        <h2>پذیرش پیشنهاد یک فرد</h2>
+        <ul>
+            <li>پیشنهاد را باز کنید و روی <strong>پذیرش پیشنهاد</strong> بزنید.</li>
+            <li>اگر قیمت‌گذاری آن ساعتی است، مشخص کنید چند ساعت.</li>
+            <li>روی <strong>تأیید</strong> بزنید. لوبیاهای شما فوراً به صورت امانی نگهداری می‌شوند و به فروشنده اطلاع داده می‌شود. نیازی به انتظار برای پاسخ مثبت فروشنده نیست.</li>
+            <li>گفتگویی با فروشنده باز می‌شود. بر سر زمان و مکان توافق کنید.</li>
+        </ul>
+        <p>ابتدا باید پیشنهادی از خودتان ثبت کرده باشید. اگر ثبت نکرده‌اید، برنامه گزینه <strong>ایجاد یک پیشنهاد</strong> را پیشنهاد می‌دهد.</p>
+        <h2>کمک به برآوردن نیاز یک فرد</h2>
+        <ul>
+            <li>نیاز را باز کنید و روی <strong>پیشنهاد برای انجام</strong>، سپس <strong>تأیید</strong> بزنید.</li>
+            <li>شخصی که آن را ثبت کرده تصمیم می‌گیرد. تا آن زمان می‌توانید روی <strong>پس گرفتن درخواست</strong> بزنید. اگر ظرف ۷ روز پاسخ ندهند، درخواست خودبه‌خود پایان می‌یابد و به هر دوی شما اطلاع داده می‌شود.</li>
+            <li>آن‌ها درخواست شما را زیر <strong>درخواست‌های انجام</strong> می‌بینند، و می‌توانند به شما <strong>پیام</strong> دهند، آن را <strong>رد</strong> کنند یا روی <strong>تأیید و تعهد</strong> بزنند.</li>
+            <li>هنگامی که تأیید می‌کنند، لوبیاهای آن‌ها به صورت امانی نگهداری می‌شود. مگر اینکه پست تکرارشونده باشد، هر کس دیگری که پیشنهاد داده بود، درخواست خود را ردشده می‌بیند.</li>
+        </ul>
+        <p>در برنامه تحت وب، <strong>پس گرفتن درخواست</strong> با عنوان <strong>لغو پیشنهاد</strong> و <strong>تأیید و تعهد</strong> با عنوان <strong>تأیید و نگهداری در امانت</strong> آمده است. شخصی که نیاز را ثبت کرده در آنجا فقط می‌تواند <strong>رد</strong> یا تأیید کند: یک درخواست دکمه <strong>پیام</strong> ندارد.</p>
+        <h2>در مدت نگهداری امانی لوبیاها</h2>
+        <p>هر دوی شما دکمه <strong>پیام</strong> را برای گفتگو، و <strong>لغو نگهداری در امانت</strong> را برای لغو آن می‌بینید. در برنامه تحت وب، فقط شخصی که آگهی را ثبت نکرده است دکمه <strong>پیام</strong> را می‌بیند، و دکمه لغو آن <strong>لغو نگهداری</strong> است.</p>
+        <ul>
+            <li>کار را انجام دهید، یا کالا را تحویل دهید.</li>
+            <li>فرد پرداخت‌کننده روی <strong>آزادسازی اعتبار</strong>، سپس دوباره برای تأیید روی <strong>آزادسازی اعتبار</strong> می‌زند. برای کار ساعتی، آن‌ها ابتدا ساعت‌های واقعی کارشده را وارد می‌کنند. اگر کمتر بود، باقی‌مانده به خودشان بازمی‌گردد. اگر بیشتر بود، مقدار اضافی از آن‌ها کسر می‌شود. هر ساعت با نرخی که معامله بر اساس آن بسته شده پرداخت می‌شود.</li>
+            <li>پرداخت به فروشنده فوراً انجام می‌شود، منهای کارمزد ۱٫۵٪ بازار که به مشاع جامعه شما می‌رود.</li>
+        </ul>
+        <p>فقط فرد پرداخت‌کننده می‌تواند لوبیاها را آزاد کند. هیچ محدودیت زمانی وجود ندارد: لوبیاها به صورت امانی نگهداری می‌شوند تا زمانی که آزاد شوند یا معامله لغو شود. پس از یک هفته، و هر هفته پس از آن، به فرد پرداخت‌کننده یادآوری ارسال می‌شود.</p>
+        <p>قیمت روی پست تا زمانی که کسی درخواست آن را می‌دهد یا لوبیاهایش به صورت امانی نگهداری می‌شود، نمی‌تواند تغییر کند. معامله قیمتی را که بر اساس آن بسته شده حفظ می‌کند. برای تغییر قیمت، شخصی که آن را ثبت کرده ابتدا معامله را رد یا لغو می‌کند.</p>
+        <h2>یک پست تکرارشونده</h2>
+        <p>یک پست تکرارشونده پس از هر معامله دوباره فعال می‌شود، و چندین نفر می‌توانند هم‌زمان در یک معامله روی آن باشند. هر پست دیگری به عنوان تمام‌شده علامت‌گذاری می‌شود.</p>
+        <h2>نظرات و بازخوردها</h2>
+        <p>پس از آزادسازی، از فرد پرداخت‌کننده خواسته می‌شود به معامله امتیاز دهد: ۱ تا ۵ ستاره و یک نظر کوتاه و اختیاری. روی <strong>ثبت امتیاز</strong> یا <strong>فعلاً رد شوید</strong> بزنید.</p>
+        <p>هر دو نفر می‌توانند بعداً امتیاز دهند: روی <strong>امتیاز دادن</strong> و نام روی پست پایان‌یافته بزنید (نه روی پست تکرارشونده، که دوباره فعال می‌شود)، یا روی <strong>ثبت نظر</strong> در معاملات من، تاریخچه (<strong>ثبت نظر</strong> در برنامه تحت وب). می‌توانید امتیاز خود را تغییر دهید؛ امتیاز جدید جایگزین قبلی می‌شود.</p>
+        <p>همه افراد جامعه شما می‌توانند ستاره‌ها و کلمات یک نظر را بخوانند. فقط دو نفری که در معامله حضور داشتند می‌توانند ببینند چه کسی آن را نوشته و درباره کدام معامله بوده است.</p>
+        <p>ستاره‌ها مهم هستند. میانگین پایین، میزان اعتمادی را که طرف مقابل از معاملات خود کسب می‌کند کاهش می‌دهد. منصف باشید.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>معاملات من</strong><span>یکجا برای تمام معاملات جاری، پست‌های فعال و معاملات گذشته شما.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>هنگام بروز مشکل در معامله</strong><span>لغو معامله، و آنچه هنگام عدم توافق رخ می‌دهد.</span></a></li>
+            <li><a href="posting.html"><strong>ثبت پیشنهاد یا نیاز</strong><span>چیزی که می‌توانید انجام دهید یا ارائه دهید، یا آنچه به دنبالش هستید را ثبت کنید.</span></a></li>
+            <li><a href="how-it-works.html"><strong>نحوه کار BeanPool</strong><span>لوبیا، معامله، پیشنهادها و نیازها و اعتبار، به زبان ساده.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

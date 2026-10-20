@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beschluss vorschlagen — BeanPool members' guide</title>
+    <meta name="description" content="Die Community bitten, eine verbindliche Entscheidung zu treffen.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Gemeingut</a></p>
+        <h1>Beschluss vorschlagen</h1>
+        <p class="lede">Die Community bitten, eine verbindliche Entscheidung zu treffen.</p>
+        <h2>Bevor du beginnst</h2>
+        <ul>
+            <li>Ein Beschluss ist für etwas gedacht, das der Server deiner Community selbstständig ausführen kann: ein Mitglied ausschließen oder suspendieren, den Kreditrahmen von jemandem einfrieren oder freigeben, festlegen, wer bürgen darf, oder Bohnen aus dem Gemeingut auszahlen. Für alles andere starte stattdessen eine Umfrage.</li>
+            <li>Ein Beschluss kann keinen Eigentümer oder Admin des Servers deiner Community ausschließen oder suspendieren. Siehe „Regeln und Entscheidungen“.</li>
+            <li>Du kannst einen Beschluss vorschlagen, sobald du einen Handel abgeschlossen hast oder ein Admin dir ein Vertrauensabzeichen verliehen hat. Die Admins deiner Community können jederzeit Vorschläge einreichen. Eine Bürgschaft allein reicht nicht aus.</li>
+            <li>Du kannst jeweils einen offenen Beschluss gleichzeitig haben.</li>
+            <li>Die globale Community hat keine Beschlüsse, daher gibt es dort nichts vorzuschlagen. Siehe „Über Beschlüsse abstimmen“.</li>
+        </ul>
+        <h2>Einen Vorschlag einreichen</h2>
+        <ul>
+            <li>Tippe auf <strong>Gemeingut</strong>, dann auf <strong>Entscheiden</strong> und anschließend auf <strong>+ Einen Beschluss vorschlagen</strong>.</li>
+            <li>Wähle, worum es geht: <strong>Mitglied</strong> oder <strong>Gemeinschaftspool</strong>.</li>
+            <li><strong>Titel:</strong> eine Zeile, wie „200 Bohnen Zuschuss an die Werkzeugbibliothek“.</li>
+            <li><strong>Beschreibung &amp; Begründung:</strong> Erkläre das Warum in mindestens 10 Zeichen. Formuliere es verständlich. Die Menschen stimmen über das ab, was sie hier lesen.</li>
+            <li>Wähle aus der Liste darunter genau aus, was geschehen soll. Zum Beispiel bei einem Mitglied: Mitglied ausschließen, Mitglied suspendieren oder Kreditrahmen einfrieren. Beim Gemeingut: Bohnen an ein Projekt oder einen Betrieb vergeben, Härtefall-Zuschuss oder Schulden eines Projekts oder Betriebs begleichen.</li>
+            <li>Trage ein, für wen es bestimmt ist, und wie viele Bohnen, falls zutreffend. Für einen Zuschuss an ein Projekt oder einen Betrieb gibst du dessen Schlüssel ein, einen langen Code: Keine der Apps bietet dafür eine Auswahlliste. Um Schulden zu begleichen oder eine Leitung zu ersetzen, tippe auf das Projekt oder den Betrieb in der Liste oder gib den Schlüssel ein.</li>
+            <li>Tippe auf <strong>Community-Beschluss einreichen</strong>.</li>
+        </ul>
+        <p>In der Web-App lauten die Schaltflächen <strong>+ Beschluss vorschlagen</strong> (oder <strong>+ Vorschlagen</strong> oben im Gemeingut, während <strong>Entscheiden</strong> geöffnet ist) und <strong>Beschluss einreichen</strong>, und das Textfeld heißt <strong>Beschreibung &amp; Begründung</strong>.</p>
+        <p>Die Abstimmung beginnt sofort und läuft 7 Tage lang.</p>
+        <h2>Wie hoch ein Zuschuss sein darf</h2>
+        <p>Ein Zuschuss an einen Betrieb oder ein Härtefall-Zuschuss darf nicht höher sein, als das Gemeingut zahlen könnte. Der Höchstbetrag, den du beantragen kannst, setzt sich zusammen aus:</p>
+        <ul>
+            <li>dem aktuellen Bestand des Gemeinguts,</li>
+            <li>zuzüglich jeder Bohne, die in den letzten 30 Tagen hineingeflossen ist: die Marktgebühr, die Umlaufgebühr und alle sonst eingezahlten Bohnen.</li>
+        </ul>
+        <p>Bohnen, die in diesen 30 Tagen aus dem Gemeingut ausgezahlt wurden, werden nicht abgezogen. Wenn du mehr beantragst, lehnt die App ab, bevor jemand abstimmt, und nennt dir den Höchstbetrag, den du aktuell beantragen kannst. Dieser Betrag steigt, sobald neue Bohnen in das Gemeingut fließen.</p>
+        <p>Dadurch bleibt die Warteschlange frei. Wird ein Zuschuss angenommen, während das Gemeingut nicht über genügend Mittel verfügt, wartet er auf das Eintreffen der Bohnen, und es kann jeweils nur ein Zuschuss gleichzeitig warten. Siehe „Regeln und Entscheidungen“.</p>
+        <h2>Wenn die App ablehnt</h2>
+        <ul>
+            <li><strong>Zuerst einen Handel abschließen</strong> (auf dem Smartphone): Du kannst noch keinen Vorschlag einreichen. In der Web-App ist die Schaltfläche <strong>+ Beschluss vorschlagen</strong> ausgegraut, und eine Zeile darüber erklärt den Grund.</li>
+            <li><strong>Limit erreicht</strong> (auf dem Smartphone): Du hast bereits einen offenen Beschluss. Warte, bis dieser geschlossen ist. In der Web-App ist die Schaltfläche hier ebenfalls ausgegraut, mit einer Erklärung darüber.</li>
+            <li><strong>A community vote can't remove or suspend an owner or admin of this community's server:</strong> Die ausgewählte Person betreibt den Server. Ein Eigentümer kann ihr diese Rolle zuvor entziehen.</li>
+            <li><strong>This grant is bigger than the Commons could pay:</strong> Beantrage nicht mehr als den genannten Betrag oder warte, bis weitere Bohnen eingehen.</li>
+            <li><strong>Ungültiger Betrag</strong> (in der Web-App: „Bitte gib einen gültigen positiven Förderbetrag in Bohnen ein“): Gib an, wie viele Bohnen es sein sollen.</li>
+            <li><strong>Fehler:</strong> Überprüfe, ob deine Beschreibung mindestens 10 Zeichen lang ist.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Über Beschlüsse abstimmen</strong><span>Offene Entscheidungen finden, abstimmen, Stimme ändern und Ergebnisse einsehen.</span></a></li>
+            <li><a href="rules.html"><strong>Regeln und Entscheidungen</strong><span>Abstimmungen, Beteiligung, geheime Wahl, Stimmberechtigung, Suspendierung, Ausschluss, Verwalter sowie Koordinatoren und Hauptkoordinatoren.</span></a></li>
+            <li><a href="polls.html"><strong>Umfragen</strong><span>Der Community eine schnelle Frage stellen. Umfragen zeigen Meinungen, ändern aber allein nichts.</span></a></li>
+            <li><a href="enterprises.html"><strong>Projekte und Betriebe</strong><span>Gemeinsame Unternehmungen mit eigenen Bohnen: finden, unterstützen oder selbst gründen.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

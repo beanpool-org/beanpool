@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hạn mức 500 đậu cho đối tác — BeanPool members' guide</title>
+    <meta name="description" content="Lý do giao dịch với nhiều người giúp xây dựng lòng tin hơn là giao dịch nhiều với chỉ một người.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Sổ cái</a></p>
+        <h1>Hạn mức 500 đậu cho đối tác</h1>
+        <p class="lede">Lý do giao dịch với nhiều người giúp xây dựng lòng tin hơn là giao dịch nhiều với chỉ một người.</p>
+        <h2>Những gì bị giới hạn</h2>
+        <p>Khi mức độ tin cậy của bạn được tính toán, giao dịch với bất kỳ một người nào chỉ được tính <strong>tối đa 500 đậu</strong>. Giao dịch vượt quá mức đó với cùng một người vẫn diễn ra và vẫn thanh toán bình thường. Chỉ là nó không cộng thêm mức độ tin cậy nữa.</p>
+        <p>Giới hạn tương tự cũng áp dụng cho tín chỉ biểu quyết của bạn đối với các cuộc bỏ phiếu về số đậu của Commons.</p>
+        <h2>Những gì không bị giới hạn</h2>
+        <p>Hạn mức này không giới hạn số lượng bạn có thể mua, bán, tặng hoặc nhận với bất kỳ ai. Bạn có thể giao dịch với một người bao nhiêu tùy thích theo thỏa thuận của cả hai, trong phạm vi giới hạn hàng ngày về số khoản thanh toán bạn thực hiện (xem &quot;Gửi quà tặng&quot;).</p>
+        <h2>Lý do</h2>
+        <p>Lòng tin cậy cần cho thấy nhiều người thấy bạn giao dịch tốt. Hai người bạn chuyển đậu qua lại cho nhau không thể tự tạo nên một hạn mức tín dụng sâu. Nếu hai người giao dịch rất nhiều và dòng đậu luân chuyển gần như đồng đều theo cả hai chiều, các giao dịch giữa họ sẽ không được tính điểm uy tín.</p>
+        <h2>Những việc cần làm</h2>
+        <p>Hãy giao dịch với nhiều người hơn. Mỗi đối tác giao dịch mới đều giúp tăng thêm mức độ tin cậy của bạn.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>Hạn mức tín dụng</strong><span>Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Huy hiệu tin cậy</strong><span>Người mới, Cư dân, Quản lý và Trưởng bối. Ý nghĩa của chúng và lý do chúng không mở khóa quyền hạn nào.</span></a></li>
+            <li><a href="decisions.html"><strong>Bỏ phiếu cho Quyết định</strong><span>Tìm các Quyết định đang mở, bỏ phiếu, đổi phiếu bầu và xem kết quả.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cách BeanPool hoạt động</strong><span>Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>找回你的账户 — BeanPool members' guide</title>
+    <meta name="description" content="在新手机上恢复账户，并通过关联登录方式为账户提供额外保护。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">设置与安全</a></p>
+        <h1>找回你的账户</h1>
+        <p class="lede">在新手机上恢复账户，并通过关联登录方式为账户提供额外保护。</p>
+        <h2>在新手机上</h2>
+        <p>你账户的密钥并不包含在手机备份中。新手机需要你的 12 个助记词（均为英文单词）或你绑定的登录账号，即使是从旧手机备份中恢复的 iPhone 也是如此。</p>
+        <ul>
+            <li>安装 BeanPool 并打开它。</li>
+            <li>点按<strong>已是会员?恢复账户</strong>。</li>
+            <li>选择<strong>通过 12 个助记词恢复</strong>或<strong>社交账号找回</strong>。</li>
+        </ul>
+        <h2>使用 12 个助记词</h2>
+        <ul>
+            <li>按顺序输入 12 个助记词（均为英文单词），或点按<strong>粘贴</strong>。</li>
+            <li>在<strong>哪个社区？</strong>下方，点按<strong>全球社区</strong>，或点按此手机曾加入过的社区之一。对于其他社区，点按<strong>其他地址</strong>并输入你所在社区的名称或地址。</li>
+            <li>点按<strong>恢复身份</strong>。你的姓名和照片将从社区服务器恢复。</li>
+        </ul>
+        <h2>使用登录账号</h2>
+        <p>该方法仅在你此前绑定过登录账号（见下文）且社区服务器正常运行时有效。</p>
+        <ul>
+            <li>输入你在该社区中的姓名。应用可能会提示“这是你吗？”。</li>
+            <li>输入你所在社区的名称或地址。</li>
+            <li>点按<strong>Recover with</strong>及你绑定的账号：Google、Facebook，或在 iPhone 上选择 Apple。</li>
+            <li>在 iPhone 上使用 Google 时，会打开 Google 网页。请在该页面登录并选择你绑定的账号。在 Android 上，Google 会直接显示其账号列表。如果手机上无法显示该列表，则会改为打开 Google 网页。</li>
+        </ul>
+        <p>如果该登录账号是在装有最新应用且保存有你 12 个助记词的手机上绑定的，你的 12 个助记词也会一并恢复。否则手机中将不包含 12 个助记词：助记词无法仅凭登录账号重新构建。如果你手头抄写有助记词，可以将其添加到手机中（参见“你的 12 个助记词”）。在此之前，绑定的登录账号是该手机恢复账户的唯一途径，因此请始终保持绑定，并在可能的情况下绑定第二个账号（见下文）。</p>
+        <h2>立即保护你的账户</h2>
+        <ul>
+            <li>打开<strong>设置</strong>并点按<strong>账户保护</strong>。</li>
+            <li>在<strong>登录恢复提供方 (1/N)</strong> 下方，点按 <strong>Protect with</strong> 并选择一个账号。</li>
+            <li>通过手机锁屏验证。由于绑定的账号具有恢复账户的权限，应用会先进行验证。</li>
+            <li>在 iPhone 上使用 Google 时，会打开 Google 网页。在该页面登录并选择你的账号，随后便会返回 BeanPool。</li>
+        </ul>
+        <p>在没有 12 个助记词的手机上该操作同样适用。</p>
+        <p>如果你最初是凭 12 个助记词加入全球社区的，请改为使用靠近<strong>账户保护</strong>顶部的<strong>添加登录方式</strong>。这也是一种找回账户的途径，并且可以解除针对 12 词新账户的限制。参见“你的 12 个助记词”。</p>
+        <p>如果此手机保存有你的 12 个助记词，绑定的账号也会一并保留它们，因此通过该账号恢复时会一并还原助记词。在旧版本应用上绑定的账号仅保留你的私钥：点按其旁边的<strong>重新连接</strong>并通过手机锁屏验证，即可将助记词包含在内。在没有 12 个助记词的手机上由于没有词可包含，因此不会显示<strong>重新连接</strong>。</p>
+        <p>这并不是一种登录方式。你的账户依然是你自己的私钥。绑定的账号仅用于协助你在该社区中找回私钥。</p>
+        <p>若要解除绑定，点按<strong>断开连接</strong>。</p>
+        <h2>如果你曾绑定过 GitHub</h2>
+        <p>BeanPool 已不再支持 GitHub。GitHub 账号的 ID 是公开的，因此锁定在 GitHub 上的副本并未锁定在仅属于你的专属凭据上。当你所在社区的服务器更新时，它会删除所有与 GitHub 关联的副本。你的账户本身不受影响，你的 12 个助记词依然有效。</p>
+        <ul>
+            <li>如果 GitHub 是你唯一绑定的账号，且你的 12 个助记词保存在当前手机上但尚未抄写下来，请立即将其抄写下来（<strong>设置</strong> → <strong>查看恢复助记词</strong>），或按上述步骤绑定 Google、Facebook 或（在 iPhone 上）Apple。在完成这些操作之一前，当前手机是你进入账户的唯一途径。</li>
+            <li>如果你的 12 个助记词已抄写保存，则无需进行任何操作。如需同时保留登录账号，请按上述步骤绑定 Google、Facebook 或（在 iPhone 上）Apple。</li>
+            <li>如果 GitHub 是你唯一绑定的账号，且当前手机没有 12 个助记词，你也未曾抄写过，请立即绑定 Google、Facebook 或（在 iPhone 上）Apple。在绑定之前，当前手机是你进入账户的唯一途径。</li>
+        </ul>
+        <h2>谁能打开加密副本</h2>
+        <p>绑定的登录账号之所以能够生效，是因为你所在社区的服务器为其保留了一份锁定的账户加密副本。运营该服务器的人员可以打开此副本，因为其服务器负责校验你的登录凭据。在全球社区中，该运营方为 BeanPool。在服务器更新后，被盗取的服务器数据库副本无法打开它。任何控制了你登录账号的人也可以进入：参见下文“如果他人尝试找回”。</p>
+        <p>如果你希望除你之外的任何人都无法进入，请仅使用你的 12 个助记词：妥善抄写保存它们，并点按每个登录账号旁边的<strong>断开连接</strong>。断开连接会删除该加密副本。部分社区配备用于应急接管的备用服务器，该备用服务器在下次从主服务器同步时（大约每分钟一次）也会删除其副本。断开连接不会删除服务器既有备份中已存在的副本，也不会删除服务器每次通过登录账号找回账户时作为记录保存的副本。运营服务器的人员仍可打开那些记录副本。</p>
+        <h2>如果他人尝试找回</h2>
+        <p>如果有人发起恢复你账户的操作，“设置”会在该过程进行期间显示<strong>有人正在恢复你的账户</strong>。如果不是你本人在操作，请点按<strong>立即阻止</strong>：你所在社区的服务器随后将停止向该恢复流程提供任何进一步数据。如果对方凭借你绑定的登录账号成功进入，你会收到一条提醒通知你的账户刚刚在另一台设备上被恢复，此时对方可能已经进入了账户。请务必保护好该登录账号的安全，为其设置专属的高强度密码。</p>
+        <h2>如果手机上已有账户</h2>
+        <p>恢复另一个不同的账户将替换本机上已有的账户，无论你是凭 12 个助记词恢复还是通过登录账号恢复。在<strong>⚠️ 替换此手机上的账户？</strong> 页面上（使用登录账号时在你登录成功后显示），应用会先发出确认询问。在你输入 <strong>WIPE</strong>、点按<strong>替换账户</strong>并通过手机锁屏验证之前，任何内容都不会改变。点按<strong>保留</strong>然后点按该账户的名称<strong>返回</strong>可保持一切原样。</p>
+        <p>请确保你保留有正在被替换账户的 12 个助记词。如果当前手机保存有它们，在点按<strong>显示</strong>（账户名称）<strong>助记词</strong>并通过手机锁屏验证后，该界面会显示它们。如果当前手机没有该账户的 12 个助记词（“设置”中会标明），且没有绑定的登录账号，你将无法再找回该账户。</p>
+        <h2>丢失了手机且没有 12 个助记词</h2>
+        <p>在没有 12 个助记词且没有绑定登录账号的情况下，你所在社区的管理员可以将你的账户迁移到一部新手机上，同时保留你的豆子、姓名和历史记录。请亲自当面联系他们：他们需要先核实是你本人。</p>
+        <ul>
+            <li>管理员在其屏幕上生成一个重设密钥码。如果你的旧手机上应用仍能运行，它会收到一条通知提示管理员已开始迁移你的账户。</li>
+            <li>在你的新手机上打开 BeanPool，点按<strong>已是会员?恢复账户</strong>，然后点按<strong>管理员给了我一个重设密钥码</strong>。扫描管理员屏幕上的二维码，或输入代码（以 RK- 开头）和你所在社区的名称。在浏览器中，二维码的链接会打开相同的界面；或者打开你社区的 Web 应用，点按<strong>我已是成员 →</strong>，然后点按<strong>管理员给了我一个重设密钥码</strong>并输入该代码。</li>
+            <li>你的手机会显示一个两位数，其下方显示所查询社区的地址。将两者出示给管理员：他们在自己的屏幕上输入该两位数。该数字用于确保绑定的是你的手机，而非偷看到代码的其他人。点按<strong>暂不</strong>可退出该数字界面：手机会保留进度，相同的代码会再次显示相同的数字。</li>
+            <li>如果新手机此前没有 BeanPool 账户，随后它会显示你<strong>新</strong>密钥的 12 个助记词（均为英文单词）。请将其抄写下来：你的旧助记词不再有效，旧手机也将永久失效。如果手机上已有另一个社区的账户，它会保留该账户的 12 个助记词，这些助记词现在同样可以找回此账户。</li>
+            <li>如果你之前绑定过登录账号，手机会提示你在“账户保护”中重新进行绑定：之前绑定的账号保护的是你的旧密钥，因此已被清除。</li>
+            <li>与你聊天的人会看到你的密钥已更改。告诉他们是你本人，并向他们报出手机端<strong>设置</strong>中<strong>账户保护</strong>下方的<strong>我的密钥代码</strong>。参见“聊天提示某人背后的密钥已更改时”。</li>
+        </ul>
+        <p>该代码有效期为 24 小时。如果管理员表示你的手机与他们看到的不符，或者代码已过期，请向他们重新索取。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>你的 12 个助记词</strong><span>这 12 个助记词是你账户的密钥。它们为何重要、在哪里找到、如何安全保存，以及添加登录方式作为备用找回途径。</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>离开或注销账户</strong><span>从此手机退出登录，或永久注销账户，以及你的豆子将会如何处理。</span></a></li>
+            <li><a href="communities.html"><strong>加入多个社区</strong><span>用一个账户加入多个社区、在它们之间切换、跟随你的社区迁移到新地址，以及查看全球社区向你展示的内容。</span></a></li>
+            <li><a href="faq.html"><strong>常见问题</strong><span>成员最常提出问题的简要解答。</span></a></li>
+            <li><a href="key-changed.html"><strong>若对话提示对方密钥已变更</strong><span>对话停止发送的原因、如何与对方核对安全密钥代码，以及何时可以继续交流。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

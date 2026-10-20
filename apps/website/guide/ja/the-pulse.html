@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Pulse — BeanPool members' guide</title>
+    <meta name="description" content="近隣住民が作成・共有した外部コンテンツを1つのフィードで確認できます。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#pulse">パルス</a></p>
+        <h1>The Pulse</h1>
+        <p class="lede">近隣住民が作成・共有した外部コンテンツを1つのフィードで確認できます。</p>
+        <h2>The Pulseとは</h2>
+        <p><strong>ホーム</strong>の<strong>パルス</strong>カードからPulseを開きます：投稿をタップするか、<strong>すべて見る</strong>をタップします。ホームにない場合は、スマートフォンでは<strong>カードを追加</strong>、Webアプリでは<strong>ホームを編集</strong>で戻すことができます。スマートフォンでは<strong>設定</strong>の<strong>パルス</strong>から開くこともできます。</p>
+        <p>The Pulseは、コミュニティのメンバーが他のサイトに投稿したコンテンツ（動画、音楽、ブログ、写真）を集めたものです。近隣の仲間が何を作り、何をしているかを知る手段となります。</p>
+        <ul>
+            <li><strong>ご近所</strong>：メンバーのチャンネルからの投稿。上部のボタンでトピック（食と栽培、修理とリユースなど）を選択できます。<strong>すべて</strong>ですべてが表示されます。</li>
+            <li><strong>学び</strong>（スマートフォンアプリ）：BeanPoolの仕組みに関する動画と、毎日の短い振り返り。「学びレーン」を参照してください。Webアプリではフィード内に含まれており、上部の<strong>仕組み</strong>でそれらのみが表示されます。</li>
+        </ul>
+        <p>下に引っ張ると更新されます。Webアプリでは、代わりに上部の🔄をタップします。</p>
+        <p>スマートフォンでは、下にスクロールすると上部のボタンが隠れます。少し上にスクロールすると再び表示されます。</p>
+        <h2>投稿を開く</h2>
+        <p><strong>YouTube動画：</strong> スマートフォンでは、▶の付いた画像をタップするとカード内で動画が再生されます。タップするまでYouTubeから読み込まれることはありません（動画をスクロールして通り過ぎても、誰にも何も送信されません）。動画の隅にあるボタンをタップすると全画面表示になります。</p>
+        <p>動画が見えない位置までスクロールしたとき、Pulseを離れたとき、別の動画を開始したときに停止します。同時に再生できるのは1つだけです。</p>
+        <p>Webアプリではカード内で動画は再生されません。画像またはタイトルをタップすると、新しいタブでYouTubeが開きます。</p>
+        <p><strong>その他のすべてのコンテンツ</strong>（TikTok、Instagram、ブログ、ウェブサイト）：画像またはタイトルをタップすると、ブラウザまたはそのサイト専用のアプリで開きます。</p>
+        <p>代わりにいつでもYouTubeで動画を開くことができます：タイトル、またはその下の<strong>YouTubeで開く ↗</strong>をタップします。動画がここで再生されない場合（動画のアップロード者がYouTube以外での再生を許可していない場合や、一部のスマートフォンで対応していない場合）、カードにその旨が表示され、そのボタンが提示されます。</p>
+        <h2>投稿に問題がある場合</h2>
+        <ul>
+            <li><strong>他の人の投稿：</strong> 旗マークをタップし、理由（<strong>スパムまたは詐欺</strong>、<strong>不快なコンテンツ</strong>、<strong>誤解を招く投稿</strong>、<strong>子どもの安全</strong>、または<strong>その他</strong>）を選択して<strong>通報を送信</strong>をタップします。コミュニティのサーバーを運営しているメンバーが確認します。</li>
+            <li><strong>自分の投稿：</strong> <strong>非表示</strong>をタップし、次に<strong>フィードから非表示</strong>をタップします。全員のPulseから削除されます。非表示にした投稿を元に戻すことはできません。Webアプリでは、<strong>削除</strong>をタップし、<strong>完全に削除</strong>をタップして完全に削除することもできます。</li>
+        </ul>
+        <p>他の人の投稿を自分に対してのみ非表示にすることはできません。</p>
+        <h2>自分のチャンネルを追加する</h2>
+        <p>上部の<strong>+ チャンネル</strong>をタップします。「チャンネルの共有」を参照してください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>ホーム</strong><span>ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。</span></a></li>
+            <li><a href="learn.html"><strong>学びレーン</strong><span>BeanPoolに関する短い動画と、対応するガイドページについて説明します。</span></a></li>
+            <li><a href="your-channels.html"><strong>チャンネルの共有</strong><span>YouTube、ブログ、Instagramなどのチャンネルをパルスに連携します。</span></a></li>
+            <li><a href="reporting.html"><strong>問題の通報</strong><span>投稿、イベント、パルスの投稿、プロジェクト、事業体についてコミュニティのモデレーターに通報します。</span></a></li>
+            <li><a href="the-bean.html"><strong>本ガイド</strong><span>本ガイドの確認場所、検索方法、最新の状態に保たれる仕組みについて説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

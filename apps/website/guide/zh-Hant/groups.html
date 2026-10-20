@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>群組 — BeanPool members' guide</title>
+    <meta name="description" content="你的群組及群聊、在其中交流、建立群組、邀請成員、憑邀請加入以及群組內部投票。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">聊天</a></p>
+        <h1>群組</h1>
+        <p class="lede">你的群組及群聊、在其中交流、建立群組、邀請成員、憑邀請加入以及群組內部投票。</p>
+        <h2>什麼是群組</h2>
+        <p>群組是專屬於部分成員而非所有人的空間：你的街區、花園小組、合唱團、公會。每個群組都有其專屬的聊天室。某些群組持有豆子：專案或在地事業（請參閱「在地事業與專案」）。其他群組（社交圈、工作小組、公會）則不持有任何豆子。加入群組不會改變你的信任度或表決票數。</p>
+        <p>負責管理聊天群組的人員稱為其<strong>召集人</strong>；其中一人為<strong>首席召集人</strong>。他們不持有豆子。</p>
+        <h2>你的群組</h2>
+        <p>點選<strong>聊天</strong>，然後點選<strong>群組</strong>。你所在的所有群組都會列在該處，最新訊息排在最前面，包含你負責或參與的專案（🎯）、你維護的在地事業（🥖），以及你主辦或確定參加的活動（📅）。在地事業的聊天室即為其公開討論區：社群中的任何成員都可以閱讀。請參閱「訊息」。每筆項目會顯示其最新訊息以及你未讀的訊息數量。在加密聊天室中，該行會顯示最後發言者以及 <strong>🔒 訊息</strong>，而不顯示具體內容。</p>
+        <ul>
+            <li>頂部<strong>群組</strong>上的數字為你未讀訊息的累計數量，已靜音的聊天室除外。</li>
+            <li>點選群組可開啟其聊天室。這會將其標記為已讀。</li>
+            <li>向下拉動清單可重新整理。</li>
+        </ul>
+        <p>在手機上，相同的清單也位於<strong>公共板塊</strong>的<strong>群組</strong>下，標記為<strong>你的群組</strong>，但不顯示未讀數量。它開啟的是相同的聊天室。</p>
+        <h2>建立群組</h2>
+        <ul>
+            <li>在手機上，於<strong>聊天</strong>的<strong>群組</strong>下點選<strong>新群組</strong>。或者在<strong>公共板塊</strong>的<strong>群組</strong>下點選圓形的 <strong>+</strong> 按鈕。兩者都會開啟相同的<strong>建立群組</strong>表單。（在<strong>專案</strong>或<strong>在地事業</strong>標籤上，點選 <strong>+</strong> 則會改為建立專案或在地事業。）</li>
+            <li>在網頁版應用程式中，開啟<strong>公共板塊</strong>，然後開啟<strong>群組</strong>，點選 <strong>+ 建立群組</strong>。建立後你仍會留在<strong>公共板塊</strong>。若要邀請他人，請開啟該群組並點選<strong>邀請成員</strong>。你也可以開啟<strong>聊天</strong>，點選<strong>群組</strong>，然後點選<strong>新群組</strong>：這會直接帶你進入新群組的聊天室。</li>
+            <li>輸入<strong>群組名稱</strong>（最多 60 個字元），如果你願意，還可以輸入<strong>宗旨 / 說明</strong>（最多 300 個字元）：說明群組的用途以及面向的對象。</li>
+            <li>選擇<strong>分類</strong>：<strong>社交圈</strong>、<strong>一般</strong>、<strong>工作小組</strong>或<strong>公會</strong>。在手機上會為你預選<strong>社交圈</strong>。在網頁版應用程式中則預選<strong>工作小組</strong>。</li>
+            <li>選擇<strong>加入政策</strong>：<strong>公開</strong>、<strong>申請加入</strong>或<strong>僅限邀請</strong>。</li>
+            <li>點選<strong>建立群組</strong>。你將成為其<strong>首席召集人</strong>。在手機上，應用程式會直接帶你進入新群組的聊天室。</li>
+        </ul>
+        <p>你在任何 24 小時內最多可以建立 5 個群組。</p>
+        <p>涉及豆子運作？請改為建立專案或在地事業，選項位於分類的最底部：在手機上為<strong>建立專案或在地事業</strong>，在網頁版上為<strong>建立專案</strong>或<strong>建立事業</strong>。請參閱「在地事業與專案」。</p>
+        <h2>邀請成員</h2>
+        <p>你可以在手機和網頁版應用程式中邀請成員。在手機上，新群組的聊天室會詢問<strong>你想邀請誰？</strong></p>
+        <ul>
+            <li>點選<strong>邀請成員</strong>，勾選你要邀請的人員，然後點選底部的按鈕（例如<strong>邀請 2 位成員</strong>）。</li>
+            <li>或者點選<strong>先不要</strong>跳過。</li>
+        </ul>
+        <p>稍後，召集人可以隨時從聊天室的 <strong>⋮</strong> 選單中點選<strong>邀請成員</strong>進行邀請。在網頁版應用程式中，召集人開啟群組並點選<strong>邀請成員</strong>，勾選成員，並以相同方式點選底部的按鈕。你邀請的每個人都會在手機應用程式的<strong>公共板塊</strong>中的<strong>群組</strong>下看到該群組，並標記為<strong>受邀</strong>（在沒有<strong>公共板塊</strong>分頁的社群中，位於手機<strong>聊天</strong>下的<strong>尋找群組</strong>中）。網頁版應用程式目前尚未標記邀請狀態：在該處，他們開啟群組並點選<strong>接受邀請</strong>。當他們加入時，聊天室中會顯示通知。</p>
+        <h2>群組聊天室</h2>
+        <ul>
+            <li>在手機上，點選聊天室頂部的群組名稱可查看該群組：其成員、<strong>退出群組</strong>，對於召集人則顯示<strong>召集人工具</strong>。在網頁版應用程式中，點選聊天室頂部的群組名稱，或從<strong>公共板塊</strong>的<strong>群組</strong>下開啟該群組。</li>
+            <li><strong>⋮</strong> 選單包含<strong>邀請成員</strong>（召集人專用）、<strong>靜音通知</strong>（或<strong>取消靜音</strong>）、<strong>搜尋此聊天</strong>、<strong>確認新手機</strong>以及<strong>群組資訊</strong>。搜尋操作是在你的手機上執行，而非社群伺服器上。</li>
+            <li>成員的加入、退出和身分變更在聊天室中顯示為灰色小字行。</li>
+            <li>輸入 <strong>@</strong> 加成員姓名可提醒他們。請參閱「提及某人」。</li>
+            <li>最新的訊息會顯示在訊息方塊正上方，且在鍵盤彈出時保持原位。向上滑動可瀏覽歷史訊息；此時收到的新訊息會等待你閱讀，而不會強制將畫面拉至底部。</li>
+        </ul>
+        <p>群組聊天是端對端加密的：只有群組成員可以閱讀內容，運作社群伺服器的人員也無法讀取。訊息方塊上方會註明為<strong>端對端加密</strong>。你社群的伺服器仍能看到發言者、發言時間、提及了誰、每行回覆了哪則訊息，以及表情符號回應。</p>
+        <ul>
+            <li>你只能看到自你加入當天起的聊天記錄。在此之前撰寫的任何內容都不會顯示，你的手機也絕不持有其金鑰。你仍能看到先前的灰色狀態提示行，但看不到任何人的發言內容。</li>
+            <li>當有人被移除或退出時，群組會產生新金鑰。在 10 人或以上的群組中，當你的手機產生新金鑰時，聊天室會顯示<strong>正在為 N 人加密聊天室…</strong>。</li>
+            <li>無法加密鎖定的訊息將不會被發送。它會顯示 <strong>! 未送達</strong>，訊息方塊上方的一行提示會說明原因。點選它可<strong>重新傳送</strong>或<strong>捨棄</strong>該訊息。</li>
+            <li>未能確認由群組成員撰寫的訊息會顯示為<strong>未經驗證</strong>（不屬於任何人），並標註<strong>無法驗證此訊息。</strong>金鑰尚未送達你手機的訊息則會顯示<strong>正在等待此訊息的金鑰。</strong></li>
+            <li>如果你社群的伺服器較舊，尚不支援鎖定群組聊天，聊天室會提示伺服器可以閱讀內容，並在伺服器更新後進行鎖定。更新後，群組先前伺服器可讀取的舊訊息會被移除，聊天室中會有一行提示說明此情況。每則較早的訊息隨後會顯示為<strong>此聊天室鎖定時已移除較早的訊息</strong>，連續多則訊息會合併顯示為一行，例如<strong>此聊天室鎖定時已移除 11 則較早的訊息</strong>。</li>
+        </ul>
+        <p>在網頁版應用程式中，你的群組聊天位於<strong>聊天</strong>下，標記有 👥。你可以在該處閱讀與撰寫，享有與手機相同的端對端加密：回覆、回應、15 分鐘內編輯以及搜尋聊天內容。靜音、<strong>刪除</strong>與<strong>移除</strong>僅可在手機上使用。在網頁版應用程式中，點選聊天室頂部的群組名稱可開啟群組；召集人可從該處邀請成員。在地事業的聊天室未經加密：請參閱「訊息」。</p>
+        <h2>在群組聊天室中交流</h2>
+        <p>群組聊天的運作方式與一對一私聊完全相同。點選一則訊息，旁邊會出現圓形小按鈕：</p>
+        <ul>
+            <li><strong>回覆</strong>會在你的下一條輸入內容上方引用該訊息。點選引用可跳轉回被回覆的內容。</li>
+            <li><strong>回應</strong>會開啟七個表情符號。每則訊息限選一個；再次點選可取消。回應會以徽章形式顯示在訊息下方。</li>
+            <li><strong>編輯</strong>，適用於你自己的訊息，在發送後 15 分鐘內可用。訊息隨後會顯示<strong>已編輯</strong>。</li>
+            <li><strong>刪除</strong>，適用於你自己的訊息，可隨時進行。系統會確認一次<strong>為所有人刪除？</strong>，隨後對群組中的所有人顯示為<strong>此訊息已被刪除</strong>。</li>
+            <li><strong>移除</strong>，供召集人使用，適用於其他人的任何訊息。系統會確認一次，隨後訊息顯示為<strong>已被協調人移除</strong>。你自己的訊息是<strong>刪除</strong>，而非<strong>移除</strong>。</li>
+        </ul>
+        <p>作者連續刪除的兩則或更多訊息會合併顯示為一行，例如<strong>3 則訊息已被刪除</strong>。召集人連續移除的兩則或更多訊息會顯示為<strong>3 則訊息已被召集人移除</strong>。</p>
+        <p>在你自己發送的訊息下方：發送中顯示時鐘圖示，群組伺服器接收後顯示單勾，若無法發送則顯示 <strong>! 未送達</strong> — 點選可<strong>重新傳送</strong>或<strong>捨棄</strong>。群組中不會顯示藍色雙勾：因為群組沒有單一閱讀者。</p>
+        <p>群組聊天中無法發送照片，也無法發起交易。這兩者都屬於兩人之間的私聊功能。請參閱「訊息」。</p>
+        <p><strong>觀察員</strong>可以閱讀聊天內容，但無法發言、回應或回覆。</p>
+        <p>社群伺服器需要維持最新版本以支援回覆、表情回應、編輯和刪除。只有在伺服器版本過舊時，應用程式才會顯示<strong>本社群尚不支援此功能</strong> — 遇到此情況值得向伺服器維護人員反映。</p>
+        <p>伺服器拒絕的其他任何操作，都會以伺服器自身的文字說明，應用程式會向你展示那些文字，而非通用提示行。「無法編輯已被移除的訊息」表示在你輸入時召集人已將其移除，而非你的伺服器版本落後。</p>
+        <h2>更換手機前的歷史訊息</h2>
+        <p>當你的帳號使用新金鑰轉移至新手機時，先前的群組訊息是以舊手機的金鑰加密鎖定。在每個群組的聊天室中，會有一行顯示 <strong>🔒 更換手機前的 N 則訊息。解鎖 →</strong>。點選它：</p>
+        <ul>
+            <li><strong>我有舊手機或舊的 12 個助記詞</strong>：在新手機上輸入你的舊 12 個助記詞，先前的訊息即可解鎖。你的舊手機會顯示<strong>此帳號已轉移至新手機</strong>，並帶有按鈕可在通過螢幕鎖定驗證後顯示那些助記詞。它們是你自己的助記詞：只能輸入到你自己的新手機中，絕不能輸入到他人遞來的手機中。</li>
+            <li><strong>請群組成員確認此手機</strong>：你的新手機會顯示一組代碼。親自與群組成員碰面；由他們開啟群組的聊天選單，點選<strong>確認新手機</strong>並進行掃描。他們的手機會將為你們共用群組所持有的早期金鑰傳送給你的手機。</li>
+            <li><strong>保持鎖定</strong>：維持原樣。你當時發布的訊息只會顯示你的名字，不顯示具體內容。</li>
+        </ul>
+        <p><strong>當你確認他人的新手機時</strong>，你的手機會根據記憶中該成員的舊金鑰來核對代碼。僅為先前在此手機上與你在該群組聊天過的成員確認新手機，且必須由對方親手拿著手機：持有該手機的人將能夠閱讀你能閱讀的所有早期訊息。如果你的手機顯示<strong>請勿繼續；請告知擁有者</strong>，請立即停止操作。這表示你手機先前看到的內容與伺服器現在說明的內容不符。對於在你的手機記錄到他們之後變更了姓名的人，手機也會永久顯示該提示：對手機而言，金鑰上的新姓名就像陌生人的名字，因此記錄過兩個姓名的手機將永遠無法再當面確認他們。他們自己的舊 12 個助記詞仍然有效，且從始至終只見過新姓名的成員也能進行確認。剛透過 12 個助記詞還原的手機，或從未開啟過該群組的手機，因記錄過少而無法驗證：它會說明從未知曉其舊金鑰，或者可能直接信任伺服器的說法。此時請讓一直與他們聊天的成員協助進行確認。</p>
+        <p>最後，你的手機會說明處理結果：僅在成功傳遞所有金鑰時才顯示<strong>完成</strong>；若伺服器拒絕了部分金鑰，則顯示<strong>已傳遞 3/5 個</strong>。當伺服器表示對方的新手機已持有部分金鑰時，你的手機能說明<strong>社群表示</strong>如此，因為它無法看到對方手機的內部情況：如果新手機仍無法讀取那些訊息，請告知擁有者。</p>
+        <h2>加入群組</h2>
+        <p>在手機上，於<strong>公共板塊</strong>的<strong>群組</strong>下，<strong>可加入的群組</strong>列出了你尚未加入的群組。你可以透過清單上方的按鈕按類型進行篩選。在網頁版應用程式中，<strong>群組</strong>會列出你可以看到的所有群組，你所屬的群組會標記你的角色；<strong>我的群組</strong>僅顯示你所屬的群組。每個群組都會顯示其說明的開頭。開啟群組可閱讀完整說明，然後：</p>
+        <ul>
+            <li>若群組向所有人開放，點選<strong>加入群組</strong>；</li>
+            <li>若需要召集人核准成員，點選<strong>申請加入</strong>。在獲得核准前，你會看到<strong>申請待審核</strong>。</li>
+        </ul>
+        <p>在手機上，你申請加入的群組在召集人准許進入之前不會出現在任一清單中。在網頁版上，它會保留在清單中並標記為<strong>待審核</strong>。</p>
+        <p><strong>僅限邀請</strong>的群組對所有未加入且未受邀的人員隱藏。</p>
+        <p>在手機上，沒有豆子的在地社群沒有<strong>公共板塊</strong>分頁。在該處，點選<strong>聊天</strong>，然後點選<strong>群組</strong>，再點選<strong>尋找群組</strong>：這會開啟相同的清單。在加入任何群組之前，該連結為<strong>尋找要加入的群組</strong>。全球社群具有<strong>公共板塊</strong>分頁：其群組位於該處，顯示在地社群的範例下方（請參閱「豆子與全球社群」）。</p>
+        <p>如果召集人將你從群組中移除，你將無法自行再次加入。</p>
+        <p>當你的帳號被停權時，你無法建立群組、加入群組、申請加入群組或接受邀請，召集人也無法核准你先前的申請。你已加入的群組仍屬於你。停權結束後，你可以重新建立或加入群組。</p>
+        <h2>憑邀請加入</h2>
+        <p>你受邀加入的群組會顯示在手機應用程式的<strong>公共板塊</strong>中<strong>群組</strong>下，標記為<strong>受邀</strong>。在手機上，於沒有<strong>公共板塊</strong>分頁的社群中，它位於<strong>聊天</strong>下的<strong>尋找群組</strong>中。點選它可查看邀請：誰邀請了你、群組性質、成員名單（對於僅限邀請群組，顯示成員人數），以及誰能閱讀其聊天記錄。在手機上：</p>
+        <ul>
+            <li>點選<strong>加入群組</strong>。你將直接進入其聊天室。</li>
+            <li>點選<strong>先不要</strong>稍後再決定。邀請會保留。</li>
+            <li>如果顯示<strong>此邀請已關閉</strong>，表示邀請已被撤回。請請邀請你的人重新發送邀請。</li>
+            <li>如果顯示<strong>無法開啟此群組</strong>，表示你的手機無法連線至社群伺服器。點選<strong>再試一次</strong>。</li>
+        </ul>
+        <p>網頁版應用程式目前尚未標記邀請。在<strong>公共板塊</strong>的<strong>群組</strong>下開啟該群組，然後點選<strong>接受邀請</strong>。你加入該群組並停留在群組頁面。</p>
+        <h2>向群組發布貼文</h2>
+        <p>在網頁版上，於<strong>公共板塊</strong>的<strong>群組</strong>下開啟群組，點選<strong>發布至</strong>與其名稱。手機應用程式目前尚不支援向已加入的群組發布貼文。只有該群組的成員能看到該貼文。它會顯示在市集中，帶有鎖定圖示與群組名稱。</p>
+        <h2>召集人與首席召集人</h2>
+        <p>召集人負責管理群組。建立群組的人即為其<strong>首席召集人</strong>，群組卡片會註明其姓名，例如<strong>首席召集人：Ali</strong>。在成員清單中，其所在行會標記為 <strong>首席</strong>。</p>
+        <p>在<strong>召集人工具</strong>中，任何召集人都可以：</p>
+        <ul>
+            <li>變更加入政策；</li>
+            <li><strong>核准</strong>或<strong>拒絕</strong>加入申請。</li>
+        </ul>
+        <p>在<strong>名冊</strong>中的姓名旁，任何召集人都可以：</p>
+        <ul>
+            <li>變更成員或觀察員的身分（在手機上為<strong>身分</strong>，在網頁版中為下拉選單），包括將其設為召集人；</li>
+            <li>移除成員或觀察員（<strong>✕</strong>）。</li>
+        </ul>
+        <p>召集人可從貼文本身移除貼文，在手機上可從聊天室中移除訊息。群組的名稱與說明目前尚無法在應用程式中變更。</p>
+        <p>只有<strong>首席召集人</strong>可以移除召集人，或解除某人的召集人身分。在無法操作的成員行旁，完全不會顯示<strong>身分</strong>或 <strong>✕</strong> — 這是應用程式在提示你無權進行該操作。</p>
+        <p><strong>任何人都無法移除首席召集人，也無法解除其首席職責。</strong>其他召集人不能，社群管理員也不能。除了首席召集人自行移交之外，只有群組投票才能推選新首席。請參閱「群組內部投票」。</p>
+        <p><strong>移交首席身分。</strong>首席召集人可以轉交該身分。在手機上，於<strong>召集人工具</strong>中點選<strong>移交</strong>，或點選某人姓名旁的盾牌按鈕。在網頁版應用程式中，點選其姓名旁的<strong>設為主要召集人</strong>。選擇另一位召集人或成員 — 成員會同時晉升為召集人。觀察員不能擔任首席；請先將其設為成員或召集人。一旦移交完成，你將無法收回首席身分。</p>
+        <p><strong>以首席身分退出。</strong>請先移交首席身分；當你點選<strong>退出群組</strong>時，手機會提示你進行移交，網頁版應用程式也會要求你這麼做。如果群組中沒有其他人，你可以直接退出。</p>
+        <p>當群組中還有其他成員時，最後一位召集人不能卸任或退出群組。</p>
+        <p><strong>當召集人被停權時。</strong>如果社群停權了召集人的帳號，在停權結束前，所有召集人工具對其均不可用：核准、邀請、變更身分、移除人員、貼文或訊息、編輯群組、移交首席身分。應用程式會說明其帳號已被停權，且其仍是召集人。他們並未被剝奪權益：他們依然是召集人，首席依然是首席，一旦停權結束，一切功能立即恢復。他們仍然可以退出群組，除非他們是首席且群組中還有其他人。</p>
+        <p>與此同時群組照常運作。成員繼續聊天與發文，人們仍然可以加入公開群組。任何其他召集人仍可執行上述所有操作；只有首席專屬的權限需要等待。加入申請與新邀請會等待召集人處理。任何人仍可向社群協調員檢舉貼文或成員。如果被停權的召集人是群組唯一的召集人，他們即為首席，且其在停權期間的任何操作均不計為活躍狀態：自上次活躍起 30 天後，群組可以投票推選新首席，如下所述。</p>
+        <p><strong>當首席召集人不活躍時。</strong>當首席召集人連續 30 天沒有任何活動後，群組有第二種方式投票推選新首席。（群組成員亦可隨時投票推選新首席，全球社群除外：請參閱「群組內部投票」。）開啟群組並查看<strong>名冊</strong>正上方：該處會出現一個面板，列出首席姓名及其離開的時間。當群組首席活躍時不會顯示任何內容 — 除了顯示上次投票結果的一行提示，該提示在投票結束後會保留兩週。</p>
+        <p>參與投票的人員為群組的<strong>其他召集人</strong> — 或者當其他召集人在首席最後活躍之日前均未被指派為召集人時，則由其<strong>成員</strong>投票。在該日之後加入群組或被指派為召集人的任何人，均不得參與投票。任何有權投票的人都可以點選該面板中姓名旁邊的<strong>提議</strong>（包括他們自己）；提議即計為該成員投下贊成票。所有有權投票的人隨後會看到<strong>贊成</strong>與<strong>反對</strong>。系統會要求你確認，因為投票一旦投出無法變更，且你永遠只能看到總數 — 絕不會看到誰投給哪一方。投票持續 14 天，若作答者中有過半數表示贊成即告通過。如果通過，當由其他召集人投票時，原首席保留召集人身分；當由成員投票時，原首席轉為一般成員。如果沉寂的首席返回並在應用程式中執行任何操作，投票將立即關閉。在手機上（允許通知的情況下），僅開啟應用程式即算作活動。在首席帳號被停權期間，其任何操作均不計入活動。觀察員可以看到該面板，但沒有投票權，沉寂的首席也沒有投票權。</p>
+        <p>完整規則請參閱「規則與決策機制」中的「不活躍的首席召集人」。</p>
+        <p><strong>當群組正在投票推選新首席時。</strong>無論是本次投票還是下方的群組內部投票，在投票結束前，任何召集人都不能移除可能成為新首席的人選，也不能降低其身分。應用程式會以相應文字進行提示。他們仍然可以自行退出，且群組投票仍然可以將其移除。</p>
+        <h2>群組內部投票</h2>
+        <p>群組成員可以就群組自身的事務共同進行投票。開啟群組（在手機上，點選聊天室頂部的群組名稱；在網頁版上，於<strong>公共板塊</strong>的<strong>群組</strong>下開啟）：其投票項目位於<strong>決策</strong>下，靠頁面頂部的位置。只有群組中的成員才能看見。</p>
+        <p>在全球社群中，群組沒有自身的投票機制，也沒有<strong>發起投票</strong>；該處只有不活躍首席投票功能可用。</p>
+        <p>點選<strong>發起投票</strong>並選擇要執行的事項：</p>
+        <ul>
+            <li><strong>推選新的首席召集人</strong>：群組中除觀察員以外的任何人，包括你自己。</li>
+            <li><strong>將某人設為召集人</strong>，或<strong>將召集人設為成員</strong>。投票絕不能變更首席的身分；若要更換首席，請投票推選新首席。</li>
+            <li>從群組中<strong>移除成員</strong>。不能是首席，也不能是你自己：若要離開，請自行退出群組。</li>
+            <li><strong>變更誰能加入</strong>：公開給所有人、需要申請並由召集人核准加入，或僅限邀請。</li>
+            <li><strong>關閉群組。</strong>聊天室仍可供閱讀，但不再接收新訊息、貼文或新成員，且其其他正在進行的投票將會結束。其貼文會從市集中下架。</li>
+        </ul>
+        <p>輸入標題並說明原因，然後點選<strong>開啟投票</strong>。投票絕不會轉移豆子：群組不持有任何豆子。投票也無法改變任何人在社群中的地位；這需要社群層級的決策。</p>
+        <p><strong>投票資格。</strong>投票開啟時為群組成員或召集人的所有人，包括首席與發起人。觀察員旁聽：他們能看見投票，但沒有贊成或反對選項。投票開啟後加入的人不具備投票資格。單人群組無人可共同投票，因此不會顯示<strong>發起投票</strong>按鈕。你一次可以在群組中發起一項開放投票。</p>
+        <p><strong>通過條件。</strong>投票人數必須超過具投票資格者的一半。移除成員與關閉群組需要 60% 的贊成票；其餘事項需要過半數贊成。投票期為 7 天，若結果已不可逆轉則會提前結束。通過後，應用程式會自動執行該決議。新首席、身分變更、移除成員或關閉群組會在聊天室中顯示為灰色小字行；新的加入規則會顯示在群組頁面上。</p>
+        <p><strong>顯示內容。</strong>在投票開放期間，所有人只能看到有多少人已投票，看不到投票內容。贊成與反對票數在投票關閉後顯示。投票一旦投出即無法變更。沒有人能看到誰投了什麼票。但在極小群組中，結果與投票名單可能會洩露意向：如果三人皆投票且結果為 3–0，所有人自然知道彼此投了什麼。</p>
+        <p><strong>通知接收。</strong>除了提議人之外，具投票資格的每個人在投票開啟時都會收到一則通知，除非他們已將群組聊天靜音或關閉了聊天通知。通知不會指名具體人員或群組，而是顯示：<strong>你的某個群組發起了一項投票。</strong>點選通知即可開啟該群組的<strong>決策</strong>。在首頁上，你尚未投票的開放投票會顯示在<strong>需要你處理</strong>下，點選亦可開啟該群組。</p>
+        <p><strong>成員異動的影響。</strong>在投票期間退出群組的人將離開投票，其投出的票數也會隨之作廢。在投票期間被召集人移除或轉為觀察員的人員將保留在投票名單中：他們投出的票數依然有效，若尚未投票仍可繼續投票。移除成員絕不是左右投票結果的手段。如果名單中剩餘人數少於兩人，投票將在沒有結果的情況下結束。</p>
+        <p><strong>已關閉的群組</strong>在其頁面上會顯示<strong>已關閉</strong>，並附帶一行提示：「該群組已由成員投票關閉。其聊天室保留可供閱讀。」其聊天室、投票記錄與曾參與的成員名單保留可供閱讀；無法新增任何新內容。</p>
+        <h2>即將推出</h2>
+        <ul>
+            <li>透過社群決策移除失職的首席召集人。將在後續更新中推出。</li>
+            <li>在網頁版群組清單中標記邀請狀態。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>訊息</strong><span>發起聊天、傳送相片、回覆、表情回應、編輯、刪除、靜音以及隱私說明。</span></a></li>
+            <li><a href="mute.html"><strong>靜音聊天室</strong><span>將個人、群組或事業的對話靜音 8 小時、一週或永久靜音。</span></a></li>
+            <li><a href="mentions.html"><strong>提及 (@成員)</strong><span>在群聊中輸入 @ 加上成員姓名即可向其傳送提醒。</span></a></li>
+            <li><a href="enterprises.html"><strong>專案與事業</strong><span>擁有獨立豆子帳目的共同事業：尋找、支持或自己發起一個專案或事業。</span></a></li>
+            <li><a href="event-chat.html"><strong>活動聊天</strong><span>與活動主辦人及所有參與者交流。</span></a></li>
+            <li><a href="posting.html"><strong>發布提供或需求</strong><span>發布你能做或能給予的事情，或者你正在尋找的東西。</span></a></li>
+            <li><a href="decisions.html"><strong>參與決策投票</strong><span>尋找進行中的決策、投票、更改你的投票並查看投票結果。</span></a></li>
+            <li><a href="keepers.html"><strong>管理人</strong><span>共同經營並擔當事業責任的人。如何加入、提出異議以及退出。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

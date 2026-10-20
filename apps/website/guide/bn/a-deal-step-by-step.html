@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ধাপে ধাপে একটি চুক্তি — BeanPool members' guide</title>
+    <meta name="description" content="অনুরোধ থেকে অর্থ প্রদান পর্যন্ত, প্রস্তাব ও প্রয়োজনের জন্য, এবং একটি পর্যালোচনা রেখে যাওয়া।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">বাজার</a></p>
+        <h1>ধাপে ধাপে একটি চুক্তি</h1>
+        <p class="lede">অনুরোধ থেকে অর্থ প্রদান পর্যন্ত, প্রস্তাব ও প্রয়োজনের জন্য, এবং একটি পর্যালোচনা রেখে যাওয়া।</p>
+        <h2>মূল ধারণা</h2>
+        <p>যখন একটি চুক্তি শুরু হয়, তখন অর্থপ্রদানকারী ব্যক্তির শিম <strong>আস্থায় রাখা হয়</strong>। আস্থায় রাখা শিম কেউ খরচ করতে পারে না। কাজটি সম্পন্ন হলে অর্থপ্রদানকারী ব্যক্তি সেগুলো অবমুক্ত করেন এবং অন্য ব্যক্তিকে অর্থ প্রদান করা হয়। স্ক্রিনগুলোতে কয়েকটি স্থানে শিমকে &quot;ক্রেডিট&quot; বলা হয়; উভয়ই একই অর্থ প্রকাশ করে।</p>
+        <p>আপনি যেকোনো ২৪ ঘণ্টায় ১০০টি পর্যন্ত চুক্তি চাইতে, গ্রহণ করতে বা অনুমোদন করতে পারেন। আপনি যে চুক্তির অর্থ প্রদান করেন তাও দিনে আপনার ১০০টি অর্থপ্রদানের একটি হিসেবে গণ্য হয় (&quot;উপহার পাঠানো&quot; দেখুন)। শিম অবমুক্ত করা, বাতিল করা এবং অর্থপ্রাপ্তি কখনই সীমাবদ্ধ নয়।</p>
+        <h2>কারও প্রস্তাব গ্রহণ করা</h2>
+        <ul>
+            <li>প্রস্তাবটি খুলুন এবং <strong>প্রস্তাব গ্রহণ করুন</strong>-এ ট্যাপ করুন।</li>
+            <li>এটি যদি ঘণ্টাপ্রতি মূল্যের হয়, তবে কত ঘণ্টা তা বলুন।</li>
+            <li><strong>নিশ্চিত করুন</strong>-এ ট্যাপ করুন। আপনার শিম সাথে সাথেই আটকে রাখা হয় এবং বিক্রেতাকে জানিয়ে দেওয়া হয়। বিক্রেতার হ্যাঁ বলার জন্য কোনো অপেক্ষার প্রয়োজন নেই।</li>
+            <li>বিক্রেতার সাথে একটি চ্যাট খোলে। কখন এবং কোথায় তা নিয়ে সম্মত হন।</li>
+        </ul>
+        <p>আপনাকে প্রথমে নিজের একটি প্রস্তাব পোস্ট করতে হবে। আপনি তা না করে থাকলে, অ্যাপটি <strong>একটি প্রস্তাব তৈরি করুন</strong>-এর প্রস্তাব দেয়।</p>
+        <h2>কারও প্রয়োজনে সাহায্য করা</h2>
+        <ul>
+            <li>প্রয়োজনটি খুলুন এবং <strong>পূরণ করার প্রস্তাব দিন</strong>-এ ট্যাপ করুন, তারপর <strong>নিশ্চিত করুন</strong>-এ।</li>
+            <li>যিনি এটি পোস্ট করেছেন তিনি সিদ্ধান্ত নেন। ততক্ষণ পর্যন্ত আপনি <strong>অনুরোধ প্রত্যাহার করুন</strong>-এ ট্যাপ করতে পারেন। তারা ৭ দিনের মধ্যে উত্তর না দিলে, অনুরোধটি নিজ থেকেই শেষ হয়ে যায় এবং আপনাদের দুজনকেই জানানো হয়।</li>
+            <li>তারা <strong>পূরণের অনুরোধ</strong>-এর অধীনে আপনার অনুরোধ দেখতে পান, এবং আপনাকে <strong>বার্তা পাঠান</strong>, এটি <strong>প্রত্যাখ্যান করুন</strong> অথবা <strong>অনুমোদন ও অঙ্গীকার করুন</strong> করতে পারেন।</li>
+            <li>তারা অনুমোদন করলে তাদের শিম আটকে রাখা হয়। পোস্টটি পুনরাবৃত্তিযোগ্য না হলে, অন্য যে কেউ প্রস্তাব দিয়ে থাকলে তারা তাদের অনুরোধ প্রত্যাখ্যাত হিসেবে দেখতে পান।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে, <strong>অনুরোধ প্রত্যাহার করুন</strong> হলো <strong>প্রস্তাব বাতিল করুন</strong> এবং <strong>অনুমোদন ও অঙ্গীকার করুন</strong> হলো <strong>অনুমোদন করুন ও ট্রাস্টে রাখুন</strong>। যিনি প্রয়োজনটি পোস্ট করেছেন তিনি সেখানে কেবল <strong>প্রত্যাখ্যান করুন</strong> বা অনুমোদন করতে পারেন: অনুরোধে কোনো <strong>বার্তা</strong> বোতাম থাকে না।</p>
+        <h2>শিমগুলো আটকে থাকা অবস্থায়</h2>
+        <p>আপনাদের দুজনেই কথা বলার জন্য একটি <strong>বার্তা</strong> বোতাম এবং চুক্তি বাতিল করতে <strong>আস্থার হোল্ড বাতিল করুন</strong> দেখতে পান। ওয়েব অ্যাপে, কেবল যিনি তালিকাটি পোস্ট করেননি তিনি <strong>বার্তা</strong> দেখতে পান, এবং চুক্তি বাতিল করার বোতামটি হলো <strong>হোল্ড বাতিল করুন</strong>।</p>
+        <ul>
+            <li>কাজটি করুন, অথবা জিনিসটি হস্তান্তর করুন।</li>
+            <li>অর্থপ্রদানকারী ব্যক্তি <strong>ক্রেডিট রিলিজ করুন</strong>-এ ট্যাপ করেন, তারপর নিশ্চিত করতে আবার <strong>ক্রেডিট রিলিজ করুন</strong>-এ ট্যাপ করেন। ঘণ্টাপ্রতি কাজের জন্য তারা প্রথমে প্রকৃতপক্ষে কত ঘণ্টা কাজ হয়েছে তা লেখেন। এটি কম হলে বাকিটা তাদের কাছে ফেরত যায়। এটি বেশি হলে অতিরিক্ত অংশ তাদের কাছ থেকে নেওয়া হয়। প্রতিটি ঘণ্টা যে মূল্যে চুক্তিটি হয়েছিল সেই হারেই পরিশোধ করা হয়।</li>
+            <li>বিক্রেতাকে সাথে সাথেই অর্থ প্রদান করা হয়, ১.৫% বাজার ফি বাদ দিয়ে, যা আপনার কমিউনিটির যৌথ তহবিলে যায়।</li>
+        </ul>
+        <p>কেবল অর্থপ্রদানকারী ব্যক্তিই শিম অবমুক্ত করতে পারেন। কোনো সময়সীমা নেই: শিমগুলো অবমুক্ত না করা পর্যন্ত বা চুক্তিটি বাতিল না হওয়া পর্যন্ত আটকে থাকে। এক সপ্তাহ পর এবং এর পরের প্রতি সপ্তাহে অর্থপ্রদানকারী ব্যক্তি একটি অনুস্মারক (রিমাইন্ডার) পান।</p>
+        <p>কেউ এটি চাওয়ার সময় বা তাদের শিম আটকে থাকা অবস্থায় পোস্টের মূল্য পরিবর্তন করা যাবে না। চুক্তিটি যে মূল্যে সম্পন্ন হয়েছিল সেই মূল্যই বহাল থাকে। মূল্য পরিবর্তন করতে, যিনি এটি পোস্ট করেছেন তিনি প্রথমে চুক্তিটি প্রত্যাখ্যান বা বাতিল করেন।</p>
+        <h2>একটি পুনরাবৃত্তিযোগ্য পোস্ট</h2>
+        <p>একটি পুনরাবৃত্তিযোগ্য পোস্ট প্রতিটি চুক্তির পর আবার চালু হয়, এবং এতে একসাথে একাধিক ব্যক্তি চুক্তিতে থাকতে পারেন। অন্য যেকোনো পোস্ট সম্পন্ন হিসেবে চিহ্নিত হয়।</p>
+        <h2>পর্যালোচনাসমূহ</h2>
+        <p>অবমুক্ত করার পর, অর্থপ্রদানকারী ব্যক্তিকে চুক্তির রেটিং দিতে বলা হয়: ১ থেকে ৫ স্টার এবং একটি সংক্ষিপ্ত, ঐচ্ছিক মন্তব্য। <strong>রেটিং জমা দিন</strong> বা <strong>আপাতত বাদ দিন</strong>-এ ট্যাপ করুন।</p>
+        <p>উভয় ব্যক্তিই পরবর্তীতে রেটিং দিতে পারেন: সম্পন্ন পোস্টে <strong>রেট দিন</strong> এবং নামে ট্যাপ করুন (পুনরাবৃত্তিযোগ্য পোস্টে নয়, যা আবার চালু হয়), অথবা আমার চুক্তিগুলো, ইতিহাস-এ <strong>পর্যালোচনা</strong> (ওয়েব অ্যাপে <strong>পর্যালোচনা দিন</strong>)। আপনি আপনার রেটিং পরিবর্তন করতে পারেন; নতুনটি পুরনোর স্থান নেয়।</p>
+        <p>আপনার কমিউনিটির প্রত্যেকে একটি পর্যালোচনার স্টার এবং শব্দগুলো পড়তে পারেন। কেবল লেনদেনে থাকা দুজন ব্যক্তিই দেখতে পারেন কে এটি লিখেছেন এবং কোন চুক্তি সম্পর্কে এটি ছিল।</p>
+        <p>স্টার গুরুত্বপূর্ণ। একটি কম গড় অন্য ব্যক্তি তার লেনদেন থেকে যে আস্থা অর্জন করেন তা কমিয়ে দেয়। ন্যায্য হন।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>আমার চুক্তি</strong><span>আপনার সমস্ত চলমান লেনদেন, আপনার সমস্ত সক্রিয় পোস্ট এবং অতীতের লেনদেনের এক স্থান।</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>চুক্তিতে সমস্যা হলে</strong><span>চুক্তি বাতিল করা, এবং যখন আপনারা একমত হতে পারেন না তখন কী ঘটে।</span></a></li>
+            <li><a href="posting.html"><strong>প্রস্তাব বা প্রয়োজন পোস্ট করা</strong><span>আপনি যা করতে বা দিতে পারেন, অথবা আপনি যা খুঁজছেন তা পোস্ট করুন।</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool কীভাবে কাজ করে</strong><span>শিম, লেনদেন, প্রস্তাব ও প্রয়োজন এবং ক্রেডিট, সহজ কথায়।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>الصفقة، خطوة بخطوة — BeanPool members' guide</title>
+    <meta name="description" content="من الطلب إلى استلام الدفع، للعرض وللطلب، وترك تقييم.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">السوق</a></p>
+        <h1>الصفقة، خطوة بخطوة</h1>
+        <p class="lede">من الطلب إلى استلام الدفع، للعرض وللطلب، وترك تقييم.</p>
+        <h2>الفكرة</h2>
+        <p>عندما تبدأ الصفقة، تكون فاصوليا الشخص الدافع <strong>محجوزة في الضمان</strong>. ولا يمكن لأحد إنفاق الفاصوليا المحجوزة. وعند إنجاز العمل، يحررها الشخص الدافع ويتم الدفع للشخص الآخر. وتسمي الشاشات الفاصوليا &quot;رصيدًا&quot; في بضعة مواضع؛ وكلاهما يعني نفس الشيء.</p>
+        <p>يمكنك طلب ما يصل إلى 100 صفقة أو قبولها أو الموافقة عليها خلال أي 24 ساعة. والصفقة التي تدفع ثمنها تُحتسب أيضًا ضمن مدفوعاتك المائة في اليوم (انظر &quot;إرسال هدية&quot;). وتحرير الفاصوليا، والإلغاء، وتلقي الدفع لا تكون مقيدة أبدًا.</p>
+        <h2>قبول عرض شخص ما</h2>
+        <ul>
+            <li>افتح العرض واضغط على <strong>قبول العرض</strong>.</li>
+            <li>إذا كان سعره بالساعة، فاكتب عدد الساعات.</li>
+            <li>اضغط على <strong>تأكيد</strong>. تُحجز فاصولياك على الفور، ويتم إخطار البائع. لا يوجد انتظار لموافقة البائع.</li>
+            <li>تُفتح محادثة مع البائع. اتفقا على الوقت والمكان.</li>
+        </ul>
+        <p>يجب أن تكون قد نشرت عرضًا خاصًا بك أولاً. وإذا لم تكن قد فعلت، يتيح لك التطبيق <strong>إنشاء عرض</strong>.</p>
+        <h2>المساعدة في تلبية طلب شخص ما</h2>
+        <ul>
+            <li>افتح الطلب واضغط على <strong>عرض للتلبية</strong>، ثم <strong>تأكيد</strong>.</li>
+            <li>يقرر الشخص الذي نشره. وحتى ذلك الحين يمكنك الضغط على <strong>سحب الطلب</strong>. وإذا لم يجب خلال 7 أيام، ينتهي الطلب تلقائيًا ويتم إخطاركما معًا.</li>
+            <li>يرى طلبك تحت <strong>طلبات التلبية</strong>، ويمكنه <strong>مراسلة</strong> أو <strong>رفض</strong> أو <strong>موافقة وتأكيد</strong>.</li>
+            <li>عندما يوافق، تُحجز فاصولياه. وما لم يكن المنشور قابلاً للتكرار، يرى أي شخص آخر قدم عرضًا أن طلبه محدد كـ مرفوض.</li>
+        </ul>
+        <p>في تطبيق الويب، يكون <strong>سحب الطلب</strong> هو <strong>إلغاء العرض</strong> ويكون <strong>موافقة وتأكيد</strong> هو <strong>موافقة وحفظ في الضمان</strong>. ولا يمكن للشخص الذي نشر الطلب سوى <strong>رفض</strong> أو الموافقة هناك: فالطلب لا يحتوي على زر <strong>مراسلة</strong>.</p>
+        <h2>أثناء حجز الفاصوليا</h2>
+        <p>يرى كِلاكما زر <strong>مراسلة</strong> للتحدث، وزر <strong>إلغاء حجز الضمان</strong> لإلغاء الصفقة. في تطبيق الويب، يرى الشخص الذي لم ينشر القائمة فقط زر <strong>مراسلة</strong>، ويكون زر إلغائها هو <strong>إلغاء الحجز</strong>.</p>
+        <ul>
+            <li>قم بإنجاز العمل، أو تسليم الشيء.</li>
+            <li>يضغط الشخص الدافع على <strong>تحرير الرصيد</strong>، ثم <strong>تحرير الرصيد</strong> مرة أخرى للتأكيد. بالنسبة للعمل بالساعة، يُدخل أولاً الساعات التي تم العمل فيها فعليًا. وإذا كانت أقل، يعود الباقي إليه. وإذا كانت أكثر، يُؤخذ الفارق منه. وتُدفع كل ساعة بالسعر الذي تم الاتفاق عليه في الصفقة.</li>
+            <li>يُدفع للبائع على الفور، مخصومًا منها رسوم السوق البالغة 1.5%، والتي تذهب إلى مشاع مجتمعك.</li>
+        </ul>
+        <p>الشخص الدافع فقط هو من يمكنه تحرير الفاصوليا. لا يوجد حد زمني: تظل الفاصوليا محجوزة حتى يتم تحريرها أو إلغاء الصفقة. وبعد أسبوع، وكل أسبوع بعد ذلك، يتلقى الشخص الدافع تذكيرًا.</p>
+        <p>لا يمكن تغيير السعر على المنشور أثناء قيام شخص بطلبه أو أثناء حجز فاصولياه. وتحتفظ الصفقة بالسعر الذي أُبرمت به. ولتغيير السعر، يرفض الشخص الذي نشره الصفقة أو يلغيها أولاً.</p>
+        <h2>منشور قابل للتكرار</h2>
+        <p>يعود المنشور القابل للتكرار للظهور مجددًا بعد كل صفقة، ويمكن لعدة أشخاص إجراء صفقة عليه في وقت واحد. ويتم تمييز أي منشور آخر بأنه مكتمل.</p>
+        <h2>التقييمات</h2>
+        <p>بعد التحرير، يُطلب من الشخص الدافع تقييم الصفقة: من 1 إلى 5 نجوم وتعليق اختياري قصير. اضغط على <strong>إرسال التقييم</strong>، أو <strong>تخطي الآن</strong>.</p>
+        <p>يمكن لكلا الشخصين التقييم لاحقًا: اضغط على <strong>تقييم</strong> والاسم على المنشور المنتهي (وليس على منشور قابل للتكرار، الذي يعود للظهور مجددًا)، أو <strong>مراجعة</strong> في صفقاتي، قسم السجل (<strong>كتابة تقييم</strong> في تطبيق الويب). يمكنك تغيير تقييمك؛ ويحل التقييم الجديد محل القديم.</p>
+        <p>يمكن للجميع في مجتمعك قراءة نجوم وكلمات التقييم. ولا يمكن لأحد رؤية من كتبه وعن أي صفقة كان سوى الشخصين المعنيين بالصفقة فقط.</p>
+        <p>النجوم مهمة. المتوسط المنخفض يقلل من مقدار الثقة التي يكتسبها الشخص الآخر من صفقاته. كن عادلاً.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>صفقاتي</strong><span>مكان واحد لكل معاملة تشارك فيها، وكل منشور لديك، وتداولاتك السابقة.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>عند تعثر الصفقة</strong><span>إلغاء الصفقة، وما يحدث عندما لا تتفقان.</span></a></li>
+            <li><a href="posting.html"><strong>نشر عرض أو طلب</strong><span>انشر شيئًا يمكنك فعله أو تقديمه، أو شيئًا تبحث عنه.</span></a></li>
+            <li><a href="how-it-works.html"><strong>كيف يعمل BeanPool</strong><span>الفاصوليا، والتداول، والعروض والطلبات، والائتمان، بكلمات بسيطة.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

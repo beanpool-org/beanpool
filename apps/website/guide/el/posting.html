@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/el by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ανάρτηση προσφοράς ή ανάγκης — BeanPool members' guide</title>
+    <meta name="description" content="Δημοσιεύστε κάτι που μπορείτε να κάνετε ή να δώσετε, ή κάτι που αναζητάτε.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Αγορά</a></p>
+        <h1>Ανάρτηση προσφοράς ή ανάγκης</h1>
+        <p class="lede">Δημοσιεύστε κάτι που μπορείτε να κάνετε ή να δώσετε, ή κάτι που αναζητάτε.</p>
+        <h2>Πρώτα η Προσφορά</h2>
+        <p>Σε μια κοινότητα με Φασόλια, πρέπει να έχετε αναρτήσει τουλάχιστον μία <strong>Προσφορά</strong> πριν μπορέσετε να αναρτήσετε μια <strong>Ανάγκη</strong> ή να αποδεχτείτε την Προσφορά κάποιου άλλου. Όλοι συνεισφέρουν κάτι. Το πόσες Προσφορές έχετε ενεργές καθορίζει επίσης πόσο κάτω από το μηδέν μπορείτε να φτάσετε. Βλέπε «Το πιστωτικό σου όριο».</p>
+        <p>Όπου δεν υπάρχουν Φασόλια, όπως στην παγκόσμια κοινότητα, η πρώτη σας ανάρτηση μπορεί να είναι Ανάγκη.</p>
+        <h2>Πριν ξεκινήσετε</h2>
+        <p>Σε μια κοινότητα με Φασόλια χρειάζεστε όνομα και φωτογραφία προφίλ. Όπου δεν υπάρχουν Φασόλια, αρκεί ένα όνομα. Αν λείπει κάτι, η εφαρμογή σας ζητά να κάνετε <strong>Ρύθμιση προφίλ</strong> πρώτα.</p>
+        <h2>Ανάρτηση</h2>
+        <ul>
+            <li>Πατήστε <strong>+ ΠΡΟΣΘΗΚΗ ΑΝΑΡΤΗΣΗΣ</strong> στην καρτέλα Αγορά ή στον Χάρτη.</li>
+            <li>Επιλέξτε <strong>Προσφορά</strong> ή <strong>Ανάγκη</strong>. Η φόρμα ανοίγει στον Χάρτη.</li>
+            <li><strong>Τίτλος:</strong> λίγες λέξεις, έως 50 χαρακτήρες στο τηλέφωνο. «Προζυμένιο καρβέλι», «Μεταφορά στην πόλη τις Παρασκευές».</li>
+            <li><strong>Κατηγορία:</strong> επιλέξτε την πλησιέστερη.</li>
+            <li><strong>Περιγραφή:</strong> τι, πότε, πού, οτιδήποτε θα έπρεπε να γνωρίζει ο κόσμος.</li>
+            <li><strong>Φωτογραφίες:</strong> τουλάχιστον μία, έως πέντε. Πατήστε <strong>Κάμερα</strong> ή <strong>Συλλογή</strong>. Όπου δεν υπάρχουν Φασόλια, οι φωτογραφίες μιας Ανάγκης είναι προαιρετικές.</li>
+            <li><strong>Τοποθεσία:</strong> πατήστε <strong>Η τοποθεσία μου</strong>, ή <strong>Τοποθέτηση πινέζας</strong> και πατήστε στον χάρτη, και στη συνέχεια <strong>Επιβεβαίωση πινέζας</strong>. Κάθε μέλος της κοινότητάς σας μπορεί να δει την πινέζα, οπότε τοποθετήστε την κοντά σας αντί για την εξώπορτά σας αν προτιμάτε. Βλέπε «Πού μπαίνει η πινέζα σου».</li>
+            <li><strong>Τιμή:</strong> ένας αριθμός φασολιών. Πατήστε το κουμπί μονάδας για να επιλέξετε <strong>Σύνολο</strong> ή <strong>/ώρα</strong>. Πατήστε <strong>ΔΩΡΕΑΝ</strong> για να το χαρίσετε. Το κουμπί προσφέρει επίσης <strong>/ημ</strong>, <strong>/εβδ</strong> και <strong>/μήνα</strong>, αλλά μια νέα ανάρτηση δεν τα διατηρεί ακόμα: αποθηκεύεται ως συνολική τιμή. Επιλέξτε <strong>Σύνολο</strong> και αναφέρετε το διάστημα στην περιγραφή.</li>
+            <li>Πατήστε <strong>Ανάρτηση προσφοράς</strong> ή <strong>Ανάρτηση ανάγκης</strong>.</li>
+        </ul>
+        <p>Μέχρι να συμπληρωθούν όλα τα απαιτούμενα, το κουμπί σας αναφέρει τι λείπει, όπως <strong>Προσθήκη φωτογραφίας</strong> ή <strong>Όρισε τιμή</strong>.</p>
+        <p>Στην εφαρμογή ιστού τα βήματα διαφέρουν λίγο:</p>
+        <ul>
+            <li>Πατήστε το κουμπί <strong>+</strong> στον Χάρτη (με τίτλο <strong>Νέα ανάρτηση</strong>), ή <strong>+ ΠΡΟΣΘΗΚΗ ΑΝΑΡΤΗΣΗΣ</strong> στην Αγορά.</li>
+            <li>Για να τοποθετήσετε την πινέζα σας, πατήστε <strong>Η τοποθεσία μου</strong>, ή πατήστε <strong>Τοποθέτηση πινέζας</strong> και μετά πατήστε στον χάρτη. Δεν υπάρχει <strong>Επιβεβαίωση πινέζας</strong>.</li>
+            <li>Η τιμή είναι ένα πεδίο αριθμού και μια λίστα μονάδων. Δεν υπάρχει κουμπί <strong>ΔΩΡΕΑΝ</strong>: πληκτρολογήστε 0 για να το χαρίσετε.</li>
+            <li>Ο τίτλος δεν έχει όριο 50 χαρακτήρων.</li>
+            <li>Το κουμπί αναφέρει <strong>Απαιτείται τοποθεσία στον χάρτη</strong> ή <strong>Συμπληρώστε τα απαιτούμενα πεδία</strong> όσο λείπει κάτι. Παραμένει επίσης γκρι μέχρι να προσθέσετε τουλάχιστον μία φωτογραφία.</li>
+            <li>Η φόρμα δεν διατηρεί πρόχειρο.</li>
+        </ul>
+        <h2>Στην παγκόσμια κοινότητα</h2>
+        <p>Δεν υπάρχουν Φασόλια στην παγκόσμια κοινότητα, επομένως μια ανάρτηση εκεί δεν έχει τιμή. Η φόρμα δεν έχει πεδίο <strong>Τιμή</strong>: αναφέρετε στην περιγραφή τι θα θέλατε σε αντάλλαγμα, ή ότι είναι δωρεάν. Εκεί όπου θα έμπαινε η τιμή, η φόρμα της εφαρμογής ιστού και η φόρμα του τηλεφώνου για τροποποίηση μιας ανάρτησης αναφέρουν «🏘️ Σε μια τοπική κοινότητα αυτή είναι μια τιμή σε Φασόλια ›»: πατήστε το για να δείτε γιατί. Βλέπε «Φασόλια και παγκόσμια κοινότητα».</p>
+        <p>Οι επισκέπτες στην παγκόσμια κοινότητα μπορούν να δουν τις φωτογραφίες αυτής της καταχώρισης και την κατά προσέγγιση περιοχή της πριν γίνουν μέλη. Βλέπουν τις λέξεις και τις φωτογραφίες της ανάρτησης και περίπου πού βρίσκεται, όχι το όνομά σας, το πρόσωπό σας ή το ακριβές σημείο. Στην εφαρμογή ιστού η φόρμα το αναφέρει κάτω από τις φωτογραφίες. Τα μέλη της παγκόσμιας κοινότητας βλέπουν το σημείο σας σε ακτίνα περίπου ενός χιλιομέτρου.</p>
+        <h2>Δεν είστε σίγουροι τι να χρεώσετε;</h2>
+        <p>Στο τηλέφωνο, πατήστε <strong>Δεν είστε σίγουροι για την τιμή;</strong> κάτω από την τιμή. Στην εφαρμογή ιστού η φόρμα δεν έχει τέτοια γραμμή: ανοίξτε το <strong>💡 Οδηγός τιμολόγησης</strong> στην Αγορά αντ' αυτού. Ένας πρόχειρος οδηγός: 40 φασόλια είναι περίπου μία ώρα από τον χρόνο κάποιου. Ο <strong>Οδηγός τιμών κοινότητας</strong> περιέχει εκτιμήσεις για πολλά καθημερινά πράγματα. Στο τηλέφωνο, πατώντας ένα από αυτά συμπληρώνεται μια Προσφορά για εσάς. Στην εφαρμογή ιστού, πατώντας ένα ανοίγει η φόρμα Νέας Ανάρτησης στον Χάρτη χωρίς να συμπληρώσει κάτι.</p>
+        <p>Κάτω από την τιμή βλέπετε τι θα λάβετε μετά το τέλος αγοράς 1,5%. Τα δώρα δεν έχουν τέλος.</p>
+        <h2>Επιπλέον επιλογές</h2>
+        <ul>
+            <li><strong>Επαναλαμβανόμενη:</strong> η ανάρτηση παραμένει ενεργή μετά από κάθε συμφωνία, και πολλά άτομα μπορούν να την αποδεχτούν ταυτόχρονα. Καλή επιλογή για εβδομαδιαία μεταφορά ή ψωμί κάθε Σάββατο.</li>
+            <li><strong>Χρειάζονται και μετρητά:</strong> επιλέξτε το αν χρειάζεστε επίσης μετρητά, για καύσιμα ή υλικά. Η εφαρμογή δεν διαχειρίζεται ποτέ μετρητά· αυτό το κανονίζετε μεταξύ σας.</li>
+            <li><strong>Πού ταξιδεύει αυτό;</strong> Μόνο αν η κοινότητά σας συναλλάσσεται με άλλες κοινότητες: διατηρήστε την ανάρτηση εδώ, ή κοινοποιήστε την παραπέρα.</li>
+        </ul>
+        <p>Στο τηλέφωνο, η εφαρμογή διατηρεί ένα πρόχειρο καθώς πληκτρολογείτε. Αν φύγετε και επιστρέψετε, ρωτά αν θέλετε <strong>Συνέχεια</strong> ή <strong>Έναρξη από την αρχή</strong>.</p>
+        <h2>Ανάρτηση μόνο σε ομάδα</h2>
+        <p>Ανοίξτε τα <strong>Κοινά</strong>, μετά <strong>Ομάδες</strong>, μετά την ομάδα σας, και πατήστε <strong>Ανάρτηση σε</strong> και το όνομα της ομάδας. Μόνο εκείνη η ομάδα τη βλέπει. Στο τηλέφωνο αυτή η συντομότερη φόρμα δεν έχει φωτογραφίες και τοποθεσία. Στην εφαρμογή ιστού ανοίγει τη συνηθισμένη φόρμα στον Χάρτη, ορισμένη στην ομάδα.</p>
+        <h2>Αλλαγή ή αφαίρεση ανάρτησης</h2>
+        <p>Ανοίξτε την ανάρτησή σας. Αν δεν βρίσκεται σε εξέλιξη καμία συμφωνία σε αυτήν:</p>
+        <ul>
+            <li>Το <strong>Επεξεργασία ανάρτησης</strong> αλλάζει τα κείμενα, την κατηγορία, την τιμή και τις φωτογραφίες. Πατήστε <strong>Αποθήκευση</strong>. Η τοποθεσία δεν μπορεί να αλλάξει· διαγράψτε την ανάρτηση και αναρτήστε την ξανά.</li>
+            <li>Το <strong>Παύση Προσφοράς</strong> αποκρύπτει μια Προσφορά για λίγο. Το <strong>Ενεργοποίηση Προσφοράς</strong> την επαναφέρει. Οι Ανάγκες δεν μπορούν να τεθούν σε παύση.</li>
+            <li>Το <strong>Διαγραφή ανάρτησης</strong> την καταργεί. Οποιοσδήποτε εξακολουθεί να ζητά τη συμφωνία βλέπει το αίτημά του να επισημαίνεται ως απορριφθέν.</li>
+        </ul>
+        <p>Όσο κάποιος ζητά την ανάρτησή σας, μπορείτε ακόμα να αλλάξετε τα κείμενα και τις φωτογραφίες της, αλλά όχι την τιμή της: η εφαρμογή το αναφέρει. Όσο τα φασόλια είναι δεσμευμένα σε μια ανάρτηση, δεν μπορείτε να την επεξεργαστείτε καθόλου. Εξαίρεση αποτελεί μια Επαναλαμβανόμενη ανάρτηση (μπορεί να έχει πολλές συμφωνίες ταυτόχρονα): μπορείτε ακόμα να αλλάξετε τα κείμενα και τις φωτογραφίες της, αλλά όχι την τιμή της. Για να αλλάξετε την τιμή, απορρίψτε ή ακυρώστε πρώτα εκείνη τη συμφωνία.</p>
+        <p>Σε μια τοπική κοινότητα, οι αναρτήσεις δεν λήγουν. Διαγράψτε τες όταν ολοκληρωθούν.</p>
+        <p>Στην παγκόσμια κοινότητα, μια καταχώριση αρχειοθετείται 90 ημέρες μετά την τελευταία της αλλαγή: απομακρύνεται από την Αγορά και οι φωτογραφίες της διαγράφονται. Η αποθήκευσή της με το <strong>Επεξεργασία ανάρτησης</strong> τη διατηρεί για άλλες 90 ημέρες. Βλέπε «Όρια παγκόσμιας κοινότητας».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Μια συμφωνία βήμα προς βήμα</strong><span>Από το αίτημα μέχρι την πληρωμή, για Προσφορά και Ανάγκη, και υποβολή αξιολόγησης.</span></a></li>
+            <li><a href="my-deals.html"><strong>Συμφωνίες μου</strong><span>Ένα μέρος για κάθε συναλλαγή σας, κάθε ενεργή ανάρτηση και τις παλιές σας συμφωνίες.</span></a></li>
+            <li><a href="map-pins.html"><strong>Τι δείχνει ο χάρτης</strong><span>Οι πινέζες στον Χάρτη, τι σημαίνουν τα χρώματά τους και τα κουμπιά γύρω τους.</span></a></li>
+            <li><a href="credit-line.html"><strong>Το πιστωτικό σου όριο</strong><span>Πόσο κάτω από το μηδέν μπορείτε να φτάσετε και πώς μεγαλώνει αυτό το όριο.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

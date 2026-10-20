@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理者がAIアシスタントを使う場合 — BeanPool members' guide</title>
+    <meta name="description" content="オーナーや管理者のAIアシスタントが確認できる情報、決して見られない情報、送信先について説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">設定と安全性</a></p>
+        <h1>管理者がAIアシスタントを使う場合</h1>
+        <p class="lede">オーナーや管理者のAIアシスタントが確認できる情報、決して見られない情報、送信先について説明します。</p>
+        <p>コミュニティのオーナーは、サーバーの管理を支援してもらうために、自分自身のAIアシスタント（例えばClaudeやChatGPTなど）をコミュニティのサーバーに連携させることができます（対応が必要な事柄を尋ねたり、未対応の通報を要約してもらったりするためなど）。管理者も同様に連携できます：管理者は自身のアシスタントにコミュニティのアドレスを追加し、スマートフォンで承認します。管理者自身で接続し、いつでも接続を解除できます。連携された際には、他のオーナーに通知されます。</p>
+        <h2>AIアシスタントが確認できるあなたに関する情報</h2>
+        <p>アシスタントが見られる情報は、管理者が「設定」で確認できる情報よりもはるかに少ないです。何が渡されるかを決定するのはアシスタントではなく、コミュニティのサーバーです。</p>
+        <ul>
+            <li><strong>誰かがあなたまたはあなたの投稿を通報し</strong>、管理者が通報の文面を求めた場合：記載された理由、投稿のタイトルと説明、およびBeanPool上でのあなたの名前。誰が通報したかが渡されることは決してありません。</li>
+            <li><strong>あなたが参加を申請し</strong>、管理者がメッセージを求めた場合：申請時に送信した名前とメッセージ、および出身として記入したコミュニティ。写真や鍵が渡されることは決してありません。</li>
+            <li><strong>コミュニティ全体の合計数値</strong>（メンバー数や流通している豆の総数など）。あなたの残高が渡されることは決してありません。</li>
+        </ul>
+        <h2>AIアシスタントが決して見られない情報</h2>
+        <p>あなたのメッセージやチャット、残高や取引、鍵、住所、写真、メンバーの名前一覧、および誰が誰を通報したか。アシスタントがあなたに関する何かを変更することはできません：あなたを除名したり、ミュートしたり、投稿を取り下げたり、参加申請に回答したりすることはできません。これらは人間によって行われます。管理者が「設定」またはスマートフォン上で行い、参加申請への回答は招待権限を持つメンバーがアプリ内で行います。</p>
+        <p>アシスタントは、通報に対してどう対応すべきか（投稿を維持するか取り下げるかなど）を提案することはできます。ただし、そのアシスタントを利用している管理者が通報を読んで承認しない限り、何かが実行されることはありません。これに関してあなたに届く通知は、常にこれまで通りコミュニティのモデレーターからのものとなります。</p>
+        <h2>情報の送信先</h2>
+        <p>アシスタントが読み取った内容は、自分自身でAIチャットに何かを貼り付けたときと同様に、そのAIを運営する企業に送信されます。サーバーが通報の文面や参加メッセージを送信するのは、管理者のアシスタントがそれらを要求した場合のみであり、指示ではなくメンバーからの言葉としてマークされて送信されます。</p>
+        <p>ご自身の通報や参加メッセージがAIに読み取られることを望まない場合は、管理者にAIの利用状況についてお尋ねください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>管理者が確認できる情報</strong><span>管理者が名簿を保持しているコミュニティにおいて、記録される情報、閲覧権限、サーバーの保持情報、認証済みの意味を説明します。</span></a></li>
+            <li><a href="reporting.html"><strong>問題の通報</strong><span>投稿、イベント、パルスの投稿、プロジェクト、事業体についてコミュニティのモデレーターに通報します。</span></a></li>
+            <li><a href="privacy.html"><strong>プライバシー</strong><span>他のメンバーに公開される情報と、それを管理する設定について説明します。</span></a></li>
+            <li><a href="joining.html"><strong>BeanPoolへの参加</strong><span>参加方法は2つあります。メンバーからの招待によるコミュニティ参加、または公開されているグローバルコミュニティへの12個の秘密の単語か1つのサインインによる参加です。参加申請や他者の招待方法も説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

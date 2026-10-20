@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>মানুষ এবং বন্ধু — BeanPool members' guide</title>
+    <meta name="description" content="মানুষ, বন্ধু, তাদের প্রোফাইল খোঁজা, কাউকে গ্রুপে আমন্ত্রণ জানানো এবং কারা আপনাকে দেখতে পারে।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">কথা</a></p>
+        <h1>মানুষ এবং বন্ধু</h1>
+        <p class="lede">মানুষ, বন্ধু, তাদের প্রোফাইল খোঁজা, কাউকে গ্রুপে আমন্ত্রণ জানানো এবং কারা আপনাকে দেখতে পারে।</p>
+        <h2>মানুষ খোঁজা</h2>
+        <p><strong>আলাপ</strong>-এ ট্যাপ করুন, তারপর <strong>সদস্য</strong>-তে। ওয়েব অ্যাপে, ট্যাবগুলোর সারিতে <strong>মানুষ</strong>-এ ট্যাপ করুন। সেখানে তিনটি বোতাম রয়েছে:</p>
+        <ul>
+            <li><strong>বন্ধুরা:</strong> আপনার যোগ করা মানুষজন।</li>
+            <li><strong>কমিউনিটি:</strong> প্রতিটি সদস্য। নাম দিয়ে অনুসন্ধান করুন। ফোনে, <strong>নতুন</strong>, <strong>নাম</strong>, <strong>বন্ধু</strong>, <strong>বিশ্বস্ত</strong> বা <strong>সক্রিয়</strong> অনুসারে সাজান। বৈশ্বিক কমিউনিটিতে এটি আপনার এলাকার নিকটতম সদস্যদের দেখায়: অন্য কাউকে খুঁজতে একটি নামের অন্তত ২টি অক্ষর টাইপ করুন।</li>
+            <li><strong>আমন্ত্রণ:</strong> নতুন কাউকে আমন্ত্রণ জানান। &quot;BeanPool-এ যোগ দেওয়া&quot; দেখুন। আপনি এখনও যোগ না দিয়ে থাকলে এই বোতামটিতে <strong>নিবন্ধন করুন</strong> লেখা থাকে। যখন মানুষজন আপনার সম্প্রদায়ে যোগ দেওয়ার জন্য অনুরোধ করেন, তখন কতজন অনুরোধ করেছেন তা এটি দেখায় এবং তারা <strong>যোগ দিতে চান</strong>-এর অধীনে তালিকাভুক্ত থাকেন। ওয়েব অ্যাপে এই বোতামটি সর্বদা <strong>🎟️ আমন্ত্রণ</strong> থাকে, যাতে কোনো সংখ্যা এবং <strong>যোগ দিতে চান</strong> তালিকা থাকে না।</li>
+        </ul>
+        <p>কারও প্রোফাইল দেখতে সেই ব্যক্তির ওপর ট্যাপ করুন: তাদের পর্যালোচনা ও পোস্ট এবং শিম রয়েছে এমন কোনো সম্প্রদায়ে ফোনে তাদের আস্থার ব্যাজ ও লেনদেন। &quot;আপনার প্রোফাইল&quot; দেখুন।</p>
+        <h2>বন্ধুরা</h2>
+        <ul>
+            <li><strong>কমিউনিটি</strong>-তে, নামের পাশে <strong>+ যোগ করুন</strong>-এ ট্যাপ করুন। এটি <strong>যুক্ত হয়েছে</strong>-তে পরিবর্তিত হয়। তাদের আবার সরিয়ে দিতে <strong>যুক্ত হয়েছে</strong>-তে ট্যাপ করুন। ওয়েব অ্যাপে এটি <strong>✓ বন্ধু</strong>-তে পরিবর্তিত হয়, যাতে আপনি ট্যাপ করতে পারেন না: কাউকে সরাতে <strong>বন্ধুরা</strong>-র অধীনে <strong>সরান</strong> ব্যবহার করুন।</li>
+            <li><strong>বন্ধুরা</strong>-তে, একটি চ্যাট শুরু করতে বার্তা বোতামে ট্যাপ করুন, অথবা কাউকে সরাতে অপসারণ বোতামে ট্যাপ করে <strong>সরান</strong>-এ ট্যাপ করুন।</li>
+            <li>কেউ আপনাকে যুক্ত করলে, <strong>বন্ধুরা</strong>-র শীর্ষে কে যুক্ত করেছেন তা বলে, যেমন &quot;Sam added you&quot;, সাথে থাকে <strong>ফিরতি যুক্ত করুন</strong>। প্রথমে তাদের প্রোফাইল দেখতে তাদের নামের ওপর ট্যাপ করুন। কোনো বিজ্ঞপ্তি থাকে না। আপনি তাদের ফিরতি যুক্ত করলে বা ৩০ দিন পর লাইনটি চলে যায়। সর্বাধিক ২০ জনকে দেখানো হয়, তারপর আরও কতজন আছেন তা দেখায়।</li>
+            <li>যেকোনো ২৪ ঘণ্টায় আপনি সর্বাধিক ১০০ জন ব্যক্তিকে যুক্ত করতে পারেন। কাউকে সরানোও এতে গণনা করা হয়। আপনি এই সীমায় পৌঁছে গেলে অ্যাপটি তা জানিয়ে দেয় এবং কখন আপনি আবার কাউকে যুক্ত করতে পারবেন তা বলে।</li>
+            <li>আপনার ব্লক করা কাউকে আপনি যুক্ত করতে পারবেন না: প্রথমে তাদের আনব্লক করুন। &quot;কাউকে ব্লক করা&quot; দেখুন।</li>
+        </ul>
+        <p>বন্ধুরা আপনার জন্য একটি শর্টকাট। আপনি আপনার যোগাযোগের বিবরণের জন্য <strong>বন্ধুরা</strong> বেছে নিলে কেবল তারাই সেগুলো দেখতে পাবেন। &quot;আপনার প্রোফাইল&quot; দেখুন।</p>
+        <p>অন্য কেউ আপনার বন্ধুদের তালিকা পড়তে পারে না। আপনি যে ব্যক্তিকে যুক্ত করেছেন তিনি দেখতে পান যে আপনি তা করেছেন।</p>
+        <h2>পারস্পরিক পরিচিতি</h2>
+        <p>একজন সদস্যের প্রোফাইল <strong>পারস্পরিক পরিচিতি</strong> দেখাতে পারে: যাদের কাছে আপনি তাদের সম্পর্কে জিজ্ঞাসা করতে পারেন। সেখানে কাউকে কেবল তখনই দেখানো হয় যখন আপনার সাথে এমন কারও পারস্পরিক বন্ধুত্ব থাকে যার সাথে তাদের পারস্পরিক বন্ধুত্ব রয়েছে। এর অর্থ হলো আপনি এবং সেই ব্যক্তি একে অপরকে যুক্ত করেছেন, এবং সেই ব্যক্তি ও সেই সদস্যও একে অপরকে যুক্ত করেছেন। একা কাউকে যুক্ত করলে কখনোই সেখানে কাউকে রাখা হয় না, এবং কেউ আপনাকে যুক্ত করলেও তা হয় না। সর্বাধিক ১২ জনকে দেখানো হয়। তাদের প্রোফাইল দেখতে নামের ওপর ট্যাপ করুন।</p>
+        <p>আপনি কারও পারস্পরিক পরিচিতি হিসেবে প্রদর্শিত না হওয়া বেছে নিতে পারেন। সেটিংসে, <strong>আইনি ও গোপনীয়তা</strong>-র অধীনে, <strong>আমাকে সাধারণ সংযোগ হিসেবে দেখান</strong> বন্ধ করুন। তখন কেউ সেখানে আপনার নাম দেখতে পাবে না এবং আপনাকে গণনা করা হবে না। আপনি বন্ধ না করা পর্যন্ত এটি চালু থাকে। &quot;আপনার গোপনীয়তা&quot; দেখুন।</p>
+        <h2>কারও জন্য প্রত্যয়ন করা</h2>
+        <p>নতুনদের স্বাগত জানানোর জন্য সম্প্রদায় কিছু সদস্যকে বেছে নেয়। তারা একজন নতুন সদস্যের জন্য প্রত্যয়ন করতে পারেন, যা সেই ব্যক্তিকে শুরুতে ব্যবহারের জন্য একটি ছোট ক্রেডিট সীমা দেয়। ব্যক্তির প্রোফাইলে, তারা <strong>সদস্যের জন্য প্রত্যয়ন করুন</strong>-এ ট্যাপ করেন এবং <strong>হালকা</strong> (২৫), <strong>মানক</strong> (৫০) বা <strong>গভীর</strong> (১০০) বেছে নেন। প্রত্যয়নকারীর নিজস্ব ওয়ালেট থেকে কোনো শিম কাটা যায় না।</p>
+        <p>কে প্রত্যয়ন করতে পারেন তা একজন অ্যাডমিন বা সম্প্রদায়ের কোনো সিদ্ধান্তের মাধ্যমে নির্ধারিত হয়, কখনোই ব্যাজ দ্বারা নয়। &quot;নিয়ম ও সিদ্ধান্ত যেভাবে হয়&quot; দেখুন।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>বার্তাসমূহ</strong><span>একটি চ্যাট শুরু করুন, ছবি পাঠান, উত্তর দিন, প্রতিক্রিয়া দিন, সম্পাদনা করুন, মুছুন, মিউট করুন এবং কী গোপনীয়।</span></a></li>
+            <li><a href="your-profile.html"><strong>আপনার প্রোফাইল</strong><span>আপনার নাম, ছবি, আপনার সম্পর্কে কয়েকটি কথা এবং কে আপনার যোগাযোগের বিবরণ দেখতে পারে।</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool-এ যোগ দেওয়া</strong><span>যুক্ত হওয়ার দুটি উপায়: একজন সদস্যের আমন্ত্রণে একটি কমিউনিটি, অথবা বিশ্বব্যাপী কমিউনিটি খোলা থাকলে 12টি গোপন শব্দ বা একটি সাইন-ইন দিয়ে। কোনো কমিউনিটিতে প্রবেশের অনুরোধ করা এবং অন্যকে আমন্ত্রণ জানানো।</span></a></li>
+            <li><a href="blocking.html"><strong>কাউকে ব্লক করা</strong><span>কারও পোস্ট ও বার্তা আপনার থেকে লুকিয়ে রাখুন এবং পরে তা পূর্বাবস্থায় ফিরিয়ে আনুন।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -2167,3 +2167,63 @@ describe("the Map's enterprise list where the statuses read fails (review of #20
         await waitFor(() => expect(api.getTreasuries).toHaveBeenCalledTimes(1));
     });
 });
+
+describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.md §1.4, slice T0.3)", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        mockCreatedMarkers.length = 0;
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([]);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+        window.alert = vi.fn();
+    });
+
+    const draft = {
+        type: 'offer' as const, title: 'Ladder to lend', description: 'Three metres, aluminium.', category: 'tools', credits: 5,
+        priceType: 'daily' as const, repeatable: true, cashAlsoNeeded: false,
+    };
+
+    it('opens the composer with every field of the draft in it, takes the draft once, and posts nothing by itself', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost');
+        const taken = vi.fn();
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} onDraftOpened={taken} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        expect(taken).toHaveBeenCalledTimes(1);
+        expect(within(panel).getByRole('button', { name: '🟢 Offer' })).toHaveAttribute('aria-pressed', 'true');
+        expect(within(panel).getByPlaceholderText('What do you need/offer?')).toHaveValue('Ladder to lend');
+        expect(within(panel).getByPlaceholderText('Describe what you need/offer...')).toHaveValue('Three metres, aluminium.');
+        expect(within(panel).getByPlaceholderText('B')).toHaveValue('5');
+        expect(within(panel).getByDisplayValue('/ Dy')).toBeInTheDocument();
+        expect((within(panel).getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('tools');
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    it('a Need draft opens the composer as a Need, with no price carried', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost');
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} openDraft={{ ...draft, type: 'need', title: 'Tomato seed', credits: null, priceType: null, repeatable: false }} />);
+        });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        expect(within(panel).getByRole('button', { name: '🟠 Need' })).toHaveAttribute('aria-pressed', 'true');
+        expect(within(panel).getByPlaceholderText('What do you need/offer?')).toHaveValue('Tomato seed');
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    it("the profile check still holds: a member with no photo is asked for one, and the composer doesn't open", async () => {
+        vi.mocked(getProfileStatus).mockResolvedValueOnce({ complete: false, missingName: false, missingAvatar: true } as any);
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} } as any);
+        resetCommunityInfoOnce();
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} />); });
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        expect(view!.queryByTestId('map-new-post-panel')).toBeNull();
+    });
+});

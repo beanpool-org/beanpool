@@ -19,7 +19,7 @@ Beji yako ya uaminifu haijalishi.
 
 - Gusa **Leja**, kisha **Mkoba**, kisha **Tuma Maharagwe**.
 - Gusa **Chagua mpokeaji...**, tafuta jina lake na uliguse.
-- Andika **Kiasi**. Ongeza **Kumbukumbu** ukipenda, kama vile "Asante kwa nyanya".
+- Andika **Kiasi**. Ongeza **Ujumbe** ukipenda, kama vile "Asante kwa nyanya".
 - Kagua **Mpokeaji anapokea**. Zawadi hazina ada, kwa hivyo anapata yote.
 - Gusa **Thibitisha Uhamisho**. Kwenye simu unaona **Imetumwa!**; kwenye programu ya wavuti fomu inafungwa na zawadi inaonekana katika miamala yako.
 

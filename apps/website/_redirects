@@ -1,3 +1,0 @@
-# Cloudflare Pages redirects and route blocking
-# Prevent public access to unrendered translation source files in content/
-/content/* /404 404

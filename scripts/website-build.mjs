@@ -3,7 +3,7 @@
  *
  * Source of truth:
  * - English pages live in apps/website/<page>.html.
- * - Per-language pages live under apps/website/content/<lang>/<page>.html, each carrying `<!-- source-hash: <16-hex> -->`
+ * - Per-language pages live under apps/website-src/content/<lang>/<page>.html, each carrying `<!-- source-hash: <16-hex> -->`
  *   which records the content hash of the English page it was drafted from.
  * - Generated per-language pages are written to apps/website/<lang>/<page>.html. They are never hand-edited.
  *
@@ -19,9 +19,9 @@
  * - Asset path rewrites: relative paths (style.css, bean.png, fonts/, main.js) adjust for <lang>/ subdirectories.
  *
  * Modes:
- *   node scripts/website-build.mjs            Builds all pages from content/ into apps/website/<lang>/
+ *   node scripts/website-build.mjs            Builds all pages from apps/website-src/content/ into apps/website/<lang>/
  *   node scripts/website-build.mjs --check    Verifies generated files match build output and check rules
- *   node scripts/website-build.mjs --draft <lang>  Prepares/refreshes content/<lang>/ from current English
+ *   node scripts/website-build.mjs --draft <lang>  Prepares/refreshes apps/website-src/content/<lang>/ from current English
  */
 
 import fs from 'node:fs';
@@ -33,7 +33,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '..');
 const WEBSITE_DIR = path.join(REPO_ROOT, 'apps', 'website');
-const CONTENT_DIR = path.join(WEBSITE_DIR, 'content');
+const CONTENT_DIR = path.join(REPO_ROOT, 'apps', 'website-src', 'content');
 
 export const GUIDE_LANGS = Object.freeze([
     'es', 'pt', 'hi', 'bn', 'fr', 'ar', 'id', 'ru',
@@ -462,11 +462,16 @@ export function checkWebsite() {
         }
     }
 
+    // Verify translation sources are not inside published apps/website/
+    if (fs.existsSync(path.join(WEBSITE_DIR, 'content'))) {
+        errors.push('apps/website/content exists; translation sources must be in apps/website-src/content outside the published folder');
+    }
+
     // Check translated pages
     for (const lang of GUIDE_LANGS) {
         const contentLangDir = path.join(CONTENT_DIR, lang);
         if (!fs.existsSync(contentLangDir)) {
-            errors.push(`missing content source folder for language: apps/website/content/${lang}`);
+            errors.push(`missing content source folder for language: apps/website-src/content/${lang}`);
             continue;
         }
 
@@ -481,7 +486,7 @@ export function checkWebsite() {
         for (const page of TRANSLATED_PAGES) {
             const srcPath = path.join(contentLangDir, page);
             if (!fs.existsSync(srcPath)) {
-                errors.push(`missing source file: apps/website/content/${lang}/${page}`);
+                errors.push(`missing source file: apps/website-src/content/${lang}/${page}`);
                 continue;
             }
 

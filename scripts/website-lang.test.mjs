@@ -47,7 +47,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '..');
 const WEBSITE_DIR = path.join(REPO_ROOT, 'apps', 'website');
-const CONTENT_DIR = path.join(WEBSITE_DIR, 'content');
+const CONTENT_DIR = path.join(REPO_ROOT, 'apps', 'website-src', 'content');
 
 const require = createRequire(path.join(REPO_ROOT, 'apps/pwa/package.json'));
 const { chromium } = require('playwright');
@@ -58,7 +58,7 @@ test('website translation check passes across all pages and languages', () => {
     assert.deepEqual(errors, [], `website check reported errors:\n  ${errors.join('\n  ')}`);
 });
 
-test('every language has its source folder in content/ and generated folder in apps/website/', () => {
+test('every language has its source folder in apps/website-src/content/ and generated folder in apps/website/', () => {
     assert.equal(GUIDE_LANGS.length, 24, '24 languages in GUIDE_LANGS');
     for (const lang of GUIDE_LANGS) {
         const contentDir = path.join(CONTENT_DIR, lang);
@@ -573,9 +573,7 @@ test('apps/website/_headers matches at most one rule per path', () => {
         '/guide/guide.json',
         ...GUIDE_LANGS.map(l => `/guide/${l}/guide.json`),
         '/rules.html',
-        '/es/rules.html',
-        '/content/es/rules.html',
-        '/content/es/rules'
+        '/es/rules.html'
     ];
 
     for (const p of testPaths) {
@@ -584,13 +582,11 @@ test('apps/website/_headers matches at most one rule per path', () => {
     }
 });
 
-test('apps/website/_redirects blocks public access to /content/* with 404', () => {
-    const redirectsFile = path.join(WEBSITE_DIR, '_redirects');
-    assert.ok(fs.existsSync(redirectsFile), 'apps/website/_redirects exists');
-    const content = fs.readFileSync(redirectsFile, 'utf8');
-    const lines = content.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-
-    const contentRule = lines.find(l => l.startsWith('/content/*'));
-    assert.ok(contentRule, '_redirects contains rule for /content/*');
-    assert.match(contentRule, /^\/content\/\*\s+\S+\s+404$/, '/content/* rule returns 404 status');
+test('nothing under apps/website/ is a translation source', () => {
+    assert.ok(!fs.existsSync(path.join(WEBSITE_DIR, 'content')), 'apps/website/content must NOT exist');
+    assert.ok(fs.existsSync(CONTENT_DIR), 'apps/website-src/content exists');
+    for (const lang of GUIDE_LANGS) {
+        assert.ok(!fs.existsSync(path.join(WEBSITE_DIR, 'content', lang)), `apps/website/content/${lang} must NOT exist`);
+        assert.ok(fs.existsSync(path.join(CONTENT_DIR, lang)), `apps/website-src/content/${lang} exists`);
+    }
 });

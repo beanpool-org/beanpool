@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gizliliğiniz — BeanPool members' guide</title>
+    <meta name="description" content="Başkalarının sizin hakkınızda neleri görebileceği ve bunu denetleyen ayarlar.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Ayarlar ve güvenlik</a></p>
+        <h1>Gizliliğiniz</h1>
+        <p class="lede">Başkalarının sizin hakkınızda neleri görebileceği ve bunu denetleyen ayarlar.</p>
+        <h2>Ayarlar'ı açma</h2>
+        <p>Ekranın sağ üst tarafındaki kaydırıcılar düğmesine dokunun. Geniş bir bilgisayar ekranında web uygulamasında ise bunun yerine sol kenar çubuğunun altındaki bir dişli simgesidir. Ayarlar sekmelerden biri değildir.</p>
+        <h2>Topluluğunuzun üyelerinin görebildikleri</h2>
+        <ul>
+            <li>Adınız, fotoğrafınız, biyografiniz, ne zaman katıldığınız ve en son ne zaman aktif olduğunuz.</li>
+            <li>Güven rozetiniz, yorumlarınız (yorumu kimin yazdığını başka hiç kimse göremez) ve güven profiliniz: takaslarınızdan kaçının tamamlandığı ve kaçının iptal edildiği ve tamamlanma oranı, üyelere gönderdiğiniz veya üyelerden aldığınız Fasulye ödemesi sayısı artı tamamladığınız takaslar, ödeme yaptığınız, ödeme aldığınız veya takas yaptığınız kaç farklı üye olduğu, bakan üyeyle kaç ödeme ve takas yaptığınız ve Güven Puanınız. Yöneticiler de bunu herhangi bir üyenin gördüğü gibi görür ve günlüğe kaydedilmez.</li>
+            <li>Gönderileriniz ve işaretlerinin nerede olduğu. &quot;İşaretinizin konumu&quot; bölümüne bakın.</li>
+            <li>Bir Ankette nasıl oy kullandığınız; ancak yalnızca oluşturan kişinin <strong>açık oylama</strong> yaptığı bir Ankette. Bunun dışında anketler anonimdir ve <strong>Kararlar</strong> üzerindeki oylar her zaman gizlidir.</li>
+            <li>Sizi kimin davet ettiği. Telefonda profilinizde <strong>tarafından kefil olundu</strong> ve o kişinin adı yazar. Kurucu üye olarak katıldıysanız veya doğrudan sistem yöneticisi tarafından davet edildiyseniz bunun yerine <strong>Kurucu üye</strong> veya <strong>Doğrudan sistem yöneticisi tarafından davet edildi</strong> yazar. Bir üye kredi limitinize kefil olduysa telefon uygulamasında ve web uygulamasında profilinizde <strong>kefil oldu</strong> ve o kişinin adı yazar.</li>
+        </ul>
+        <h2>Yalnızca sizin görebildikleriniz</h2>
+        <ul>
+            <li><strong>Bakiyeniz ve takaslarınız.</strong> Topluluğunuzdaki başka hiç kimse bunları uygulamada veya topluluğunuzun sunucusundan okuyamaz. Bir takas yalnızca ilgili iki kişiyi gösterir: siz ve diğer kişi.</li>
+            <li><strong>Arkadaş listeniz, kiminle sohbet ettiğiniz ve yaptığınız davetler.</strong> Bunları yalnızca siz uygulamada veya topluluğunuzun sunucusundan okuyabilirsiniz. Diğerleri yalnızca sizinle paylaştıkları ortak bağlantıları görür.</li>
+            <li>Topluluk sizi çıkarma konusunda oy kullanırsa, oylamada oy kullanabilen herkes yalnızca o oylamada bakiyenizi ve varsa borcunuzu görür. Oylamada oy kullanamayan bir yönetici veya sahip bunları orada göremez. Bu bakışlar günlüğe kaydedilmez.</li>
+            <li>Bir yönetici hesabınızı kaldırırsa, işlemi başlatan yönetici elinizde tuttuklarınızın veya borcunuzun kapatılabilmesi için bakiyenizi görür. Diğer yöneticiler ve sahip kimin ne zaman baktığını görebilir.</li>
+            <li>Bilinen bir toplulukta, katılırken bunu kabul ettiyseniz ve bir yönetici sizi onayladıysa, bakiyeniz topluluğunuzun sınırlarından birini aştığında yöneticiler bakiyenizi görebilir. Bunu Ayarlar'dan istediğiniz zaman geri alabilirsiniz. Herhangi bir toplulukta, herhangi bir yönetici takaslarınızdan bazılarını da görebilir: henüz tamamlanmamış veya bir yöneticinin sonuçlandırdığı bir takas, eski bir sunucuda bir üye kaldırıldığında Fasulyeleri takılı kalan bir takas, dolandırıcılık uyarıları ve belirli bir gün sayısı boyunca hesabınıza veya hesabınızdan hiçbir Fasulye hareketi olmadıysa bir uyarı. Bu takaslardan birine yapılan her bakış günlüğe kaydedilir ve adınızı veren uyarılara yapılan bir bakış, her yöneticinin bunları 24 saat içinde ilk açışında günlüğe kaydedilir. Sahip ve yöneticiler bu günlüğü görebilir. Yöneticiler ayrıca kaç ilanınızın yayında olduğunu ve kaç mesaj gönderdiğinizi görür; takaslarda ise sizinkileri değil, yalnızca tüm topluluğun toplamlarını görür; ve her üyenin gördüğü gibi güven profilinizi günlüğe kaydedilmeden görür. Topluluğunuzun sunucusunu her kim işletiyorsa, yedekleri, anlık görüntüleri ve yedek kopyalarıyla birlikte tüm veritabanını elinde tutar. &quot;Yöneticilerin görebildikleri&quot; bölümüne bakın.</li>
+        </ul>
+        <p>Topluluğunuzun sunucusunu işleten sahipler ve yöneticiler orada nelerin saklandığını yine de görebilir. &quot;Başka kimler neleri görebilir&quot; bölümüne bakın.</p>
+        <h2>Katılmamış olan kişiler</h2>
+        <ul>
+            <li><strong>Topluluğunuzda:</strong> gönderilerinizden hiçbir şeyi göremezler. İlanları ve fotoğrafları üyeleri içindir; profil fotoğrafınız da öyledir. Her fotoğraf yalnızca ilanıyla veya uygulamada adınızla birlikte gelen bağlantıdan açılır, bu nedenle dışarıdan biri fotoğrafı yalnızca bir üye bu bağlantıyı ilettiğinde görür. Katılmadan topluluğunuzun adresini açan birine bunun yerine küresel topluluğun yolu gösterilir.</li>
+            <li><strong>Küresel toplulukta:</strong> herkes katılmadan önce ilanlarına bakabilir, ancak yalnızca kelimeleri, fotoğrafları ve her birinin yaklaşık nerede olduğunu görür; adınızı, yüzünüzü veya tam noktayı asla göremez.</li>
+            <li><strong>Nabız gönderileriniz:</strong> hiçbir şeyi göremezler. Nabız üyeler içindir. Videonun veya gönderinin kendisi kendi sitesinde (YouTube, Instagram vb.), orada olduğu kadar herkese açık kalır. &quot;Kanallarınızı paylaşma&quot; bölümüne bakın.</li>
+        </ul>
+        <h2>Sizin denetledikleriniz</h2>
+        <ul>
+            <li><strong>İletişim bilgileri:</strong> profilinizde <strong>Bunu kimler görebilir?</strong> seçeneğini belirleyin: <strong>Gizli</strong>, <strong>Takas Ortakları</strong>, <strong>Arkadaşlar</strong> veya <strong>Topluluk</strong>. &quot;Profiliniz&quot; bölümüne bakın.</li>
+            <li><strong>Ortak bağlantılar:</strong> siz ve iki kişi birbirinizi eklediğinde, her biri diğerinin profilinde adınızı sorabilecekleri biri olarak görebilir. Ayarlar'da, <strong>YASAL VE GİZLİLİK</strong> altında <strong>Beni ortak bağlantı olarak göster</strong> seçeneğini kapatın; hiç kimse adınızı orada görmez. Siz kapatana kadar açıktır. &quot;Kişiler ve arkadaşlar&quot; bölümüne bakın.</li>
+            <li><strong>Sizi kimlerin eklediği:</strong> birini eklediğinizde, sizi geri ekleyebilmeleri için Kişiler sekmesinde sizin eklediğinizi söyleyen bir satır görürler. Kendilerine bir bildirim gönderilmez.</li>
+            <li><strong>Konum (telefon):</strong> Ayarlar'da, <strong>UYGULAMA AYARLARI</strong> altında, harita ve yakındaki gönderiler için konumunuzu kullanmak üzere <strong>Konum</strong>'u açın. Kapatmak için telefonunuzun kendi ayarlarından değiştirin; uygulama size nasıl yapılacağını gösterir. Bir web tarayıcısında böyle bir anahtar yoktur: tarayıcı size sorar ve yanıtınızı hatırlar.</li>
+            <li><strong>Bölgeniz</strong> (küresel toplulukta): Ayarlar'da, <strong>Bölgeniz</strong> altında, verdiğiniz bölgeyi (bir kasabanın çevresinde yaklaşık 10 km veya iki sayı) veya <strong>Ayarlanmadı</strong> ifadesini görün. <strong>Temizle</strong> onu kaldırır. Altındaki <strong>Yaklaşık olarak neredesin?</strong>, <strong>Konumumu kullan</strong> veya <strong>Bir kasaba veya semt yaz</strong> ile yeni bir bölge belirler; <strong>İptal</strong> (bir tarayıcıda <strong>← Ayarlar'a Geri Dön</strong>) ise olduğu gibi bırakır. Yalnızca yuvarlanmış bölge gönderilir. Diğer üyeler ne kadar uzakta olduğunuzu görür ve yaptığınız bir anket bölgenizde gösterilir. Bir bölgeniz olmadan dünya çapındaki en yeni ilanları görürsünüz ve yakındaki üyeler yaptığınız bir anketi listelerinde göremez; ancak yine de arayarak bulabilirler. &quot;Bölgeniz&quot; bölümüne bakın.</li>
+            <li><strong>Uygulama Kilidi:</strong> uygulama açıldığında ve 15 saniye veya daha uzun süre uzakta kaldıktan sonra geri döndüğünüzde telefonunuzun ekran kilidini (PIN, desen, şifre, parmak izi veya yüz) ister. Kilit, uygulamanın ekranlarını ve açılır pencerelerini kapsar. Bir iPhone'da, uygulamanın açtığı bir web sayfasını da kapatır; örneğin <strong>Yönet</strong> üzerinden açılan topluluğunuzun Ayarlarını. Uygulamanın bir Android telefonda açtığı (uygulamanın dışında açılan) bir web sayfasını veya her iki telefonda da bir şey paylaşma panelini kapsayamaz: telefonunuzu elinizden bırakmadan önce bunları kapatın. <strong>Yönet</strong> üzerinden açılan topluluğunuzun Ayarları, kullanılmadığında 15 dakika sonra oturumunuzu kapatır. Uygulama Kilidi açıkken, uygulamadan ayrıldığınızda ekran kararır ve geri döndüğünüzde tekrar gelir. Telefonda bir ekran kilidine ihtiyaç duyar: kilit olmadan isteyebileceği hiçbir şey yoktur.</li>
+            <li><strong>Kanallar:</strong> Nabız'da paylaştığınız her şey, topluluğunuzdaki herkese adınızla birlikte gösterilir. &quot;Kanallarınızı paylaşma&quot; bölümüne bakın.</li>
+        </ul>
+        <h2>Başka kimler neleri görebilir</h2>
+        <ul>
+            <li>İki kişi arasındaki sohbetler uçtan uca şifrelidir: kilitlenemeyen bir mesaj gönderilmez. BeanPool'un bir anlaşma hakkında sohbete eklediği tutarı gibi bildirimler şifrelenmez. &quot;Mesajlar&quot; bölümüne bakın.</li>
+            <li>Telefonda, grup sohbetlerini kilitlemek üzere sunucusu güncellenmiş bir toplulukta grup sohbeti de uçtan uca şifrelidir: sunucu karıştırılmış sözcükler tutar. Yine de kimin ne zaman yazdığını, kimden bahsedildiğini, her satırın hangi mesaja yanıt verdiğini ve emoji tepkilerini görür. Sohbet kilitli olup olmadığını belirtir. Güncellenmemiş bir sunucuda ise grubun sohbeti sunucu tarafından hâlâ okunabilir.</li>
+            <li>Nabız'da bir YouTube videosu oynatmak, videoyu YouTube uygulamasında açmakla aynı şekilde YouTube'a onu izlediğinizi bildirir. Siz ▶ simgesine dokunana kadar YouTube'a hiçbir şey gönderilmez ve bir videonun yanından kaydırıp geçmek hiçbir şey göndermez. &quot;Nabız Akışı&quot; bölümüne bakın.</li>
+            <li>Topluluğunuzun sunucusu takaslarınızı, gönderilerinizi, oylarınızı ve web uygulamasında kimi engellediğinizi saklar. Sunucuyu işleten sahipler ve yöneticiler; etkinlik sohbetleri, girişim sohbetleri ve bunları kilitlemek üzere güncellenmemiş bir sunucudaki grup sohbetleri dahil orada saklananları görebilir. İnsanlarına güvendiğiniz bir topluluk seçin.</li>
+            <li>Hesabınızı silerseniz, yazdığınız her mesajda <strong>Bu mesaj silindi</strong> yazar ve gönderdiğiniz fotoğraflar silinir. Sunucunun bundan önce alınan kendi günlük kopyaları bunları 14 güne kadar saklar. Topluluğunuzun sunucusu yedeklerini başka bir yerdeki depolama alanına gönderiyorsa, bundan önce alınan her yedek bunları 30 güne kadar saklar. Bir sahibin indirdiği bir yedek ise sahip silene kadar bunları saklar. &quot;Ayrılma veya hesabı silme&quot; bölümüne bakın.</li>
+            <li>Bir oturum açma hesabı bağladıysanız, böyle bir hesapla katıldıysanız veya daha sonra eklediyseniz, topluluğunuzun sunucusu bunun için hesabınızın kilitli bir kopyasını saklar. O sunucuyu işleten kişiler bu kopyayı açabilir. Yalnızca 12 kelimeniz hiç kimseye ihtiyaç duymaz. &quot;Hesabınızı geri alma&quot; bölümüne bakın.</li>
+            <li>Küresel toplulukta moderatörler, aynı internet bağlantısından birbirini izleyen bir gün içinde hangi hesapların katıldığını görebilir, ancak bağlantının kendisini asla göremezler; böylece sahte hesap akınıyla tek seferde ilgilenebilirler. &quot;Sorun bildirme&quot; bölümüne bakın.</li>
+            <li>Küresel topluluğa katıldığınızda, katıldığınız internet bağlantısının karıştırılmış bir referansını bir gün boyunca saklar; adresin kendisini asla saklamaz. Bununla, tek bir bağlantıdan çok sayıda hesap oluşturulduğunda, oradaki her yeni hesabın kurulumu biraz daha uzun sürer ve oradan yalnızca belirli sayıda hesap gelebilir. Topluluk bir hesabı katıldıktan sonra bir gün içinde kaldırırsa, bu referans katılma anından itibaren 7 gün boyunca saklanır; böylece aynı bağlantıdan gelen yeni 12 kelimelik hesapların (kelimeler İngilizce kelimelerdir) kurulumu o hafta daha uzun sürer. Kendi hesabını silen biri için asla daha uzun süre saklanmaz.</li>
+            <li>Küresel topluluğa 12 kelimeyle (kelimeler İngilizce kelimelerdir) katılırsanız kapıda öğrendiği tek şey, bu referansın yanı sıra seçtiğiniz ad ve hesabınızın anahtarıdır: e-posta yok, telefon numarası yok, başka bir hesap yok.</li>
+        </ul>
+        <h2>Daha fazla oku</h2>
+        <p>Ayarlar'da, <strong>YASAL VE GİZLİLİK</strong> altında <strong>Gizlilik Politikası</strong>'na dokunun.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-profile.html"><strong>Profiliniz</strong><span>Adınız, fotoğrafınız, hakkınızda birkaç kelime ve iletişim bilgilerinizi kimlerin görebileceği.</span></a></li>
+            <li><a href="your-area.html"><strong>Bölgeniz</strong><span>Küresel topluluğun size yakındaki ilanları göstermek için kullandığı yaklaşık konum ve bunu değiştirme veya temizleme.</span></a></li>
+            <li><a href="pin-locations.html"><strong>İşaretinizin konumu</strong><span>İlanlarınızın ve etkinliklerinizin yerini kimlerin gördüğü ve ev adresinizi nasıl gizli tutacağınız.</span></a></li>
+            <li><a href="blocking.html"><strong>Birini engelleme</strong><span>Birinin ilanlarını ve mesajlarını sizden gizleyin ve daha sonra bu işlemi geri alın.</span></a></li>
+            <li><a href="messages.html"><strong>Mesajlar</strong><span>Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

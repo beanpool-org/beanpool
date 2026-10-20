@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assistant IA d'un admin — BeanPool members' guide</title>
+    <meta name="description" content="Ce que l'assistant IA d'un propriétaire ou administrateur peut lire sur vous, ce qu'il ne voit jamais et qui le reçoit.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Paramètres et sécurité</a></p>
+        <h1>Assistant IA d'un admin</h1>
+        <p class="lede">Ce que l'assistant IA d'un propriétaire ou administrateur peut lire sur vous, ce qu'il ne voit jamais et qui le reçoit.</p>
+        <p>Les propriétaires de votre communauté peuvent connecter leur propre assistant IA (par exemple Claude ou ChatGPT) au serveur de votre communauté pour les aider à en prendre soin : pour demander ce qui attend leur intervention ou pour résumer les signalements en cours. Les administrateurs le peuvent aussi : ils ajoutent l'adresse de votre communauté à leur assistant et l'approuvent sur leur téléphone. Ils le connectent eux-mêmes et peuvent le déconnecter à tout moment. Les autres propriétaires sont avertis dès qu'un assistant est connecté.</p>
+        <h2>Ce qu'il peut lire sur vous</h2>
+        <p>Un assistant voit bien moins de choses qu'un administrateur dans les Paramètres. C'est le serveur de votre communauté qui décide de ce qu'il reçoit, et non l'assistant.</p>
+        <ul>
+            <li><strong>Si quelqu'un vous signale ou signale votre annonce</strong>, et que l'administrateur demande le contenu du signalement : le motif fourni, le titre et la description de votre annonce, ainsi que votre nom BeanPool. Jamais l'auteur du signalement.</li>
+            <li><strong>Si vous demandez à rejoindre la communauté</strong>, et que l'administrateur demande les messages : le nom et le message envoyés avec votre demande, ainsi que la communauté dont vous avez indiqué provenir. Jamais votre photo ni votre clé.</li>
+            <li><strong>Les totaux pour l'ensemble de la communauté</strong>, comme le nombre de membres et le nombre de haricots en circulation. Jamais votre solde.</li>
+        </ul>
+        <h2>Ce qu'il ne voit jamais</h2>
+        <p>Vos messages et discussions, votre solde et vos échanges, vos clés, votre adresse, vos photos, la liste des vrais noms, et qui a signalé qui. Il ne peut rien modifier vous concernant : il ne peut ni vous exclure, ni vous mettre en sourdine, ni supprimer votre publication, ni répondre à votre demande d'adhésion. Ces actions sont accomplies par des humains. Un administrateur les effectue dans les Paramètres ou sur son téléphone, et la réponse à une demande d'adhésion est apportée dans l'application par tout membre habilité à inviter.</p>
+        <p>Un assistant peut suggérer quoi faire concernant un signalement, par exemple conserver votre publication ou la retirer. Rien ne se produit tant que l'administrateur pour lequel il travaille ne lit pas le signalement et ne valide pas l'action ; toute information qui vous parvient à ce sujet émane des modérateurs de votre communauté, comme toujours.</p>
+        <h2>Qui le reçoit</h2>
+        <p>Ce que l'assistant lit est transmis à l'entreprise qui l'exploite, comme lorsque vous collez vous-même quelque chose dans une discussion avec une IA. Le serveur ne transmet le texte d'un signalement ou d'un message d'adhésion que si l'assistant de l'administrateur le demande expressément, marqué comme émanant d'un membre et non comme des instructions.</p>
+        <p>Si vous préférez que votre signalement ou votre message d'adhésion ne soit pas lu par une IA, demandez à vos administrateurs comment ils utilisent la leur.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>Ce que voient les admins</strong><span>Dans une communauté où les administrateurs tiennent un registre de noms : ce qu'il contient sur vous, qui peut le lire, ce que garde le serveur et ce que signifie être confirmé.</span></a></li>
+            <li><a href="reporting.html"><strong>Signaler un problème</strong><span>Alerter les modérateurs de votre communauté à propos d'une annonce, d'un événement, d'une publication du Pouls, d'un projet ou d'une entreprise.</span></a></li>
+            <li><a href="privacy.html"><strong>Confidentialité</strong><span>Ce que les autres voient de vous et les réglages qui le contrôlent.</span></a></li>
+            <li><a href="joining.html"><strong>Rejoindre BeanPool</strong><span>Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

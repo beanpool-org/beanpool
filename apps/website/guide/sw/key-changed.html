@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soga ikisema ufunguo wa jina umebadilika — BeanPool members' guide</title>
+    <meta name="description" content="Kwa nini soga inasimama kutuma, jinsi ya kuangalia nambari ya ufunguo na mhusika, na wakati wa kuendelea.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Gumzo</a></p>
+        <h1>Soga ikisema ufunguo wa jina umebadilika</h1>
+        <p class="lede">Kwa nini soga inasimama kutuma, jinsi ya kuangalia nambari ya ufunguo na mhusika, na wakati wa kuendelea.</p>
+        <h2>Maana yake</h2>
+        <p>Kila ujumbe kati ya watu wawili umefungwa ili simu ya yule mtu mwingine pekee ndiyo iweze kuufungua. Umefungwa kwa <strong>ufunguo</strong> wao, si kwa jina lao. Simu yako inakumbuka ni ufunguo gani ambao imekuwa ikifunga gumzo lenu kwake.</p>
+        <p>Ikiwa jumuiya yako sasa inataja ufunguo tofauti kwa mtu huyo, simu yako inasimama na kukuambia, badala ya kutuma kimyakimya kwenye ufunguo mpya. Juu ya gumzo unaona <strong>Ufunguo unaotumika na &quot;Ben&quot; umebadilika.</strong> Kisanduku cha ujumbe kinakuwa cha kijivu na kinasema kutuma kumesitishwa.</p>
+        <p>Jumbe zako za awali pamoja naye kwa kawaida bado zinasomeka kama hapo awali. Kwenye simu uliyotoka kuirejesha hivi karibuni au kuiweka upya, jumbe kutoka kwa ufunguo mpya zinasomeka <strong>Umetumwa kutoka kwa ufunguo mpya. Utaonyeshwa baada ya kuendelea.</strong> hadi utakapoamua.</p>
+        <p>Hii ni kwenye programu ya simu. Programu ya wavuti haikumbuki funguo bado.</p>
+        <h2>Kwa nini inaweza kutokea</h2>
+        <ul>
+            <li><strong>Walipata simu mpya na kubadilisha ufunguo.</strong> Hii ndiyo sababu ya kawaida. Ufunguo wao wa zamani umeondoka, kwa hivyo wana mpya.</li>
+            <li><strong>Kitu si sawa.</strong> Seva ya jumuiya huorodhesha nani yumo katika kila gumzo. Seva iliyotaka kusoma jumbe zako inaweza kuweka ufunguo wa mtu mwingine nyuma ya jina la rafiki yako. Jina linaonekana sahihi, lakini ufunguo hauonekani sawa.</li>
+        </ul>
+        <p>Simu yako haiwezi kutofautisha haya yenyewe. Wewe unaweza, ukitumia msimbo wa ufunguo.</p>
+        <h2>Kagua msimbo wa ufunguo na mhusika</h2>
+        <ul>
+            <li>Bango linaonyesha msimbo: tarakimu 20 katika makundi matano ya tarakimu nne.</li>
+            <li>Mwombe mhusika afungue <strong>Mipangilio</strong>, kisha <strong>Ulinzi wa Akaunti</strong>, na akusomee <strong>Msimbo wa ufunguo wangu</strong>.</li>
+            <li><strong>Msimbo wa ufunguo wangu</strong> uko kwenye programu ya simu pekee. Ikiwa mtu huyo anatumia programu ya wavuti pekee, hawezi kukusomea bado: gusa <strong>Si sasa</strong> hadi atakapoweza kufungua programu ya simu.</li>
+            <li>Ukague <strong>ana kwa ana, au kwenye simu au simu ya video</strong> ambapo unajua hakika ni wao. Usiukague kwa ujumbe katika BeanPool: ikiwa ufunguo si sahihi, yeyote anayejibu pia si sahihi.</li>
+            <li>Ikiwa kila tarakimu inalingana, weka alama ya vema kwenye <strong>Nilikagua na Ben: msimbo wa ufunguo katika Mipangilio yake unalingana na huu</strong>, kisha uguse <strong>Endelea na ufunguo mpya</strong>.</li>
+        </ul>
+        <p>Kuanzia wakati huo na kuendelea jumbe zako huenda kwenye ufunguo mpya. Bango na lebo ya <strong>ufunguo umebadilika</strong> kwenye gumzo katika <strong>Gumzo</strong> huondoka, na jumbe zako za awali bado zinasomeka.</p>
+        <p>Msimbo huo si wa siri. Ni salama kuusoma kwa sauti.</p>
+        <h2>Ikiwa msimbo haulingani, au huwezi kukagua</h2>
+        <p>Gusa <strong>Si sasa</strong>. Hakuna kinachotumwa na hakuna kinachobadilika. Unaweza kurudi kwenye gumzo baadaye.</p>
+        <p>Gumzo lililositishwa linaweza kubaki limesitishwa hadi utakapoendelea. Hakuna njia nyingine ya kuendelea kuzungumza ndani yake: jumuiya yako huweka gumzo moja kwa ajili yenu nyote wawili, kwa hivyo kuanzisha gumzo jipya na mtu yuleyule hufungua gumzo hilohilo.</p>
+        <p>Ikiwa msimbo haulingani, usiendelee. Mjulishe mhusika na wasimamizi wa jumuiya yako: mtu fulani anaweza kuwa anajaribu kusoma jumbe zako.</p>
+        <h2>Ikiwa bango halitoi ufunguo wa kuendelea nao</h2>
+        <p>Wakati mwingine jumuiya haiorodheshi ufunguo mmoja kwa mtu huyo katika gumzo kati ya watu wawili: inaorodhesha kadhaa, au hakuna. Basi hakuna ufunguo wa kuendelea nao, kwa hivyo bango linasema hivyo na kutoa tu <strong>Si sasa</strong>. Hakuna kinachotumwa. Zungumza na mtu huyo ana kwa ana au kwa simu. Simu yako hukagua gumzo tena yenyewe wakati orodha ya jumuiya inapobadilika, na gumzo jipya na mtu yuleyule ni gumzo hilohilo.</p>
+        <h2>Ikiwa bango linasema simu yako inakagua gumzo tangu mwanzo</h2>
+        <p>Baada ya kurejesha simu yako kutoka kwa maneno yako 12, au kuisasisha programu, simu yako hukagua kila gumzo kulingana na jumbe zake za awali. Ikiwa hizo zilitoka kwa ufunguo tofauti na ule ambao jumuiya yako sasa inatoa kwa ajili ya mtu huyo, bango huanza na <strong>Simu hii inakagua gumzo hili tangu mwanzo, kama inavyofanya baada ya kurejesha au kuisasisha programu.</strong> Kagua msimbo na mtu huyo kama hapo juu. Baada ya kuweka upya kumbukumbu ya gumzo ya jumuiya huanza na <strong>Kumbukumbu ya gumzo ya jumuiya hii iliwekwa upya, kwa hivyo simu hii inakagua gumzo hili tangu mwanzo.</strong> badala yake.</p>
+        <h2>Kumbukumbu ya gumzo</h2>
+        <p>Simu yako huweka kumbukumbu ndogo kwa kila jumuiya: ni ufunguo gani ambao kila gumzo lako linatumia, na ni gumzo zipi zilizo za faragha. Huwekwa kwenye simu, na seva ya jumuiya haiwezi kuhamisha gumzo kwenye ufunguo mwingine yenyewe: ni wewe pekee unayeweza, kwenye bango. Hubaki kwenye simu unapoondoka, kwa hivyo kuondoka na kuingia tena hakulifuti. Simu haiweki upya yenyewe kamwe.</p>
+        <p>Unaweza kuiweka upya kwa ajili ya jumuiya moja: fungua <strong>Mipangilio</strong>, gusa <strong>Kumbukumbu ya gumzo</strong> chini ya <strong>AKAUNTI &amp; KITAMBULISHO</strong>, gusa <strong>Weka upya</strong> kando ya jumuiya, soma onyo, na uguse <strong>Weka upya</strong> tena. Programu inakuelekeza hapa pale tu inaposema haikuweza kusoma kumbukumbu hiyo na kujaribu tena hakukusaidia.</p>
+        <p>Baada ya kuweka upya, simu yako hukagua kila gumzo katika jumuiya hiyo tena tangu mwanzo, kutoka kwenye jumbe inazoshikilia. Gumzo ambalo jumbe zake zilitoka kwa ufunguo tofauti na ule ambao jumuiya inatoa sasa huonyesha bango tena, likianza na <strong>Kumbukumbu ya gumzo ya jumuiya hii iliwekwa upya, kwa hivyo simu hii inakagua gumzo hili tangu mwanzo.</strong> Kagua msimbo na mtu huyo kama hapo juu.</p>
+        <p>Mambo mawili yanaweza kubadilika baada ya kuweka upya, na onyo linasema hivyo kabla hujathibitisha: gumzo lililositishwa kwa sababu ufunguo wake ulibadilika linaweza kufunguka na ufunguo mpya, na gumzo la faragha lililopotea kutoka kwa Gumzo linaweza kurudi kama gumzo la kikundi ambalo jumuiya inaweza kulisoma. Kagua msimbo wa ufunguo, au nani yumo kwenye gumzo, kabla ya kutuma.</p>
+        <p>Kuweka upya hakusaidii kwa gumzo ambalo simu yako haiwezi kulilinganisha na ufunguo mmoja: linakaguliwa tena na kusimama tena. Kagua msimbo na mtu huyo badala yake (hapo juu).</p>
+        <p>Hii ni kwenye programu ya simu. Programu ya wavuti haina kumbukumbu ya gumzo.</p>
+        <h2>Ikiwa bango linasema simu yako haiwezi kulinganisha gumzo na ufunguo mmoja</h2>
+        <p>Wakati mwingine jumbe za awali katika gumzo zilifungwa kwa funguo ambazo simu yako haiwezi kuzilinganisha na mtu mmoja. Juu ya kisanduku cha ujumbe inasema <strong>Simu hii haiwezi kulinganisha gumzo hili na ufunguo mmoja, kwa hivyo kutuma kumezimwa.</strong> na bango linaonyesha msimbo wa ufunguo ambao jumuiya yako sasa inaorodhesha kwa ajili ya mtu huyo.</p>
+        <p>Baadhi ya jumbe bado zinaweza kuonekana. Huenda zisitoke kwa mtu ambaye jina lake liko kwenye gumzo: jumbe zao za awali zinaweza kuwa zile zinazosoma <strong>Ujumbe huu haukuweza kuthibitishwa, kwa hivyo hauonyeshwi.</strong> Hizo zinabaki hivyo, hata baada ya wewe kuendelea.</p>
+        <p>Kagua msimbo na mtu huyo kama ilivyo hapo juu, ana kwa ana au kwa simu. Ikiwa unalingana, weka alama ya vema kwenye kisanduku na uguse <strong>Endelea na ufunguo mpya</strong>: kuanzia wakati huo na kuendelea jumbe zako huenda kwenye ufunguo huo. Ikiwa haulingani, au huwezi kukagua, gusa <strong>Si sasa</strong>. Gumzo jipya na mtu yuleyule ni gumzo hilohilo, kwa hivyo hakuna kingine cha kujaribu. Ikiwa jumuiya haiorodheshi ufunguo mmoja kwa ajili yao, bango hutoa <strong>Si sasa</strong> pekee, na simu yako hukagua gumzo tena yenyewe wakati orodha ya jumuiya inapobadilika.</p>
+        <h2>Kile ambacho simu yako inaweza kukagua, na isichoweza</h2>
+        <p>Simu yako hukagua gumzo kulingana na jumbe ambazo tayari inazo. Simu iliyorejeshwa, au simu iliyopo wakati wa sasisho, inaongozwa tu na seva inayozuia au inayozunguka sehemu ya zamani zaidi ya gumzo katika kile inachotuma. Simu ambayo tayari ilikuwa na sehemu hiyo ya zamani zaidi haiongozwi na chochote ambacho seva inatuma baada ya sasisho.</p>
+        <p>Kwa hivyo simu uliyotoka kuirejesha hivi karibuni, au uliyotoka kuisasisha, inaweza kupotoshwa kuhusu ufunguo wa gumzo. Bango haliwezi kuzuia hilo. <strong>Thibitisha ufunguo uliobadilika ana kwa ana</strong>, au kwenye simu ambapo unajua hakika ni wao.</p>
+        <h2>Ikiwa jumuiya inatoa tarehe</h2>
+        <p>Wakati jumuiya yako inapoweza kuonyesha kuwa akaunti ilibadilishiwa ufunguo, bango linasema hivyo, kwa mfano: <strong>Jumuiya hii inasema akaunti ilibadilishiwa ufunguo mnamo 3 Okt 2026.</strong> Hiyo inakusaidia kuelewa kilichotokea, lakini haichukui nafasi ya kukagua msimbo: seva inaweza kusema hivyo pia.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Ujumbe</strong><span>Anzisha soga, tuma picha, jibu, toa hisia, hariri, futa, nyamazisha, na mambo ya faragha.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Maneno yako 12</strong><span>Maneno 12 ndio ufunguo wa akaunti yako. Umuhimu wake, mahali pa kuyapata, jinsi ya kuyaweka salama, na kuongeza njia ya kuingia kwa usalama.</span></a></li>
+            <li><a href="people.html"><strong>Watu na marafiki</strong><span>Tafuta wanachama wa jumuiya yako, ongeza marafiki, na mdhamini mtu.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

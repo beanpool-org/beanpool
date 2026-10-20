@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wilayahmu — BeanPool members' guide</title>
+    <meta name="description" content="Perkiraan wilayah yang digunakan komunitas global untuk menampilkan kiriman terdekat, dan cara mengubah atau menghapusnya.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Pengaturan dan keamanan</a></p>
+        <h1>Wilayahmu</h1>
+        <p class="lede">Perkiraan wilayah yang digunakan komunitas global untuk menampilkan kiriman terdekat, dan cara mengubah atau menghapusnya.</p>
+        <h2>Apa itu wilayahmu</h2>
+        <p>Di komunitas global, wilayahmu adalah perkiraan tempat kamu berada: radius sekitar 10 km dari suatu kota atau titik, tidak pernah lokasi tepatmu. Komunitas global menggunakannya untuk menunjukkan apa yang ditawarkan di dekatmu: 500 listing terdekat dalam radius 250 km darinya. Lihat &quot;Lebih dari satu komunitas&quot;.</p>
+        <p>Kamu memberikannya saat bergabung, pada <strong>Kira-kira kamu di mana?</strong>, yang dapat kamu lewati dengan <strong>Lewati dulu</strong>. Kamu dapat mengubah atau menghapusnya kapan saja. Ini milik akunmu di komunitas global, jadi ponselmu dan aplikasi web menggunakan wilayah yang sama.</p>
+        <p>Komunitasmu yang lain tidak memintanya. Komunitas yang servernya disiapkan untuk bekerja dengan cara yang sama juga menampilkan <strong>Wilayahmu</strong> di Pengaturannya.</p>
+        <h2>Melihat wilayahmu</h2>
+        <ul>
+            <li>Buka Pengaturan: ketuk tombol penggeser di kanan atas layar (pada layar komputer yang lebar, roda gigi di bilah sisi kiri).</li>
+            <li>Di bawah <strong>PENGATURAN APLIKASI</strong>, ketuk <strong>Wilayahmu</strong>. Di ponsel letaknya tepat di bawah <strong>Lokasi</strong>.</li>
+        </ul>
+        <p>Tertulis <strong>Radius sekitar 10 km dari</strong> dan kota yang kamu ketik, atau dua angka koordinat jika kamu menggunakan lokasimu, atau <strong>Belum diatur</strong>. Nama kota hanya disimpan di ponsel atau di browser tempat kamu mengetiknya, jadi di tempat lain kamu melihat dua angka tersebut. Jika aplikasi tidak dapat menjangkau komunitas, baris tersebut bertuliskan <strong>Tidak dapat memeriksa saat ini</strong>.</p>
+        <h2>Mengubahnya</h2>
+        <ul>
+            <li>Di <strong>Wilayahmu</strong>, di bawah <strong>Kira-kira kamu di mana?</strong>, ketuk <strong>Pakai lokasiku</strong>, atau <strong>Ketik nama kota atau daerah</strong> dan pilih kotamu dari daftar.</li>
+            <li>Begitu tersimpan, kamu kembali ke Pengaturan.</li>
+            <li><strong>Batal</strong> (di browser, <strong>← Kembali ke Pengaturan</strong>) membiarkannya seperti semula.</li>
+        </ul>
+        <p>Ponsel atau browsermu membulatkan lokasi menjadi sekitar 10 km sebelum dikirim, dan komunitas membulatkannya lagi, sehingga lokasi tepatmu tidak pernah dikirim atau disimpan. <strong>Pakai lokasiku</strong> mengambil satu kali pembacaan posisi tempatmu berada. Untuk menemukan kota, apa yang kamu ketik dikirimkan ke OpenStreetMap, yang menjadi asal daftar tempat tersebut.</p>
+        <p>Ketika wilayahmu berubah, ponselmu menukar listing yang disimpannya dengan listing di dekat wilayah baru pada sinkronisasi berikutnya. Jika kamu mengubahnya di aplikasi web atau di ponsel lain, ponselmu akan menerapkannya dalam waktu sekitar satu jam.</p>
+        <h2>Menghapusnya</h2>
+        <ul>
+            <li>Di <strong>Wilayahmu</strong>, ketuk <strong>Hapus</strong>. Tombol itu hanya ada saat kamu memiliki wilayah yang diatur.</li>
+        </ul>
+        <p>Tanpa wilayah, kamu tetap menggunakan komunitas global seperti sebelumnya. Ponselmu menyimpan 100 listing terbaru dari mana saja alih-alih yang ada di dekatmu, dan sebuah baris di atas Pasar bertuliskan <strong>Anda melihat listing terbaru di seluruh dunia. Atur wilayahmu untuk melihat apa yang ada di dekatmu.</strong> Ketuk baris tersebut untuk mengaturnya. Di aplikasi web, Pasar dan Peta menampilkan listing terbaru dari mana saja: lihat &quot;Menemukan berbagai hal di dekatmu&quot;.</p>
+        <h2>Siapa melihat apa</h2>
+        <ul>
+            <li>Anggota lain melihat seberapa jauh jarakmu, dan jajak pendapat yang kamu buat ditampilkan di wilayahmu. Lihat &quot;Privasimu&quot;.</li>
+            <li>Tanpa wilayah, anggota di sekitar tidak akan melihat jajak pendapat yang kamu buat di daftar mereka, meskipun mereka masih dapat menemukannya lewat pencarian.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="communities.html"><strong>Lebih dari satu komunitas</strong><span>Bergabung di beberapa komunitas dengan satu akun, berpindah antar komunitas, mengikuti komunitas saat pindah alamat, dan melihat apa yang ditampilkan komunitas global.</span></a></li>
+            <li><a href="privacy.html"><strong>Privasimu</strong><span>Apa yang bisa dilihat orang lain tentangmu, dan pengaturan yang mengaturnya.</span></a></li>
+            <li><a href="near-you.html"><strong>Menemukan hal di dekatmu</strong><span>Tampilkan hanya kiriman dalam jarak tertentu darimu, atau dari tempat mana pun yang kamu pilih.</span></a></li>
+            <li><a href="joining.html"><strong>Bergabung ke BeanPool</strong><span>Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Menjelajahi pasar</strong><span>Cari Penawaran dan Permintaan dengan pencarian, filter, dan jarak.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

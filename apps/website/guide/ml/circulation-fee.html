@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>സർക്കുലേഷൻ ഫീസ് — BeanPool members' guide</title>
+    <meta name="description" content="പയറുകൾ വിനിമയത്തിൽ തുടരാൻ വലിയ ബാലൻസുകൾക്ക് ചെറിയൊരു പ്രതിമാസ ഫീസ്. ആദ്യത്തെ 200 സൗജന്യമാണ്.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">ലെഡ്ജർ</a></p>
+        <h1>സർക്കുലേഷൻ ഫീസ്</h1>
+        <p class="lede">പയറുകൾ വിനിമയത്തിൽ തുടരാൻ വലിയ ബാലൻസുകൾക്ക് ചെറിയൊരു പ്രതിമാസ ഫീസ്. ആദ്യത്തെ 200 സൗജന്യമാണ്.</p>
+        <h2>എന്തുകൊണ്ട്</h2>
+        <p>പയർ ഉപയോഗിക്കാനുള്ളതാണ്, കൂട്ടിവെക്കാനുള്ളതല്ല. വലിയ ബാലൻസുകൾക്കുള്ള ഒരു ചെറിയ ഫീസ് അവയെ കമ്മ്യൂണിറ്റിയിൽ വിനിമയം ചെയ്യാൻ സഹായിക്കുന്നു. ഇത് എല്ലാവർക്കുമായി കോമൺസിലേക്ക് പോകുന്നു.</p>
+        <h2>എത്രയാണ്</h2>
+        <p>200-ൽ കൂടുതൽ നിങ്ങളുടെ പക്കൽ <strong>ഉള്ള</strong> പയറിന് മാത്രമേ ഫീസ് നൽകേണ്ടതുള്ളൂ. നിങ്ങളുടെ ബാലൻസിന്റെ ഓരോ ഭാഗവും പ്രതിമാസം അതിന്റെ നിരക്ക് നൽകുന്നു:</p>
+        <ul>
+            <li>ആദ്യത്തെ 200: ഒന്നുമില്ല;</li>
+            <li>200 മുതൽ 500 വരെ: 1%;</li>
+            <li>500 മുതൽ 1,000 വരെ: 1.5%;</li>
+            <li>1,000 മുതൽ 2,000 വരെ: 2%;</li>
+            <li>2,000-ൽ കൂടുതൽ: 2.5%.</li>
+        </ul>
+        <p>പൂജ്യത്തിന് താഴെയുള്ള ഒരു ബാലൻസ് ഒന്നും നൽകേണ്ടതില്ല. കടത്തിന് ആരും പലിശ നൽകേണ്ടതില്ല.</p>
+        <p>ഉദാഹരണത്തിന്, ഒരു മാസത്തേക്ക് 600 പയർ കൈവശം വെയ്ക്കുന്നതിന് ഏകദേശം 4.5 പയർ ചിലവാകും: ആദ്യത്തെ 200-ന് ഒന്നുമില്ല, അടുത്ത 300-ന് 3, അവസാന 100-ന് 1.5.</p>
+        <h2>എപ്പോഴാണ്</h2>
+        <p>ഫീസ് ഓരോ ദിവസവും കൂടുകയും, നിങ്ങളുടെ അക്കൗണ്ട് അടുത്തതായി ഉപയോഗിക്കുമ്പോഴെല്ലാം അല്പം വീതം കുറയ്ക്കുകയും ചെയ്യുന്നു. ഒരൊറ്റ ദിവസം കൊണ്ട് വലിയൊരു തുക നിങ്ങൾക്ക് നഷ്ടപ്പെടില്ല.</p>
+        <h2>ഇത് കാണുന്നത് എങ്ങനെ</h2>
+        <p><strong>ലെഡ്ജർ</strong>-ൽ, <strong>വാലറ്റ്</strong> എന്നതിൽ, <strong>കമ്മ്യൂണിറ്റി പ്രചാരം</strong> ബോക്സ് ഈ മാസം നിങ്ങൾ എത്ര തുക നൽകേണ്ടിവരുമെന്ന് കാണിക്കുന്നു. നിങ്ങളുടെ പക്കൽ പയർ ഉള്ളപ്പോൾ മാത്രമേ ഇത് കാണിക്കൂ. 1,000 പയറുകൾക്ക് മുകളിൽ ഇത് ആമ്പർ നിറമായി മാറുന്നു. ഫോണിൽ ഇതിൽ കുറച്ച് ചെലവഴിക്കാനും നിർദ്ദേശിക്കുന്നു, കൂടാതെ ഫീസിനെക്കുറിച്ച് വിശദീകരിക്കുന്ന <strong>സിസ്റ്റം സർക്കുലേഷൻ</strong> കാണാൻ നിങ്ങൾക്ക് ഇതിൽ ടാപ്പ് ചെയ്യാം.</p>
+        <p>അവധി മോഡ് ഫീസ് താൽക്കാലികമായി നിർത്തുന്നില്ല.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-balance.html"><strong>ബാലൻസും ചരിത്രവും</strong><span>നിങ്ങളുടെ പക്കലുള്ള പയറുകൾ, പിടിച്ചുവെച്ചിട്ടുള്ളവ, എല്ലാ ഇടപാടുകളും സമ്മാനങ്ങളും.</span></a></li>
+            <li><a href="commons-fund.html"><strong>കോമൺസ് ഫണ്ട്</strong><span>കമ്മ്യൂണിറ്റിയുടെ പങ്കിട്ട പയറുകൾ: അവ എവിടെ നിന്ന് വരുന്നു, എങ്ങനെ ചിലവഴിക്കുന്നു.</span></a></li>
+            <li><a href="credit-line.html"><strong>നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ</strong><span>പൂജ്യത്തിന് താഴേക്ക് എത്രത്തോളം പോകാം, ഇത് എങ്ങനെ വർദ്ധിക്കുന്നു.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool എങ്ങനെ പ്രവർത്തിക്കുന്നു</strong><span>പയർ, ഇടപാടുകൾ, ഓഫറുകളും ആവശ്യങ്ങളും, ക്രെഡിറ്റ് എന്നിവ ലളിതമായ വാക്കുകളിൽ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

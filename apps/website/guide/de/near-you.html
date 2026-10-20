@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dinge in der Nähe finden — BeanPool members' guide</title>
+    <meta name="description" content="Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Karte</a></p>
+        <h1>Dinge in der Nähe finden</h1>
+        <p class="lede">Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.</p>
+        <h2>Auf dem Tab „Markt“</h2>
+        <ul>
+            <li>Tippe auf <strong>Markt</strong> und dann in der zweiten Filterzeile auf <strong>Entfernung</strong>. Dieser Filter wird nicht angezeigt, solange <strong>Veranstaltungen</strong> ausgewählt ist.</li>
+            <li><strong>Ort &amp; Umkreis</strong> öffnet sich (<strong>Standort &amp; Umkreis festlegen</strong> in der Web-App). Um deinen aktuellen Standort zu verwenden, tippe auf das Fadenkreuz-Symbol. Oder tippe auf die Karte bzw. ziehe die Stecknadel, um einen anderen Mittelpunkt zu wählen.</li>
+            <li>Wähle die Reichweite mit <strong>Suchumkreis</strong>: von 100 Metern bis zu 50 Kilometern.</li>
+            <li>Tippe auf <strong>Anwenden</strong>. Die Schaltfläche zeigt anschließend die Distanz an, wie etwa <strong>5km</strong>.</li>
+            <li>Um wieder alles zu sehen, öffne den Filter erneut und tippe auf <strong>Zurücksetzen</strong>. In der Web-App kannst du auch auf das <strong>✕</strong> bei <strong>Entfernung</strong> tippen.</li>
+        </ul>
+        <p>Auf dem Smartphone werden Beiträge ohne Ortsangabe immer angezeigt. In der Web-App blendet eine gewählte <strong>Entfernung</strong> diese aus, mit Ausnahme von Umfragen. In der globalen Community lässt die Web-App sie auch weg, solange die Liste auf deine Nähe eingestellt ist (siehe unten).</p>
+        <p>Wenn dein Browser BeanPool bereits erlaubt, deinen Standort zu verwenden, kann sich die Auswahl direkt an deinem aktuellen Standort öffnen. Wenn nicht, öffnet sie sich an einem festen Ort. Prüfe die Stecknadel oder tippe auf das Fadenkreuz bzw. die Karte, bevor du auf <strong>Anwenden</strong> tippst. In der globalen Community sendet die Web-App den von dir gewählten Mittelpunkt an die Community, gerundet auf etwa 11 Meter.</p>
+        <p>Auf dem Smartphone öffnet sich die Auswahl am zuletzt gewählten Mittelpunkt oder an einem festen Ort; tippe daher zuerst auf das Fadenkreuz-Symbol.</p>
+        <h2>Auf der Karte</h2>
+        <p>Die Karte verfügt über keinen eigenen Entfernungsfilter. Tippe links auf das Fadenkreuz-Symbol, um deinen Standort zu sehen, und sieh dich dann um und zoome.</p>
+        <h2>In der globalen Community, in der Web-App</h2>
+        <p>Die globale Community enthält Einträge von überall her, daher starten <strong>Markt</strong> und <strong>Karte</strong> in der Web-App ausgehend von deiner Nähe:</p>
+        <ul>
+            <li>Wenn im Markt eine <strong>Entfernung</strong> gewählt ist, zeigen beide die nächstgelegenen Einträge innerhalb dieses Umkreises an, die nächsten zuerst. Die Karte zeigt bis zu 200 Stecknadeln.</li>
+            <li>Ohne Entfernungsfilter zeigen sie die nächstgelegenen Einträge im Umkreis von 250 km um deine Gegend an: den ungefähren Ort, den du der Community beim Beitritt mitgeteilt hast oder später in den <strong>Einstellungen</strong> unter <strong>Deine Gegend</strong>. Eine Zeile über der Liste im Markt besagt: <strong>Zuerst die nächsten aus deiner Gegend, innerhalb von 250 km.</strong> Tippe auf <strong>Überall anzeigen</strong>, um die neuesten Einträge von überall zu sehen, und auf <strong>In deiner Nähe</strong>, um zurückzukehren.</li>
+            <li>Ist weder das eine noch das andere gesetzt, siehst du die neuesten Einträge von überall her, und <strong>Finde heraus, was in deiner Nähe ist</strong> öffnet die Entfernungsauswahl. Eine Zeile über der Marktliste zeigt an, welche dieser Ansichten aktiv ist. Bei gesetzter <strong>Entfernung</strong> gibt es keine Schaltfläche: Öffne <strong>Entfernung</strong> und tippe auf <strong>Zurücksetzen</strong>. Du bist dann wieder bei deiner Gegend, oder, falls keine Gegend festgelegt ist, siehst du die neuesten Einträge von überall.</li>
+            <li>Jeder Eintrag zeigt an, wie weit er entfernt ist, wie <strong>📍 12 km</strong>. Deine eigenen Einträge sind immer auf der Karte und im Markt bei deiner Gegend zu finden, wo immer sie liegen. Bei gesetzter <strong>Entfernung</strong> zeigt der Markt nur das an, was innerhalb dieses Umkreises liegt, einschließlich deiner eigenen Einträge.</li>
+            <li>Solange die Liste auf deine Nähe beschränkt ist, bleiben Beiträge ohne Ortsangabe außen vor. Eine Umfrage von jemandem, der seine Gegend nicht festgelegt hat, gehört dazu. Um sie zu sehen, setze die <strong>Entfernung</strong> zurück, falls du eine gewählt hast, und tippe dann auf <strong>Überall anzeigen</strong>.</li>
+            <li>Unter <strong>Veranstaltungen</strong> wird die Liste wie bisher niemals nach deiner Gegend oder deiner <strong>Entfernung</strong> gekürzt.</li>
+            <li>Befindet sich nichts in deiner Nähe, teilt die Karte dies mit und bietet <strong>Überall anzeigen</strong> an. Anschließend bringt <strong>In deiner Nähe</strong> (oder <strong>In der Nähe des gewählten Ortes</strong>) die nächsten Einträge zurück.</li>
+        </ul>
+        <p>Die Suche in der Web-App durchsucht nur die Einträge auf dem Bildschirm. <strong>Überall anzeigen</strong> zeigt die neuesten Einträge von überall, nicht jeden einzelnen; ein Eintrag, der weit entfernt und nicht neu ist, taucht daher in der Suche nicht auf. In jeder anderen Community beschränkt die Web-App Markt und Karte nicht auf deine Gegend. Sie zeigen die 50 zuletzt geänderten Einträge sowie deine eigenen an, und die Suche durchsucht ausschließlich diese.</p>
+        <h2>In der globalen Community, auf dem Smartphone</h2>
+        <p>Das Smartphone speichert die Einträge, die deiner Gegend am nächsten liegen: bis zu 500, innerhalb von 250 km. Es behält auch deine eigenen Einträge sowie alle, zu denen du einen Deal, einen Chat oder eine Antwort hast. Der Markt und die Karte zeigen, was das Smartphone gespeichert hat. Ist keine Gegend festgelegt, speichert es stattdessen die neuesten Einträge, worauf eine Zeile über dem Markt hinweist. Siehe „Deine Gegend“.</p>
+        <h2>Veranstaltungen in deiner Nähe</h2>
+        <p>Auf dem Smartphone zeigen Veranstaltungskarten an, wie weit sie entfernt sind, sobald du der App die Erlaubnis zur Nutzung deines Standorts erteilt hast. In der Web-App zeigen sie die Entfernung ausgehend von dem Mittelpunkt an, den du unter <strong>Entfernung</strong> gewählt hast. In der globalen Community zeigen sie, falls du keinen Mittelpunkt gewählt hast, die Distanz zu deiner Gegend an (nicht unter <strong>Veranstaltungen</strong>). Auf der Karte zeigt die Web-App die Distanz zu dir an, sobald du auf das Fadenkreuz-Symbol tippst.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>Im Markt stöbern</strong><span>Angebote und Gesuche über Suche, Filter und Entfernung finden.</span></a></li>
+            <li><a href="map-pins.html"><strong>Was die Karte zeigt</strong><span>Die Pins auf der Karte, was ihre Farben bedeuten und die Symbole drumherum.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Wo dein Pin steht</strong><span>Wer sieht, wo deine Beiträge und Events sind, und wie dein Zuhause privat bleibt.</span></a></li>
+            <li><a href="events.html"><strong>Veranstaltung</strong><span>Events vor Ort oder online erstellen, einmalig oder wiederkehrend; Teilnahme zusagen, Erinnerungen erhalten, teilen und leiten.</span></a></li>
+            <li><a href="your-area.html"><strong>Deine Gegend</strong><span>Der ungefähre Ort, den die globale Community für Einträge in deiner Nähe nutzt, und wie du ihn änderst oder löschst.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

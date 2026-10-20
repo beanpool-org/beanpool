@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teklif veya İhtiyaç paylaşma — BeanPool members' guide</title>
+    <meta name="description" content="Yapabileceğiniz, verebileceğiniz bir şey veya aradığınız bir şeyi paylaşın.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Pazar</a></p>
+        <h1>Teklif veya İhtiyaç paylaşma</h1>
+        <p class="lede">Yapabileceğiniz, verebileceğiniz bir şey veya aradığınız bir şeyi paylaşın.</p>
+        <h2>Önce Teklif</h2>
+        <p>Fasulyeli bir toplulukta, bir <strong>İhtiyaç</strong> paylaşabilmeniz veya başka birinin Teklifini kabul edebilmeniz için önce en az bir <strong>Teklif</strong> paylaşmış olmanız gerekir. Herkes bir şeyler getirir. Yayında kaç Teklifinizin olduğu, sıfırın ne kadar altına inebileceğinizi de belirler. &quot;Kredi limitiniz&quot; bölümüne bakın.</p>
+        <p>Küresel toplulukta olduğu gibi Fasulyenin olmadığı yerlerde ilk gönderiniz bir İhtiyaç olabilir.</p>
+        <h2>Başlamadan önce</h2>
+        <p>Fasulyeli bir toplulukta bir ada ve bir profil fotoğrafına ihtiyacınız vardır. Fasulyenin olmadığı yerlerde bir ad yeterlidir. Eksik bir şey varsa uygulama önce <strong>Profil oluştur</strong>manızı ister.</p>
+        <h2>Paylaşma</h2>
+        <ul>
+            <li>Pazar sekmesinde veya Harita'da <strong>+ İLAN EKLE</strong>'ye dokunun.</li>
+            <li><strong>Teklif</strong> veya <strong>İhtiyaç</strong> seçin. Form Harita üzerinde açılır.</li>
+            <li><strong>Başlık:</strong> telefonda en fazla 50 karakter olmak üzere birkaç kelime. &quot;Ekşi mayalı ekmek&quot;, &quot;Cuma günleri şehre arabayla bırakma&quot;.</li>
+            <li><strong>Kategori:</strong> en yakın olanı seçin.</li>
+            <li><strong>Açıklama:</strong> ne, ne zaman, nerede ve insanların bilmesi gereken her şey.</li>
+            <li><strong>Fotoğraflar:</strong> en az bir, en fazla beş adet. <strong>Kamera</strong> veya <strong>Galeri</strong> seçeneğine dokunun. Fasulyenin olmadığı yerlerde bir İhtiyacın fotoğrafları isteğe bağlıdır.</li>
+            <li><strong>Konum:</strong> <strong>Konumum</strong> seçeneğine veya <strong>İğne bırak</strong> seçeneğine dokunup haritaya dokunun, ardından <strong>İğneyi Onayla</strong> seçeneğine dokunun. Topluluğunuzun her üyesi iğneyi görebilir; bu nedenle tercih ederseniz kapınızın tam üstüne koymak yerine yakınınızdaki bir yere bırakın. &quot;İşaretinizin konumu&quot; bölümüne bakın.</li>
+            <li><strong>Fiyat:</strong> fasulye sayısı. <strong>Toplam</strong> veya <strong>/ Sa</strong> seçmek için birim düğmesine dokunun. Karşılıksız vermek için <strong>ÜCRETSİZ</strong> seçeneğine dokunun. Düğme ayrıca <strong>/ Gün</strong>, <strong>/ Hafta</strong> ve <strong>/ Ay</strong> seçeneklerini de sunar ancak yeni bir gönderi bunları henüz korumaz: toplam fiyat olarak kaydedilir. <strong>Toplam</strong>'ı seçin ve süreyi açıklamada belirtin.</li>
+            <li><strong>Teklif Paylaş</strong> veya <strong>İhtiyaç Paylaş</strong> seçeneğine dokunun.</li>
+        </ul>
+        <p>Gerekli her şey doldurulana kadar düğme <strong>Fotoğraf ekle</strong> veya <strong>Fiyat belirle</strong> gibi neyin eksik olduğunu söyler.</p>
+        <p>Web uygulamasında adımlar biraz farklıdır:</p>
+        <ul>
+            <li>Harita'daki <strong>+</strong> düğmesine (<strong>Yeni Gönderi</strong> adlı) veya Pazar'daki <strong>+ İLAN EKLE</strong>'ye dokunun.</li>
+            <li>İğnenizi yerleştirmek için <strong>Konumum</strong> seçeneğine veya <strong>İğne bırak</strong> seçeneğine ve ardından haritaya dokunun. <strong>İğneyi Onayla</strong> yoktur.</li>
+            <li>Fiyat bir sayı kutusu ve bir birim listesidir. <strong>ÜCRETSİZ</strong> düğmesi yoktur: karşılıksız vermek için 0 yazın.</li>
+            <li>Başlıkta 50 karakter sınırı yoktur.</li>
+            <li>Bir şey eksikken düğme <strong>Harita konumu gerekli</strong> veya <strong>Gerekli alanları doldurun</strong> der. Ayrıca en az bir fotoğraf ekleyene kadar gri kalır.</li>
+            <li>Form taslak tutmaz.</li>
+        </ul>
+        <h2>Küresel toplulukta</h2>
+        <p>Küresel toplulukta Fasulye yoktur, bu nedenle oradaki bir ilanın fiyatı yoktur. Formda <strong>Fiyat</strong> bulunmaz: açıklamada karşılığında ne istediğinizi veya ücretsiz olduğunu belirtin. Fiyatın geleceği yerde web uygulamasının formu ve telefonun bir ilanı değiştirme formu &quot;🏘️ Yerel bir toplulukta bu fasulye cinsinden bir fiyattır ›&quot; der: nedenini görmek için dokunun. &quot;Fasulye ve küresel topluluk&quot; bölümüne bakın.</p>
+        <p>Küresel topluluğun ziyaretçileri katılmadan önce bu ilanın fotoğraflarını ve yaklaşık bölgesini görebilir. İlanın metnini, fotoğraflarını ve yaklaşık olarak nerede olduğunu görürler; adınızı, yüzünüzü veya tam yeri göremezler. Web uygulamasında form bunu fotoğrafların altında belirtir. Küresel topluluğun üyeleri yerinizi yaklaşık bir kilometreye kadar görür.</p>
+        <h2>Ne kadar ücret belirleyeceğinizden emin değil misiniz?</h2>
+        <p>Telefonda fiyatın altındaki <strong>Ne kadar isteyeceğinizden emin değil misiniz?</strong> seçeneğine dokunun. Web uygulamasında formda böyle bir satır yoktur: bunun yerine Pazar'da <strong>💡 Fiyatlandırma Kılavuzu</strong>'nu açın. Yaklaşık bir kılavuz: 40 fasulye, birinin yaklaşık bir saatlik zamanıdır. <strong>Topluluk Fiyat Rehberi</strong>, birçok günlük şey için tahminler içerir. Telefonda birine dokunmak sizin için bir Teklif doldurur. Web uygulamasında birine dokunmak, hiçbir şey doldurmadan Harita üzerinde Yeni Gönderi formunu açar.</p>
+        <p>Fiyatın altında, %1,5 pazar ücretinden sonra ne alacağınızı görürsünüz. Hediyelerin ücreti yoktur.</p>
+        <h2>Ekstra seçenekler</h2>
+        <ul>
+            <li><strong>Tekrarlanabilir:</strong> ilan her takastan sonra yayında kalır ve birden fazla kişi aynı anda onu alabilir. Haftalık bir araba yolculuğu veya her cumartesi ekmek için uygundur.</li>
+            <li><strong>Nakit de gerekli:</strong> yakıt veya malzeme için biraz nakde de ihtiyacınız varsa bunu işaretleyin. Uygulama nakit parayla asla işlem yapmaz; bunu kendi aranızda halledersiniz.</li>
+            <li><strong>Bu nereye kadar ulaşır?</strong> Yalnızca topluluğunuz diğer topluluklarla takas yapıyorsa görünür: ilanı burada tutun veya daha uzaklarla paylaşın.</li>
+        </ul>
+        <p>Telefonda uygulama siz yazarken bir taslak tutar. Ayrılıp geri gelirseniz <strong>Devam et</strong> veya <strong>Baştan başla</strong> seçeneğini sorar.</p>
+        <h2>Yalnızca bir gruba paylaşma</h2>
+        <p><strong>Ortak</strong> sekmesini, ardından <strong>Gruplar</strong>'ı, ardından grubunuzu açın ve <strong>Şuraya gönder:</strong> ile grup adına dokunun. Yalnızca o grup görür. Telefonda bu daha kısa formda fotoğraf ve konum yoktur. Web uygulamasında gruba ayarlanmış olarak Harita üzerindeki her zamanki formu açar.</p>
+        <h2>Bir ilanı değiştirme veya kaldırma</h2>
+        <p>İlanınızı açın. Üzerinde devam eden bir takas yoksa:</p>
+        <ul>
+            <li><strong>İlanı Düzenle</strong> kelimeleri, kategoriyi, fiyatı ve fotoğrafları değiştirir. <strong>Kaydet</strong> seçeneğine dokunun. Konum değiştirilemez; bunun yerine ilanı silip yeniden paylaşın.</li>
+            <li><strong>Teklifi Duraklat</strong> bir Teklifi bir süreliğine gizler. <strong>Teklifi Etkinleştir</strong> geri getirir. İhtiyaçlar duraklatılamaz.</li>
+            <li><strong>İlanı Sil</strong> ilanı kaldırır. Hâlâ talep eden herkes talebinin reddedildiğini görür.</li>
+        </ul>
+        <p>Biri ilanınızı talep ederken kelimelerini ve fotoğraflarını yine de değiştirebilirsiniz ancak fiyatını değiştiremezsiniz: uygulama bunu belirtir. Bir ilanda fasulyeler tutulurken onu hiçbir şekilde düzenleyemezsiniz. İstisna, Tekrarlanabilir bir ilandır (aynı anda birden fazla anlaşması olabilir): kelimelerini ve fotoğraflarını yine de değiştirebilirsiniz ancak fiyatını değiştiremezsiniz. Fiyatı değiştirmek için önce o anlaşmayı reddedin veya iptal edin.</p>
+        <p>Yerel bir toplulukta ilanların süresi dolmaz. İşleri bittiğinde onları silin.</p>
+        <p>Küresel toplulukta bir ilan en son değiştirilmesinden 90 gün sonra arşivlenir: Pazar'dan kaldırılır ve fotoğrafları silinir. <strong>İlanı Düzenle</strong> ile kaydetmek ilanı 90 gün daha tutar. &quot;Küresel topluluğun sınırları&quot; bölümüne bakın.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Adım adım bir takas</strong><span>Teklif ve İhtiyaç için sormaktan ödeme almaya kadar tüm aşamalar ve değerlendirme bırakma.</span></a></li>
+            <li><a href="my-deals.html"><strong>Takaslarım</strong><span>Dahil olduğunuz her takas, yayındaki her ilanınız ve geçmiş takaslarınız için tek bir yer.</span></a></li>
+            <li><a href="map-pins.html"><strong>Haritanın gösterdikleri</strong><span>Haritadaki işaretler, renklerinin anlamı ve çevrelerindeki düğmeler.</span></a></li>
+            <li><a href="credit-line.html"><strong>Kredi limitiniz</strong><span>Sıfırın ne kadar altına inebileceğiniz ve bu limitin nasıl büyüdüğü.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

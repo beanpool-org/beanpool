@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>メッセージ — BeanPool members' guide</title>
+    <meta name="description" content="チャットの開始、写真の送信、返信、リアクション、編集、削除、ミュート、公開範囲について説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">トーク</a></p>
+        <h1>メッセージ</h1>
+        <p class="lede">チャットの開始、写真の送信、返信、リアクション、編集、削除、ミュート、公開範囲について説明します。</p>
+        <h2>チャット一覧</h2>
+        <p><strong>トーク</strong>の上部には、<strong>メッセージ</strong>、<strong>グループ</strong>、<strong>メンバー</strong>の3つのボタンがあります。</p>
+        <p>下部のタブ行で<strong>トーク</strong>をタップし、<strong>メッセージ</strong>をタップします。他の人とのチャットが一覧表示されます。対応が必要な取引は最上部の<strong>要アクション</strong>の下に表示されます。</p>
+        <p>グループ、事業体、またはイベントに属するチャットはここではなく、<strong>グループ</strong>の下にあります。「グループ」を参照してください。</p>
+        <ul>
+            <li><strong>チャット、投稿、取引相手を検索...</strong>で検索できます。</li>
+            <li>フィルターボタンを使うと、<strong>新しい順</strong>や<strong>未読</strong>（コミュニティが豆を使用している場合は、各取引の豆の数が多い順または少ない順）で並べ替えることができ、<strong>未読のみ</strong>や<strong>フレンドのみ</strong>を表示することもできます。</li>
+            <li>スマートフォンでは、下にスクロールすると検索バーとフィルターボタンが隠れます。少し上にスクロールすると再び現れます。<strong>トーク</strong>をもう一度タップすると最上部にジャンプします。</li>
+        </ul>
+        <p>Webアプリでは、これは<strong>チャット</strong>タブになります。上部に<strong>すべて</strong>、<strong>取引</strong>、<strong>直接送金</strong>、<strong>グループ</strong>が並び、グループやイベントのチャットも含めすべてのチャットが一覧表示されます（検索やフィルター機能はありません）。</p>
+        <h2>チャットを開始する</h2>
+        <ul>
+            <li>投稿から：<strong>メッセージ</strong>と相手の名前をタップします。</li>
+            <li><strong>トーク</strong>から：鉛筆ボタンをタップし、名前で相手を探します。グローバルコミュニティでは、「新規メッセージ」に取引したことのある相手とフレンドが一覧表示されます。他の人を探すには、名前の文字を2文字以上入力してください。</li>
+            <li>フレンドから：<strong>トーク</strong>、<strong>メンバー</strong>、<strong>フレンド</strong>の順に開き、名前の横にあるメッセージボタンをタップします。</li>
+        </ul>
+        <p>Webアプリでは、<strong>✉️ 新規DM</strong>を使用するか、投稿の<strong>💬 メッセージ</strong>ボタンを使用します。フレンドは<strong>メンバー</strong>タブにあります。</p>
+        <h2>メッセージの送信</h2>
+        <ul>
+            <li><strong>メッセージを入力...</strong>に入力し、送信ボタンをタップします。</li>
+            <li>写真を送信するには、<strong>+</strong>をタップして<strong>カメラ</strong>または<strong>ギャラリー</strong>を選択します。Webアプリでは、<strong>📎</strong>ボタンを使用するか、画像をチャットに直接貼り付けるかドラッグ＆ドロップします（先に画像が表示され、入力欄の文字はキャプションとして一緒に送信されます）。写真は2者間のチャットでのみ送信できます。</li>
+        </ul>
+        <p>メッセージの下に表示されるマーク：</p>
+        <ul>
+            <li>チェックマーク1つ：送信完了；</li>
+            <li>青いチェックマーク2つ：既読；</li>
+            <li>時計マーク：送信中；</li>
+            <li><strong>未送信</strong>：送信失敗。タップして<strong>再送信</strong>または<strong>破棄</strong>してください。</li>
+        </ul>
+        <p>時計マークと<strong>未送信</strong>はスマートフォンで表示されます。Webアプリでは、送信に失敗したメッセージは入力欄に残ったまま、アプリにエラーが表示されます。</p>
+        <h2>返信、リアクション、編集、削除</h2>
+        <p>スマートフォンでは、メッセージをタップします。横に小さな丸いボタンが表示されます：</p>
+        <ul>
+            <li><strong>返信</strong>：次に書く内容の上にそのメッセージを引用します。送信されたメッセージ内の引用をタップすると、返信元のメッセージにジャンプします。</li>
+            <li><strong>リアクション</strong>：7種類の絵文字が開きます。タップして追加し、もう一度タップして取り消します。1人につき1つのリアクションが可能です；別の絵文字をタップすると入れ替わります。リアクションはメッセージの下に小さなバッジとして表示されます。</li>
+            <li><strong>編集</strong>：自分のメッセージに対して、送信後15分以内に行えます。メッセージには<strong>編集済み</strong>と表示されます。写真は編集できません。</li>
+            <li><strong>削除</strong>：自分のメッセージに対して、いつでも行えます（時間制限はありません）。<strong>全員に対して削除しますか？</strong>と一度確認されます。その後、2人双方に対して<strong>このメッセージは削除されました</strong>と表示され、そのメッセージへのリアクションや返信はできなくなります。</li>
+        </ul>
+        <p>グループチャットでも同じボタンが用意されています。「グループ」を参照してください。</p>
+        <p>Webアプリでは、<strong>返信</strong>、<strong>リアクション</strong>、<strong>編集</strong>は各メッセージ上の小さな文字として表示され、<strong>削除</strong>はありません：メッセージを削除する場合はスマートフォンアプリから行ってください。</p>
+        <p>削除を行うとコミュニティのサーバーからも文章が消去されるため、後からサインインした新しいスマートフォンにそれらが表示されることは決してありません。</p>
+        <h2>チャットのミュート</h2>
+        <p>右上の<strong>⋯</strong>（グループチャットでは<strong>⋮</strong>）をタップし、<strong>通知をミュート</strong>を選択します：<strong>8時間</strong>、<strong>1週間</strong>、または<strong>常に</strong>。同じボタンをタップして<strong>ミュート解除</strong>を選択すると解除できます。Webアプリではまだチャットをミュートできません。「チャットのミュート」を参照してください。</p>
+        <h2>非公開とされる情報</h2>
+        <ul>
+            <li>2者間のチャットは<strong>エンドツーエンド暗号化</strong>されています：送信元の端末で暗号化されてロックされ、相手の端末でのみロック解除されるため、コミュニティのサーバーが中身を読むことはできません。スマートフォンでは、チャットの上部に<strong>エンドツーエンド暗号化</strong>と表示されます。チャット内の写真も暗号化され、編集内容も同様に暗号化されます。</li>
+            <li>各メッセージはまた、誰が送信したか、その個別のメッセージ、そのチャット、および返信の場合は返信先メッセージに対しても暗号化して紐付けられています。そのため、サーバーがあなたのメッセージを相手のものとして偽装したり、新しいメッセージとして再送したり、あなたの返信を別のメッセージに向け直したりすることはできません。サーバーがそれを試みた場合、アプリは文章の代わりに、誰のものでもないメッセージとして<strong>このメッセージは検証できなかったため表示されません。</strong>とチャットの中央に表示します。サーバーによって別の写真に差し替えられた写真は<strong>画像を表示できません</strong>と表示されます。</li>
+            <li>サーバーがメッセージを別のチャットに入れた場合、アプリはそのチャットでの表示を拒否します。同じ相手との2つのチャットが1つに統合された場合、各メッセージには元のチャット情報が付随します。このアップデート以降に送信されたメッセージの下には<strong>別の会話からここへ移動されました。</strong>と表示されます。それ以前に送信されたメッセージの下には、代わりに旧バージョンの文章が表示されます（下記参照）。</li>
+            <li>各メッセージはまた、送信者がそれを書いた時点で持っていた最新のメッセージを記憶しています。サーバーがそれよりも前にそのメッセージを表示した場合、メッセージの下に<strong>投稿された順序とは異なって表示されています。</strong>と表示されます。全く同じ瞬間に書かれ、前後関係のない2つのメッセージは、この警告なしにどちらの順序でも表示されることがあります。</li>
+            <li>2者間のチャットで暗号化されていないものは、決してどちらかの発言として表示されることはありません：チャットの中央に<strong>このメッセージは暗号化されていなかったため、BeanPoolは送信者を確認できませんでした。</strong>と表示され、文章は表示されません。チャット一覧にも同じ文章が表示されます。</li>
+            <li>コミュニティ管理者がサーバーの管理ページから送信するメッセージは暗号化されておらず、非公開メッセージではありません。特定の個人のメッセージとしてではなくチャットの中央に表示され、下に<strong>コミュニティ管理者からのメッセージです。非公開メッセージではありません：コミュニティのサーバーが読み取ることができます。</strong>と表示されます。</li>
+            <li>このアップデート以前にいずれかのアプリから送信されたメッセージは、これらの検証なしで暗号化されていました：サーバーが見かけ上の送信者を変更したり、再送したりすることが可能でした。それらも引き続き開くことはでき、チャット内のどこにあっても、すべてのメッセージの下に<strong>古いバージョンのアプリから送信されたため、BeanPoolは送信者を確認できません。</strong>と表示されます。古いアプリを使い続けている人は、アプリをアップデートするまで、アップデート済みアプリからのメッセージを読むことができません。</li>
+            <li>返信には、返信先のメッセージがそのままの形式で表示されます。返信先メッセージが開けた場合にのみ送信者名が表示され、旧バージョンの表示などそのメッセージ固有の行が下に付随します。サーバーのお知らせに対しては<strong>お知らせ</strong>、管理者のメッセージに対しては<strong>コミュニティ管理者</strong>と表示されます。開けなかったものや暗号化されていなかったものは、文章の代わりの行とともに<strong>未確認</strong>として引用されます。</li>
+            <li>したがって、サーバー単独で、どちらかが書いていない文章を書いたように見せかけることはできません。ただし、メッセージを保留したり、配信を遅らせたり、<strong>このメッセージは削除されました</strong>と表示させたりすることは可能です。編集されたメッセージの新しい文章の代わりに古い文章を表示させることも可能です（どちらも送信者本人のものです）。どのメッセージがどのメッセージへの返信であるかはサーバーから見えますが、気付かれないように変更することはできません。絵文字リアクションは暗号化されていないため、どちらの名前でもリアクションを追加または削除できます。また、チャットに独自の通知を追加することもできます。通知は通知として表示され、引用時は<strong>お知らせ</strong>と表示され、チャット一覧では<strong>お知らせ:</strong>と表示され、どちらかの発言として表示されることは決してありません。</li>
+            <li>暗号化によるロックは、メッセージが2人のうちのどちらかから届いたことを証明するものであり、どちらであるかを証明するものではありません：相手がサーバーの運用者の協力を得れば、あなたの名前で発言を偽装できる可能性があります。</li>
+            <li>これらすべては、暗号化自体と同様に、アプリがコミュニティのサーバーから取得する相手の本物の鍵に依存しています。Webアプリでは、コミュニティのサーバーがブラウザに送信するアプリ自体にも依存します。スマートフォンアプリはアプリストアから提供されます。</li>
+            <li>ロックできないメッセージは送信されません。アプリがまだ相手の鍵を見つけられない場合やロックに失敗した場合、入力欄にその旨の文面とともに文章が残ります。しばらくしてから再送信してください。コミュニティのサーバーも、暗号化されていない2者間のメッセージを拒否します。</li>
+            <li>BeanPoolが取引に関してチャットに追加する通知は暗号化されません：取引のために保留された豆、支払い、キャンセル時の返却、金額、および管理者が停滞した取引をどのようにどのような理由で仲裁したかです。コミュニティのサーバーを運用する人々はこれらを閲覧できます。</li>
+            <li>サーバーはまた、誰が誰にいつメッセージを送信したか、どれがどのメッセージへの返信かを知っており、絵文字リアクションを閲覧できます。アプリの旧バージョンが暗号化せずに送信したメッセージは、サーバー上で閲覧可能なまま残ります。</li>
+            <li>グループチャットも、スマートフォンおよびWebアプリにおいて<strong>エンドツーエンド暗号化</strong>されています：グループのメンバーのみが閲覧でき、コミュニティのサーバーを運用する人々は閲覧できません。メッセージ入力欄の上に<strong>エンドツーエンド暗号化</strong>と表示されます。コミュニティのサーバーには、誰がいつ書いたか、誰がメンションされたか、各行がどの返信先か、および絵文字リアクションは表示されます。グループチャットは参加した当日のメッセージからのみ表示されます：それ以前に書かれた内容は表示されず、スマートフォンがその鍵を保持することもありません。ロックできないメッセージは送信されません。メンバーによって書かれたと確認できない行は、誰のものでもないメッセージとして<strong>このメッセージは確認できませんでした。</strong>と表示されます。コミュニティのサーバーが古く、グループチャットの暗号化にまだ対応していない場合はその旨が表示され、サーバーは閲覧可能です。サーバーが更新されると、過去のメッセージは削除され、チャット内にその旨が表示されます。「グループ」を参照してください。</li>
+            <li>Webアプリのグループチャットも同様に動作しますが、写真の送信はできません。</li>
+            <li>事業体およびイベントのチャットは暗号化されていません。コミュニティのサーバーを運用する人々はそれらを閲覧でき、サーバーが誰かの名前で書き込むことも可能です。</li>
+            <li>2者間のチャットがそれらに変換されることは決してありません。アプリが一度2者間のチャットとして認識したチャット、または暗号化メッセージを保持しているチャットは、サーバーが何と言おうと2者間のチャットのままであり続けます：上記のすべての検証を伴うそのチャットとしてのみ開き、送信内容は常にロックされます。そのチャットを一度も開いたことがなく暗号化メッセージも渡されていないスマートフォンやブラウザには判別できません：そのような環境では、サーバーが閲覧可能な通常のグループチャットのように見えます。Webアプリでは、サインアウトしたブラウザ、プライベートウィンドウ、またはサイトデータを消去したブラウザも同様です：Webアプリはどのチャットが2者間のものであったかを忘れてしまいます。スマートフォンアプリはそのリストを保持し続けます。</li>
+            <li>メッセージを削除すると、コミュニティのサーバーに置き換えを要求します。すでに相手が読んだコピーやスクリーンショットにまでは届きません。</li>
+            <li>アカウントを削除すると、あらゆる種類のチャットにおいてあなたが書いたすべてのメッセージに同様の処理が行われ、送信した写真は削除されます。「アカウントの退会または削除」を参照してください。</li>
+            <li>イベントチャットは主催者と参加者全員（承認制の場合は主催者が承認した参加者）も閲覧できます。</li>
+            <li>事業体のチャットはコミュニティの全メンバーが閲覧できます。これは事業体のページに表示される公開の議論であり、コミュニティ内の誰もが書き込むことができます。運営者専用の非公開チャットではありません。</li>
+        </ul>
+        <h2>チャットから相手をブロックする</h2>
+        <p>チャット上部にある相手の名前をタップします。相手のプロフィールが開きます。<strong>ブロック</strong>をタップし、次に<strong>ユーザーをブロック</strong>をタップします。Webアプリでは、チャット上部の<strong>ブロック</strong>をタップし、<strong>OK</strong>をタップします。「ユーザーのブロック」を参照してください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>メンバーと友達</strong><span>コミュニティメンバーの検索、プロフィールと信頼バッジ、誰かが退会したときに気付ける友達機能について説明します。</span></a></li>
+            <li><a href="blocking.html"><strong>ユーザーのブロック</strong><span>特定の人の投稿やメッセージを非表示にし、後から解除する方法について説明します。</span></a></li>
+            <li><a href="event-chat.html"><strong>イベントトーク</strong><span>主催者やイベント参加者全員と会話できます。</span></a></li>
+            <li><a href="groups.html"><strong>グループ</strong><span>グループとチャット、会話、グループの作成、メンバーの招待、招待による参加、グループ内投票について説明します。</span></a></li>
+            <li><a href="mute.html"><strong>チャットのミュート</strong><span>個人、グループ、事業体のチャットを8時間、1週間、または無期限でミュートします。</span></a></li>
+            <li><a href="the-top-bar.html"><strong>トップバー</strong><span>豆のアイコン、確認が必要な項目を示す小さなアイコン、右上のボタンについて説明します。</span></a></li>
+            <li><a href="key-changed.html"><strong>鍵や名前が変更されたとき</strong><span>チャットが送信停止する理由、相手とキーコードを確認する方法、再開のタイミングについて説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Những gì bản đồ hiển thị — BeanPool members' guide</title>
+    <meta name="description" content="Các ghim trên Bản đồ, ý nghĩa màu sắc của chúng và các nút xung quanh.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Bản đồ</a></p>
+        <h1>Những gì bản đồ hiển thị</h1>
+        <p class="lede">Các ghim trên Bản đồ, ý nghĩa màu sắc của chúng và các nút xung quanh.</p>
+        <h2>Các ghim</h2>
+        <p>Nhấn <strong>Bản đồ</strong> trong hàng các tab. Bản đồ sẽ hiển thị các bài đăng của cộng đồng bạn:</p>
+        <ul>
+            <li><strong>Ghim màu xanh lá:</strong> Lời đề nghị.</li>
+            <li><strong>Ghim màu cam:</strong> Nhu cầu.</li>
+            <li><strong>Ghim màu tím có biểu tượng lịch:</strong> các sự kiện chưa kết thúc.</li>
+        </ul>
+        <p>Mỗi ghim hiển thị hình ảnh danh mục của bài đăng. Ở những nơi có nhiều Lời đề nghị và Nhu cầu ở gần nhau, chúng sẽ gộp lại thành một hình tròn có số lượng. Hình tròn này có màu xanh lam trên điện thoại và màu xám đậm trong ứng dụng web. Phóng to để xem từng ghim riêng biệt. Các sự kiện luôn hiển thị riêng lẻ.</p>
+        <p>Mọi người và các nhóm không xuất hiện trên bản đồ. Trong ứng dụng web, doanh nghiệp đã đặt địa điểm sẽ hiển thị dưới dạng một ghim hình vuông kèm theo ảnh của doanh nghiệp. Nhấn vào ghim để mở doanh nghiệp.</p>
+        <p>Các cuộc thăm dò ý kiến cũng không xuất hiện trên bản đồ. Trường hợp ngoại lệ duy nhất là trên điện thoại, trong cộng đồng toàn cầu, nơi một cuộc thăm dò có thể hiển thị dưới dạng một ghim tại khu vực của người đăng. Nó trông giống như ghim Nhu cầu màu cam, và chỉ hiển thị dưới mục <strong>Tất cả</strong>.</p>
+        <h2>Nhấn vào một ghim</h2>
+        <ul>
+            <li><strong>Một Lời đề nghị hoặc Nhu cầu:</strong> một thẻ sẽ hiển thị tiêu đề và người đã đăng. Nhấn <strong>Xem chi tiết</strong> để mở bài đăng. Trên điện thoại, hãy nhấn vào tên của họ để xem hồ sơ. Nhấn vào bản đồ hoặc biểu tượng <strong>✕</strong> để đóng thẻ.</li>
+            <li><strong>Một sự kiện:</strong> một thẻ sẽ hiển thị thời gian, địa điểm và số người sẽ tham gia. Nhấn <strong>Xem sự kiện</strong>. Trong ứng dụng web, nút này là <strong>Xem chi tiết</strong>, và bạn cũng có thể nhấn <strong>Sẽ tham gia</strong> hoặc <strong>Quan tâm</strong> ngay trên thẻ.</li>
+        </ul>
+        <h2>Bộ lọc</h2>
+        <p>Trên điện thoại, ở phần trên cùng của bản đồ:</p>
+        <ul>
+            <li><strong>Tất cả</strong>, <strong>Lời đề nghị</strong>, <strong>Nhu cầu</strong> hoặc <strong>Sự kiện</strong>. Nhấn <strong>✕</strong> để xóa bộ lọc.</li>
+            <li><strong>Tất cả danh mục</strong> để hiển thị một danh mục cụ thể.</li>
+            <li>Đối với sự kiện: <strong>Tất cả</strong>, <strong>Hôm nay</strong>, <strong>Cuối tuần này</strong> hoặc <strong>7 ngày tới</strong>. Bản đồ sẽ tự động căn chỉnh cho vừa với các sự kiện đó.</li>
+        </ul>
+        <p>Trong ứng dụng web, bản đồ chỉ có các thẻ chọn ngày sự kiện: <strong>Hôm nay</strong>, <strong>Cuối tuần này</strong>, <strong>7 ngày tới</strong> và <strong>Tất cả sự kiện</strong>. Chúng chỉ hiển thị khi cộng đồng của bạn có sự kiện sắp diễn ra.</p>
+        <h2>Các nút ở bên trái</h2>
+        <ul>
+            <li>Trên điện thoại, biểu tượng mặt trăng hoặc mặt trời: bản đồ nền tối hoặc sáng.</li>
+            <li>Biểu tượng hồng tâm: hiển thị vị trí của bạn. Lần đầu tiên sử dụng, ứng dụng sẽ xin phép sử dụng thông tin vị trí của bạn.</li>
+            <li><strong>+</strong> và <strong>−</strong>: phóng to và thu nhỏ.</li>
+        </ul>
+        <p>Vòng tròn màu hổ phách hiển thị khu vực mà cộng đồng của bạn phục vụ.</p>
+        <h2>Đăng tin từ bản đồ</h2>
+        <p>Nhấn <strong>+ ĐĂNG TIN</strong>. Trong ứng dụng web, hãy nhấn vào nút tròn <strong>+</strong> ở góc dưới cùng bên phải. Xem &quot;Đăng Lời đề nghị hoặc Nhu cầu&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>Vị trí ghim của bạn</strong><span>Ai thấy vị trí các bài đăng và sự kiện của bạn, và cách giữ riêng tư cho ngôi nhà.</span></a></li>
+            <li><a href="near-you.html"><strong>Tìm kiếm thứ ở gần bạn</strong><span>Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.</span></a></li>
+            <li><a href="events.html"><strong>Sự kiện</strong><span>Tạo sự kiện trực tiếp hoặc trực tuyến, một lần hoặc lặp lại; xác nhận tham gia, nhận nhắc nhở, chia sẻ và chủ trì sự kiện.</span></a></li>
+            <li><a href="posting.html"><strong>Đăng Lời đề nghị hoặc Nhu cầu</strong><span>Đăng thứ bạn có thể làm hoặc trao tặng, hoặc thứ bạn đang tìm kiếm.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

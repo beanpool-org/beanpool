@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>अपने नज़दीक चीज़ें ढूंढना — BeanPool members' guide</title>
+    <meta name="description" content="केवल अपने से, या अपनी पसंद के किसी भी स्थान से तय दूरी के भीतर के पोस्ट दिखाएं।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">नक्शा</a></p>
+        <h1>अपने नज़दीक चीज़ें ढूंढना</h1>
+        <p class="lede">केवल अपने से, या अपनी पसंद के किसी भी स्थान से तय दूरी के भीतर के पोस्ट दिखाएं।</p>
+        <h2>On the Market tab</h2>
+        <ul>
+            <li><strong>बाज़ार</strong> पर टैप करें, फिर फ़िल्टर की दूसरी पंक्ति में <strong>दूरी</strong> पर। जब <strong>कार्यक्रम</strong> चुना गया हो तब यह वहाँ नहीं होता है।</li>
+            <li><strong>स्थान और दायरा</strong> खुलता है (वेब ऐप में <strong>स्थान और दायरा तय करें</strong>)। आप जहाँ हैं उसका उपयोग करने के लिए, लक्ष्य (टारगेट) बटन पर टैप करें। या कोई अन्य केंद्र चुनने के लिए नक्शे पर टैप करें, या पिन खींचें।</li>
+            <li><strong>खोज दायरा</strong> के साथ चुनें कि कितनी दूर: 100 मीटर से 50 किलोमीटर तक।</li>
+            <li><strong>लागू करें</strong> पर टैप करें। बटन तब दूरी दिखाता है, जैसे <strong>5km</strong>।</li>
+            <li>सब कुछ वापस पाने के लिए, इसे फिर से खोलें और <strong>रीसेट करें</strong> पर टैप करें। वेब ऐप में आप <strong>दूरी</strong> पर <strong>✕</strong> पर भी टैप कर सकते हैं।</li>
+        </ul>
+        <p>फ़ोन पर, बिना किसी स्थान वाली पोस्ट हमेशा दिखाई जाती हैं। वेब ऐप में <strong>दूरी</strong> उन्हें छुपा देती है, पोल को छोड़कर। वैश्विक समुदाय पर वेब ऐप उन्हें तब भी छोड़ देता है जब सूची आपके पास होती है (नीचे)।</p>
+        <p>यदि आपका ब्राउज़र पहले से ही BeanPool को आपकी लोकेशन का उपयोग करने की अनुमति देता है, तो चयनकर्ता उस स्थान पर खुल सकता है जहाँ आप अभी हैं। यदि नहीं, तो यह एक निश्चित स्थान पर खुलता है। <strong>लागू करें</strong> पर टैप करने से पहले पिन की जाँच करें, या लक्ष्य बटन या नक्शे पर टैप करें। वैश्विक समुदाय पर वेब ऐप आपके द्वारा चुने गए केंद्र को लगभग 11 मीटर तक राउंड करके समुदाय को भेजता है।</p>
+        <p>फ़ोन पर चयनकर्ता आपके द्वारा चुने गए अंतिम केंद्र पर, या किसी निश्चित स्थान पर खुलता है, इसलिए पहले लक्ष्य बटन पर टैप करें।</p>
+        <h2>On the Map</h2>
+        <p>नक्शे का अपना कोई दूरी फ़िल्टर नहीं होता है। आप कहाँ हैं यह देखने के लिए बाईं ओर लक्ष्य बटन पर टैप करें, फिर चारों ओर देखें और ज़ूम करें।</p>
+        <h2>On the global community, in the web app</h2>
+        <p>वैश्विक समुदाय में हर जगह की लिस्टिंग होती हैं, इसलिए वेब ऐप का <strong>बाज़ार</strong> और <strong>नक्शा</strong> आपके नज़दीक से शुरू होते हैं:</p>
+        <ul>
+            <li>बाज़ार पर चुनी गई <strong>दूरी</strong> के साथ, दोनों इसके भीतर निकटतम लिस्टिंग दिखाते हैं, सबसे निकटतम पहले। नक्शा 200 पिन तक दिखाता है।</li>
+            <li>इसके बिना, वे आपके क्षेत्र के 250 किमी के भीतर की निकटतम लिस्टिंग दिखाते हैं: वह अनुमानित स्थान जो आप शामिल होने पर समुदाय को देते हैं, या बाद में <strong>सेटिंग्स</strong> में, <strong>आपका क्षेत्र</strong> के तहत। बाज़ार की सूची के ऊपर एक पंक्ति कहती है <strong>Nearest to your area first, within 250 km.</strong> हर जगह से नवीनतम देखने के लिए <strong>हर जगह दिखाएं</strong> पर टैप करें, और वापस आने के लिए <strong>आपके क्षेत्र के पास</strong> पर।</li>
+            <li>दोनों में से किसी के भी बिना, आप हर जगह से नवीनतम देखते हैं, और <strong>देखें आपके पास क्या है</strong> दूरी चयनकर्ता को खोलता है। बाज़ार की सूची के ऊपर एक पंक्ति बताती है कि आप इनमें से किसे देख रहे हैं। <strong>दूरी</strong> के साथ इसमें कोई बटन नहीं होता: <strong>दूरी</strong> खोलें और <strong>रीसेट करें</strong> पर टैप करें। तब आप वापस अपने क्षेत्र के पास आ जाते हैं, या कोई क्षेत्र निर्धारित न होने पर, आप हर जगह से नवीनतम देखते हैं।</li>
+            <li>प्रत्येक लिस्टिंग दिखाती है कि वह कितनी दूर है, जैसे <strong>📍 12 km</strong>। आपकी अपनी लिस्टिंग हमेशा नक्शे पर और आपके क्षेत्र के पास बाज़ार पर होती हैं, चाहे वे कहीं भी हों। <strong>दूरी</strong> के साथ, बाज़ार केवल वही दिखाता है जो इसके भीतर है, आपकी लिस्टिंग भी।</li>
+            <li>जब सूची आपके पास होती है, तो बिना किसी स्थान वाली पोस्ट छोड़ दी जाती हैं। जिस व्यक्ति ने अपना क्षेत्र निर्धारित नहीं किया है उसका पोल उनमें से एक है। उन्हें देखने के लिए, यदि आपने कोई <strong>दूरी</strong> चुनी है तो उसे रीसेट करें, फिर <strong>हर जगह दिखाएं</strong> पर टैप करें।</li>
+            <li><strong>कार्यक्रम</strong> के तहत सूची आपके क्षेत्र या आपकी <strong>दूरी</strong> से कभी नहीं काटी जाती है, जैसा कि पहले था।</li>
+            <li>यदि पास में कुछ नहीं है, तो नक्शा ऐसा कहता है, साथ में <strong>हर जगह दिखाएं</strong>। तब <strong>आपके क्षेत्र के पास</strong> (या <strong>Near the place you picked</strong>) निकटतम को वापस लाता है।</li>
+        </ul>
+        <p>वेब ऐप की खोज केवल स्क्रीन पर मौजूद लिस्टिंग में ही खोज करती है। <strong>हर जगह दिखाएं</strong> हर जगह की नवीनतम लिस्टिंग दिखाता है, हर एक लिस्टिंग नहीं, इसलिए जो लिस्टिंग बहुत दूर है और नई नहीं है वह खोज में नहीं आएगी। हर दूसरे समुदाय में वेब ऐप बाज़ार या नक्शे को आपके क्षेत्र के अनुसार नहीं काटता है। वे 50 सबसे हाल ही में बदली गई लिस्टिंग और आपकी अपनी लिस्टिंग दिखाते हैं, और खोज केवल उन्हीं में देखती है।</p>
+        <h2>On the global community, on the phone</h2>
+        <p>फ़ोन आपके क्षेत्र के निकटतम लिस्टिंग रखता है: 250 किमी के भीतर 500 तक। यह आपकी अपनी लिस्टिंग भी रखता है, और ऐसी कोई भी लिस्टिंग जिस पर आपका कोई सौदा, चैट या उत्तर हो। बाज़ार और नक्शा वही दिखाते हैं जो फ़ोन रखता है। कोई क्षेत्र निर्धारित न होने पर, यह इसके बजाय नवीनतम लिस्टिंग रखता है, और बाज़ार के ऊपर एक पंक्ति ऐसा कहती है। &quot;आपका क्षेत्र&quot; देखें।</p>
+        <h2>Events near you</h2>
+        <p>फ़ोन पर, एक बार जब आप ऐप को अपनी लोकेशन का उपयोग करने की अनुमति दे देते हैं, तो कार्यक्रम कार्ड दिखाते हैं कि वे कितनी दूर हैं। वेब ऐप में वे इसे <strong>दूरी</strong> में आपके द्वारा चुने गए केंद्र से दिखाते हैं। वैश्विक समुदाय पर, यदि आपने कोई केंद्र नहीं चुना है, तो वे इसे आपके क्षेत्र से दिखाते हैं (<strong>कार्यक्रम</strong> के तहत नहीं)। नक्शे पर, एक बार जब आप लक्ष्य पर टैप करते हैं तो वेब ऐप इसे आपसे दिखाता है।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>बाज़ार ब्राउज़ करना</strong><span>खोज, फ़िल्टर और दूरी के साथ ऑफ़र और ज़रूरतें ढूंढें।</span></a></li>
+            <li><a href="map-pins.html"><strong>नक्शा क्या दिखाता है</strong><span>नक्शे पर पिन, उनके रंगों का अर्थ, और उनके आस-पास के बटन।</span></a></li>
+            <li><a href="pin-locations.html"><strong>आपका पिन कहाँ लगता है</strong><span>कौन देखता है कि आपके पोस्ट और कार्यक्रम कहाँ हैं, और अपने घर को निजी कैसे रखें।</span></a></li>
+            <li><a href="events.html"><strong>कार्यक्रम</strong><span>किसी स्थान पर या ऑनलाइन, एक बार या दोहराए जाने वाला कार्यक्रम बनाएं; कहें कि आप जा रहे हैं, अनुस्मारक पाएं, इसे साझा करें, और आयोजक के रूप में चलाएं।</span></a></li>
+            <li><a href="your-area.html"><strong>आपका क्षेत्र</strong><span>वह अनुमानित स्थान जिसे वैश्विक समुदाय आपके आस-पास की सूचियाँ दिखाने के लिए उपयोग करता है, और इसे कैसे बदलें या हटाएं।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

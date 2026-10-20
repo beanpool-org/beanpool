@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>휴가 모드 — BeanPool members' guide</title>
+    <meta name="description" content="자리를 비울 때 휴가 모드를 켜면 제공 게시글이 숨겨지고 새 요청이 일시 중지돼요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">설정 및 안전</a></p>
+        <h1>휴가 모드</h1>
+        <p class="lede">자리를 비울 때 휴가 모드를 켜면 제공 게시글이 숨겨지고 새 요청이 일시 중지돼요.</p>
+        <h2>켜는 방법</h2>
+        <ul>
+            <li>진행 중인 모든 거래를 먼저 완료하거나 취소하세요. 진행 중인 거래가 남아 있다면 앱에서 휴가 모드를 시작할 수 없어요.</li>
+            <li><strong>설정</strong>을 여세요. <strong>앱 설정</strong> 아래에서 <strong>휴가 모드</strong>를 켜세요.</li>
+        </ul>
+        <h2>자리를 비운 동안</h2>
+        <ul>
+            <li>장터에서 내 게시물이 숨겨져요: 제공, 요청, 행사 및 설문이에요.</li>
+            <li>아무도 나에게 새로운 요청을 보낼 수 없어요.</li>
+            <li>직접 게시물을 올리거나 거래를 시작할 수 없어요.</li>
+            <li>내 잔액과 신용 한도는 그대로 유지돼요.</li>
+            <li>선물은 계속 보낼 수 있으며, 큰 잔액에 부과되는 유통 수수료도 그대로 적용돼요.</li>
+        </ul>
+        <h2>돌아왔을 때</h2>
+        <p><strong>휴가 모드</strong>를 끄세요. 내 제공 글이 다시 활성화돼요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>내 거래</strong><span>진행 중인 모든 거래, 내가 올린 게시글, 지난 거래 내역을 한곳에서 확인하세요.</span></a></li>
+            <li><a href="notifications.html"><strong>알림</strong><span>휴대폰으로 받을 알림과 행사 미리림 시점을 선택하세요.</span></a></li>
+            <li><a href="credit-line.html"><strong>내 신용 한도</strong><span>잔액이 마이너스로 내려갈 수 있는 범위와 한도 상향 방식이에요.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>로그아웃 또는 계정 삭제</strong><span>이 휴대폰에서 로그아웃하거나 계정을 영구 삭제하는 방법과 보유 콩의 처리 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

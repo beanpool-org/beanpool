@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ur by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>آپ کے 12 الفاظ اور سرور کیز (مالکان) — BeanPool members' guide</title>
+    <meta name="description" content="کمیونٹی مالکان کے لیے۔ اپنے 12 الفاظ کی جانچ، فون سے سرور کا کنٹرول لینا یا بحال کرنا، اور فون کی خودکار جانچ۔">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">سیٹنگز اور حفاظت</a></p>
+        <h1>آپ کے 12 الفاظ اور سرور کیز (مالکان)</h1>
+        <p class="lede">کمیونٹی مالکان کے لیے۔ اپنے 12 الفاظ کی جانچ، فون سے سرور کا کنٹرول لینا یا بحال کرنا، اور فون کی خودکار جانچ۔</p>
+        <h2>یہ کس کے لیے ہے</h2>
+        <p>صرف کمیونٹی کے <strong>مالکان</strong> کے لیے۔ اگر آپ مالک نہیں ہیں، تو آپ کو ان میں سے کچھ بھی نظر نہیں آئے گا۔</p>
+        <h2>مالکان سے کیوں پوچھا جاتا ہے</h2>
+        <p>آپ کی کمیونٹی کا سرور اپنی کلیدوں کی ایک مقفل کاپی رکھتا ہے، تاکہ اگر اس کا اپنا سرور ضائع ہو جائے تو کمیونٹی کو دوسرے سرور پر منتقل کیا جا سکے، اور اس کے بیک اپ بھی مقفل ہوتے ہیں۔ وہ مالکان کے اکاؤنٹس کے ساتھ مقفل ہوتے ہیں: کوئی بھی ایک مالک اپنے فون سے انہیں کھول سکتا ہے (نیچے &quot;اپنے فون سے کنٹرول سنبھالنا یا بحال کرنا&quot; دیکھیں)۔ اگر آپ اپنا فون کھو دیتے ہیں، تو آپ کے 12 الفاظ آپ کا اکاؤنٹ واپس لاتے ہیں، اور اس کے ساتھ سرور کے لاک اور اس کے بیک اپس کے لیے آپ کی کلید بھی۔ یہ اس دن سب سے زیادہ اہمیت رکھتا ہے جس دن سرور خود ختم ہو جائے۔ (یہ 12 الفاظ انگریزی الفاظ ہیں)۔</p>
+        <p>اس لیے ایپ وقتاً فوقتاً ہر مالک سے پوچھتی ہے کہ وہ تصدیق کر لیں کہ ان کے پاس اب بھی صحیح 12 الفاظ موجود ہیں۔ آپ <strong>بعد میں</strong> کہہ سکتے ہیں۔ کبھی بھی کچھ بھی بلاک نہیں ہوتا، اور آپ وہ سب کچھ کرتے رہ سکتے ہیں جو ایک مالک کرتا ہے۔</p>
+        <h2>ایپ کب پوچھتی ہے</h2>
+        <ul>
+            <li>ایک بار، آپ کے مالک بننے کے کچھ ہی عرصے بعد۔</li>
+            <li>دوبارہ آپ کی پچھلی جانچ کے 12 ماہ بعد۔</li>
+        </ul>
+        <p>یہ مارکیٹ کے اوپری حصے میں ایک کارڈ دکھاتی ہے (ویب ایپ میں، نقشے کے علاوہ ہر اسکرین کے اوپری حصے میں): <strong>ابھی چیک کریں</strong> یا <strong>بعد میں</strong>۔ <strong>بعد میں</strong> کارڈ کو اس وقت تک کے لیے ہٹا دیتا ہے جب تک کہ اس کی اگلی باری نہ آ جائے۔ آپ <strong>سیٹنگز</strong> سے کسی بھی وقت جانچ کر سکتے ہیں: <strong>کمیونٹی کیز</strong> کے تحت، <strong>اپنے 12 الفاظ کی جانچ کریں</strong> پر ٹیپ کریں (ویب ایپ میں، <strong>ابھی چیک کریں</strong>).</p>
+        <h2>جانچ کیسے کریں</h2>
+        <ul>
+            <li>12 الفاظ والا اپنا کاغذ لائیں۔ یہ 12 الفاظ انگریزی الفاظ ہیں۔</li>
+            <li>انہیں ترتیب سے ٹائپ کریں، ان کے درمیان فاصلہ رکھ کر۔ بڑے حروف اور اضافی فاصلوں سے کوئی فرق نہیں پڑتا۔</li>
+            <li><strong>میرے الفاظ چیک کریں</strong> پر ٹیپ کریں۔</li>
+        </ul>
+        <p>اگر وہ درست ہوں، تو ایپ کہتی ہے <strong>یہ درست الفاظ ہیں۔</strong> اگر نہیں: <strong>یہ اس اکاؤنٹ کے الفاظ نہیں ہیں۔</strong> یہ نہیں بتاتی کہ کون سا لفظ غلط ہے، اس لیے کاغذ چیک کریں اور ان سب کو دوبارہ ٹائپ کریں۔</p>
+        <p>ایسے فون پر جس میں آپ کے 12 الفاظ کی کوئی کاپی نہ ہو (جو سائن ان اکاؤنٹ کے ساتھ بحال کیا گیا ہو)، درست الفاظ <strong>انہیں اس فون پر محفوظ کریں</strong> بھی لاتے ہیں۔ اس پر ٹیپ کریں اور <strong>بحالی کا جملہ دیکھیں</strong> اس کے بعد سے انہیں دکھاتا ہے۔ یہ وہی جانچ اور وہی محفوظ کرنے کا عمل ہے جو <strong>اپنے 12 الفاظ اس فون میں شامل کریں</strong> کا ہے (&quot;آپ کے 12 الفاظ&quot; دیکھیں)۔</p>
+        <p>انہیں تلاش نہیں کر پا رہے؟ اگر اس فون کے پاس اب بھی وہ موجود ہیں، تو <strong>سیٹنگز</strong>، پھر <strong>بحالی کا جملہ دیکھیں</strong> انہیں دکھاتا ہے۔ انہیں دوبارہ لکھ لیں، پھر جانچ کریں۔ بغیر کاپی والے فون پر ایپ ایسا بتاتی ہے: جب آپ کو وہ مل جائیں، تو یہاں ان کی جانچ کریں، پھر انہیں محفوظ کریں۔</p>
+        <h2>کیا بھیجا جاتا ہے، اور کیا نہیں</h2>
+        <ul>
+            <li>جانچ آپ کے فون پر ہوتی ہے (یا ویب ایپ میں، آپ کے براؤزر میں)۔ آپ کے الفاظ کبھی کہیں نہیں بھیجے جاتے۔ جیسے ہی جانچ کا جواب ملتا ہے، اور جب آپ اسکرین چھوڑتے ہیں، باکس خالی ہو جاتا ہے۔ وہ صرف اس صورت میں محفوظ ہوتے ہیں جب آپ <strong>انہیں اس فون پر محفوظ کریں</strong> پر ٹیپ کریں، اور پھر صرف اسی فون پر۔</li>
+            <li>جب الفاظ درست ہوتے ہیں، تو آپ کا فون آپ کی کمیونٹی کے سرور کو صرف یہ بتاتا ہے کہ آپ نے جانچ کی، اور کب کی، جس پر آپ کے اکاؤنٹ کے دستخط ہوتے ہیں۔</li>
+            <li>مالکان اور ایڈمنز سرور کی سیٹنگز میں ہر مالک کی &quot;12 الفاظ جانچنے کی&quot; تاریخ، یا &quot;ابھی نہیں&quot; دیکھتے ہیں۔ یہ آپ کا اپنا بیان ہے: سرور آپ کے الفاظ کو دیکھ یا جانچ نہیں سکتا۔</li>
+        </ul>
+        <h2>اپنے فون سے کنٹرول سنبھالنا یا بحال کرنا</h2>
+        <p>اگر آپ کی کمیونٹی کا سرور ضائع ہو جائے، تو جو بھی اس کا اسٹینڈ بائی سرور چلا رہا ہو (یا بیک اپ بحال کرنے والا نیا سرور) وہ مقفل کلیدیں کھولنے کے لیے کسی مالک سے کہہ سکتا ہے۔ کوئی بھی ایک مالک کافی ہے۔ آپ کو BeanPool ایپ کے جدید ترین ورژن کی ضرورت ہے۔ ویب ایپ بھی کام کرتی ہے اگر یہ اب بھی کھلتی ہو، لیکن یہ آپ کی کمیونٹی کے اپنے پتے پر موجود ہوتی ہے، جو سرور کے ساتھ ڈاؤن ہو سکتا ہے: فون ایپ ہی وہ ہے جس پر انحصار کیا جانا چاہیے۔</p>
+        <ul>
+            <li>سرور کی سیٹنگز پر، وہ <strong>Take over as the main server</strong> کا انتخاب کرتے ہیں، پھر <strong>I understand: use an owner's phone</strong> پر، یا بیک اپ بحال کرتے وقت <strong>Open with an owner's phone</strong> پر۔ ان کی اسکرین پر ایک کوڈ ظاہر ہوتا ہے۔</li>
+            <li>ایپ میں: <strong>سیٹنگز</strong>، <strong>کمیونٹی کیز</strong> کے تحت، <strong>اس فون کے ساتھ کنٹرول سنبھالیں یا بحال کریں</strong> پر ٹیپ کریں، اور کیمرے کا رخ کوڈ کی طرف کریں۔ اگر سرور کا صفحہ آپ کے اپنے فون پر کھلا ہے، تو اس کے لنک پر ٹیپ کرنے سے بھی یہی کام ہوتا ہے۔ ویب ایپ میں، ان کی اسکرین سے لنک کاپی کریں اور اسے <strong>سیٹنگز</strong> میں <strong>اس براؤزر کے ساتھ کنٹرول سنبھالیں یا بحال کریں</strong> کے تحت چسپاں کریں۔</li>
+            <li>ایپ دکھاتی ہے کہ کون سی کمیونٹی، کون سا سرور، اور کیا ہوگا۔ اگر آپ کا مرکزی سرور اب بھی جواب دے رہا ہے، تو یہ سرخ رنگ میں ایسا بتاتی ہے: کنٹرول سنبھالنا صرف ایسے سرور کے لیے ہے جو واقعی ختم ہو چکا ہو۔</li>
+            <li><strong>کنٹرول سنبھالنے کے لیے انلاک کریں</strong> (یا <strong>بیک اپ انلاک کریں</strong>) پر ٹیپ کریں۔ آپ کا فون پہلے اپنا انلاک مانگتا ہے: فنگر پرنٹ، چہرہ یا پن۔ ویب ایپ میں ایسا کوئی مرحلہ نہیں ہے، یہی وجہ ہے کہ مالک کی کلید کے لیے فون ایپ زیادہ محفوظ جگہ ہے۔</li>
+            <li>آپ کا فون لاک کا اپنا حصہ کھولتا ہے اور کلید اس سرور کے حوالے کرتا ہے، جو اس طرح مقفل ہوتی ہے کہ صرف وہی سرور اسے پڑھ سکتا ہے۔ آپ کا فون کبھی بھی سرور کی کلیدیں یا بیک اپ نہیں دیکھتا۔</li>
+            <li>کنٹرول سنبھالنے پر، سرور پر موجود شخص پھر اپنی اسکرین پر تصدیق کرتا ہے۔ کمیونٹی کو مطلع کیا جاتا ہے کہ یہ منتقل ہو گئی ہے، اور یہ کہ آپ نے کلیدیں کھول دی ہیں۔</li>
+        </ul>
+        <p>اگر لاک کسی دوسری کمیونٹی کا ہے، اگر یہ آپ کے لیے مقفل نہیں ہے، اگر سرور کا کوڈ ختم ہو چکا ہے (یہ 10 منٹ تک رہتا ہے اور ایک بار کام کرتا ہے)، یا اگر کلیدیں آپ کی کمیونٹی کے اپنے سرور کے ذریعے مقفل نہیں کی گئی تھیں، تو ایپ انکار کر دیتی ہے اور وجہ بتاتی ہے۔</p>
+        <h2>آپ کا فون خود ہی لاک کی جانچ کرتا ہے</h2>
+        <p>ہر بار جب آپ کی کمیونٹی کا لاک تبدیل ہوتا ہے (کوئی مالک شامل یا ہٹایا جاتا ہے، نیا ریکوری کوڈ بنایا جاتا ہے)، آپ کی ایپ خاموشی سے جانچ کرتی ہے کہ آیا وہ اب بھی اپنا حصہ کھول سکتی ہے۔ یہ اسے کھولتی ہے، کلید کو فوراً ضائع کر دیتی ہے، اور سرور کو بتاتی ہے کہ آیا اس نے کام کیا۔ آپ سے کچھ نہیں پوچھا جاتا۔</p>
+        <p>مالکان اور ایڈمنز اسے سرور کی سیٹنگز میں آپ کی 12 الفاظ کی تاریخ کے ساتھ دیکھتے ہیں: <strong>ان کے فون نے موجودہ لاک کو کھولا</strong>، تاریخ کے ساتھ، یا یہ کہ اس نے آخری بار پرانے والے کو کھولا تھا۔ اگر یہ کہتا ہے کہ آپ کا فون لاک کو <strong>نہیں کھول سکا</strong>، تو اپنے 12 الفاظ چیک کریں، اور کسی دوسرے مالک سے سرور کی سیٹنگز دیکھنے کو کہیں۔</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>آپ کے 12 الفاظ</strong><span>12 الفاظ آپ کے اکاؤنٹ کی کلید ہیں۔ ان کی اہمیت، وہ کہاں ملیں گے، انہیں کیسے محفوظ رکھا جائے، اور دوسرے راستے کے طور پر سائن ان کا اضافہ۔</span></a></li>
+            <li><a href="recovery.html"><strong>اپنا اکاؤنٹ واپس حاصل کرنا</strong><span>نئے فون پر اپنا اکاؤنٹ بحال کریں، اور اسے سائن ان اکاؤنٹ سے محفوظ بنائیں۔</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

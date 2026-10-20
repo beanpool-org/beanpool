@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12個の単語とサーバーの鍵（オーナー用） — BeanPool members' guide</title>
+    <meta name="description" content="コミュニティのオーナー向け。12個の単語の確認、スマートフォンによるサーバーの引き継ぎや復元、端末による自動確認について説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">設定と安全性</a></p>
+        <h1>12個の単語とサーバーの鍵（オーナー用）</h1>
+        <p class="lede">コミュニティのオーナー向け。12個の単語の確認、スマートフォンによるサーバーの引き継ぎや復元、端末による自動確認について説明します。</p>
+        <h2>対象者</h2>
+        <p>コミュニティの<strong>オーナー</strong>のみが対象です。オーナーでない場合、この内容は一切表示されません。</p>
+        <h2>オーナーに確認が求められる理由</h2>
+        <p>コミュニティのサーバーは、万が一サーバーが失われた場合に備えて別のサーバーにコミュニティを移行できるよう、暗号化されてロックされた鍵のコピーを保持しており、バックアップも同様に暗号化されてロックされています。これらはオーナーのアカウントによってロックされています：いずれか1人のオーナーが自身のスマートフォンを使ってそれらを開くことができます（以下の「スマートフォンでの引き継ぎまたは復元」を参照）。もしスマートフォンを紛失しても、12個の単語があればアカウントを復元でき、それによってサーバーのロックやバックアップを開く鍵も元に戻ります。これは、サーバー自体が失われてしまった当日に最も重要となります。</p>
+        <p>そのためアプリは、適切な12個の単語を引き続き保持しているかどうかを確認するよう、時折各オーナーに求めます。<strong>後で</strong>を選択することも可能です。何かがブロックされることは一切なく、オーナーとしてのすべての操作を引き続き行えます。</p>
+        <h2>アプリから確認を求められるタイミング</h2>
+        <ul>
+            <li>オーナーになった直後に1回。</li>
+            <li>前回の確認から12か月後にもう1回。</li>
+        </ul>
+        <p>マーケットの最上部にカードが表示されます（Webアプリでは地図以外の全画面の最上部）：<strong>今すぐ確認</strong>または<strong>後で</strong>。<strong>後で</strong>を選ぶと、次の期限までカードは非表示になります。<strong>設定</strong>からいつでも確認できます：<strong>コミュニティ鍵</strong>の下にある<strong>12個の単語を確認</strong>をタップします（Webアプリでは<strong>今すぐ確認</strong>）。</p>
+        <h2>確認方法</h2>
+        <ul>
+            <li>12個の単語（英語の単語です）が書かれた紙を用意します。</li>
+            <li>単語の間にスペースを空けて、順番に入力します。大文字や余分なスペースは関係ありません。</li>
+            <li><strong>単語を確認</strong>をタップします。</li>
+        </ul>
+        <p>単語が正しければ、アプリに<strong>正しい単語です。</strong>と表示されます。正しくない場合は、<strong>このアカウントの単語ではありません。</strong>と表示されます。どの単語が間違っているかは表示されないため、紙を確認してすべて再度入力してください。</p>
+        <p>12個の単語のコピーが保存されていない端末（サインインアカウントで復元した端末など）では、正しい単語を入力すると<strong>この端末に保存</strong>も表示されます。これをタップすると、以降は<strong>復元フレーズを表示</strong>に単語が表示されるようになります。これは<strong>この端末に12個の単語を追加</strong>と同じ確認および保存処理です（「あなたの12個の単語」を参照）。</p>
+        <p>紙が見つからない場合：この端末にまだ単語が残っていれば、<strong>設定</strong>から<strong>復元フレーズを表示</strong>を開くと確認できます。再度紙に書き留めてから確認を行ってください。コピーが保存されていない端末ではその旨が表示されます：紙が見つかったら、ここで確認した上で保存してください。</p>
+        <h2>送信される情報と送信されない情報</h2>
+        <ul>
+            <li>確認はお使いのスマートフォン上（またはWebアプリではブラウザ上）で行われます。単語がどこかに送信されることは決してありません。確認結果が表示されると同時に、また画面を離れると、入力欄は空になります。単語が保存されるのは<strong>この端末に保存</strong>をタップした場合のみであり、その場合もこの端末内にのみ保存されます。</li>
+            <li>単語が正しかった場合、スマートフォンはコミュニティのサーバーに対して、確認を行ったこと、およびその日時のみを自身のアカウントで署名して通知します。</li>
+            <li>オーナーと管理者は、サーバーの「設定」で、各オーナーの「12 words checked」の日付、または「not yet」を確認できます。これはあなた自身の申告に基づくものであり、サーバーがあなたの単語を閲覧したり検証したりすることはできません。</li>
+        </ul>
+        <h2>スマートフォンでの引き継ぎまたは復元</h2>
+        <p>コミュニティのサーバーが失われた場合、スタンバイサーバー（またはバックアップを復元する新しいサーバー）を運用している担当者は、ロックされた鍵を開くようオーナーに依頼できます。オーナーはいずれか1人いれば十分です。最新バージョンのBeanPoolアプリが必要です。Webアプリも開ける状態であれば利用できますが、サーバーの停止とともにアクセスできなくなる可能性があるコミュニティ自身のアドレス上に存在するため、確実に頼りになるのはスマートフォンアプリです。</p>
+        <ul>
+            <li>サーバーの「設定」で、担当者は<strong>Take over as the main server</strong>を選び、次に<strong>I understand: use an owner's phone</strong>を選択します。バックアップを復元する場合は<strong>Open with an owner's phone</strong>を選択します。担当者の画面にコードが表示されます。</li>
+            <li>アプリで：<strong>設定</strong>を開き、<strong>コミュニティ鍵</strong>の下にある<strong>この端末で引き継ぎまたは復元</strong>をタップして、カメラをコードに向けます。自分のスマートフォン上でサーバーのページを開いている場合は、そのリンクをタップすることでも同様に行えます。Webアプリでは、担当者の画面からリンクをコピーし、<strong>設定</strong>の<strong>このブラウザで引き継ぎまたは復元を行う</strong>の下に貼り付けます。</li>
+            <li>アプリには、どのコミュニティか、どのサーバーか、そして何が実行されるかが表示されます。メインサーバーがまだ応答している場合は、その旨が赤字で表示されます：引き継ぎは、サーバーが完全に失われた場合にのみ行われるべきものです。</li>
+            <li><strong>引き継ぎのためにロック解除</strong>（または<strong>バックアップをロック解除</strong>）をタップします。スマートフォンはまず、指紋、顔認証、またはPINといった端末自体のロック解除を要求します。Webアプリにはこのような手順がないため、オーナーの鍵を保持する場所としてはスマートフォンアプリの方が安全です。</li>
+            <li>スマートフォンは自身のロック部分を開き、そのサーバーのみが読み取れるよう暗号化して鍵をサーバーに渡します。スマートフォンがサーバーの鍵やバックアップ自体を見ることは決してありません。</li>
+            <li>引き継ぎの場合、サーバー側の担当者が画面上で確認を行います。コミュニティにはサーバーが移行したこと、およびあなたが鍵を開いたことが通知されます。</li>
+        </ul>
+        <p>ロックが別のコミュニティに属している場合、あなたに対してロックされていない場合、サーバーのコードの有効期限が切れている場合（有効期限は10分間で、1回のみ有効）、または鍵があなたのコミュニティ自身のサーバーによってロックされたものでない場合、アプリは処理を拒否し、その理由を表示します。</p>
+        <h2>端末による自動確認</h2>
+        <p>コミュニティのロックが変更されるたび（オーナーが追加または削除されたとき、新しい復元コードが作成されたときなど）、アプリは自身のロック部分をまだ開くことができるかどうかを密かに確認します。アプリはそれを開き、直ちに鍵を破棄し、正常に機能したかどうかをサーバーに伝えます。あなたに何か操作が求められることはありません。</p>
+        <p>オーナーと管理者は、サーバーの「設定」で、あなたの12個の単語の確認日の横に<strong>their phone opened the current lock</strong>と日付が表示されているのを確認できます（または以前のロックを開いた最新の日付）。もし端末がロックを<strong>could NOT open</strong>と表示されている場合は、12個の単語を確認し、別のオーナーにサーバーの「設定」を確認してもらってください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>あなたの12個の単語</strong><span>12個の単語はアカウントの鍵です。その重要性、確認場所、安全な保管方法、復元のバックアップ手段としてサインインを追加する方法を説明します。</span></a></li>
+            <li><a href="recovery.html"><strong>アカウントの復元</strong><span>新しい端末でアカウントを復元し、連携したサインインアカウントで保護します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

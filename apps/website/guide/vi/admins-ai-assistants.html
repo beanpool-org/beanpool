@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khi quản trị viên dùng trợ lý AI — BeanPool members' guide</title>
+    <meta name="description" content="Những gì trợ lý AI của chủ sở hữu hay quản trị viên có thể đọc về bạn, những gì không bao giờ thấy và ai nhận được dữ liệu.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Cài đặt và an toàn</a></p>
+        <h1>Khi quản trị viên dùng trợ lý AI</h1>
+        <p class="lede">Những gì trợ lý AI của chủ sở hữu hay quản trị viên có thể đọc về bạn, những gì không bao giờ thấy và ai nhận được dữ liệu.</p>
+        <p>Chủ sở hữu cộng đồng của bạn có thể kết nối trợ lý AI của riêng họ (ví dụ Claude hoặc ChatGPT) với máy chủ của cộng đồng, để giúp họ trông coi cộng đồng: hỏi xem việc gì cần đến họ, hoặc tóm tắt các báo cáo đang mở. Quản trị viên cũng có thể làm điều này: họ thêm địa chỉ cộng đồng của bạn vào trợ lý của mình và phê duyệt trên điện thoại. Họ tự kết nối và có thể ngắt kết nối bất cứ lúc nào. Các chủ sở hữu khác sẽ được thông báo khi có một trợ lý được kết nối.</p>
+        <h2>Những gì trợ lý có thể đọc về bạn</h2>
+        <p>Một trợ lý nhìn thấy ít hơn rất nhiều so với những gì quản trị viên thấy trong Cài đặt. Máy chủ cộng đồng của bạn quyết định những gì trợ lý nhận được, chứ không phải trợ lý.</p>
+        <ul>
+            <li><strong>Nếu ai đó báo cáo bạn hoặc bài đăng của bạn</strong>, và quản trị viên yêu cầu nội dung của báo cáo: lý do được đưa ra, tiêu đề và mô tả bài đăng của bạn, cùng tên BeanPool của bạn. Không bao giờ biết ai là người đã gửi báo cáo.</li>
+            <li><strong>Nếu bạn yêu cầu tham gia</strong>, và quản trị viên yêu cầu xem tin nhắn: tên và tin nhắn bạn đã gửi cùng yêu cầu của mình, cùng cộng đồng mà bạn cho biết mình đến từ đó. Không bao giờ xem được ảnh hoặc khóa của bạn.</li>
+            <li><strong>Số liệu tổng của toàn bộ cộng đồng</strong>, chẳng hạn như có bao nhiêu thành viên và có bao nhiêu Đậu đang lưu hành. Không bao giờ biết số dư của bạn.</li>
+        </ul>
+        <h2>Những gì trợ lý không bao giờ thấy</h2>
+        <p>Tin nhắn và các cuộc trò chuyện của bạn, số dư và các giao dịch của bạn, các khóa của bạn, địa chỉ của bạn, ảnh của bạn, danh sách tên thành viên, và ai đã báo cáo ai. Trợ lý không thể thay đổi bất cứ điều gì về bạn: nó không thể xóa bạn, tắt tiếng bạn, gỡ bài đăng của bạn hay trả lời yêu cầu tham gia của bạn. Những việc đó do con người thực hiện. Một quản trị viên thực hiện các thao tác đó trong Cài đặt hoặc trên điện thoại của họ, và yêu cầu tham gia được trả lời trong ứng dụng bởi bất kỳ thành viên nào có quyền mời.</p>
+        <p>Một trợ lý có thể đề xuất việc cần làm đối với một báo cáo, ví dụ như giữ lại bài đăng của bạn hay gỡ bỏ nó. Không có gì xảy ra trừ khi người quản trị viên mà nó phục vụ đọc báo cáo và phê duyệt; mọi thông tin bạn nhận được về việc đó đều đến từ những người điều hành cộng đồng của bạn, như thường lệ.</p>
+        <h2>Ai nhận được dữ liệu</h2>
+        <p>Những gì trợ lý đọc được sẽ được chuyển đến công ty vận hành trợ lý đó, giống như khi chính bạn dán một nội dung nào đó vào một cuộc trò chuyện AI. Máy chủ chỉ gửi nội dung của báo cáo hoặc tin nhắn tham gia khi trợ lý của quản trị viên yêu cầu, được đánh dấu là lời nói từ một thành viên chứ không phải chỉ dẫn.</p>
+        <p>Nếu bạn không muốn báo cáo hoặc tin nhắn xin tham gia của mình bị AI đọc, hãy hỏi các quản trị viên về cách họ sử dụng trợ lý của mình.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>Quản trị viên có thể thấy gì</strong><span>Trong cộng đồng có danh sách tên: thông tin về bạn, ai có thể đọc, máy chủ lưu những gì và ý nghĩa của việc được xác nhận.</span></a></li>
+            <li><a href="reporting.html"><strong>Báo cáo vấn đề</strong><span>Báo cho kiểm duyệt viên cộng đồng về bài đăng, sự kiện, bài đăng Nhịp đập hoặc dự án.</span></a></li>
+            <li><a href="privacy.html"><strong>Quyền riêng tư</strong><span>Những gì người khác có thể thấy về bạn và các cài đặt để kiểm soát điều đó.</span></a></li>
+            <li><a href="joining.html"><strong>Tham gia BeanPool</strong><span>Hai cách tham gia: cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu khi mở, bằng 12 từ bí mật hoặc đăng nhập. Xin gia nhập và mời người khác.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

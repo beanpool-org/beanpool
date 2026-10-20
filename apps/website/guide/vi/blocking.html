@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chặn một người — BeanPool members' guide</title>
+    <meta name="description" content="Ẩn bài đăng và tin nhắn của ai đó khỏi bạn và bỏ chặn bất cứ lúc nào.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Cài đặt và an toàn</a></p>
+        <h1>Chặn một người</h1>
+        <p class="lede">Ẩn bài đăng và tin nhắn của ai đó khỏi bạn và bỏ chặn bất cứ lúc nào.</p>
+        <h2>Chặn</h2>
+        <ul>
+            <li>Trên hồ sơ của họ: nhấn <strong>Chặn</strong>, hoặc <strong>Chặn</strong> và tên của họ ở phía dưới.</li>
+            <li>Trên một bài đăng của họ (ứng dụng điện thoại): nhấn <strong>Chặn người dùng</strong>. Bài đăng trong ứng dụng web không có nút chặn.</li>
+            <li>Từ một cuộc trò chuyện: nhấn vào tên của họ ở trên cùng để mở hồ sơ, sau đó nhấn <strong>Chặn</strong>. Trong ứng dụng web, cuộc trò chuyện với một người cũng có nút <strong>Chặn</strong> ở trên cùng.</li>
+        </ul>
+        <p>Trong ứng dụng điện thoại, hãy xác nhận bằng <strong>Chặn người dùng</strong>. Trong ứng dụng web, trình duyệt của bạn sẽ yêu cầu bạn xác nhận: nhấn <strong>OK</strong>.</p>
+        <h2>Những tác vụ được thực hiện</h2>
+        <ul>
+            <li>Các bài đăng của họ trên Chợ bị ẩn khỏi bạn.</li>
+            <li>Họ biến mất khỏi các cuộc trò chuyện của bạn và khỏi danh sách Mọi người, và hai bên không thể nhắn tin cho nhau. Trong ứng dụng điện thoại, người mà bạn đã thêm vẫn hiển thị trên tab <strong>Bạn bè</strong> của bạn: xem &quot;Những gì tính năng này không thực hiện&quot; bên dưới. Ứng dụng web ẩn họ khỏi mọi danh sách.</li>
+            <li>Các bài đăng trên Nhịp đập của họ vẫn hiển thị. Trên điện thoại, các ghim của họ trên Bản đồ cũng vẫn hiển thị. Bản đồ của ứng dụng web ẩn chúng.</li>
+            <li>Trên Sổ cái của bạn, Đậu nhận từ họ hiển thị dòng chữ &quot;Đậu từ một thành viên bạn đã chặn&quot; thay vì bất kỳ ghi chú nào họ gửi kèm.</li>
+            <li>Một báo cáo sẽ được gửi tới những người điều hành cộng đồng của bạn để họ có thể xem xét.</li>
+        </ul>
+        <h2>Những gì cộng đồng của bạn xử lý đối với việc chặn</h2>
+        <p>Cộng đồng của bạn thực hiện điều này đối với các lệnh chặn mà cộng đồng lưu giữ cho bạn. Hiện tại đó là lệnh chặn được thực hiện trong ứng dụng web. Lệnh chặn được thực hiện trong ứng dụng điện thoại sẽ chỉ lưu trên chiếc điện thoại đó, và cộng đồng của bạn không biết về lệnh chặn đó.</p>
+        <ul>
+            <li>Tin nhắn trực tiếp của họ không bao giờ đến được bạn. Cộng đồng của bạn không chuyển tiếp chúng đến bạn, trên bất kỳ điện thoại hay máy tính nào, và bạn không nhận được thông báo cũng như không có số lượng tin nhắn chưa đọc từ họ.</li>
+            <li>Nếu họ bắt đầu một cuộc trò chuyện mới với bạn, cuộc trò chuyện đó sẽ không xuất hiện trong danh sách trò chuyện của bạn.</li>
+            <li>Nếu bạn bỏ chặn họ, không nội dung nào họ đã gửi trong lúc bị chặn sẽ đến. Chỉ những tin nhắn họ gửi sau thời điểm đó mới đến được bạn.</li>
+            <li>Nếu họ bày tỏ cảm xúc với một tin nhắn của bạn, hoặc chỉnh sửa một tin nhắn cũ của họ, bạn sẽ không nhìn thấy điều đó.</li>
+            <li>Bạn không nhận được thông báo khi họ viết trong một cuộc trò chuyện nhóm, ngay cả khi họ nhắc đến bạn bằng @.</li>
+            <li>Nếu họ yêu cầu giao dịch trên một bài đăng của bạn, yêu cầu sẽ nằm chờ trong danh sách giao dịch của bạn mà không có thông báo. Nếu bạn để mặc nó, yêu cầu sẽ kết thúc sau 7 ngày, cũng không có thông báo nào.</li>
+            <li>Nếu họ chấp nhận một Lời đề nghị của bạn ngay lập tức, bạn không nhận được thông báo nào, và cũng không có thông báo nếu sau đó họ hủy giao dịch đó. Giao dịch vẫn hiển thị trong mục giao dịch của bạn, và các tin nhắn của giao dịch vẫn hiển thị trong cuộc trò chuyện với họ, như với bất kỳ ai. Đậu của họ được giữ và hoàn lại như bình thường.</li>
+            <li>Họ không thể tạo một bài đăng chỉ gửi đích danh cho bạn.</li>
+            <li>Bạn không thể thêm họ. Nếu họ thêm bạn, bạn sẽ không được thông báo. Nếu trước đó họ đã thêm bạn, dòng &quot;đã thêm bạn&quot; trên tab Mọi người của bạn sẽ biến mất. Bạn bè của bạn sẽ không còn thấy bạn là một kết nối chung trên hồ sơ của người bạn đã chặn.</li>
+            <li>Nếu họ gửi Đậu cho bạn kèm một ghi chú, số Đậu sẽ đến đầy đủ nhưng phần ghi chú thì không. Bạn sẽ thấy dòng &quot;Đậu từ một thành viên bạn đã chặn&quot; thay thế, và bạn vẫn thấy dòng này ngay cả sau khi bạn đã bỏ chặn họ.</li>
+        </ul>
+        <h2>Những gì tính năng này không thực hiện</h2>
+        <ul>
+            <li>Họ không được thông báo. Đối với họ, các tin nhắn của họ trông như đã được gửi đi, và các ghi chú gửi kèm Đậu cũng vậy.</li>
+            <li>Tính năng này không hủy bỏ quan hệ bạn bè: nếu bạn đã thêm họ, họ vẫn là bạn bè của bạn, và nếu thông tin liên hệ của bạn được đặt ở chế độ Bạn bè, họ vẫn có thể nhìn thấy. Để chấm dứt cả điều đó, hãy mở <strong>Quản lý người dùng bị chặn</strong> (trên web là <strong>Quản lý thành viên bị chặn</strong>; xem &quot;Bỏ chặn&quot; bên dưới) và nhấn <strong>Đồng thời xóa khỏi bạn bè</strong> bên dưới tên của họ. Nút này chỉ xuất hiện đối với người mà bạn đã thêm. Họ vẫn tiếp tục bị chặn. Họ có thể nhận ra việc bị xóa kết bạn.</li>
+            <li>Các cuộc trò chuyện nhóm, trò chuyện sự kiện, cùng các cuộc trò chuyện của dự án và doanh nghiệp là không gian chung: mọi người trong đó đều thấy các tin nhắn giống nhau. Tin nhắn của họ ở những nơi đó vẫn hiển thị, đối với bạn cũng như với mọi người khác.</li>
+            <li>Một giao dịch mà bạn đang có sẵn với họ vẫn tiếp tục như trước, cùng với các thông báo và thông báo nhắc nhở của giao dịch đó.</li>
+            <li>Nếu bạn đã từng giao dịch với họ trước đây, họ vẫn có thể gửi Đậu cho bạn. Từng hạt Đậu đều sẽ đến, không có thông báo nào.</li>
+            <li>Các thông báo từ cộng đồng của bạn vẫn được gửi đến, ngay cả khi họ là người khởi xướng. Ví dụ, bạn sẽ được thông báo khi ai đó mở một cuộc bỏ phiếu để thay thế bạn làm người triệu tập chính của một nhóm, và bạn nhận được tin nhắn từ những người vận hành cộng đồng của bạn.</li>
+            <li>Họ vẫn có thể nhìn thấy các bài đăng của bạn.</li>
+            <li>Trong ứng dụng điện thoại, lệnh chặn được lưu giữ trên chiếc điện thoại này, chỉ dành riêng cho tài khoản của bạn. Một tài khoản khác trên điện thoại này sẽ không nhận các lệnh chặn của bạn.</li>
+            <li>Trong ứng dụng điện thoại, nếu bạn đăng xuất, hoặc thay thế tài khoản của chiếc điện thoại này bằng một tài khoản khác, các lệnh chặn của bạn vẫn ở lại trên điện thoại. Hãy quay lại bằng chính tài khoản đó và các lệnh chặn vẫn còn nguyên ở đó.</li>
+            <li>Trong ứng dụng điện thoại, nếu bạn cài đặt lại ứng dụng hoặc sử dụng một điện thoại khác, hãy chặn lại họ.</li>
+            <li>Trong ứng dụng web, cộng đồng của bạn lưu giữ các lệnh chặn cùng với tài khoản của bạn. Đăng nhập trên bất kỳ trình duyệt nào và các lệnh chặn sẽ quay trở lại. Đăng xuất sẽ không để lại bất cứ thông tin nào về các lệnh chặn trên máy tính đó. Xem &quot;Dùng BeanPool trên trình duyệt web&quot;.</li>
+            <li>Những người vận hành máy chủ cộng đồng của bạn có thể nhìn thấy người bạn đã chặn trong ứng dụng web, tương tự như việc họ có thể nhìn thấy các báo cáo.</li>
+            <li>Ứng dụng điện thoại và ứng dụng web lưu giữ các danh sách riêng biệt. Một lệnh chặn ở ứng dụng này không hiển thị ở ứng dụng kia.</li>
+        </ul>
+        <h2>Bỏ chặn</h2>
+        <ul>
+            <li>Mở <strong>Cài đặt</strong>. Dưới mục <strong>Pháp lý &amp; quyền riêng tư</strong>, nhấn <strong>Quản lý người dùng bị chặn</strong>.</li>
+            <li>Nhấn <strong>Bỏ chặn</strong> bên cạnh một cái tên, hoặc <strong>Bỏ chặn tất cả</strong>.</li>
+        </ul>
+        <p>Trong ứng dụng web, việc chặn và bỏ chặn cần có kết nối tới cộng đồng của bạn. Nếu không có kết nối, ứng dụng sẽ thông báo điều đó và không có gì thay đổi. Hãy thử lại khi bạn trực tuyến trở lại.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>Báo cáo vấn đề</strong><span>Báo cho kiểm duyệt viên cộng đồng về bài đăng, sự kiện, bài đăng Nhịp đập hoặc dự án.</span></a></li>
+            <li><a href="messages.html"><strong>Tin nhắn</strong><span>Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.</span></a></li>
+            <li><a href="privacy.html"><strong>Quyền riêng tư</strong><span>Những gì người khác có thể thấy về bạn và các cài đặt để kiểm soát điều đó.</span></a></li>
+            <li><a href="getting-help.html"><strong>Nhận trợ giúp</strong><span>Tìm ở đâu khi bạn gặp khó khăn và nên hỏi ai.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

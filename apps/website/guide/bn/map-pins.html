@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>মানচিত্র যা দেখায় — BeanPool members' guide</title>
+    <meta name="description" content="মানচিত্রের পিনগুলো, তাদের রঙের অর্থ এবং তাদের চারপাশের বোতামগুলো।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">মানচিত্র</a></p>
+        <h1>মানচিত্র যা দেখায়</h1>
+        <p class="lede">মানচিত্রের পিনগুলো, তাদের রঙের অর্থ এবং তাদের চারপাশের বোতামগুলো।</p>
+        <h2>পিনসমূহ</h2>
+        <p>ট্যাবগুলোর সারিতে <strong>মানচিত্র</strong>-এ ট্যাপ করুন। মানচিত্রটি আপনার কমিউনিটির পোস্টগুলো দেখায়:</p>
+        <ul>
+            <li><strong>সবুজ পিন:</strong> প্রস্তাবসমূহ।</li>
+            <li><strong>কমলা পিন:</strong> প্রয়োজনসমূহ।</li>
+            <li><strong>ক্যালেন্ডারসহ বেগুনি পিন:</strong> এখনও শেষ না হওয়া ইভেন্টসমূহ।</li>
+        </ul>
+        <p>একটি পিন পোস্টের বিভাগের ছবি দেখায়। যেখানে অনেকগুলো প্রস্তাব এবং প্রয়োজন কাছাকাছি থাকে, সেগুলো একটি সংখ্যাসহ একটি বৃত্তে একত্রিত হয়। বৃত্তটি ফোনে নীল এবং ওয়েব অ্যাপে গাঢ় ধূসর দেখায়। একে একে দেখতে জুম করুন। ইভেন্টগুলো সর্বদা আলাদাভাবে প্রদর্শিত হয়।</p>
+        <p>মানুষ এবং গ্রুপগুলো মানচিত্রে থাকে না। ওয়েব অ্যাপে, কোনো উদ্যোগ কোনো স্থান নির্ধারণ করে থাকলে তা তার ছবিসহ একটি চারকোণা পিন হিসেবে প্রদর্শিত হয়। উদ্যোগটি খুলতে সেটিতে ট্যাপ করুন।</p>
+        <p>পোলগুলোও মানচিত্রে থাকে না। একমাত্র ব্যতিক্রম হলো ফোনে, গ্লোবাল কমিউনিটিতে, যেখানে কোনো পোল পোস্টকারীর এলাকায় পিন হিসেবে প্রদর্শিত হতে পারে। এটি দেখতে কমলারঙা প্রয়োজনের পিনের মতো এবং কেবল <strong>সব</strong>-এর অধীনে প্রদর্শিত হয়।</p>
+        <h2>একটি পিনে ট্যাপ করা</h2>
+        <ul>
+            <li><strong>একটি প্রস্তাব বা প্রয়োজন:</strong> একটি কার্ড শিরোনাম এবং কে এটি পোস্ট করেছেন তা দেখায়। এটি খুলতে <strong>বিস্তারিত দেখুন</strong>-এ ট্যাপ করুন। ফোনে, তাদের প্রোফাইল দেখতে তাদের নামে ট্যাপ করুন। কার্ডটি বন্ধ করতে মানচিত্রে বা <strong>✕</strong>-এ ট্যাপ করুন।</li>
+            <li><strong>একটি ইভেন্ট:</strong> একটি কার্ড দেখায় কখন এবং কোথায়, এবং কতজন যাচ্ছেন। <strong>ইভেন্ট দেখুন</strong>-এ ট্যাপ করুন। ওয়েব অ্যাপে বোতামটি হলো <strong>বিস্তারিত দেখুন</strong>, এবং আপনি কার্ডটিতে <strong>যাচ্ছি</strong> বা <strong>আগ্রহী</strong>-তেও ট্যাপ করতে পারেন।</li>
+        </ul>
+        <h2>ফিল্টারসমূহ</h2>
+        <p>ফোনে, মানচিত্রের শীর্ষে:</p>
+        <ul>
+            <li><strong>সব</strong>, <strong>প্রস্তাবসমূহ</strong>, <strong>প্রয়োজনসমূহ</strong> বা <strong>ইভেন্টসমূহ</strong>। সরাতে <strong>✕</strong>-এ ট্যাপ করুন।</li>
+            <li>একটি বিভাগ দেখাতে <strong>সকল বিভাগ</strong>।</li>
+            <li>ইভেন্টের জন্য: <strong>সব</strong>, <strong>আজ</strong>, <strong>এই সপ্তাহান্তে</strong> বা <strong>পরবর্তী ৭ দিন</strong>। মানচিত্রটি সেগুলোকে মানানসই করতে সরে যায়।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে মানচিত্রে কেবল ইভেন্টের তারিখের চিপগুলো থাকে: <strong>আজ</strong>, <strong>এই সপ্তাহান্তে</strong>, <strong>পরবর্তী ৭ দিন</strong> এবং <strong>সকল ইভেন্ট</strong>। আপনার কমিউনিটিতে কোনো আসন্ন ইভেন্ট থাকলেই কেবল সেগুলো প্রদর্শিত হয়।</p>
+        <h2>বাম পাশের বোতামগুলো</h2>
+        <ul>
+            <li>ফোনে, চাঁদ বা সূর্য: একটি অন্ধকার বা উজ্জ্বল মানচিত্র।</li>
+            <li>লক্ষ্যচিহ্ন (টার্গেট): আপনি কোথায় আছেন তা দেখান। প্রথমবার অ্যাপটি আপনার লোকেশন ব্যবহারের অনুমতি চায়।</li>
+            <li><strong>+</strong> এবং <strong>−</strong>: জুম।</li>
+        </ul>
+        <p>অ্যাম্বার বৃত্তটি আপনার কমিউনিটি যে এলাকায় সেবা দেয় তা দেখায়।</p>
+        <h2>মানচিত্র থেকে একটি পোস্ট যোগ করা</h2>
+        <p><strong>+ পোস্ট যোগ করুন</strong>-এ ট্যাপ করুন। ওয়েব অ্যাপে, নিচে ডানদিকের গোলাকার <strong>+</strong>-এ ট্যাপ করুন। &quot;একটি প্রস্তাব বা প্রয়োজন পোস্ট করা&quot; দেখুন।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>আপনার পিন যেখানে থাকে</strong><span>কে আপনার পোস্ট এবং ইভেন্টের অবস্থান দেখতে পারে, এবং আপনার বাড়ি কীভাবে ব্যক্তিগত রাখবেন।</span></a></li>
+            <li><a href="near-you.html"><strong>কাছাকাছি জিনিস খোঁজা</strong><span>শুধুমাত্র আপনার একটি নির্দিষ্ট দূরত্বের মধ্যে, বা আপনার নির্বাচিত যেকোনো স্থানের পোস্ট দেখান।</span></a></li>
+            <li><a href="events.html"><strong>ইভেন্টসমূহ</strong><span>একটি নির্দিষ্ট স্থানে বা অনলাইনে, একবার বা পুনরাবৃত্তিমূলক ইভেন্ট তৈরি করুন; যাচ্ছেন জানান, রিমাইন্ডার পান, শেয়ার করুন এবং হোস্ট হিসেবে পরিচালনা করুন।</span></a></li>
+            <li><a href="posting.html"><strong>প্রস্তাব বা প্রয়োজন পোস্ট করা</strong><span>আপনি যা করতে বা দিতে পারেন, অথবা আপনি যা খুঁজছেন তা পোস্ট করুন।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

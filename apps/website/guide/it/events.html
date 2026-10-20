@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eventi — BeanPool members' guide</title>
+    <meta name="description" content="Crea un evento, di persona o online, singolo o ricorrente; conferma la partecipazione, ricevi promemoria, condividilo e gestiscilo come organizzatore.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Beni comuni</a></p>
+        <h1>Eventi</h1>
+        <p class="lede">Crea un evento, di persona o online, singolo o ricorrente; conferma la partecipazione, ricevi promemoria, condividilo e gestiscilo come organizzatore.</p>
+        <h2>Trovare eventi</h2>
+        <ul>
+            <li>Nel <strong>Mercato</strong>, tocca <strong>Eventi</strong>. Scegli <strong>Oggi</strong>, <strong>Questo fine settimana</strong> o <strong>Prossimi 7 giorni</strong>.</li>
+            <li>Sulla <strong>Mappa</strong>, gli eventi sono contrassegnati da pin viola. Sul telefono, tocca <strong>Eventi</strong> per vedere solo quelli. Nell'app web sono sempre visibili, e i filtri delle date permettono di restringerli.</li>
+        </ul>
+        <h2>I tuoi eventi</h2>
+        <p>Nel <strong>Mercato</strong>, tocca <strong>★ Per Te</strong>. <strong>I tuoi eventi</strong> è la prima voce visualizzata: tutto ciò a cui hai indicato <strong>Partecipo</strong> o <strong>Interessato</strong>, dal più imminente. Toccane uno per aprirlo.</p>
+        <p>È presente solo quando hai qualcosa in programma, e contiene solo le tue risposte — nessun altro può vederlo.</p>
+        <h2>Partecipare</h2>
+        <p>Su un evento, tocca <strong>Partecipo</strong> o <strong>Interessato</strong>. Tocca di nuovo la tua scelta per rimuoverla.</p>
+        <p>Quando hai scelto <strong>Partecipo</strong>:</p>
+        <ul>
+            <li>puoi leggere la <strong>Nota per chi partecipa</strong> dell'organizzatore, una volta che ti ha fatto entrare, laddove l'organizzatore abbia scelto questa opzione;</li>
+            <li>puoi aprire la <strong>chat dell'evento</strong>. Vedi &quot;Chat di eventi&quot;;</li>
+            <li>per un evento online, vedi il suo <strong>Link per partecipare</strong> e un pulsante <strong>Partecipa</strong>, alle stesse condizioni della nota.</li>
+        </ul>
+        <p>Tocca l'evento per vedere tutto, e <strong>Mostra sulla mappa</strong>. Sul telefono apre la tua app di mappe. Nell'app web mostra il luogo sulla Mappa.</p>
+        <h2>Ricevere promemoria</h2>
+        <p>Quando hai scelto <strong>Partecipo</strong> o <strong>Interessato</strong>, l'evento mostra <strong>Ricordamelo</strong> e quanto tempo prima dell'inizio riceverai l'avviso — <strong>1 giorno prima (predefinito)</strong> finché non lo modifichi.</p>
+        <ul>
+            <li>Tocca <strong>Modifica</strong> per scegliere <strong>1 settimana prima</strong>, <strong>1 giorno prima</strong>, <strong>2 ore prima</strong>, <strong>1 ora prima</strong> o <strong>30 minuti prima</strong>. Puoi selezionarne più di uno.</li>
+            <li>Non selezionare nulla per non ricevere alcun promemoria per questo evento.</li>
+            <li>Quindi tocca <strong>Salva per questo evento</strong>. La selezione non viene salvata finché non lo fai.</li>
+            <li>Tocca <strong>Usa il mio predefinito</strong> per ripristinare la tua scelta abituale.</li>
+        </ul>
+        <p>Per modificare la tua scelta abituale per ogni evento, vedi &quot;Notifiche&quot;.</p>
+        <p>I promemoria arrivano come avvisi sul telefono, insieme agli avvisi del Mercato, quindi si interrompono se li disattivi. Non ricevi mai promemoria per un evento annullato o terminato, né per un orario già trascorso quando hai indicato la tua partecipazione.</p>
+        <h2>Parlarne a qualcuno</h2>
+        <p>Apri l'evento e tocca <strong>Condividi</strong>. Si apre il consueto pannello di condivisione del telefono con il nome dell'evento, quando si tiene, dove si trova e un link. Su un computer, il link viene copiato per permetterti di incollarlo.</p>
+        <p>Chiunque tocchi quel link apre l'evento — nell'app se la possiede, altrimenti nell'app web. Chi non fa parte della tua comunità atterra sulla pagina per unirsi. In un browser web, la comunità globale mostra prima l'evento, come lo vede un visitatore, e lo riapre una volta effettuato l'accesso.</p>
+        <h2>Inserirlo nel calendario</h2>
+        <p>Apri l'evento e tocca <strong>Aggiungi al calendario</strong>.</p>
+        <ul>
+            <li>Sull'<strong>app web</strong>, viene scaricato un file di calendario. Aprilo e il tuo calendario ti proporrà di aggiungere l'evento.</li>
+            <li>Su un <strong>iPhone</strong>, lo stesso file viene passato al telefono, che propone <strong>Aggiungi a Calendario</strong>.</li>
+            <li>Su <strong>Android</strong>, si apre Google Calendar con l'evento già compilato. Controllalo e salva.</li>
+        </ul>
+        <p>La voce include il nome, l'orario, il luogo e il link all'evento. Se in seguito l'organizzatore modifica l'orario, il tuo calendario non si aggiorna di conseguenza — l'app ti ricorderà comunque l'evento, e l'evento stesso mostrerà sempre il nuovo orario.</p>
+        <h2>Creare un evento</h2>
+        <ul>
+            <li>Tocca <strong>+ PUBBLICA</strong> nella scheda Mercato o sulla Mappa, poi <strong>Evento</strong>.</li>
+            <li><strong>Titolo</strong>, e quando <strong>Inizia</strong>. <strong>Finisce</strong> è facoltativo; è impostato a 2 ore dopo a meno che non lo modifichi.</li>
+            <li>Gli orari sono nel fuso orario dell'evento, ricavato dal pin. Quando non corrisponde al tuo fuso orario, una riga sotto gli orari lo indica. Tocca <strong>Modifica</strong> accanto ad esso se non è corretto.</li>
+            <li><strong>Si ripete:</strong> scegli con quale frequenza ricorre, ad esempio ogni settimana in quel giorno o una volta al mese, oppure lascialo su <strong>Non si ripete</strong>. <strong>Fino a</strong> è facoltativo: lascialo vuoto e l'evento si ripeterà finché non lo annulli.</li>
+            <li>Scegli <strong>In un luogo</strong> o <strong>Online</strong>. Per un evento online non ci sono luoghi né pin: aggiungi invece un <strong>Link per partecipare</strong>. Solo tu e le persone che partecipano lo vedono (laddove tu faccia entrare le persone, solo quelle che fai entrare). I suoi orari sono nel tuo fuso orario, e tutti gli altri li vedono nel proprio, contrassegnati da <strong>la tua ora</strong>.</li>
+            <li><strong>Nome del luogo</strong>, come &quot;Municipio&quot;.</li>
+            <li>Posiziona il pin sulla mappa: tocca la mappa, cerca con <strong>Trova un indirizzo</strong>, oppure tocca <strong>Usa la mia posizione</strong>. Tocca <strong>Approssimativo (~100 m)</strong> se non vuoi mostrare il punto esatto. Vedi &quot;Dove va il tuo pin&quot;.</li>
+            <li>Una <strong>Descrizione</strong>, e una foto se vuoi.</li>
+            <li><strong>Nota per chi partecipa:</strong> tutti coloro che toccano Partecipo la vedono, a meno che non selezioni <strong>Solo le persone che faccio entrare vedono la nota e la chat</strong> (selezionato inizialmente sulla comunità globale, dove chiunque può entrare in un minuto): in tal caso solo le persone che fai entrare vedono la nota e la chat dell'evento. Un buon posto per l'indirizzo esatto o il codice di un cancello; il nome del luogo è visibile a tutti.</li>
+            <li><strong>Chi può vederlo:</strong> l'intera comunità o un solo gruppo.</li>
+            <li>Se gestisci un progetto o un'impresa o coordini un gruppo, <strong>Pubblica come</strong> ti consente di pubblicare l'evento a suo nome. Un gruppo organizza solo per i propri membri; un'impresa organizza per l'intera comunità, quindi un evento di un'impresa non è mai riservato a un solo gruppo.</li>
+            <li>Tocca <strong>Crea</strong>. Il tuo evento è nel Mercato e sulla Mappa.</li>
+        </ul>
+        <p>Nell'app web la casella del titolo è <strong>Cosa succede</strong>, i pulsanti del pin sono <strong>📍 La mia posizione</strong> e <strong>📌 Posiziona un segnaposto</strong>, e l'ultimo pulsante è <strong>Crea evento</strong>.</p>
+        <p>Puoi avere 5 eventi in programma contemporaneamente. Gli eventi di un gruppo vengono conteggiati per il gruppo, e quelli di un'impresa per l'impresa.</p>
+        <h2>Gestire il tuo evento</h2>
+        <p>Apri il tuo evento. Come organizzatore puoi:</p>
+        <ul>
+            <li>vedere <strong>Chi partecipa</strong>, e far entrare le persone: <strong>Fai entrare</strong> accanto a un nome (tocca di nuovo per revocare), o <strong>Fai entrare tutti</strong>. I tuoi amici vengono ammessi non appena toccano Partecipo. Se deselezioni <strong>Solo le persone che faccio entrare vedono la nota e la chat</strong>, tutti i partecipanti vedono la nota e la chat svolta finora, e la chat indica che l'organizzatore l'ha aperta;</li>
+            <li><strong>Modifica evento</strong>. Se modifichi l'orario o il luogo, tutti i partecipanti vengono avvisati;</li>
+            <li><strong>Copia in una nuova data</strong>, per riproporlo;</li>
+            <li><strong>Annulla evento</strong>, quindi conferma (<strong>Annulla evento</strong> di nuovo sul telefono, <strong>OK</strong> nell'app web). Tutti i partecipanti vedono che è annullato, e la sua chat diventa di sola lettura.</li>
+        </ul>
+        <h2>Eventi ricorrenti</h2>
+        <p>Un evento ricorrente mostra <strong>↻</strong> e la frequenza accanto alla data, ad esempio <strong>Ogni venerdì</strong> o <strong>Ogni mese il 16</strong>. La sua scheda mostra la data successiva; aprila per vedere <strong>Prossime date</strong>.</p>
+        <p>Se lo organizzi tu, ciascuna delle prossime date presenta:</p>
+        <ul>
+            <li><strong>Annulla questa data:</strong> solo quel giorno viene annullato. Tutti i partecipanti per quel giorno vengono avvisati.</li>
+            <li><strong>Modifica solo questa data:</strong> quel giorno viene annullato e crei un evento singolo in un'altra data.</li>
+            <li><strong>Ripristina:</strong> una data annullata viene ripristinata.</li>
+        </ul>
+        <p><strong>Annulla evento</strong> annulla ogni data, e la relativa chat diventa di sola lettura. Fino ad allora la chat rimane aperta tra una data e l'altra, fino all'ultima data; senza una data indicata in <strong>Fino a</strong>, rimane aperta finché non annulli l'evento.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>Chat di eventi</strong><span>Parla con gli organizzatori e con tutti i partecipanti all'evento.</span></a></li>
+            <li><a href="notifications.html"><strong>Notifiche</strong><span>Scegli quali avvisi ricevere sul telefono e quando ricevere promemoria per gli eventi.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Dove va il tuo pin</strong><span>Chi può vedere la posizione dei tuoi annunci ed eventi e come proteggere la privacy della tua abitazione.</span></a></li>
+            <li><a href="map-pins.html"><strong>Cosa mostra la mappa</strong><span>I pin sulla Mappa, il significato dei colori e i pulsanti intorno ad essi.</span></a></li>
+            <li><a href="polls.html"><strong>Sondaggi</strong><span>Fai una domanda veloce alla comunità. I sondaggi rilevano le opinioni; non cambiano nulla di per sé.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

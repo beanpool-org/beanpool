@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的交易 — BeanPool members' guide</title>
+    <meta name="description" content="集中管理你參與的每一筆交易、發布的每一則刊登以及過去的交易紀錄。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市集</a></p>
+        <h1>我的交易</h1>
+        <p class="lede">集中管理你參與的每一筆交易、發布的每一則刊登以及過去的交易紀錄。</p>
+        <h2>如何開啟</h2>
+        <p>點擊「市集」分頁頂端的<strong>我的交易</strong>。上面的紅色數字顯示你正在進行中的交易數量。</p>
+        <p>在全球社群上沒有交易，因此<strong>我的交易</strong>會顯示來自在地社群 Example Valley 的三個交易範例，標有 <strong>🏘️ 在地社群</strong>：一個等待你處理、一個豆子安全託管中、一個已完成。其按鈕會說明為何交易屬於在地社群，且不會改變任何內容。參見「豆子與全球社群」。</p>
+        <h2>三個分頁</h2>
+        <ul>
+            <li><strong>進行中：</strong>進行中的交易，以及等待回應的請求。每項都會顯示目前進度：<strong>信託託管中</strong>（豆子處於託管狀態）、<strong>需要處理</strong>（有人提出請求，需要你回應）或<strong>等待核准</strong>（你提出了請求，正在等待對方回應）。</li>
+            <li><strong>我的刊登：</strong>你正在展示的「提供」與「需求」，或<strong>已暫停</strong>的項目。有人提出請求的刊登會顯示<strong>需要處理</strong>。</li>
+            <li><strong>歷史紀錄：</strong>已完成、已取消與已婉拒的交易。可選擇<strong>全部</strong>、<strong>收到</strong>或<strong>付出</strong>。每項均顯示日期、金額與交易對象。</li>
+        </ul>
+        <p>在網頁版應用程式中，<strong>進行中</strong>僅列出豆子處於託管狀態的交易，因此等待回應的請求不會出現在該處。<strong>我的刊登</strong>僅顯示你有效的刊登，每項標註為<strong>活躍</strong>：已暫停的刊登不會列出。</p>
+        <p>在<strong>進行中</strong>或<strong>我的刊登</strong>中點擊某筆交易即可開啟該刊登。你可以在該處接受、完成或取消交易。若無人回應，請求將在 7 天後自動結束。</p>
+        <h2>評價</h2>
+        <p><strong>歷史紀錄</strong>中已完成的交易會有<strong>檢查</strong>按鈕。完成評價後，該按鈕會變為<strong>編輯</strong>，你可以修改你的星級評分。</p>
+        <p>在網頁版應用程式中，該按鈕顯示為<strong>留下評價</strong>，且僅在你尚未對該筆交易進行評價前顯示。若要在網頁版中修改評價，請開啟該刊登。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>交易步驟詳解</strong><span>從發起詢問到完成付款，針對提供與需求的流程，以及留下評價。</span></a></li>
+            <li><a href="posting.html"><strong>發布提供或需求</strong><span>發布你能做或能給予的事情，或者你正在尋找的東西。</span></a></li>
+            <li><a href="your-balance.html"><strong>餘額與帳目歷史</strong><span>你擁有的豆子數量、交易中暫扣的豆子，以及每一筆交易與贈送紀錄。</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>交易出現問題時</strong><span>取消交易，以及雙方無法達成共識時該如何處理。</span></a></li>
+            <li><a href="the-top-bar.html"><strong>頂端列</strong><span>豆子圖示、有待處理事項時顯示的小圖示，以及右上角的按鈕。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

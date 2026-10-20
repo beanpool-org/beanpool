@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 핀 위치 설정 — BeanPool members' guide</title>
+    <meta name="description" content="내 게시글과 행사의 위치를 볼 수 있는 사람과 집 주소를 안전하게 지키는 방법이에요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">지도</a></p>
+        <h1>내 핀 위치 설정</h1>
+        <p class="lede">내 게시글과 행사의 위치를 볼 수 있는 사람과 집 주소를 안전하게 지키는 방법이에요.</p>
+        <h2>직접 선택하는 위치</h2>
+        <p>모든 제공과 요청은 지도에 위치를 가져요. 글을 등록할 때 위치를 선택해요:</p>
+        <ul>
+            <li><strong>내 위치</strong>는 휴대폰의 현재 위치를 사용해요.</li>
+            <li><strong>핀 놓기</strong>는 지도의 원하는 지점을 직접 탭할 수 있어요.</li>
+        </ul>
+        <p>커뮤니티의 모든 멤버는 약 10미터 오차 범위 내에서 해당 지점의 핀을 볼 수 있어요. 앱이 위치를 자동으로 흐리게 처리해 주지 않아요. 가입하지 않은 사람은 커뮤니티의 게시물을 볼 수 없어요. 글로벌 커뮤니티에서는 볼 수 있지만, 대략적인 위치만 보일 뿐 정확한 지점은 절대 표시되지 않아요.</p>
+        <p>글로벌 커뮤니티에서 다른 멤버들은 내 게시물의 핀을 약 1킬로미터 오차 범위로 보게 되며, 정확한 지점을 공유할지는 본인의 선택이에요. 웹 앱에서 새 핀은 약 100미터 단위로 반올림되어 시작해요: 선택한 지점을 그대로 유지하려면 <strong>정확한 위치 사용</strong>을 탭하세요.</p>
+        <p><strong>집에서 글을 올리면서 주소가 알려지는 것을 원하지 않는다면, 핀 놓기를 사용하여 근처 다른 곳(골목 모퉁이, 공원, 상가 등)에 핀을 놓으세요.</strong> 거래에 합의한 후 메시지를 통해 상대방에게 정확한 장소를 알려줄 수 있어요.</p>
+        <p>제공이나 요청의 핀은 나중에 다른 곳으로 옮길 수 없어요. 위치를 변경하려면 게시물을 삭제하고 다시 등록하세요. 주최자는 이벤트를 수정하여 행사의 핀을 옮길 수 있어요.</p>
+        <h2>행사</h2>
+        <p>행사를 만들 때는 먼저 핀을 놓은 다음 <strong>대략적 위치 (~100 m)</strong>를 탭하세요. 그러면 핀이 대략적인 위치만 표시해요. 그 후 핀을 옮겼다면 다시 탭하세요. 글로벌 커뮤니티에서 새 핀은 대략적 위치로 시작하며, <strong>정확한 위치 사용</strong>을 누르면 내가 놓은 원래 위치로 되돌아가요. 그곳에서는 주최자와 메모를 읽을 수 있는 사람만 정확한 지점을 보고, 다른 멤버들은 약 1킬로미터 범위로 보게 돼요.</p>
+        <p>모든 사람이 행사의 장소 이름을 볼 수 있으므로 장소 이름에 집 주소를 적지 마세요. 정확한 주소는 <strong>참석자를 위한 안내 메모</strong>에 적으세요. 주최자가 읽을 수 있고, 주최자가 <strong>내가 승인한 사람만 메모와 대화를 볼 수 있어요</strong>에 체크하지 않은 한 <strong>참석</strong>을 누른 모든 사람도 읽을 수 있어요: 체크한 경우에는 주최자가 승인한 사람만 볼 수 있어요. 글로벌 커뮤니티에서는 이 체크박스가 기본으로 켜져 있어요.</p>
+        <h2>절대 공개되지 않는 항목</h2>
+        <ul>
+            <li>내 현재 위치. 내가 어디에 있는지를 보여주는 점은 내 화면에만 표시돼요. 휴대폰에서는 파란색, 웹 앱에서는 초록색이에요.</li>
+            <li>설문은 자체적인 장소가 없어요. 글로벌 커뮤니티에서 설문은 작성자가 지역을 설정한 경우 해당 작성자의 지역 주변 약 10km 범위에 표시돼요.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="map-pins.html"><strong>지도에 표시되는 항목</strong><span>지도의 핀과 색상별 의미, 주변 버튼 안내예요.</span></a></li>
+            <li><a href="posting.html"><strong>제공 또는 요청 등록하기</strong><span>내가 해줄 수 있거나 나눌 수 있는 것, 또는 구하는 것을 등록해 보세요.</span></a></li>
+            <li><a href="events.html"><strong>행사</strong><span>오프라인이나 온라인에서 일회성 또는 반복 행사를 만들고, 참석 여부 표시, 알림 받기, 공유 및 주최자 운영 안내예요.</span></a></li>
+            <li><a href="privacy.html"><strong>개인정보 보호</strong><span>다른 멤버에게 공개되는 내 정보와 이를 설정하는 방법이에요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

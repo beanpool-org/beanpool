@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yöneticilerin görebildikleri — BeanPool members' guide</title>
+    <meta name="description" content="Yöneticilerin isim listesi tuttuğu bir toplulukta: sizin hakkınızda neleri içerdiği, kimlerin okuyabileceği, sunucunun neleri tuttuğu ve onaylanmanın anlamı.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Ayarlar ve güvenlik</a></p>
+        <h1>Yöneticilerin görebildikleri</h1>
+        <p class="lede">Yöneticilerin isim listesi tuttuğu bir toplulukta: sizin hakkınızda neleri içerdiği, kimlerin okuyabileceği, sunucunun neleri tuttuğu ve onaylanmanın anlamı.</p>
+        <h2>İsim listesi</h2>
+        <p>Bazı toplulukların yöneticileri bir <strong>isim listesi</strong> tutar: bir LETS komitesinin üyelik listesi tutması gibi, gerçek adlarıyla üyelerin kim olduğu. Her topluluk bu listeyi tutmaz. Sizinkinin tutup tutmadığını yöneticilerinize sorun.</p>
+        <p>Bir kayıt adınızı ve bazen bir yöneticinin yazdığı kısa bir notu (topluluğun sizi nasıl tanıdığı gibi) içerir. Başka hiçbir şey yoktur: adres yok, doğum tarihi yok, kimlik numarası yok.</p>
+        <h2>Kimler okuyabilir</h2>
+        <p><strong>Yalnızca topluluğunuzun sahipleri ve yöneticileri, kendi telefonlarında.</strong> Adınız topluluğunuzun sunucusuna gönderilmeden önce bir yöneticinin telefonunda mühürlenir. Sunucu karıştırılmış metin tutar: bir yedek, bir kopya, BeanPool veya veritabanını çalan biri okunabilir hiçbir şeye sahip olamaz.</p>
+        <p>Sunucuyu kim işletirse işletsin bunu okuyamaz. Yöneticilerin telefonları, listenin anahtarlarını yalnızca telefonu başka bir yönetici tarafından bir aramada veya şahsen kontrol edilmiş yöneticilere verir ve yeni anahtarları yalnızca onlardan alır. Bu durum yöneticilere bağlıdır: yanlış kişinin telefonunu kontrol eden bir yönetici, birinin eriştiği bir yönetici telefonu veya yöneticiler anahtarını kaldırmadan önce kaybolan bir telefon başkasının isimleri okumasına neden olabilir. Sunucuyu işleten kişinin bir yöneticinin çıkarıldığını öğrenmesini engellediği bir yönetici telefonu da buna yol açabilir: öğrenene kadar yazdıkları, çıkarılan yöneticinin sahip olduğu anahtarlarla okunabilir. Telefonunda hâlâ çıkarılan yöneticiyi gören bir yönetici, onun anahtarını elle kaldırır ve o telefon daha sonra onlar olmadan yeni bir anahtar oluşturur veya hiçbir şey yazmaz.</p>
+        <p><strong>Diğer üyeler isimleri görmez.</strong> Her zamanki gibi BeanPool adınızı görürler.</p>
+        <p>Bir yönetici, güvenli bir şekilde saklamak için telefonunda listenin bir PDF kopyasını oluşturabilir. Oluşturulduktan sonra, tıpkı kağıt bir liste gibi onu güvende tutmak onların sorumluluğundadır. Liste her açıldığında veya kopyalandığında, diğer yöneticiler bunu kimin ne zaman yaptığını görebilir.</p>
+        <h2>Onaylanmak</h2>
+        <p>Bir yönetici sizi <strong>onaylayabilir</strong>: hesabınızın kaydınızdaki kişi olduğunu belirtir. Bunu yalnızca sizi tanıyan biri yapmalıdır ve bazı topluluklarda iki yöneticinin anlaşması gerekir.</p>
+        <ul>
+            <li>Bir onay hiçbir isim taşımaz. Sunucu hangi hesabı, hangi kaydı ve hangi yöneticiyi kaydeder; asla kim olduğunuzu kaydetmez.</li>
+            <li>Bu bir güven rozeti değildir ve şimdilik uygulamada başka hiçbir şeyi değiştirmez.</li>
+            <li>Bir yönetici sizi adınızla davet ettiyse, onun davetiyle katılmak o yönetici tarafından kaydınıza karşı sizi onaylamıştır. &quot;Onaylandı&quot; yalnızca bir yöneticinin bu hesabın o kayıttaki kişi olduğunu söylediği anlamına gelir.</li>
+            <li>Kayıp bir telefonu değiştirirseniz ve hesabınız yeni bir anahtara taşınırsa onayınız da onunla birlikte taşınır.</li>
+            <li>Ayrılırsanız veya hesabınızı silerseniz onayınız sona erer. Bir yönetici silene kadar kaydınız yöneticilerin listesinde kalır: silmelerini isteyin.</li>
+            <li>Onaylandıysanız ve Fasulye borcunuz varken ayrılırsanız, çıkarılırsanız veya hesabınızı silerseniz her zamanki gibi borcu Ortak karşılar. Yöneticilerin listesi ayrıca kaydınızda ne kadar borcunuz olduğunu, neden ve ne zaman olduğunu 3 yıl boyunca bir not olarak tutar ve yöneticiler bunu telefonlarında adınızın yanında görür. Geri ödenene, çalışarak kapatılana veya bağışlanana kadar hiç kimse bu kayda karşı onaylanamaz.</li>
+        </ul>
+        <h2>İsim listesinin yöneticilere göstermedikleri</h2>
+        <p>Liste isimleri ve notları, hangi hesabın kime ait olduğunu tutar. Yukarıda bahsedilen bıraktığınız borç notu dışında, hiç kimseye bakiyenizi veya takaslarınızı göstermez (bir yönetici aşağıdaki durumlarda bakiyenizi ve bazı takaslarınızı görebilir: bu sayfanın sonuna bakın). Üyelerin ve yöneticilerin bunun dışında neleri görebileceği konusunda bkz. &quot;Gizliliğiniz&quot;.</p>
+        <h2>Bilinen bir toplulukta kabul ettikleriniz</h2>
+        <p>Üyelerini onaylayan bir topluluk, yani <strong>bilinen topluluk</strong>, her zaman bir LETS'in işlediği gibi çalışır: yöneticiler çok büyüyen veya çok uzun süre kalan borçları takip eder. Birine katıldığınızda katılma ekranı topluluğunuzun sayılarıyla tam olarak ne zaman olduğunu belirtir, örneğin:</p>
+        <p>&quot;Bu toplulukta yöneticiler bakiyeniz kredi limitinizin %50'sini aşarsa veya bir satış yapmadan 60 gün boyunca borçta kalırsanız bakiyenizi görebilir. Bir LETS her zaman böyle çalışmıştır. Bir yönetici bu sınırları aşan üyelerin listesini her açtığında ve bir yönetici sizi çıkarırken bakiyenize her baktığında bu durum günlüğe kaydedilir. Sizi çıkarma oylamasında, bu oylamada oy kullanabilen herkes yalnızca o oylamada bakiyenizi ve herhangi bir borcunuzu görür ve bu bakışlar günlüğe kaydedilmez. Bunu Ayarlar'dan istediğiniz zaman geri alabilirsiniz. Ne seçerseniz seçin, herhangi bir yönetici takaslarınızdan bazılarını görebilir: henüz tamamlanmamış veya bir yöneticinin sonuçlandırdığı bir takas (kiminle olduğu, ilan, fiyat ve özel ise okuyamayacakları bire bir sohbetiniz; böylece takılan bir takas çözülebilir); eski bir sunucuda bir üye çıkarıldığında Fasulyeleri takılı kalan bir takas (takasın durumu, ilan, fiyat, tarihleri, takılı kalan Fasulyeler, içinden kaç ödeme geçtiği ve sonuncunun tutarı ile notu); bir üyeyle bir sınırın üzerinde karşılıklı ve yaklaşık olarak eşit şekilde alışveriş yaparsanız adınızı veren, toplam Fasulyeyi ve her iki yöne ne kadar eşit gittiklerini belirten bir dolandırıcılık uyarısı; davet ettiğiniz üyeler belirli bir gün sayısı içinde bir sınırın üzerinde size Fasulye gönderirse veya bu üyelerden biriyseniz toplam Fasulye ile davet ettiğiniz üyelerden kaçının yalnızca sizinle takas yaptığını gösteren ve adınızı veren bir uyarı; en az yarısı yeni olan ve çoğunlukla birbirleriyle takas yapan bir grup üyenin içindeyseniz grubun takasının ne kadarının birbirleriyle olduğunu gösteren ancak Fasulye içermeyen ve adınızı veren bir uyarı; ve belirli bir gün sayısı boyunca hesabınıza veya hesabınızdan hiçbir Fasulye hareketi olmadıysa adınızı veren bir uyarı. Bu takaslardan birine yapılan her bakış kimin, ne zaman ve hangi takaslara baktığıyla birlikte günlüğe kaydedilir; adınızı veren uyarılara yapılan bir bakış, her yöneticinin bunları ilk açışında ve o yöneticinin 24 saat sonraki ilk bakışında günlüğe kaydedilir ve aradaki bakışlar yeni bir satır eklemez. Sahip ve yöneticiler bu günlüğü görebilir. Yöneticilerin gördüğü üye istatistikleri kaç ilanınızın yayında olduğunu ve kaç mesaj gönderdiğinizi gösterir; takaslarda ise sizinkileri değil yalnızca tüm topluluğun toplamlarını gösterir. Yöneticiler de dahil olmak üzere her üye güven profilinizi görür: takaslarınızdan kaçının tamamlandığı ve kaçının iptal edildiği, tamamlanma oranı, üyelere gönderdiğiniz veya üyelerden aldığınız Fasulye ödemesi sayısı artı tamamladığınız takaslar, ödeme yaptığınız, ödeme aldığınız veya takas yaptığınız kaç farklı üye olduğu, bakan üyeyle kaç ödeme ve takas yaptığınız ve Güven Puanınız. Bu günlüğe kaydedilmez, çünkü her üye bunu görebilir. Takaslarınızdan başka hiçbir şey gösterilmez. Bu topluluğun sunucusunu her kim işletiyorsa bakiyeniz ve takaslarınız da dahil olmak üzere tüm veritabanını, yedeklerini, anlık görüntülerini ve yedek kopyalarını elinde tutar.&quot;</p>
+        <p>Bunu kabul etmek sizin rızanızdır. Ardından ve yalnızca bir yönetici sizi onayladığı sürece:</p>
+        <ul>
+            <li>Bakiyeniz iki sınırdan birini geçerse, sizi tanıyan bir yöneticinin sizinle konuşabilmesi için hesabınız bakiyenizle birlikte yöneticilerin telefonlarında görünür. Bu liste sizin hakkınızda başka hiçbir şey ve takaslarınızın hiçbirini göstermez.</li>
+            <li>Bir yönetici bu listeyi her açtığında, diğer yöneticiler ve sahip bunu kimin ne zaman açtığını görebilir.</li>
+            <li>Kabul etmediyseniz veya kimse sizi onaylamadıysa ya da topluluğunuz üyeleri onaylamıyorsa, o liste sizi asla göstermez.</li>
+        </ul>
+        <p>Topluluğunuz bunu sormadan önce katıldıysanız uygulamanız bunu size sunar. Hayır demek veya yanıt vermemek başka hiçbir şeyi değiştirmez: hâlâ üyesinizdir. Topluluk daha sonra sınırlarını değiştirirse uygulamanız size tekrar sorar.</p>
+        <p>Rızanızı istediğiniz zaman geri alabilirsiniz: uygulamanızın neyi ne zaman kabul ettiğinizi gösterdiği <strong>Ayarlar</strong>'ı açın ve <strong>Geri Çek</strong> seçeneğine dokunun. O andan itibaren listeden çıkarsınız. Topluluğunuz kabul ettiğinize ve geri çektiğinize dair bir kayıt tutar ve daha sonra tekrar kabul edebilirsiniz.</p>
+        <h2>Bir yöneticinin bakiyenizi yine de gördüğü durumlar</h2>
+        <p>Herhangi bir şeyi kabul etmiş olun veya olmayın, herhangi bir toplulukta:</p>
+        <ul>
+            <li><strong>Bir yönetici hesabınızı kaldırdığında.</strong> Sizi kaldırmaya başlayan yönetici, elinizde tuttuklarınızın veya borcunuzun kapatılabilmesi için bakiyenizi ve kaç açık takasınız olduğunu görür. Diğer yöneticiler ve sahip kimin, kimin bakiyesine ve ne zaman baktığını görebilir.</li>
+            <li><strong>Topluluğunuz sizi çıkarma konusunda oy kullandığında.</strong> Oylamada oy kullanabilen herkes, yalnızca o oylamada bakiyenizi ve varsa borcunuzu görür. Oylamada oy kullanamayan bir yönetici veya sahip bunları orada göremez. Bu bakışlar günlüğe kaydedilmez.</li>
+            <li><strong>Topluluğunuzun sunucusunu işleten kişi</strong>, bakiyeniz ve takaslarınız dahil olmak üzere tüm veritabanını, yedeklerini, anlık görüntülerini ve yedek kopyalarını elinde tutar.</li>
+        </ul>
+        <h2>Herhangi bir yöneticinin takaslarınız hakkında görebildikleri</h2>
+        <p>Herhangi bir şeyi kabul etmiş olun veya olmayın, herhangi bir toplulukta herhangi bir yönetici şunları görebilir:</p>
+        <ul>
+            <li><strong>Henüz tamamlanmamış veya bir yöneticinin sonuçlandırdığı bir takas.</strong> Her iki üye, ilan, fiyat ve iki üyenin bire bir sohbetindeki mesajlar. Bir yönetici özel bir sohbeti okuyamaz, yalnızca kimin ne zaman yazdığını görebilir. Bu, bir yöneticinin takılan bir takası sonuçlandırabilmesi içindir.</li>
+            <li><strong>Eski bir sunucuda bir üye kaldırıldığında Fasulyeleri takılı kalan bir takas.</strong> Takasın durumu, ilan, fiyat, tarihleri, takılı kalan Fasulyeler, içinden kaç ödeme geçtiği ve sonuncunun tutarı ile notu; böylece bir sahip takılı kalan Fasulyeleri silebilir.</li>
+            <li><strong>Üyelerin adını veren dolandırıcılık uyarıları,</strong> Fasulyelerle birlikte. Biri bir sınırın üzerinde karşılıklı ve yaklaşık olarak eşit şekilde alışveriş yapan iki üyenin adını verir. Toplam Fasulyeyi ve her iki yöne ne kadar eşit gittiklerini gösterir. Bir diğeri, davet ettikleri üyeler belirli bir gün sayısı içinde bir sınırın üzerinde kendilerine Fasulye gönderdiğinde bir üyenin ve davet ettiği üyelerin adını verir. Toplam Fasulyeyi ve davet ettikleri üyelerden kaçının yalnızca kendileriyle takas yaptığını gösterir.</li>
+            <li><strong>Çoğunlukla birbirleriyle takas yapan, en az yarısı yeni bir grup üyenin adını veren bir dolandırıcılık uyarısı.</strong> Grubun takasının ne kadarının birbirleriyle olduğunu gösterir ancak Fasulye göstermez.</li>
+            <li>Belirli bir gün sayısı boyunca <strong>hesabına veya hesabından hiç Fasulye hareketi olmamış üyelerin adını veren bir uyarı</strong>.</li>
+        </ul>
+        <p><strong>Bu takaslardan birine yapılan her bakış günlüğe kaydedilir:</strong> kimin, ne zaman ve hangi takaslara baktığı. <strong>Bir üyenin adını veren uyarılara yapılan bir bakış</strong>, her yöneticinin bunları ilk açışında ve o yöneticinin 24 saat sonraki ilk bakışında günlüğe kaydedilir; aradaki bakışlar yeni bir satır eklemez. Sahip ve yöneticiler bu günlüğü Topluluk sağlığı içinde, bir bakiyeye kimin baktığını gösteren listenin yanında ayrı bir liste olarak görebilir. Bir otomasyon belirteci (bir sahibin kurduğu bir betik) tarafından yapılan bir bakış bunu belirtir: satırda oluşturan sahibin yanında &quot;belirteçle&quot; ve belirtecin adı yazar.</p>
+        <p>Yöneticilerin gördüğü üye istatistikleri, her üyenin kaç ilanının yayında olduğunu ve kaç mesaj gönderdiğini gösterir; takaslarda ise tek bir üyeninkini değil, yalnızca tüm topluluğun toplamlarını gösterir: kaç takasın tamamlandığı veya iptal edildiği ve tamamlananların ne kadara ulaştığı.</p>
+        <p>Yöneticiler de dahil olmak üzere her üye, her üyenin <strong>güven profili</strong>ni görür: takaslarından kaçının tamamlandığı ve kaçının iptal edildiği, tamamlanma oranı, üyelere gönderdikleri veya üyelerden aldıkları Fasulye ödemesi sayısı artı tamamladıkları takaslar, ödeme yaptıkları, ödeme aldıkları veya takas yaptıkları kaç farklı üye olduğu, bakan üyeyle kaç ödeme ve takas yaptıkları ve Güven Puanları. Günlüğe kaydedilmez, çünkü her üye bunu görebilir.</p>
+        <p>Takaslarınızdan başka hiçbir şey gösterilmez.</p>
+        <h2>Bir yöneticinin AI asistanı</h2>
+        <p>Bir sahip veya yönetici, kendilerine yardımcı olması için kendi AI asistanını sunucuya bağlayabilir. Onlardan daha azını görür: mesajlarınızı, bakiyenizi, takaslarınızı, anahtarlarınızı, fotoğraflarınızı veya isim listesini asla görmez ve kimin kimi bildirdiğini asla göremez. Bkz. &quot;Yönetici AI asistanı kullandığında&quot;.</p>
+        <h2>Kaydınız hakkında sorma</h2>
+        <p>Yöneticilerinize kaydınızda ne yazdığını sorabilir, düzeltilmesini isteyebilir veya artık topluluğa ait olmadığınızda silinmesini talep edebilirsiniz. Listeyi BeanPool değil onlar tutar.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>Gizliliğiniz</strong><span>Başkalarının sizin hakkınızda neleri görebileceği ve bunu denetleyen ayarlar.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool'a katılma</strong><span>Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Ayrılma veya hesabı silme</strong><span>Bu telefondan çıkış yapın veya hesabınızı kalıcı olarak silin; fasulyelerinize ne olacağını öğrenin.</span></a></li>
+            <li><a href="admins-ai-assistants.html"><strong>Yönetici AI asistanı kullandığında</strong><span>Bir topluluk sahibinin veya yöneticisinin AI asistanının sizin hakkınızda neleri okuyabileceği, neleri asla göremediği ve kime iletildiği.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

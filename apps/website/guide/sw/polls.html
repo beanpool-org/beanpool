@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kura za maoni — BeanPool members' guide</title>
+    <meta name="description" content="Uliza jumuiya swali la haraka. Kura za maoni huonyesha mtazamo; hazibadili chochote zenyewe.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Mali za Pamoja</a></p>
+        <h1>Kura za maoni</h1>
+        <p class="lede">Uliza jumuiya swali la haraka. Kura za maoni huonyesha mtazamo; hazibadili chochote zenyewe.</p>
+        <h2>Kura ya maoni au Uamuzi?</h2>
+        <p><strong>Kura ya maoni</strong> huuliza kile ambacho watu wanafikiria: &quot;Soko Jumapili au Jumamosi?&quot;. Haibadilishi chochote yenyewe. Kwa kitu cha kisheria na cha lazima, pendekeza Uamuzi.</p>
+        <p>Kwenye jumuiya ya kimataifa kila kura ya maoni husema <strong>Kura ya maoni isiyo rasmi; haiamui chochote</strong>. Mtu yeyote anaweza kujiunga nayo, akiwa na maneno 12 au njia ya kuingia, hivyo mtu mmoja mwenye akaunti kadhaa anaweza kubadilisha hesabu, na hakuna Maamuzi huko. Chini yake, &quot;🏘️ Katika jumuiya ya eneo Uamuzi hufunga kisheria ›&quot; hueleza kwa nini kura huwa ya lazima katika jumuiya ya eneo pekee.</p>
+        <p>Wakati kura ya maoni isiyo na majina huko inapofungwa, inasema pia ni kura ngapi zilitoka kwenye <strong>akaunti mpya au za maneno 12</strong>, kwa mfano &quot;kura 5 kati ya 12 zilitoka kwenye akaunti mpya au za maneno 12&quot;. Kila kura huhesabiwa jinsi akaunti ilivyokuwa ilipopiga kura: akaunti mpya ni ile ambayo bado ilikuwa na mipaka ya akaunti mpya, na akaunti ya maneno 12 ni ile iliyotengenezwa kwa maneno 12 ambayo haijaongeza njia ya kuingia. Wakati angalau kura 3 zikitoka kwenye akaunti mpya au za maneno 12, na kura nyingine zikiwa ama hakuna au angalau 3, kila jibu husema pia ni ngapi kati ya kura zake zilizofanya hivyo. Kila kura bado inahesabiwa, na hakuna kinachoonyesha nani aliyepiga kura.</p>
+        <p>Wakati kura ya maoni ikiwa wazi haisemi chochote kuhusu hili. Kama ingefanya hivyo, mtu anayekagua kura baada ya kila kura angeweza kujua kila kura ilitoka kwenye akaunti ya aina gani, na ilichagua nini. Kura ya wazi haisemi hivyo kamwe, iwe wazi au imefungwa: inaonyesha nani aliyepiga kura, kwa hivyo hesabu ingesema ni akaunti ya aina gani ambayo kila mpiga kura anayo. Kura ya maoni ya kikundi haisemi hivyo pia, na wala kura ya maoni kwenye jumuiya ya eneo haisemi.</p>
+        <h2>Kuanzisha kura ya maoni</h2>
+        <ul>
+            <li>Gusa <strong>+ WEKA TANGAZO</strong> kwenye kichupo cha Soko au kwenye Ramani.</li>
+            <li>Chagua <strong>Kura ya Maoni ya Jumuiya</strong>.</li>
+            <li>Andika <strong>Swali</strong>.</li>
+            <li>Ongeza <strong>Muktadha / Maelezo</strong> ikisaidia. Hili si lazima.</li>
+            <li>Andika <strong>Machaguo</strong> 2 hadi 4. Gusa <strong>+ Ongeza Chaguo</strong> kwa mengine zaidi.</li>
+            <li>Chagua muda gani itaendelea: <strong>Siku 3</strong>, <strong>Siku 7</strong> au <strong>Siku 14</strong>.</li>
+            <li>Chagua kama ni <strong>Kura ya wazi</strong> kabla ya kugusa <strong>Unda</strong>. Iache bila kuweka alama na kura ya maoni itakuwa bila majina. Weka tiki na wanachama wanaweza kuona nani aliyechagua nini. Huwezi kuibadilisha baada ya kura ya maoni kuchapishwa.</li>
+            <li>Gusa <strong>Unda</strong>.</li>
+        </ul>
+        <p>Kwenye programu ya wavuti aina ni <strong>🗳️ Kura ya maoni</strong>, maelezo ni <strong>Mandharinyuma / Muktadha</strong>, kitufe cha chaguo ni <strong>+ Ongeza chaguo</strong> na kitufe cha mwisho ni <strong>🗳️ Unda Kura ya Maoni</strong>. Kwenye Ramani ya wavuti, gusa duara la <strong>+</strong>.</p>
+        <p>Unaweza kuwa na kura moja ya maoni iliyo wazi kwa wakati mmoja, na jumuiya inaweza kuwa na 5 zilizo wazi kwa wakati mmoja. Unahitaji mkopo ambao haujagandishwa ili kuanzisha au kujibu kura ya maoni.</p>
+        <h2>Kupata na kujibu kura za maoni</h2>
+        <p>Kura za maoni ziko Sokoni. Gusa <strong>Kura za maoni</strong> katika safu ya juu ili kuona kura za maoni pekee.</p>
+        <ul>
+            <li>Gusa jibu ili kulichagua. Gusa lingine ili kubadili nia yako, hadi kura ya maoni ifungwe.</li>
+            <li>Kadi huonyesha ni watu wangapi waliochagua kila jibu.</li>
+        </ul>
+        <h2>Nani anayeweza kuona jinsi ulivyopiga kura</h2>
+        <p>Kila kura ya maoni husema ni ya aina gani, juu ya mahudhurio:</p>
+        <ul>
+            <li><strong>Bila jina</strong> (aina ya kawaida): kila mtu huona tu watu wangapi waliochagua kila jibu. Hakuna anayeona nani aliyechagua nini, ikijumuisha mtu aliyeianzisha.</li>
+            <li><strong>Kura ya wazi:</strong> mtu aliyeianzisha alichagua kuonyesha wapiga kura. Wanachama wanaweza kugusa <strong>Tazama wapiga kura</strong> (<strong>Onyesha Wapiga Kura</strong> kwenye programu ya wavuti) ili kuona nani aliyechagua nini. Mwanachama aliyesimamishwa huona jumla tu, hadi kusimamishwa kuondolewe.</li>
+        </ul>
+        <p>Wamiliki na wasimamizi wanaoendesha seva ya jumuiya yako bado wanaweza kuona kila kura iliyohifadhiwa hapo.</p>
+        <h2>Kufunga kura ya maoni mapema</h2>
+        <p>Ikiwa wewe ndiye uliyeianzisha, gusa <strong>Funga Kura ya Maoni</strong>, kisha <strong>Funga Kura ya Maoni</strong> tena ili kuthibitisha (<strong>Sawa</strong> kwenye programu ya wavuti).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Kupiga kura ya Uamuzi</strong><span>Pata Maamuzi yaliyo wazi, piga kura, badili kura yako, na uone matokeo.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>Kupendekeza Uamuzi</strong><span>Iombe jumuiya kuamua jambo lenye masharti ya kisheria au wajibu.</span></a></li>
+            <li><a href="events.html"><strong>Matukio</strong><span>Unda tukio, mahali au mtandaoni, la mara moja au linalojirudia; sema unakwenda, kumbushwa, shiriki, na liendeshe kama mwenyeji.</span></a></li>
+            <li><a href="rules.html"><strong>Sheria na jinsi maamuzi hufanywa</strong><span>Kupiga kura, mahudhurio, kura ya siri, nani anaweza kupiga kura, kusimamishwa, kuondoa mwanachama, wasimamizi, na wawezeshaji na wawezeshaji wakuu.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Maharagwe na jumuiya ya kimataifa</strong><span>Lengo la jumuiya ya kimataifa, jumuiya moja kati ya nyingi, na unachokiona hapo: alama ya 🏘️ Jamii ya eneo, jumuiya ya mfano ya Example Valley, kwa nini Maharagwe husubiri hapo, na jinsi ya kuanza au kupata jumuiya ya ndani.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

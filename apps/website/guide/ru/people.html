@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Люди и друзья — BeanPool members' guide</title>
+    <meta name="description" content="Поиск участников сообщества, добавление в друзья и поручительство за других.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Беседы</a></p>
+        <h1>Люди и друзья</h1>
+        <p class="lede">Поиск участников сообщества, добавление в друзья и поручительство за других.</p>
+        <h2>Поиск участников</h2>
+        <p>Нажмите <strong>Беседы</strong>, затем <strong>Люди</strong>. В веб-приложении нажмите <strong>Люди</strong> на панели вкладок. Вверху расположены три кнопки:</p>
+        <ul>
+            <li><strong>Друзья:</strong> добавленные вами участники.</li>
+            <li><strong>Сообщество:</strong> все участники. Поиск выполняется по имени. На телефоне доступна сортировка: <strong>Новые</strong>, <strong>По имени</strong>, <strong>Друзья</strong>, <strong>Надёжные</strong> или <strong>Активные</strong>. В глобальном сообществе первыми показываются участники, находящиеся ближе всего к вашему району: введите хотя бы 2 буквы имени, чтобы найти остальных.</li>
+            <li><strong>Приглашения:</strong> приглашение нового участника. См. «Вступление в BeanPool». Если вы ещё не вступили в сообщество, на этой кнопке написано <strong>Регистрация</strong>. Если кто-то подал заявку на вступление в ваше сообщество, кнопка показывает их количество, а сами заявки перечислены под заголовком <strong>Хотят вступить</strong>. В веб-приложении эта кнопка всегда называется <strong>🎟️ Приглашения</strong> без счётчика и без списка заявок.</li>
+        </ul>
+        <p>Нажмите на участника, чтобы открыть его профиль: его отзывы и объявления, а на телефоне в сообществе с бобами — также его значок доверия и сделки. См. «Ваш профиль».</p>
+        <h2>Друзья</h2>
+        <ul>
+            <li>Во вкладке <strong>Сообщество</strong> нажмите <strong>+ Добавить</strong> рядом с именем. Кнопка сменится на <strong>✓ Добавлен</strong>. Нажмите <strong>✓ Добавлен</strong>, чтобы удалить человека из друзей. В веб-приложении кнопка меняется на <strong>✓ В друзьях</strong>, на которую нельзя нажать повторно: чтобы удалить кого-то из друзей, используйте кнопку <strong>Удалить</strong> во вкладке <strong>Друзья</strong>.</li>
+            <li>Во вкладке <strong>Друзья</strong> нажмите значок сообщения, чтобы начать диалог, либо кнопку удаления, а затем <strong>Удалить</strong>, чтобы убрать человека из списка.</li>
+            <li>Когда кто-то добавляет вас в друзья, вверху вкладки <strong>Друзья</strong> появляется строка с именем (например, «Sam добавил(а) вас в друзья») и кнопкой <strong>Добавить в ответ</strong>. Нажмите на имя, чтобы сначала посмотреть профиль. Уведомление об этом не приходит. Строка исчезает после добавления в ответ или через 30 дней. Отображается до 20 таких предложений, а затем счётчик остальных.</li>
+            <li>Можно добавлять до 100 человек за любые 24 часа. Удаление из друзей также учитывается в этом лимите. При достижении предела приложение сообщит об этом и укажет время, когда действие снова станет доступным.</li>
+            <li>Нельзя добавить в друзья заблокированного пользователя: сначала разблокируйте его. См. «Блокировка участника».</li>
+        </ul>
+        <p>Список друзей — это удобный быстрый доступ. Если в настройках контактов выбрать <strong>Друзья</strong>, только они смогут видеть ваши контактные данные. См. «Ваш профиль».</p>
+        <p>Никто другой не может просматривать ваш список друзей. Добавленный вами человек видит, что вы добавили его.</p>
+        <h2>Общие знакомые</h2>
+        <p>В профиле участника могут отображаться <strong>общие знакомые</strong>: люди, у которых можно узнать о нём. Участник появляется там только тогда, когда вы являетесь взаимными друзьями с человеком, который также является взаимным другом этого участника. Это значит, что вы и этот человек добавили друг друга в друзья, и этот человек с данным участником также взаимно добавили друг друга. Одностороннее добавление никогда никого туда не добавляет. Отображается до 12 общих знакомых. Нажмите на имя, чтобы открыть профиль.</p>
+        <p>Вы можете отказаться от отображения в качестве общего знакомого. В Настройках в разделе <strong>ПРАВОВАЯ ИНФОРМАЦИЯ И КОНФИДЕНЦИАЛЬНОСТЬ</strong> выключите пункт <strong>Показывать меня как общего знакомого</strong>. Тогда ваше имя не будет там появляться и учитываться в подсчётах. По умолчанию эта функция включена. См. «Приватность».</p>
+        <h2>Поручительство за участника</h2>
+        <p>Некоторые участники наделяются сообществом правом встречать новичков. Они могут поручиться за нового участника, что открывает для него начальную кредитную линию. В профиле новичка поручитель нажимает <strong>Поручиться за участника</strong> и выбирает уровень: <strong>Базовый</strong> (25), <strong>Стандартный</strong> (50) или <strong>Расширенный</strong> (100). Бобы из кошелька самого поручителя не списываются.</p>
+        <p>Право поручительства определяется администратором или общим Решением сообщества, но никогда автоматически по значку. См. «Правила и принятие решений».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Сообщения</strong><span>Начало диалога, отправка фото, ответы, реакции, редактирование, удаление, режим без звука и приватность.</span></a></li>
+            <li><a href="your-profile.html"><strong>Ваш профиль</strong><span>Ваше имя, фото, пара слов о себе и кому видны ваши контактные данные.</span></a></li>
+            <li><a href="joining.html"><strong>Вступление в BeanPool</strong><span>Два пути: в сообщество по приглашению участника, или в глобальное сообщество по 12 секретным словам или аккаунту. Запрос на вход и приглашение других.</span></a></li>
+            <li><a href="blocking.html"><strong>Блокировка участников</strong><span>Скрытие объявлений и сообщений от определённого человека с возможностью разблокировки в любой момент.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

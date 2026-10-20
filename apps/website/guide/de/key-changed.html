@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wenn ein Schlüssel im Chat wechselt — BeanPool members' guide</title>
+    <meta name="description" content="Warum ein Chat den Versand stoppt, wie du den Schlüsselcode prüfst und wann du fortfahren kannst.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Wenn ein Schlüssel im Chat wechselt</h1>
+        <p class="lede">Warum ein Chat den Versand stoppt, wie du den Schlüsselcode prüfst und wann du fortfahren kannst.</p>
+        <h2>Was es bedeutet</h2>
+        <p>Jede Nachricht zwischen zwei Personen wird so verschlüsselt, dass nur das Telefon der anderen Person sie öffnen kann. Sie wird für deren <strong>Schlüssel</strong> verschlüsselt, nicht für deren Namen. Dein Telefon merkt sich, für welchen Schlüssel es deinen Chat verschlüsselt hat.</p>
+        <p>Wenn deine Community nun einen anderen Schlüssel für die Person nennt, hält dein Telefon inne und informiert dich, statt unbemerkt an den neuen Schlüssel zu senden. Oben im Chat siehst du <strong>Der Schlüssel hinter „Ben“ hat sich geändert.</strong> Das Eingabefeld ist ausgegraut und meldet, dass das Senden pausiert ist.</p>
+        <p>Deine früheren Nachrichten mit der Person sind in der Regel weiterhin lesbar wie zuvor. Auf einem Telefon, das du gerade wiederhergestellt oder neu eingerichtet hast, steht bei Nachrichten vom neuen Schlüssel: <strong>Mit dem neuen Schlüssel gesendet. Wird angezeigt, nachdem du fortfährst.</strong>, bis du eine Entscheidung triffst.</p>
+        <p>Dies gilt für die Telefon-App. Die Web-App speichert Schlüssel derzeit noch nicht.</p>
+        <h2>Warum das passieren kann</h2>
+        <ul>
+            <li><strong>Die Person hat ein neues Telefon und einen neuen Schlüssel.</strong> Das ist der häufigste Grund. Der alte Schlüssel ist weg, also hat sie einen neuen.</li>
+            <li><strong>Etwas stimmt nicht.</strong> Der Server einer Community listet auf, wer an jedem Chat beteiligt ist. Ein Server, der deine Nachrichten mitlesen wollte, könnte den Schlüssel einer fremden Person hinter den Namen deines Freundes setzen. Der Name sieht richtig aus, aber der Schlüssel ist es nicht.</li>
+        </ul>
+        <p>Dein Telefon kann diese Fälle nicht von alleine unterscheiden. Du kannst es – anhand des Schlüsselcodes.</p>
+        <h2>Den Schlüsselcode mit der Person abgleichen</h2>
+        <ul>
+            <li>Das Banner zeigt einen Code an: 20 Ziffern in fünf Vierergruppen.</li>
+            <li>Bitte die Person, die <strong>Einstellungen</strong> zu öffnen, dann <strong>Kontoschutz</strong>, und dir <strong>Mein Schlüsselcode</strong> vorzulesen.</li>
+            <li><strong>Mein Schlüsselcode</strong> gibt es nur in der Telefon-App. Nutzt die Person ausschließlich die Web-App, kann sie ihn dir noch nicht vorlesen: Tippe auf <strong>Nicht jetzt</strong>, bis sie die Telefon-App öffnen kann.</li>
+            <li>Gleiche den Code <strong>persönlich oder in einem Telefon- oder Videoanruf</strong> ab, bei dem du sicher bist, dass es die Person ist. Gleiche ihn nicht über eine Nachricht in BeanPool ab: Wenn der Schlüssel falsch ist, gilt das auch für jeden, der antwortet.</li>
+            <li>Stimmt jede Ziffer überein, setze das Häkchen bei <strong>Ich habe mit Ben gesprochen: Der Schlüsselcode in ihren Einstellungen stimmt mit diesem überein</strong> und tippe auf <strong>Mit neuem Schlüssel fortfahren</strong>.</li>
+        </ul>
+        <p>Von da an gehen deine Nachrichten an den neuen Schlüssel. Das Banner und der Hinweis <strong>Schlüssel geändert</strong> am Chat im <strong>Chat</strong> verschwinden, und deine früheren Nachrichten bleiben lesbar.</p>
+        <p>Der Code ist nicht geheim. Du kannst ihn bedenkenlos vorlesen.</p>
+        <h2>Wenn der Code nicht übereinstimmt oder du ihn nicht prüfen kannst</h2>
+        <p>Tippe auf <strong>Nicht jetzt</strong>. Es wird nichts gesendet und nichts geändert. Du kannst später zum Chat zurückkehren.</p>
+        <p>Ein pausierter Chat bleibt möglicherweise pausiert, bis du fortfährst. Es gibt keinen anderen Weg, darin weiterzuschreiben: Deine Community führt genau einen Chat für euch beide, sodass das Starten eines neuen Chats mit derselben Person denselben Chat öffnet.</p>
+        <p>Stimmt der Code nicht überein, fahre nicht fort. Informiere die Person und die Admins deiner Community: Möglicherweise versucht jemand, deine Nachrichten mitzulesen.</p>
+        <h2>Wenn das Banner keinen Schlüssel zum Fortfahren anbietet</h2>
+        <p>Manchmal nennt die Community in einem Chat zwischen zwei Personen keinen einzelnen Schlüssel für die Person: Sie listet mehrere oder gar keinen auf. Dann gibt es keinen Schlüssel zum Fortfahren, das Banner weist darauf hin und bietet nur <strong>Nicht jetzt</strong> an. Es wird nichts gesendet. Sprich persönlich oder telefonisch mit der Person. Dein Telefon überprüft den Chat von selbst erneut, sobald sich die Liste der Community ändert, und ein neuer Chat mit derselben Person ist derselbe Chat.</p>
+        <h2>Wenn das Banner meldet, dass dein Telefon den Chat von Anfang an überprüft</h2>
+        <p>Nachdem du dein Telefon aus deinen 12 Wörtern wiederhergestellt oder die App aktualisiert hast, prüft dein Telefon jeden Chat anhand seiner eigenen früheren Nachrichten. Kamen diese von einem anderen Schlüssel als dem, den deine Community jetzt für die Person angibt, beginnt das Banner mit: <strong>Dieses Telefon überprüft diesen Chat von Anfang an, wie nach einer Wiederherstellung oder einem App-Update.</strong> Gleiche den Code wie oben beschrieben mit der Person ab. Nachdem du den Chat-Speicher der Community zurückgesetzt hast, beginnt es stattdessen mit: <strong>Der Chat-Speicher dieser Community wurde zurückgesetzt, daher überprüft dieses Telefon den Chat von Beginn an.</strong></p>
+        <h2>Chat-Speicher</h2>
+        <p>Dein Telefon führt für jede Community einen kleinen Speicher: mit welchem Schlüssel jeder deiner Chats geführt wird und welche Chats privat sind. Er wird auf dem Telefon gespeichert, und der Server der Community kann einen Chat nicht von sich aus auf einen anderen Schlüssel übertragen: Das kannst nur du über das Banner. Er bleibt auf dem Telefon erhalten, wenn du dich abmeldest, sodass das Ab- und erneute Anmelden ihn nicht löscht. Das Telefon setzt ihn niemals von sich aus zurück.</p>
+        <p>Du kannst ihn für eine Community zurücksetzen: Öffne die <strong>Einstellungen</strong>, tippe unter <strong>Konto &amp; Identität</strong> auf <strong>Chat-Speicher</strong>, tippe neben der Community auf <strong>Zurücksetzen</strong>, lies die Warnung und tippe erneut auf <strong>Zurücksetzen</strong>. Die App verweist dich nur hierher, wenn sie meldet, dass sie diesen Speicher nicht lesen konnte und ein erneuter Versuch nicht geholfen hat.</p>
+        <p>Nach einem Zurücksetzen prüft dein Telefon jeden Chat in dieser Community anhand der gespeicherten Nachrichten noch einmal von Anfang an. Ein Chat, dessen Nachrichten von einem anderen Schlüssel stammten als dem, den die Community jetzt angibt, zeigt das Banner erneut, beginnend mit: <strong>Der Chat-Speicher dieser Community wurde zurückgesetzt, daher überprüft dieses Telefon den Chat von Beginn an.</strong> Gleiche den Code wie oben beschrieben mit der Person ab.</p>
+        <p>Zwei Dinge können sich nach einem Zurücksetzen ändern, und die Warnung weist vor deiner Bestätigung darauf hin: Ein Chat, der wegen eines geänderten Schlüssels pausiert war, kann sich mit dem neuen Schlüssel öffnen, und ein privater Chat, der aus dem Chat verschwunden war, kann als Gruppenchat zurückkehren, den die Community mitlesen kann. Prüfe vor dem Absenden den Schlüsselcode oder wer im Chat ist.</p>
+        <p>Ein Zurücksetzen hilft nicht bei einem Chat, den dein Telefon keinem einzelnen Schlüssel zuordnen kann: Er wird erneut geprüft und stoppt wieder. Gleiche stattdessen den Code wie oben beschrieben mit der Person ab.</p>
+        <p>Dies gilt für die Telefon-App. Die Web-App besitzt keinen Chat-Speicher.</p>
+        <h2>Wenn das Banner meldet, dass dein Telefon den Chat keinem Schlüssel zuordnen kann</h2>
+        <p>Manchmal waren die früheren Nachrichten in einem Chat mit Schlüsseln verschlüsselt, die dein Telefon nicht einer einzelnen Person zuordnen kann. Über dem Eingabefeld steht dann: <strong>Dieses Telefon kann diesen Chat keinem Schlüssel zuordnen, daher ist das Senden deaktiviert.</strong> und das Banner zeigt den Code des Schlüssels, den deine Community jetzt für die Person listet.</p>
+        <p>Einige Nachrichten werden möglicherweise weiterhin angezeigt. Sie stammen vielleicht nicht von der Person, deren Name über dem Chat steht: Die eigenen früheren Nachrichten dieser Person können diejenigen sein, bei denen steht: <strong>Diese Nachricht konnte nicht verifiziert werden und wird daher nicht angezeigt.</strong> Diese bleiben auch so, nachdem du fortfährst.</p>
+        <p>Gleiche den Code wie oben beschrieben persönlich oder bei einem Anruf mit der Person ab. Stimmt er überein, setze das Häkchen und tippe auf <strong>Mit neuem Schlüssel fortfahren</strong>: Von da an gehen deine Nachrichten an diesen Schlüssel. Stimmt er nicht überein oder kannst du ihn nicht prüfen, tippe auf <strong>Nicht jetzt</strong>. Ein neuer Chat mit derselben Person ist derselbe Chat; es gibt also nichts anderes zu versuchen. Nennt die Community keinen einzelnen Schlüssel für die Person, bietet das Banner nur <strong>Nicht jetzt</strong> an, und dein Telefon prüft den Chat von selbst erneut, sobald sich die Liste der Community ändert.</p>
+        <h2>Was dein Telefon prüfen kann und was nicht</h2>
+        <p>Dein Telefon überprüft einen Chat anhand der Nachrichten, die es bereits gespeichert hat. Ein wiederhergestelltes Telefon oder ein bestehendes Telefon beim Update wird nur von einem Server gesteuert, der den ältesten Teil des Chats in den gesendeten Daten zurückhält oder umgibt. Ein Telefon, das diesen ältesten Teil bereits gespeichert hatte, lässt sich durch nichts täuschen, was der Server nach dem Update sendet.</p>
+        <p>Ein gerade wiederhergestelltes oder frisch aktualisiertes Telefon kann daher über den Schlüssel eines Chats getäuscht werden. Ein Banner kann das nicht ausschließen. <strong>Bestätige einen geänderten Schlüssel persönlich</strong> oder bei einem Anruf, bei dem du sicher bist, dass es die Person ist.</p>
+        <h2>Wenn die Community ein Datum angibt</h2>
+        <p>Wenn deine Community nachweisen kann, dass das Konto einen neuen Schlüssel erhalten hat, weist das Banner darauf hin, zum Beispiel: <strong>Diese Community meldet, dass das Konto am 3. Okt. 2026 einen neuen Schlüssel erhalten hat.</strong> Das hilft dir zu verstehen, was passiert ist, ersetzt aber nicht den Abgleich des Codes: Ein Server könnte dies ebenfalls behaupten.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Nachrichten</strong><span>Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Deine 12 Wörter</strong><span>Die 12 Wörter sind der Schlüssel zu deinem Konto. Warum sie wichtig sind, wo du sie findest, wie du sie schützt und ein Login als zweiten Weg hinzufügst.</span></a></li>
+            <li><a href="people.html"><strong>Leute und Freunde</strong><span>Mitglieder finden, Freunde, Profile, jemanden in eine Gruppe einladen und wer dich sehen kann.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

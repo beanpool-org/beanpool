@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>O que administradores veem — BeanPool members' guide</title>
+    <meta name="description" content="Em comunidades onde administradores mantêm lista de nomes: o que ela tem sobre você, quem lê, o que o servidor guarda e o que significa estar confirmado.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Configurações e segurança</a></p>
+        <h1>O que administradores veem</h1>
+        <p class="lede">Em comunidades onde administradores mantêm lista de nomes: o que ela tem sobre você, quem lê, o que o servidor guarda e o que significa estar confirmado.</p>
+        <h2>A lista de nomes</h2>
+        <p>Os administradores de algumas comunidades mantêm uma <strong>lista de nomes</strong>: quem são os membros, pelo nome real, da mesma forma que um comitê de LETS mantém uma lista de membros. Nem toda comunidade mantém uma. Pergunte aos seus administradores se a sua mantém.</p>
+        <p>Um registro contém o seu nome e, às vezes, uma breve anotação que um administrador escreve, como a forma pela qual a comunidade conhece você. Nada mais: nenhum endereço, nenhuma data de nascimento, nenhum número de documento.</p>
+        <h2>Quem pode ler</h2>
+        <p><strong>Apenas os proprietários e administradores da sua comunidade, nos próprios celulares deles.</strong> Seu nome é selado no celular de um administrador antes de ser enviado ao servidor da sua comunidade. O servidor guarda texto embaralhado: um backup, uma cópia, o BeanPool ou qualquer pessoa que roube o banco de dados não obtém nada legível.</p>
+        <p>Quem gerencia o servidor não pode ler a lista. Os celulares dos administradores fornecem as chaves da lista apenas aos administradores cujos celulares outro administrador já verificou, por chamada ou pessoalmente, e só aceitam chaves novas vindas deles. Isso depende dos administradores: um administrador que verificar o celular da pessoa errada, o celular de um administrador no qual alguém consiga entrar ou um celular perdido antes que os administradores removam sua chave podem permitir que outra pessoa leia os nomes. O mesmo pode ocorrer se o responsável pelo servidor impedir que o celular de um administrador saiba que outro administrador foi removido: até que saiba, o que ele escrever poderá ser lido com as chaves que o administrador removido possuía. Um administrador cujo celular ainda exiba o administrador removido remove a chave dele manualmente, e esse celular então cria uma nova chave sem ele ou não escreve nada.</p>
+        <p><strong>Outros membros não veem os nomes.</strong> Eles veem seu nome no BeanPool, como sempre.</p>
+        <p>Um administrador pode gerar uma cópia em PDF da lista no celular dele, para fins de segurança. Uma vez gerada, cabe a ele mantê-la segura, como uma lista em papel. Sempre que a lista é aberta ou copiada, os outros administradores podem ver quem fez isso e quando.</p>
+        <h2>Ser confirmado</h2>
+        <p>Um administrador pode <strong>confirmar</strong> você: ele declara que a sua conta pertence à pessoa indicada no seu registro. Apenas alguém que conheça você deve fazer isso e, em algumas comunidades, dois administradores precisam concordar.</p>
+        <ul>
+            <li>Uma confirmação não carrega nenhum nome. O servidor registra qual conta, qual entrada e qual administrador, nunca quem você é.</li>
+            <li>Não é um selo de confiança e, por enquanto, não altera mais nada no aplicativo.</li>
+            <li>Se um administrador convidou você pelo nome, entrar com o convite dele confirmou você no seu registro, por aquele administrador. &quot;Confirmado&quot; significa apenas que um administrador atesta que esta conta é a pessoa indicada naquele registro.</li>
+            <li>Se você substituir um celular perdido e sua conta passar para uma nova chave, sua confirmação passa junto.</li>
+            <li>Se você sair ou excluir sua conta, sua confirmação termina. Seu registro permanece na lista dos administradores até que um administrador o exclua: peça a ele para fazer isso.</li>
+            <li>Se você estiver confirmado e sair, for removido ou excluir sua conta devendo feijões, os Bens comuns cobrem a dívida, como sempre. A lista dos administradores também guarda uma anotação no seu registro sobre o que você devia, por que motivo e quando, por 3 anos, e os administradores veem isso ao lado do seu nome nos celulares deles. Ninguém pode ser confirmado em relação àquele registro até que o valor seja pago de volta, compensado com trabalho ou perdoado.</li>
+        </ul>
+        <h2>O que a lista de nomes não mostra aos administradores</h2>
+        <p>A lista contém nomes e anotações, e qual conta pertence a quem. Além da anotação mencionada acima de uma dívida deixada em aberto, ela não mostra a ninguém seu saldo ou suas trocas (um administrador pode ver seu saldo nos casos descritos abaixo e algumas das suas trocas: veja o final desta página). Veja &quot;Sua privacidade&quot; para saber o que membros e administradores podem ver em outras circunstâncias.</p>
+        <h2>O que você concorda em uma comunidade conhecida</h2>
+        <p>Uma comunidade que confirma seus membros, uma <strong>comunidade conhecida</strong>, funciona como um LETS sempre funcionou: os administradores ficam atentos a dívidas que crescem demais ou permanecem por muito tempo. Quando você entra em uma, a tela de adesão diz exatamente quando, com os números da sua comunidade, por exemplo:</p>
+        <p>&quot;Nesta comunidade, os administradores podem ver o seu saldo se ele ultrapassar 50% da sua linha de crédito ou se você permanecer no negativo por 60 dias sem nenhuma venda. É assim que um LETS sempre funcionou. Cada vez que um administrador abre a lista de membros que ultrapassaram esses limites, e cada vez que um administrador olha o seu saldo enquanto remove você, isso é registrado em logs. Em uma votação sobre a sua remoção, todos os que podem votar nela veem o seu saldo e qualquer dívida, apenas nessa votação, e essas visualizações não são registradas em logs. Você pode revogar isso a qualquer momento nas Configurações. Seja qual for a sua escolha, qualquer administrador pode ver algumas das suas trocas: uma troca que ainda não foi concluída ou que um administrador liquidou (com quem foi, o anúncio, o preço e a sua conversa individual com a pessoa, que eles não podem ler se for privada), para que uma negociação travada possa ser resolvida; uma troca cujos feijões ficaram travados quando um membro foi removido em um servidor mais antigo (o status da troca, o anúncio, o preço, as datas, os feijões que ficaram travados, quantos pagamentos passaram por ela e o valor e anotação do último); um alerta de fraude que cita seu nome se você e outro membro comprarem um do outro repetidamente, em valores semelhantes, acima de um limite, com o total de feijões e o equilíbrio entre as partes; um alerta que cita seu nome, com o total de feijões e quantos membros convidados por você negociaram apenas com você, se membros convidados por você enviarem feijões para você acima de um limite em um número definido de dias, ou se você for um desses membros; um alerta que cita seu nome, com a proporção de trocas do grupo entre si, mas sem feijões, se você estiver em um grupo de membros, pelo menos metade deles novos, que negociam quase exclusivamente entre si; e um alerta que cita seu nome se nenhum feijão tiver entrado ou saído da sua conta por um número definido de dias. Cada consulta a uma dessas trocas é registrada em logs, com quem olhou, quando e em quais trocas; a consulta aos alertas que citam você é registrada na primeira vez que cada administrador os abre e novamente no primeiro acesso desse administrador após 24 horas, e os acessos intermediários não adicionam linhas. O proprietário e os administradores podem consultar esse registro. As estatísticas de membros que os administradores veem mostram quantas publicações você tem ativas e quantas mensagens enviou, e em relação a trocas mostram apenas os totais da comunidade inteira, e não os seus. Todos os membros, administradores incluídos, veem seu perfil de confiança: quantas das suas trocas foram concluídas e quantas foram canceladas, e a porcentagem de conclusão, quantos pagamentos em feijões você enviou ou recebeu de membros somados às trocas que concluiu, com quantos membros diferentes você pagou, recebeu ou negociou, quantos pagamentos e trocas você realizou com o membro que está olhando, e seus Pontos de Confiança. Isso não fica registrado em logs, porque todos os membros podem ver. Nada mais das suas trocas. Quem gerencia o servidor desta comunidade detém todo o banco de dados, incluindo seu saldo e trocas, e seus backups, instantâneos e cópias em espera.&quot;</p>
+        <p>Concordar com isso é o seu consentimento. Então, e somente enquanto um administrador tiver confirmado você:</p>
+        <ul>
+            <li>Se o seu saldo ultrapassar qualquer um dos dois limites, sua conta aparecerá nos celulares dos administradores com o seu saldo, para que um administrador que conheça você possa conversar com você. Essa lista não mostra mais nada sobre você, e nenhuma das suas trocas.</li>
+            <li>Toda vez que um administrador abre essa lista, os outros administradores e o proprietário podem ver quem abriu e quando.</li>
+            <li>Se você não tiver concordado, ou ninguém tiver confirmado você, ou a sua comunidade não confirmar membros, essa lista nunca exibirá você.</li>
+        </ul>
+        <p>Se você entrou antes de a comunidade passar a solicitar isso, o seu aplicativo oferecerá essa opção. Responder que não ou não responder não altera mais nada: você continua sendo membro. Se a comunidade alterar os limites posteriormente, o seu aplicativo perguntará novamente.</p>
+        <p>Você pode revogar seu consentimento a qualquer momento: abra as <strong>Configurações</strong>, onde o aplicativo mostra com o que você concordou e quando, e toque em <strong>Revogar</strong>. A partir desse instante, você sai da lista. A comunidade mantém um registro de que você concordou e de que revogou, e você pode concordar novamente mais tarde.</p>
+        <h2>Quando um administrador vê seu saldo de qualquer forma</h2>
+        <p>Quer você tenha concordado ou não, em qualquer comunidade:</p>
+        <ul>
+            <li><strong>Quando um administrador remove a sua conta.</strong> O administrador que inicia a remoção vê o seu saldo e quantas trocas você tem abertas, para que o que você possui ou deve possa ser liquidado. Os outros administradores e o proprietário podem ver quem olhou, o saldo de quem foi consultado e quando.</li>
+            <li><strong>Quando a sua comunidade vota sobre a sua remoção.</strong> Todos os autorizados a votar nessa decisão veem o seu saldo e qualquer dívida, apenas nessa votação. Um administrador ou proprietário que não possa votar não os vê ali. Essas visualizações não são registradas em logs.</li>
+            <li><strong>Quem gerencia o servidor da sua comunidade</strong> detém todo o banco de dados, incluindo seu saldo e trocas, além de backups, instantâneos e cópias em espera.</li>
+        </ul>
+        <h2>O que qualquer administrador pode ver das suas trocas</h2>
+        <p>Quer você tenha concordado ou não com algo, em qualquer comunidade, qualquer administrador pode ver:</p>
+        <ul>
+            <li><strong>Uma troca que ainda não foi concluída ou que um administrador liquidou.</strong> Ambos os membros, o anúncio, o preço e as mensagens na conversa individual dos dois membros. Um administrador não pode ler uma conversa privada, apenas ver quem escreveu e quando. Isso serve para que um administrador possa resolver uma troca que ficou travada.</li>
+            <li><strong>Uma troca cujos feijões ficaram travados quando um membro foi removido em um servidor mais antigo.</strong> O status da troca, o anúncio, o preço, suas datas, os feijões que ficaram travados, quantos pagamentos passaram por ela e o valor e anotação do último pagamento, para que um proprietário possa dar baixa nos feijões travados.</li>
+            <li><strong>Alertas de fraude que citam membros,</strong> com feijões. Um deles cita dois membros que compram um do outro repetidamente, em valores aproximados, acima de um limite. Ele exibe o total de feijões e o equilíbrio entre as duas partes. Outro cita um membro e os membros convidados por ele, quando esses membros enviam feijões a ele acima de um limite em um número definido de dias. Ele exibe o total de feijões e quantos membros convidados por ele negociaram exclusivamente com ele.</li>
+            <li><strong>Um alerta de fraude que cita um grupo de membros,</strong> no qual pelo menos metade é nova na comunidade, que negociam quase exclusivamente entre si. Ele exibe a proporção das trocas do grupo entre si, mas sem feijões.</li>
+            <li><strong>Um alerta que cita os membros cujas contas não tiveram nenhuma movimentação de feijões, de entrada ou saída,</strong> por um número definido de dias.</li>
+        </ul>
+        <p><strong>Cada consulta a uma dessas trocas é registrada em logs:</strong> quem olhou, quando e em quais trocas. <strong>A consulta aos alertas que citam um membro é registrada</strong> na primeira vez que cada administrador os abre e novamente no primeiro acesso desse administrador após 24 horas; os acessos intermediários não acrescentam nenhuma linha. O proprietário e os administradores podem ver esse registro em Saúde da comunidade, como uma lista própria ao lado da lista de quem consultou um saldo. Uma consulta realizada por um token de automação (um script configurado por um proprietário) traz essa indicação: a linha diz &quot;por token&quot; e o nome do token, ao lado do proprietário que o criou.</p>
+        <p>As estatísticas de membros que os administradores veem mostram quantas publicações cada membro mantém ativas e quantas mensagens enviou, e em relação a trocas mostram apenas os totais de toda a comunidade: quantas trocas foram concluídas ou canceladas e a que valor chegaram as concluídas, nunca os números individuais de um membro.</p>
+        <p>Todos os membros, administradores incluídos, veem o <strong>perfil de confiança</strong> de cada membro: quantas das suas trocas foram concluídas e quantas foram canceladas, e a proporção de concluídas, quantos pagamentos em feijões foram enviados ou recebidos de membros somados às trocas concluídas, com quantos membros distintos pagou, recebeu ou negociou, quantos pagamentos e trocas realizou com o membro que está consultando, e seus Pontos de Confiança. Isso não fica registrado em logs, porque todos os membros podem ver.</p>
+        <p>Nada mais das suas trocas.</p>
+        <h2>O assistente de IA de um administrador</h2>
+        <p>Um proprietário ou administrador pode conectar seu próprio assistente de IA ao servidor para ajudá-lo. O assistente vê menos do que eles: nunca suas mensagens, saldo, trocas, chaves, fotos ou a lista de nomes, e nunca quem denunciou alguém. Veja &quot;Quando um administrador usa um assistente de IA&quot;.</p>
+        <h2>Perguntando sobre o seu registro</h2>
+        <p>Você pode perguntar aos seus administradores o que consta no seu registro, pedir correções ou solicitar a exclusão dele quando você não pertencer mais à comunidade. Eles é que guardam a lista, não o BeanPool.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>Sua privacidade</strong><span>O que os outros podem ver sobre você e as configurações que controlam isso.</span></a></li>
+            <li><a href="joining.html"><strong>Entrar no BeanPool</strong><span>Duas formas de entrar: uma comunidade com convite de membro, ou a comunidade global se estiver aberta, com 12 palavras secretas ou login. Pedir entrada e convidar outros.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Sair ou excluir sua conta</strong><span>Saia deste celular ou exclua sua conta em definitivo, e veja o que acontece com seus feijões.</span></a></li>
+            <li><a href="admins-ai-assistants.html"><strong>Assistente de IA de admin</strong><span>O que o assistente de IA de um proprietário ou administrador pode ler sobre você, o que nunca vê e quem recebe.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giao dịch — BeanPool members' guide</title>
+    <meta name="description" content="Một nơi cho mọi giao dịch bạn tham gia, mọi tin bạn đã đăng và các giao dịch trước đây.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Chợ</a></p>
+        <h1>Giao dịch</h1>
+        <p class="lede">Một nơi cho mọi giao dịch bạn tham gia, mọi tin bạn đã đăng và các giao dịch trước đây.</p>
+        <h2>Cách mở</h2>
+        <p>Nhấn <strong>Giao dịch của tôi</strong> ở trên cùng của tab Chợ. Một con số màu đỏ trên đó sẽ đếm các giao dịch đang tiến hành của bạn.</p>
+        <p>Trên cộng đồng toàn cầu không có giao dịch, vì vậy <strong>Giao dịch của tôi</strong> hiển thị ba giao dịch ví dụ từ một cộng đồng địa phương, Example Valley, được đánh dấu <strong>🏘️ Cộng đồng địa phương</strong>: một giao dịch đang chờ bạn xử lý, một giao dịch có Đậu được giữ an toàn, và một giao dịch đã hoàn tất. Các nút của chúng giải thích lý do tại sao các giao dịch hoạt động trong cộng đồng địa phương, và không làm thay đổi điều gì. Xem &quot;Đậu và cộng đồng toàn cầu&quot;.</p>
+        <h2>Ba tab</h2>
+        <ul>
+            <li><strong>Đang tiến hành:</strong> các giao dịch đang diễn ra, và các yêu cầu đang chờ phản hồi. Mỗi mục hiển thị trạng thái hiện tại: <strong>Giữ trong quỹ tín thác</strong> (đậu đang được giữ), <strong>Cần hành động</strong> (ai đó đã yêu cầu và bạn cần trả lời) hoặc <strong>⏳ Chờ chấp thuận</strong> (bạn đã yêu cầu và đang chờ họ).</li>
+            <li><strong>Bài đăng của tôi:</strong> các Lời đề nghị và Nhu cầu của bạn đang mở, hoặc <strong>TẠM DỪNG</strong>. Một bài đăng mà ai đó đã gửi yêu cầu sẽ hiển thị <strong>Cần hành động</strong>.</li>
+            <li><strong>Lịch sử:</strong> các giao dịch đã hoàn tất, đã hủy và bị từ chối. Chọn <strong>Tất cả</strong>, <strong>Đã nhận</strong> hoặc <strong>Đã cho đi</strong>. Mỗi mục hiển thị ngày tháng, số tiền và người giao dịch cùng bạn.</li>
+        </ul>
+        <p>Trong ứng dụng web, tab <strong>Đang tiến hành</strong> chỉ liệt kê các giao dịch có đậu đang bị giữ, vì vậy một yêu cầu đang chờ phản hồi sẽ không xuất hiện ở đó. Tab <strong>Bài đăng của tôi</strong> chỉ hiển thị các bài đăng đang hoạt động của bạn, mỗi bài được đánh dấu <strong>Hoạt động</strong>: các bài đăng tạm dừng không được liệt kê.</p>
+        <p>Nhấn vào một giao dịch trong mục <strong>Đang tiến hành</strong> hoặc <strong>Bài đăng của tôi</strong> để mở bài đăng đó. Đó là nơi bạn chấp nhận, hoàn thành hoặc hủy bỏ một giao dịch. Một yêu cầu không có ai trả lời sẽ tự động kết thúc sau 7 ngày.</p>
+        <h2>Đánh giá</h2>
+        <p>Một giao dịch đã hoàn tất trong mục <strong>Lịch sử</strong> sẽ có nút <strong>Xem lại</strong>. Sau khi bạn đánh giá, nút sẽ đổi thành <strong>Chỉnh sửa</strong>, và bạn có thể thay đổi số sao của mình.</p>
+        <p>Trong ứng dụng web, nút ghi là <strong>Để lại đánh giá</strong>, và chỉ hiển thị cho đến khi bạn đã đánh giá giao dịch đó. Để thay đổi đánh giá tại đó, hãy mở bài đăng.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Giao dịch từng bước một</strong><span>Từ yêu cầu đến khi nhận thanh toán, cho Lời đề nghị và Nhu cầu, cùng việc để lại đánh giá.</span></a></li>
+            <li><a href="posting.html"><strong>Đăng Lời đề nghị hoặc Nhu cầu</strong><span>Đăng thứ bạn có thể làm hoặc trao tặng, hoặc thứ bạn đang tìm kiếm.</span></a></li>
+            <li><a href="your-balance.html"><strong>Số dư và lịch sử giao dịch</strong><span>Bạn có bao nhiêu đậu, số lượng đang bị giữ, cùng mọi giao dịch và quà tặng.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Khi giao dịch trục trặc</strong><span>Hủy giao dịch và những gì xảy ra khi hai bên không thể thống nhất ý kiến.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Thanh trên cùng</strong><span>Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

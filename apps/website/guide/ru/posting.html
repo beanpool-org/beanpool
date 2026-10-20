@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Публикация объявления — BeanPool members' guide</title>
+    <meta name="description" content="Предложите то, что умеете или готовы отдать, или опубликуйте то, что ищете.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Рынок</a></p>
+        <h1>Публикация объявления</h1>
+        <p class="lede">Предложите то, что умеете или готовы отдать, или опубликуйте то, что ищете.</p>
+        <h2>Сначала Предложение</h2>
+        <p>В сообществе с бобами перед тем, как опубликовать <strong>Спрос</strong> или откликнуться на чужое Предложение, необходимо разместить хотя бы одно собственное <strong>Предложение</strong>. Каждый вносит свой вклад. Количество активных Предложений также определяет, насколько глубоко вы можете уходить в минус. См. «Кредитная линия».</p>
+        <p>Там, где бобов нет (например, в глобальном сообществе), вашей первой публикацией может быть Спрос.</p>
+        <h2>Перед началом</h2>
+        <p>В сообществе с бобами вам понадобятся имя и фотография профиля. Там, где бобов нет, достаточно одного имени. Если каких-то данных не хватает, приложение сначала предложит <strong>Настроить профиль</strong>.</p>
+        <h2>Публикация</h2>
+        <ul>
+            <li>Нажмите <strong>+ ОБЪЯВЛЕНИЕ</strong> на вкладке Рынка или Карты.</li>
+            <li>Выберите <strong>Предложение</strong> или <strong>Спрос</strong>. Форма откроется на Карте.</li>
+            <li><strong>Заголовок:</strong> несколько слов, до 50 символов на телефоне. «Домашний хлеб на закваске», «Поездка в город по пятницам».</li>
+            <li><strong>Категория:</strong> выберите наиболее подходящую.</li>
+            <li><strong>Описание:</strong> что, когда, где и всё, что следует знать другим участникам.</li>
+            <li><strong>Фотографии:</strong> хотя бы одна, до пяти штук. Нажмите <strong>Камера</strong> или <strong>Галерея</strong>. Там, где бобов нет, фотографии для Спроса необязательны.</li>
+            <li><strong>Местоположение:</strong> нажмите <strong>Моё местоположение</strong> либо <strong>Указать на карте</strong>, выберите точку на карте и нажмите <strong>Подтвердить метку</strong>. Метку видит каждый участник вашего сообщества, поэтому при желании поставьте её рядом с домом, а не точно у входной двери. См. «Местоположение метки».</li>
+            <li><strong>Цена:</strong> количество бобов. Нажмите кнопку единиц измерения, чтобы выбрать <strong>Всего</strong> или <strong>/ч</strong>. Нажмите <strong>БЕСПЛАТНО</strong>, чтобы отдать бесплатно. Кнопка также предлагает варианты <strong>/день</strong>, <strong>/нед</strong> и <strong>/мес</strong>, но в новом объявлении они пока не сохраняются: объявление сохраняется с общей ценой. Выберите <strong>Всего</strong> и укажите период в описании.</li>
+            <li>Нажмите <strong>Создать Предложение</strong> или <strong>Создать Спрос</strong>.</li>
+        </ul>
+        <p>Пока не заполнены все обязательные поля, кнопка подсказывает, чего именно не хватает, например <strong>Добавьте фото</strong> или <strong>Укажите цену</strong>.</p>
+        <p>В веб-приложении шаги немного отличаются:</p>
+        <ul>
+            <li>Нажмите кнопку <strong>+</strong> на Карте (называется <strong>Новая публикация</strong>) или <strong>+ ОБЪЯВЛЕНИЕ</strong> на Рынке.</li>
+            <li>Чтобы поставить метку, нажмите <strong>Моё местоположение</strong> либо нажмите <strong>Указать на карте</strong>, а затем нажмите на карту. Кнопки <strong>Подтвердить метку</strong> там нет.</li>
+            <li>Цена вводится в числовое поле с выпадающим списком единиц. Кнопки <strong>БЕСПЛАТНО</strong> нет: укажите 0, чтобы отдать бесплатно.</li>
+            <li>У заголовка нет ограничения в 50 символов.</li>
+            <li>Пока что-то не заполнено, кнопка сообщает: <strong>Требуется указать местоположение</strong> или <strong>Заполните обязательные поля</strong>. Она также остаётся серой, пока вы не добавите хотя бы одну фотографию.</li>
+            <li>Форма не сохраняет черновик.</li>
+        </ul>
+        <h2>В глобальном сообществе</h2>
+        <p>В глобальном сообществе бобов нет, поэтому у публикаций там нет цены. В форме нет поля <strong>Цена</strong>: укажите в описании, что бы вы хотели взамен, или напишите, что это бесплатно. На месте цены в форме веб-приложения и в форме редактирования на телефоне написано: «🏘️ В местном сообществе это цена в бобах ›»: нажмите на эту строку, чтобы узнать подробнее. См. «Бобы и глобальное сообщество».</p>
+        <p>Гости глобального сообщества могут видеть фотографии объявления и его приблизительный район до вступления. Они видят текст объявления, фото и приблизительное место, но не ваше имя, лицо или точную точку. В веб-приложении форма предупреждает об этом под фотографиями. Участники глобального сообщества видят вашу точку с точностью примерно до километра.</p>
+        <h2>Не знаете, какую цену назначить?</h2>
+        <p>На телефоне нажмите <strong>Не знаете цену?</strong> под полем цены. В веб-приложении этой строки в форме нет: вместо этого откройте <strong>💡 Справочник цен</strong> на Рынке. Примерный ориентир: 40 бобов равны примерно одному часу времени человека. В <strong>СПРАВОЧНИКЕ ЦЕН СООБЩЕСТВА</strong> приведены примерные оценки для многих повседневных вещей и услуг. На телефоне нажатие на строку справочника заполняет Предложение за вас. В веб-приложении нажатие на неё открывает форму новой публикации на Карте без предварительного заполнения полей.</p>
+        <p>Под ценой отображается сумма, которую вы получите после вычета комиссии Рынка в размере 1,5%. Подарки не облагаются комиссией.</p>
+        <h2>Дополнительные параметры</h2>
+        <ul>
+            <li><strong>Повторяющееся:</strong> объявление остаётся активным после каждой сделки, и сразу несколько участников могут договориться о сделке по нему. Удобно для регулярных еженедельных поездок или выпечки хлеба по субботам.</li>
+            <li><strong>Также требуются деньги:</strong> отметьте этот пункт, если вам также требуется доплата обычными деньгами на бензин или расходные материалы. Приложение никогда не проводит платежи обычными деньгами; об этом вы договариваетесь между собой лично.</li>
+            <li><strong>Куда это передаётся?</strong> Отображается, только если ваше сообщество обменивается с другими сообществами: оставить публикацию только здесь или поделиться ею шире.</li>
+        </ul>
+        <p>На телефоне приложение сохраняет черновик по мере ввода текста. Если вы выйдете и вернётесь, оно спросит: <strong>Продолжить</strong> или <strong>Начать заново</strong>.</p>
+        <h2>Публикация только для группы</h2>
+        <p>Откройте <strong>Общие проекты</strong>, затем <strong>Группы</strong>, затем нужную группу и нажмите <strong>Опубликовать в</strong> с названием группы. Объявление увидят только участники этой группы. На телефоне в этой сокращённой форме нет фотографий и местоположения. В веб-приложении открывается обычная форма на Карте с предустановленной привязкой к группе.</p>
+        <h2>Изменение или удаление объявления</h2>
+        <p>Откройте своё объявление. Если по нему не ведётся активная сделка:</p>
+        <ul>
+            <li><strong>Редактировать объявление</strong> позволяет изменить текст, категорию, цену и фотографии. Нажмите <strong>Сохранить</strong>. Местоположение изменить нельзя; вместо этого удалите объявление и опубликуйте его заново.</li>
+            <li><strong>Приостановить Предложение</strong> временно скрывает Предложение из ленты. Кнопка <strong>Активировать Предложение</strong> возвращает его обратно. Спрос нельзя поставить на паузу.</li>
+            <li><strong>Удалить объявление</strong> полностью убирает его. Все, кто ещё ожидал ответа на свой запрос по нему, увидят его отклонённым.</li>
+        </ul>
+        <p>Пока по вашему объявлению есть ожидающий запрос, вы по-прежнему можете изменить текст и фото, но не цену: приложение сообщит об этом. Пока бобы по объявлению удерживаются в сделке, редактировать его нельзя вовсе. Исключение составляют повторяющиеся объявления (по ним может одновременно идти несколько сделок): вы можете менять текст и фотографии, но не цену. Чтобы изменить цену, сначала отклоните или отмените сделку.</p>
+        <p>В местном сообществе срок действия объявлений не ограничен. Удаляйте их, когда они перестают быть актуальными.</p>
+        <p>В глобальном сообществе публикация архивируется через 90 дней после последнего изменения: она убирается с Рынка, а её фотографии удаляются. Сохранение объявления через <strong>Редактировать объявление</strong> продлевает его ещё на 90 дней. См. «Лимиты сообщества».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Сделка шаг за шагом</strong><span>От первого вопроса до оплаты, для Предложения и для Спроса, и написание отзыва.</span></a></li>
+            <li><a href="my-deals.html"><strong>Мои сделки</strong><span>Единое место для текущих обменов, активных объявлений и истории сделок.</span></a></li>
+            <li><a href="map-pins.html"><strong>Метки на Карте</strong><span>Метки на Карте, значение цветов и кнопки управления вокруг них.</span></a></li>
+            <li><a href="credit-line.html"><strong>Кредитная линия</strong><span>До какого предела можно уходить в минус и как этот лимит увеличивается.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

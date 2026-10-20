@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>助記詞與伺服器金鑰（所有者） — BeanPool members' guide</title>
+    <meta name="description" content="適用於社群所有者。核對 12 個助記詞、用手機接管或復原伺服器，以及手機自身的自動檢查。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">設定與安全</a></p>
+        <h1>助記詞與伺服器金鑰（所有者）</h1>
+        <p class="lede">適用於社群所有者。核對 12 個助記詞、用手機接管或復原伺服器，以及手機自身的自動檢查。</p>
+        <h2>適用對象</h2>
+        <p>僅適用於社群的<strong>所有者</strong>。如果你不是所有者，你將不會看見此處的任何內容。</p>
+        <h2>為什麼需要所有者核對</h2>
+        <p>你所在社群的伺服器保留了一份受鎖定保護的金鑰副本，以便在伺服器本身遺失時將社群遷移至另一台伺服器，且其備份亦處於鎖定保護狀態。這些金鑰鎖定至所有者的帳號：任何一位所有者都可以使用自己的手機開啟它們（參見下文「使用手機接管或還原」）。如果你遺失了手機，你的 12 個助記詞可以找回你的帳號，隨之找回開啟伺服器鎖定與備份的金鑰。在伺服器本身不復存在的那一天，這一點最為關鍵。</p>
+        <p>因此，應用程式會不時提示每位所有者核對是否仍保留有正確的 12 個助記詞。你可以選擇<strong>稍後</strong>。任何操作絕不會被封鎖，你可以繼續執行身為所有者的所有操作。</p>
+        <h2>應用程式何時會提示</h2>
+        <ul>
+            <li>在你成為所有者後不久，提示一次。</li>
+            <li>在你上次核對後滿 12 個月時，再次提示。</li>
+        </ul>
+        <p>它會在市集頂端顯示一張卡片（在網頁版應用程式中，除地圖外的每個畫面頂端皆會顯示）：<strong>立即核對</strong>或<strong>稍後</strong>。點擊<strong>稍後</strong>會收起該卡片，直到下次到期為止。你可以隨時從<strong>設定</strong>中進行核對：在<strong>社群金鑰</strong>下方，點擊<strong>檢查你的 12 個助記詞</strong>（在網頁版應用程式中為<strong>立即核對</strong>）。</p>
+        <h2>如何核對</h2>
+        <ul>
+            <li>取出抄寫有 12 個助記詞的紙張。</li>
+            <li>依序輸入這 12 個英文助記詞，詞與詞之間用空格分隔。字母大小寫及多餘的空格均無影響。</li>
+            <li>點擊<strong>檢查我的助記詞</strong>。</li>
+        </ul>
+        <p>如果助記詞正確，應用程式會顯示<strong>這是正確的助記詞</strong>。如果不正確，則顯示：<strong>這些不是此帳號的助記詞。</strong> 系統不會指出具體哪個詞有誤，因此請核對紙張並重新輸入所有助記詞。</p>
+        <p>在未保留 12 個助記詞副本的手機上（例如使用登入帳號還原的手機），輸入正確的助記詞還會出現<strong>儲存至此手機</strong>。點擊它之後，<strong>檢視復原助記詞</strong>便會自此顯示這些助記詞。這與<strong>將你的 12 個助記詞新增至此手機</strong>具有相同的核對與儲存機制（參見「你的 12 個助記詞」）。</p>
+        <p>找不到助記詞？如果此手機仍保留有助記詞，依序點擊<strong>設定</strong>與<strong>檢視復原助記詞</strong>即可查看。請重新將它們抄寫下來，然後進行核對。在沒有保存副本的手機上，應用程式會予以提示：當你找到它們時，在此處進行核對，然後保存至手機。</p>
+        <h2>傳送了哪些內容，哪些內容絕不傳送</h2>
+        <ul>
+            <li>核對過程在你的手機本機進行（在網頁版應用程式中則在你的瀏覽器中進行）。你的助記詞絕不會傳送至任何地方。核對一有結果，或者當你離開畫面時，輸入方塊便會立即清空。只有當你點擊<strong>儲存至此手機</strong>時它們才會被儲存，且僅儲存在此手機本機上。</li>
+            <li>當助記詞正確時，你的手機只會向社群伺服器傳送已核對的訊息及時間，並附帶你帳號的數位簽章。</li>
+            <li>所有者與管理員可在伺服器的「設定」中查看每位所有者的「已核對 12 個助記詞」日期，或「尚未核對」。這是你自己的聲明：伺服器無法查看或核對你的助記詞。</li>
+        </ul>
+        <h2>使用手機接管或還原</h2>
+        <p>如果你社群的伺服器遺失，運作備用伺服器的人員（或還原備份的新伺服器）可以請求所有者開啟鎖定的金鑰。任何一位所有者即可完成。你需要安裝最新版本的 BeanPool 應用程式。網頁版應用程式如果仍能開啟也可以使用，但它託管在社群自身的位址上，該位址可能隨伺服器一同失效：手機應用程式才是最可靠的途徑。</p>
+        <ul>
+            <li>在伺服器的「設定」中，他們選擇<strong>接管為主要伺服器</strong>，然後選擇<strong>我了解：使用所有者的手機</strong>，或在還原備份時選擇<strong>使用所有者的手機開啟</strong>。對方的螢幕上會出現一個代碼。</li>
+            <li>在應用程式中：開啟<strong>設定</strong>，在<strong>社群金鑰</strong>下方點擊<strong>使用此手機接管或還原</strong>，將相機對準代碼。如果伺服器頁面正開啟在你的手機上，點擊其連結作用相同。在網頁版應用程式中，從其螢幕複製連結，並將其貼入「設定」中的<strong>使用此瀏覽器接管或還原</strong>下方。</li>
+            <li>應用程式會顯示是哪個社群、哪台伺服器，以及將會發生什麼。如果你原本的主要伺服器仍有回應，應用程式會以紅色文字註明：接管僅適用於確實已失效的伺服器。</li>
+            <li>點擊<strong>解鎖以進行接管</strong>（或<strong>解鎖備份</strong>）。你的手機會先要求自身的螢幕解鎖驗證：指紋、臉部或 PIN 碼。網頁版應用程式沒有此步驟，這也是手機應用程式對所有者金鑰而言更安全的原因。</li>
+            <li>你的手機會開啟自身負責的鎖定部分，並將金鑰交給該伺服器，此過程經過加密鎖定，僅該伺服器能讀取。你的手機絕看不到伺服器的金鑰或備份。</li>
+            <li>進行接管時，伺服器操作者隨後在其螢幕上進行確認。社群會收到伺服器已遷移且由你開啟了金鑰的通知。</li>
+        </ul>
+        <p>若鎖定屬於其他社群、未鎖定至你的身分、伺服器代碼已過期（代碼效期 10 分鐘且僅能使用一次），或者金鑰並非由你社群自身的伺服器所鎖定，應用程式會拒絕執行並說明原因。</p>
+        <h2>手機會自行檢查鎖定狀態</h2>
+        <p>每次社群的鎖定發生變更時（新增或移除所有者、建立新的復原代碼），你的應用程式都會在背景靜默檢查是否仍能開啟其自身的部分。它會將其開啟、立即拋棄金鑰，並向伺服器回報是否成功。不需要你進行任何操作。</p>
+        <p>所有者與管理員可以在伺服器的「設定」中，於你的 12 個助記詞日期旁看到：<strong>其手機已開啟當前鎖定</strong>及日期，或顯示上次開啟的是較舊版本。如果顯示你的手機<strong>無法開啟</strong>該鎖定，請檢查你的 12 個助記詞，並請其他所有者查看伺服器的「設定」。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>你的 12 個助記詞</strong><span>這 12 個助記词是你帳號的金鑰。它們為何重要、在哪裡找到、如何安全保存，以及新增登入方式作為備用復原途徑。</span></a></li>
+            <li><a href="recovery.html"><strong>找回你的帳號</strong><span>在新手機上復原帳號，並透過連結登入方式為帳號提供額外保護。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>プライバシー — BeanPool members' guide</title>
+    <meta name="description" content="他のメンバーに公開される情報と、それを管理する設定について説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">設定と安全性</a></p>
+        <h1>プライバシー</h1>
+        <p class="lede">他のメンバーに公開される情報と、それを管理する設定について説明します。</p>
+        <h2>設定を開く</h2>
+        <p>画面右上にあるスライダーボタンをタップします。幅の広いパソコン画面のWebアプリでは、左側のサイドバーの一番下にある歯車アイコンになります。「設定」は画面下のタブの1つではありません。</p>
+        <h2>コミュニティのメンバーが見られる情報</h2>
+        <ul>
+            <li>あなたの名前、写真、自己紹介、参加時期、および最終アクティブ日時。</li>
+            <li>あなたの信用バッジ、レビュー（誰がレビューを書いたかは他の誰にも見られません）、および信用プロファイル：取引のうち完了したものとキャンセルされたものの件数、完了率、メンバーとの間で送受した豆の支払い件数と完了した取引件数、支払い・受取・取引を行った異なるメンバーの人数、そのプロフィールを見ているメンバーとあなたとの取引および支払い件数、そしてあなたの信用ポイント。管理者は一般メンバーと同じようにこれを確認でき、記録（ログ）に残ることはありません。</li>
+            <li>あなたの投稿と、そのピンの位置。「ピンの位置」を参照してください。</li>
+            <li>投票であなたがどのように投票したか。ただし、作成者が<strong>記名投票</strong>に設定した投票に限られます。それ以外の投票は匿名であり、<strong>決定</strong>への投票は常に秘密投票です。</li>
+            <li>あなたを誰が招待したか。スマートフォンでは、プロフィールに<strong>推薦（保証）</strong>と相手の名前が表示されます。創設メンバーとして参加した場合やシステム管理者から直接招待された場合は、代わりに<strong>創設メンバー</strong>または<strong>システム管理者から直接招待されました</strong>と表示されます。メンバーがあなたの信用枠を推薦（保証）した場合、スマートフォンアプリおよびWebアプリのプロフィールに<strong>推薦（保証）</strong>と相手の名前が表示されます。</li>
+        </ul>
+        <h2>あなただけが見られる情報</h2>
+        <ul>
+            <li><strong>あなたの残高と取引記録。</strong>アプリ内でもコミュニティのサーバー上でも、コミュニティ内の他の誰もこれらを読むことはできません。取引には当事者の2人（あなたと相手）のみが表示されます。</li>
+            <li><strong>あなたのフレンド一覧、チャット相手、および作成した招待状。</strong>アプリ内でもコミュニティのサーバー上でも、あなただけがこれらを読むことができます。他の人には、共有している共通のつながりのみが表示されます。</li>
+            <li>コミュニティがあなたの除名について投票を行う場合、その投票で投票権を持つ全員が、その投票内に限りあなたの残高および負債を確認できます。投票権のない管理者やオーナーはそこでは確認できません。これらの閲覧はログに記録されません。</li>
+            <li>管理者があなたのアカウントを削除する場合、手続きを開始した管理者は、保有または未払いの豆を清算できるようあなたの残高を確認できます。他の管理者とオーナーは、誰がいつ閲覧したかを確認できます。</li>
+            <li>既知のコミュニティにおいて、参加時に同意し管理者があなたを確認（承認）した場合、残高がコミュニティの基準線を超えた時点で管理者があなたの残高を確認できるようになります。これは「設定」でいつでも取り消すことができます。どのコミュニティでも、管理者はあなたの一部の取引を確認できます：まだ完了していない取引や管理者が仲裁・清算した取引、古いサーバーでメンバーが除名された際に豆が滞留した取引、不正アラート、および指定した日数にわたってアカウントからの豆の出入りがない場合のアラートです。これらの取引の閲覧はすべてログに記録され、あなたを指名するアラートの閲覧は、各管理者が24時間以内に初めて開いた際に記録されます。オーナーと管理者はそのログを確認できます。管理者はまた、あなたの公開投稿数や送信メッセージ数を確認できますが、取引についてはあなた個人の数値ではなくコミュニティ全体の合計数値のみを確認できます。また、すべてのメンバーと同様に、あなたの信用プロファイルをログに残さずに確認できます。コミュニティのサーバーを運用している担当者は、バックアップ、スナップショット、スタンバイコピーを含め、データベース全体を保持しています。「管理者が確認できる情報」を参照してください。</li>
+        </ul>
+        <p>コミュニティのサーバーを運用しているオーナーと管理者は、そこに保存されている情報を引き続き確認できます。以下の「他に誰が情報を確認できるか」を参照してください。</p>
+        <h2>参加していない人</h2>
+        <ul>
+            <li><strong>あなたのコミュニティにおいて：</strong>あなたの投稿は一切見られません。出品内容や写真はメンバー向けであり、プロフィールの写真も同様です。各写真は出品やアプリ内の名前に付随するリンクからのみ開くことができるため、外部の人が写真を見るのはメンバーがそのリンクを転送した場合に限られます。参加せずにコミュニティのアドレスを開いた人には、代わりにグローバルコミュニティへの案内が表示されます。</li>
+            <li><strong>グローバルコミュニティにおいて：</strong>参加前でも誰でも出品を閲覧できますが、文章、写真、およびおおよその位置のみが表示され、あなたの名前、顔写真、または正確な場所が表示されることは決してありません。</li>
+            <li><strong>あなたのパルスの投稿：</strong>一切見られません。パルスはメンバー向けです。動画や投稿自体は各サービス（YouTubeやInstagramなど）に残り、そこでの公開範囲に従います。「チャンネルの共有」を参照してください。</li>
+        </ul>
+        <h2>あなたが管理できること</h2>
+        <ul>
+            <li><strong>連絡先情報：</strong>プロフィールで<strong>誰に公開しますか？</strong>を選択します：<strong>非公開</strong>、<strong>取引相手</strong>、<strong>フレンド</strong>、または<strong>コミュニティ</strong>。「プロフィール」を参照してください。</li>
+            <li><strong>共通のつながり：</strong>あなたと他の2人が互いに追加し合っている場合、それぞれのプロフィールに尋ねることができる相手としてあなたの名前が表示されます。「設定」の<strong>法的情報とプライバシー</strong>の下にある<strong>共通のつながりとして自分を表示</strong>をオフにすると、誰のプロフィールにもあなたの名前は表示されなくなります。オフにするまではオンになっています。「メンバーと友達」を参照してください。</li>
+            <li><strong>あなたを追加した人：</strong>あなたが誰かを追加すると、相手の「メンバー」タブにあなたが追加した旨の行が表示され、相手もあなたを追加できるようになります。相手に通知が送られることはありません。</li>
+            <li><strong>位置情報（スマートフォン）：</strong>「設定」の<strong>アプリ設定</strong>の下にある<strong>位置情報</strong>をオンにすると、地図や近くの投稿に現在地が使用されます。オフにするには、スマートフォンの設定画面で変更します（アプリに手順が表示されます）。Webブラウザにはそのようなスイッチはありません：ブラウザが確認を求め、その回答が記憶されます。</li>
+            <li><strong>あなたの地域</strong>（グローバルコミュニティ）：設定の<strong>あなたの地域</strong>で、登録した地域（町や2つの座標周辺約10km）、または<strong>未設定</strong>を確認できます。<strong>消去</strong>をタップすると削除されます。その下にある<strong>だいたいどこにいますか？</strong>では、<strong>現在地を使用</strong>または<strong>町や地区の名前を入力</strong>を使って新しい地域を設定できます。<strong>キャンセル</strong>（ブラウザでは<strong>← 設定に戻る</strong>）をタップすると変更せずに終了します。送信されるのは丸められた大まかな地域のみです。他のメンバーにはあなたがどれくらい離れているかが表示され、あなたが作成した投票はその地域に表示されます。未設定の場合、世界中の最新の出品が表示され、近くのメンバーのリストにあなたが作成した投票は表示されなくなります（検索すれば見つけることはできます）。「お住まいの地域」を参照してください。</li>
+            <li><strong>アプリロック：</strong>アプリを開いたとき、およびアプリから離れて15秒以上経過した後に戻ったときに、スマートフォンの画面ロック（PIN、パターン、パスワード、指紋、顔認証）を要求します。このロックはアプリの画面やポップアップを保護します。iPhoneでは、アプリが開いたWebページ（<strong>管理</strong>から開いたコミュニティの設定など）も閉じられます。Android端末ではアプリが開いたWebページはアプリの外部で開くため保護できず、どちらの端末でも共有パネルは保護できません：スマートフォンを置く前に閉じてください。<strong>管理</strong>から開いたコミュニティの設定は、操作のないまま15分が経過するとサインアウトします。アプリロックがオンの間は、アプリから離れると画面が白紙になり、戻ると復元されます。スマートフォン本体に画面ロックが設定されている必要があります：設定されていない場合、認証を要求することができません。</li>
+            <li><strong>チャンネル：</strong>あなたがパルスに共有したものはすべて、コミュニティの全員にあなたの名前付きで表示されます。「チャンネルの共有」を参照してください。</li>
+        </ul>
+        <h2>他に誰が情報を確認できるか</h2>
+        <ul>
+            <li>2人間のチャットはエンドツーエンドで暗号化されています：暗号化できないメッセージは送信されません。BeanPoolがチャットに追加する取引に関する通知（金額など）は暗号化されません。「メッセージ」を参照してください。</li>
+            <li>スマートフォンでは、グループチャットを暗号化するようにサーバーが更新されたコミュニティであれば、グループチャットもエンドツーエンドで暗号化されます：サーバーは暗号化された文章を保持します。ただし、誰がいつ書いたか、誰がメンションされたか、各行がどのメッセージへの返信か、および絵文字リアクションはサーバーにも表示されます。暗号化されているかどうかはチャット内に表示されます。更新されていないサーバーでは、グループチャットを読むことができます。</li>
+            <li>パルスでYouTube動画を再生すると、YouTubeアプリで開いた場合と同様に、視聴したことがYouTubeに伝わります。▶をタップするまではYouTubeに何も送信されず、動画の横をスクロールして通り過ぎるだけでは何も送信されません。「パルス」を参照してください。</li>
+            <li>コミュニティのサーバーは、あなたの取引、投稿、投票、およびWebアプリで誰をブロックしたかを保持します。サーバーを運用するオーナーと管理者は、そこに保存されている情報（イベントチャット、事業チャット、および暗号化対応に更新されていないサーバー上のグループチャットを含む）を確認できます。信頼できる人々がいるコミュニティを選んでください。</li>
+            <li>アカウントを削除すると、送信したすべてのメッセージが<strong>このメッセージは削除されました</strong>と表示され、送信した写真は削除されます。それ以前に作成されたサーバー自身の日ごとのコピーには、最長14日間それらが残ります。コミュニティのサーバーがバックアップを外部ストレージに送信している場合、それ以前に作成された各バックアップには最長30日間残ります。オーナーがダウンロードしたバックアップには、オーナーが削除するまで残ります。「アカウントの退会または削除」を参照してください。</li>
+            <li>サインインアカウントを連携した場合、それを使って参加した場合、または後から追加した場合、コミュニティのサーバーはそのアカウント用に暗号化されたあなたのアカウントのコピーを保持します。そのサーバーを運用する人々はそれを開くことができます。12個の単語だけは誰の助けも必要としません。「アカウントの復元」を参照してください。</li>
+            <li>グローバルコミュニティでは、モデレーターは同じインターネット接続から1日以内に参加したアカウントを確認できますが、接続情報自体を見ることはできません。これにより、一斉に作成された偽アカウントに一度に対処できます。「問題の通報」を参照してください。</li>
+            <li>グローバルコミュニティに参加する際、参加元のインターネット接続の暗号化された参照情報が1日間保持されます（アドレス自体が保持されることは決してありません）。これによって、1つの接続から大量のアカウントが作成されている場合に、新しいアカウントのセットアップに少し時間がかかるようになり、作成できる数も制限されます。参加後1日以内にコミュニティがそのアカウントを除名した場合、その参照情報は参加から7日間にわたって保持され、その週は同じ接続からの新しい12単語アカウントのセットアップに時間がかかるようになります。自らアカウントを削除した人に対して長期間保持されることは決してありません。</li>
+            <li>12個の単語を使ってグローバルコミュニティに参加する場合、その参照情報を除き、受付で伝わるのはあなたが選んだ名前とアカウントの鍵のみです：メールアドレス、電話番号、その他のアカウント情報は一切伝わりません。</li>
+        </ul>
+        <h2>詳細情報</h2>
+        <p>「設定」の<strong>法的情報とプライバシー</strong>の下にある<strong>プライバシーポリシー</strong>をタップしてください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-profile.html"><strong>プロフィール</strong><span>名前、写真、自己紹介、連絡先情報を閲覧できる範囲について説明します。</span></a></li>
+            <li><a href="your-area.html"><strong>お住まいの地域</strong><span>グローバルコミュニティが近くの投稿を表示するために使用するおおよその地域と、その変更や消去方法について説明します。</span></a></li>
+            <li><a href="pin-locations.html"><strong>ピンの位置</strong><span>投稿やイベントの場所が誰に表示されるか、自宅のプライバシーを守る方法について説明します。</span></a></li>
+            <li><a href="blocking.html"><strong>ユーザーのブロック</strong><span>特定の人の投稿やメッセージを非表示にし、後から解除する方法について説明します。</span></a></li>
+            <li><a href="messages.html"><strong>メッセージ</strong><span>チャットの開始、写真の送信、返信、リアクション、編集、削除、ミュート、公開範囲について説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

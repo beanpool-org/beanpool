@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Si la clave de un contacto cambió — BeanPool members' guide</title>
+    <meta name="description" content="Por qué un chat deja de enviar, cómo verificar el código de clave con la persona y cuándo continuar.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Charlas</a></p>
+        <h1>Si la clave de un contacto cambió</h1>
+        <p class="lede">Por qué un chat deja de enviar, cómo verificar el código de clave con la persona y cuándo continuar.</p>
+        <h2>Qué significa</h2>
+        <p>Cada mensaje entre dos personas se bloquea para que solo el teléfono de la otra persona pueda abrirlo. Está protegido con su <strong>clave</strong>, no con su nombre. Tu teléfono recuerda a qué clave ha estado asociando tu chat.</p>
+        <p>Si tu comunidad ahora asigna una clave diferente para esa persona, tu teléfono se detiene y te lo advierte, en lugar de enviar silenciosamente a la clave nueva. En la parte superior del chat verás <strong>La clave detrás de «Ben» cambió.</strong> El cuadro de mensajes aparece atenuado y dice que el envío está en pausa.</p>
+        <p>Tus mensajes anteriores con esa persona normalmente se siguen leyendo como antes. En un teléfono que acabas de restaurar o configurar de nuevo, los mensajes de la nueva clave dicen <strong>Enviado desde la nueva clave. Se muestra después de continuar.</strong> hasta que tomes una decisión.</p>
+        <p>Esto ocurre en la app del teléfono. La aplicación web todavía no recuerda claves.</p>
+        <h2>Por qué puede suceder</h2>
+        <ul>
+            <li><strong>Consiguieron un teléfono nuevo y renovaron su clave.</strong> Este es el motivo habitual. Su clave anterior ya no existe, por lo que tienen una nueva.</li>
+            <li><strong>Algo no está bien.</strong> El servidor de una comunidad enumera quién está en cada chat. Un servidor que quisiera leer tus mensajes podría poner la clave de otra persona detrás del nombre de tu amigo. El nombre parece correcto, pero la clave no lo es.</li>
+        </ul>
+        <p>Tu teléfono no puede distinguir estas situaciones por sí solo. Tú sí puedes, mediante el código de clave.</p>
+        <h2>Comprobar el código de clave con la persona</h2>
+        <ul>
+            <li>El aviso muestra un código: 20 dígitos en cinco grupos de cuatro.</li>
+            <li>Pídele a la persona que abra <strong>Ajustes</strong>, luego <strong>Protección de la cuenta</strong>, y te lea <strong>Mi código de clave</strong>.</li>
+            <li><strong>Mi código de clave</strong> solo está en la app del teléfono. Si la persona solo usa la aplicación web, todavía no puede leértelo: toca <strong>Ahora no</strong> hasta que pueda abrir la app del teléfono.</li>
+            <li>Comprueba el código <strong>en persona, o en una llamada telefónica o de video</strong> donde sepas con certeza que es esa persona. No lo compruebes mediante un mensaje en BeanPool: si la clave es incorrecta, quien responda también lo será.</li>
+            <li>Si cada dígito coincide, marca <strong>Lo comprobé con Ben: el código de clave en su Configuración coincide con este</strong>, luego toca <strong>Continuar con la nueva clave</strong>.</li>
+        </ul>
+        <p>A partir de entonces, tus mensajes irán a la nueva clave. El banner y la etiqueta de <strong>clave modificada</strong> en el chat en <strong>Charlas</strong> desaparecerán, y tus mensajes anteriores seguirán siendo legibles.</p>
+        <p>El código no es secreto. Es seguro leerlo en voz alta.</p>
+        <h2>Si el código no coincide o no puedes comprobarlo</h2>
+        <p>Toca <strong>Ahora no</strong>. No se envía nada y nada cambia. Puedes volver al chat más tarde.</p>
+        <p>Un chat en pausa puede permanecer en pausa hasta que continúes. No hay otra forma de seguir conversando en él: tu comunidad conserva un único chat para ustedes dos, por lo que iniciar un chat nuevo con la misma persona abre este mismo chat.</p>
+        <p>Si el código no coincide, no continúes. Avísale a la persona y a los administradores de tu comunidad: alguien podría estar intentando leer tus mensajes.</p>
+        <h2>Si el aviso no ofrece ninguna clave para continuar</h2>
+        <p>A veces la comunidad no enumera una sola clave para la persona en un chat entre dos personas: enumera varias, o ninguna. En ese caso no hay ninguna clave con la que continuar, por lo que el aviso lo indica y solo ofrece <strong>Ahora no</strong>. No se envía nada. Habla con la persona cara a cara o por llamada. Tu teléfono vuelve a comprobar el chat por sí solo cuando la lista de la comunidad cambie, y un chat nuevo con la misma persona es este mismo chat.</p>
+        <h2>Si el aviso dice que tu teléfono está comprobando el chat desde el principio</h2>
+        <p>Después de restaurar tu teléfono a partir de tus 12 palabras, o de actualizar la app, tu teléfono comprueba cada chat comparándolo con sus propios mensajes anteriores. Si estos provinieron de una clave diferente a la que tu comunidad proporciona ahora para esa persona, el aviso comienza con <strong>Este teléfono está comprobando este chat desde el principio, tal como hace al restaurarlo o actualizar la app.</strong> Comprueba el código con la persona como se explicó arriba. Después de restablecer la memoria de chats de la comunidad, comienza con <strong>Se restableció la memoria de chats de esta comunidad, por lo que este teléfono está comprobando este chat desde el principio.</strong> en su lugar.</p>
+        <h2>Memoria de chats</h2>
+        <p>Tu teléfono conserva una pequeña memoria para cada comunidad: con qué clave se comunica cada uno de tus chats y qué chats son privados. Se conserva en el teléfono, y el servidor de la comunidad no puede transferir un chat a otra clave por sí solo: solo tú puedes hacerlo, desde el aviso. Permanece en el teléfono al cerrar sesión, por lo que cerrar sesión y volver a entrar no la borra. El teléfono nunca la restablece por su cuenta.</p>
+        <p>Puedes restablecerla para una comunidad: abre <strong>Ajustes</strong>, toca <strong>Memoria de chats</strong> bajo <strong>CUENTA E IDENTIDAD</strong>, toca <strong>Restablecer</strong> junto a la comunidad, lee la advertencia y toca <strong>Restablecer</strong> nuevamente. La app te dirige aquí únicamente cuando indica que no pudo leer esa memoria y que volver a intentarlo no sirvió de nada.</p>
+        <p>Tras un restablecimiento, tu teléfono comprueba cada chat de esa comunidad nuevamente desde el principio, a partir de los mensajes que conserva. Un chat cuyos mensajes provinieron de una clave distinta a la que la comunidad proporciona ahora vuelve a mostrar el aviso, comenzando con <strong>Se restableció la memoria de chats de esta comunidad, por lo que este teléfono está comprobando este chat desde el principio.</strong> Comprueba el código con la persona como se indicó arriba.</p>
+        <p>Dos cosas pueden cambiar tras un restablecimiento, y la advertencia lo aclara antes de que confirmes: un chat que estaba pausado porque su clave cambió puede abrirse con la nueva clave, y un chat privado que había desaparecido de Charlas puede regresar como un chat grupal que la comunidad puede leer. Comprueba el código de clave, o quién está en el chat, antes de enviar nada.</p>
+        <p>Un restablecimiento no soluciona el caso de un chat que tu teléfono no puede asociar a una sola clave: se comprueba de nuevo y se detiene otra vez. Comprueba el código con la persona en su lugar (arriba).</p>
+        <p>Esto ocurre en la app del teléfono. La aplicación web no tiene memoria de chats.</p>
+        <h2>Si el aviso dice que tu teléfono no puede asociar el chat a una clave</h2>
+        <p>A veces, los mensajes anteriores de un chat quedaron bloqueados con claves que tu teléfono no puede asociar a una sola persona. Encima del cuadro de mensajes dice <strong>Este teléfono no puede asociar este chat a una clave, por lo que el envío está desactivado.</strong> y el aviso muestra el código de la clave que tu comunidad ahora indica para la persona.</p>
+        <p>Es posible que algunos mensajes sigan mostrándose. Podrían no ser de la persona cuyo nombre figura en el chat: sus propios mensajes anteriores pueden ser los que digan <strong>Este mensaje no se pudo verificar, por lo que no se muestra.</strong> Esos permanecen así, incluso después de continuar.</p>
+        <p>Comprueba el código con la persona como se indicó arriba, en persona o por llamada. Si coincide, marca la casilla y toca <strong>Continuar con la nueva clave</strong>: a partir de entonces tus mensajes irán a esa clave. Si no coincide o no puedes comprobarlo, toca <strong>Ahora no</strong>. Un chat nuevo con la misma persona es este mismo chat, por lo que no hay nada más que intentar. Si la comunidad no indica una sola clave para esa persona, el aviso solo ofrece <strong>Ahora no</strong>, y tu teléfono comprueba el chat nuevamente por sí solo cuando la lista de la comunidad cambie.</p>
+        <h2>Qué puede comprobar tu teléfono y qué no</h2>
+        <p>Tu teléfono comprueba un chat comparándolo con los mensajes que ya conserva. Un teléfono restaurado, o un teléfono existente al momento de la actualización, solo se deja guiar por un servidor que retiene o rodea la parte más antigua del chat en lo que envía. Un teléfono que ya tenía esa parte más antigua no se deja guiar por nada de lo que el servidor envíe después de la actualización.</p>
+        <p>Por lo tanto, un teléfono que acabas de restaurar o actualizar puede ser engañado sobre la clave de un chat. Un aviso no puede descartar eso. <strong>Confirma una clave modificada en persona</strong>, o en una llamada donde sepas que es ella.</p>
+        <h2>Si la comunidad da una fecha</h2>
+        <p>Cuando tu comunidad puede demostrar que a la cuenta se le cambió la clave, el aviso lo indica, por ejemplo: <strong>Esta comunidad indica que la cuenta cambió de clave el 3 oct 2026.</strong> Eso te ayuda a entender lo que sucedió, pero no reemplaza la comprobación del código: un servidor también podría decirlo.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Mensajes</strong><span>Iniciar un chat, enviar fotos, responder, reaccionar, editar, eliminar, silenciar y qué es privado.</span></a></li>
+            <li><a href="your-12-words.html"><strong>Tus 12 palabras</strong><span>Las 12 palabras son la llave de tu cuenta. Por qué importan, dónde encontrarlas, cómo protegerlas y cómo vincular un inicio de sesión como alternativa.</span></a></li>
+            <li><a href="people.html"><strong>Personas y amistades</strong><span>Encuentra miembros de tu comunidad, agrega amistades y avala a alguien.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

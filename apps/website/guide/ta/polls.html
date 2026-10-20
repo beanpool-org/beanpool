@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>வாக்கெடுப்புகள் — BeanPool members' guide</title>
+    <meta name="description" content="சமூகத்திடம் ஒரு விரைவான கேள்வியைக் கேளுங்கள். வாக்கெடுப்புகள் கருத்துக்களைக் காட்டுகின்றன; தானாக எதையும் மாற்றுவதில்லை.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">பொது</a></p>
+        <h1>வாக்கெடுப்புகள்</h1>
+        <p class="lede">சமூகத்திடம் ஒரு விரைவான கேள்வியைக் கேளுங்கள். வாக்கெடுப்புகள் கருத்துக்களைக் காட்டுகின்றன; தானாக எதையும் மாற்றுவதில்லை.</p>
+        <h2>வாக்கெடுப்பா அல்லது முடிவா?</h2>
+        <p>ஒரு <strong>வாக்கெடுப்பு</strong> மக்கள் என்ன நினைக்கிறார்கள் என்பதைக் கேட்கிறது: &quot;சந்தை ஞாயிற்றுக்கிழமையா அல்லது சனிக்கிழமையா?&quot;. அது தானாக எதையும் மாற்றாது. கட்டுப்படுத்தும் ஒன்றிற்கு, ஒரு முடிவை முன்மொழியுங்கள்.</p>
+        <p>உலகளாவிய சமூகத்தில் ஒவ்வொரு வாக்கெடுப்பும் <strong>முறைசாரா வாக்கெடுப்பு; இது எதையும் தீர்மானிக்காது</strong> என்று கூறுகிறது. 12 சொற்கள் அல்லது ஒரு உள்நுழைவு மூலம் யார் வேண்டுமானாலும் இதில் இணையலாம், எனவே பல கணக்குகளைக் கொண்ட ஒரு நபர் எண்ணிக்கையை மாற்றக்கூடும், மேலும் அங்கே முடிவுகள் எதுவும் இல்லை. அதன் கீழ், &quot;🏘️ ஓர் உள்ளூர் சமூகத்தில் ஒரு முடிவு கட்டுப்படுத்தும் ›&quot; என்பது ஒரு வாக்கு ஏன் உள்ளூர் சமூகத்தில் மட்டுமே கட்டுப்படுத்துகிறது என்பதைக் கூறுகிறது.</p>
+        <p>அங்கு ஒரு பெயரற்ற வாக்கெடுப்பு முடிந்ததும், அதன் வாக்குகளில் எத்தனை <strong>புதிய அல்லது 12-சொல் கணக்குகளிலிருந்து</strong> வந்தன என்பதையும் அது கூறுகிறது, எடுத்துக்காட்டாக &quot;12 வாக்குகளில் 5 வாக்குகள் புதிய அல்லது 12-சொல் கணக்குகளிலிருந்து வந்தவை&quot;. வாக்களித்த போது கணக்கு எவ்வாறு இருந்ததோ அவ்வாறே ஒவ்வொரு வாக்கும் கணக்கிடப்படுகிறது: ஒரு புதிய கணக்கு என்பது இன்னும் புதிய கணக்கிற்கான வரம்புகளைக் கொண்டிருந்த ஒன்றாகும், மேலும் 12-சொல் கணக்கு என்பது உள்நுழைவைச் சேர்க்காத 12 சொற்களால் உருவாக்கப்பட்ட ஒன்றாகும். குறைந்தது 3 வாக்குகள் புதிய அல்லது 12-சொல் கணக்குகளிலிருந்து வந்து, மற்ற வாக்குகள் எதுவுமில்லாமல் அல்லது குறைந்தது 3 ஆக இருக்கும் போது, ஒவ்வொரு பதிலும் அதனுடைய சொந்த வாக்குகளில் எத்தனை அவ்வாறு வந்தன என்பதையும் கூறுகிறது. ஒவ்வொரு வாக்கும் தொடர்ந்து கணக்கிடப்படுகிறது, மேலும் யார் வாக்களித்தார்கள் என்பதை எதுவும் காட்டாது.</p>
+        <p>ஒரு வாக்கெடுப்பு திறந்திருக்கும் போது இது பற்றி எதுவும் கூறாது. அவ்வாறு கூறினால், ஒவ்வொரு வாக்கிற்குப் பிறகும் வாக்கெடுப்பைச் சரிபார்க்கும் ஒருவர், ஒவ்வொரு வாக்கும் எந்த வகையான கணக்கிலிருந்து வந்தது என்பதையும், அது எதைத் தேர்ந்தெடுத்தது என்பதையும் சொல்ல முடியும். திறந்த வாக்கு ஒருபோதும் இதைத் திறந்திருந்தாலும் முடிந்திருந்தாலும் கூறாது: அது யார் வாக்களித்தார்கள் என்பதைக் காட்டுகிறது, எனவே எண்ணிக்கை ஒவ்வொரு வாக்காளரிடமும் எந்த வகையான கணக்கு உள்ளது என்பதைக் கூறிவிடும். ஒரு குழுவின் வாக்கெடுப்பும் இதைச் சொல்லாது, மேலும் உள்ளூர் சமூகத்தின் வாக்கெடுப்பும் சொல்லாது.</p>
+        <h2>ஒரு வாக்கெடுப்பைத் தொடங்குதல்</h2>
+        <ul>
+            <li>சந்தை தாவல் அல்லது வரைபடத்தில் உள்ள <strong>+ பகிர்வைச் சேர்</strong> என்பதைத் தட்டவும்.</li>
+            <li><strong>சமூக வாக்கெடுப்பு</strong> என்பதைத் தேர்வுசெய்யவும்.</li>
+            <li><strong>Question</strong>-ஐ எழுதவும்.</li>
+            <li>அது உதவிகரமாக இருந்தால் <strong>சூழல் / குறிப்புகள் (விருப்பத்தேர்வு)</strong> என்பதைச் சேர்க்கவும். இது விருப்பத்திற்குரியது.</li>
+            <li>2 முதல் 4 <strong>Options</strong>-ஐ எழுதவும். கூடுதல் விருப்பங்களுக்கு <strong>+ விருப்பத்தைச் சேர்</strong> என்பதைத் தட்டவும்.</li>
+            <li>அது எவ்வளவு காலம் இயங்க வேண்டும் என்பதைத் தேர்வுசெய்யவும்: <strong>3 Days</strong>, <strong>7 Days</strong> அல்லது <strong>14 Days</strong>.</li>
+            <li>நீங்கள் <strong>உருவாக்கு</strong> என்பதைத் தட்டுவதற்கு முன் அது ஒரு <strong>திறந்த வாக்கு</strong>-ஆ என்பதைத் தேர்வுசெய்யவும். அதைத் தேர்வுசெய்யாமல் விட்டுவிட்டால் வாக்கெடுப்பு பெயரற்றதாக இருக்கும். அதைத் தேர்வுசெய்தால் யார் எதைத் தேர்ந்தெடுத்தார்கள் என்பதை உறுப்பினர்கள் பார்க்கலாம். வாக்கெடுப்பு பதிவிடப்பட்ட பிறகு இதை நீங்கள் மாற்ற முடியாது.</li>
+            <li><strong>உருவாக்கு</strong> என்பதைத் தட்டவும்.</li>
+        </ul>
+        <p>இணைய செயலியில் வகை <strong>🗳️ Poll</strong>, குறிப்புகள் <strong>Background / Context</strong>, விருப்பப் பொத்தான் <strong>+ Add option</strong> மற்றும் கடைசிப் பொத்தான் <strong>🗳️ Create Poll</strong> ஆகும். இணைய வரைபடத்தில், வட்ட வடிவ <strong>+</strong> என்பதைத் தட்டவும்.</p>
+        <p>ஒரே நேரத்தில் ஒரு வாக்கெடுப்பை நீங்கள் திறந்திருக்கலாம், மேலும் ஒரு சமூகம் ஒரே நேரத்தில் 5 வாக்கெடுப்புகளைத் திறந்திருக்கலாம். ஒரு வாக்கெடுப்பைத் தொடங்க அல்லது பதிலளிக்க உங்களுக்கு முடக்கப்படாத கடன் தேவை.</p>
+        <h2>வாக்கெடுப்புகளைக் கண்டறிந்து பதிலளித்தல்</h2>
+        <p>வாக்கெடுப்புகள் சந்தையில் உள்ளன. வாக்கெடுப்புகளை மட்டுமே பார்க்க மேல் வரிசையில் உள்ள <strong>வாக்கெடுப்புகள்</strong> என்பதைத் தட்டவும்.</p>
+        <ul>
+            <li>அதைத் தேர்வுசெய்ய ஒரு பதிலைத் தட்டவும். வாக்கெடுப்பு முடியும் வரை, உங்கள் எண்ணத்தை மாற்ற மற்றொன்றைத் தட்டவும்.</li>
+            <li>அட்டை ஒவ்வொரு பதிலையும் எத்தனை பேர் தேர்வு செய்தார்கள் என்பதைக் காட்டுகிறது.</li>
+        </ul>
+        <h2>நீங்கள் எவ்வாறு வாக்களித்தீர்கள் என்பதை யார் பார்க்கலாம்</h2>
+        <p>ஒவ்வொரு வாக்கெடுப்பும் அது எந்த வகையைச் சேர்ந்தது என்பதை, வாக்களிப்பு சதவீதத்திற்கு மேலே கூறுகிறது:</p>
+        <ul>
+            <li><strong>பெயரற்றவர்</strong> (வழக்கமான வகை): ஒவ்வொரு பதிலையும் எத்தனை பேர் தேர்ந்தெடுத்தார்கள் என்பதை மட்டுமே அனைவரும் பார்க்க முடியும். அதைத் தொடங்கிய நபர் உட்பட யார் எதைத் தேர்ந்தெடுத்தார்கள் என்பதை யாரும் பார்க்க முடியாது.</li>
+            <li><strong>திறந்த வாக்கு:</strong> அதைத் தொடங்கிய நபர் வாக்காளர்களைக் காட்டத் தேர்ந்தெடுத்துள்ளார். யார் எதைத் தேர்ந்தெடுத்தார்கள் என்பதைப் பார்க்க உறுப்பினர்கள் <strong>வாக்காளர்களைக் காண்க</strong> (இணைய செயலியில் <strong>வாக்காளர்களைக் காட்டு</strong>) என்பதைத் தட்டலாம். இடைநீக்கம் செய்யப்பட்ட ஓர் உறுப்பினர் இடைநீக்கம் முடியும் வரை மொத்த எண்ணிக்கையை மட்டுமே பார்க்க முடியும்.</li>
+        </ul>
+        <p>உங்கள் சமூகத்தின் சேவையகத்தை இயக்கும் உரிமையாளர்களும் நிர்வாகிகளும் அங்கு சேமிக்கப்பட்டுள்ள ஒவ்வொரு வாக்கையும் தொடர்ந்து பார்க்க முடியும்.</p>
+        <h2>ஒரு வாக்கெடுப்பை முன்கூட்டியே முடித்தல்</h2>
+        <p>நீங்கள் அதைத் தொடங்கியிருந்தால், <strong>வாக்கெடுப்பை முடி</strong> என்பதைத் தட்டவும், பின்னர் உறுதிப்படுத்த மீண்டும் <strong>வாக்கெடுப்பை முடி</strong> என்பதைத் தட்டவும் (இணைய செயலியில் <strong>சரி</strong>).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>முடிவுக்கு வாக்களித்தல்</strong><span>திறந்திருக்கும் முடிவுகளைக் கண்டறிந்து, வாக்களித்து, உங்கள் வாக்கை மாற்றி, முடிவுகளைப் பாருங்கள்.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>முடிவை முன்மொழிதல்</strong><span>கட்டுப்பாடான ஒரு முடிவை எடுக்குமாறு சமூகத்தைக் கேளுங்கள்.</span></a></li>
+            <li><a href="events.html"><strong>நிகழ்வுகள்</strong><span>ஓரிடத்தில் அல்லது இணையத்தில் நிகழ்வை உருவாக்குங்கள்; செல்வதாகக் கூறுங்கள், நினைவூட்டல் பெறுங்கள், பகிருங்கள், தொகுத்து நடத்துங்கள்.</span></a></li>
+            <li><a href="rules.html"><strong>விதிகளும் முடிவுகள் செயல்படும் விதமும்</strong><span>வாக்களிப்பு, பங்கேற்பு, ரகசிய வாக்கெடுப்பு, வாக்களிக்கத் தகுதியானவர்கள், இடைநீக்கம், உறுப்பினரை நீக்குதல், பொறுப்பாளர்கள் மற்றும் ஒருங்கிணைப்பாளர்கள்.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>பயறுகளும் உலகளாவிய சமூகமும்</strong><span>உலகளாவிய சமூகம் எதற்கானது, பலவற்றில் ஒரு சமூகம், மற்றும் அங்கு நீங்கள் பார்ப்பவை: 🏘️ உள்ளூர் சமூகம் குறிப்பான், மாதிரி சமூகம் Example Valley, பயறுகள் அங்கு காத்திருப்பதன் காரணம், உள்ளூர் சமூகத்தைத் தொடங்குவது அல்லது கண்டறிவது எப்படி.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

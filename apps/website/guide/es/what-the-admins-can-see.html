@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qué ven los administradores — BeanPool members' guide</title>
+    <meta name="description" content="En comunidades donde la administración lleva una lista de nombres: qué contiene sobre ti, quién la lee, qué guarda el servidor de tu comunidad y qué implica estar confirmado.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Ajustes y seguridad</a></p>
+        <h1>Qué ven los administradores</h1>
+        <p class="lede">En comunidades donde la administración lleva una lista de nombres: qué contiene sobre ti, quién la lee, qué guarda el servidor de tu comunidad y qué implica estar confirmado.</p>
+        <h2>La lista de nombres</h2>
+        <p>Los administradores de algunas comunidades llevan una <strong>lista de nombres</strong>: quiénes son los miembros, por su nombre real, de la misma manera que un comité de un LETS lleva una lista de miembros. No todas las comunidades llevan una. Pregunta a tus administradores si la tuya lo hace.</p>
+        <p>Una entrada contiene tu nombre y, a veces, una nota breve que escribe un administrador, como la forma en que la comunidad te conoce. Nada más: ni dirección, ni fecha de nacimiento, ni número de identificación.</p>
+        <h2>Quién puede leerla</h2>
+        <p><strong>Solo los propietarios y administradores de tu comunidad, en sus propios teléfonos.</strong> Tu nombre se sella en el teléfono de un administrador antes de enviarse al servidor de tu comunidad. El servidor guarda texto codificado: un respaldo, una copia, BeanPool o cualquiera que robe la base de datos no tiene nada legible.</p>
+        <p>Quien administra el servidor no puede leerla. Los teléfonos de los administradores solo entregan las claves de la lista a los administradores cuyos teléfonos hayan sido verificados por otro administrador, por llamada o en persona, y solo aceptan claves nuevas de ellos. Eso depende de los administradores: un administrador que verifica el teléfono de la persona equivocada, el teléfono de un administrador en el que alguien logra entrar o un teléfono perdido antes de que los administradores eliminen su clave pueden permitir que otra persona lea los nombres. También puede hacerlo el teléfono de un administrador al que quien administra el servidor le impida enterarse de que un administrador fue eliminado: hasta que lo sepa, lo que escriba se puede leer con las claves que tenía el administrador eliminado. Un administrador cuyo teléfono aún muestre al administrador eliminado retira su clave manualmente, y ese teléfono genera entonces una clave nueva sin él o no escribe nada.</p>
+        <p><strong>Los demás miembros no ven los nombres.</strong> Ven tu nombre de BeanPool, como siempre.</p>
+        <p>Un administrador puede hacer una copia en PDF de la lista en su teléfono para resguardarla. Una vez creada, es su responsabilidad mantenerla a salvo, como una lista en papel. Cada vez que la lista se abre o se copia, los demás administradores pueden ver quién lo hizo y cuándo.</p>
+        <h2>Estar confirmado</h2>
+        <p>Un administrador puede <strong>confirmarte</strong>: declara que tu cuenta corresponde a la persona de tu entrada. Solo alguien que te conozca debería hacer eso, y en algunas comunidades dos administradores deben estar de acuerdo.</p>
+        <ul>
+            <li>Una confirmación no lleva ningún nombre. El servidor registra qué cuenta, qué entrada y qué administrador, nunca quién eres.</li>
+            <li>No es una insignia de confianza y, por ahora, no cambia nada más en la app.</li>
+            <li>Si un administrador te invitó por tu nombre, unirte con su invitación te confirmó con respecto a tu entrada, por parte de ese administrador. «Confirmado» solo significa que un administrador afirma que esta cuenta corresponde a la persona en esa entrada.</li>
+            <li>Si reemplazas un teléfono perdido y tu cuenta pasa a una nueva clave, tu confirmación pasa con ella.</li>
+            <li>Si dejas la comunidad o eliminas tu cuenta, tu confirmación termina. Tu entrada permanece en la lista de los administradores hasta que un administrador la elimine: pídeles que lo hagan.</li>
+            <li>Si estás confirmado y te marchas, eres expulsado o eliminas tu cuenta mientras debes frijoles, los Bienes comunes cubren la deuda como siempre. La lista de los administradores también conserva una nota en tu entrada con lo que debías, por qué y cuándo, durante 3 años, y los administradores la ven junto a tu nombre en sus teléfonos. Nadie puede ser confirmado respecto a esa entrada hasta que se pague, se compense trabajando o se perdone.</li>
+        </ul>
+        <h2>Qué no muestra la lista de nombres a los administradores</h2>
+        <p>La lista contiene nombres y notas, y a quién pertenece cada cuenta. Aparte de la nota mencionada arriba de una deuda que dejaste pendiente, no muestra a nadie tu saldo ni tus intercambios (un administrador puede ver tu saldo en los casos que figuran más abajo, y algunos de tus tratos: consulta el final de esta página). Consulta «Tu privacidad» para conocer qué más pueden ver los miembros y administradores.</p>
+        <h2>Qué aceptas en una comunidad conocida</h2>
+        <p>Una comunidad que confirma a sus miembros, una <strong>comunidad conocida</strong>, funciona como siempre ha funcionado un LETS: los administradores vigilan las deudas que crecen demasiado o permanecen por mucho tiempo. Cuando te unes a una, la pantalla de registro indica exactamente cuándo, con las cifras propias de tu comunidad, por ejemplo:</p>
+        <p>&quot;En esta comunidad, los administradores pueden ver tu saldo si supera el 50% de tu línea de crédito o si permaneces en saldo negativo durante 60 días sin realizar ninguna venta. Así es como siempre ha funcionado un sistema LETS. Cada vez que un administrador abre la lista de miembros que superan esos límites, y cada vez que un administrador consulta tu saldo al expulsarte, queda registrado. En una votación sobre tu expulsión, todos los que pueden votar en ella ven tu saldo y cualquier deuda, únicamente en esa votación, y esas consultas no se registran. Puedes retirar este consentimiento en cualquier momento en Ajustes. Independientemente de lo que elijas, cualquier administrador puede ver algunos de tus tratos: un trato que aún no ha finalizado o que un administrador resolvió (con quién, el anuncio, el precio y tu chat individual con esa persona, el cual no pueden leer si es privado), para que se pueda resolver un trato atascado; un trato cuyos frijoles quedaron atascados cuando se expulsó a un miembro en un servidor anterior (el estado del trato, el anuncio, el precio, sus fechas, los frijoles que quedaron atascados, cuántos pagos pasaron por él, y el monto y nota del último); una alerta de fraude que te nombra si tú y un miembro se compran mutuamente de forma recurrente, de manera casi equitativa, superando un límite, con los frijoles en total y cuán equitativos fueron en cada sentido; una que te nombra, con los frijoles en total y cuántos de los miembros que invitaste han comerciado únicamente contigo, si los miembros que invitaste te envían frijoles superando un límite en un plazo determinado de días, o si tú eres uno de esos miembros; una que te nombra, con qué proporción del comercio del grupo es entre sí pero sin mostrar frijoles, si estás en un grupo de miembros, de los cuales al menos la mitad son nuevos, que comercian principalmente entre sí; y una alerta que te nombra si no se han movido frijoles hacia o desde tu cuenta durante un número determinado de días. Cada consulta a uno de esos tratos queda registrada, con quién miró, cuándo y qué tratos; una consulta a las alertas que te nombran se registra la primera vez que cada administrador las abre, y nuevamente en la primera consulta de ese administrador después de 24 horas, y las consultas intermedias no agregan ninguna línea. El propietario y los administradores pueden ver ese registro. Las estadísticas de miembros que ven los administradores muestran cuántas publicaciones tienes activas y cuántos mensajes has enviado, y de los tratos solo los totales de toda la comunidad, no los tuyos. Cada miembro, incluidos los administradores, ve tu perfil de confianza: cuántos de tus intercambios se finalizaron y cuántos se cancelaron, y la proporción finalizada, cuántos pagos en frijoles has enviado a miembros o recibido de ellos más los intercambios que has finalizado, con cuántos miembros diferentes has pagado, cobrado o intercambiado, cuántos pagos e intercambios has hecho con el miembro que está mirando, y tus Puntos de confianza. Eso no se registra, porque todos los miembros pueden verlo. Nada más de tus tratos. Quien administra el servidor de esta comunidad tiene toda su base de datos, incluidos tu saldo y tus tratos, y sus respaldos, instantáneas y copias de respaldo.&quot;</p>
+        <p>Aceptar eso constituye tu consentimiento. Luego, y solo mientras un administrador te haya confirmado:</p>
+        <ul>
+            <li>Si tu saldo supera cualquiera de los dos límites, tu cuenta aparece en los teléfonos de los administradores con tu saldo, para que un administrador que te conozca pueda hablar contigo. Esa lista no muestra nada más sobre ti ni ninguno de tus tratos.</li>
+            <li>Cada vez que un administrador abre esa lista, los demás administradores y el propietario pueden ver quién la abrió y cuándo.</li>
+            <li>Si no has dado tu consentimiento, o nadie te ha confirmado, o tu comunidad no confirma a los miembros, esa lista nunca te muestra.</li>
+        </ul>
+        <p>Si te uniste antes de que tu comunidad lo solicitara, tu app te lo propone. Decir que no o no responder no cambia nada más: sigues siendo miembro. Si la comunidad modifica sus límites más adelante, tu app te lo preguntará de nuevo.</p>
+        <p>Puedes retirar tu consentimiento en cualquier momento: abre <strong>Ajustes</strong>, donde tu app muestra qué aceptaste y cuándo, y toca <strong>Retirar</strong>. A partir de ese momento quedas fuera de la lista. Tu comunidad guarda un registro de que diste tu consentimiento y de que lo retiraste, y puedes volver a aceptarlo más adelante.</p>
+        <h2>Cuándo ve un administrador tu saldo de todos modos</h2>
+        <p>Hayas aceptado o no algo, en cualquier comunidad:</p>
+        <ul>
+            <li><strong>Cuando un administrador elimina tu cuenta.</strong> El administrador que inicia tu eliminación ve tu saldo y cuántos intercambios tienes abiertos, para que lo que tengas o debas pueda liquidarse. Los demás administradores y el propietario pueden ver quién miró, el saldo de quién y cuándo.</li>
+            <li><strong>Cuando tu comunidad vota para expulsarte.</strong> Todos los que pueden votar en ella ven tu saldo y cualquier deuda, únicamente en esa votación. Un administrador o propietario que no pueda votar en ella no los ve allí. Esas consultas no se registran.</li>
+            <li><strong>Quien administra el servidor de tu comunidad</strong> tiene toda su base de datos, incluidos tu saldo y tus intercambios, y sus respaldos, instantáneas y copias de respaldo.</li>
+        </ul>
+        <h2>Qué puede ver cualquier administrador de tus tratos</h2>
+        <p>Hayas aceptado o no algo, en cualquier comunidad, cualquier administrador puede ver:</p>
+        <ul>
+            <li><strong>Un trato que aún no ha finalizado o que un administrador resolvió.</strong> Ambos miembros, el anuncio, el precio y los mensajes en el chat individual de los dos miembros. Un administrador no puede leer un chat privado, solo ver quién escribió y cuándo. Esto es para que un administrador pueda resolver un trato que se quede atascado.</li>
+            <li><strong>Un trato cuyos frijoles quedaron atascados cuando se expulsó a un miembro en un servidor anterior.</strong> El estado del trato, el anuncio, el precio, sus fechas, los frijoles que quedaron atascados, cuántos pagos pasaron por él, y el monto y nota del último, para que un propietario pueda condonar los frijoles atascados.</li>
+            <li><strong>Alertas de fraude que nombran a miembros,</strong> con frijoles. Una nombra a dos miembros que se compran mutuamente de forma recurrente, de manera casi equitativa, superando un límite. Muestra los frijoles en total y cuán equitativos fueron en cada sentido. Otra nombra a un miembro y a los miembros que invitó, cuando esos miembros le envían frijoles superando un límite en un plazo determinado de días. Muestra los frijoles en total y cuántos de los miembros que invitó han comerciado únicamente con él.</li>
+            <li><strong>Una alerta de fraude que nombra a un grupo de miembros,</strong> de los cuales al menos la mitad son nuevos, que comercian principalmente entre sí. Muestra qué proporción del comercio del grupo es entre sí, pero sin mostrar frijoles.</li>
+            <li><strong>Una alerta que nombra a los miembros que no han tenido movimientos de frijoles entrantes o salientes</strong> durante un número determinado de días.</li>
+        </ul>
+        <p><strong>Cada consulta a uno de estos tratos queda registrada:</strong> quién miró, cuándo y qué tratos. <strong>Una consulta a las alertas que nombran a un miembro se registra</strong> la primera vez que cada administrador las abre, y nuevamente en la primera consulta de ese administrador después de 24 horas; las consultas intermedias no agregan ninguna línea. El propietario y los administradores pueden ver ese registro en Salud de la comunidad, como una lista independiente junto a la lista de quién consultó un saldo. Una consulta realizada por un token de automatización (un script configurado por un propietario) así lo indica: la línea dice «por token» y el nombre del token, junto al propietario que lo creó.</p>
+        <p>Las estadísticas de miembros que ven los administradores muestran cuántas publicaciones tiene activas cada miembro y cuántos mensajes ha enviado, y de los tratos solo los totales de toda la comunidad: cuántos intercambios se finalizaron o cancelaron y a cuánto ascendieron los finalizados, nunca los de un miembro individual.</p>
+        <p>Cada miembro, incluidos los administradores, ve el <strong>perfil de confianza</strong> de cada miembro: cuántos de sus intercambios se finalizaron y cuántos se cancelaron, y la proporción finalizada, cuántos pagos en frijoles ha enviado a miembros o recibido de ellos más los intercambios que ha finalizado, con cuántos miembros diferentes ha pagado, cobrado o intercambiado, cuántos pagos e intercambios ha hecho con el miembro que está mirando, y sus Puntos de confianza. No se registra, porque todos los miembros pueden verlo.</p>
+        <p>Nada más de tus tratos.</p>
+        <h2>El asistente de IA de un administrador</h2>
+        <p>Un propietario o un administrador puede conectar su propio asistente de IA al servidor para que le ayude. Este ve menos que ellos: nunca tus mensajes, saldo, tratos, claves, fotos ni la lista de nombres, y nunca quién reportó a alguien. Consulta «Cuando un administrador usa un asistente de IA».</p>
+        <h2>Preguntar sobre tu entrada</h2>
+        <p>Puedes preguntar a tus administradores qué dice tu entrada, para corregirla o para eliminarla cuando ya no pertenezcas a la comunidad. Ellos conservan la lista, no BeanPool.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="privacy.html"><strong>Tu privacidad</strong><span>Qué pueden ver los demás sobre ti y los ajustes que lo controlan.</span></a></li>
+            <li><a href="joining.html"><strong>Unirse a BeanPool</strong><span>Dos vías: una comunidad con invitación de un miembro, o la comunidad global si está abierta, con 12 palabras secretas o un inicio de sesión. Pedir entrar e invitar a otros.</span></a></li>
+            <li><a href="leaving-or-deleting.html"><strong>Salir o eliminar tu cuenta</strong><span>Cierra sesión en este teléfono o elimina tu cuenta definitivamente, y qué ocurre con tus frijoles.</span></a></li>
+            <li><a href="admins-ai-assistants.html"><strong>Si se usa un asistente de IA</strong><span>Qué puede leer sobre ti el asistente de IA de un propietario o administrador, qué nunca ve y quién lo recibe.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자가 AI 어시스턴트를 사용할 때 — BeanPool members' guide</title>
+    <meta name="description" content="소유자나 관리자의 AI 어시스턴트가 읽을 수 있는 정보, 절대 볼 수 없는 정보, 수신자 안내예요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">설정 및 안전</a></p>
+        <h1>관리자가 AI 어시스턴트를 사용할 때</h1>
+        <p class="lede">소유자나 관리자의 AI 어시스턴트가 읽을 수 있는 정보, 절대 볼 수 없는 정보, 수신자 안내예요.</p>
+        <p>커뮤니티 소유자는 서버 관리를 돕기 위해 자체 AI 어시스턴트(예: Claude 또는 ChatGPT)를 커뮤니티 서버에 연결할 수 있어요: 조치가 필요한 사항을 묻거나 접수된 신고를 요약하기 위함이에요. 관리자도 가능해요: 어시스턴트에 커뮤니티 주소를 추가하고 휴대폰에서 승인해요. 관리자가 직접 연결하며 언제든지 연결을 해제할 수 있어요. 연결되면 다른 소유자들에게도 알림이 가요.</p>
+        <h2>AI 어시스턴트가 나에 대해 읽을 수 있는 정보</h2>
+        <p>어시스턴트가 볼 수 있는 정보는 관리자가 설정에서 보는 것보다 훨씬 적어요. 어시스턴트가 아닌 커뮤니티 서버가 무엇을 전달할지 결정해요.</p>
+        <ul>
+            <li><strong>누군가 나 또는 내 게시물을 신고했을 때</strong>, 관리자가 신고 내용을 요청하는 경우: 접수된 사유, 게시물의 제목 및 설명, 그리고 내 BeanPool 이름이에요. 신고한 사람이 누구인지는 절대 전달되지 않아요.</li>
+            <li><strong>내가 가입을 신청했을 때</strong>, 관리자가 메시지를 요청하는 경우: 신청 시 보낸 이름과 메시지, 그리고 소속되어 있다고 밝힌 커뮤니티예요. 사진이나 키는 절대 전달되지 않아요.</li>
+            <li><strong>커뮤니티 전체 통계</strong>: 멤버 수, 유통 중인 콩 수량 등이에요. 내 잔액은 절대 전달되지 않아요.</li>
+        </ul>
+        <h2>AI 어시스턴트가 절대 볼 수 없는 정보</h2>
+        <p>내 메시지와 대화 내용, 잔액과 거래 내역, 키, 주소, 사진, 멤버 명단, 그리고 누가 누구를 신고했는지는 볼 수 없어요. 어시스턴트는 나에 관한 어떤 것도 변경할 수 없어요: 나를 제명하거나, 음소거하거나, 내 게시물을 내리거나, 가입 신청에 응답할 수 없어요. 이러한 일은 사람이 직접 처리해요. 관리자가 설정이나 휴대폰에서 처리하며, 가입 신청은 초대가 가능한 커뮤니티 멤버 누구나 앱에서 응답해요.</p>
+        <p>어시스턴트는 게시물을 유지할지 내릴지와 같이 신고 처리에 대한 제안을 할 수 있어요. 하지만 어시스턴트를 사용하는 관리자가 신고 내용을 직접 읽고 승인하지 않는 한 아무 일도 일어나지 않아요. 이에 대해 전달받는 모든 내용은 언제나처럼 커뮤니티 중재자로부터 나와요.</p>
+        <h2>정보 수신자</h2>
+        <p>직접 AI 채팅에 내용을 붙여넣을 때와 마찬가지로, 어시스턴트가 읽는 정보는 해당 AI를 운영하는 회사로 전송돼요. 서버는 관리자의 어시스턴트가 요청할 때만 신고 내용이나 가입 메시지를 전송하며, 명령어가 아닌 멤버의 글로 표시하여 전달해요.</p>
+        <p>신고 내용이나 가입 메시지가 AI에게 읽히는 것을 원하지 않는다면, 관리자에게 어시스턴트를 어떻게 활용하고 있는지 문의하세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>관리자가 볼 수 있는 정보</strong><span>관리자가 명단을 관리하는 커뮤니티에서: 나에 대해 보관되는 정보, 열람 권한자, 서버 보관 내용 및 확인 완료의 의미예요.</span></a></li>
+            <li><a href="reporting.html"><strong>문제 신고하기</strong><span>게시글, 행사, 동향 게시물, 프로젝트나 기업에 관해 커뮤니티 중재자에게 알리세요.</span></a></li>
+            <li><a href="privacy.html"><strong>개인정보 보호</strong><span>다른 멤버에게 공개되는 내 정보와 이를 설정하는 방법이에요.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool 가입하기</strong><span>가입 방법 2가지: 멤버의 초대를 통한 커뮤니티 가입, 개방 시 12개 비밀 단어 또는 간편 로그인으로 글로벌 커뮤니티 가입. 가입 요청과 다른 사람 초대 방법이에요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

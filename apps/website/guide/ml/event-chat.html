@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ഇവന്റ് ചാറ്റ് — BeanPool members' guide</title>
+    <meta name="description" content="ഹോസ്റ്റുമായും ഇവന്റിൽ പങ്കെടുക്കുന്ന എല്ലാവരുമായും സംസാരിക്കുക.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">ചാറ്റ്</a></p>
+        <h1>ഇവന്റ് ചാറ്റ്</h1>
+        <p class="lede">ഹോസ്റ്റുമായും ഇവന്റിൽ പങ്കെടുക്കുന്ന എല്ലാവരുമായും സംസാരിക്കുക.</p>
+        <h2>ആരൊക്കെ ഇതിലുണ്ട്</h2>
+        <p>ഓരോ ഇവന്റിനും സ്വന്തമായി ചാറ്റ് ഉണ്ട്. ഹോസ്റ്റിനും <strong>പോകുന്നു</strong> എന്ന് ടാപ്പ് ചെയ്ത എല്ലാവർക്കും ഇത് വായിക്കാനും ഇതിൽ എഴുതാനും കഴിയും. ഹോസ്റ്റ് ആളുകൾക്ക് പ്രവേശനം നൽകുന്നിടത്ത്, ഹോസ്റ്റ് അനുവദിച്ച പങ്കെടുക്കുന്ന ആളുകൾക്കായിരിക്കും ഇത്: അതുവരെ ചാറ്റ് <strong>ഹോസ്റ്റ് നിങ്ങളെ അനുവദിക്കുമ്പോൾ ചാറ്റ് തുറക്കും.</strong> എന്ന് കാണിക്കും. നിങ്ങൾ <strong>താൽപ്പര്യമുണ്ട്</strong> എന്നതിലേക്ക് മാറ്റുകയോ, അല്ലെങ്കിൽ അത് ഒഴിവാക്കാൻ വീണ്ടും <strong>പോകുന്നു</strong> ടാപ്പ് ചെയ്യുകയോ ചെയ്താൽ, നിങ്ങൾ ചാറ്റിൽ നിന്ന് പുറത്തുപോകും. ഹോസ്റ്റ് എപ്പോഴും ഇതിലുണ്ടാകും.</p>
+        <h2>ഇത് തുറക്കൽ</h2>
+        <ul>
+            <li>ഇവന്റ് തുറന്ന് <strong>ഇവന്റ് ചാറ്റ് തുറക്കുക</strong> ടാപ്പ് ചെയ്യുക.</li>
+            <li>അല്ലെങ്കിൽ <strong>ചാറ്റ്</strong>-ൽ, <strong>ഗ്രൂപ്പുകൾ</strong> എന്നതിന് താഴെ 📅 <strong>ഇവന്റ്</strong> എന്ന് അടയാളപ്പെടുത്തിയിരിക്കുന്നത് കണ്ടെത്തുക. വെബ് ആപ്പിൽ നിങ്ങളുടെ മറ്റ് ചാറ്റുകൾക്കൊപ്പം ഇത് <strong>ചാറ്റ്</strong> ടാബിലാണ് ഉള്ളത്.</li>
+        </ul>
+        <p>മുകളിൽ, പിൻ ചെയ്ത ബോക്സിൽ കൃത്യമായ വിലാസം പോലുള്ള ഹോസ്റ്റിന്റെ <strong>പങ്കെടുക്കുന്ന ആളുകൾക്കുള്ള കുറിപ്പ്</strong> കാണിക്കുന്നു. ഇവന്റിലേക്ക് തിരികെ പോകാൻ ഏറ്റവും മുകളിലുള്ള ഇവന്റിന്റെ പേര് (വെബ് ആപ്പിൽ, <strong>ഇവന്റ് കാണുക</strong>) ടാപ്പ് ചെയ്യുക.</p>
+        <h2>എഴുത്ത്</h2>
+        <p><strong>പങ്കെടുക്കുന്ന എല്ലാവർക്കും സന്ദേശമയയ്ക്കൂ…</strong> എന്നതിൽ ടൈപ്പ് ചെയ്ത് സെൻഡ് ബട്ടൺ ടാപ്പ് ചെയ്യുക. നിങ്ങൾക്ക് ഒരു മിനിറ്റിൽ 30 സന്ദേശങ്ങൾ വരെ അയക്കാം. ഏറ്റവും പുതിയ സന്ദേശം മെസ്സേജ് ബോക്സിന് തൊട്ടുമുകളിലായിരിക്കും, കീബോർഡ് തുറക്കുമ്പോൾ അവിടെത്തന്നെ നിലനിൽക്കുകയും ചെയ്യും.</p>
+        <h2>അറിഞ്ഞിരിക്കേണ്ട കാര്യങ്ങൾ</h2>
+        <ul>
+            <li>ഇവന്റ് ചാറ്റുകൾ എൻഡ്-ടു-എൻഡ് എൻക്രിപ്റ്റ് ചെയ്തതല്ല. ഹോസ്റ്റിനും പങ്കെടുക്കുന്ന എല്ലാവർക്കും (ഹോസ്റ്റ് ആളുകളെ അനുവദിക്കുന്നിടത്ത്, ഹോസ്റ്റ് പ്രവേശനം നൽകിയ ആളുകൾക്ക്), നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവർ പ്രവർത്തിപ്പിക്കുന്ന ആളുകൾക്കും അവ വായിക്കാനാകും. മെസ്സേജ് ബോക്സിന് മുകളിൽ ചാറ്റ് അങ്ങനെ വ്യക്തമാക്കുന്നുണ്ട്.</li>
+            <li>ഹോസ്റ്റിന് ഏത് സന്ദേശവും നീക്കം ചെയ്യാം. അത് ടാപ്പ് ചെയ്യുക, തുടർന്ന് <strong>നീക്കം ചെയ്യുക</strong>. അത് പിന്നീട് &quot;ഹോസ്റ്റ് നീക്കം ചെയ്തത്&quot; എന്ന് കാണിക്കും.</li>
+            <li>ഒരു വ്യക്തിയുമായുള്ള ചാറ്റിലോ ഗ്രൂപ്പ് ചാറ്റിലോ ഉള്ളതുപോലെ ഒരു ഇവന്റ് ചാറ്റിന് മറുപടി നൽകാനോ, പ്രതികരണങ്ങൾ നൽകാനോ, എഡിറ്റ് ചെയ്യാനോ നിങ്ങളുടെ സ്വന്തം സന്ദേശം ഇല്ലാതാക്കാനോ കഴിയില്ല. നിങ്ങൾ ഒഴിവാക്കാൻ ആഗ്രഹിക്കുന്ന എന്തെങ്കിലും നീക്കം ചെയ്യാൻ ഹോസ്റ്റിനോട് ആവശ്യപ്പെടുക. നിങ്ങളുടെ അക്കൗണ്ട് ഇല്ലാതാക്കുകയാണെങ്കിൽ, നിങ്ങൾ ഇവിടെ എഴുതിയ ഓരോ സന്ദേശവും <strong>ഈ സന്ദേശം ഇല്ലാതാക്കി</strong> എന്ന് കാണിക്കും.</li>
+            <li>ഇവന്റ് അവസാനിക്കുകയോ റദ്ദാക്കുകയോ ചെയ്യുമ്പോൾ ചാറ്റ് വായിക്കാൻ മാത്രമുള്ളതായി മാറുന്നു. ആവർത്തിക്കുന്ന ഒരു ഇവന്റിന്റെ ചാറ്റ് തീയതികൾക്കിടയിൽ തുറന്നുതന്നെയിരിക്കും: ഹോസ്റ്റ് <strong>വരെ</strong> സജ്ജീകരിച്ചിട്ടുണ്ടെങ്കിൽ അതിന്റെ അവസാന തീയതി വരെയും, ഇല്ലെങ്കിൽ ഹോസ്റ്റ് ഇവന്റ് റദ്ദാക്കുന്നത് വരെയും. അവസാനിച്ച് മുപ്പത് ദിവസങ്ങൾക്ക് ശേഷം അത് അപ്രത്യക്ഷമാകും.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="events.html"><strong>ഇവന്റുകൾ</strong><span>ഒരു സ്ഥലത്തോ ഓൺലൈനിലോ ഒറ്റത്തവണയോ ആവർത്തിച്ചോ ഇവന്റ് ഉണ്ടാക്കുക; പങ്കെടുക്കുമെന്ന് അറിയിക്കുക, ഓർമ്മപ്പെടുത്തൽ നേടുക, പങ്കിടുക, ഹോസ്റ്റായി നടത്തുക.</span></a></li>
+            <li><a href="messages.html"><strong>സന്ദേശങ്ങൾ</strong><span>ചാറ്റ് ആരംഭിക്കുക, ഫോട്ടോകൾ അയയ്ക്കുക, മറുപടി നൽകുക, പ്രതികരിക്കുക, തിരുത്തുക, ഇല്ലാതാക്കുക, മ്യൂട്ട് ചെയ്യുക, സ്വകാര്യമായവ.</span></a></li>
+            <li><a href="pin-locations.html"><strong>നിങ്ങളുടെ പിൻ എവിടെ വരുന്നു</strong><span>നിങ്ങളുടെ പോസ്റ്റുകളും ഇവന്റുകളും എവിടെയാണെന്ന് ആർക്കൊക്കെ കാണാം, വീട് എങ്ങനെ സ്വകാര്യമായി സൂക്ഷിക്കാം.</span></a></li>
+            <li><a href="reporting.html"><strong>പ്രശ്നം റിപ്പോർട്ട് ചെയ്യൽ</strong><span>ഒരു പോസ്റ്റ്, ഇവന്റ്, പൾസ് പോസ്റ്റ്, പ്രോജക്റ്റ് അല്ലെങ്കിൽ സംരംഭത്തെക്കുറിച്ച് മോഡറേറ്റർമാരെ അറിയിക്കുക.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

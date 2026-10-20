@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>சுழற்சிக் கட்டணம் — BeanPool members' guide</title>
+    <meta name="description" content="பயறுகள் புழக்கத்தில் இருக்கப் பெரிய இருப்புகளுக்குச் சிறிய மாதாந்திரக் கட்டணம். முதல் 200 இலவசம்.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">பேரேடு</a></p>
+        <h1>சுழற்சிக் கட்டணம்</h1>
+        <p class="lede">பயறுகள் புழக்கத்தில் இருக்கப் பெரிய இருப்புகளுக்குச் சிறிய மாதாந்திரக் கட்டணம். முதல் 200 இலவசம்.</p>
+        <h2>ஏன்</h2>
+        <p>பயறுகள் பயன்படுத்துவதற்காகவே தவிர, குவித்து வைப்பதற்காக அல்ல. பெரிய இருப்புகளுக்கான சிறிய கட்டணம் அவற்றைச் சமூகத்தில் தொடர்ந்து புழக்கத்தில் வைத்திருக்க உதவுகிறது. இது அனைவருக்கும் பயன்படும் வகையில் பொது நிதிக்குச் செல்கிறது.</p>
+        <h2>எவ்வளவு</h2>
+        <p>200-க்கு மேல் நீங்கள் <strong>வைத்திருக்கும்</strong> பயறுகளுக்கு மட்டுமே கட்டணம் உண்டு. உங்கள் இருப்பின் ஒவ்வொரு பகுதியும் மாதந்தோறும் தனக்கென சொந்த விகிதத்தைச் செலுத்துகிறது:</p>
+        <ul>
+            <li>முதல் 200: எதுவும் இல்லை;</li>
+            <li>200 முதல் 500 வரை: 1%;</li>
+            <li>500 முதல் 1,000 வரை: 1.5%;</li>
+            <li>1,000 முதல் 2,000 வரை: 2%;</li>
+            <li>2,000-க்கு மேல்: 2.5%.</li>
+        </ul>
+        <p>பூஜ்ஜியத்திற்குக் கீழே உள்ள இருப்பு எதுவும் செலுத்த வேண்டியதில்லை. கடனுக்கு யாரும் வட்டி செலுத்துவதில்லை.</p>
+        <p>எடுத்துக்காட்டாக, 600 பயறுகளை ஒரு மாதத்திற்கு வைத்திருப்பது சுமார் 4.5 பயறுகள் செலவாகும்: முதல் 200-க்கு எதுவும் இல்லை, அடுத்த 300-க்கு 3, மற்றும் கடைசி 100-க்கு 1.5.</p>
+        <h2>எப்போது</h2>
+        <p>கட்டணம் நாளுக்கு நாள் சேர்ந்து, உங்கள் கணக்கு அடுத்த முறை பயன்படுத்தப்படும் போதெல்லாம் சிறிது சிறிதாக எடுக்கப்படுகிறது. ஒரே நாளில் நீங்கள் மொத்தமாக எதையும் இழக்க மாட்டீர்கள்.</p>
+        <h2>இதைப் பார்ப்பது</h2>
+        <p><strong>பேரேடு</strong>, <strong>பணப்பை</strong> பக்கத்தில், <strong>சமூகச் சுழற்சி</strong> பெட்டி இந்த மாதம் நீங்கள் சுமார் எவ்வளவு செலுத்துவீர்கள் என்பதைக் காட்டுகிறது. நீங்கள் பயறுகளை வைத்திருக்கும் போது மட்டுமே இது தோன்றும். 1,000 பயறுகளுக்கு மேல் அது அம்பர் நிறமாக மாறும். மொபைலில் இது சிலவற்றைச் செலவழிக்கவும் பரிந்துரைக்கிறது, மேலும் கட்டணத்தை விளக்கும் <strong>அமைப்பு சுழற்சி</strong> என்பதைக் காண நீங்கள் அதைத் தட்டலாம்.</p>
+        <p>விடுமுறை முறை கட்டணத்தை இடைநிறுத்தாது.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-balance.html"><strong>இருப்பும் பரிவர்த்தனை வரலாறும்</strong><span>உங்களிடம் எத்தனை பயறுகள் உள்ளன, நிறுத்தி வைக்கப்பட்டுள்ளவை, மற்றும் ஒவ்வொரு பரிமாற்றமும் பரிசும்.</span></a></li>
+            <li><a href="commons-fund.html"><strong>பொது நிதி</strong><span>உங்கள் சமூகத்தின் பகிரப்பட்ட பயறுகள்: அவை எங்கிருந்து வருகின்றன, எவ்வாறு செலவிடப்படுகின்றன என்பது.</span></a></li>
+            <li><a href="credit-line.html"><strong>உங்கள் கடன் வரம்பு</strong><span>பூஜ்ஜியத்திற்குக் கீழே நீங்கள் எவ்வளவு செல்லலாம் மற்றும் அது எவ்வாறு வளர்கிறது என்பது.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool செயல்படும் விதம்</strong><span>பயறுகள், பரிமாற்றம், உதவிகள் மற்றும் தேவைகள், மற்றும் கடன் பற்றி எளிய சொற்களில்.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deine 12 Wörter und der Server — BeanPool members' guide</title>
+    <meta name="description" content="Für Eigentümer einer Community: 12 Wörter prüfen, den Server mit dem Handy übernehmen oder wiederherstellen, und automatische Handy-Checks.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Einstellungen &amp; Schutz</a></p>
+        <h1>Deine 12 Wörter und der Server</h1>
+        <p class="lede">Für Eigentümer einer Community: 12 Wörter prüfen, den Server mit dem Handy übernehmen oder wiederherstellen, und automatische Handy-Checks.</p>
+        <h2>Für wen dies gedacht ist</h2>
+        <p>Ausschließlich für die <strong>Eigentümer</strong> einer Community. Wenn du kein Eigentümer bist, siehst du davon nichts.</p>
+        <h2>Warum Eigentümer darum gebeten werden</h2>
+        <p>Der Server deiner Community bewahrt eine gesperrte Kopie seiner Schlüssel auf, um die Community auf einen anderen Server umziehen zu können, falls der eigene verloren geht, und auch seine Datensicherungen sind gesperrt. Sie sind an die Konten der Eigentümer gekoppelt: Jeder einzelne Eigentümer kann sie mit seinem Smartphone öffnen (siehe unten „Mit deinem Smartphone übernehmen oder wiederherstellen“). Wenn du dein Smartphone verlierst, bringen deine 12 Wörter dein Konto zurück und damit auch deinen Schlüssel zum Schloss des Servers und dessen Datensicherungen. Das zählt besonders an dem Tag, an dem der Server selbst verloren gegangen ist.</p>
+        <p>Deshalb bittet die App jeden Eigentümer von Zeit zu Zeit zu prüfen, ob er noch die richtigen 12 Wörter besitzt. Die 12 Wörter sind englische Wörter. Du kannst auf <strong>Später</strong> tippen. Es wird niemals etwas blockiert, und du kannst weiterhin alles tun, was ein Eigentümer tut.</p>
+        <h2>Wann die App nachfragt</h2>
+        <ul>
+            <li>Einmal kurz nachdem du Eigentümer wirst.</li>
+            <li>Erneut 12 Monate nach deiner letzten Überprüfung.</li>
+        </ul>
+        <p>Sie zeigt eine Karte oben im Markt an (in der Web-App oben auf jedem Bildschirm außer der Karte): <strong>Jetzt überprüfen</strong> oder <strong>Später</strong>. <strong>Später</strong> blendet die Karte aus, bis die Prüfung das nächste Mal fällig ist. Du kannst die Prüfung jederzeit über die <strong>Einstellungen</strong> durchführen: Tippe unter <strong>Community-Schlüssel</strong> auf <strong>Überprüfe deine 12 Wörter</strong> (in der Web-App auf <strong>Jetzt überprüfen</strong>).</p>
+        <h2>Wie du prüfst</h2>
+        <ul>
+            <li>Hole dein Papier mit den 12 Wörtern (es sind englische Wörter).</li>
+            <li>Tippe sie der Reihe nach ein, mit Leerzeichen dazwischen. Groß-/Kleinschreibung und zusätzliche Leerzeichen spielen keine Rolle.</li>
+            <li>Tippe auf <strong>Meine Wörter prüfen</strong>.</li>
+        </ul>
+        <p>Wenn sie stimmen, meldet die App: <strong>Dies sind die richtigen Wörter.</strong> Wenn nicht: <strong>Dies sind nicht die Wörter für dieses Konto.</strong> Sie sagt nicht, welches Wort falsch ist; prüfe also das Papier und tippe alle Wörter noch einmal ein.</p>
+        <p>Auf einem Smartphone ohne gespeicherte Kopie deiner 12 Wörter (ein Smartphone, das über ein Anmeldekonto wiederhergestellt wurde) blenden die richtigen Wörter zusätzlich <strong>Auf diesem Telefon speichern</strong> ein. Tippe darauf, und <strong>12 Wörter anzeigen</strong> zeigt sie von da an an. Dies ist dieselbe Überprüfung und dasselbe Speichern wie bei <strong>Füge deine 12 Wörter diesem Telefon hinzu</strong> (siehe „Deine 12 Wörter“).</p>
+        <p>Kannst du sie nicht finden? Wenn dieses Smartphone sie noch hat, zeigt <strong>Einstellungen</strong> und dann <strong>12 Wörter anzeigen</strong> sie an. Schreibe sie erneut auf und führe dann die Überprüfung durch. Auf einem Smartphone ohne gespeicherte Kopie weist die App darauf hin: Wenn du sie findest, überprüfe sie hier und speichere sie anschließend.</p>
+        <h2>Was gesendet wird und was nicht</h2>
+        <ul>
+            <li>Die Überprüfung findet auf deinem Smartphone statt (oder in deinem Browser, in der Web-App). Deine Wörter werden niemals irgendwohin gesendet. Das Eingabefeld wird geleert, sobald das Ergebnis vorliegt und wenn du den Bildschirm verlässt. Sie werden nur gespeichert, wenn du auf <strong>Auf diesem Telefon speichern</strong> tippst, und dann ausschließlich auf diesem Smartphone.</li>
+            <li>Stimmen die Wörter, teilt dein Smartphone dem Server deiner Community lediglich mit, dass du die Überprüfung durchgeführt hast und wann, signiert mit deinem Konto.</li>
+            <li>Eigentümer und Admins sehen in den Server-Einstellungen das Datum der Überprüfung jedes Eigentümers oder „noch nicht“. Es ist deine eigene Angabe: Der Server kann deine Wörter weder sehen noch überprüfen.</li>
+        </ul>
+        <h2>Mit deinem Smartphone übernehmen oder wiederherstellen</h2>
+        <p>Geht der Server deiner Community verloren, kann derjenige, der den Standby-Server betreibt (oder einen neuen Server, der eine Sicherung wiederherstellt), einen Eigentümer bitten, die gesperrten Schlüssel zu öffnen. Ein einziger Eigentümer reicht aus. Du benötigst die neueste Version der BeanPool-App. Die Web-App funktioniert ebenfalls, sofern sie sich noch öffnen lässt, allerdings liegt sie unter der eigenen Adresse deiner Community, die zusammen mit dem Server ausgefallen sein könnte: Die Smartphone-App ist diejenige, auf die Verlass ist.</p>
+        <ul>
+            <li>In den Einstellungen des Servers wählen sie <strong>Als Hauptserver übernehmen</strong> und dann <strong>Ich verstehe: Smartphone eines Eigentümers nutzen</strong>, oder beim Wiederherstellen einer Datensicherung <strong>Mit dem Smartphone eines Eigentümers öffnen</strong>. Ein Code erscheint auf ihrem Bildschirm.</li>
+            <li>In der App: Öffne die <strong>Einstellungen</strong>, tippe unter <strong>Community-Schlüssel</strong> auf <strong>Mit diesem Telefon übernehmen oder wiederherstellen</strong> und richte die Kamera auf den Code. Wenn die Seite des Servers auf deinem eigenen Smartphone geöffnet ist, bewirkt das Antippen des Links dasselbe. In der Web-App kopiere den Link von deren Bildschirm und füge ihn unter <strong>Mit diesem Browser übernehmen oder wiederherstellen</strong> in den <strong>Einstellungen</strong> ein.</li>
+            <li>Die App zeigt an, um welche Community und welchen Server es sich handelt und was passieren wird. Antwortet dein Hauptserver noch, wird dies in Rot angezeigt: Eine Übernahme ist nur für einen Server gedacht, der wirklich verloren ist.</li>
+            <li>Tippe auf <strong>Für die Übernahme entsperren</strong> (oder <strong>Sicherung entsperren</strong>). Dein Smartphone verlangt zuerst seine eigene Entsperrung: Fingerabdruck, Gesichtserkennung oder PIN. Die Web-App hat keinen solchen Schritt, weshalb die Smartphone-App der sicherere Ort für den Schlüssel eines Eigentümers ist.</li>
+            <li>Dein Smartphone öffnet seinen Teil des Schlosses und übergibt den Schlüssel an diesen Server, so verschlüsselt, dass nur dieser Server ihn lesen kann. Dein Smartphone bekommt die Schlüssel des Servers oder die Datensicherung niemals zu sehen.</li>
+            <li>Bei einer Übernahme bestätigt die Person am Server den Vorgang anschließend auf ihrem Bildschirm. Die Community wird darüber informiert, dass sie umgezogen ist und dass du die Schlüssel geöffnet hast.</li>
+        </ul>
+        <p>Die App verweigert den Vorgang und nennt den Grund, wenn das Schloss zu einer anderen Community gehört, wenn es nicht für dich gesperrt ist, wenn der Code des Servers abgelaufen ist (er ist 10 Minuten lang gültig und funktioniert einmal) oder wenn die Schlüssel nicht vom eigenen Server deiner Community gesperrt wurden.</p>
+        <h2>Dein Smartphone überprüft das Schloss selbstständig</h2>
+        <p>Jedes Mal, wenn sich das Schloss deiner Community ändert (ein Eigentümer wird hinzugefügt oder entfernt, ein neuer Wiederherstellungscode wird erstellt), überprüft deine App im Hintergrund, ob sie ihren Teil noch öffnen könnte. Sie öffnet ihn, verwirft den Schlüssel sofort wieder und meldet dem Server, ob es funktioniert hat. Von dir wird dabei nichts verlangt.</p>
+        <p>Eigentümer und Admins sehen dies in den Server-Einstellungen neben dem Datum deiner 12 Wörter: <strong>Ihr Telefon hat das aktuelle Schloss geöffnet</strong> mit Datum, oder dass es zuletzt ein älteres geöffnet hat. Wenn dort steht, dass dein Telefon das Schloss <strong>NICHT öffnen konnte</strong>, überprüfe deine 12 Wörter und bitte einen anderen Eigentümer, in die Server-Einstellungen zu schauen.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Deine 12 Wörter</strong><span>Die 12 Wörter sind der Schlüssel zu deinem Konto. Warum sie wichtig sind, wo du sie findest, wie du sie schützt und ein Login als zweiten Weg hinzufügst.</span></a></li>
+            <li><a href="recovery.html"><strong>Konto wiederherstellen</strong><span>Stelle dein Konto auf einem neuen Handy wieder her und schütze es mit einem Login.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

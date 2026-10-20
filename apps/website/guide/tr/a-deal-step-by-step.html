@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adım adım bir takas — BeanPool members' guide</title>
+    <meta name="description" content="Teklif ve İhtiyaç için sormaktan ödeme almaya kadar tüm aşamalar ve değerlendirme bırakma.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Pazar</a></p>
+        <h1>Adım adım bir takas</h1>
+        <p class="lede">Teklif ve İhtiyaç için sormaktan ödeme almaya kadar tüm aşamalar ve değerlendirme bırakma.</p>
+        <h2>Fikir</h2>
+        <p>Bir takas başladığında, ödeme yapan kişinin fasulyeleri <strong>emanette tutulur</strong>. Tutulan fasulyeleri kimse harcayamaz. İş bittiğinde ödeme yapan kişi bunları serbest bırakır ve diğer kişiye ödeme yapılır. Ekranlar birkaç yerde fasulyelere &quot;kredi&quot; der; ikisi de aynı anlama gelir.</p>
+        <p>Herhangi bir 24 saat içinde 100 adede kadar takas isteyebilir, kabul edebilir veya onaylayabilirsiniz. Ödediğiniz bir takas, günde 100 ödeme hakkınızdan biri olarak da sayılır (&quot;Hediye gönderme&quot; bölümüne bakın). Fasulyeleri serbest bırakmak, iptal etmek ve ödeme almak asla sınırlı değildir.</p>
+        <h2>Başkasının Teklifini kabul etme</h2>
+        <ul>
+            <li>Teklifi açın ve <strong>Teklifi Kabul Et</strong> seçeneğine dokunun.</li>
+            <li>Saatlik olarak fiyatlandırılmışsa kaç saat olduğunu belirtin.</li>
+            <li><strong>Onayla</strong> seçeneğine dokunun. Fasulyeleriniz hemen emanete alınır ve satıcıya bildirilir. Satıcının evet demesini beklemek yoktur.</li>
+            <li>Satıcıyla bir sohbet açılır. Ne zaman ve nerede olacağı konusunda anlaşın.</li>
+        </ul>
+        <p>Önce kendinize ait bir Teklif paylaşmış olmanız gerekir. Paylaşmadıysanız uygulama <strong>Bir Teklif Oluştur</strong> seçeneğini sunar.</p>
+        <h2>Birinin İhtiyacına yardım etme</h2>
+        <ul>
+            <li>İhtiyacı açın ve <strong>Karşılamayı Teklif Et</strong> seçeneğine, ardından <strong>Onayla</strong> seçeneğine dokunun.</li>
+            <li>İlanı paylaşan kişi karar verir. O zamana kadar <strong>Talebi Geri Çek</strong> seçeneğine dokunabilirsiniz. 7 gün içinde yanıt vermezlerse talep kendiliğinden sona erer ve ikinize de bildirilir.</li>
+            <li>Talebinizi <strong>Karşılama Talepleri</strong> altında görürler ve size <strong>Mesaj</strong> gönderebilir, talebi <strong>Reddet</strong> seçeneğiyle geri çevirebilir veya <strong>Onayla ve Taahhüt Et</strong> seçeneğini kullanabilirler.</li>
+            <li>Onayladıklarında fasulyeleri emanete alınır. İlan Tekrarlanabilir olmadığı sürece teklifte bulunan diğer herkes taleplerinin reddedildiğini görür.</li>
+        </ul>
+        <p>Web uygulamasında <strong>Talebi Geri Çek</strong>, <strong>Teklifi İptal Et</strong> şeklindedir ve <strong>Onayla ve Taahhüt Et</strong>, <strong>Onayla ve Güvencede Tut</strong> şeklindedir. İhtiyacı paylaşan kişi orada yalnızca <strong>Reddet</strong> veya onaylama işlemlerini yapabilir: bir talebin <strong>Mesaj</strong> düğmesi yoktur.</p>
+        <h2>Fasulyeler emanette tutulurken</h2>
+        <p>Her ikiniz de konuşmak için bir <strong>Mesaj</strong> düğmesi ve işlemi iptal etmek için <strong>Emanet Tutmayı İptal Et</strong> seçeneğini görürsünüz. Web uygulamasında yalnızca ilanı paylaşmamış olan kişi <strong>Mesaj</strong> görür ve iptal etme düğmesi <strong>Bekletmeyi İptal Et</strong> şeklindedir.</p>
+        <ul>
+            <li>İşi yapın veya eşyayı teslim edin.</li>
+            <li>Ödeme yapan kişi <strong>Kredileri Serbest Bırak</strong> seçeneğine, ardından onaylamak için tekrar <strong>Kredileri Serbest Bırak</strong> seçeneğine dokunur. Saatlik çalışma için önce fiilen çalışılan saatleri girer. Daha az ise kalanı kendilerine geri döner. Daha fazla ise fazlalık kendilerinden alınır. Her saat, takasın yapıldığı fiyattan ödenir.</li>
+            <li>Satıcıya, topluluğunuzun Ortak Alanına giden %1,5 pazar ücreti düşülerek hemen ödeme yapılır.</li>
+        </ul>
+        <p>Fasulyeleri yalnızca ödeme yapan kişi serbest bırakabilir. Zaman sınırı yoktur: fasulyeler serbest bırakılana veya takas iptal edilene kadar emanette kalır. Bir hafta sonra ve ondan sonraki her hafta ödeme yapan kişi bir hatırlatıcı alır.</p>
+        <p>Biri ilanı talep ederken veya fasulyeleri emanette tutulurken ilanın üzerindeki fiyat değiştirilemez. Takas yapıldığı fiyatı korur. Fiyatı değiştirmek için ilanı paylaşan kişi önce takası reddeder veya iptal eder.</p>
+        <h2>Tekrarlanabilir bir gönderi</h2>
+        <p>Tekrarlanabilir bir gönderi her takastan sonra tekrar yayına girer ve birden fazla kişi aynı anda üzerinde bir takasta olabilir. Diğer tüm gönderiler tamamlandı olarak işaretlenir.</p>
+        <h2>Değerlendirmeler</h2>
+        <p>Serbest bıraktıktan sonra ödeme yapan kişiden takası değerlendirmesi istenir: 1 ila 5 yıldız ve kısa, isteğe bağlı bir yorum. <strong>Puanı Gönder</strong> veya <strong>Şimdilik atla</strong> seçeneğine dokunun.</p>
+        <p>Her iki kişi de daha sonra değerlendirme yapabilir: tamamlanan gönderideki <strong>Değerlendir</strong> ve ada dokunun (tekrar yayına giren Tekrarlanabilir bir gönderide değil) veya Takaslarım, Geçmiş bölümünde <strong>Değerlendirme</strong> seçeneğine dokunun (web uygulamasında <strong>Yorum Bırak</strong>). Değerlendirmenizi değiştirebilirsiniz; yenisi eskisinin yerini alır.</p>
+        <p>Topluluğunuzdaki herkes bir değerlendirmenin yıldızlarını ve kelimelerini okuyabilir. Yalnızca takastaki iki kişi değerlendirmeyi kimin yazdığını ve hangi takas hakkında olduğunu görebilir.</p>
+        <p>Yıldızlar önemlidir. Düşük bir ortalama, diğer kişinin takaslarından ne kadar güven kazanacağını azaltır. Adil olun.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>Takaslarım</strong><span>Dahil olduğunuz her takas, yayındaki her ilanınız ve geçmiş takaslarınız için tek bir yer.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Takasta sorun çıktığında</strong><span>Bir takası iptal etme ve anlaşmazlık durumunda neler olacağı.</span></a></li>
+            <li><a href="posting.html"><strong>Teklif veya İhtiyaç paylaşma</strong><span>Yapabileceğiniz, verebileceğiniz bir şey veya aradığınız bir şeyi paylaşın.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool nasıl çalışır</strong><span>Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

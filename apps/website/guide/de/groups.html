@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gruppen — BeanPool members' guide</title>
+    <meta name="description" content="Einer Gruppe beitreten, eine gründen, Gruppenchats, offene und geschlossene Gruppen, Koordinatoren und neue Leitung wählen.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Gruppen</h1>
+        <p class="lede">Einer Gruppe beitreten, eine gründen, Gruppenchats, offene und geschlossene Gruppen, Koordinatoren und neue Leitung wählen.</p>
+        <h2>Was eine Gruppe ist</h2>
+        <p>Eine Gruppe ist ein Ort für bestimmte Personen statt für alle: deine Straße, ein Gartenteam, ein Chor, eine Gilde. Jede Gruppe hat ihren eigenen Chat. Einige Gruppen verwalten Bohnen: ein Projekt oder ein Betrieb (siehe „Projekte und Betriebe“). Die anderen (ein Freundeskreis, eine Arbeitsgruppe, eine Gilde) verwalten keine. In einer Gruppe zu sein, ändert nichts an deinem Vertrauen oder deinem Stimmrecht.</p>
+        <p>Die Personen, die eine Chat-Gruppe betreuen, sind ihre <strong>Koordinatoren</strong>; einer von ihnen ist der <strong>Hauptkoordinator</strong>. Sie halten keine Bohnen.</p>
+        <h2>Deine Gruppen</h2>
+        <p>Tippe auf <strong>Chat</strong>, dann auf <strong>Gruppen</strong>. Jede Gruppe, in der du bist, ist dort aufgelistet – mit der neuesten Nachricht zuerst –, zusammen mit den Projekten, die du leitest oder an denen du mitarbeitest (🎯), den Betrieben, die du verwaltest (🥖), und den Veranstaltungen, die du veranstaltest oder besuchst (📅). Der Chat eines Betriebs ist dessen öffentliche Diskussion: Jedes Mitglied deiner Community kann darin lesen. Siehe „Nachrichten“. Jede Gruppe zeigt ihre neueste Nachricht und die Anzahl deiner ungelesenen Nachrichten an. In einem verschlüsselten Chat zeigt die Zeile, wer zuletzt geschrieben hat, und <strong>🔒 Nachricht</strong>, nicht den Text.</p>
+        <ul>
+            <li>Die Zahl auf <strong>Gruppen</strong> ganz oben summiert deine ungelesenen Nachrichten, außer in stummgeschalteten Chats.</li>
+            <li>Tippe auf eine Gruppe, um ihren Chat zu öffnen. Dadurch wird sie als gelesen markiert.</li>
+            <li>Ziehe die Liste nach unten, um sie zu aktualisieren.</li>
+        </ul>
+        <p>Auf dem Telefon befindet sich dieselbe Liste im <strong>Gemeingut</strong> unter <strong>Gruppen</strong> als <strong>Deine Gruppen</strong>, ohne die ungelesenen Zahlen. Sie öffnet dieselben Chats.</p>
+        <h2>Eine Gruppe gründen</h2>
+        <ul>
+            <li>Auf dem Telefon tippst du im <strong>Chat</strong> unter <strong>Gruppen</strong> auf <strong>Neue Gruppe</strong>. Oder im <strong>Gemeingut</strong> unter <strong>Gruppen</strong> auf die runde <strong>+</strong>-Schaltfläche. Beide öffnen dasselbe Formular <strong>Gruppe erstellen</strong>. (Auf dem Chip <strong>Projekte</strong> oder <strong>Betriebe</strong> startet das <strong>+</strong> stattdessen ein Projekt oder einen Betrieb.)</li>
+            <li>In der Web-App öffnest du das <strong>Gemeingut</strong>, dann <strong>Gruppen</strong>, und tippst auf <strong>+ Gruppe erstellen</strong>. Danach bleibst du im <strong>Gemeingut</strong>. Um Personen einzuladen, öffne die Gruppe und tippe auf <strong>Personen einladen</strong>. Du kannst auch den <strong>Chat</strong> öffnen, auf <strong>Gruppen</strong> und dann auf <strong>Neue Gruppe</strong> tippen: Das führt dich direkt in den Chat der neuen Gruppe.</li>
+            <li>Gib einen <strong>Gruppennamen</strong> ein, bis zu 60 Zeichen, und, wenn du möchtest, einen <strong>Zweck / Beschreibung</strong>, bis zu 300 Zeichen: wofür die Gruppe da ist und an wen sie sich richtet.</li>
+            <li>Wähle eine <strong>Kategorie</strong>: <strong>Freundeskreis</strong>, <strong>Allgemein</strong>, <strong>Arbeitsgruppe</strong> oder <strong>Gilde</strong>. Auf dem Telefon ist standardmäßig <strong>Freundeskreis</strong> ausgewählt. In der Web-App ist es <strong>Arbeitsgruppe</strong>.</li>
+            <li>Wähle eine <strong>Beitrittsrichtlinie</strong>: <strong>Offen</strong>, <strong>Beitritt anfragen</strong> oder <strong>Nur auf Einladung</strong>.</li>
+            <li>Tippe auf <strong>Gruppe erstellen</strong>. Du wirst ihr <strong>Hauptkoordinator</strong>. Auf dem Telefon führt dich die App direkt in den Chat der neuen Gruppe.</li>
+        </ul>
+        <p>Du kannst innerhalb von 24 Stunden bis zu 5 Gruppen gründen.</p>
+        <p>Sind Bohnen im Spiel? Starte stattdessen ein Projekt oder einen Betrieb ganz unten bei den Kategorien: auf dem Telefon <strong>Projekt oder Betrieb starten</strong>, im Web <strong>Projekt starten</strong> oder <strong>Betrieb starten</strong>. Siehe „Projekte und Betriebe“.</p>
+        <h2>Personen einladen</h2>
+        <p>Du kannst Personen auf dem Telefon und in der Web-App einladen. Auf dem Telefon fragt der Chat einer neuen Gruppe: <strong>Wen möchtest du einladen?</strong></p>
+        <ul>
+            <li>Tippe auf <strong>Personen einladen</strong>, hake die gewünschten Personen an und tippe auf die Schaltfläche unten (beispielsweise <strong>2 Personen einladen</strong>).</li>
+            <li>Oder tippe auf <strong>Nicht jetzt</strong>, um dies zu überspringen.</li>
+        </ul>
+        <p>Später kann ein Koordinator Personen über das Menü <strong>⋮</strong> des Chats unter <strong>Personen einladen</strong> einladen. In der Web-App öffnet ein Koordinator die Gruppe, tippt auf <strong>Personen einladen</strong>, wählt die Personen aus und tippt unten auf dieselbe Weise auf die Schaltfläche. Jede eingeladene Person sieht die Gruppe im <strong>Gemeingut</strong> unter <strong>Gruppen</strong>, in der Telefon-App mit <strong>EINGELADEN</strong> gekennzeichnet (auf dem Telefon in einer Community ohne <strong>Gemeingut</strong>-Reiter unter <strong>Gruppen finden</strong> im <strong>Chat</strong>). Die Web-App kennzeichnet Einladungen noch nicht: Dort öffnet man die Gruppe und tippt auf <strong>Einladung annehmen</strong>. Wenn jemand beitritt, weist der Chat darauf hin.</p>
+        <h2>Der Gruppenchat</h2>
+        <ul>
+            <li>Tippe auf dem Telefon ganz oben im Chat auf den Gruppennamen, um die Gruppe anzuzeigen: ihre Mitglieder, <strong>Gruppe verlassen</strong> und für Koordinatoren die <strong>Koordinator-Werkzeuge</strong>. In der Web-App klicke oben im Chat auf den Gruppennamen oder öffne die Gruppe im <strong>Gemeingut</strong> unter <strong>Gruppen</strong>.</li>
+            <li>Das Menü <strong>⋮</strong> bietet <strong>Personen einladen</strong> (für Koordinatoren), <strong>Benachrichtigungen stummschalten</strong> (oder <strong>Stummschaltung aufheben</strong>), <strong>Diesen Chat durchsuchen</strong>, <strong>Neues Telefon bestätigen</strong> und <strong>Gruppeninfo</strong>. Die Suche läuft auf deinem Telefon, nicht auf dem Server deiner Community.</li>
+            <li>Beitritte, Austritte und Rollenwechsel erscheinen im Chat als kleine graue Zeilen.</li>
+            <li>Schreibe <strong>@</strong> und den Namen von jemandem, um die Person zu benachrichtigen. Siehe „Erwähnungen (@Name)“.</li>
+            <li>Die neueste Nachricht befindet sich direkt über dem Eingabefeld und bleibt dort, wenn sich die Tastatur öffnet. Scrolle nach oben, um zurückzulesen; eine neu eintreffende Nachricht wartet dann auf dich, statt dich nach unten zu ziehen.</li>
+        </ul>
+        <p>Der Chat einer Gruppe ist Ende-zu-Ende verschlüsselt: Nur die Mitglieder der Gruppe können ihn lesen, nicht die Betreiber des Servers deiner Community. Über dem Eingabefeld steht <strong>Ende-zu-Ende verschlüsselt</strong>. Der Server deiner Community sieht weiterhin, wer wann geschrieben hat, wer erwähnt wurde, auf welche Nachricht geantwortet wurde und die Emoji-Reaktionen.</p>
+        <ul>
+            <li>Du siehst den Chat erst ab dem Tag deines Beitritts. Vorher Geschriebenes wird nicht angezeigt, und dein Telefon besitzt niemals den Schlüssel dazu. Du siehst die grauen Zeilen von früher, aber niemandes Worte.</li>
+            <li>Wenn jemand entfernt wird oder austritt, erstellt die Gruppe einen neuen Schlüssel. In einer Gruppe ab 10 Personen meldet der Chat: <strong>Chat für N Personen wird gesichert…</strong>, während dein Telefon ihn erstellt.</li>
+            <li>Eine Nachricht, die nicht verschlüsselt werden kann, wird nicht gesendet. Sie zeigt <strong>! nicht zugestellt</strong>, und eine Zeile über dem Eingabefeld kann den Grund nennen. Tippe darauf, um sie <strong>Erneut senden</strong> oder <strong>Verwerfen</strong>.</li>
+            <li>Eine Nachricht, die sich nicht als von einem Mitglied verfasst bestätigt, erscheint als <strong>Unbestätigt</strong> ohne Zuordnung, mit dem Hinweis: <strong>Diese Nachricht konnte nicht verifiziert werden.</strong> Eine Nachricht, deren Schlüssel dein Telefon noch nicht erreicht hat, zeigt: <strong>Warten auf den Schlüssel zu dieser Nachricht.</strong></li>
+            <li>Wenn der Server deiner Community älter ist und Gruppenchats noch nicht verschlüsseln kann, meldet der Chat, dass der Server mitlesen kann und dass er verschlüsselt wird, sobald der Server aktualisiert wird. Nach der Aktualisierung werden frühere Nachrichten, die der Server lesen konnte, entfernt, worauf eine Zeile im Chat hinweist. Jede frühere Nachricht lautet dann <strong>Eine frühere Nachricht wurde entfernt, als dieser Chat verschlüsselt wurde</strong>, und mehrere hintereinander erscheinen als eine Zeile, etwa <strong>11 frühere Nachrichten entfernt, als dieser Chat verschlüsselt wurde</strong>.</li>
+        </ul>
+        <p>In der Web-App befinden sich deine Gruppenchats unter <strong>Chat</strong>, gekennzeichnet mit 👥. Du kannst dort Ende-zu-Ende verschlüsselt wie auf dem Telefon lesen und schreiben: antworten, reagieren, 15 Minuten lang bearbeiten und den Chat durchsuchen. Stummschalten, <strong>Löschen</strong> und <strong>Entfernen</strong> gibt es nur auf dem Telefon. In der Web-App klickst du oben im Chat auf den Gruppennamen, um die Gruppe zu öffnen; Koordinatoren können von dort aus Personen einladen. Der Chat eines Betriebs ist nicht verschlüsselt: Siehe „Nachrichten“.</p>
+        <h2>Im Gruppenchat sprechen</h2>
+        <p>Der Chat einer Gruppe funktioniert genau wie ein Chat mit einer einzelnen Person. Tippe auf eine Nachricht, und daneben erscheinen kleine runde Schaltflächen:</p>
+        <ul>
+            <li><strong>Antworten</strong> zitiert die Nachricht über deiner nächsten Eingabe. Tippe auf das Zitat, um zur beantworteten Nachricht zu springen.</li>
+            <li><strong>Reagieren</strong> öffnet sieben Emojis. Eins pro Person; tippe erneut darauf, um es zurückzunehmen. Die Reaktionen erscheinen als kleines Abzeichen unter der Nachricht.</li>
+            <li><strong>Bearbeiten</strong>, bei eigenen Nachrichten, 15 Minuten lang. Die Nachricht zeigt danach <strong>bearbeitet</strong>.</li>
+            <li><strong>Löschen</strong>, bei eigenen Nachrichten, jederzeit. Es erfolgt eine einmalige Nachfrage: <strong>Für alle löschen?</strong>, und die Nachricht lautet danach für alle in der Gruppe: <strong>Diese Nachricht wurde gelöscht</strong>.</li>
+            <li><strong>Entfernen</strong>, für Koordinatoren, bei jeder fremden Nachricht. Es erfolgt eine einmalige Nachfrage, und die Nachricht lautet danach: <strong>Von einem Koordinator entfernt</strong>. Eine eigene Nachricht wird über <strong>Löschen</strong> gelöscht, nicht über <strong>Entfernen</strong>.</li>
+        </ul>
+        <p>Zwei oder mehr aufeinanderfolgende Nachrichten, die ihre Verfasser gelöscht haben, erscheinen als eine Zeile, wie etwa <strong>3 Nachrichten wurden gelöscht</strong>. Zwei oder mehr von einem Koordinator entfernte Nachrichten erscheinen als <strong>3 Nachrichten von einem Koordinator entfernt</strong>.</p>
+        <p>Unter deiner eigenen Nachricht: eine Uhr, während sie gesendet wird, ein Haken, sobald der Server der Gruppe sie erhalten hat, oder <strong>! nicht zugestellt</strong>, falls sie nicht gesendet werden konnte – tippe darauf, um sie <strong>Erneut senden</strong> oder <strong>Verwerfen</strong>. In einer Gruppe gibt es keine blauen Doppelhaken: Eine Gruppe hat keinen einzelnen Leser.</p>
+        <p>Fotos können in einem Gruppenchat nicht gesendet werden, und ein Deal kann darin nicht gestartet werden. Beides gehört in einen Chat zwischen zwei Personen. Siehe „Nachrichten“.</p>
+        <p>Ein <strong>Beobachter</strong> kann den Chat lesen, aber darin weder schreiben noch reagieren oder antworten.</p>
+        <p>Der Server deiner Community muss aktuell sein, damit Antworten, Reaktionen, Bearbeiten und Löschen funktionieren. Nur wenn er das nicht ist, meldet die App <strong>In dieser Community noch nicht verfügbar</strong> – diesen Hinweis lohnt es sich, an die Verantwortlichen des Servers weiterzugeben.</p>
+        <p>Alles andere, was der Server ablehnt, lehnt er mit eigenen Worten ab, und die App zeigt dir diese Worte anstelle jener Zeile. „Eine entfernte Nachricht kann nicht bearbeitet werden“ bedeutet, dass ein Koordinator die Nachricht entfernt hat, während du getippt hast – nicht, dass dein Server veraltet ist.</p>
+        <h2>Nachrichten von vor deinem Telefonwechsel</h2>
+        <p>Wenn dein Konto mit einem neuen Schlüssel auf ein neues Telefon umzieht, waren die früheren Gruppennachrichten mit dem Schlüssel deines alten Telefons verschlüsselt. Im Chat jeder Gruppe steht eine Zeile: <strong>🔒 N Nachrichten von vor deinem Telefonwechsel. Entsperren →</strong>. Tippe darauf:</p>
+        <ul>
+            <li><strong>Ich habe mein altes Telefon oder alte 12 Wörter</strong>: Gib deine alten 12 Wörter auf dem neuen Telefon ein (es sind englische Wörter), und die früheren Nachrichten werden entschlüsselt. Dein altes Telefon zeigt <strong>Dieses Konto ist auf ein neues Telefon umgezogen</strong> mit einem Button, um diese Wörter hinter seiner Bildschirmsperre anzuzeigen. Es sind deine eigenen Wörter: Gib sie nur in dein eigenes neues Telefon ein, niemals in ein Telefon, das dir jemand hinhält.</li>
+            <li><strong>Ein Mitglied der Gruppe bitten, dieses Telefon zu bestätigen</strong>: Dein neues Telefon zeigt einen Code an. Triff ein Mitglied der Gruppe persönlich; diese Person öffnet das Chat-Menü der Gruppe, tippt auf <strong>Neues Telefon bestätigen</strong> und scannt den Code. Ihr Telefon übergibt deinem Telefon die früheren Schlüssel, die es für eure gemeinsamen Gruppen hält.</li>
+            <li><strong>Gesperrt lassen</strong>: Nichts ändert sich. Deine eigenen Nachrichten von damals erscheinen unter deinem Namen, jedoch ohne ihren Text.</li>
+        </ul>
+        <p><strong>Wenn du das neue Telefon von jemand anderem bestätigst</strong>, prüft dein Telefon den Code anhand dessen, was es über den alten Schlüssel dieser Person gespeichert hat. Bestätige ein neues Telefon nur für jemanden, mit dem du zuvor auf diesem Telefon in jener Gruppe geschrieben hast, und nur, wenn die Person das Gerät selbst in den Händen hält: Wer es in der Hand hat, kann die früheren Nachrichten lesen, die auch du lesen kannst. Wenn dein Telefon sagt: <strong>Nicht fortfahren; informiere einen Eigentümer</strong>, halte inne. Das bedeutet, dass das, was dein Telefon zuvor gespeichert hatte, nicht mit den aktuellen Serverangaben übereinstimmt. Dasselbe gilt dauerhaft für jemanden, der seinen Namen geändert hat, nachdem dein Telefon die Person gesehen hatte: Für ein Telefon sieht ein neuer Name an einem Schlüssel genau so aus wie der Name eines Fremden. Ein Telefon, das beide Namen gesehen hat, kann die Person daher nie wieder persönlich bestätigen. Die eigenen alten 12 Wörter dieser Person funktionieren weiterhin, ebenso wie die Bestätigung durch ein Mitglied, dessen Telefon immer nur den neuen Namen gesehen hat. Ein Telefon, das gerade erst aus seinen 12 Wörtern wiederhergestellt wurde oder jene Gruppe nie geöffnet hat, hat zu wenig gesehen, um die Prüfung durchzuführen: Es meldet, dass es den alten Schlüssel nie kannte, oder vertraut den Serverangaben. Lass die Bestätigung stattdessen von einem Mitglied durchführen, das regelmäßig mit der Person geschrieben hat.</p>
+        <p>Am Ende zeigt dein Telefon an, was geschehen ist: <strong>Fertig</strong> nur dann, wenn es jeden Schlüssel übertragen hat; <strong>3 von 5 übergeben</strong>, falls der Server einige abgelehnt hat. Wenn der Server meldet, dass das neue Telefon bereits einige besitzt, sagt dein Telefon: <strong>die Community meldet</strong>, da es nicht in das andere Telefon hineinsehen kann. Falls das neue Telefon jene Nachrichten weiterhin nicht lesen kann, informiere einen Eigentümer.</p>
+        <h2>Einer Gruppe beitreten</h2>
+        <p>Auf dem Telefon listet im <strong>Gemeingut</strong> unter <strong>Gruppen</strong> der Bereich <strong>Gruppen, denen du beitreten kannst</strong> die Gruppen auf, in denen du noch nicht bist. Filtere sie nach Art mit den Schaltflächen über der Liste. In der Web-App listet <strong>Gruppen</strong> jede sichtbare Gruppe auf, deine eigenen mit deiner Rolle gekennzeichnet; <strong>Meine Gruppen</strong> zeigt nur deine eigenen an. Jede Gruppe zeigt den Beginn ihrer Beschreibung. Öffne eine Gruppe, um alles zu lesen, und wähle dann:</p>
+        <ul>
+            <li><strong>Gruppe beitreten</strong>, wenn sie für alle offen ist;</li>
+            <li><strong>Beitritt anfragen</strong>, wenn ein Koordinator Mitglieder bestätigt. Bis zur Bestätigung siehst du <strong>Anfrage wartet auf Genehmigung</strong>.</li>
+        </ul>
+        <p>Auf dem Telefon befindet sich eine angefragte Gruppe in keiner der Listen, bis ein Koordinator dich hereinlässt. Im Web bleibt sie in der Liste mit der Kennzeichnung <strong>Ausstehend</strong>.</p>
+        <p>Eine Gruppe <strong>Nur auf Einladung</strong> ist für alle unsichtbar, die weder Mitglied noch eingeladen sind.</p>
+        <p>Auf dem Telefon hat eine lokale Community ohne Bohnen keinen <strong>Gemeingut</strong>-Reiter. Tippe dort auf <strong>Chat</strong>, dann auf <strong>Gruppen</strong> und anschließend auf <strong>Gruppen finden</strong>: Dies öffnet dieselbe Liste. Bevor du in einer Gruppe bist, lautet der Link <strong>Eine Gruppe zum Beitreten finden</strong>. Die globale Gemeinschaft besitzt den <strong>Gemeingut</strong>-Reiter: Ihre Gruppen befinden sich dort unter einem Beispiel aus einer lokalen Community (siehe „Regeln und Entscheidungen“).</p>
+        <p>Wenn ein Koordinator dich aus einer Gruppe entfernt hat, kannst du ihr nicht mehr selbstständig beitreten.</p>
+        <p>Während dein Konto gesperrt ist, kannst du weder Gruppen gründen noch ihnen beitreten, keinen Beitritt anfragen und keine Einladungen annehmen, und ein Koordinator kann eine zuvor gestellte Anfrage von dir nicht genehmigen. Gruppen, in denen du bereits bist, bleiben dir erhalten. Endet die Sperre, kannst du wieder Gruppen gründen oder ihnen beitreten.</p>
+        <h2>Per Einladung beitreten</h2>
+        <p>Eine Gruppe, zu der du eingeladen wurdest, erscheint im <strong>Gemeingut</strong> unter <strong>Gruppen</strong>, in der Telefon-App mit <strong>EINGELADEN</strong> markiert. Auf dem Telefon in einer Community ohne <strong>Gemeingut</strong>-Reiter findest du sie unter <strong>Gruppen finden</strong> im <strong>Chat</strong>. Tippe darauf, um die Einladung anzusehen: wer dich eingeladen hat, worum es in der Gruppe geht, wer dabei ist (bei geschlossenen Gruppen: wie viele) und wer den Chat lesen kann. Auf dem Telefon:</p>
+        <ul>
+            <li>Tippe auf <strong>Der Gruppe beitreten</strong>. Du landest direkt in ihrem Chat.</li>
+            <li>Tippe auf <strong>Nicht jetzt</strong>, um später zu entscheiden. Die Einladung bleibt bestehen.</li>
+            <li>Steht dort <strong>Diese Einladung ist nicht mehr gültig</strong>, wurde sie zurückgezogen. Bitte die einladende Person um eine erneute Einladung.</li>
+            <li>Steht dort <strong>Diese Gruppe konnte nicht geöffnet werden</strong>, konnte dein Telefon den Server deiner Community nicht erreichen. Tippe auf <strong>Erneut versuchen</strong>.</li>
+        </ul>
+        <p>Die Web-App kennzeichnet Einladungen noch nicht. Öffne die Gruppe im <strong>Gemeingut</strong> unter <strong>Gruppen</strong> und klicke auf <strong>Einladung annehmen</strong>. Du trittst ihr bei und bleibst auf der Gruppenseite.</p>
+        <h2>In einer Gruppe inserieren</h2>
+        <p>Öffne die Gruppe im Web im <strong>Gemeingut</strong> unter <strong>Gruppen</strong> und klicke auf <strong>Einstellen in</strong> gefolgt von ihrem Namen. Die Telefon-App kann noch keine Inserate in bestehenden Gruppen erstellen. Nur Gruppenmitglieder sehen das Inserat. Es erscheint im Markt mit einem Schloss und dem Gruppennamen.</p>
+        <h2>Koordinatoren und der Hauptkoordinator</h2>
+        <p>Ein Koordinator betreut die Gruppe. Wer sie gegründet hat, ist ihr <strong>Hauptkoordinator</strong>, und die Gruppenkarte nennt ihn: <strong>Hauptkoordinator: Ali</strong>. In der Mitgliederliste ist diese Zeile mit <strong>LEITUNG</strong> gekennzeichnet.</p>
+        <p>In den <strong>Koordinator-Werkzeuge</strong> kann jeder Koordinator:</p>
+        <ul>
+            <li>die Beitrittsrichtlinie ändern;</li>
+            <li>Beitrittsanfragen <strong>Genehmigen</strong> oder <strong>Ablehnen</strong>.</li>
+        </ul>
+        <p>Neben einem Namen in der <strong>Mitgliederliste</strong> kann jeder Koordinator:</p>
+        <ul>
+            <li>die Rolle eines Mitglieds oder Beobachters ändern (<strong>Rolle</strong> auf dem Telefon, ein Dropdown-Menü in der Web-App), einschließlich der Ernennung zum Koordinator;</li>
+            <li>ein Mitglied oder einen Beobachter entfernen (<strong>✕</strong>).</li>
+        </ul>
+        <p>Ein Koordinator entfernt ein Inserat direkt am Inserat selbst, und auf dem Telefon eine Nachricht im Chat. Der Name und die Beschreibung einer Gruppe können in der App derzeit noch nicht geändert werden.</p>
+        <p>Nur der <strong>Hauptkoordinator</strong> kann einen Koordinator entfernen oder jemandem die Koordinator-Rolle entziehen. Neben Zeilen, die du nicht bearbeiten kannst, wird weder <strong>Rolle</strong> noch <strong>✕</strong> angezeigt – so teilt die App dir mit, dass dir diese Berechtigung fehlt.</p>
+        <p><strong>Niemand kann den Hauptkoordinator entfernen oder ihm die Leitung entziehen.</strong> Weder ein anderer Koordinator noch ein Community-Admin. Abgesehen davon, dass der Hauptkoordinator die Rolle freiwillig übergibt, kann nur eine Gruppenabstimmung eine neue Leitung bestimmen. Siehe „Abstimmungen in einer Gruppe“.</p>
+        <p><strong>Die Leitung übergeben.</strong> Die Leitung kann weitergegeben werden. Tippe auf dem Telefon in den <strong>Koordinator-Werkzeuge</strong> auf <strong>Übergeben</strong> oder auf die Schild-Schaltfläche neben dem Namen einer Person. In der Web-App klicke neben dem Namen auf <strong>Zur Leitung machen</strong>. Wähle einen anderen Koordinator oder ein Mitglied – ein Mitglied wird dabei automatisch zum Koordinator. Ein Beobachter kann nicht die Leitung übernehmen; mache ihn zuerst zum Mitglied oder Koordinator. Einmal übergeben, kannst du die Leitung nicht zurückfordern.</p>
+        <p><strong>Als Leitung austreten.</strong> Übergib die Leitung zuerst; das Telefon bietet dir dies an, wenn du auf <strong>Gruppe verlassen</strong> tippst, und die Web-App weist dich darauf hin. Wenn sonst niemand mehr in der Gruppe ist, kannst du einfach austreten.</p>
+        <p>Der letzte verbliebene Koordinator kann weder zurücktreten noch die Gruppe verlassen, solange noch andere Personen in der Gruppe sind.</p>
+        <p><strong>Während ein Koordinator gesperrt ist.</strong> Wenn deine Community das Konto eines Koordinators vorübergehend sperrt, funktioniert keines der Koordinator-Werkzeuge für ihn, bis die Sperre endet: Genehmigen, Einladen, Rollen ändern, Personen, Inserate oder Nachrichten entfernen, die Gruppe bearbeiten, die Leitung übergeben. Die App zeigt an, dass sein Konto gesperrt ist und dass er weiterhin Koordinator ist. Ihm wird nichts genommen: Er bleibt Koordinator, die Leitung bleibt Leitung, und alles funktioniert wieder ab der Sekunde, in der die Sperre endet. Er kann die Gruppe weiterhin verlassen, es sei denn, er leitet sie und es sind noch andere Personen darin.</p>
+        <p>Die Gruppe läuft in der Zwischenzeit weiter. Ihre Mitglieder chatten und inserieren weiter, und einer offenen Gruppe können weiterhin Personen beitreten. Jeder andere Koordinator kann all das Genannte weiterhin tun; nur die Befugnisse der Leitung pausieren. Beitrittsanfragen und neue Einladungen warten auf einen Koordinator. Jeder kann weiterhin Inserate oder Personen den Moderatoren der Community melden. Ist der gesperrte Koordinator der einzige Koordinator der Gruppe, ist er deren Leitung, und nichts, was er während der Sperre tut, zählt als Aktivität: 30 Tage nach seiner letzten Aktivität kann die Gruppe wie unten beschrieben eine neue Leitung wählen.</p>
+        <p><strong>Wenn die Leitung inaktiv wird.</strong> Nach 30 Tagen ohne Aktivität der Leitung hat die Gruppe einen zweiten Weg, eine neue Leitung zu wählen. (Ihre Mitglieder können zudem jederzeit für eine neue Leitung stimmen, außer in der globalen Gemeinschaft: siehe „Abstimmungen in einer Gruppe“.) Öffne die Gruppe und schaue direkt über die <strong>Mitgliederliste</strong>: Dort erscheint ein Bereich, der die Leitung nennt und anzeigt, wie lange sie abwesend ist. Solange die Leitung aktiv ist, wird dort nichts angezeigt – abgesehen von einer Zeile über das Ergebnis der letzten Abstimmung, die nach deren Ende zwei Wochen lang sichtbar bleibt.</p>
+        <p>Stimmberechtigt sind die <strong>anderen Koordinatoren</strong> der Gruppe – oder ihre <strong>Mitglieder</strong>, falls bis zum Tag der letzten Aktivität der Leitung kein anderer Koordinator ernannt worden war. Jeder, der der Gruppe beitrat oder nach diesem Tag zum Koordinator ernannt wurde, nimmt nicht an der Abstimmung teil. Jeder Stimmberechtigte kann neben einem Namen in jenem Bereich auf <strong>Vorschlagen</strong> tippen, auch beim eigenen; das Vorschlagen zählt als Ja-Stimme dieser Person. Alle Stimmberechtigten sehen daraufhin <strong>Ja</strong> und <strong>Nein</strong>. Du wirst um eine Bestätigung gebeten, da eine Stimme nicht geändert werden kann, und du siehst immer nur die Gesamtergebnisse – niemals, wer wie gestimmt hat. Die Abstimmung läuft 14 Tage lang und ist angenommen, wenn mehr als die Hälfte der Antwortenden mit Ja stimmt. Bei Annahme bleibt die bisherige Leitung Koordinator, wenn die anderen Koordinatoren abgestimmt haben, und wird zum Mitglied, wenn die Mitglieder abgestimmt haben. Wenn die inaktive Leitung zurückkehrt und irgendeine Aktion in der App ausführt, schließt sich die Abstimmung sofort. Auf dem Telefon bei erlaubten Benachrichtigungen zählt bereits das bloße Öffnen der App als Aktivität. Solange das Konto der Leitung gesperrt ist, zählt keine ihrer Aktionen. Beobachter können den Bereich sehen, haben aber kein Stimmrecht – ebenso wenig wie die inaktive Leitung selbst.</p>
+        <p>Die vollständigen Regeln stehen unter „Regeln und Entscheidungen“ im Abschnitt „Eine inaktive Hauptkoordination“.</p>
+        <p><strong>Während die Gruppe über eine neue Leitung abstimmt.</strong> Ob bei dieser Abstimmung oder bei einer der unten genannten gruppeninternen Abstimmungen: Kein Koordinator kann die Person, die zur Leitung werden könnte, entfernen oder in ihrer Rolle herabstufen, bis die Abstimmung abgeschlossen ist. Die App weist darauf hin. Die Person kann die Gruppe weiterhin von sich aus verlassen, und eine Abstimmung der Gruppe kann sie weiterhin abwählen.</p>
+        <h2>Abstimmungen in einer Gruppe</h2>
+        <p>Die Mitglieder einer Gruppe können gemeinsam über gruppeneigene Angelegenheiten abstimmen. Öffne die Gruppe (auf dem Telefon tippe oben im Chat auf ihren Namen; im Web öffne sie im <strong>Gemeingut</strong> unter <strong>Gruppen</strong>): Ihre Abstimmungen stehen unter <strong>Beschlüsse</strong> weit oben auf der Seite. Nur die Personen in der Gruppe können sie sehen.</p>
+        <p>In der globalen Gemeinschaft hat eine Gruppe keine eigenen Abstimmungen und kein <strong>Abstimmung vorschlagen</strong>; dort funktioniert ausschließlich die Abstimmung bei inaktiver Leitung.</p>
+        <p>Tippe auf <strong>Abstimmung vorschlagen</strong> und wähle aus, was geschehen soll:</p>
+        <ul>
+            <li><strong>Neuen Hauptkoordinator wählen</strong>: jede Person in der Gruppe außer Beobachtern, dich selbst eingeschlossen.</li>
+            <li><strong>Jemanden zum Koordinator machen</strong> oder <strong>Einen Koordinator zum Mitglied machen</strong>. Eine Abstimmung ändert niemals die Rolle der Leitung; um die Leitung zu ändern, stimme über eine neue Leitung ab.</li>
+            <li><strong>Jemanden entfernen</strong> aus der Gruppe. Weder die Leitung noch dich selbst: Um zu gehen, verlasse die Gruppe.</li>
+            <li><strong>Ändern, wer beitreten kann</strong>: für alle offen, Beitritt auf Anfrage mit Freigabe durch Koordinator oder nur auf Einladung.</li>
+            <li><strong>Gruppe schließen.</strong> Ihr Chat bleibt zum Lesen erhalten, nimmt aber keine neuen Nachrichten, Inserate oder Mitglieder mehr an, und ihre sonstigen offenen Abstimmungen enden. Ihre Inserate werden aus dem Markt entfernt.</li>
+        </ul>
+        <p>Gib dem Vorschlag einen Titel, begründe ihn und tippe auf <strong>Abstimmung eröffnen</strong>. Eine Abstimmung bewegt niemals Bohnen: Eine Gruppe verwaltet keine. Ebenso wenig kann sie den Status von jemandem in der Community ändern; dazu bedarf es eines Community-Beschlusses.</p>
+        <p><strong>Wer abstimmt.</strong> Alle, die beim Eröffnen der Abstimmung Mitglied oder Koordinator der Gruppe waren, einschließlich der Leitung und der Person, die den Vorschlag eingebracht hat. Beobachter schauen zu: Sie sehen die Abstimmungen, haben aber weder Ja noch Nein. Wer nach Eröffnung der Abstimmung beitritt, ist nicht stimmberechtigt. Eine Gruppe mit nur einer Person hat niemanden zum Abstimmen, daher gibt es in diesem Fall keine Schaltfläche <strong>Abstimmung vorschlagen</strong>. Du kannst jeweils nur eine eigene offene Abstimmung in einer Gruppe haben.</p>
+        <p><strong>Wie sie angenommen wird.</strong> Mehr als die Hälfte der Stimmberechtigten muss abstimmen. Das Entfernen einer Person und das Schließen der Gruppe erfordern 60 % Ja-Stimmen; der Rest erfordert mehr als die Hälfte. Eine Abstimmung läuft 7 Tage oder endet früher, sobald das Ergebnis rechnerisch feststeht. Wird sie angenommen, setzt die App das Ergebnis selbstständig um. Eine neue Leitung, ein Rollenwechsel, ein Ausschluss oder eine Schließung wird im Chat als kleine graue Zeile angezeigt; eine neue Beitrittsregel erscheint auf der Gruppenseite.</p>
+        <p><strong>Was du siehst.</strong> Während eine Abstimmung läuft, sehen alle, wie viele Personen abgestimmt haben, nicht wie. Ja und Nein werden nach Abschluss angezeigt. Eine einmal abgegebene Stimme kann nicht mehr geändert werden. Niemand sieht, wer wie gestimmt hat. In einer sehr kleinen Gruppe können das Gesamtergebnis und die Teilnehmerzahl dies jedoch verraten: Wenn drei Personen abstimmen und es 3:0 ausgeht, weiß jeder, wie die anderen gestimmt haben.</p>
+        <p><strong>Benachrichtigung.</strong> Alle Stimmberechtigten mit Ausnahme der vorschlagenden Person erhalten beim Start eine Benachrichtigung, sofern sie den Chat der Gruppe nicht stummgeschaltet oder Chat-Benachrichtigungen deaktiviert haben. Sie nennt weder Person noch Gruppe: Sie lautet <strong>In einer deiner Gruppen wurde eine Abstimmung eröffnet.</strong> Tippe darauf, und die Gruppe öffnet sich bei ihren <strong>Beschlüsse</strong>. Auf der Startseite erscheint eine offene Abstimmung, an der du noch nicht teilgenommen hast, unter <strong>Braucht dich</strong> und öffnet ebenfalls die Gruppe.</p>
+        <p><strong>Wenn Personen beitreten oder austreten.</strong> Verlässt jemand während einer Abstimmung die Gruppe, scheidet die Person aus der Abstimmung aus, und ihre Stimme erlischt. Wird jemand während einer Abstimmung von einem Koordinator entfernt oder zum Beobachter gemacht, bleibt die Person stimmberechtigt: Ihre abgegebene Stimme bleibt erhalten, und sie kann noch abstimmen, falls noch nicht geschehen. Das Entfernen von Personen ist niemals ein Weg, eine Abstimmung zu kippen. Bleiben weniger als zwei Personen übrig, endet die Abstimmung ergebnislos.</p>
+        <p><strong>Eine geschlossene Gruppe</strong> zeigt auf ihrer Seite <strong>Geschlossen</strong> an, mit dem Hinweis: „Die Gruppe wurde durch Abstimmung ihrer Mitglieder geschlossen. Ihr Chat bleibt lesbar.“ Ihr Chat, ihre Abstimmungen und ihre bisherigen Mitglieder bleiben zum Nachlesen erhalten; Neues kann nicht mehr hinzugefügt werden.</p>
+        <h2>Bald verfügbar</h2>
+        <ul>
+            <li>Abberufung eines unredlichen Hauptkoordinators durch einen Community-Beschluss. Kommt in einem späteren Update.</li>
+            <li>Kennzeichnung von Einladungen in der Webliste der Gruppen.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Nachrichten</strong><span>Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.</span></a></li>
+            <li><a href="mute.html"><strong>Chat stummschalten</strong><span>Benachrichtigungen für einen einzelnen Chat ausschalten, ohne ihn zu verlassen.</span></a></li>
+            <li><a href="mentions.html"><strong>Erwähnungen (@Name)</strong><span>Wie du jemanden in einer Gruppe oder einem Event-Chat direkt ansprichst.</span></a></li>
+            <li><a href="enterprises.html"><strong>Projekte und Betriebe</strong><span>Gemeinsame Unternehmungen mit eigenen Bohnen: finden, unterstützen oder selbst gründen.</span></a></li>
+            <li><a href="event-chat.html"><strong>Event-Chat</strong><span>Ein Gruppenchat für alle Teilnehmenden und wie er sich von anderen Chats unterscheidet.</span></a></li>
+            <li><a href="posting.html"><strong>Angebot oder Gesuch aufgeben</strong><span>Stelle etwas ein, das du tun oder geben kannst, oder etwas, das du suchst.</span></a></li>
+            <li><a href="decisions.html"><strong>Über Beschlüsse abstimmen</strong><span>Offene Entscheidungen finden, abstimmen, Stimme ändern und Ergebnisse einsehen.</span></a></li>
+            <li><a href="keepers.html"><strong>Verwalter</strong><span>Die Personen, die einen Betrieb führen und dafür einstehen. Wie man beitritt, widerspricht und zurücktritt.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khi đoạn chat báo khóa của người trò chuyện đã đổi — BeanPool members' guide</title>
+    <meta name="description" content="Tại sao đoạn chat ngừng gửi tin, cách kiểm tra mã khóa với người đó và khi nào nên tiếp tục.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Khi đoạn chat báo khóa của người trò chuyện đã đổi</h1>
+        <p class="lede">Tại sao đoạn chat ngừng gửi tin, cách kiểm tra mã khóa với người đó và khi nào nên tiếp tục.</p>
+        <h2>Ý nghĩa của thông báo</h2>
+        <p>Mỗi tin nhắn giữa hai người đều được khóa lại sao cho chỉ có điện thoại của người kia mới mở được. Tin nhắn được khóa theo <strong>khóa</strong> của họ, không phải theo tên của họ. Điện thoại của bạn ghi nhớ khóa mà nó đã dùng để khóa cuộc trò chuyện của bạn.</p>
+        <p>Nếu cộng đồng của bạn giờ đây nêu ra một khóa khác cho người đó, điện thoại của bạn sẽ dừng lại và thông báo cho bạn, thay vì âm thầm gửi đến khóa mới. Ở trên cùng của cuộc trò chuyện, bạn sẽ thấy <strong>Khóa của &quot;Ben&quot; đã thay đổi.</strong> Ô tin nhắn sẽ chuyển sang màu xám và thông báo việc gửi tin nhắn đã tạm dừng.</p>
+        <p>Các tin nhắn trước đây của bạn với họ thường vẫn đọc được như cũ. Trên một điện thoại bạn vừa khôi phục hoặc thiết lập lại, các tin nhắn từ khóa mới sẽ hiển thị <strong>Được gửi từ khóa mới. Sẽ hiển thị sau khi bạn tiếp tục.</strong> cho đến khi bạn quyết định.</p>
+        <p>Điều này có trên ứng dụng điện thoại. Ứng dụng web hiện chưa ghi nhớ các khóa.</p>
+        <h2>Lý do có thể xảy ra</h2>
+        <ul>
+            <li><strong>Họ có điện thoại mới và đổi khóa.</strong> Đây là lý do thông thường. Khóa cũ của họ đã mất, vì vậy họ có khóa mới.</li>
+            <li><strong>Có vấn đề gì đó không ổn.</strong> Máy chủ của cộng đồng liệt kê những ai có mặt trong mỗi cuộc trò chuyện. Một máy chủ muốn đọc tin nhắn của bạn có thể đặt khóa của người khác vào sau tên bạn của bạn. Tên thì trông đúng, nhưng khóa thì không.</li>
+        </ul>
+        <p>Điện thoại của bạn không thể tự phân biệt hai trường hợp này. Bạn có thể làm được điều đó, bằng mã khóa.</p>
+        <h2>Kiểm tra mã khóa với người đó</h2>
+        <ul>
+            <li>Biểu ngữ hiển thị một mã: 20 chữ số chia thành năm nhóm bốn chữ số.</li>
+            <li>Hãy nhờ người đó mở <strong>Cài đặt</strong>, sau đó vào <strong>Bảo vệ tài khoản</strong>, và đọc cho bạn nghe <strong>Mã khóa của tôi</strong>.</li>
+            <li><strong>Mã khóa của tôi</strong> chỉ có trên ứng dụng điện thoại. Nếu người đó chỉ dùng ứng dụng web, họ chưa thể đọc mã cho bạn: hãy nhấn <strong>Không phải bây giờ</strong> cho đến khi họ có thể mở ứng dụng điện thoại.</li>
+            <li>Kiểm tra mã <strong>trực tiếp, hoặc qua cuộc gọi thoại hay gọi video</strong> nơi bạn biết chắc đó là họ. Đừng kiểm tra bằng tin nhắn trong BeanPool: nếu khóa bị sai, thì người trả lời tin nhắn cũng có thể là người khác.</li>
+            <li>Nếu từng chữ số đều khớp, hãy đánh dấu vào <strong>Tôi đã kiểm tra với Ben: mã khóa trong Cài đặt của họ khớp với mã này</strong>, sau đó nhấn <strong>Tiếp tục với khóa mới</strong>.</li>
+        </ul>
+        <p>Kể từ thời điểm đó, các tin nhắn của bạn sẽ được gửi tới khóa mới. Biểu ngữ và thẻ <strong>khóa đã đổi</strong> trên cuộc trò chuyện trong mục <strong>Trò chuyện</strong> sẽ biến mất, và các tin nhắn trước đây của bạn vẫn đọc được.</p>
+        <p>Mã này không phải là bí mật. Bạn có thể đọc to một cách an toàn.</p>
+        <h2>Nếu mã không khớp, hoặc bạn không thể kiểm tra</h2>
+        <p>Nhấn <strong>Không phải bây giờ</strong>. Không có gì được gửi đi và không có gì thay đổi. Bạn có thể quay lại cuộc trò chuyện sau.</p>
+        <p>Một cuộc trò chuyện bị tạm dừng có thể vẫn bị tạm dừng cho đến khi bạn tiếp tục. Không có cách nào khác để tiếp tục nói chuyện trong đó: cộng đồng của bạn chỉ lưu giữ một cuộc trò chuyện duy nhất cho hai bạn, vì vậy việc bắt đầu một cuộc trò chuyện mới với cùng người đó sẽ mở chính cuộc trò chuyện này.</p>
+        <p>Nếu mã không khớp, đừng tiếp tục. Hãy báo cho người đó và các quản trị viên cộng đồng của bạn: ai đó có thể đang cố gắng đọc tin nhắn của bạn.</p>
+        <h2>Nếu biểu ngữ không cung cấp khóa nào để tiếp tục</h2>
+        <p>Đôi khi cộng đồng không liệt kê một khóa duy nhất cho người đó trong cuộc trò chuyện giữa hai người: cộng đồng liệt kê nhiều khóa, hoặc không liệt kê khóa nào. Khi đó không có khóa nào để tiếp tục, vì vậy biểu ngữ sẽ thông báo điều đó và chỉ đưa ra lựa chọn <strong>Không phải bây giờ</strong>. Không có gì được gửi đi. Hãy nói chuyện trực tiếp với người đó hoặc qua cuộc gọi. Điện thoại của bạn sẽ tự kiểm tra lại cuộc trò chuyện khi danh sách của cộng đồng thay đổi, và một cuộc trò chuyện mới với cùng người đó sẽ là chính cuộc trò chuyện này.</p>
+        <h2>Nếu biểu ngữ thông báo điện thoại đang kiểm tra đoạn chat từ đầu</h2>
+        <p>Sau khi bạn khôi phục điện thoại từ 12 từ, hoặc cập nhật ứng dụng, điện thoại của bạn sẽ kiểm tra từng cuộc trò chuyện đối chiếu với các tin nhắn trước đó của chính nó. Nếu những tin nhắn đó đến từ một khóa khác với khóa mà cộng đồng hiện cung cấp cho người đó, biểu ngữ sẽ bắt đầu bằng <strong>Điện thoại này đang kiểm tra đoạn chat này từ đầu, như thường làm sau khi bạn khôi phục hoặc cập nhật ứng dụng.</strong> Hãy kiểm tra mã với người đó như ở trên. Sau khi bạn đặt lại bộ nhớ đoạn chat của cộng đồng, biểu ngữ sẽ bắt đầu bằng dòng chữ <strong>Bộ nhớ đoạn chat của cộng đồng này đã được đặt lại, vì vậy điện thoại đang kiểm tra lại đoạn chat này từ đầu.</strong> thay thế.</p>
+        <h2>Bộ nhớ đoạn chat</h2>
+        <p>Điện thoại của bạn lưu giữ một bộ nhớ nhỏ cho từng cộng đồng: mỗi cuộc trò chuyện của bạn là với khóa nào, và cuộc trò chuyện nào là riêng tư. Bộ nhớ này được lưu trên điện thoại, và máy chủ cộng đồng không thể tự chuyển một cuộc trò chuyện sang một khóa khác: chỉ bạn mới có thể làm điều đó trên biểu ngữ. Nó vẫn ở lại trên điện thoại khi bạn đăng xuất, vì vậy việc đăng xuất và đăng nhập lại không xóa bộ nhớ này. Điện thoại không bao giờ tự ý đặt lại bộ nhớ.</p>
+        <p>Bạn có thể đặt lại bộ nhớ cho một cộng đồng: mở <strong>Cài đặt</strong>, nhấn <strong>Bộ nhớ đoạn chat</strong> dưới mục <strong>Tài khoản &amp; danh tính</strong>, nhấn <strong>Đặt lại</strong> bên cạnh cộng đồng, đọc lời cảnh báo và nhấn <strong>Đặt lại</strong> lần nữa. Ứng dụng chỉ hướng dẫn bạn đến đây khi nó thông báo không thể đọc được bộ nhớ đó và việc thử lại không có tác dụng.</p>
+        <p>Sau khi đặt lại, điện thoại của bạn sẽ kiểm tra lại mọi cuộc trò chuyện trong cộng đồng đó từ đầu, từ các tin nhắn mà nó lưu giữ. Một cuộc trò chuyện có tin nhắn đến từ một khóa khác với khóa mà cộng đồng hiện cung cấp sẽ hiển thị lại biểu ngữ, bắt đầu bằng <strong>Bộ nhớ đoạn chat của cộng đồng này đã được đặt lại, vì vậy điện thoại đang kiểm tra lại đoạn chat này từ đầu.</strong> Hãy kiểm tra mã với người đó như ở trên.</p>
+        <p>Hai điều có thể thay đổi sau khi đặt lại, và lời cảnh báo sẽ nêu rõ điều đó trước khi bạn xác nhận: một cuộc trò chuyện bị tạm dừng vì khóa của nó đã thay đổi có thể mở ra với khóa mới, và một cuộc trò chuyện riêng tư từng biến mất khỏi Trò chuyện có thể quay trở lại dưới dạng một cuộc trò chuyện nhóm mà cộng đồng có thể đọc được. Hãy kiểm tra mã khóa, hoặc kiểm tra ai có mặt trong cuộc trò chuyện, trước khi bạn gửi tin nhắn.</p>
+        <p>Việc đặt lại không giải quyết được trường hợp cuộc trò chuyện mà điện thoại của bạn không thể khớp với một khóa: nó sẽ được kiểm tra lại và lại dừng lại. Thay vào đó hãy kiểm tra mã với người đó (ở trên).</p>
+        <p>Điều này có trên ứng dụng điện thoại. Ứng dụng web không có bộ nhớ đoạn chat.</p>
+        <h2>Nếu biểu ngữ thông báo điện thoại không thể khớp đoạn chat với một khóa</h2>
+        <p>Đôi khi các tin nhắn trước đây trong một cuộc trò chuyện đã được khóa vào các khóa mà điện thoại của bạn không thể khớp với một người duy nhất. Phía trên ô tin nhắn có ghi <strong>Điện thoại này không thể khớp đoạn chat này với một khóa duy nhất, vì vậy tính năng gửi đã tắt.</strong> và biểu ngữ hiển thị mã của khóa mà cộng đồng hiện liệt kê cho người đó.</p>
+        <p>Một số tin nhắn có thể vẫn hiển thị. Chúng có thể không phải từ người có tên trên cuộc trò chuyện: các tin nhắn trước đây của chính họ có thể là những tin nhắn hiển thị dòng chữ <strong>🔒 Tin nhắn này không thể xác minh, nên không được hiển thị.</strong> Những tin nhắn đó vẫn giữ nguyên như vậy, ngay cả sau khi bạn tiếp tục.</p>
+        <p>Hãy kiểm tra mã với người đó như ở trên, trực tiếp hoặc qua cuộc gọi. Nếu khớp, hãy tích vào ô và nhấn <strong>Tiếp tục với khóa mới</strong>: kể từ thời điểm đó các tin nhắn của bạn sẽ được gửi tới khóa đó. Nếu mã không khớp, hoặc bạn không thể kiểm tra, hãy nhấn <strong>Không phải bây giờ</strong>. Một cuộc trò chuyện mới với cùng người đó sẽ là chính cuộc trò chuyện này, vì vậy không còn cách nào khác để thử. Nếu cộng đồng không liệt kê một khóa duy nhất cho họ, biểu ngữ chỉ cung cấp lựa chọn <strong>Không phải bây giờ</strong>, và điện thoại của bạn sẽ tự kiểm tra lại cuộc trò chuyện khi danh sách của cộng đồng thay đổi.</p>
+        <h2>Những gì điện thoại của bạn có thể kiểm tra, và những gì không thể</h2>
+        <p>Điện thoại của bạn kiểm tra một cuộc trò chuyện đối chiếu với các tin nhắn mà nó đã lưu giữ sẵn. Một chiếc điện thoại được khôi phục, hoặc một chiếc điện thoại hiện có tại thời điểm cập nhật, chỉ bị điều hướng bởi một máy chủ giữ lại hoặc bao quanh phần cũ nhất của cuộc trò chuyện trong những gì nó gửi. Một chiếc điện thoại đã lưu giữ phần cũ nhất đó sẽ không bị điều hướng bởi bất cứ nội dung gì mà máy chủ gửi sau bản cập nhật.</p>
+        <p>Vì vậy, một chiếc điện thoại bạn vừa khôi phục hoặc vừa cập nhật có thể bị đánh lừa về khóa của một cuộc trò chuyện. Biểu ngữ không thể loại trừ khả năng đó. <strong>Hãy xác nhận trực tiếp một khóa đã thay đổi</strong>, hoặc qua một cuộc gọi nơi bạn biết chắc đó là họ.</p>
+        <h2>Nếu cộng đồng cung cấp ngày tháng</h2>
+        <p>Khi cộng đồng của bạn có thể hiển thị bằng chứng tài khoản đã được cấp khóa mới, biểu ngữ sẽ thông báo điều đó, ví dụ: <strong>Cộng đồng này báo rằng tài khoản đã được cấp khóa mới vào 3 Thg 10 2026.</strong> Điều đó giúp bạn hiểu điều gì đã xảy ra, nhưng nó không thay thế cho việc kiểm tra mã: một máy chủ cũng có thể đưa ra thông báo như vậy.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Tin nhắn</strong><span>Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.</span></a></li>
+            <li><a href="your-12-words.html"><strong>12 từ của bạn</strong><span>12 từ là chìa khóa tài khoản của bạn. Tầm quan trọng của chúng, nơi tìm thấy, cách giữ an toàn và thêm phương thức đăng nhập phụ.</span></a></li>
+            <li><a href="people.html"><strong>Mọi người và bạn bè</strong><span>Tìm thành viên trong cộng đồng, kết bạn và bảo lãnh cho một người.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

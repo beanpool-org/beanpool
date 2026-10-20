@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>活动 — BeanPool members' guide</title>
+    <meta name="description" content="在线下或线上发起一次性或周期性活动；报名参加、接收提醒、分享活动并作为主办方进行管理。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">公共资金池</a></p>
+        <h1>活动</h1>
+        <p class="lede">在线下或线上发起一次性或周期性活动；报名参加、接收提醒、分享活动并作为主办方进行管理。</p>
+        <h2>查找活动</h2>
+        <ul>
+            <li>在<strong>市集</strong>中，点按<strong>活动</strong>。选择<strong>今天</strong>、<strong>本周末</strong>或<strong>未来 7 天</strong>。</li>
+            <li>在<strong>地图</strong>上，活动显示为紫色图钉。在手机上，点按<strong>活动</strong>可仅查看活动图钉。在 Web 应用中，它们始终显示，并通过日期标签进行筛选。</li>
+        </ul>
+        <h2>你的活动</h2>
+        <p>在<strong>市集</strong>中，点按<strong>★ 为你推荐</strong>。<strong>你的活动</strong>排在最上方：包含你表明了<strong>参加</strong>或<strong>感兴趣</strong>的所有活动，按时间由近及远排列。点按其中一个即可将其打开。</p>
+        <p>它仅在你近期有活动时才会显示，且只包含你自己的回复 — 其他任何人都无法看到它。</p>
+        <h2>参加活动</h2>
+        <p>在活动页面上，点按<strong>参加</strong>或<strong>感兴趣</strong>。再次点按你的选择可将其清除。</p>
+        <p>当你选择<strong>参加</strong>后：</p>
+        <ul>
+            <li>若主办方设置了准入限制，在主办方准入后，你便可以阅读主办方的<strong>给参与者的说明</strong>；</li>
+            <li>你可以打开<strong>活动聊天</strong>。参见“活动聊天”；</li>
+            <li>对于线上活动，在满足与上述说明相同的准入条件下，你将看到其<strong>加入链接</strong>和<strong>加入</strong>按钮。</li>
+        </ul>
+        <p>点按活动可查看完整信息，以及<strong>在地图上显示</strong>。在手机上它会打开你的地图应用。在 Web 应用中它会在“地图”上显示该地点。</p>
+        <h2>接收提醒</h2>
+        <p>当你选择<strong>参加</strong>或<strong>感兴趣</strong>后，活动会显示<strong>提醒我</strong>以及在开始前多久提醒你 — 在你更改之前为<strong>开始前 1 天（你的默认设置）</strong>。</p>
+        <ul>
+            <li>点按<strong>更改</strong>可选择<strong>1 周前</strong>、<strong>1 天前</strong>、<strong>2 小时前</strong>、<strong>1 小时前</strong>或<strong>30 分钟前</strong>。你可以勾选多个选项。</li>
+            <li>全部不勾选则表示不接收此活动的提醒。</li>
+            <li>然后点按<strong>仅为此活动保存</strong>。在点按保存之前勾选不会生效。</li>
+            <li>点按<strong>使用默认设置</strong>可恢复为你平时的常用选择。</li>
+        </ul>
+        <p>如需更改所有活动通用的常用选择，请参见“通知设置”。</p>
+        <p>提醒会以手机通知形式随市集通知一同发送，因此若关闭市集通知，提醒也将停止。已取消或已结束的活动绝不会发送提醒；在你表示参加时已过去的时间点也绝不会发送提醒。</p>
+        <h2>分享活动</h2>
+        <p>打开活动并点按<strong>分享</strong>。手机的常用分享面板随即打开，附带活动名称、时间、地点以及链接。在电脑上，链接会自动复制供你粘贴。</p>
+        <p>点击该链接的任何人都能打开活动 — 已安装应用的用户在应用中打开，否则在 Web 应用中打开。尚未加入你社区的人会转到社区加入页面。在网页浏览器中，全球社区会先向其展示活动（如同访客看到的一样），并在其加入后再次打开该活动。</p>
+        <h2>添加到你的日历</h2>
+        <p>打开活动并点按<strong>添加到日历</strong>。</p>
+        <ul>
+            <li>在 <strong>Web 应用</strong>中，系统会下载日历文件。打开该文件，你的日历即可添加该活动。</li>
+            <li>在 <strong>iPhone</strong> 上，相同的文件会传递给手机，提示<strong>添加到日历</strong>。</li>
+            <li>在 <strong>Android</strong> 上，Google 日历会自动打开并预先填入活动信息。检查无误后保存即可。</li>
+        </ul>
+        <p>该日程包含名称、时间、地点以及返回活动的链接。如果主办方随后修改了时间，你的日历不会随之自动更新 — 应用仍会提醒你，且活动页面本身始终显示最新时间。</p>
+        <h2>创建活动</h2>
+        <ul>
+            <li>在“市集”标签页或“地图”上点按 <strong>+ 发布信息</strong>，然后选择<strong>活动</strong>。</li>
+            <li>输入<strong>标题</strong>以及<strong>开始</strong>时间。<strong>结束</strong>时间为选填项；若不修改，默认设定为开始后 2 小时。</li>
+            <li>活动时间采用该活动所在时区，取自地图图钉。当该时区与你所在的时区不同时，时间下方一行会注明该时区名称。如有误，点按其旁的<strong>更改</strong>。</li>
+            <li><strong>重复：</strong>选择举办频次，例如每周当天的某一天或每月一次，或者保持为<strong>不重复</strong>。<strong>截止日期</strong>为选填项：留空则活动会一直重复，直到你将其取消。</li>
+            <li>选择<strong>在线下地点</strong>或<strong>在线</strong>。对于线上活动，无需填写地点和放置图钉：改为添加<strong>加入链接</strong>。该链接仅对你和确认参加的人可见（若设置了准入，则仅对你准入的人可见）。其时间采用你自己的时区，其他人则看到其所在时区对应的时间，并标有<strong>你的当地时间</strong>。</li>
+            <li><strong>地点名称</strong>，例如“市政厅”。</li>
+            <li>在地图上放置图钉：轻点地图，搜索<strong>查找地址</strong>，或点按<strong>使用我的位置</strong>。如果你不希望显示确切位置，可点按<strong>粗略位置（约 100 米）</strong>。参见“你的图钉位置”。</li>
+            <li>填写<strong>描述</strong>，如有需要还可以添加照片。</li>
+            <li><strong>给参与者的说明：</strong>点按“参加”的所有人均可看到，除非你勾选了<strong>只有我准入的人才能看到备注和聊天</strong>（全球社区默认勾选，因为任何人都能在一分钟内加入）：此时仅有你准入的人才能看到该说明以及活动聊天。此处很适合放置确切地址或门禁密码；地点名称则是公开对所有人展示的。</li>
+            <li><strong>谁可以看到：</strong>你所在的整个社区，或指定群组。</li>
+            <li>如果你管理一个项目或企业，或者担任群组的召集人，<strong>发布身份</strong>允许你以其名义发布活动。群组主办的活动仅对其自身成员可见；企业主办的活动面向整个社区，因此企业活动绝不能限定为仅群组可见。</li>
+            <li>点按<strong>创建</strong>。你的活动即会出现在市集和地图上。</li>
+        </ul>
+        <p>在 Web 应用中，标题框为 <strong>What's happening</strong>，图钉按钮为 <strong>📍 My location</strong> 和 <strong>📌 Drop a pin</strong>，最后一个按钮为<strong>创建活动</strong>。</p>
+        <p>你最多可以同时拥有 5 个即将举行的活动。群组的活动计入群组的配额，企业的活动计入企业的配额。</p>
+        <h2>管理你的活动</h2>
+        <p>打开你的活动。作为主办方，你可以：</p>
+        <ul>
+            <li>查看<strong>谁会参加</strong>，并准入成员：姓名旁的<strong>允许加入</strong>（再次点按可撤回），或<strong>允许所有人加入</strong>。你自己的好友在点按“参加”时会自动准入。如果你取消勾选<strong>只有我准入的人才能看到备注和聊天</strong>，所有确认参加的人都将看到说明和此前的聊天记录，且聊天中会提示主办方已向所有人开放；</li>
+            <li><strong>编辑活动</strong>。如果你修改了时间或地点，所有确认参加的人都会收到通知；</li>
+            <li><strong>复制到新日期</strong>，以便再次举办；</li>
+            <li><strong>取消活动</strong>，然后确认（在手机上再次点按<strong>取消活动</strong>，在 Web 应用中点按 <strong>确定</strong>）。所有确认参加的人都会看到活动已取消，且活动聊天将变为只读。</li>
+        </ul>
+        <h2>周期性活动</h2>
+        <p>周期性活动在其日期旁会显示 <strong>↻</strong> 和重复频次，例如<strong>每周五</strong>或<strong>每月 16 日</strong>。其卡片展示下一个日期；打开可查看<strong>接下来的日期</strong>。</p>
+        <p>如果你是主办方，每个接下来的日期都具备以下选项：</p>
+        <ul>
+            <li><strong>取消此日期：</strong>仅取消当天的活动。当天确认参加的所有人都会收到通知。</li>
+            <li><strong>仅更改此日期：</strong>取消当天活动，并在另一日期举办一次性活动。</li>
+            <li><strong>恢复活动：</strong>已取消的日期重新恢复举办。</li>
+        </ul>
+        <p><strong>取消活动</strong>会取消所有日期，且聊天将变为只读。在此之前，各日期之间聊天始终保持开放，直至最后一个日期；若未设置<strong>截止日期</strong>，聊天将一直开放直到你取消整个活动。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>活动聊天</strong><span>与活动组织者及所有参与者交流。</span></a></li>
+            <li><a href="notifications.html"><strong>通知设置</strong><span>选择哪些提醒会推送到你的手机，以及活动何时向你发出提醒。</span></a></li>
+            <li><a href="pin-locations.html"><strong>你的图钉位置</strong><span>谁能看到你的帖子和活动所在位置，以及如何保护家庭住址隐私。</span></a></li>
+            <li><a href="map-pins.html"><strong>地图图钉说明</strong><span>地图上的图钉、颜色代表的含义以及图钉周边的操作按钮。</span></a></li>
+            <li><a href="polls.html"><strong>投票</strong><span>向社区提出简短问题。民意投票仅反映大家的看法，其本身不产生任何变更。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>동향 둘러보기 — BeanPool members' guide</title>
+    <meta name="description" content="이웃들이 다른 곳에서 만들고 공유한 소식을 피드 하나로 모아보세요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#pulse">동향</a></p>
+        <h1>동향 둘러보기</h1>
+        <p class="lede">이웃들이 다른 곳에서 만들고 공유한 소식을 피드 하나로 모아보세요.</p>
+        <h2>동향이란</h2>
+        <p><strong>홈</strong>의 <strong>동향</strong> 카드에서 동향을 여세요: 게시물을 탭하거나 <strong>전체 보기</strong>를 탭하세요. 홈에 카드가 없다면 휴대폰에서는 <strong>카드 추가</strong>로, 웹 앱에서는 <strong>홈 편집</strong>으로 다시 가져올 수 있어요. 휴대폰에서는 <strong>설정</strong>의 <strong>동향</strong> 아래에서도 열 수 있어요.</p>
+        <p>동향은 커뮤니티 멤버들이 다른 사이트에 올린 동영상, 음악, 블로그, 사진 등의 게시물을 한곳에 모아줘요. 내 이웃들이 무엇을 만들고 어떤 활동을 하는지 알아볼 수 있는 공간이에요.</p>
+        <ul>
+            <li><strong>이웃:</strong> 멤버들의 채널에서 가져온 게시물이에요. 상단 버튼을 통해 '음식 및 재배' 또는 '수리 및 재사용'과 같은 주제를 선택할 수 있어요. <strong>전체</strong>는 모든 항목을 보여줘요.</li>
+            <li><strong>배움</strong> (휴대폰 앱): BeanPool의 작동 원리에 관한 영상과 매일의 짧은 생각이에요. &quot;배움 영상&quot;을 참조하세요. 웹 앱에서는 피드 안에 포함되어 있으며, 상단의 <strong>이용 방법</strong>을 누르면 해당 영상들만 볼 수 있어요.</li>
+        </ul>
+        <p>아래로 당겨서 새로고침하세요. 웹 앱에서는 상단의 🔄를 탭하세요.</p>
+        <p>휴대폰에서는 아래로 스크롤할 때 상단 버튼들이 위로 숨겨져요. 위로 살짝 스크롤하면 다시 나타나요.</p>
+        <h2>게시물 열기</h2>
+        <p><strong>YouTube 영상:</strong> 휴대폰에서 ▶ 표시가 있는 이미지를 탭하면 카드 안에서 바로 영상이 재생돼요. 탭하기 전까지는 YouTube에서 아무것도 불러오지 않으므로, 영상을 지나쳐 스크롤하더라도 누구에게도 데이터가 전송되지 않아요. 화면을 가득 채우려면 영상 모서리의 전체화면 버튼을 누르세요.</p>
+        <p>영상이 화면 밖으로 스크롤되거나, 동향 화면을 벗어나거나, 다른 영상을 시작하면 재생이 멈춰요. 한 번에 하나의 영상만 재생돼요.</p>
+        <p>웹 앱에서는 영상이 카드 안에서 재생되지 않아요. 이미지나 제목을 탭하면 새 탭에서 YouTube로 열려요.</p>
+        <p><strong>그 밖의 모든 링크</strong>(TikTok, Instagram, 블로그, 웹사이트 등): 이미지나 제목을 탭하면 브라우저나 해당 사이트의 앱에서 열려요.</p>
+        <p>영상은 언제든지 YouTube에서 직접 열 수도 있어요: 제목을 탭하거나 그 아래의 <strong>YouTube에서 열기 ↗</strong>를 탭하세요. 영상이 카드에서 재생되지 않는 경우(일부 사용자가 YouTube 외부 재생을 허용하지 않거나 일부 휴대폰에서 지원하지 않음), 카드에 해당 안내가 표시되며 해당 버튼이 제공돼요.</p>
+        <h2>게시물에 문제가 있는 경우</h2>
+        <ul>
+            <li><strong>다른 사람의 게시물:</strong> 깃발 아이콘을 탭하고 사유(<strong>스팸 또는 사기</strong>, <strong>불쾌한 콘텐츠</strong>, <strong>허위 정보 게시물</strong>, <strong>아동 안전</strong>, 또는 <strong>기타</strong>)를 선택한 뒤 <strong>신고 제출</strong>(웹 앱에서는 <strong>신고 제출</strong>)을 누르세요. 커뮤니티 서버 운영자가 이를 검토해요.</li>
+            <li><strong>내가 올린 게시물:</strong> <strong>숨기기</strong>를 누른 다음 <strong>피드에서 숨기기</strong>를 누르세요. 모든 사람의 동향 피드에서 내려가요. 숨긴 게시물은 다시 되돌릴 수 없어요. 웹 앱에서는 <strong>삭제</strong>를 누른 다음 <strong>영구 삭제</strong>를 눌러 게시물을 완전히 제거할 수도 있어요.</li>
+        </ul>
+        <p>다른 사람의 게시물을 나에게만 보이지 않도록 숨길 수는 없어요.</p>
+        <h2>내 채널 추가하기</h2>
+        <p>상단의 <strong>+ 채널</strong>을 탭하세요. &quot;내 채널 공유하기&quot;를 참조하세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>홈</strong><span>홈의 구성, 휴대폰과 웹 앱에 표시되는 카드, 카드 추가·이동·삭제, 관심사 선택, 로그아웃 시 개인정보 보호 안내예요.</span></a></li>
+            <li><a href="learn.html"><strong>배움 영상</strong><span>BeanPool에 관한 짧은 영상과 해당 안내 가이드 페이지예요.</span></a></li>
+            <li><a href="your-channels.html"><strong>내 채널 공유하기</strong><span>YouTube, 블로그, Instagram 등 내 채널을 동향 피드에 공유해 보세요.</span></a></li>
+            <li><a href="reporting.html"><strong>문제 신고하기</strong><span>게시글, 행사, 동향 게시물, 프로젝트나 기업에 관해 커뮤니티 중재자에게 알리세요.</span></a></li>
+            <li><a href="the-bean.html"><strong>가이드 안내</strong><span>가이드를 찾는 곳, 검색하는 방법, 항상 최신 상태로 유지되는 방식이에요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

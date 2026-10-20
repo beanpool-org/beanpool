@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leute und Freunde — BeanPool members' guide</title>
+    <meta name="description" content="Mitglieder finden, Freunde, Profile, jemanden in eine Gruppe einladen und wer dich sehen kann.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Leute und Freunde</h1>
+        <p class="lede">Mitglieder finden, Freunde, Profile, jemanden in eine Gruppe einladen und wer dich sehen kann.</p>
+        <h2>Personen finden</h2>
+        <p>Tippe auf <strong>Chat</strong>, dann auf <strong>Personen</strong>. Tippe in der Web-App in der Leiste der Reiter auf <strong>Leute</strong>. Dort gibt es drei Schaltflächen:</p>
+        <ul>
+            <li><strong>Freunde:</strong> Personen, die du hinzugefügt hast.</li>
+            <li><strong>Community:</strong> jedes Mitglied. Suche nach Namen. Sortiere auf dem Telefon nach <strong>Neueste</strong>, <strong>Name</strong>, <strong>Freunde</strong>, <strong>Vertraut</strong> oder <strong>Aktiv</strong>. In der globalen Gemeinschaft werden die Mitglieder angezeigt, die deiner Gegend am nächsten sind: Gib mindestens 2 Buchstaben eines Namens ein, um andere zu finden.</li>
+            <li><strong>Einladungen:</strong> lade jemanden Neues ein. Siehe „BeanPool beitreten“. Wenn du selbst noch nicht beigetreten bist, lautet diese Schaltfläche <strong>Registrieren</strong>. Wenn Personen um Beitritt zu deiner Community gebeten haben, wird deren Anzahl angezeigt und sie sind unter <strong>Möchte beitreten</strong> aufgelistet. In der Web-App heißt diese Schaltfläche immer <strong>🎟️ Einladungen</strong>, ohne Anzahl und ohne Liste von Beitrittsanfragen.</li>
+        </ul>
+        <p>Tippe auf eine Person, um ihr Profil zu sehen: ihre Bewertungen und Beiträge, und auf dem Telefon in einer Community mit Bohnen ihr Vertrauensabzeichen und ihre Trades. Siehe „Dein Profil“.</p>
+        <h2>Freunde</h2>
+        <ul>
+            <li>Tippe in der <strong>Community</strong> neben einem Namen auf <strong>+ Hinzufügen</strong>. Die Anzeige wechselt zu <strong>Hinzugefügt</strong>. Tippe auf <strong>Hinzugefügt</strong>, um die Person wieder zu entfernen. In der Web-App wechselt es zu <strong>✓ Freund</strong>, worauf du nicht klicken kannst: Um jemanden zu entfernen, nutze <strong>Entfernen</strong> unter <strong>Freunde</strong>.</li>
+            <li>Tippe unter <strong>Freunde</strong> auf die Nachrichten-Schaltfläche, um einen Chat zu starten, oder auf die Entfernen-Schaltfläche und dann auf <strong>Entfernen</strong>, um jemanden aus den Freunden zu nehmen.</li>
+            <li>Wenn dich jemand hinzufügt, steht oben unter <strong>Freunde</strong>, wer es war (beispielsweise „Sam hat dich hinzugefügt“) mit <strong>Auch hinzufügen</strong>. Tippe zuerst auf den Namen, um das Profil anzusehen. Es gibt keine Push-Benachrichtigung. Die Zeile verschwindet, wenn du die Person ebenfalls hinzufügst, oder nach 30 Tagen. Bis zu 20 Personen werden angezeigt, danach die Anzahl weiterer Personen.</li>
+            <li>Du kannst innerhalb von 24 Stunden bis zu 100 Personen hinzufügen. Das Entfernen von Personen zählt ebenfalls dazu. Erreichst du das Limit, weist die App darauf hin und nennt den Zeitpunkt, ab dem du wieder Personen hinzufügen kannst.</li>
+            <li>Du kannst niemanden hinzufügen, den du blockiert hast: Hebe die Blockierung zuerst auf. Siehe „Jemanden blockieren“.</li>
+        </ul>
+        <p>Freunde sind eine Abkürzung für dich. Wenn du bei deinen Kontaktdaten <strong>Freunde</strong> wählst, können nur sie diese sehen. Siehe „Dein Profil“.</p>
+        <p>Niemand sonst kann deine Freundesliste einsehen. Die Person, die du hinzufügst, sieht jedoch, dass du es getan hast.</p>
+        <h2>Gemeinsame Verbindungen</h2>
+        <p>Das Profil eines Mitglieds kann <strong>gemeinsame Verbindungen</strong> anzeigen: Personen, die du nach diesem Mitglied fragen kannst. Jemand wird dort nur angezeigt, wenn du beidseitig mit jemandem befreundet bist, der wiederum beidseitig mit diesem Mitglied befreundet ist. Das bedeutet, dass du und jene Person euch gegenseitig hinzugefügt habt und jene Person und das Mitglied sich ebenfalls gegenseitig hinzugefügt haben. Wenn du jemanden allein hinzufügst, erscheint dort niemand, und auch nicht, wenn dich jemand hinzufügt. Bis zu 12 Personen werden angezeigt. Tippe auf einen Namen, um das jeweilige Profil zu sehen.</p>
+        <p>Du kannst festlegen, bei niemandem als gemeinsame Verbindung angezeigt zu werden. Deaktiviere in den Einstellungen unter <strong>Rechtliches &amp; Datenschutz</strong> die Option <strong>Mich als gemeinsame Verbindung anzeigen</strong>. Dann sieht niemand deinen Namen dort und du wirst nicht mitgezählt. Die Option ist aktiv, bis du sie ausschaltest. Siehe „Privatsphäre“.</p>
+        <h2>Für jemanden bürgen</h2>
+        <p>Einige Mitglieder werden von der Community ausgewählt, um Neulinge willkommen zu heißen. Sie können für ein neues Mitglied bürgen, was dieser Person einen kleinen Start-Kreditrahmen verschafft. Auf dem Profil der Person tippen sie auf <strong>Für Mitglied bürgen</strong> und wählen <strong>Leicht</strong> (25), <strong>Standard</strong> (50) oder <strong>Tief</strong> (100). Es fließen keine Bohnen aus dem Guthaben des Bürgen ab.</p>
+        <p>Wer bürgen darf, entscheidet ein Admin oder ein Community-Beschluss, niemals ein Abzeichen. Siehe „Regeln und Entscheidungen“.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Nachrichten</strong><span>Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.</span></a></li>
+            <li><a href="your-profile.html"><strong>Dein Profil</strong><span>Dein Name, Foto, ein paar Worte über dich und wer deine Kontaktdaten sehen kann.</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool beitreten</strong><span>Zwei Wege: eine Community mit Einladung oder die globale Community mit 12 geheimen Wörtern oder einem Login. Beitritt anfragen und andere einladen.</span></a></li>
+            <li><a href="blocking.html"><strong>Jemanden blockieren</strong><span>Beiträge und Nachrichten einer Person ausblenden und dies später wieder aufheben.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

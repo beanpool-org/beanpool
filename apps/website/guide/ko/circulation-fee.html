@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>유통 수수료 — BeanPool members' guide</title>
+    <meta name="description" content="콩의 활발한 유통을 위해 큰 잔액에 부과되는 소액의 월간 수수료예요. 처음 200콩까지는 무료예요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">장부</a></p>
+        <h1>유통 수수료</h1>
+        <p class="lede">콩의 활발한 유통을 위해 큰 잔액에 부과되는 소액의 월간 수수료예요. 처음 200콩까지는 무료예요.</p>
+        <h2>도입 이유</h2>
+        <p>콩은 쌓아두기 위한 것이 아니라 사용하기 위한 것이에요. 큰 잔액에 부과되는 소액의 수수료는 콩이 커뮤니티 안에서 계속 순환하도록 도와줘요. 이 수수료는 모두를 위해 공유지로 들어가요.</p>
+        <h2>수수료 금액</h2>
+        <p>200 콩을 초과하여 <strong>보유한</strong> 콩에 대해서만 부과돼요. 잔액의 각 구간마다 월별 고유 요율이 적용돼요:</p>
+        <ul>
+            <li>최초 200 콩: 무료;</li>
+            <li>200~500 콩 구간: 1%;</li>
+            <li>500~1,000 콩 구간: 1.5%;</li>
+            <li>1,000~2,000 콩 구간: 2%;</li>
+            <li>2,000 콩 초과 구간: 2.5%.</li>
+        </ul>
+        <p>0 미만의 잔액에는 부과되지 않아요. 부채에 이자를 내는 사람은 아무도 없어요.</p>
+        <p>예를 들어 한 달 동안 600 콩을 보유하면 약 4.5 콩의 수수료가 들어요: 첫 200 콩은 무료, 다음 300 콩은 3 콩, 마지막 100 콩은 1.5 콩이에요.</p>
+        <h2>부과 시점</h2>
+        <p>수수료는 매일 조금씩 누적되며, 다음에 계정을 사용할 때마다 조금씩 차감돼요. 특정 날짜에 한꺼번에 목돈이 빠져나가지 않아요.</p>
+        <h2>수수료 확인하기</h2>
+        <p><strong>장부</strong>의 <strong>지갑</strong>에서 <strong>커뮤니티 순환</strong> 상자에 이번 달에 지불할 예상 수수료가 표시돼요. 콩을 보유하고 있을 때만 표시돼요. 1,000 콩을 초과하면 주황색으로 바뀌어요. 휴대폰에서는 콩을 사용할 것을 권장하기도 하며, 탭하여 수수료를 설명하는 <strong>시스템 순환</strong>을 볼 수 있어요.</p>
+        <p>휴가 모드 중에도 수수료는 중단되지 않아요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-balance.html"><strong>내 잔액 및 거래 내역</strong><span>보유 콩 수량, 거래 대기 중인 수량, 모든 거래와 선물 내역이에요.</span></a></li>
+            <li><a href="commons-fund.html"><strong>공유지 기금</strong><span>커뮤니티의 공유 콩: 기금의 출처와 사용 방법 안내예요.</span></a></li>
+            <li><a href="credit-line.html"><strong>내 신용 한도</strong><span>잔액이 마이너스로 내려갈 수 있는 범위와 한도 상향 방식이에요.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool 작동 원리</strong><span>콩, 거래, 제공과 요청, 신용 한도를 알기 쉽게 설명해요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ユーザーのブロック — BeanPool members' guide</title>
+    <meta name="description" content="特定の人の投稿やメッセージを非表示にし、後から解除する方法について説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">設定と安全性</a></p>
+        <h1>ユーザーのブロック</h1>
+        <p class="lede">特定の人の投稿やメッセージを非表示にし、後から解除する方法について説明します。</p>
+        <h2>ブロックする</h2>
+        <ul>
+            <li>相手のプロフィールで：<strong>ブロック</strong>をタップするか、下部にある<strong>ブロック</strong>と相手の名前をタップします。</li>
+            <li>相手の投稿で（スマートフォンアプリ）：<strong>ユーザーをブロック</strong>をタップします。Webアプリの投稿にはブロックボタンはありません。</li>
+            <li>チャットから：上部にある相手の名前をタップしてプロフィールを開き、<strong>ブロック</strong>をタップします。Webアプリでは、1対1のチャットの上部にも<strong>ブロック</strong>が表示されます。</li>
+        </ul>
+        <p>スマートフォンアプリでは、<strong>ユーザーをブロック</strong>で確認します。Webアプリでは、ブラウザで確認を求められるので<strong>OK</strong>をタップします。</p>
+        <h2>ブロックによって行われること</h2>
+        <ul>
+            <li>マーケットにある相手の投稿があなたから非表示になります。</li>
+            <li>相手はあなたのチャットやメンバー一覧から消え、お互いにメッセージを送信できなくなります。スマートフォンアプリでは、あなたが追加していた相手は引き続き<strong>フレンド</strong>タブに表示されます：以下の「ブロックによって行われないこと」を参照してください。Webアプリではすべてのリストから非表示になります。</li>
+            <li>相手のパルスの投稿は引き続き表示されます。スマートフォンでは、地図上の相手のピンも引き続き表示されます。Webアプリの地図では非表示になります。</li>
+            <li>あなたの元帳では、相手からの豆に添えられたメッセージの代わりに「ブロックしたメンバーからの豆」と表示されます。</li>
+            <li>コミュニティのモデレーターに通報が送信され、モデレーターが状況を確認できます。</li>
+        </ul>
+        <h2>コミュニティ側で行われる対応</h2>
+        <p>コミュニティは、あなたのために保持しているブロックに対して以下の処理を行います。現在、これはWebアプリで行われたブロックが対象です。スマートフォンアプリで行われたブロックはその端末内にとどまり、コミュニティには伝わりません。</p>
+        <ul>
+            <li>相手からのダイレクトメッセージは決してあなたに届きません。コミュニティはいかなるスマートフォンやパソコンへもそれを配信せず、通知や未読数カウントも届きません。</li>
+            <li>相手があなたと新しいチャットを始めても、あなたのチャット一覧には表示されません。</li>
+            <li>相手のブロックを解除しても、ブロック中に送信されたメッセージが届くことはありません。それ以降に送信されたメッセージのみが届きます。</li>
+            <li>相手があなたのメッセージにリアクションしたり、過去のメッセージを変更したりしても、あなたには表示されません。</li>
+            <li>相手がグループチャットに投稿しても、@でメンションされた場合を含め、通知は届きません。</li>
+            <li>あなたの出品に対して相手が取引を求めてきた場合、そのリクエストは通知なしで取引一覧に保留されます。放置された場合、7日後に通知なしで終了します。</li>
+            <li>あなたの「ゆずります」を相手がすぐに承諾した場合、通知は届きません。相手がその取引をキャンセルした場合も通知はありません。取引自体は通常通りあなたの取引一覧に表示され、そのメッセージも通常通り相手とのチャットに表示されます。相手の豆は通常通り保留および返却されます。</li>
+            <li>相手はあなた宛てだけの限定出品を作成することはできません。</li>
+            <li>あなたは相手を追加できません。相手があなたを追加しても、通知はされません。相手があなたを追加していた場合、「メンバー」タブの「追加しました」という表示は消えます。相手のプロフィール上で、あなたのフレンドに対してあなたが共通のつながりとして表示されることもなくなります。</li>
+            <li>相手がメッセージを添えて豆を送ってきた場合、豆は全額届きますがメッセージは届きません。代わりに「ブロックしたメンバーからの豆」と表示され、ブロックを解除した後もそのまま表示されます。</li>
+        </ul>
+        <h2>ブロックによって行われないこと</h2>
+        <ul>
+            <li>相手にブロックされたことは通知されません。相手からは、メッセージや豆に添えたメッセージは送信されたように見えます。</li>
+            <li>フレンド関係は解消されません：相手を追加していた場合、相手は引き続きフレンドのままであり、連絡先が「フレンド」に設定されている場合は相手に引き続き表示されます。フレンド関係も解消したい場合は、<strong>ブロックしたユーザーを管理</strong>（Webアプリでは<strong>ブロックしたメンバーの管理</strong>；以下の「ブロック解除」を参照）を開き、相手の名前の下にある<strong>フレンドからも削除</strong>をタップします。これはあなたが追加した相手に対してのみ表示されます。相手はブロックされたままとなります。相手は削除されたことに気づく可能性があります。</li>
+            <li>グループチャット、イベントチャット、プロジェクトや事業チャットは共有されています：参加者全員に同じメッセージが表示されます。そこでの相手のメッセージは、他の全員と同様にあなたにも引き続き表示されます。</li>
+            <li>相手とすでに進行中の取引がある場合、通知や連絡を含め、以前と同様に継続します。</li>
+            <li>過去に取引したことがある相手であれば、相手は引き続きあなたに豆を送ることができます。豆は通知なしですべて届きます。</li>
+            <li>コミュニティからの通知は、相手がきっかけとなったものであっても引き続き届きます。例えば、誰かがグループの代表世話役からあなたを交代させるための投票を開始した場合に通知が届くほか、コミュニティの運営者からのメッセージも届きます。</li>
+            <li>相手はあなたの投稿を引き続き見ることができます。</li>
+            <li>スマートフォンアプリでは、ブロック情報はこの端末内のあなたのアカウントに対してのみ保持されます。この端末上の別のアカウントにはブロックは適用されません。</li>
+            <li>スマートフォンアプリでは、サインアウトしたり、この端末のアカウントを別のアカウントに置き換えたりしても、ブロック情報は端末内に残ります。同じアカウントで再度ログインすれば、ブロックは維持されています。</li>
+            <li>スマートフォンアプリでは、アプリを再インストールしたり別の端末を使用したりした場合は、再度ブロックを行ってください。</li>
+            <li>Webアプリでは、コミュニティがあなたのアカウントにブロック情報を紐付けて保持します。どのブラウザでサインインしても復元されます。サインアウトすると、そのパソコン上にはブロックに関する情報は残りません。「WebブラウザでのBeanPool利用」を参照してください。</li>
+            <li>コミュニティのサーバー運営者は、通報を確認できるのと同様に、あなたがWebアプリで誰をブロックしたかを確認できます。</li>
+            <li>スマートフォンアプリとWebアプリは別々のリストを保持しています。一方で行ったブロックはもう一方には反映されません。</li>
+        </ul>
+        <h2>ブロック解除</h2>
+        <ul>
+            <li><strong>設定</strong>を開きます。<strong>法的情報とプライバシー</strong>の下にある<strong>ブロックしたユーザーを管理</strong>をタップします。</li>
+            <li>名前の横にある<strong>ブロック解除</strong>、または<strong>すべてブロック解除</strong>をタップします。</li>
+        </ul>
+        <p>Webアプリでは、ブロックとブロック解除にはコミュニティへの接続が必要です。接続がない場合、アプリにその旨が表示され、何も変更されません。オンラインに戻ってから再度お試しください。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>問題の通報</strong><span>投稿、イベント、パルスの投稿、プロジェクト、事業体についてコミュニティのモデレーターに通報します。</span></a></li>
+            <li><a href="messages.html"><strong>メッセージ</strong><span>チャットの開始、写真の送信、返信、リアクション、編集、削除、ミュート、公開範囲について説明します。</span></a></li>
+            <li><a href="privacy.html"><strong>プライバシー</strong><span>他のメンバーに公開される情報と、それを管理する設定について説明します。</span></a></li>
+            <li><a href="getting-help.html"><strong>ヘルプとサポート</strong><span>困ったときの確認場所と相談先について説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ИИ-помощник администратора — BeanPool members' guide</title>
+    <meta name="description" content="Что может читать о вас ИИ-помощник владельца или администратора, чего он никогда не увидит и кто получает эти данные.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Настройки и безопасность</a></p>
+        <h1>ИИ-помощник администратора</h1>
+        <p class="lede">Что может читать о вас ИИ-помощник владельца или администратора, чего он никогда не увидит и кто получает эти данные.</p>
+        <p>Владельцы вашего сообщества могут подключить собственного ИИ-помощника (например, Claude или ChatGPT) к серверу сообщества, чтобы облегчить управление: спросить, что требует внимания, или кратко обобщить открытые жалобы. Администраторы также могут это сделать: они добавляют адрес сообщества в своего помощника и подтверждают подключение на телефоне. Они подключают его самостоятельно и могут отключить в любой момент. Другие владельцы получают уведомление о каждом подключении.</p>
+        <h2>Что он может читать о вас</h2>
+        <p>Помощник видит гораздо меньше информации, чем администратор в Настройках. Сервер вашего сообщества сам определяет объём передаваемых данных, а не помощник.</p>
+        <ul>
+            <li><strong>Если кто-то пожаловался на вас или ваше объявление</strong>, и администратор запрашивает текст жалобы: указанную причину, заголовок и описание вашего объявления, а также ваше имя в BeanPool. Имя автора жалобы никогда не передаётся.</li>
+            <li><strong>Если вы подали заявку на вступление</strong>, и администратор запрашивает сообщения: указанное вами имя, сопроводительное сообщение к заявке и сообщество, из которого вы пришли. Ваша фотография и ключ никогда не передаются.</li>
+            <li><strong>Общие показатели сообщества в целом</strong>, такие как количество участников и объём бобов в обращении. Ваш личный баланс никогда не раскрывается.</li>
+        </ul>
+        <h2>Чего он никогда не увидит</h2>
+        <p>Ваши личные сообщения и групповые чаты, ваш баланс и сделки, ваши ключи, ваш точный адрес, ваши фотографии, список настоящих имён и авторов жалоб на других участников. Помощник не может ничего изменить в вашем аккаунте: он не может исключить вас, отключить вам звук, удалить объявление или ответить на вашу заявку на вступление. Все эти действия совершают люди. Администратор делает это в Настройках или на телефоне, а на заявки на вступление в приложении отвечает любой участник с правом приглашения.</p>
+        <p>Помощник может лишь предложить администратору вариант действия по жалобе, например оставить объявление или скрыть его. Ничего не происходит без личного рассмотрения и утверждения администратором; любые решения и сообщения по-прежнему исходят исключительно от модераторов сообщества.</p>
+        <h2>Кто получает эти данные</h2>
+        <p>То, что читает помощник, отправляется компании-разработчику этой нейросети — точно так же, как если бы вы сами вставили текст в чат с ИИ. Сервер отправляет текст жалобы или сообщение заявки только по прямому запросу помощника администратора, помечая эти данные как слова участника, а не как команды для исполнения.</p>
+        <p>Если вы предпочитаете, чтобы ваши жалобы или сообщения заявок не обрабатывались ИИ, уточните у администраторов, используют ли они таких помощников.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>Что видят администраторы</strong><span>В сообществах со списком реальных имён: что в нём хранится, кому он доступен, что помнит сервер и что даёт подтверждение.</span></a></li>
+            <li><a href="reporting.html"><strong>Жалоба на нарушение</strong><span>Обращение к модераторам сообщества по поводу объявления, события, записи в Пульсе, проекта или предприятия.</span></a></li>
+            <li><a href="privacy.html"><strong>Приватность</strong><span>Что другие видят о вас и какие параметры этим управляют.</span></a></li>
+            <li><a href="joining.html"><strong>Вступление в BeanPool</strong><span>Два пути: в сообщество по приглашению участника, или в глобальное сообщество по 12 секретным словам или аккаунту. Запрос на вход и приглашение других.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

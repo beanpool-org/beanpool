@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>決定への投票 — BeanPool members' guide</title>
+    <meta name="description" content="進行中の決定事項を確認し、投票や投票内容の変更を行い、結果を確認できます。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">コモンズ</a></p>
+        <h1>決定への投票</h1>
+        <p class="lede">進行中の決定事項を確認し、投票や投票内容の変更を行い、結果を確認できます。</p>
+        <h2>場所</h2>
+        <p><strong>コモンズ</strong>をタップし、次に<strong>決定</strong>をタップします。進行中の決定は<strong>進行中の決定</strong>の下にあります。</p>
+        <p>決定には拘束力があります。可決されると、コミュニティのサーバーが自動で実行します。管理者が決定を阻止できるのは、メンバーが読める形で書面による理由を提示した場合に限られます。誰が投票できるか、どのくらいの投票率が必要か、どのくらいの賛成票が必要かというルールについては、「ルールと決定の仕組み」に記載されています。</p>
+        <p>グローバルコミュニティには決定がありません。誰でも12個の単語やサインインで参加できるため、1人が複数のアカウントを持って投票を左右できてしまうからです。代わりにモデレーターが管理を行っています。「問題の通報」を参照してください。決定はローカルコミュニティに属します。アンケートはどこでも機能します。</p>
+        <p>グローバルコミュニティでは、仕組みがわかるように、<strong>コモンズ</strong>にローカルコミュニティのサンプル決定が<strong>🏘️ ローカルコミュニティ</strong>というマーク付きで表示されます。その<strong>賛成に投票</strong>ボタンと<strong>反対に投票</strong>ボタンには、投票がローカルコミュニティにある理由が表示され、投票は行われません。「豆とグローバルコミュニティ」を参照してください。</p>
+        <h2>決定の読み方</h2>
+        <p>各決定には以下が表示されます：</p>
+        <ul>
+            <li>何に関する決定か、および可決された場合に何が起こるか。</li>
+            <li>票の数え方：1人1票、またはコモンズの豆に関する決定の場合はボイスクレジット。</li>
+            <li>残り時間。投票期間は7日間です。</li>
+            <li><strong>投票率：</strong> 必要な票数、および現在それに達しているかどうか。</li>
+            <li><strong>集計：</strong> これまでの賛成と反対、および必要な賛成票の割合。</li>
+        </ul>
+        <h2>投票</h2>
+        <ul>
+            <li><strong>賛成に投票</strong>または<strong>反対に投票</strong>をタップします。スマートフォンではアプリに<strong>投票を受け付けました</strong>と表示されます。Webアプリではカードが更新されます。</li>
+            <li>カードには「賛成に投票しました」のように、自分がどう投票したかが表示されます。</li>
+            <li>締め切られる前に考えが変わった場合は、<strong>反対に変更</strong>などのもう一方のボタンをタップします。</li>
+        </ul>
+        <p>すべての決定は<strong>秘密投票</strong>です。メンバーには合計のみが表示され、誰がどのように投票したかが表示されることはありません。自分の投票は自分にのみ表示されます。</p>
+        <h2>コモンズの豆に関する決定</h2>
+        <p>これらには<strong>ボイスクレジット</strong>を使用します。完了した取引からボイスクレジットを獲得でき、決定ごとに新たに付与されます。<strong>−</strong>と<strong>+</strong>を使用して投じる票数を選択します。票数を増やすほどコストが高くなります（2票は4クレジット、3票は9クレジット必要です）。</p>
+        <p>まだ取引を完了していない場合は、これらに投票することはできません。決定が開始される前に参加しており、クレジットが凍結されていない限り、他の決定には引き続き投票できます。</p>
+        <h2>結果</h2>
+        <p><strong>決定の履歴</strong>をタップします。<strong>すべて</strong>、<strong>実行済み</strong>、<strong>否決</strong>、または<strong>無効</strong>を選択します。それぞれに最終的な投票率と集計、そして何が起こったか（例えば投票者が少なすぎたなど）が表示されます。</p>
+        <h2>さらに詳しく</h2>
+        <p>スマートフォンでは、コモンズのタイトルの横にある<strong>ⓘ</strong>をタップして、コモンズの豆と投票の仕組みを確認できます。Webアプリでは、<strong>台帳</strong>を開き、<strong>ウォレット</strong>をタップして、<strong>コモンズプール ⓘ</strong>をタップします。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>決定の提案</strong><span>コミュニティ全体に拘束力のある決定事項を提案します。</span></a></li>
+            <li><a href="rules.html"><strong>ルールと決定の仕組み</strong><span>投票、投票率、秘密投票、投票権、停止処分、メンバーの除名、運営者、まとめ役および代表まとめ役について説明します。</span></a></li>
+            <li><a href="polls.html"><strong>アンケート</strong><span>コミュニティに手軽に質問できます。アンケートは意見を把握するためのもので、それ自体で何かが変更されることはありません。</span></a></li>
+            <li><a href="commons-fund.html"><strong>コモンズ</strong><span>コミュニティで共有される豆の出所と使い道について説明します。</span></a></li>
+            <li><a href="the-top-bar.html"><strong>トップバー</strong><span>豆のアイコン、確認が必要な項目を示す小さなアイコン、右上のボタンについて説明します。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆とグローバルコミュニティ</strong><span>グローバルコミュニティの目的、多数のコミュニティの1つとしての位置付け、表示内容（🏘️ コミュニティマーカー、サンプルコミュニティExample Valley、豆がそこで待機する理由、ローカルコミュニティの探し方や立ち上げ方）を説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

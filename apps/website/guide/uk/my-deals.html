@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мої обміни — BeanPool members' guide</title>
+    <meta name="description" content="Єдине місце для кожного вашого обміну, кожного активного оголошення та минулих угод.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Ринок</a></p>
+        <h1>Мої обміни</h1>
+        <p class="lede">Єдине місце для кожного вашого обміну, кожного активного оголошення та минулих угод.</p>
+        <h2>Як відкрити</h2>
+        <p>Торкніться розділу <strong>Мої обміни</strong> у верхній частині вкладки «Ринок». Червоне число на кнопці показує кількість ваших обмінів у процесі.</p>
+        <p>У глобальній спільноті обмінів немає, тому розділ <strong>Мої обміни</strong> показує три зразкові угоди з місцевої спільноти, Example Valley, з позначкою <strong>🏘️ Local community</strong>: одна чекає на вашу дію, в іншій боби надійно захищені, а третя вже завершена. Їхні кнопки пояснюють, чому угоди існують лише в місцевій спільноті, і нічого не змінюють. Дивіться «Боби та глобальна спільнота».</p>
+        <h2>Три вкладки</h2>
+        <ul>
+            <li><strong>У процесі:</strong> поточні угоди та запити, що очікують на відповідь. Для кожної вказано її стан: <strong>На довірчому утриманні</strong> (боби заблоковано), <strong>Потрібна дія</strong> (хтось подав запит, і вам потрібно відповісти) або <strong>Очікує схвалення</strong> (ви надіслали запит і чекаєте на відповідь).</li>
+            <li><strong>Мої публікації:</strong> ваші опубліковані Пропозиції та Потреби або ті, які стоять <strong>НА ПАУЗІ</strong>. Допис, за яким надійшов запит, позначається написом <strong>Потрібна дія</strong>.</li>
+            <li><strong>Історія:</strong> завершені, скасовані та відхилені угоди. Оберіть <strong>Усі</strong>, <strong>Отримано</strong> або <strong>Віддано</strong>. У кожному рядку показано дату, суму та іншого учасника.</li>
+        </ul>
+        <p>У вебдодатку вкладка <strong>В процесі</strong> містить лише угоди із заблокованими бобами, тому запити, що чекають на відповідь, там не відображаються. Вкладка <strong>Мої публікації</strong> показує лише ваші активні оголошення з позначкою <strong>Активне</strong>: оголошення на паузі там не перелічені.</p>
+        <p>Торкніться угоди у вкладці <strong>У процесі</strong> або <strong>Мої публікації</strong>, щоб відкрити оголошення. Саме там ви приймаєте, завершуєте або скасовуєте угоду. Запит, на який ніхто не відповідає, скасовується автоматично через 7 днів.</p>
+        <h2>Відгуки</h2>
+        <p>Завершена угода у вкладці <strong>Історія</strong> має кнопку <strong>Відгук</strong>. Після того як ви залишите відгук, напис зміниться на <strong>Редагувати</strong>, і ви зможете змінити кількість зірок.</p>
+        <p>У вебдодатку ця кнопка підписана як <strong>Залишити відгук</strong>, і вона доступна лише доти, доки ви не оцінили цю угоду. Щоб змінити відгук у вебдодатку, відкрийте саме оголошення.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Обмін крок за кроком</strong><span>Від запиту до отримання оплати для Пропозицій і Потреб, а також залишення відгуку.</span></a></li>
+            <li><a href="posting.html"><strong>Публікація Пропозиції чи Потреби</strong><span>Запропонуйте те, що ви можете зробити чи віддати, або те, що ви шукаєте.</span></a></li>
+            <li><a href="your-balance.html"><strong>Ваш баланс та історія</strong><span>Скільки у вас бобів, скільки заблоковано в угодах, а також історія всіх обмінів і подарунків.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Коли в обміні виникли проблеми</strong><span>Скасування обміну та що відбувається, коли не вдається дійти згоди.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Верхня панель</strong><span>Боб, маленькі піктограми, які з'являються, коли потрібна ваша дія, і кнопки у верхньому правому кутку.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

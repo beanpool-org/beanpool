@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>贈送豆子 — BeanPool members' guide</title>
+    <meta name="description" content="無需任何交易即可向他人贈送豆子。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">帳本</a></p>
+        <h1>贈送豆子</h1>
+        <p class="lede">無需任何交易即可向他人贈送豆子。</p>
+        <h2>使用條件</h2>
+        <ul>
+            <li>你需要在市集中完成過一筆交易。僅 1 或 2 顆豆子的交易金額太小，不予計入。</li>
+            <li>你只能贈送自己持有的豆子。贈送豆子絕不能使你的餘額低於零。</li>
+        </ul>
+        <p>在此之前，按鈕會說明缺少什麼條件，例如<strong>需完成 1 筆交易</strong>或<strong>需正數餘額</strong>。</p>
+        <p>你的信任徽章等級並不影響此功能。</p>
+        <h2>傳送贈送款項</h2>
+        <ul>
+            <li>點擊<strong>帳本</strong>，然後點擊<strong>錢包</strong>，接著點擊<strong>傳送豆子</strong>。</li>
+            <li>點擊<strong>選擇接收人...</strong>，搜尋對方的姓名並點擊它。</li>
+            <li>輸入<strong>金額</strong>。若有需要可新增<strong>備註</strong>，例如「謝謝你的番茄」。</li>
+            <li>核對<strong>接收人收到</strong>。贈送豆子免手續費，因此對方會收到全額。</li>
+            <li>點擊<strong>確認轉帳</strong>。在手機上你會看見<strong>已傳送！</strong>；在網頁版應用程式中表單會關閉，該筆贈送會顯示在你的交易記錄中。</li>
+        </ul>
+        <p>贈送的豆子無法收回。傳送前請仔細核對姓名。</p>
+        <h2>實用須知</h2>
+        <ul>
+            <li>贈送豆子不會建立信任。只有已完成的交易才能建立信任。</li>
+            <li>你在休假期間也可以傳送贈送豆子。</li>
+            <li>在任何 24 小時內，你最多可以進行 100 筆付款。贈送、購買、申請購買「提供」、核准你「需求」上的協助、向專案認捐豆子以及向其他社群購買皆計入在內。管理人為事業擔保不會轉移豆子，因此不算作付款：它只計入你每天 20 次認捐變更的額度內。在這些付款中，最多有 30 筆可以付給從未付款過的對象；向之前付款過的對象付款則依然不受此限。接收款項絕不受限。如果你達到了限制，應用程式會說明達到哪項限制，以及何時可以再次付款。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-balance.html"><strong>餘額與帳目歷史</strong><span>你擁有的豆子數量、交易中暫扣的豆子，以及每一筆交易與贈送紀錄。</span></a></li>
+            <li><a href="credit-line.html"><strong>信用額度</strong><span>你的餘額最多可以透支多少，以及額度如何增長。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool 運作方式</strong><span>用通俗的話解釋豆子、交易、提供與需求以及信用。</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>交易步驟詳解</strong><span>從發起詢問到完成付款，針對提供與需求的流程，以及留下評價。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

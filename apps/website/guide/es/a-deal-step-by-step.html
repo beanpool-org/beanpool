@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Un trato paso a paso — BeanPool members' guide</title>
+    <meta name="description" content="Desde consultar hasta recibir el pago, para una Oferta y una Necesidad, y dejar una reseña.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Mercado</a></p>
+        <h1>Un trato paso a paso</h1>
+        <p class="lede">Desde consultar hasta recibir el pago, para una Oferta y una Necesidad, y dejar una reseña.</p>
+        <h2>La idea</h2>
+        <p>Cuando comienza un trato, la persona que paga tiene sus frijoles <strong>retenidos en custodia</strong>. Nadie puede gastar frijoles retenidos. Cuando el trabajo está terminado, la persona que paga los libera y a la otra persona se le paga. Las pantallas llaman a los frijoles &quot;créditos&quot; en algunos lugares; significan lo mismo.</p>
+        <p>Puedes solicitar, aceptar o aprobar hasta 100 tratos en cualquier período de 24 horas. Un trato que pagas cuenta también como uno de tus 100 pagos diarios (consulta &quot;Enviar un regalo&quot;). Liberar frijoles, cancelar y recibir pagos nunca tienen límite.</p>
+        <h2>Aceptar la Oferta de alguien</h2>
+        <ul>
+            <li>Abre la Oferta y toca <strong>Aceptar Oferta</strong>.</li>
+            <li>Si tiene precio por hora, indica cuántas horas.</li>
+            <li>Toca <strong>Confirmar</strong>. Tus frijoles se retienen de inmediato, y se le notifica al vendedor. No hay espera para que el vendedor diga que sí.</li>
+            <li>Se abre un chat con el vendedor. Acuerden cuándo y dónde.</li>
+        </ul>
+        <p>Necesitas haber publicado una Oferta propia primero. Si no lo has hecho, la app te ofrece <strong>Crear una Oferta</strong>.</p>
+        <h2>Ayudar con la Necesidad de alguien</h2>
+        <ul>
+            <li>Abre la Necesidad y toca <strong>Ofrecerse a cumplir</strong>, luego <strong>Confirmar</strong>.</li>
+            <li>La persona que la publicó decide. Hasta entonces puedes tocar <strong>Retirar solicitud</strong>. Si no responde en 7 días, la solicitud finaliza por sí sola y se les notifica a ambos.</li>
+            <li>Ellos ven tu solicitud bajo <strong>Solicitudes de cumplimiento</strong>, y pueden enviarte un <strong>Mensaje</strong>, <strong>Rechazar</strong> o <strong>Aprobar y comprometer</strong>.</li>
+            <li>Cuando aprueban, sus frijoles quedan retenidos. A menos que la publicación sea Recurrente, cualquier otra persona que se haya ofrecido ve su solicitud marcada como rechazada.</li>
+        </ul>
+        <p>En la app web, <strong>Retirar solicitud</strong> es <strong>Cancelar oferta</strong> y <strong>Aprobar y comprometer</strong> es <strong>Aprobar y retener en custodia</strong>. La persona que publicó la Necesidad solo puede <strong>Rechazar</strong> o aprobar allí: una solicitud no tiene botón de <strong>Mensaje</strong>.</p>
+        <h2>Mientras los frijoles están retenidos</h2>
+        <p>Ambos ven un botón de <strong>Mensaje</strong> para hablar, y <strong>Cancelar retención en custodia</strong> para cancelarlo. En la app web, solo la persona que no publicó el anuncio ve <strong>Mensaje</strong>, y el botón para cancelarlo es <strong>Cancelar retención</strong>.</p>
+        <ul>
+            <li>Haz el trabajo o entrega el objeto.</li>
+            <li>La persona que paga toca <strong>Liberar créditos</strong>, luego <strong>Liberar créditos</strong> de nuevo para confirmar. Para trabajos por hora primero introduce las horas realmente trabajadas. Si fue menos, el resto vuelve a ella. Si fue más, el monto adicional se le descuenta. Cada hora se paga a la tarifa en que se cerró el trato.</li>
+            <li>Al vendedor se le paga de inmediato, descontando la comisión de mercado del 1.5%, que va a los Bienes comunes de tu comunidad.</li>
+        </ul>
+        <p>Solo la persona que paga puede liberar los frijoles. No hay límite de tiempo: los frijoles permanecen retenidos hasta que se liberen o se cancele el trato. Después de una semana, y cada semana a partir de entonces, la persona que paga recibe un recordatorio.</p>
+        <p>El precio de la publicación no puede cambiar mientras alguien la esté solicitando o sus frijoles estén retenidos. El trato conserva el precio en el que se acordó. Para cambiar el precio, la persona que la publicó rechaza o cancela el trato primero.</p>
+        <h2>Una publicación recurrente</h2>
+        <p>Una publicación recurrente vuelve a estar activa después de cada trato, y varias personas pueden tener un trato en ella al mismo tiempo. Cualquier otra publicación queda marcada como finalizada.</p>
+        <h2>Reseñas</h2>
+        <p>Después de liberar, se le pide a la persona que paga que valore el trato: de 1 a 5 estrellas y un comentario breve y opcional. Toca <strong>Enviar valoración</strong> u <strong>Omitir por ahora</strong>.</p>
+        <p>Ambas personas pueden calificar más tarde: toca <strong>Valorar</strong> y el nombre en la publicación finalizada (no en una publicación recurrente, que vuelve a estar activa), o <strong>Valoración</strong> en Mis tratos, Historial (<strong>Dejar valoración</strong> en la app web). Puedes cambiar tu valoración; la nueva reemplaza a la anterior.</p>
+        <p>Todos en tu comunidad pueden leer las estrellas y palabras de una reseña. Solo las dos personas del intercambio pueden ver quién la escribió y de qué trato se trataba.</p>
+        <p>Las estrellas importan. Un promedio bajo reduce cuánta confianza gana la otra persona con sus intercambios. Sé justo.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>Mis tratos</strong><span>Un solo lugar para cada trato en curso, cada publicación activa y tus tratos pasados.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Si un trato sale mal</strong><span>Cancelar un trato y qué ocurre si no logran ponerse de acuerdo.</span></a></li>
+            <li><a href="posting.html"><strong>Publicar Oferta o Necesidad</strong><span>Ofrece algo que puedes hacer o dar, o pide algo que estés buscando.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cómo funciona BeanPool</strong><span>Frijoles, intercambios, ofertas y necesidades, y crédito, en palabras sencillas.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

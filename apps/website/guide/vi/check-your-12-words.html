@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12 từ của bạn và khóa máy chủ (chủ sở hữu) — BeanPool members' guide</title>
+    <meta name="description" content="Dành cho chủ sở hữu cộng đồng. Kiểm tra 12 từ, tiếp quản hoặc khôi phục máy chủ bằng điện thoại và tự động kiểm tra.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Cài đặt và an toàn</a></p>
+        <h1>12 từ của bạn và khóa máy chủ (chủ sở hữu)</h1>
+        <p class="lede">Dành cho chủ sở hữu cộng đồng. Kiểm tra 12 từ, tiếp quản hoặc khôi phục máy chủ bằng điện thoại và tự động kiểm tra.</p>
+        <h2>Dành cho ai</h2>
+        <p>Chỉ dành cho <strong>chủ sở hữu</strong> của cộng đồng. Nếu bạn không phải là chủ sở hữu, bạn sẽ không thấy bất kỳ điều nào trong số này.</p>
+        <h2>Tại sao chủ sở hữu được yêu cầu</h2>
+        <p>Máy chủ cộng đồng của bạn lưu giữ một bản sao các khóa đã được khóa, để chuyển cộng đồng sang máy chủ khác nếu máy chủ hiện tại bị mất, và các bản sao lưu của máy chủ cũng được khóa. Chúng được khóa vào tài khoản của các chủ sở hữu: bất kỳ một chủ sở hữu nào cũng có thể mở chúng bằng điện thoại của mình (xem Tiếp quản hoặc khôi phục bằng điện thoại của bạn, bên dưới). Nếu bạn mất điện thoại, 12 từ của bạn sẽ khôi phục lại tài khoản của bạn, và cùng với đó là khóa của bạn đối với ổ khóa của máy chủ và các bản sao lưu của nó. Điều đó quan trọng nhất vào ngày mà chính máy chủ bị mất.</p>
+        <p>Vì vậy, ứng dụng sẽ yêu cầu mỗi chủ sở hữu, thỉnh thoảng, kiểm tra xem họ có còn đúng 12 từ hay không. Bạn có thể chọn <strong>Để sau</strong>. Không có gì bị chặn cả, và bạn có thể tiếp tục làm mọi việc mà một chủ sở hữu làm.</p>
+        <h2>Khi nào ứng dụng yêu cầu</h2>
+        <ul>
+            <li>Một lần, ngay sau khi bạn trở thành chủ sở hữu.</li>
+            <li>Một lần nữa sau 12 tháng kể từ lần kiểm tra gần nhất của bạn.</li>
+        </ul>
+        <p>Ứng dụng hiển thị một thẻ ở trên cùng của Chợ (trong ứng dụng web, ở trên cùng của mọi màn hình trừ Bản đồ): <strong>Kiểm tra ngay</strong> hoặc <strong>Để sau</strong>. <strong>Để sau</strong> sẽ tạm ẩn thẻ cho đến lần tiếp theo đến hạn. Bạn có thể kiểm tra bất cứ lúc nào từ <strong>Cài đặt</strong>: dưới mục <strong>Khóa cộng đồng</strong>, nhấn <strong>Kiểm tra 12 từ của bạn</strong> (trong ứng dụng web là <strong>Kiểm tra ngay</strong>).</p>
+        <h2>Cách kiểm tra</h2>
+        <ul>
+            <li>Lấy tờ giấy có ghi 12 từ của bạn. Các từ này là những từ tiếng Anh.</li>
+            <li>Nhập các từ theo thứ tự, có dấu cách ở giữa các từ. Chữ hoa hay khoảng trắng thừa không quan trọng.</li>
+            <li>Nhấn <strong>Kiểm tra các từ của tôi</strong>.</li>
+        </ul>
+        <p>Nếu các từ chính xác, ứng dụng sẽ báo <strong>Đây đúng là các từ chính xác.</strong> Nếu không: <strong>Đây không phải là các từ của tài khoản này.</strong> Ứng dụng không cho biết từ nào bị sai, vì vậy hãy kiểm tra lại tờ giấy và nhập lại toàn bộ các từ.</p>
+        <p>Trên một điện thoại không có bản sao của 12 từ của bạn (chiếc điện thoại được khôi phục bằng tài khoản đăng nhập), các từ chính xác cũng sẽ hiển thị <strong>Lưu trên điện thoại này</strong>. Nhấn vào đó và mục <strong>Xem cụm từ khôi phục</strong> sẽ hiển thị chúng kể từ thời điểm đó. Đây là cùng một bước kiểm tra và cùng một bước lưu như <strong>Thêm 12 từ của bạn vào điện thoại này</strong> (xem &quot;12 từ của bạn&quot;).</p>
+        <p>Không thể tìm thấy chúng? Nếu điện thoại này vẫn còn lưu các từ đó, hãy vào <strong>Cài đặt</strong>, sau đó chọn <strong>Xem cụm từ khôi phục</strong> để xem. Hãy viết lại chúng ra giấy, sau đó kiểm tra. Trên một điện thoại không có bản sao, ứng dụng sẽ thông báo điều đó: khi bạn tìm thấy chúng, hãy kiểm tra chúng tại đây, rồi lưu lại.</p>
+        <h2>Những gì được gửi đi, và những gì không</h2>
+        <ul>
+            <li>Việc kiểm tra diễn ra trên điện thoại của bạn (hoặc trong trình duyệt của bạn, trong ứng dụng web). Các từ của bạn không bao giờ được gửi đi bất cứ đâu. Ô nhập liệu sẽ bị xóa sạch ngay sau khi việc kiểm tra đưa ra câu trả lời, và khi bạn rời khỏi màn hình. Chúng chỉ được lưu nếu bạn nhấn <strong>Lưu trên điện thoại này</strong>, và khi đó cũng chỉ lưu trên chiếc điện thoại này.</li>
+            <li>Khi các từ chính xác, điện thoại của bạn chỉ báo cho máy chủ cộng đồng rằng bạn đã kiểm tra, và vào thời gian nào, được ký bằng tài khoản của bạn.</li>
+            <li>Chủ sở hữu và quản trị viên sẽ thấy, trong phần Cài đặt của máy chủ, ngày &quot;12 words checked&quot; của từng chủ sở hữu, hoặc &quot;not yet&quot;. Đó là lời xác nhận của chính bạn: máy chủ không thể nhìn thấy hoặc kiểm tra các từ của bạn.</li>
+        </ul>
+        <h2>Tiếp quản hoặc khôi phục bằng điện thoại của bạn</h2>
+        <p>Nếu máy chủ của cộng đồng bạn bị mất, bất kỳ ai vận hành máy chủ dự phòng của cộng đồng (hoặc một máy chủ mới đang khôi phục bản sao lưu) đều có thể yêu cầu một chủ sở hữu mở các khóa đã khóa. Bất kỳ một chủ sở hữu nào cũng là đủ. Bạn cần phiên bản mới nhất của ứng dụng BeanPool. Ứng dụng web cũng hoạt động nếu nó vẫn mở được, nhưng nó nằm ở địa chỉ riêng của cộng đồng bạn, địa chỉ này có thể bị sập cùng với máy chủ: ứng dụng điện thoại là ứng dụng đáng tin cậy nhất.</p>
+        <ul>
+            <li>Trên mục Cài đặt của máy chủ, họ chọn <strong>Take over as the main server</strong>, sau đó chọn <strong>I understand: use an owner's phone</strong>, hoặc <strong>Open with an owner's phone</strong> khi khôi phục bản sao lưu. Một mã sẽ xuất hiện trên màn hình của họ.</li>
+            <li>Trong ứng dụng: vào <strong>Cài đặt</strong>, dưới mục <strong>Khóa cộng đồng</strong>, nhấn <strong>Tiếp quản hoặc khôi phục bằng điện thoại này</strong>, và hướng máy ảnh vào mã đó. Nếu trang của máy chủ đang mở trên chính điện thoại của bạn, việc nhấn vào liên kết của nó cũng có tác dụng tương tự. Trong ứng dụng web, hãy sao chép liên kết từ màn hình của họ và dán vào dưới mục <strong>Tiếp quản hoặc khôi phục bằng trình duyệt này</strong> trong <strong>Cài đặt</strong>.</li>
+            <li>Ứng dụng hiển thị cộng đồng nào, máy chủ nào, và điều gì sẽ xảy ra. Nếu máy chủ chính của bạn vẫn phản hồi, ứng dụng sẽ báo điều đó bằng chữ màu đỏ: việc tiếp quản chỉ dành cho một máy chủ thực sự đã mất.</li>
+            <li>Nhấn <strong>Mở khóa để tiếp quản</strong> (hoặc <strong>Mở khóa bản sao lưu</strong>). Điện thoại của bạn trước tiên sẽ yêu cầu mở khóa chính nó: vân tay, khuôn mặt hoặc mã PIN. Ứng dụng web không có bước như vậy, đó là lý do tại sao ứng dụng điện thoại là nơi an toàn hơn cho khóa của chủ sở hữu.</li>
+            <li>Điện thoại của bạn mở phần khóa của chính nó và chuyển giao chìa khóa cho máy chủ đó, được khóa lại sao cho chỉ máy chủ đó mới có thể đọc được. Điện thoại của bạn không bao giờ nhìn thấy các khóa của máy chủ hoặc bản sao lưu.</li>
+            <li>Khi tiếp quản, người ở phía máy chủ sau đó sẽ xác nhận trên màn hình của họ. Cộng đồng sẽ được thông báo rằng cộng đồng đã chuyển sang máy chủ mới, và bạn đã mở các khóa.</li>
+        </ul>
+        <p>Ứng dụng sẽ từ chối và nêu rõ lý do nếu khóa thuộc về một cộng đồng khác, nếu nó không được khóa cho bạn, nếu mã của máy chủ đã hết hạn (mã có hiệu lực trong 10 phút và dùng được một lần), hoặc nếu các khóa không được khóa bởi chính máy chủ của cộng đồng bạn.</p>
+        <h2>Điện thoại của bạn tự kiểm tra khóa</h2>
+        <p>Mỗi khi khóa của cộng đồng bạn thay đổi (một chủ sở hữu được thêm vào hoặc gỡ bỏ, một mã khôi phục mới được tạo), ứng dụng của bạn sẽ kiểm tra, một cách âm thầm, xem nó có còn mở được phần khóa của mình hay không. Ứng dụng mở phần khóa đó, hủy bỏ chìa khóa ngay lập tức, và báo cho máy chủ biết việc đó có thành công hay không. Bạn không cần phải làm gì cả.</p>
+        <p>Chủ sở hữu và quản trị viên thấy điều đó trong mục Cài đặt của máy chủ, bên cạnh ngày kiểm tra 12 từ của bạn: <strong>their phone opened the current lock</strong>, cùng với ngày tháng, hoặc đã mở một khóa cũ hơn lần cuối khi nào. Nếu mục đó báo rằng điện thoại của bạn <strong>could NOT open</strong> khóa, hãy kiểm tra 12 từ của bạn, và nhờ một chủ sở hữu khác xem trong mục Cài đặt của máy chủ.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>12 từ của bạn</strong><span>12 từ là chìa khóa tài khoản của bạn. Tầm quan trọng của chúng, nơi tìm thấy, cách giữ an toàn và thêm phương thức đăng nhập phụ.</span></a></li>
+            <li><a href="recovery.html"><strong>Khôi phục tài khoản của bạn</strong><span>Khôi phục tài khoản trên điện thoại mới và bảo vệ tài khoản bằng liên kết đăng nhập.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

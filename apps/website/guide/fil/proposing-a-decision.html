@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pagpanukala ng Desisyon — BeanPool members' guide</title>
+    <meta name="description" content="Hilingin sa komunidad na magdesisyon ng bagay na may bisa.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Komun</a></p>
+        <h1>Pagpanukala ng Desisyon</h1>
+        <p class="lede">Hilingin sa komunidad na magdesisyon ng bagay na may bisa.</p>
+        <h2>Bago ka magsimula</h2>
+        <ul>
+            <li>Ang isang Desisyon ay para sa isang bagay na kayang isagawa ng server ng iyong komunidad: pag-alis o pagsuspinde ng isang miyembro, pag-freeze o pag-unfreeze ng kredito ng isang tao, pagpili kung sino ang maaaring mag-vouch, o pagbabayad ng munggo mula sa Komun. Para sa anumang iba pa, magsimula ng Botohan sa halip.</li>
+            <li>Hindi maaaring alisin o suspindihin ng isang Desisyon ang isang may-ari o admin ng server ng iyong komunidad. Tingnan ang &quot;Mga tuntunin at mga desisyon&quot;.</li>
+            <li>Maaari kang magpanukala kapag nakakumpleto ka na ng kalakalan, o binigyan ka ng isang admin ng trust badge. Palaging maaaring magpanukala ang mga admin ng iyong komunidad. Ang vouch lamang ay hindi sapat.</li>
+            <li>Maaari kang magkaroon ng isang bukas na Desisyon sa bawat pagkakataon.</li>
+            <li>Walang mga Desisyon ang pandaigdigang komunidad, kaya walang maipapanukala roon. Tingnan ang &quot;Pagboto sa Desisyon&quot;.</li>
+        </ul>
+        <h2>Pagpanukala</h2>
+        <ul>
+            <li>I-tap ang <strong>Komun</strong>, pagkatapos ay <strong>Magpasya</strong>, pagkatapos ay <strong>+ Magmungkahi ng Desisyon</strong>.</li>
+            <li>Piliin kung tungkol saan ito: <strong>Miyembro</strong> o <strong>Commons Pool</strong>.</li>
+            <li><strong>Pamagat:</strong> isang linya, tulad ng &quot;Grant 200 beans to the Tool Library&quot;.</li>
+            <li><strong>Deskripsyon at Dahilan:</strong> ipaliwanag kung bakit, sa hindi bababa sa 10 character. Sabihin ito nang malinaw. Bumaboto ang mga tao batay sa nababasa nila rito.</li>
+            <li>Mula sa listahan sa ibaba nito, piliin nang eksakto kung ano ang dapat mangyari. Halimbawa, para sa isang miyembro: Alisin ang Miyembro, Isuspinde ang Miyembro o I-freeze ang Kredito. Para sa Komun: Magbigay ng munggo sa isang proyekto o negosyo, Tulong sa Kagipitan, o Bayaran ang utang ng isang proyekto o negosyo.</li>
+            <li>Punan kung para kanino ito, at gaano karaming munggo kung mayroon man. Para sa isang grant sa isang proyekto o negosyo, itina-type mo ang key nito, isang mahabang code: walang listahan ang alinmang app upang pagpilian ito. Upang bayaran ang isang utang o palitan ang isang pinuno, i-tap ang proyekto o negosyo sa listahan, o i-type ang key nito.</li>
+            <li>I-tap ang <strong>Isumite ang Desisyon ng Komunidad</strong>.</li>
+        </ul>
+        <p>Sa web app ang mga button ay mababasang <strong>+ Magmungkahi ng Desisyon</strong> (o <strong>+ Magmungkahi</strong> sa itaas ng Komun, habang nakabukas ang <strong>Magpasya</strong>) at <strong>Isumite ang Desisyon</strong>, at ang kahon ay <strong>Paglalarawan at Batayan</strong>.</p>
+        <p>Magbubukas agad ang pagboto at tatakbo nang 7 araw.</p>
+        <h2>Gaano kalaki ang maaaring maging grant</h2>
+        <p>Ang isang grant sa isang negosyo o isang hardship grant ay hindi maaaring mas malaki kaysa sa kayang bayaran ng Komun. Ang pinakamalaki na maaari mong hilingin ay:</p>
+        <ul>
+            <li>kung ano ang hawak ng Komun ngayon,</li>
+            <li>kasama ang bawat munggo na pumasok dito sa nakalipas na 30 araw: ang bayad sa merkado, ang circulation fee, at anumang iba pang munggo na ibinayad dito.</li>
+        </ul>
+        <p>Ang mga munggo na ibinayad mula sa Komun sa loob ng 30 araw na iyon ay hindi ibinabawas. Kung hihingi ka ng higit pa, tatanggi ang app bago pa man bumoto ang sinuman, at sasabihin sa iyo ang pinakamalaking maaari mong hilingin ngayon. Ang halagang iyon ay tumataas habang pumapasok ang mga munggo sa Komun.</p>
+        <p>Pinapanatili nitong libre ang pila. Kung pumasa ang isang grant kapag kulang ang Komun, maghihintay ito sa mga munggo, at isang grant lamang ang maaaring maghintay sa bawat pagkakataon. Tingnan ang &quot;Mga tuntunin at mga desisyon&quot;.</p>
+        <h2>Kung tatanggi ang app</h2>
+        <ul>
+            <li><strong>Kumpletuhin Muna ang Isang Palitan</strong> (sa telepono): hindi ka pa maaaring magpanukala. Sa web app ang button na <strong>+ Magmungkahi ng Desisyon</strong> ay naka-grey out, at isang linya sa itaas nito ang nagsasabi kung bakit.</li>
+            <li><strong>Naabot ang Limitasyon</strong> (sa telepono): mayroon ka nang bukas na Desisyon. Hintayin itong magsara. Sa web app ang button ay naka-grey out din dito, na may linyang nagsasabi kung bakit.</li>
+            <li><strong>Hindi maaaring alisin o suspindihin ng boto ng komunidad ang isang may-ari o admin ng server ng komunidad na ito:</strong> ang taong pinili mo ang nagpapatakbo ng server. Maaaring alisin muna ng isang may-ari ang kanilang tungkulin.</li>
+            <li><strong>Ang grant na ito ay mas malaki kaysa sa kayang bayaran ng Komun:</strong> humiling nang hindi hihigit sa halagang pinangalanan nito, o maghintay para sa higit pang mga munggo na pumasok.</li>
+            <li><strong>Di-wastong Halaga</strong> (sa web app, &quot;Mangyaring maglagay ng wastong positibong halaga ng kaloob sa munggo&quot;): punan kung gaano karaming munggo.</li>
+            <li><strong>Error:</strong> suriin na ang iyong paglalarawan ay hindi bababa sa 10 character ang haba.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Pagboto sa Desisyon</strong><span>Maghanap ng bukas na Mga Desisyon, bumoto, baguhin ang iyong boto, at tingnan ang mga resulta.</span></a></li>
+            <li><a href="rules.html"><strong>Mga tuntunin at mga desisyon</strong><span>Pagboto, turnout, lihim na balota, sino ang maaaring bumoto, suspensiyon, pag-alis ng miyembro, mga tagapangalaga, at mga tagapag-ugnay at punong tagapag-ugnay.</span></a></li>
+            <li><a href="polls.html"><strong>Mga Poll</strong><span>Magtanong sa komunidad ng mabilisang tanong. Nagpapakita ang mga poll ng opinyon; wala itong binabago nang kusa.</span></a></li>
+            <li><a href="enterprises.html"><strong>Mga proyekto at negosyo</strong><span>Pinagsasaluhang negosyo na may sariling munggo: maghanap ng isa, sumuporta sa isa, o magsimula ng isa.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12 kelimeniz ve sunucu anahtarları (sahipler) — BeanPool members' guide</title>
+    <meta name="description" content="Topluluk sahipleri için. 12 kelimenizi kontrol etme, telefonunuzla sunucuyu devralma veya geri yükleme ve telefonunuzun kendi kendine yaptığı kontrol.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Ayarlar ve güvenlik</a></p>
+        <h1>12 kelimeniz ve sunucu anahtarları (sahipler)</h1>
+        <p class="lede">Topluluk sahipleri için. 12 kelimenizi kontrol etme, telefonunuzla sunucuyu devralma veya geri yükleme ve telefonunuzun kendi kendine yaptığı kontrol.</p>
+        <h2>Bu kimin içindir</h2>
+        <p>Yalnızca bir topluluğun <strong>sahipleri</strong> içindir. Bir sahip değilseniz bunların hiçbirini görmezsiniz.</p>
+        <h2>Sahiplerden neden istenir</h2>
+        <p>Topluluğunuzun sunucusu, kendi sunucusu kaybolursa topluluğu başka bir sunucuya taşımak için anahtarlarının kilitli bir kopyasını tutar ve yedekleri de kilitlidir. Bunlar sahiplerin hesaplarına kilitlenmiştir: herhangi bir sahip telefonunu kullanarak bunları açabilir (aşağıdaki Telefonunuzla devralma veya geri yükleme bölümüne bakın). Telefonunuzu kaybederseniz 12 kelimeniz hesabınızı ve onunla birlikte sunucunun kilidini ve yedeklerini açacak anahtarınızı geri getirir. Bu, en çok sunucunun kendisinin kaybolduğu gün önem taşır.</p>
+        <p>Bu nedenle uygulama, her bir sahibin doğru 12 kelimeye hâlâ sahip olup olmadığını arada sırada kontrol etmesini ister. <strong>Daha sonra</strong> diyebilirsiniz. Hiçbir şey hiçbir zaman engellenmez ve bir sahibin yaptığı her şeyi yapmaya devam edebilirsiniz.</p>
+        <h2>Uygulama ne zaman sorar</h2>
+        <ul>
+            <li>Bir sahip olduktan kısa bir süre sonra, bir kez.</li>
+            <li>Son kontrolünüzden 12 ay sonra tekrar.</li>
+        </ul>
+        <p>Pazar'ın en üstünde (web uygulamasında Harita dışındaki her ekranın üstünde) bir kart gösterir: <strong>Şimdi kontrol et</strong> veya <strong>Daha sonra</strong>. <strong>Daha sonra</strong>, kartı bir sonraki vadesine kadar kaldırır. İstediğiniz zaman <strong>Ayarlar</strong>'dan kontrol edebilirsiniz: <strong>TOPLULUK ANAHTARLARI</strong> altında <strong>12 kelimenizi kontrol edin</strong> seçeneğine dokunun (web uygulamasında <strong>Şimdi kontrol et</strong>).</p>
+        <h2>Nasıl kontrol edilir</h2>
+        <ul>
+            <li>12 kelimenizin olduğu kağıdınızı alın (kelimeler İngilizce kelimelerdir).</li>
+            <li>Kelimeleri aralarında boşluk bırakarak sırayla yazın. Büyük harfler ve fazladan boşluklar fark etmez.</li>
+            <li><strong>Kelimelerimi kontrol et</strong> seçeneğine dokunun.</li>
+        </ul>
+        <p>Doğruysalar uygulama <strong>Bunlar doğru kelimeler</strong> der. Değillerse: <strong>Bunlar bu hesabın kelimeleri değil.</strong> Hangi kelimenin yanlış olduğunu söylemez, bu nedenle kağıdı kontrol edin ve hepsini tekrar yazın.</p>
+        <p>12 kelimenizin kopyası olmayan bir telefonda (bir oturum açma hesabıyla geri yüklenen bir telefon), doğru kelimeler <strong>Onları bu telefona kaydet</strong> seçeneğini de getirir. Dokunun ve <strong>Kurtarma İfadesini Görüntüle</strong> bundan sonra onları gösterir. Bu, <strong>12 kelimenizi bu telefona ekleyin</strong> ile aynı kontrol ve aynı kaydetme işlemidir (&quot;12 kelimeniz&quot; bölümüne bakın).</p>
+        <p>Bulamıyor musunuz? Bu telefonda hâlâ duruyorsa, <strong>Ayarlar</strong>, ardından <strong>Kurtarma İfadesini Görüntüle</strong> onları gösterir. Onları tekrar yazın, ardından kontrol edin. Kopyası olmayan bir telefonda uygulama bunu belirtir: bulduğunuzda onları burada kontrol edin, ardından kaydedin.</p>
+        <h2>Neler gönderilir, neler gönderilmez</h2>
+        <ul>
+            <li>Kontrol telefonunuzda (veya web uygulamasında tarayıcınızda) gerçekleşir. Kelimeleriniz hiçbir yere gönderilmez. Kontrol yanıt verir vermez ve ekrandan ayrıldığınızda kutu boşaltılır. Yalnızca <strong>Onları bu telefona kaydet</strong>'e dokunursanız ve yalnızca bu telefona kaydedilirler.</li>
+            <li>Kelimeler doğru olduğunda telefonunuz topluluğunuzun sunucusuna yalnızca kontrol ettiğinizi ve hesabınızla imzalanmış olarak ne zaman kontrol ettiğinizi söyler.</li>
+            <li>Sahipler ve yöneticiler, sunucunun Ayarlar bölümünde her sahibin &quot;12 kelime kontrol edildi&quot; tarihini veya &quot;henüz değil&quot; ifadesini görür. Bu sizin kendi beyanınızdır: sunucu kelimelerinizi göremez veya kontrol edemez.</li>
+        </ul>
+        <h2>Telefonunuzla devralma veya geri yükleme</h2>
+        <p>Topluluğunuzun sunucusu kaybolursa, beklemedeki sunucusunu çalıştıran kişi (veya bir yedeği geri yükleyen yeni bir sunucu) bir sahibinden kilitli anahtarları açmasını isteyebilir. Herhangi bir sahip yeterlidir. BeanPool uygulamasının en yeni sürümüne ihtiyacınız vardır. Web uygulaması da hâlâ açılıyorsa çalışır; ancak sunucuyla birlikte çökmüş olabilecek topluluğunuzun kendi adresinde yer alır: güvenilecek olan telefon uygulamasıdır.</p>
+        <ul>
+            <li>Sunucunun Ayarlar bölümünde <strong>Take over as the main server</strong> seçeneğini, ardından <strong>I understand: use an owner's phone</strong> seçeneğini veya bir yedeği geri yüklerken <strong>Open with an owner's phone</strong> seçeneğini belirlerler. Ekranlarında bir kod görünür.</li>
+            <li>Uygulamada: <strong>Ayarlar</strong>, <strong>TOPLULUK ANAHTARLARI</strong> altında <strong>Bu telefonla devralın veya geri yükleyin</strong> seçeneğine dokunun ve kamerayı koda doğrultun. Sunucunun sayfası kendi telefonunuzda açıksa bağlantısına dokunmak da aynı işlemi yapar. Web uygulamasında bağlantıyı ekranlarından kopyalayın ve <strong>Ayarlar</strong>'daki <strong>Bu tarayıcıyla devralın veya geri yükleyin</strong> altına yapıştırın.</li>
+            <li>Uygulama hangi topluluk olduğunu, hangi sunucu olduğunu ve ne olacağını gösterir. Ana sunucunuz hâlâ yanıt veriyorsa kırmızı renkte bunu belirtir: devralma yalnızca gerçekten gitmiş bir sunucu içindir.</li>
+            <li><strong>Devralma için kilidi aç</strong> (veya <strong>Yedeğin kilidini aç</strong>) seçeneğine dokunun. Telefonunuz önce kendi kilidini açmanızı ister: parmak izi, yüz veya PIN. Web uygulamasında böyle bir adım yoktur; bu nedenle bir sahibin anahtarı için telefon uygulaması daha güvenli yerdir.</li>
+            <li>Telefonunuz kilidin kendi parçasını açar ve anahtarı yalnızca o sunucunun okuyabileceği şekilde kilitli olarak o sunucuya teslim eder. Telefonunuz sunucunun anahtarlarını veya yedeği asla görmez.</li>
+            <li>Bir devralmada sunucudaki kişi ardından ekranında onaylar. Topluluğa taşındığı ve anahtarları sizin açtığınız bildirilir.</li>
+        </ul>
+        <p>Kilit başka bir topluluğa aitse, size kilitlenmemişse, sunucunun kodunun süresi dolmuşsa (10 dakika sürer ve bir kez çalışır) veya anahtarlar topluluğunuzun kendi sunucusu tarafından kilitlenmemişse uygulama reddeder ve nedenini söyler.</p>
+        <h2>Telefonunuz kilidi kendi kendine kontrol eder</h2>
+        <p>Topluluğunuzun kilidi her değiştiğinde (bir sahip eklendiğinde veya çıkarıldığında, yeni bir kurtarma kodu oluşturulduğunda), uygulamanız kendi parçasını hâlâ açıp açamayacağını sessizce kontrol eder. Kilidi açar, anahtarı hemen atar ve çalışıp çalışmadığını sunucuya bildirir. Sizden hiçbir şey istenmez.</p>
+        <p>Sahipler ve yöneticiler bunu sunucunun Ayarlar bölümünde 12 kelime tarihinizin yanında görür: tarihiyle birlikte <strong>telefonları geçerli kilidi açtı</strong> veya en son daha eski bir kilidi açtığı bilgisi. Telefonunuzun kilidi <strong>açamadığını</strong> söylüyorsa 12 kelimenizi kontrol edin ve başka bir sahibinden sunucunun Ayarlar bölümüne bakmasını isteyin.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>12 kelimeniz</strong><span>12 kelime hesabınızın anahtarıdır. Neden önemli oldukları, nerede bulunacakları, nasıl güvende tutulacakları ve ikinci bir kurtarma yolu olarak giriş hesabı ekleme.</span></a></li>
+            <li><a href="recovery.html"><strong>Hesabınızı geri alma</strong><span>Hesabınızı yeni bir telefonda geri yükleyin ve bağlı bir giriş hesabıyla koruyun.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

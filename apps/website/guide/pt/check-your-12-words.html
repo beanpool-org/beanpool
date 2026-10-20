@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suas 12 palavras e chaves (donos) — BeanPool members' guide</title>
+    <meta name="description" content="Para proprietários de comunidades. Como checar suas 12 palavras, assumir ou restaurar o servidor pelo celular e verificação automática pelo aparelho.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Configurações e segurança</a></p>
+        <h1>Suas 12 palavras e chaves (donos)</h1>
+        <p class="lede">Para proprietários de comunidades. Como checar suas 12 palavras, assumir ou restaurar o servidor pelo celular e verificação automática pelo aparelho.</p>
+        <h2>A quem se destina</h2>
+        <p>Apenas aos <strong>proprietários</strong> da comunidade. Se você não for proprietário, não verá nada disso.</p>
+        <h2>Por que os proprietários são solicitados</h2>
+        <p>O servidor da sua comunidade mantém uma cópia bloqueada de suas chaves para transferir a comunidade para outro servidor caso o atual seja perdido, e os backups também são bloqueados. Eles ficam bloqueados para as contas dos proprietários: qualquer um dos proprietários pode abri-los usando seu próprio celular (consulte Assumir o controle ou restaurar com o celular, abaixo). Se você perder seu celular, suas 12 palavras recuperam sua conta e, com ela, a chave para o bloqueio do servidor e seus backups. Isso é ainda mais importante no dia em que o servidor em si deixar de existir.</p>
+        <p>Por isso, o aplicativo pede a cada proprietário, de tempos em tempos, que confirme se ainda possui as 12 palavras corretas. Você pode escolher <strong>Depois</strong>. Nada é bloqueado e você pode continuar fazendo tudo o que um proprietário faz.</p>
+        <h2>Quando o aplicativo solicita</h2>
+        <ul>
+            <li>Uma vez, logo após você se tornar proprietário.</li>
+            <li>Novamente 12 meses após a última verificação.</li>
+        </ul>
+        <p>Ele exibe um cartão no topo do Mercado (no aplicativo web, no topo de todas as telas, exceto no Mapa): <strong>Verificar agora</strong> ou <strong>Depois</strong>. <strong>Depois</strong> dispensa o cartão até o próximo período previsto. Você pode verificar a qualquer momento em <strong>Configurações</strong>: sob <strong>Chaves da comunidade</strong>, toque em <strong>Verifique suas 12 palavras</strong> (no aplicativo web, <strong>Verificar agora</strong>).</p>
+        <h2>Como verificar</h2>
+        <ul>
+            <li>Pegue seu papel com as 12 palavras (que são palavras em inglês).</li>
+            <li>Digite-as na ordem, separadas por espaços. Letras maiúsculas e espaços extras não fazem diferença.</li>
+            <li>Toque em <strong>Verificar minhas palavras</strong>.</li>
+        </ul>
+        <p>Se estiverem corretas, o aplicativo informa: <strong>Estas são as palavras corretas.</strong> Caso contrário: <strong>Estas não são as palavras desta conta.</strong> Ele não indica qual palavra está incorreta, portanto confira o papel e digite todas novamente.</p>
+        <p>Em um celular sem cópia das suas 12 palavras (um aparelho restaurado por meio de conta de login), palavras corretas também exibem <strong>Salvar neste celular</strong>. Toque nessa opção e <strong>Ver frase de recuperação</strong> passará a mostrá-las a partir de então. É a mesma verificação e o mesmo salvamento de <strong>Adicionar suas 12 palavras a este celular</strong> (consulte &quot;Suas 12 palavras&quot;).</p>
+        <p>Não consegue encontrá-las? Se este celular ainda as tiver salvas, abra <strong>Configurações</strong> e toque em <strong>Ver frase de recuperação</strong> para visualizá-las. Anote-as novamente no papel e faça a verificação. Em um celular sem cópia salva, o aplicativo avisa sobre isso: quando você as encontrar, verifique-as aqui e depois salve-as.</p>
+        <h2>O que é enviado e o que não é</h2>
+        <ul>
+            <li>A verificação ocorre no seu próprio celular (ou no seu navegador, no aplicativo web). Suas palavras nunca são enviadas para lugar nenhum. O campo é limpo assim que a verificação responde e quando você sai da tela. Elas só são salvas se você tocar em <strong>Salvar neste celular</strong>, e apenas neste aparelho.</li>
+            <li>Quando as palavras estão corretas, seu celular informa ao servidor da comunidade apenas que você fez a verificação, e quando, assinado pela sua conta.</li>
+            <li>Proprietários e administradores veem, nas Configurações do servidor, a data em que cada proprietário verificou as 12 palavras, ou &quot;ainda não&quot;. Trata-se da sua própria declaração: o servidor não pode ver nem conferir suas palavras.</li>
+        </ul>
+        <h2>Assumir o controle ou restaurar com o celular</h2>
+        <p>Se o servidor da sua comunidade for perdido, quem estiver operando o servidor de prontidão (ou um novo servidor restaurando um backup) pode pedir a um proprietário que abra as chaves bloqueadas. Qualquer um dos proprietários é suficiente. Você precisa da versão mais recente do aplicativo BeanPool. O aplicativo web também funciona caso ainda abra, mas ele fica no endereço próprio da comunidade, que pode estar fora do ar junto com o servidor: o aplicativo para celular é o mais confiável para isso.</p>
+        <ul>
+            <li>Nas Configurações do servidor, eles escolhem <strong>Assumir como servidor principal</strong> e depois <strong>Entendi: usar o celular de um proprietário</strong>, ou <strong>Abrir com o celular de um proprietário</strong> ao restaurar um backup. Um código surge na tela deles.</li>
+            <li>No aplicativo: abra <strong>Configurações</strong>, sob <strong>Chaves da comunidade</strong>, toque em <strong>Assumir ou restaurar com este celular</strong> e aponte a câmera para o código. Se a página do servidor estiver aberta no seu próprio celular, tocar no link faz o mesmo. No aplicativo web, copie o link da tela deles e cole sob <strong>Assumir o controle ou restaurar com este navegador</strong> em <strong>Configurações</strong>.</li>
+            <li>O aplicativo mostra qual é a comunidade, qual é o servidor e o que acontecerá. Se o servidor principal ainda responder, o aviso aparece em vermelho: a tomada de controle serve apenas para um servidor que realmente tenha sido perdido.</li>
+            <li>Toque em <strong>Desbloquear para assumir o controle</strong> (ou <strong>Desbloquear o backup</strong>). Seu celular pede a autenticação do próprio aparelho primeiro: impressão digital, reconhecimento facial ou PIN. O aplicativo web não tem essa etapa, por isso o aplicativo para celular é o local mais seguro para a chave de um proprietário.</li>
+            <li>Seu celular abre a parte correspondente do bloqueio e entrega a chave àquele servidor, codificada para que somente aquele servidor possa ler. Seu celular nunca vê as chaves do servidor nem o backup.</li>
+            <li>Na tomada de controle, a pessoa no servidor confirma na tela dela. A comunidade é notificada da mudança e de que você abriu as chaves.</li>
+        </ul>
+        <p>O aplicativo recusa e explica o motivo caso o bloqueio pertença a outra comunidade, caso não esteja bloqueado para você, caso o código do servidor tenha expirado (ele dura 10 minutos e funciona uma única vez) ou se as chaves não foram bloqueadas pelo servidor da sua própria comunidade.</p>
+        <h2>O celular confere o bloqueio automaticamente</h2>
+        <p>Toda vez que o bloqueio da sua comunidade é alterado (um proprietário é adicionado ou removido, um novo código de recuperação é gerado), seu aplicativo verifica, silenciosamente, se ainda consegue abrir a parte dele. Ele abre, descarta a chave imediatamente e avisa o servidor se funcionou. Nada é solicitado a você.</p>
+        <p>Proprietários e administradores veem isso nas Configurações do servidor, ao lado da data das suas 12 palavras: <strong>o celular abriu o bloqueio atual</strong>, com a data, ou que abriu pela última vez um bloqueio anterior. Se informar que seu celular <strong>NÃO pôde abrir</strong> o bloqueio, confira suas 12 palavras e peça a outro proprietário para consultar as Configurações do servidor.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>Suas 12 palavras</strong><span>As 12 palavras são a chave da sua conta. Por que importam, onde encontrá-las, como mantê-las seguras e como adicionar um login como alternativa.</span></a></li>
+            <li><a href="recovery.html"><strong>Recuperar sua conta</strong><span>Restaure sua conta em um celular novo e proteja-a vinculando um login.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>거래에 문제가 생겼을 때 — BeanPool members' guide</title>
+    <meta name="description" content="거래 취소 방법과 서로 합의되지 않을 때 진행되는 절차예요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">장터</a></p>
+        <h1>거래에 문제가 생겼을 때</h1>
+        <p class="lede">거래 취소 방법과 서로 합의되지 않을 때 진행되는 절차예요.</p>
+        <h2>먼저 대화해 보세요</h2>
+        <p>대부분의 문제는 오해에서 비롯돼요. 게시물에서 <strong>메시지</strong>를 탭하고 충분히 대화를 나눠보세요.</p>
+        <h2>취소하기</h2>
+        <ul>
+            <li><strong>합의되기 전:</strong> 신청한 사람이 <strong>요청 철회</strong>를 탭해요. 요청을 올린 사람은 <strong>거절</strong>을 누른 후 <strong>거절</strong>을 누르고 짧은 메시지를 덧붙일 수 있어요. 아무도 응답하지 않는 요청은 7일 후에 자동으로 종료돼요.</li>
+            <li><strong>콩이 안전 보관 중일 때:</strong> 둘 중 누구나 <strong>신뢰 보관 취소</strong>를 누른 다음 <strong>예, 취소합니다</strong>를 누를 수 있어요. 보관 중인 모든 콩은 지급한 사람에게 돌아가고 게시물은 다시 장터에 올라가요. 상대방에게도 알림이 가요.</li>
+        </ul>
+        <p>웹 앱에서는 <strong>요청 철회</strong>가 <strong>제안 취소</strong>이고, <strong>거절</strong>을 누르면 메시지 없이 즉시 거절돼요. 웹 앱에서 보관 중인 거래를 취소하려면 <strong>신뢰 보관 취소</strong>를 누른 후 <strong>확인</strong>을 누르세요.</p>
+        <p>콩이 전달되기 전이라면 작업이 완료된 후를 포함하여 언제든지 어느 한쪽이 일방적으로 취소할 수 있어요. 이런 일이 발생하면 먼저 상대방과 대화해 보고, 커뮤니티 관리자에게 문의하세요.</p>
+        <h2>합의가 이루어지지 않을 때</h2>
+        <p>앱에는 &quot;분쟁 해결&quot; 버튼이 따로 없어요. 커뮤니티 관리자에게 도움을 요청하세요. 관리자는 커뮤니티 서버를 관리하며, 진행이 막힌 거래를 다음 세 가지 방법 중 하나로 해결할 수 있어요:</p>
+        <ul>
+            <li>판매자에게 지급 (일반적인 1.5% 수수료 적용);</li>
+            <li>구매자에게 콩 전액 환불;</li>
+            <li>절반씩 분할.</li>
+        </ul>
+        <p>관리자는 자신이 당사자인 거래나 자신이 운영하는 기업이 관련된 거래를 직접 중재할 수 없어요.</p>
+        <p>두 사람 모두에게 알림(&quot;거래에 새로운 소식이 있습니다.&quot;)이 가며, 대화방에 어떻게 해결되었는지 안내 줄이 표시돼요. 대화방 안내에는 관리자의 호출 부호가 표시되거나 &quot;커뮤니티 관리자&quot;라고 나와요. 알림 자체에는 이름이 표시되지 않아요.</p>
+        <h2>상대방이 정직하지 않다면</h2>
+        <ul>
+            <li>공정한 후기를 남기세요. 낮은 별점은 상대방이 거래로 쌓는 신뢰를 줄어들게 해요.</li>
+            <li>상대방의 게시물을 신고하거나 차단하세요. &quot;문제 신고하기&quot; 및 &quot;멤버 차단하기&quot;를 참조하세요.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>단계별 거래 진행 방식</strong><span>제공과 요청에서 요청부터 지급 완료까지의 과정, 후기 작성 안내예요.</span></a></li>
+            <li><a href="getting-help.html"><strong>도움받기</strong><span>문제가 생겼을 때 확인할 곳과 문의할 사람 안내예요.</span></a></li>
+            <li><a href="reporting.html"><strong>문제 신고하기</strong><span>게시글, 행사, 동향 게시물, 프로젝트나 기업에 관해 커뮤니티 중재자에게 알리세요.</span></a></li>
+            <li><a href="rules.html"><strong>규칙 및 의사결정 방식</strong><span>투표, 참여율, 비밀 투표, 투표 자격, 활동 정지, 멤버 제명, 운영자 및 소집자와 대표 소집자 안내예요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

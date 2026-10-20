@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ta by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>முடிவை முன்மொழிதல் — BeanPool members' guide</title>
+    <meta name="description" content="கட்டுப்பாடான ஒரு முடிவை எடுக்குமாறு சமூகத்தைக் கேளுங்கள்.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">பொது</a></p>
+        <h1>முடிவை முன்மொழிதல்</h1>
+        <p class="lede">கட்டுப்பாடான ஒரு முடிவை எடுக்குமாறு சமூகத்தைக் கேளுங்கள்.</p>
+        <h2>நீங்கள் தொடங்குவதற்கு முன்</h2>
+        <ul>
+            <li>ஒரு முடிவு என்பது உங்கள் சமூகத்தின் சேவையகம் செயல்படுத்தக்கூடிய ஒன்றிற்கானது: ஓர் உறுப்பினரை நீக்குதல் அல்லது இடைநீக்கம் செய்தல், ஒருவரின் கடனை முடக்குதல் அல்லது முடக்கத்தை நீக்குதல், யார் சான்றளிக்கலாம் என்பதைத் தேர்ந்தெடுத்தல் அல்லது பொது நிதியிலிருந்து பயறுகளைச் செலுத்துதல். மற்ற எதற்கும், அதற்குப் பதிலாக ஒரு வாக்கெடுப்பைத் தொடங்குங்கள்.</li>
+            <li>உங்கள் சமூகத்தின் சேவையகத்தின் ஓர் உரிமையாளரையோ அல்லது நிர்வாகியையோ ஒரு முடிவால் நீக்கவோ அல்லது இடைநீக்கம் செய்யவோ முடியாது. &quot;விதிகளும் முடிவுகள் செயல்படும் விதமும்&quot; என்பதைப் பார்க்கவும்.</li>
+            <li>நீங்கள் ஒரு வர்த்தகத்தை முடித்தவுடன், அல்லது ஓர் நிர்வாகி உங்களுக்கு நம்பிக்கை பேட்ஜ் வழங்கியதும் நீங்கள் முன்மொழியலாம். உங்கள் சமூகத்தின் நிர்வாகிகள் எப்போதும் முன்மொழியலாம். ஒரு சான்றளிப்பு மட்டுமே போதுமானது அல்ல.</li>
+            <li>ஒரே நேரத்தில் ஒரு திறந்த முடிவை நீங்கள் வைத்திருக்கலாம்.</li>
+            <li>உலகளாவிய சமூகத்தில் முடிவுகள் எதுவும் இல்லை, எனவே அங்கு முன்மொழிய எதுவும் இல்லை. &quot;முடிவுக்கு வாக்களித்தல்&quot; என்பதைப் பார்க்கவும்.</li>
+        </ul>
+        <h2>முன்மொழிதல்</h2>
+        <ul>
+            <li><strong>பொது</strong> என்பதைத் தட்டி, பின்னர் <strong>தீர்மானி</strong> என்பதைத் தட்டி, பின்னர் <strong>+ முடிவை முன்மொழியுங்கள்</strong> என்பதைத் தட்டவும்.</li>
+            <li>அது எதைப் பற்றியது என்பதைத் தேர்வுசெய்யவும்: <strong>உறுப்பினர்</strong> அல்லது <strong>பொதுத் தொகுப்பு</strong>.</li>
+            <li><strong>தலைப்பு:</strong> &quot;கருவி நூலகத்திற்கு 200 பயறுகள் மானியம் வழங்குதல்&quot; போன்ற ஒரு வரி.</li>
+            <li><strong>விளக்கம் &amp; நியாயம்:</strong> குறைந்தபட்சம் 10 எழுத்துகளில் ஏன் என்பதை விளக்குங்கள். அதைத் தெளிவாகக் கூறுங்கள். மக்கள் இங்கே படிப்பவற்றின் அடிப்படையிலேயே வாக்களிப்பார்கள்.</li>
+            <li>அதற்குக் கீழே உள்ள பட்டியலிலிருந்து, என்ன நடக்க வேண்டும் என்பதைத் துல்லியமாகத் தேர்வுசெய்யவும். எடுத்துக்காட்டாக, ஓர் உறுப்பினருக்கு: <strong>உறுப்பினரை நீக்கு</strong>, <strong>உறுப்பினரை இடைநீக்கம் செய்</strong> அல்லது <strong>கடனை முடக்கு</strong>. பொது நிதிக்கு: <strong>ஒரு திட்டம் அல்லது கூட்டு முயற்சிக்குப் பயறுகளை வழங்குதல்</strong>, <strong>துயர் துடைப்பு மானியம்</strong>, அல்லது <strong>ஒரு திட்டம் அல்லது கூட்டு முயற்சியின் கடனை அடைத்தல்</strong>.</li>
+            <li>அது யாருக்கானது என்பதையும், ஏதேனும் பயறுகள் இருந்தால் எத்தனை என்பதையும் நிரப்பவும். ஒரு திட்டம் அல்லது கூட்டு முயற்சிக்கான மானியத்திற்கு அதன் சாவியை, அதாவது ஒரு நீண்ட குறியீட்டை நீங்கள் தட்டச்சு செய்ய வேண்டும்: இரண்டு செயலிகளிலும் அதைத் தேர்ந்தெடுப்பதற்கான பட்டியல் எதுவும் இல்லை. ஒரு கடனை அடைக்க அல்லது ஒரு முதன்மைப் பொறுப்பாளரை மாற்ற, பட்டியலில் உள்ள திட்டம் அல்லது கூட்டு முயற்சியைத் தட்டவும், அல்லது அதன் சாவியைத் தட்டச்சு செய்யவும்.</li>
+            <li><strong>சமூக முடிவைச் சமர்ப்பிக்கவும்</strong> என்பதைத் தட்டவும்.</li>
+        </ul>
+        <p>இணைய செயலியில் பொத்தான்கள் <strong>+ முடிவை முன்மொழி</strong> (அல்லது <strong>தீர்மானி</strong> திறந்திருக்கும் போது பொது பகுதியின் மேலே <strong>+ முன்மொழி</strong>) மற்றும் <strong>முடிவைச் சமர்ப்பி</strong> என்று இருக்கும், மேலும் பெட்டி <strong>விளக்கம் &amp; காரணம்</strong> ஆகும்.</p>
+        <p>வாக்களிப்பு உடனடியாகத் தொடங்கி 7 நாட்கள் இயங்கும்.</p>
+        <h2>மானியம் எவ்வளவு பெரியதாக இருக்கலாம்</h2>
+        <p>ஒரு கூட்டு முயற்சிக்கான மானியமோ அல்லது ஒரு துயர் துடைப்பு மானியமோ பொது நிதி செலுத்தக்கூடியதை விடப் பெரியதாக இருக்க முடியாது. நீங்கள் கேட்கக்கூடிய அதிகபட்ச அளவு:</p>
+        <ul>
+            <li>இப்போது பொது நிதி வைத்திருப்பது,</li>
+            <li>மற்றும் கடந்த 30 நாட்களில் அதற்குள் வந்த ஒவ்வொரு பயறும்: சந்தைக் கட்டணம், சுழற்சிக் கட்டணம் மற்றும் செலுத்தப்பட்ட பிற பயறுகள்.</li>
+        </ul>
+        <p>அந்த 30 நாட்களில் பொது நிதியிலிருந்து செலுத்தப்பட்ட பயறுகள் கழிக்கப்படாது. நீங்கள் அதிகமாகக் கேட்டால், யாரும் வாக்களிப்பதற்கு முன்பே செயலி முடியாது என்று கூறிவிடும், மேலும் இப்போது நீங்கள் எவ்வளவு கேட்கலாம் என்பதையும் கூறும். பயறுகள் பொது நிதிக்கு வரும்போது அந்தத் தொகை அதிகரிக்கும்.</p>
+        <p>இது வரிசையைத் தடையின்றி வைத்திருக்கும். பொது நிதி குறைவாக இருக்கும்போது ஒரு மானியம் நிறைவேற்றப்பட்டால், அது பயறுகளுக்காகக் காத்திருக்கும், மேலும் ஒரே நேரத்தில் ஒரு மானியம் மட்டுமே காத்திருக்க முடியும். &quot;விதிகளும் முடிவுகள் செயல்படும் விதமும்&quot; என்பதைப் பார்க்கவும்.</p>
+        <h2>செயலி மறுத்தால்</h2>
+        <ul>
+            <li><strong>முதலில் ஒரு வர்த்தகத்தை முடிக்கவும்</strong> (மொபைலில்): நீங்கள் இன்னும் முன்மொழிய முடியாது. இணைய செயலியில் <strong>+ முடிவை முன்மொழி</strong> பொத்தான் சாம்பல் நிறத்தில் மங்கி இருக்கும், மேலும் அதற்கு மேலே உள்ள ஒரு வரி ஏன் என்று கூறும்.</li>
+            <li><strong>வரம்பு முடிந்தது</strong> (மொபைலில்): உங்களிடம் ஏற்கனவே ஒரு திறந்த முடிவு உள்ளது. அது முடிவடையும் வரை காத்திருக்கவும். இணைய செயலியில் இங்கேயும் பொத்தான் மங்கி இருக்கும், அதற்கான காரணத்தைக் கூறும் ஒரு வரியுடன்.</li>
+            <li><strong>A community vote can't remove or suspend an owner or admin of this community's server:</strong> நீங்கள் தேர்ந்தெடுத்த நபர் சேவையகத்தை இயக்குகிறார். ஓர் உரிமையாளர் முதலில் அவர்களின் பொறுப்பை விலக்கிக்கொள்ளலாம்.</li>
+            <li><strong>This grant is bigger than the Commons could pay:</strong> அது குறிப்பிடும் தொகைக்கு மேல் கேட்க வேண்டாம், அல்லது அதிக பயறுகள் வரும் வரை காத்திருக்கவும்.</li>
+            <li><strong>செல்லாத தொகை</strong> (இணைய செயலியில், &quot;Please enter a valid positive grant amount in Beans&quot;): எத்தனை பயறுகள் என்பதை நிரப்பவும்.</li>
+            <li><strong>பிழை:</strong> உங்கள் விளக்கம் குறைந்தபட்சம் 10 எழுத்துகள் நீளமாக உள்ளதா என்பதைச் சரிபார்க்கவும்.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>முடிவுக்கு வாக்களித்தல்</strong><span>திறந்திருக்கும் முடிவுகளைக் கண்டறிந்து, வாக்களித்து, உங்கள் வாக்கை மாற்றி, முடிவுகளைப் பாருங்கள்.</span></a></li>
+            <li><a href="rules.html"><strong>விதிகளும் முடிவுகள் செயல்படும் விதமும்</strong><span>வாக்களிப்பு, பங்கேற்பு, ரகசிய வாக்கெடுப்பு, வாக்களிக்கத் தகுதியானவர்கள், இடைநீக்கம், உறுப்பினரை நீக்குதல், பொறுப்பாளர்கள் மற்றும் ஒருங்கிணைப்பாளர்கள்.</span></a></li>
+            <li><a href="polls.html"><strong>வாக்கெடுப்புகள்</strong><span>சமூகத்திடம் ஒரு விரைவான கேள்வியைக் கேளுங்கள். வாக்கெடுப்புகள் கருத்துக்களைக் காட்டுகின்றன; தானாக எதையும் மாற்றுவதில்லை.</span></a></li>
+            <li><a href="enterprises.html"><strong>திட்டங்களும் கூட்டு முயற்சிகளும்</strong><span>தமக்கென சொந்தப் பயறுகளைக் கொண்ட கூட்டு முயற்சிகள்: ஒன்றைக் கண்டறியுங்கள், ஆதரவளியுங்கள் அல்லது தொடங்குங்கள்.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

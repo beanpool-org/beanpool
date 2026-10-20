@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bildirimler — BeanPool members' guide</title>
+    <meta name="description" content="Hangi uyarıların telefonunuza ulaşacağını ve etkinliklerin ne zaman hatırlatılacağını seçin.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Ayarlar ve güvenlik</a></p>
+        <h1>Bildirimler</h1>
+        <p class="lede">Hangi uyarıların telefonunuza ulaşacağını ve etkinliklerin ne zaman hatırlatılacağını seçin.</p>
+        <h2>Uyarılarınızı seçme</h2>
+        <ul>
+            <li><strong>Ayarlar</strong>'ı açın. <strong>UYGULAMA AYARLARI</strong> altında <strong>Bildirim Tercihleri</strong>'ne dokunun.</li>
+            <li>Her türü açın veya kapatın:</li>
+            <li><strong>Doğrudan Mesajlar:</strong> birisi size mesaj gönderdiğinde, gruplarınızdan birine yazdığında veya sizden bahsettiğinde ya da içinde bulunduğunuz bir grupta veya girişimde bir oylama açıldığında.</li>
+            <li><strong>Pazaryeri Etkinliği:</strong> takaslarınızla ilgili talepler, onaylar ve retler ile bildirdiğiniz bir gönderiye veya yöneticilerin kaldırdığı size ait bir gönderiye ne olduğu. Ayrıca katılacağınız etkinliklerle ilgili haberler, topluluğunuzun yöneticilerinden gelen duyurular ve sorduğunuz bir yerin yakınında başlayan bir topluluk.</li>
+            <li><strong>Emanette Tutulanlar ve Sistem:</strong> emanette tutulan, serbest bırakılan veya sorgulanan Fasulyeler.</li>
+        </ul>
+        <p>Web uygulamasında ilki <strong>Sohbet Mesajları</strong> olarak adlandırılır ve üçüncüsü ise adını <strong>Deals</strong>'tan alandır. Telefonunuza nelerin ulaşacağını belirlerler.</p>
+        <p>Değişiklikler kendiliğinden kaydedilir. Topluluğunuzun sunucusu tarafından saklanırlar, böylece hesabınızı takip ederler.</p>
+        <p>Hesabınızla ilgili iki uyarı her zaman iletilir ve uygulama bunlar için bir anahtara sahip değildir: hesabınızın başka bir cihazda az önce geri yüklendiği ve bir yöneticinin hesabınızı yeni bir telefona taşımaya başladığı. Topluluğunuzun sunucusunu siz çalıştırıyorsanız, sunucuyla ilgili uyarıları da her zaman iletilir.</p>
+        <h2>Bir uyarının söyledikleri</h2>
+        <p>Telefonunuzdaki bir uyarı yalnızca ne tür bir haber olduğunu söyler; örneğin:</p>
+        <ul>
+            <li>&quot;Yeni bir mesajınız var.&quot;</li>
+            <li>&quot;Takaslarınızdan birinde haber var.&quot;</li>
+            <li>&quot;Katılacağınız bir etkinlik yakında başlıyor.&quot;</li>
+            <li>&quot;Topluluğunuzun sizin için bir bildirimi var.&quot;</li>
+        </ul>
+        <p>Asla kimden olduğunu, hangi ilan olduğunu, kaç Fasulye olduğunu veya topluluğunuzun duyurusunun ne söylediğini belirtmez. Uyarılar telefonunuza giderken Apple, Google ve Expo sunucularından geçer ve kilit ekranını herkes okuyabilir; bu nedenle geri kalanı topluluğunuzda kalır. Görmek için BeanPool'u açın.</p>
+        <p>BeanPool bir uyarıda asla 12 kelimenizi veya bir parola istemez.</p>
+        <h2>Bir uyarıya dokunduğunuzda</h2>
+        <p>Her uyarı, yalnızca sizin için oluşturulmuş topluluğunuzun imzasını taşır. BeanPool herhangi bir şey yapmadan önce bunu kontrol eder:</p>
+        <ul>
+            <li><strong>Doğrulanırsa:</strong> BeanPool topluluğunuza uyarının ne hakkında olduğunu sorar ve içinde bulunduğunuz topluluktansa onu açar. Başka bir topluluğunuzdan gelen bir uyarı, BeanPool'u kaldığınız yerde açar: görmek için o topluluğa geçiş yapın.</li>
+            <li><strong>Doğrulanmazsa:</strong> BeanPool hiçbir şey açmaz ve size bir kez şunu söyler: &quot;Bu bildirim topluluğunuzdan gelmedi. Ne yazdığını dikkate almayın. BeanPool bir bildirimde asla 12 kelimenizi veya bir parola istemez.&quot;</li>
+        </ul>
+        <p>BeanPool açıkken, doğrulanmayan bir uyarı hiç gösterilmez ve daha önce gördüğünüz bir uyarı da gösterilmez.</p>
+        <p>Telefonunuz, BeanPool kontrol etmeden önce bir uyarının sözlerini gösterir. Dolayısıyla, telefonunuzun uyarı adresini ele geçiren biri kilit ekranınıza kendi sözlerini koyabilir. Birine dokunmak hiçbir şey yapmaz ve BeanPool bunu belirtir.</p>
+        <p>Bu telefondan kaldırdığınız bir topluluktan gelen bir uyarı da hiçbir şey yapmaz.</p>
+        <p>Topluluğunuzun sunucusu henüz güncellenmediyse, uyarıları imza taşımaz. BeanPool bunları genel ifadelerle gösterir (&quot;Topluluğunuzdan bir haber var.&quot;) ve birine dokunduğunuzda kaldığınız yerde açılır.</p>
+        <h2>BeanPool kontrol ettiğindeki bildirimler</h2>
+        <p>Telefonunuz, BeanPool'un arka planda topluluğunuzla ara sıra bağlantı kurmasına izin verir. Topluluğunuz sizin için henüz görmediğiniz bir duyuru sakladıysa (örneğin gönderilerinizden birine ne olduğu gibi), BeanPool bunu telefonunuzda tam olarak bir kez gösterir.</p>
+        <p>Bu işlem için topluluğunuzun sunucusundan başka hiçbir şeye ihtiyaç duyulmaz; bu nedenle uyarılar çalışmasa bile çalışmaya devam eder. Bir uyarının geleceğinden daha geç gelir: telefonunuz yaklaşık 15 dakikadan birkaç saate kadar ne zaman olacağına karar verir.</p>
+        <h2>Etkinlik hatırlatıcıları</h2>
+        <p>Anahtarların altında yer alan <strong>Etkinlik hatırlatıcıları</strong>, <strong>Katılıyorum</strong> veya <strong>İlgileniyorum</strong> dediğiniz bir etkinlik başlamadan ne kadar önce size haber verileceğini ayarlar. <strong>1 hafta önce</strong>, <strong>1 gün önce</strong>, <strong>2 saat önce</strong>, <strong>1 saat önce</strong> veya <strong>30 dakika önce</strong> seçeneklerini işaretleyin — birden fazlasını işaretleyebilirsiniz — veya hiç almamak için <strong>Kapalı</strong> seçeneğini işaretleyin.</p>
+        <p>Herkes <strong>1 gün</strong> önce ile başlar. Bu sizin olağan seçiminizdir; herhangi bir etkinlik, etkinliğin kendisinde farklı şekilde ayarlanabilir. &quot;Etkinlikler&quot; bölümüne bakın.</p>
+        <p>Hatırlatıcılar <strong>Pazaryeri Etkinliği</strong> uyarılarınızla birlikte gelir, bu nedenle bunları kapatırsanız dururlar. İptal edilen veya sona eren bir etkinlik ya da geleceğinizi söylediğinizde zaten geçmiş olan bir zaman hakkında size asla hatırlatma yapılmaz. Düzenleyen kişi etkinliği erteler veya taşırsa hatırlatıcı da onunla birlikte taşınır.</p>
+        <h2>Hiç uyarı yok mu?</h2>
+        <p>Telefonunuzun kendi ayarlarından BeanPool için bildirimlere izin verilip verilmediğini kontrol edin.</p>
+        <h2>Her seferinde bir sohbet</h2>
+        <p>Bir grubun, projenin veya girişimin sohbetini 8 saatliğine, bir haftalığına veya tamamen sessize alabilirsiniz. &quot;Sohbeti susturma&quot; bölümüne bakın.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="mute.html"><strong>Sohbeti susturma</strong><span>Bir kişinin, grubun veya girişimin sohbetini 8 saat, bir hafta veya tamamen sessize alın.</span></a></li>
+            <li><a href="messages.html"><strong>Mesajlar</strong><span>Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.</span></a></li>
+            <li><a href="my-deals.html"><strong>Takaslarım</strong><span>Dahil olduğunuz her takas, yayındaki her ilanınız ve geçmiş takaslarınız için tek bir yer.</span></a></li>
+            <li><a href="events.html"><strong>Etkinlikler</strong><span>Bir mekanda veya çevrim içi, tek seferlik veya tekrarlayan bir etkinlik oluşturun; katılacağınızı belirtin, paylaşın ve ev sahibi olarak yönetin.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Tatil Modu</strong><span>Tatil Modu siz uzaktayken Tekliflerinizi gizler ve yeni talepleri duraklatır.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Üst çubuk</strong><span>Fasulye simgesi, dikkatiniz gerektiğinde beliren küçük simgeler ve sağ üstteki düğmeler.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

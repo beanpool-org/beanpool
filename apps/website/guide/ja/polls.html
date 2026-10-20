@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アンケート — BeanPool members' guide</title>
+    <meta name="description" content="コミュニティに手軽に質問できます。アンケートは意見を把握するためのもので、それ自体で何かが変更されることはありません。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">コモンズ</a></p>
+        <h1>アンケート</h1>
+        <p class="lede">コミュニティに手軽に質問できます。アンケートは意見を把握するためのもので、それ自体で何かが変更されることはありません。</p>
+        <h2>アンケートか決定か？</h2>
+        <p><strong>アンケート</strong>は、「マーケットは日曜日と土曜日のどちらが良いですか？」のように人々の意見を尋ねるものです。それ自体で何かが変更されることはありません。拘束力のあるものについては、決定を提案してください。</p>
+        <p>グローバルコミュニティでは、各アンケートに「<strong>非公式の投票です。正式な決定を行うものではありません</strong>」と表示されます。12個の単語やサインインで誰でも参加できるため、1人が複数のアカウントを持って集計を左右する恐れがあり、そこには決定が存在しません。その下にある「🏘️ ローカルコミュニティでは決定に拘束力があります ›」には、投票に拘束力があるのがローカルコミュニティだけである理由が説明されています。</p>
+        <p>グローバルコミュニティで匿名のアンケートが締め切られると、「12票中5票が新規または12語のアカウントから投じられました」のように、何票が<strong>新規または12語のアカウント</strong>から投じられたかも表示されます。各票は投票時のアカウントの状態でカウントされます。新規アカウントとは新規アカウントの制限が残っているアカウントであり、12語のアカウントとはサインインを追加していない12個の単語で作成されたアカウントです。新規または12語のアカウントから少なくとも3票が投じられ、その他の票が0票または少なくとも3票ある場合は、各選択肢にもそのうちの何票が該当するかが表示されます。すべての票は引き続きカウントされ、誰が投票したかが表示されることはありません。</p>
+        <p>アンケートの進行中は、これについて何も表示されません。もし表示されると、投票のたびにアンケートを確認する人が、各票がどのアカウント種別から投じられ、何を選択したかを把握できてしまうためです。公開投票では、受付中か終了後かを問わず、これが表示されることは決してありません。公開投票では誰が投票したかが表示されるため、集計によって各投票者がどのアカウント種別を持っているかがわかってしまうからです。グループのアンケートにも表示されず、ローカルコミュニティのアンケートにも表示されません。</p>
+        <h2>アンケートを開始する</h2>
+        <ul>
+            <li>マーケットタブまたは地図で<strong>+ 投稿を作成</strong>をタップします。</li>
+            <li><strong>コミュニティ投票</strong>を選択します。</li>
+            <li><strong>質問</strong>を入力します。</li>
+            <li>役立つ場合は<strong>背景 / メモ（任意）</strong>を追加します。これは任意です。</li>
+            <li>2〜4個の<strong>選択肢</strong>を入力します。さらに追加するには<strong>+ 選択肢を追加</strong>をタップします。</li>
+            <li>開催期間を選択します：<strong>3 Days</strong>、<strong>7 Days</strong>、または<strong>14 Days</strong>。</li>
+            <li><strong>作成</strong>をタップする前に、<strong>公開投票</strong>にするかどうかを選択します。オフのままにするとアンケートは匿名になります。チェックを入れると、メンバーは誰が何を選んだかを見ることができます。アンケートが投稿された後に変更することはできません。</li>
+            <li><strong>作成</strong>をタップします。</li>
+        </ul>
+        <p>Webアプリでは、種類は<strong>🗳️ Poll</strong>、メモは<strong>Background / Context</strong>、選択肢ボタンは<strong>+ Add option</strong>、最後のボタンは<strong>🗳️ Create Poll</strong>です。Webの地図では、丸い<strong>+</strong>をタップします。</p>
+        <p>一度に開催できるアンケートは1人1件までで、コミュニティ全体で同時に開催できるのは5件までです。アンケートを開始したり回答したりするには、凍結されていないクレジットが必要です。</p>
+        <h2>アンケートを探して回答する</h2>
+        <p>アンケートはマーケットにあります。上部の行にある<strong>投票</strong>をタップすると、アンケートのみが表示されます。</p>
+        <ul>
+            <li>回答をタップして選択します。アンケートが締め切られるまで、別の回答をタップして選択を変更できます。</li>
+            <li>カードには各回答を選んだ人数が表示されます。</li>
+        </ul>
+        <h2>誰があなたの投票を見られるか</h2>
+        <p>各アンケートには、投票率の上に種類が表示されます：</p>
+        <ul>
+            <li><strong>匿名</strong>（通常の種類）：各回答を選んだ人数のみが全員に表示されます。開始した本人を含め、誰が何を選んだかを誰かに見られることはありません。</li>
+            <li><strong>公開投票</strong>：開始した人が投票者を表示することを選択した場合です。メンバーは<strong>投票者を表示</strong>（Webアプリでは<strong>Show Voters</strong>）をタップして、誰が何を選んだかを確認できます。一時停止中のメンバーには、一時停止が解除されるまで合計のみが表示されます。</li>
+        </ul>
+        <p>コミュニティのサーバーを運営しているオーナーや管理者は、そこに保存されているすべての投票を引き続き確認できます。</p>
+        <h2>アンケートを早期に締め切る</h2>
+        <p>あなたが開始した場合は、<strong>投票を締め切る</strong>をタップし、確認のためにもう一度<strong>投票を締め切る</strong>をタップします（Webアプリでは<strong>OK</strong>）。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>決定への投票</strong><span>進行中の決定事項を確認し、投票や投票内容の変更を行い、結果を確認できます。</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>決定の提案</strong><span>コミュニティ全体に拘束力のある決定事項を提案します。</span></a></li>
+            <li><a href="events.html"><strong>イベント</strong><span>対面またはオンライン、単発または定期的なイベントを作成し、参加表明、リマインダー受け取り、共有、主催者としての運営を行います。</span></a></li>
+            <li><a href="rules.html"><strong>ルールと決定の仕組み</strong><span>投票、投票率、秘密投票、投票権、停止処分、メンバーの除名、運営者、まとめ役および代表まとめ役について説明します。</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>豆とグローバルコミュニティ</strong><span>グローバルコミュニティの目的、多数のコミュニティの1つとしての位置付け、表示内容（🏘️ コミュニティマーカー、サンプルコミュニティExample Valley、豆がそこで待機する理由、ローカルコミュニティの探し方や立ち上げ方）を説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

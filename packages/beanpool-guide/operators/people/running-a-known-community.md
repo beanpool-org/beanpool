@@ -110,6 +110,16 @@ A change needs an owner or admin signed in with their own key, so the log can sa
 
 Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read one member's lines on that member's **Known floor** panel. A raise above the community's known floor is its own line, so other admins notice.
 
+## Running a mixed community
+
+A community can be a mix of members your admins know and members they do not. To run a mixed community:
+
+- **The door stays open.** On a node with an open door, anyone can join without an invite code.
+- **Keep the names list.** In the BeanPool app on an owner's or admin's phone, open **Settings → Community admin → Names list**, tap **Add a name**, and tap **Confirm a member** for each person your admins know.
+- **Turn on the known floor.** In the manager, open **People & Safety → Invites & QR**, find **The known floor**, check **Confirmed members get the known floor**, set your amounts, and tap **Save the known floor**.
+
+Newcomers who join through the open door start at zero, while members your admins have confirmed on the names list get the known floor.
+
 ## Debts and a second chance
 
 When a confirmed member leaves owing Beans, because the community removed them or they deleted their account, the Commons takes on their debt, as it always has. Your server also writes a **debt record** on their entry in the names list: how much, when they left, and whether it is open, settled or forgiven. The record names the entry, never the person: the name stays sealed on the admins' phones.

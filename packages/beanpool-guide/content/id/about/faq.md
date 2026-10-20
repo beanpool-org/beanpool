@@ -50,7 +50,7 @@ Kehilangan 12 katamu juga? Admin komunitasmu dapat memindahkan akunmu ke ponsel 
 
 ## Apakah saya memerlukan akun Google, Apple, atau Facebook?
 
-Tidak. Komunitas lokal mengizinkanmu masuk dengan undangan dari salah satu anggotanya. Komunitas global mengizinkan siapa saja masuk dengan 12 kata rahasia (dalam bahasa Inggris), atau dengan akun masuk jika kamu lebih menyukainya. Jika kamu bergabung hanya dengan 12 kata, kata-kata tersebut adalah satu-satunya caramu untuk kembali masuk ke akunmu, dan akun baru yang dibuat dengan cara itu dimulai lebih lambat untuk minggu pertamanya. Kamu dapat menambahkan akun masuk nanti, dari ponsel atau browser mana pun tempat kamu berada di akunmu, dan tidak saat akunmu ditangguhkan. Lihat "Joining BeanPool" dan "12 katamu".
+Tidak. Komunitas lokal mengizinkanmu masuk dengan undangan dari salah satu anggotanya. Komunitas global mengizinkan siapa saja masuk dengan 12 kata rahasia (dalam bahasa Inggris), atau dengan akun masuk jika kamu lebih menyukainya. Jika kamu bergabung hanya dengan 12 kata, kata-kata tersebut adalah satu-satunya caramu untuk kembali masuk ke akunmu, dan akun baru yang dibuat dengan cara itu dimulai lebih lambat untuk minggu pertamanya. Kamu dapat menambahkan akun masuk nanti, dari ponsel atau browser mana pun tempat kamu berada di akunmu, dan tidak saat akunmu ditangguhkan. Lihat "Joining BeanPool" dan "Your 12 words".
 
 ## Mengapa tidak ada Kacang di komunitas global?
 

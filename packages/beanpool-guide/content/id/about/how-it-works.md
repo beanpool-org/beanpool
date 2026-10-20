@@ -66,7 +66,7 @@ Kepercayaan menentukan seberapa dalam kamu **bisa** mencapai saldo negatif. Pena
 
 Jika kamu menurunkan Penawaran saat kamu berada di bawah nol, kamu mungkin berutang lebih banyak daripada yang sekarang ditanggung oleh Penawaranmu. Maka kamu tidak dapat berbelanja lebih banyak sampai kamu kembali berada dalam batasmu. Kamu tetap bisa memperoleh kacang, dan tidak ada yang diambil darimu.
 
-Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat "Batas kredit".
+Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat "Credit line".
 
 ## Lencana kepercayaan
 
@@ -80,7 +80,7 @@ Lencana adalah bentuk pengakuan, tidak lebih. Lencana tidak membatasi tindakan a
 
 ## Biaya dan Sarana Bersama
 
-Komunitasmu memiliki kolam kacang bersama yang disebut **Bersama**. Biaya-biaya disalurkan ke dalamnya. Anggota memutuskan bersama bagaimana biaya tersebut dibelanjakan.
+Komunitasmu memiliki kolam kacang bersama yang disebut **Sarana Bersama**. Biaya-biaya disalurkan ke dalamnya. Anggota memutuskan bersama bagaimana biaya tersebut dibelanjakan.
 
 - **Biaya pasar:** 1,5% dari setiap pembayaran pasar disalurkan ke Sarana Bersama. Biaya ini dipotong dari apa yang diterima penjual.
 - **Biaya peredaran:** kacang dimaksudkan untuk terus berputar, bukan diam mengendap. 200 kacang pertama yang kamu miliki selalu bebas biaya. Di atas jumlah itu, biaya bulanan kecil disalurkan ke Sarana Bersama: 1% per bulan untuk kacang antara 200 dan 500, 1,5% antara 500 dan 1.000, 2% antara 1.000 dan 2.000, dan 2,5% di atas 2.000.

@@ -10,10 +10,10 @@ source-hash: 3f81c6f1fb085719
 
 No celular, toque no feijão no canto superior esquerdo da tela. Ou:
 
-- Abra as **Configurações** com o botão de controles deslizantes na parte superior da tela.
+- Abra as **Ajustes** com o botão de controles deslizantes na parte superior da tela.
 - Sob **BeanPool**, toque em **Ajuda e funcionamento**.
 
-No aplicativo web, fica no mesmo lugar: **Configurações**, depois **Ajuda e funcionamento** sob **BeanPool**.
+No aplicativo web, fica no mesmo lugar: **Ajustes**, depois **Ajuda e funcionamento** sob **BeanPool**.
 
 ## O que há nele
 

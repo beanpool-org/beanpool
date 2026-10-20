@@ -8,7 +8,7 @@ source-hash: 7adea0e9b76c043c
 
 ## Alterar seu nome, foto ou biografia
 
-- Abra as **Configurações** com o botão de controles deslizantes na parte superior da tela.
+- Abra as **Ajustes** com o botão de controles deslizantes na parte superior da tela.
 - No seu cartão no topo, toque em **Editar**, ou toque na sua foto.
 - Altere o que desejar:
 - **Apelido** é o nome que as pessoas veem.
@@ -18,7 +18,7 @@ source-hash: 7adea0e9b76c043c
 
 No aplicativo web, toque em **Editar perfil**, altere a foto com a **Câmera** ou **Galeria**, e toque em **Salvar alterações do perfil**.
 
-Você também pode tocar em **Repetir configuração** nas Configurações. Ele orienta você pelo seu nome e foto novamente, sua localização aproximada (na comunidade global, no aplicativo de celular) e o breve tour sobre o funcionamento do BeanPool. Em um navegador web, defina sua região nas **Configurações**, sob **Sua área**.
+Você também pode tocar em **Repetir configuração** nas Configurações. Ele orienta você pelo seu nome e foto novamente, sua localização aproximada (na comunidade global, no aplicativo de celular) e o breve tour sobre o funcionamento do BeanPool. Em um navegador web, defina sua região nas **Ajustes**, sob **Sua área**.
 
 ## Antes de publicar
 

@@ -80,7 +80,7 @@ Um emblema é um reconhecimento, nada mais. Ele não libera nada. Todos podem ne
 
 ## Taxas e os Bens comuns
 
-Sua comunidade tem uma reserva compartilhada de feijões chamada **Bens comuns**. As taxas vão para ela. Os membros decidem juntos como ela é gasta.
+Sua comunidade tem uma reserva compartilhada de feijões chamada **Comuns**. As taxas vão para ela. Os membros decidem juntos como ela é gasta.
 
 - **Taxa de mercado:** 1,5% de cada pagamento no mercado vai para os Bens comuns. É deduzida do valor que o vendedor recebe.
 - **Taxa de circulação:** feijões foram feitos para circular, não para ficar parados. Os primeiros 200 feijões que você tem são sempre isentos. Acima disso, uma pequena taxa mensal vai para os Bens comuns: 1% ao mês sobre feijões entre 200 e 500, 1,5% entre 500 e 1.000, 2% entre 1.000 e 2.000, e 2,5% acima de 2.000.

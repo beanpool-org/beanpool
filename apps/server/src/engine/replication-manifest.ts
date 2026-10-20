@@ -478,6 +478,9 @@ export const TABLES: Record<string, TableEntry> = {
     pricing_guide_items: plain('id category emoji name description price_beans unit is_pinned confidence_count trend seasonality_hint thumbnail_url updated_at'),
     // Only members' reports (MEMBERS_REPORTS).
     pricing_reports: plain('id item_id reporter_pubkey report_type comment status created_at updated_at', { rows: MEMBERS_REPORTS }),
+    // Each tool's private copy of its owner's document (engine/tool-state.ts), so a second phone, or the same one after a
+    // take-over, gets it back. Only a member or an enterprise's keeper writes a row, for themselves or the enterprise.
+    member_tool_state: plain('public_key tool body updated_at'),
 
     // ── Not copied today, and the design says they should be ──
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },

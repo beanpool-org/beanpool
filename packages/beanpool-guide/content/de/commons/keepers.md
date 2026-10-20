@@ -28,7 +28,7 @@ Nur du siehst, wie viel Vertrauen dir noch zur Unterstützung zur Verfügung ste
 
 ## Für Verwalter
 
-- Mit **Annehmen** oder **Ablehnen** bearbeitest du Anfragen unter **Offene Anfragen als Verwalter** (**Beitrittsanfragen als Verwalter** in der Web-App). Jede Anfrage zeigt die Zusage und gibt an, ob der Status der Person sie abdeckt. Wenn nicht, wird die Annahme verweigert, bis dies der Fall ist.
+- Mit **Genehmigen** oder **Ablehnen** bearbeitest du Anfragen unter **Offene Anfragen als Verwalter** (**Beitrittsanfragen als Verwalter** in der Web-App). Jede Anfrage zeigt die Zusage und gibt an, ob der Status der Person sie abdeckt. Wenn nicht, wird die Annahme verweigert, bis dies der Fall ist.
 - Unter **Wartende Änderungen bei Verwaltern** werden anstehende Änderungen mit ihrer Einspruchsfrist angezeigt. Tippe auf **Einspruch einlegen**, um eine Änderung zu stoppen. **Einspruch einlegen wirkt beim ersten Antippen, ohne zweite Rückfrage.** Ein einziger Einspruch bricht die Änderung ab.
 - Die Leitung kann einen Verwalter mit **Entfernen** und dessen Namen entfernen. Andere Verwalter können auf die gleiche Weise Einspruch einlegen.
 - Die **Betreiber-Steuerung** ermöglicht es Verwaltern, Angebote und Gesuche des Betriebs zu veröffentlichen.

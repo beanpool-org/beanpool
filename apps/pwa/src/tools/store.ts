@@ -155,13 +155,13 @@ export async function removeToolRecord(owner: string, tool: string): Promise<boo
 export async function clearToolRecordsFor(nodeUrl: string): Promise<boolean> {
     const db = await openDb();
     if (!db) return true;
-    const prefix = `${nodeUrl}|`;
+    const normalized = (nodeUrl || (typeof window !== 'undefined' ? window.location.origin : '')).trim().replace(/\/+$/, '');
+    const prefix = `${normalized}|`;
     const KeyRange = typeof IDBKeyRange !== 'undefined'
         ? IDBKeyRange
         : (globalThis as unknown as { IDBKeyRange?: { bound: (...a: unknown[]) => unknown } }).IDBKeyRange;
-    const range = KeyRange
-        ? KeyRange.bound(prefix, prefix + '\ufffd', false, false)
-        : { lower: prefix, upper: prefix + '\ufffd' };
+    if (!KeyRange) return false;
+    const range = KeyRange.bound(prefix, prefix + '\ufffd', false, false);
     const ok = await run(db, (s) => (s as unknown as { delete(r: unknown): IDBRequest }).delete(range));
     notifyToolStore('*', '*');
     return ok;

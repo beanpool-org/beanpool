@@ -157,6 +157,13 @@ describe('the one store (IndexedDB)', () => {
         expect(await readToolRecord('ana', 'notes')).toEqual(rec('{"v":1,"items":["stay"]}'));
     });
 
+    it('clearToolRecordsFor normalizes trailing slashes on nodeUrl', async () => {
+        localStorage.setItem('bp_node_url', 'https://slash.example');
+        await writeToolRecord('ana', 'notes', rec('{"v":1}'));
+        expect(await clearToolRecordsFor('https://slash.example///')).toBe(true);
+        expect(await readToolRecord('ana', 'notes')).toBeNull();
+    });
+
     it('notifies subscribers on write, remove, and clear', async () => {
         const events: Array<{ owner: string; tool: string }> = [];
         const unsub = subscribeToolStore((owner, tool) => events.push({ owner, tool }));

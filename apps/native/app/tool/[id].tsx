@@ -2,7 +2,7 @@
  * The one host route of every tool (scratch/tools/DESIGN-tool-template-fable.md §1.3, slice T0.2): `/tool/<id>`, with
  * `screen` (default: the manifest's first) and any params the tool set (`key`, a record's id). Deep links are
  * `beanpool://tool/<id>?screen=…&key=…`. It looks the tool up in the registry (tools/index.ts phoneTool), reads its
- * document from the one store (tools/store.ts), builds its host narrowed to its permissions (tools/host.ts hostFor) and
+ * document from the one store (tools/store.ts), builds its host narrowed to its permissions (tools/builder.ts hostFor) and
  * draws the screen inside the frame (tools/frame.tsx), with the two doors while the document is empty.
  *
  * A tool, a screen or a permission this build doesn't have shows "This tool isn't in this version of the app" with
@@ -187,7 +187,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const host = useMemo(() => hostFor(manifest, ctx), [manifest, ctx]);
 
     const remove = useCallback(() => {
-        Alert.alert(t('Remove my data from this phone'), t("Everything this tool keeps on this phone goes: its list, its photos and its reminders. This can't be undone."), [
+        Alert.alert(t('Remove my data from this phone'), t("Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone."), [
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t('Remove'), style: 'destructive', onPress: () => {

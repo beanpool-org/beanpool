@@ -373,7 +373,7 @@ function ToolSettings({ manifest, onRemove }: { manifest: ToolManifest; onRemove
             </ToolSection>
             <ToolSection title={t('Remove my data from this browser')}>
                 <p className="m-0 px-3 pt-3 text-sm text-nature-800 dark:text-nature-100 break-words">
-                    {t('Takes everything {tool} keeps out of this browser. It can\'t be undone.', { tool: t(manifest.name) })}
+                    {t('Takes this community\'s data for {tool} out of this browser. The same tool in another community keeps its own. It can\'t be undone.', { tool: t(manifest.name) })}
                 </p>
                 <div className="p-3 flex flex-wrap gap-2 min-w-0">
                     {!confirming

@@ -184,6 +184,9 @@ export function resetRemindersForTest(): void {
  * Where a tap on a tool's reminder opens: the tool, at the screen due() named when this build has it, else its first.
  * Null for anything else: a push from outside (only the app posts a local notification), a tool this build doesn't have,
  * or a reminder belonging to a community other than the currently active one.
+ * Only what {@link scheduleToolReminders} posted is one: `remote` is inferred from the trigger, which a platform may leave
+ * unset on a push, so the `bpLocal: 1` it writes must be there too, or an unsigned push naming a tool is never routed
+ * here past the signed-tap check (PR #2267 review 4326931551).
  */
 export function toolReminderRoute(n: { remote: boolean; data: unknown }, activeCommunity?: string | null): string | null {
     if (n.remote || !n.data || typeof n.data !== 'object') return null;

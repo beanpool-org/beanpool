@@ -274,6 +274,24 @@ function handPublish(cwd, change) {
 }
 const changeText = g => { g.guides[0].blocks[0] = { type: 'p', text: 'Words that no page says.' }; };
 
+test('a published copy over 1 MiB on main is still found: a PR that leaves it alone passes the check', () => {
+    const repo = makeRepo();
+    try {
+        const cwd = repo.work;
+        // Tamil pages pass 1 MiB once a language has every page (3 bytes a letter); grow one page to get there today.
+        editPage(cwd, 'content/ta/getting-started/communities.md', 'தமிழ் '.repeat(80_000));
+        const pub = build(cwd, '--publish');
+        assert.equal(pub.status, 0, said(pub));
+        assert.ok(fs.statSync(path.join(cwd, PKG, 'generated/guide.ta.json')).size > 1024 * 1024, 'the Tamil copy is over 1 MiB');
+        git(cwd, 'add', '-A');
+        git(cwd, 'commit', '-q', '-m', 'publish a big Tamil guide');
+        git(cwd, 'push', '-q', 'origin', 'main');
+        openPr(cwd, 'english-edit', c => editPage(c, 'content/ledger/gifts.md', 'An English change.'));
+    } finally {
+        repo.cleanup();
+    }
+});
+
 test('the check refuses changed text under an old version', () => {
     const repo = makeRepo();
     try {

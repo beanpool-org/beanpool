@@ -97,6 +97,14 @@ vi.mock('./api', async () => {
     };
 });
 
+// Each tab is its own copy of lib/blocklist, but all of them share one @beanpool/core, the words lib/blocklist draws its
+// sentences from (#2237); nothing in this file changes the language, and no tab's list depends on core. openTab's
+// vi.resetModules() leaves a mocked module as it is, so this pass-through, the real core, is evaluated once for the file.
+// Evaluated anew for every tab, core took 11-32 ms a time at idle: 95% of each sweep test below (1.3-2.4 s, against 80 ms
+// with one core), and past the 30 s limit on a busy CI runner (20 Oct). A module lib/blocklist imports later that is slow
+// to evaluate wants the same.
+vi.mock('@beanpool/core', async importOriginal => await importOriginal());
+
 const BLOCKLIST_STORAGE_KEY = 'bp_blocked_users';
 const BLOCKLIST_UPDATED_EVENT = 'bp_blocklist_updated';
 const ME = 'a1'.repeat(32);
@@ -234,7 +242,9 @@ describe('two tabs, and a node that takes time to answer', () => {
     // Every run is on the fake clock, so what happens in it never depends on this machine; how long the runs take does. All
     // 488 in one test outlasted the suite's 30 s on a busy Mac (load 20-90, 14 Oct merge queue), and the runs it was still
     // making went on into the next test and failed it ("expected null"). So each word-of-the-change delay is a test of its
-    // own, 61 runs; a test that runs out of time stops its runs, and the next test starts only once they have.
+    // own, 61 runs; a test that runs out of time stops its runs, and the next test starts only once they have. At idle the 61
+    // runs take about 85 ms: two new tabs each (~40 ms in all, with core evaluated once: see its mock above) and some 900
+    // timers on the fake clock (~40 ms). No real timer runs in them.
     describe.each([50, 120])('a tab holding blocks from before never shows them unblocked while another tab moves them up (reads answered in %i ms)', readBack => {
         it.for([0, 7, 30, 60])('the browser\'s word of the change after %i ms', async (after, { signal }) => {
             // A test that runs out of time stops here; the next one waits for that (afterEach).

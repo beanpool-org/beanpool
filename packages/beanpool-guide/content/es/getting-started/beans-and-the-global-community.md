@@ -44,24 +44,24 @@ Te lo encuentras de varias formas:
 
 - una pequeña etiqueta en una pantalla o en una tarjeta;
 - un recuadro en la parte superior de una pantalla de ejemplo;
-- un botón que mantiene su posición, como **Request · Beans held safely 🏘️** en una publicación;
+- un botón que mantiene su posición, como **Solicitud · Frijoles retenidos de forma segura 🏘️** en una publicación;
 - una sola línea donde una comunidad local es diferente, como "🏘️ En una comunidad local esto es un precio en frijoles ›".
 
-Toca cualquiera de ellos para abrir **Why this lives in a local community**. Explica el motivo en una oración o dos, y luego ofrece **Crear una comunidad** y, donde sea posible, **Comunidades cerca de ti** y **Cómo funciona**.
+Toca cualquiera de ellos para abrir **Por qué esto vive en una comunidad local**. Explica el motivo en una oración o dos, y luego ofrece **Crear una comunidad** y, donde sea posible, **Comunidades cerca de ti** y **Cómo funciona**.
 
 ## Example Valley
 
-Las pantallas con el marcador muestran **Example Valley**: una comunidad ficticia, para que puedas ver las pantallas de una comunidad local con contenido en ellas.
+Las pantallas con el marcador muestran **Valle de Ejemplo**: una comunidad ficticia, para que puedas ver las pantallas de una comunidad local con contenido en ellas.
 
 - **Registro:** un miembro de ejemplo con 85 frijoles, margen para gastar hasta −200, una insignia de confianza y algunos intercambios recientes, como pan, una hora de jardinería y algunos plantines.
 - **Bienes comunes:** Example Valley Bakery, un emprendimiento que sus miembros custodian, y una Decisión: un área de compostaje, pagada con los frijoles compartidos de Bienes comunes.
 - **Mis tratos,** en el Mercado: tres tratos de ejemplo: uno esperando por ti, uno con los frijoles retenidos de forma segura y uno completado.
 
-Nadie en Example Valley tiene nombre propio. Verás "un vecino", "Bienes comunes" o "Example Valley Bakery". Nada de esto es real ni te pertenece.
+Nadie en Example Valley tiene nombre propio. Verás "un vecino", "Bienes comunes" o "Panadería de Valle de Ejemplo". Nada de esto es real ni te pertenece.
 
 Los botones **ⓘ** y las páginas de la guía en estas pantallas son los reales: explican cómo funciona en una comunidad local.
 
-Un botón que enviaría frijoles, crearía un trato, votaría, aportaría o invitaría abre **Why this lives in a local community** en su lugar. No envía nada y no cambia nada.
+Un botón que enviaría frijoles, crearía un trato, votaría, aportaría o invitaría abre **Por qué esto vive en una comunidad local** en su lugar. No envía nada y no cambia nada.
 
 El recuadro en la parte superior de una pantalla de ejemplo tiene una **✕**. Tócalo y el recuadro se reducirá a una sola línea, "🏘️ Un ejemplo · ¿Por qué? ›". Tu teléfono o navegador recordará eso para esta comunidad. En el teléfono, toca la línea para volver a abrir el recuadro. En la app web, toca la línea para ver el motivo, o **▾** para volver a abrir el recuadro.
 
@@ -91,7 +91,7 @@ Una comunidad local funciona en su propio servidor pequeño, administrado por al
 - **Lo que nunca ves:** los chats de tus miembros con otra persona. Están cifrados para que el servidor no pueda leerlos.
 - **Cuánto tiempo toma:** aproximadamente media hora, para alguien que pueda seguir instrucciones paso a paso.
 
-Para comenzar, toca **Crear una comunidad** en cualquier panel de **Why this lives in a local community** o, en el teléfono, en la tarjeta **Find your community** de Inicio. Muestra tres formas de gestionar una: una computadora de repuesto en casa, un pequeño servidor alquilado o pedir ayuda en la comunidad global. **Copiar los detalles de mi comunidad** copia el nombre de tu comunidad, la ubicación y cómo comunicarse contigo, para pegarlos en los ajustes de tu nuevo servidor.
+Para comenzar, toca **Crear una comunidad** en cualquier panel de **Por qué esto vive en una comunidad local** o, en el teléfono, en la tarjeta **Encuentra tu comunidad** de Inicio. Muestra tres formas de gestionar una: una computadora de repuesto en casa, un pequeño servidor alquilado o pedir ayuda en la comunidad global. **Copiar los detalles de mi comunidad** copia el nombre de tu comunidad, la ubicación y cómo comunicarse contigo, para pegarlos en los ajustes de tu nuevo servidor.
 
 Los pasos se encuentran en "Primeros pasos", en la guía para administradores de una comunidad, en beanpool.org. Cuando tu servidor esté activo, lo vinculas con tu teléfono: apunta la cámara del teléfono al código QR que muestra tu servidor, o en BeanPool toca **Configurar un nuevo servidor comunitario** (en **Buscar una comunidad** o **Crear una comunidad**), luego **Escanear el código**. Luego, Ajustes te ayuda a nombrar tu comunidad, añadir un segundo propietario y crear tus primeras invitaciones. Configura también la ubicación de tu comunidad en Ajustes para que las personas cercanas a ti puedan encontrarla.
 
@@ -103,7 +103,7 @@ En el teléfono:
 - Toca **Pedir unirme**: un miembro de allí puede dejarte entrar. Donde la comunidad permite que solo sus administradores inviten, lo hace un propietario o administrador.
 - ¿Todavía no hay ninguna cerca de ti? **Avisarme cuando empiece una aquí** te avisa cuando comience una.
 
-En la app web, la tarjeta **Find your community** de Inicio enlaza cada comunidad cercana a ti a su propia página.
+En la app web, la tarjeta **Encuentra tu comunidad** de Inicio enlaza cada comunidad cercana a ti a su propia página.
 
 Tu cuenta viene contigo, con las mismas 12 palabras, y sigues siendo miembro de la comunidad global. Consulta "Buscar una comunidad cerca".
 

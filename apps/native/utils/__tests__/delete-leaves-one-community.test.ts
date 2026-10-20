@@ -41,6 +41,7 @@ vi.mock('expo-crypto', async () => {
 vi.mock('../db', () => ({
     clearDB: vi.fn(async () => {}),
     closeDB: vi.fn(async () => {}),
+    getDb: vi.fn(async () => null),
     // Which community's copy the phone opens next.
     initDB: vi.fn(async () => { mem.anchorAtInit.push(mem.async.get('beanpool_anchor_url')); }),
 }));
@@ -243,6 +244,35 @@ describe('Delete account with another saved community where Kim is a member', ()
         // nodes.ts getSavedNodes writes the community the phone is set to back into the list: now that is Bellingen.
         const { getSavedNodes } = await import('../nodes');
         expect((await getSavedNodes()).map((n) => n.url)).toEqual([BELLINGEN]);
+    });
+
+    it('leaving a community notifies tool cards only after the anchor has moved to next', async () => {
+        await kimsPhone();
+        const { subscribeToolStore } = await import('../../tools/store');
+        let anchorAtNotify: string | null = null;
+        let aReopened = false;
+        const unsub = subscribeToolStore(() => {
+            anchorAtNotify = mem.async.get(ANCHOR) ?? null;
+            // What Home's tool card does on notify: readToolDoc -> getDb() reads the current anchor.
+            // If the anchor is still Mullum, opening its DB re-creates Mullum's file and puts Mullum back on saved list.
+            if (anchorAtNotify === MULLUM) {
+                aReopened = true;
+                const raw = mem.async.get(SAVED_NODES_STORE_KEY);
+                const list = raw ? JSON.parse(raw) : [];
+                list.push({ url: MULLUM });
+                mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(list));
+            }
+        });
+        try {
+            await leaveThisCommunity(MULLUM, BELLINGEN);
+            expect(anchorAtNotify).toBe(BELLINGEN);
+            expect(aReopened).toBe(false);
+            const raw = mem.async.get(SAVED_NODES_STORE_KEY);
+            const list = raw ? JSON.parse(raw) : [];
+            expect(list.some((n: { url?: string }) => n.url === MULLUM)).toBe(false);
+        } finally {
+            unsub();
+        }
     });
 
     it('the confirmation names what stays and where the phone goes', async () => {

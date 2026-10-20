@@ -23,6 +23,7 @@ import {
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, removeCard as frameRemoveCard, starterCards, t, word,
     type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2,
 } from '@beanpool/core';
+import { drawnToolCardTypes } from '../tools/cards';
 
 export type { HomeCardInstance, HomeLayoutV2 };
 
@@ -36,11 +37,13 @@ const FIXED: ReadonlySet<string> = new Set([FIXED_FIRST, FIXED_LAST]);
 
 /**
  * The types this build has a body for (pages/HomePage.tsx). A type in the registry but not here is listed nowhere and
- * drawn nowhere; a type in neither is a newer app's, kept and not drawn.
+ * drawn nowhere; a type in neither is a newer app's, kept and not drawn. With them every tool's card (`tool-<id>`) that
+ * this build has a web half for (tools/cards.ts): Home's default branch draws it from the tool's manifest.
  */
 export const HOME_DRAWN: ReadonlySet<string> = new Set([
     'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
     'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
+    ...drawnToolCardTypes(),
 ]);
 
 /** Find your community is pinned for a member's first 30 days on the global node, then it can be removed (§4.1, §7). */

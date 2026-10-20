@@ -53,6 +53,17 @@ function wordsChunk(id: string): string | undefined {
     return m ? `words-${m[1]}` : undefined;
 }
 
+/**
+ * One chunk per tool, `tool-<id>` (scratch/tools/DESIGN-tool-template-fable.md §2.3 step 6, §2.4): every file of a tool's
+ * web folder, src/tools/<id>/, which src/tools/index.ts loads on first open, so a member who never opens a tool never
+ * fetches it. The template's own files (host, ui, store, the registry) sit beside the folders and are not a tool's.
+ * e2e/tool-chunks-check.mjs proves it on a build with the scaffold registered.
+ */
+export function toolChunk(id: string): string | undefined {
+    const m = /apps[\\/]pwa[\\/]src[\\/]tools[\\/]([a-z]+(?:-[a-z]+)*)[\\/]/.exec(id);
+    return m ? `tool-${m[1]}` : undefined;
+}
+
 export default defineConfig({
     define: {
         __APP_VERSION__: JSON.stringify(resolvedVersion),
@@ -108,7 +119,7 @@ export default defineConfig({
     build: {
         outDir: path.resolve(__dirname, '../server/public'),
         emptyOutDir: false,
-        rollupOptions: { output: { manualChunks: wordsChunk } },
+        rollupOptions: { output: { manualChunks: (id) => wordsChunk(id) ?? toolChunk(id) } },
     },
     test: {
         globals: true,

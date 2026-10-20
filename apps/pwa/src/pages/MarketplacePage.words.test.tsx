@@ -322,9 +322,13 @@ describe('the Market in the pseudo-locale', () => {
         const loanOffer = { ...offer, id: 'offer-loan', authorPublicKey: ME, authorCallsign: 'Mia', priceType: 'fixed', lendable: true };
         stubNode([loanOffer]);
         const loanBid = tx({ id: 'bid-loan', postId: 'offer-loan', status: 'requested', buyerPublicKey: 'bob-pk', buyerCallsign: 'Bob', sellerPublicKey: ME, hours: 3 });
-        const v3 = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-loan" onPostOpened={() => {}} transactions={[loanBid]} />);
+        const onOpenProfile = vi.fn();
+        const v3 = render(<MarketplacePage identity={identity} isMember={true} openPostId="offer-loan" onPostOpened={() => {}} transactions={[loanBid]} onOpenProfile={onOpenProfile} />);
         await screen.findByText(xx('✋ Fulfillment Requests ({n})').replace('{n}', '1'));
         expect(screen.getByText(xx('for {n} days').replace('{n}', '3'))).toBeInTheDocument();
+        expect(screen.getByText('Bob')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /Bob/ }));
+        expect(onOpenProfile).toHaveBeenCalledWith('bob-pk');
         allThroughT(10);
         v3.unmount();
 

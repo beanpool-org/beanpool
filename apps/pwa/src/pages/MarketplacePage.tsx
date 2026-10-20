@@ -992,7 +992,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Depending on `myTransactions` directly would re-run this effect on every poll even when
     // nothing relevant changed, re-rendering an open post every 10s; this only changes when the
     // set of outstanding bids for THIS post actually changes.
-    const openNeedBidIds = selectedPost?.type === 'need'
+    const openNeedBidIds = (selectedPost?.type === 'need' || selectedPost?.lendable)
         ? myTransactions
             .filter(t => t.postId === selectedPost.id && t.status === 'requested')
             .map(t => t.id)
@@ -1099,9 +1099,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             return { ...req, bidderRating: r };
                         } catch(e) { return { ...req, bidderRating: { average: 0, count: 0 } }; }
                     }));
-                    setRequests(enriched);
+                    if (!cancelled) setRequests(enriched);
                 })
-                .catch(() => setRequests([]));
+                .catch(() => { if (!cancelled) setRequests([]); });
         } else {
             setRequests([]);
         }
@@ -1671,14 +1671,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             {t('✋ Fulfillment Requests ({n})', { n: requests.length })}
                         </p>
                         <div className="flex flex-col gap-2">
-                            {requests.map((req: any) => (
+                            {requests.map((req: any) => {
+                                const isNeed = selectedPost.type === 'need';
+                                const requesterKey = isNeed ? req.sellerPublicKey : (req.buyerPublicKey || req.sellerPublicKey);
+                                const requesterCallsign = isNeed ? (req.sellerCallsign || req.buyerCallsign) : (req.buyerCallsign || req.sellerCallsign);
+                                return (
                                 <div key={req.id} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-lg p-3 flex flex-col shadow-sm">
                                     <div className="flex flex-col mb-3">
                                         <button 
-                                            onClick={() => { if (onOpenProfile) onOpenProfile(req.sellerPublicKey || req.buyerPublicKey); }}
+                                            type="button"
+                                            onClick={() => { if (onOpenProfile && requesterKey) onOpenProfile(requesterKey); }}
                                             className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1"
                                         >
-                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign || req.buyerCallsign}</span>
+                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{requesterCallsign}</span>
                                         </button>
                                         <span className="text-xs text-amber-500 mt-0.5 font-semibold">
                                             {/* The English has always said "reviews" and "hours" whatever the count: both forms keep it. */}
@@ -1736,7 +1741,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         </button>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}

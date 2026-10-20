@@ -10,7 +10,7 @@
 
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { Lang } from '@beanpool/core';
+import { areCatalogsMachineDraft, type Lang } from '@beanpool/core';
 import { useTheme } from '../app/ThemeContext';
 import { useWords } from './LanguageProvider';
 import { LANGUAGE_NAMES, LANGUAGE_OPTIONS } from '../utils/language-choice';
@@ -20,7 +20,7 @@ import { catalogsFor } from '../utils/words-catalogs';
 export function isMachineDraft(lang: string): boolean {
     if (lang === 'en' || lang === 'xx') return false;
     try {
-        return catalogsFor(lang as Lang).some((c) => (c?._meta as { review?: unknown } | undefined)?.review === 'machine');
+        return areCatalogsMachineDraft(catalogsFor(lang as Lang));
     } catch {
         return false;
     }

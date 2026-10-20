@@ -685,7 +685,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         status: row.status,
         repeatable: Boolean(row.repeatable),
         cashAlsoNeeded: Boolean(row.cash_also_needed),
-        ...lendFieldsOf(row),
+        ...lendFieldsOf(db, row),
         acceptedBy: row.accepted_by,
         acceptedByCallsign: row.accepted_callsign,
         acceptedAt: row.accepted_at,
@@ -731,11 +731,15 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
 
 /**
  * A lendable Offer's fields from its row; nothing for any other post. While it is out, when it is due back: from the
- * quantity its deal holds (`lend_deal_units`, read with the row by POST_ROW_SELECT) and the day it was handed over.
+ * quantity its deal holds (one lookup by the deal's key, only for a lendable Offer that is out) and the day it was handed
+ * over.
  */
-export function lendFieldsOf(row: any): Pick<MarketplacePost, 'lendable' | 'lendMaxDays' | 'lendTerms' | 'replacementValue' | 'lendBackAround'> {
+export function lendFieldsOf(db: Db, row: any): Pick<MarketplacePost, 'lendable' | 'lendMaxDays' | 'lendTerms' | 'replacementValue' | 'lendBackAround'> {
     if (row.lendable !== 1) return {};
-    const backAround = row.status === 'pending' ? lendBackAroundOf(row.accepted_at, row.price_type, row.lend_deal_units) : null;
+    const deal = row.status === 'pending' && row.pending_transaction_id
+        ? prepared(db, 'SELECT hours FROM marketplace_transactions WHERE id = ?').get(row.pending_transaction_id) as { hours: number | null } | undefined
+        : undefined;
+    const backAround = deal ? lendBackAroundOf(row.accepted_at, row.price_type, deal.hours) : null;
     return {
         lendable: true,
         ...(typeof row.lend_max_days === 'number' ? { lendMaxDays: row.lend_max_days } : {}),
@@ -921,7 +925,7 @@ const HEALED_DEALS = 50;
  * - An upcoming event of an off-board host that the member read by id outside a sync, until the cursor passes the read
  *   (eventReadsCountingAt).
  * - An open listing of an off-board author on which one of the member's last 50 deals is cancelled, or completed on a
- *   repeatable or lendable listing. Each time the phone applies a changed list of those deals it writes those listings back as
+ *   repeatable listing (a lendable Offer is one too: apps/server schema.sql). Each time the phone applies a changed list of those deals it writes those listings back as
  *   active (apps/native utils/db.ts applyDelta, after the posts: the deal heal). A new deal, a rating or a cold start
  *   changes or re-applies that list with no listing row moving, so these go in every delta.
  * - An open listing of an off-board author on which one of those deals is rejected. While the request was open the
@@ -951,8 +955,8 @@ function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor
     const rejected = new Set(deals.filter(d => d.status === 'rejected').map(d => d.post_id));
     const candidates = [...new Set([...reads, ...cancelled, ...completed, ...rejected])];
     if (candidates.length === 0) return [];
-    const rows = selectInChunks<{ id: string; type: string; author_pubkey: string; repeatable: number; lendable: number; status: string; active: number; accepted_by: string | null; event_end_at: string | null }>(
-        db, candidates, ph => `SELECT p.id, p.type, p.author_pubkey, p.repeatable, p.lendable, p.status, p.active, p.accepted_by, p.event_end_at FROM posts p WHERE p.id IN (${ph})`);
+    const rows = selectInChunks<{ id: string; type: string; author_pubkey: string; repeatable: number; status: string; active: number; accepted_by: string | null; event_end_at: string | null }>(
+        db, candidates, ph => `SELECT p.id, p.type, p.author_pubkey, p.repeatable, p.status, p.active, p.accepted_by, p.event_end_at FROM posts p WHERE p.id IN (${ph})`);
     const off = authorsOffBoard(db, [...new Set(rows.map(r => r.author_pubkey))]);
     const open = postsInOpenDealWith(db, viewer);
     return rows.filter(r => {
@@ -960,7 +964,7 @@ function offBoardPostsToResend(db: Db, viewer: string, kept: Set<string>, cursor
         if (r.accepted_by === viewer || open.has(r.id) || r.active !== 1) return false;
         if (!(r.status === 'active' || r.status === 'pending' || (r.type === 'poll' && r.status === 'completed'))) return false;
         const readEvent = reads.has(r.id) && r.type === 'event' && (!r.event_end_at || r.event_end_at > nowIso);
-        return readEvent || cancelled.has(r.id) || rejected.has(r.id) || (completed.has(r.id) && (r.repeatable === 1 || r.lendable === 1));
+        return readEvent || cancelled.has(r.id) || rejected.has(r.id) || (completed.has(r.id) && r.repeatable === 1);
     }).map(r => r.id);
 }
 
@@ -988,15 +992,10 @@ export function liveOfferCount(db: Db, publicKey: string): number {
     return row?.c || 0;
 }
 
-/**
- * A listed post's row: the post, its author, who took it, its group, and the author's trade count; and on a lendable Offer
- * that is out, the quantity its loan's deal holds (lendFieldsOf), one lookup by the deal's key.
- */
+/** A listed post's row: the post, its author, who took it, its group, and the author's trade count. */
 const POST_ROW_SELECT = `
         SELECT p.*, m.callsign as author_callsign, m.avatar_ref as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
-               CASE WHEN p.lendable = 1 AND p.pending_transaction_id IS NOT NULL
-                    THEN (SELECT lt.hours FROM marketplace_transactions lt WHERE lt.id = p.pending_transaction_id) END as lend_deal_units,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (
                  COALESCE((SELECT COUNT(*) FROM transactions t

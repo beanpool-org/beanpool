@@ -26,7 +26,7 @@ import { CAPTION_MAX_SCALE, HOME_TARGET_DP, HOME_THUMB_DP, communityLinksStyle, 
 import { EDIT_HOME_NOTE, editHomeStyles } from '../../components/home/EditHomeSheet';
 import { ADD_CARD_FULL_NOTE, ADD_CARD_NOTE, addCardStyles } from '../../components/home/AddCardSheet';
 import { cardRowName, FEWER_CARDS_LINE, HOME_HINT_LINE, NOT_ON_ACCOUNT_LINE, SEARCH_KIND_CHIPS, SEARCH_OFFLINE_LINE, SKY_NO_PLACE_LINE, SKY_PLACE_CHIPS, pickerGroups, searchEmptyLine, searchFirstLine } from '../home-cards';
-import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption } from '@beanpool/core';
+import { HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_SEARCH_KMS, HOME_TIPS, MOON_PHASE_NAMES, TIPS_ALL_SEEN, TIPS_DONT_SHOW, skyToday, tipsCaption, toolHomeCardTypes, word, type ToolManifest } from '@beanpool/core';
 import { FAB_BAND_DP } from '../fab-band';
 
 /** Every card's name as a member can see it: core's registry, and the worldwide community's words for the Market. */
@@ -242,6 +242,25 @@ describe('the picker at 320dp × 1.3 (CARD-FRAME §1.2, §1.4)', () => {
             expect(textWidth(g.name.toUpperCase(), num(e.section.fontSize), { caps: true, letterSpacing: num(e.section.letterSpacing) }), g.name).toBeLessThan(inner);
         }
         for (const t of [ADD_CARD_NOTE, ADD_CARD_FULL_NOTE]) expect(longestWord(t, num(e.note.fontSize)), t).toBeLessThan(inner);
+    });
+
+    it("a tool's card (core's toolHomeCardTypes, spread into the registry) is measured like any other type: caption and picker row", () => {
+        // Every registered tool's card is in the registry the walks above measure, so none goes unmeasured.
+        const ids = HOME_CARD_TYPES.map(t => t.id);
+        for (const t of toolHomeCardTypes()) expect(ids, t.id).toContain(t.id);
+        // The first two tools' cards (DESIGN-tool-template-fable.md §3), measured before they land.
+        const firstTwo = toolHomeCardTypes([
+            { id: 'things', name: word('Tool shed'), homeCard: { line: word('Your things, and what is out.'), lines: () => [] } },
+            { id: 'garden', name: word('Your garden'), homeCard: { line: word('What to sow and pick this week.'), lines: () => [] } },
+        ] as unknown as ToolManifest[]);
+        expect(firstTwo.map(t => t.id)).toEqual(['tool-things', 'tool-garden']);
+        const captionRoom = CARD_INNER - num(s.menuButton.width) - num(s.menuButton.marginRight) - HOME_TARGET_DP;
+        for (const t of firstTwo) {
+            const caption = longestWord(t.name.toUpperCase(), num(s.caption.fontSize), { scale: CAPTION_MAX_SCALE, caps: true, letterSpacing: num(s.caption.letterSpacing) });
+            expect(caption, t.id).toBeLessThan(captionRoom);
+            expect(longestWord(t.name, num(a.name.fontSize)), t.id).toBeLessThan(room);
+            expect(longestWord(t.line, num(a.line.fontSize)), t.id).toBeLessThan(room);
+        }
     });
 });
 

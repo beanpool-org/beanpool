@@ -1,0 +1,10 @@
+{
+  "_about": "Each tool's size budget (scratch/tools/DESIGN-tool-template-fable.md §2.3), refused over by scripts/tools/check-tool-budgets.mjs: minified JS of its phone half and of its web half (each with its core half), bytes of bundled data (*.json and *.table.ts in its folders), and sentences of its own (keys no screen outside a tool uses). A tool that needs more says why in its PR and gets an entry in `tools`, e.g. \"things\": { \"sentences\": 180, \"reason\": \"…\" }; an entry without a reason is refused.",
+  "default": {
+    "phoneJsBytes": 122880,
+    "webJsBytes": 122880,
+    "dataBytes": 102400,
+    "sentences": 150
+  },
+  "tools": {}
+}

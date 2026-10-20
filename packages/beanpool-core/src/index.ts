@@ -57,6 +57,7 @@ export * from './poll-vote-origins.js';
 export * from './recovery-kit.js';
 export * from './home-tips.js';
 export * from './home-frame.js';
+export * from './tools/index.js';
 export * from './home-save-search.js';
 export * from './sample-community.js';
 export * from './features.js';

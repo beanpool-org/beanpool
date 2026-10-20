@@ -36,7 +36,9 @@ export async function catalogLangs(root = ROOT) {
  * The manager is measured only: operators' Settings stays English for launch (design M8).
  */
 export const PACKAGES = [
-    { name: 'native', dirs: ['apps/native/app', 'apps/native/components', 'apps/native/utils', 'apps/native/services', 'apps/native/constants'], words: 'apps/native/words', lint: true },
+    // apps/native/tools: the phone's tool halves (DESIGN-tool-template-fable.md §1.5). The web's (apps/pwa/src/tools) and core's
+    // (packages/beanpool-core/src/tools) are inside the folders their packages already scan.
+    { name: 'native', dirs: ['apps/native/app', 'apps/native/components', 'apps/native/utils', 'apps/native/services', 'apps/native/constants', 'apps/native/tools'], words: 'apps/native/words', lint: true },
     { name: 'pwa', dirs: ['apps/pwa/src'], words: 'apps/pwa/words', lint: true },
     { name: 'core', dirs: ['packages/beanpool-core/src'], words: 'packages/beanpool-core/words', lint: true },
     { name: 'server', dirs: ['apps/server/src'], words: 'apps/server/words', lint: false },

@@ -6,13 +6,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { TOOL_LIMITS, word, type ToolManifest } from '@beanpool/core';
-import { memoryIndexedDB, type MemoryIndexedDB } from '../../lib/memory-indexeddb';
+import { memoryIndexedDB, MemoryIDBKeyRange, type MemoryIndexedDB } from '../../lib/memory-indexeddb';
 import { endAccountEpoch, resetAccountEpochForTest } from '../../lib/account-epoch';
 import { clearAccountStorage } from '../../lib/device-prefs';
 import {
-    TOOL_DB_NAME, TOOL_STORE, clearToolStore, readToolRecord, removeToolRecord, resetToolStoreForTest, toolRecordKey, writeToolRecord,
+    TOOL_DB_NAME, TOOL_STORE, clearToolRecordsFor, clearToolStore, readToolRecord, removeToolRecord, resetToolStoreForTest, subscribeToolStore, toolRecordKey, writeToolRecord,
 } from '../store';
-import { COMPOSER_TITLE_CHARS, ToolDocTooBig, composerDraft, docMaxBytes, isEmptyDoc, readDoc, useToolDoc, webHostFor } from '../host';
+import { COMPOSER_TITLE_CHARS, ToolDocTooBig, composerDraft, docMaxBytes, isEmptyDoc, readDoc, useToolDoc, webHostFor } from '../builder';
 import { parseToolTarget, toolTarget } from '../route';
 import { drawnToolCardTypes, toolOfCard } from '../cards';
 import { HOME_DRAWN } from '../../lib/home-layout';
@@ -24,6 +24,7 @@ beforeEach(() => {
     localStorage.clear();
     mem = memoryIndexedDB();
     vi.stubGlobal('indexedDB', mem);
+    vi.stubGlobal('IDBKeyRange', MemoryIDBKeyRange);
     resetToolStoreForTest();
     resetAccountEpochForTest();
 });
@@ -140,6 +141,48 @@ describe('the one store (IndexedDB)', () => {
         localStorage.removeItem('bp_node_url');
         expect(await readToolRecord('ana', 'notes')).toBeNull();
         expect(await readToolRecord('ben', 'garden')).toBeNull();
+    });
+
+    it('leaving a community takes that community\'s tool documents and leaves the others', async () => {
+        localStorage.setItem('bp_node_url', 'https://leave.example');
+        await writeToolRecord('ana', 'notes', rec('{"v":1,"items":["leave"]}'));
+        localStorage.setItem('bp_node_url', 'https://stay.example');
+        await writeToolRecord('ana', 'notes', rec('{"v":1,"items":["stay"]}'));
+
+        expect(await clearToolRecordsFor('https://leave.example')).toBe(true);
+
+        localStorage.setItem('bp_node_url', 'https://leave.example');
+        expect(await readToolRecord('ana', 'notes')).toBeNull();
+        localStorage.setItem('bp_node_url', 'https://stay.example');
+        expect(await readToolRecord('ana', 'notes')).toEqual(rec('{"v":1,"items":["stay"]}'));
+    });
+
+    it('clearToolRecordsFor normalizes trailing slashes on nodeUrl', async () => {
+        localStorage.setItem('bp_node_url', 'https://slash.example');
+        await writeToolRecord('ana', 'notes', rec('{"v":1}'));
+        expect(await clearToolRecordsFor('https://slash.example///')).toBe(true);
+        expect(await readToolRecord('ana', 'notes')).toBeNull();
+    });
+
+    it('notifies subscribers on write, remove, and clear', async () => {
+        const events: Array<{ owner: string; tool: string }> = [];
+        const unsub = subscribeToolStore((owner, tool) => events.push({ owner, tool }));
+
+        await writeToolRecord('ana', 'notes', rec('{}'));
+        expect(events).toEqual([{ owner: 'ana', tool: 'notes' }]);
+
+        await removeToolRecord('ana', 'notes');
+        expect(events).toEqual([
+            { owner: 'ana', tool: 'notes' },
+            { owner: 'ana', tool: 'notes' },
+        ]);
+
+        await clearToolRecordsFor('https://example.org');
+        expect(events[2]).toEqual({ owner: '*', tool: '*' });
+
+        unsub();
+        await writeToolRecord('ana', 'notes', rec('{}'));
+        expect(events).toHaveLength(3);
     });
 
     // Review of #2274: a connection the browser closed was held on to, so every read came back empty and every write

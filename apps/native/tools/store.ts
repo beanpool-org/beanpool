@@ -1,25 +1,22 @@
 /**
  * The one store of every tool on the phone (scratch/tools/DESIGN-tool-template-fable.md §1.6, slice T0.2): its document,
  * one row of `tool_docs` (tools/schema.ts) in the community's SQLite file, and its photos, files under the app's own
- * document directory at `tools/<owner>/<tool>/<ref>.jpg` (800 px, the Offer form's downsize), never inside the document
+ * document directory at `tools/<community>/<owner>/<tool>/<ref>.jpg` (800 px, the Offer form's downsize), never inside the document
  * and never on the node. Beside them, the host's own settings for each tool (the backup toggle, which reminders are on,
  * which door the member took, whether the Home card was offered) in app storage under `beanpool_tool:`.
  *
- * Nothing here leaves the phone. The private copy on the node (member_tool_state) is slice T0.4; until it lands the
- * backup line says the document is on this phone only. An account leaving the phone takes all of it
- * ({@link wipeToolDataOnThisPhone}, from utils/account-leaves-phone.ts releaseAccountFromPhone and utils/identity.ts
- * wipeIdentity): no row, no file, no reminder, no setting.
- *
- * The photo files are tools/photos.ts's, loaded here only when a tool's data goes: Home and the Commons tab read this
- * module for a tool's card and row, and never load the file system for it.
+ * All data is kept per community, owner and tool (PR #2267 findings 2 + 3). "Remove my data" in one community removes only
+ * that community's document, photos and reminders. Leaving or deleting at a community removes all its documents, photos
+ * and reminders. An account leaving the phone takes all of it (wipeToolDataOnThisPhone).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TOOL_LIMITS, toolDocBytes, type ToolManifest } from '@beanpool/core';
 import { getDb } from '../utils/db';
 import { cancelToolReminders, type ToolNotifications } from './reminders';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from './schema';
+import { communityKey } from './community';
 
-export { TOOL_SETTINGS_PREFIX };
+export { TOOL_SETTINGS_PREFIX, communityKey };
 
 /** The node copy (member_tool_state) is switched on in slice T0.4: until then a tool's document is on this phone only. */
 export const NODE_COPY_BUILT = false;
@@ -64,6 +61,25 @@ export async function writeToolSettings(owner: string, tool: string, next: ToolS
 export const reminderOn = (settings: ToolSettings, reminder: { id: string; defaultOn: boolean }): boolean =>
     settings.reminders?.[reminder.id] ?? reminder.defaultOn;
 
+// ── Store change subscriptions ───────────────────────────────────────────────────────────────────────────────────
+
+type ToolStoreListener = (owner: string, tool: string) => void;
+const listeners = new Set<ToolStoreListener>();
+
+/** Subscribe to writes and removals in the tool store. */
+export function subscribeToolStore(listener: ToolStoreListener): () => void {
+    listeners.add(listener);
+    return () => {
+        listeners.delete(listener);
+    };
+}
+
+export function notifyToolStore(owner: string, tool: string): void {
+    for (const listener of [...listeners]) {
+        try { listener(owner, tool); } catch (e) { console.warn('[Tools] Listener failed', e); }
+    }
+}
+
 // ── The document ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -97,20 +113,43 @@ export async function writeToolDoc<D>(owner: string, manifest: ToolManifest<D>, 
          ON CONFLICT(owner, tool) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`,
         [owner, manifest.id, JSON.stringify(doc), new Date(now).toISOString()],
     );
+    notifyToolStore(owner, manifest.id);
 }
 
 // ── Taking it off the phone ──────────────────────────────────────────────────────────────────────────────────────
 
 /**
  * "Remove my data from this phone" in a tool's menu: its document, its photos, its reminders and its settings, for
- * this owner. (The node copy's tombstone is T0.4's: until it lands nothing of the tool is on the node.)
+ * this community and owner. Leaves other communities' documents, photos and reminders untouched.
  */
-export async function removeToolDataHere(owner: string, tool: string): Promise<void> {
+export async function removeToolDataHere(owner: string, tool: string, url?: string | null, notifications?: ToolNotifications | null): Promise<void> {
     const db = await getDb();
     await db.runAsync('DELETE FROM tool_docs WHERE owner = ? AND tool = ?', [owner, tool]);
-    await (await import('./photos')).removeToolFolder(owner, tool);
-    await cancelToolReminders(tool);
+    const anchorUrl = url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+    const community = communityKey(anchorUrl);
+    await (await import('./photos')).removeToolFolder(community, owner, tool);
+    await cancelToolReminders({ community, tool }, notifications);
     await AsyncStorage.removeItem(settingsKey(owner, tool));
+    notifyToolStore(owner, tool);
+}
+
+/**
+ * A community is left or deleted: removes all photos and cancels all reminders for this community.
+ * (The SQLite file containing tool_docs is removed by community-cache.ts removeCommunityCaches).
+ */
+export async function removeCommunityToolData(url: string | null, notifications?: ToolNotifications | null): Promise<void> {
+    const community = communityKey(url);
+    try {
+        await (await import('./photos')).removeCommunityPhotos(community);
+    } catch (e) {
+        console.warn('[Tools] Could not remove community photos', e);
+    }
+    try {
+        await cancelToolReminders({ community }, notifications);
+    } catch (e) {
+        console.warn('[Tools] Could not cancel community reminders', e);
+    }
+    notifyToolStore('*', '*');
 }
 
 /**
@@ -135,5 +174,6 @@ export async function wipeToolDataOnThisPhone(notifications?: ToolNotifications 
         const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(TOOL_SETTINGS_PREFIX));
         if (keys.length) await AsyncStorage.multiRemove(keys);
     });
+    notifyToolStore('*', '*');
     if (failed) throw failed;
 }

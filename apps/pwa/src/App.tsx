@@ -36,7 +36,7 @@ const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.Map
 // The tools' covered page is its own chunk, as each tool is (tools/index.ts): a member who never opens one never fetches it.
 const ToolsPage = lazy(() => import('./pages/ToolsPage').then(m => ({ default: m.ToolsPage })));
 import { parseToolTarget, type OpenTool } from './tools/route';
-import type { ComposerDraft } from './tools/host';
+import type { ComposerDraft } from './tools/builder';
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';

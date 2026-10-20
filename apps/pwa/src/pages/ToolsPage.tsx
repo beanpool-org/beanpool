@@ -23,7 +23,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { useCommunityInfo } from '../lib/features';
 import { getNodeApiUrl } from '../lib/api';
 import { TOOL_APPS, type WebToolApp } from '../tools';
-import { isEmptyDoc, readDoc, useToolDoc, type ComposerDraft, type WebHostContext, webHostFor } from '../tools/host';
+import { isEmptyDoc, readDoc, useToolDoc, type ComposerDraft, type WebHostContext, webHostFor } from '../tools/builder';
 import { readToolRecord } from '../tools/store';
 import type { OpenTool } from '../tools/route';
 import { ToolButton, ToolEmpty, ToolRow, ToolSection } from '../tools/ui';

@@ -15,6 +15,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import { t, type ToolNeedDraft, type ToolOfferDraft, type ToolPhoto } from '@beanpool/core';
 import { keepToolPhoto, toolPhotoDataUri } from './photos';
+import { communityKey } from './community';
 
 /** The Offer composer's draft key (app/(tabs)/map.tsx `OFFER_DRAFT_KEY`, read there and never changed here). */
 export const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
@@ -22,11 +23,11 @@ export const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
 const DRAFT_PHOTOS = 5;
 
 /** A photo picked or taken: 800 px wide JPEG (the Offer form's downsize), kept in the tool's folder under a new ref. */
-export async function keepPicked(owner: string, tool: string, result: ImagePicker.ImagePickerResult): Promise<ToolPhoto | null> {
+export async function keepPicked(community: string, owner: string, tool: string, result: ImagePicker.ImagePickerResult): Promise<ToolPhoto | null> {
     const asset = !result.canceled ? result.assets?.[0] : undefined;
     if (!asset?.uri) return null;
     const small = await ImageManipulator.manipulateAsync(asset.uri, [{ resize: { width: 800 } }], { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG });
-    return keepToolPhoto(owner, tool, small, Crypto.randomUUID());
+    return keepToolPhoto(community, owner, tool, small, Crypto.randomUUID());
 }
 
 /** The fee the List sheet set: free, Beans per day or per week, or a fixed number of Beans. */
@@ -76,9 +77,10 @@ export async function unfinishedPostHere(): Promise<boolean> {
 }
 
 async function writeDraftAndOpen(type: 'offer' | 'need', owner: string, tool: string, draft: ToolOfferDraft | ToolNeedDraft, fee: ToolListFee | null): Promise<void> {
-    const refs = type === 'offer' ? ((draft as ToolOfferDraft).photos ?? []) : [];
-    const photos = (await Promise.all(refs.slice(0, DRAFT_PHOTOS).map((ref) => toolPhotoDataUri(owner, tool, ref)))).filter((p): p is string => !!p);
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    const community = communityKey(anchorUrl);
+    const refs = type === 'offer' ? ((draft as ToolOfferDraft).photos ?? []) : [];
+    const photos = (await Promise.all(refs.slice(0, DRAFT_PHOTOS).map((ref) => toolPhotoDataUri(community, owner, tool, ref)))).filter((p): p is string => !!p);
     await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(composerDraft(type, draft, anchorUrl, photos, fee, Date.now())));
     router.push(`/(tabs)/map?newPost=${type}`);
 }

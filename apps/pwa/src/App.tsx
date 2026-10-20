@@ -33,6 +33,10 @@ import { lazy, Suspense } from 'react';
 import { webAppBehindServer } from './lib/app-version';
 import { retryPendingReports, startBlocklist } from './lib/blocklist';
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
+// The tools' covered page is its own chunk, as each tool is (tools/index.ts): a member who never opens one never fetches it.
+const ToolsPage = lazy(() => import('./pages/ToolsPage').then(m => ({ default: m.ToolsPage })));
+import { parseToolTarget, type OpenTool } from './tools/route';
+import type { ComposerDraft } from './tools/builder';
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
@@ -184,6 +188,7 @@ export function App() {
         if (!tourTab) return;
         setShowSettings(false);
         setOpenProfilePubkey(null);
+        setOpenTool(null);
         setActiveTab(tourTab as Tab);
     }, [tourTab, tourIndex]);
     // A tab the member opens during the tour moves the tour to that tab's step: it follows, never scolds.
@@ -234,7 +239,21 @@ export function App() {
     const [openGroup, setOpenGroup] = useState<Group | null>(null);
     // A group whose own read is refused, but whose votes still hold the reader (removed mid-vote from an invite-only group).
     const [openGroupVotes, setOpenGroupVotes] = useState<{ groupId: string; canVote: boolean } | null>(null);
-    const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
+    // The tools' covered page (DESIGN-tool-template-fable.md §1.3): the Tools screen (id null) or one tool at a screen.
+    const [openTool, setOpenTool] = useState<OpenTool | null>(null);
+    // A tool's offer or need door: the composer opens with it filled in, and nothing is posted until the member taps Post.
+    const [openDraft, setOpenDraft] = useState<ComposerDraft | null>(null);
+    const clearOpenDraft = useCallback(() => setOpenDraft(null), []);
+    // A tool's Home card, from its one offer: Home adds it as Add a card would, then lets go of it.
+    const [addHomeCard, setAddHomeCard] = useState<string | null>(null);
+    const clearAddHomeCard = useCallback(() => setAddHomeCard(null), []);
+    const openComposerFromTool = useCallback((draft: ComposerDraft) => {
+        setOpenTool(null);
+        setShowSettings(false);
+        setOpenDraft(draft);
+        setActiveTab('map');
+    }, []);
+    const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey && !openTool;
 
     useEffect(() => {
         if (typeof document !== 'undefined') {
@@ -283,7 +302,7 @@ export function App() {
     // The install banner (rehearsal 14 Oct, B1) never sits on the tour or a screen drawn over the tabs, and a member is
     // first offered it once the tour has ended: while Home has not said, or says its Getting started card is up, it waits.
     const tourStillOffered = !!identity && isGuest === false && (tourOffered?.publicKey !== identity.publicKey || tourOffered.up);
-    const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey;
+    const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey || !!openTool;
     // "Your account is new" (G11-e): put away in this browser for this account; Settings keeps showing it.
     const [newAccountCardClosed, setNewAccountCardClosed] = useState(false);
     // The recent searches and "near you" answers (lib/members-on-demand) are kept by path alone: another account in this
@@ -354,6 +373,12 @@ export function App() {
                 setOpenNewPost(true);
                 setOpenNewPostGroupId(contextId);
             }
+            return;
+        }
+        // The Tools screen, or one tool: `<id>`, or `<id>?screen=<name>&key=<record>` (tools/route.ts).
+        if (tab === 'tools' || tab === 'tool') {
+            setShowSettings(false);
+            setOpenTool(parseToolTarget(tab === 'tool' ? contextId : null));
             return;
         }
         if (tab === 'enterprise' || tab === 'treasury') {
@@ -768,6 +793,7 @@ export function App() {
                             setActiveTab('home');
                             setShowSettings(false);
                             setOpenProfilePubkey(null);
+                            setOpenTool(null);
                         }}
                     >
                         <img src="/bean.png" alt={t('BeanPool Icon')} className="w-9 h-9 object-contain drop-shadow-sm" />
@@ -794,6 +820,7 @@ export function App() {
                                     setActiveTab(tab.id);
                                     setShowSettings(false);
                                     setOpenProfilePubkey(null);
+                                    setOpenTool(null);
                                 }}
                                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ${
                                     isActive
@@ -1000,10 +1027,12 @@ export function App() {
                                         openNewPost={openNewPost}
                                         initialGroupId={openNewPostGroupId}
                                         onOpenNewPostHandled={() => { setOpenNewPost(false); setOpenNewPostGroupId(undefined); }}
+                                        openDraft={openDraft}
+                                        onDraftOpened={clearOpenDraft}
                                         onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                         onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
                                         isMember={isGuest === null ? null : !isGuest}
-                                        covered={!!openTreasuryPubkey || !!openProfilePubkey}
+                                        covered={!!openTreasuryPubkey || !!openProfilePubkey || !!openTool}
                                         focusPostId={focusMapPostId}
                                         onFocusPostHandled={clearFocusMapPost}
                                         copyEventPostId={copyEventPostId}
@@ -1018,6 +1047,8 @@ export function App() {
                                     identity={identity}
                                     saveSearch={saveSearchToHome}
                                     onSaveSearchTaken={clearSaveSearch}
+                                    addCardType={addHomeCard}
+                                    onAddCardTaken={clearAddHomeCard}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
                                 />
@@ -1084,6 +1115,21 @@ export function App() {
                     )}
                     {openGroupVotes && (
                         <GroupVotesSheet groupId={openGroupVotes.groupId} canVote={openGroupVotes.canVote} myPubkey={identity?.publicKey ?? null} onClose={() => setOpenGroupVotes(null)} />
+                    )}
+
+                    {/* The tools' covered page: the Tools screen or one tool, each tool its own chunk. */}
+                    {openTool && identity && (
+                        <Suspense fallback={<div className="page-overlay z-[110] flex items-center justify-center text-nature-600 dark:text-nature-300">{t('Loading...')}</div>}>
+                            <ToolsPage
+                                identity={identity}
+                                open={openTool}
+                                onOpen={setOpenTool}
+                                onClose={() => setOpenTool(null)}
+                                onComposer={openComposerFromTool}
+                                onGuide={(slug) => { setOpenTool(null); navigateToTab('guide', slug); }}
+                                onAddHomeCard={(type) => { setOpenTool(null); setAddHomeCard(type); setShowSettings(false); setActiveTab('home'); }}
+                            />
+                        </Suspense>
                     )}
 
                     {/* Treasury Detail Overlay */}
@@ -1180,6 +1226,7 @@ export function App() {
                                 setActiveTab(tab.id);
                                 setShowSettings(false);
                                 setOpenProfilePubkey(null);
+                                setOpenTool(null);
                             }}
                             style={{
                                 // Width follows label length (floor 4, the emoji's width), so "Commons"

@@ -164,6 +164,11 @@ export async function scheduleToolReminders<D>(
             return [];
         }
     })();
+    run.finally(() => {
+        if (rescheduleChains.get(chainKey) === run) {
+            rescheduleChains.delete(chainKey);
+        }
+    });
     rescheduleChains.set(chainKey, run);
     return run;
 }

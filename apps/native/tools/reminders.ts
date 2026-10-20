@@ -93,23 +93,19 @@ export async function cancelToolReminders(
     let match: (id: string) => boolean = (id) => id.startsWith(TOOL_REMINDER_PREFIX);
     if (typeof target === 'string') {
         const tool = target;
-        match = (id) => {
-            const parts = id.split(':');
-            return (parts.length === 5 && parts[2] === tool) || (parts.length === 4 && parts[1] === tool);
-        };
+        match = (id) => id.startsWith(TOOL_REMINDER_PREFIX) && (id.split(':')[2] === tool || id.split(':')[1] === tool);
     } else if (target) {
         const { community, tool } = target;
-        match = (id) => {
-            const parts = id.split(':');
-            if (parts[0] !== 'bp-tool') return false;
-            if (parts.length === 5) {
-                return (!community || parts[1] === community) && (!tool || parts[2] === tool);
-            }
-            if (parts.length === 4) {
-                return Boolean(tool && parts[1] === tool);
-            }
-            return false;
-        };
+        if (community && tool) {
+            const prefix = `${TOOL_REMINDER_PREFIX}${community}:${tool}:`;
+            const legacyPrefix = `${TOOL_REMINDER_PREFIX}${tool}:`;
+            match = (id) => id.startsWith(prefix) || (id.startsWith(legacyPrefix) && id.split(':').length === 4);
+        } else if (community) {
+            const prefix = `${TOOL_REMINDER_PREFIX}${community}:`;
+            match = (id) => id.startsWith(prefix);
+        } else if (tool) {
+            match = (id) => id.startsWith(TOOL_REMINDER_PREFIX) && (id.split(':')[2] === tool || id.split(':')[1] === tool);
+        }
     }
     try {
         for (const s of await n.getAllScheduledNotificationsAsync()) {

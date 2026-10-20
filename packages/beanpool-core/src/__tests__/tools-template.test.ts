@@ -131,6 +131,7 @@ describe('the checks bite', () => {
         one(toolManifestProblems({ ...good, permissions: ['contacts' as never] }), /contacts is not a permission/);
         one(toolManifestProblems({ ...good, permissions: ['reminders'] }), /asks for 'reminders' but has none/);
         one(toolManifestProblems({ ...good, reminders: { list: [{ id: 'r', name: word('A reminder'), defaultOn: true }], due: () => [] } }), /does not ask for the 'reminders'/);
+        one(toolManifestProblems({ ...good, permissions: ['reminders'], reminders: { list: [{ id: 'due:back', name: word('A reminder'), defaultOn: true }], due: () => [] } }), /reminder due:back is not 1 to 24 lowercase letters, digits and hyphens/);
         one(toolManifestProblems({ ...good, screens: ['list', 'main'] }), /start with 'main'/);
         one(toolManifestProblems({ ...good, examples: [] }), /examples/);
         one(toolManifestProblems({ ...good, needs: { fee: 'money' as never } }), /needs.fee is not a node feature/);

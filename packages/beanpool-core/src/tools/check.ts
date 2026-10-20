@@ -109,6 +109,8 @@ export function toolManifestProblems(m: ToolManifest): string[] {
     }
     const reminderIds = (m.reminders?.list ?? []).map((r) => r.id);
     if (m.reminders && reminderIds.length === 0) say('its reminders list names at least one.');
+    const badReminders = reminderIds.filter((r) => typeof r !== 'string' || !SCREEN_NAME.test(r));
+    if (badReminders.length) say(`reminder ${badReminders.join(', ')} is not 1 to 24 lowercase letters, digits and hyphens.`);
     if (repeated(reminderIds).length) say(`its reminders name ${repeated(reminderIds).join(', ')} more than once.`);
     if (m.homeCard && (typeof m.homeCard.line !== 'string' || m.homeCard.line.trim() === '')) say("its Home card's line is a word('…') sentence.");
 

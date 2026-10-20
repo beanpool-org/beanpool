@@ -879,6 +879,26 @@ describe("reminders: due() becomes the phone's own date-trigger notifications", 
         expect(n.scheduled.map((s) => s.identifier)).toEqual(['bp-tool:comm:other-tool:due:1000']);
     });
 
+    it('cancelToolReminders matches anchored prefix and cancels multi-part reminder ids', async () => {
+        const n = fakeNotifications();
+        n.scheduled.push(
+            { identifier: 'bp-tool:mullum_key:kit:due:back:1700000000000' },
+            { identifier: 'bp-tool:mullum_key:other:item:1700000000000' },
+            { identifier: 'bp-tool:bellingen_key:kit:due:back:1700000000000' },
+        );
+        // Cancel kit in mullum_key
+        await cancelToolReminders({ community: 'mullum_key', tool: 'kit' }, n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([
+            'bp-tool:mullum_key:other:item:1700000000000',
+            'bp-tool:bellingen_key:kit:due:back:1700000000000',
+        ]);
+        // Cancel whole mullum_key community
+        await cancelToolReminders({ community: 'mullum_key' }, n);
+        expect(n.scheduled.map((s) => s.identifier)).toEqual([
+            'bp-tool:bellingen_key:kit:due:back:1700000000000',
+        ]);
+    });
+
     it("serializes reschedules so an older write cannot survive two quick writes", async () => {
         const n = fakeNotifications();
         const doc1: KitDoc = { v: 1, items: [{ id: '1', name: 'Ladder', at: NOW + 1000 }] };

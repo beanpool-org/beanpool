@@ -75,11 +75,14 @@ vi.mock('../../app/ThemeContext', async () => {
         useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: 'light', colors: lightColors }),
     };
 });
-// The titles files ship empty until the drafting round: Portuguese reads the file each test sets.
-const titles = vi.hoisted(() => ({ pt: null as unknown }));
+// The titles files ship empty until the drafting round: Portuguese reads the file each test sets; Turkish reads the
+// shipped file unless a test sets one.
+const titles = vi.hoisted(() => ({ pt: null as unknown, tr: null as unknown }));
 vi.mock('../guide-titles', async (importOriginal) => {
     const real = await importOriginal<typeof import('../guide-titles')>();
-    return { guideTitlesFor: (lang: string) => (lang === 'pt' ? titles.pt : real.guideTitlesFor(lang as never)) };
+    return {
+        guideTitlesFor: (lang: string) => (lang === 'pt' ? titles.pt : lang === 'tr' && titles.tr !== null ? titles.tr : real.guideTitlesFor(lang as never)),
+    };
 });
 vi.mock('../use-learn-videos', () => ({ useLearnVideos: () => [] }));
 vi.mock('../beanpool-links', () => ({ openBeanPoolWebsite: async () => {} }));
@@ -131,6 +134,7 @@ beforeEach(() => {
     root = createRoot(host);
     store.map.clear();
     titles.pt = null;
+    titles.tr = null;
     params.value = {};
     globalThis.fetch = vi.fn(async () => { throw new TypeError('offline'); }) as typeof fetch;
 });
@@ -352,5 +356,28 @@ describe('the guide in Portuguese: a titles file as the drafting round writes it
         await settle();
         expect(spanWith(first.title)).toBeTruthy();
         expect(host.querySelector('[data-testid="guide-english-note"]')).toBeNull();
+    });
+});
+
+// Review round 1: the page's section line is in capitals the way of its words' language, not the member's. Turkish
+// writes a capital i as İ; an English title (every title until the drafting round) keeps the English capitals.
+describe('the guide in Turkish: the section line in the capitals of its own words', () => {
+    const section = manualSections(GUIDE).find((s) => s.title.includes('i'))!;
+    const [page] = sectionPages(GUIDE, section);
+
+    it('with the shipped (empty) titles file, an English section title reads in English capitals, never with a dotted İ', async () => {
+        expect(inCapitalsOf(section.title, 'tr')).not.toBe(inCapitalsOf(section.title, 'en'));
+        params.value = { slug: page.slug };
+        await renderIn('tr', GuideScreen);
+        expect(spanWith(inCapitalsOf(section.title, 'en'))).toBeTruthy();
+        expect(spanWith(inCapitalsOf(section.title, 'tr'))).toBeUndefined();
+    });
+
+    it('a Turkish section title reads in Turkish capitals', async () => {
+        titles.tr = { sections: { [section.id]: { title: { text: 'Yeni başlayanlar için', sourceHash: guideSourceHash(section.title) } } }, pages: {} } satisfies GuideTitles;
+        params.value = { slug: page.slug };
+        await renderIn('tr', GuideScreen);
+        expect(spanWith('YENİ BAŞLAYANLAR İÇİN')).toBeTruthy();
+        expect(spanWith('YENI BAŞLAYANLAR IÇIN')).toBeUndefined();
     });
 });

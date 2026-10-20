@@ -90,8 +90,10 @@ export default function GuideScreen() {
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Part of: {section}', { section: section.title })}
                             >
-                                {/* In capitals the language's way (Turkish İ), never textTransform; never cut, a longer title wraps. */}
-                                <Text style={styles.kickerText}>{inCapitalsOf(section.title)}</Text>
+                                {/* In capitals the language's way (Turkish İ), never textTransform; never cut, a longer title wraps.
+                                    The capitals are those of the title's own language: an English title (no current
+                                    translation; `english` is set only over a translated one) reads "GETTING", never "GETTİNG". */}
+                                <Text style={styles.kickerText}>{inCapitalsOf(section.title, section.english?.title !== undefined ? undefined : 'en')}</Text>
                             </Pressable>
                         )}
                         <Text style={styles.title} accessibilityRole="header">{page.title}</Text>

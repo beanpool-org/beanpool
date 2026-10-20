@@ -158,6 +158,7 @@ import { remindersToSchedule, scheduleToolReminders, toolReminderRoute, cancelTo
 import { ToolButton, ToolButtons, ToolChips, ToolEmpty, ToolField, ToolNote, ToolRow, ToolScreen, ToolSection } from '../../tools/ui';
 import { HOME_DRAWN } from '../home-cards';
 import ToolRoute from '../../app/tool/[id]';
+import ToolsScreen from '../../app/tools';
 
 const NATIVE = path.resolve(__dirname, '../..');
 const REPO = path.resolve(NATIVE, '../..');
@@ -535,6 +536,17 @@ describe('the route around a tool', () => {
         expect([nav.backs, nav.replaced]).toEqual([1, []]);
         nav.canGoBack = false;
         await click(byTestId('tool-back'), 'Back');
+        expect([nav.backs, nav.replaced]).toEqual([1, ['/(tabs)']]);
+    });
+
+    it('the Tools screen\'s ← Back is the same: the stack\'s, and Home when beanpool://tools started the app', async () => {
+        setLanguage('en');
+        await act(async () => { root.render(createElement(ToolsScreen) as any); });
+        await settle();
+        await click(byTestId('tools-back'), 'Back');
+        expect([nav.backs, nav.replaced]).toEqual([1, []]);
+        nav.canGoBack = false;
+        await click(byTestId('tools-back'), 'Back');
         expect([nav.backs, nav.replaced]).toEqual([1, ['/(tabs)']]);
     });
 

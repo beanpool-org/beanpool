@@ -67,8 +67,8 @@ export function backupLine(settings: ToolSettings): string {
 }
 
 /**
- * ← Back: the stack's, or Home when the tool is the first screen there is (a link or a reminder's tap that started the
- * app), where the stack's would do nothing.
+ * ← Back: the stack's, or Home when the tool (or the Tools screen) is the first screen there is (a link or a reminder's
+ * tap that started the app), where the stack's would do nothing.
  */
 export function toolBack() {
     if (router.canGoBack()) router.back();

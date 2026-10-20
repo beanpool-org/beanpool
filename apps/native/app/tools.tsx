@@ -8,7 +8,7 @@
  */
 import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { t, toolsMore, type HomeNodeFacts, type ToolManifest } from '@beanpool/core';
@@ -18,7 +18,7 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { HOME_TARGET_DP, homeStyles } from '../components/home/HomeParts';
 import { SHELF_HEADINGS, memberShelves, phoneTools } from '../tools/index';
 import { readToolDoc } from '../tools/store';
-import { openTool, safeLine } from '../tools/frame';
+import { openTool, safeLine, toolBack } from '../tools/frame';
 import { ToolEmpty, ToolRow } from '../tools/ui';
 
 export default function ToolsScreen() {
@@ -54,7 +54,7 @@ export default function ToolsScreen() {
     return (
         <View style={[styles.page, { backgroundColor: colors.surface.page, paddingTop: insets.top }]} testID="tools-screen">
             <View style={[styles.header, { backgroundColor: colors.surface.card, borderBottomColor: colors.border.default }]}>
-                <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel={t('Back')} testID="tools-back">
+                <Pressable onPress={toolBack} style={styles.back} accessibilityRole="button" accessibilityLabel={t('Back')} testID="tools-back">
                     <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text.heading} />
                 </Pressable>
                 <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header" numberOfLines={2}>{t('Tools')}</Text>

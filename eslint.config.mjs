@@ -28,6 +28,7 @@ const KEYBOARD_PROVIDER_JSX = {
   selector: "JSXOpeningElement[name.name='KeyboardProvider'], JSXOpeningElement[name.property.name='KeyboardProvider']",
   message: 'KeyboardProvider lives only in app/_layout.tsx. A nested provider breaks keyboards app-wide.',
 };
+const TOOL_NO_NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'localStorage', 'sessionStorage', 'indexedDB', 'caches'];
 /** One block's rules: imports by `regex`, require() and import() of the tool's own files only, no network or stores. */
 const toolFenceRules = (regex, native) => ({
   'no-restricted-imports': ['error', { patterns: [{ regex, caseSensitive: true, message: TOOL_FENCE_MESSAGE }] }],
@@ -39,9 +40,14 @@ const toolFenceRules = (regex, native) => ({
     { selector: 'ImportExpression[source.value=/\\.\\./]', message: TOOL_FENCE_MESSAGE },
     ...(native ? [KEYBOARD_PROVIDER_JSX] : []),
   ],
-  // The network and the browser's stores are the host's (its one store, its node copy), never a tool's own.
-  'no-restricted-globals': ['error', ...['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'localStorage', 'sessionStorage', 'indexedDB']
-    .map((name) => ({ name, message: TOOL_FENCE_MESSAGE }))],
+  // The network and the browser's stores are the host's (its one store, its node copy), never a tool's own: shut as a
+  // global and as a member of anything (`window.fetch`, `globalThis.localStorage`, `const w = self; w.fetch`,
+  // `const { fetch } = window`), with the beacon and the cookie jar.
+  'no-restricted-globals': ['error', ...TOOL_NO_NETWORK.map((name) => ({ name, message: TOOL_FENCE_MESSAGE }))],
+  'no-restricted-properties': ['error',
+    ...[...TOOL_NO_NETWORK, 'sendBeacon'].map((property) => ({ property, message: TOOL_FENCE_MESSAGE })),
+    { object: 'document', property: 'cookie', message: TOOL_FENCE_MESSAGE },
+  ],
 });
 const TOOL_SOURCES = '*.{ts,tsx,js,jsx,mjs}';
 // A tool's tests are never shipped and import their runner: they are outside the fence.

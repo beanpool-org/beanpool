@@ -68,11 +68,12 @@ tool, and eslint runs the fence.
 schema, so its tier is the size rule alone: its core half is usually tier B, its phone and web screens usually tier A by
 size. A tool that needs a node route or a column is a server slice first, tier A.
 
-**What a reviewer reads by hand:** the permissions against what the screens do (the fence catches imports, not intent);
-the document for anything a member would not expect kept on the server (an address, a third person's name, a dollar
-amount stored as a number); `read()` keeping a newer version's unknown keys; the sentence count against what the screens
-need (a tool at the cap is usually two tools); the words an Offer draft would carry, since a listing is public; the
-screenshots at 320 dp in light and dark; and that the PR's "what leaves the phone" matches the permissions.
+**What a reviewer reads by hand:** the permissions against what the screens do (the fence catches imports and the
+network and storage names, plain or as a member, not intent or a name built at runtime); the document for anything a
+member would not expect kept on the server (an address, a third person's name, a dollar amount stored as a number);
+`read()` keeping a newer version's unknown keys; the sentence count against what the screens need (a tool at the cap is
+usually two tools); the words an Offer draft would carry, since a listing is public; the screenshots at 320 dp in light
+and dark; and that the PR's "what leaves the phone" matches the permissions.
 
 ## Later: a closed door
 

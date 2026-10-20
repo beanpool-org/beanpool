@@ -47,6 +47,16 @@ test('a phone tool: React, core, its own folder, the host and the primitives; no
         "const m = import('expo-file-system');",
         "fetch('https://example.org');",
         "localStorage.setItem('a', 'b');",
+        "window.fetch('https://example.org');",
+        "globalThis.fetch('https://example.org');",
+        "const f = self.fetch;",
+        "window['fetch']('https://example.org');",
+        "const w = globalThis; w.fetch('https://example.org');",
+        "const { fetch: f } = window;",
+        "window.localStorage.setItem('a', 'b');",
+        "globalThis.window.sessionStorage.clear();",
+        "new window.WebSocket('wss://example.org');",
+        "navigator.sendBeacon('https://example.org', 'x');",
     ]) await shut(top, code);
     const nested = 'apps/native/tools/demo/parts/row.tsx';
     await opens(nested, "import { THING } from '../manifest-words';");
@@ -66,6 +76,13 @@ test('a web tool: the same doors', async () => {
         "import { HomePage } from '../../pages/HomePage';",
         "const chunk = import('../../pages/MapPage');",
         "indexedDB.open('x');",
+        "window.indexedDB.open('x');",
+        "window.localStorage.setItem('a', 'b');",
+        "globalThis.fetch('https://example.org');",
+        "window.navigator.sendBeacon('https://example.org', 'x');",
+        "caches.open('x');",
+        "window.caches.open('x');",
+        "document.cookie = 'a=b';",
     ]) await shut(top, code);
 });
 

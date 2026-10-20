@@ -11,7 +11,7 @@ source-hash: fa72de1f20e20c32
 
 Sekme satırında **Defter** seçeneğine dokunun. Bakiyeniz sağ üstte **FASULYE** cinsinden yer alır. Sıfırın altında olabilir; "Kredi limitiniz" bölümüne bakın.
 
-Küresel toplulukta Fasulye yoktur; bu nedenle Defter, yerel bir topluluk olan Example Valley'den **🏘️ Yerel topluluk** olarak işaretlenmiş örnek bir üyeyi gösterir. Düğmeleri, Fasulyelerin neden yerel bir toplulukta yaşadığını açıklar ve hiçbir şey göndermez. "Fasulye ve küresel topluluk" bölümüne bakın.
+Küresel toplulukta Fasulye yoktur; bu nedenle Defter, yerel bir topluluk olan Örnek Vadi'den **🏘️ Yerel topluluk** olarak işaretlenmiş örnek bir üyeyi gösterir. Düğmeleri, Fasulyelerin neden yerel bir toplulukta yaşadığını açıklar ve hiçbir şey göndermez. "Fasulye ve küresel topluluk" bölümüne bakın.
 
 Defter'in iki sekmesi vardır: **Seviyeler** (güveniniz, "Güven rozetleri" bölümüne bakın) ve **Cüzdan**. Telefonda doğrudan Cüzdan'a gitmek için bakiyenize dokunun.
 

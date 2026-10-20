@@ -80,7 +80,7 @@ Beji ni utambuzi, hakuna zaidi. Haifungui chochote. Kila mtu anaweza kufanya bia
 
 ## Ada na Mali za Pamoja
 
-Jumuiya yako ina hazina ya pamoja ya maharagwe inayoitwa **Mali za Pamoja**. Ada huenda humo. Wanachama huamua pamoja jinsi inavyotumika.
+Jumuiya yako ina hazina ya pamoja ya maharagwe inayoitwa **Pamoja**. Ada huenda humo. Wanachama huamua pamoja jinsi inavyotumika.
 
 - **Ada ya soko:** 1.5% ya kila malipo ya soko huenda kwenye Mali za Pamoja. Inatoka kwenye kile ambacho muuzaji anapokea.
 - **Ada ya mzunguko:** maharagwe yamekusudiwa kusogea, si kukaa tu bila kufanya kazi. Maharagwe 200 ya kwanza unayoshikilia huwa bure kila wakati. Zaidi ya hayo, ada ndogo ya kila mwezi huenda kwenye Mali za Pamoja: 1% kwa mwezi kwa maharagwe kati ya 200 na 500, 1.5% kati ya 500 na 1,000, 2% kati ya 1,000 na 2,000, na 2.5% juu ya 2,000.
@@ -88,8 +88,8 @@ Jumuiya yako ina hazina ya pamoja ya maharagwe inayoitwa **Mali za Pamoja**. Ada
 
 ## Mashirika na vikundi
 
-**Shirika** huendelea na hufanya biashara kwa jina lake lenyewe: duka la kuoka mikate, maktaba ya vifaa, kibanda cha soko. Linaendeshwa na **wasimamizi**, likiongozwa na **msimamizi mkuu**. Wasimamizi wanaweza kuahidi sehemu ya uaminifu wao wenyewe ili kulipa shirika kikomo cha mkopo.
+**shirika** huendelea na hufanya biashara kwa jina lake lenyewe: duka la kuoka mikate, maktaba ya vifaa, kibanda cha soko. Linaendeshwa na **wasimamizi**, likiongozwa na **msimamizi mkuu**. Wasimamizi wanaweza kuahidi sehemu ya uaminifu wao wenyewe ili kulipa shirika kikomo cha mkopo.
 
-**Kikundi** ni duara la wanachama lenye mazungumzo na machapisho yake yenyewe, linaloendeshwa na **mratibu** mmoja au zaidi. Mmoja wao ni **mratibu mkuu** — yeyote aliyetengeneza kikundi, mwanzoni.
+**kikundi** ni duara la wanachama lenye mazungumzo na machapisho yake yenyewe, linaloendeshwa na **mratibu** mmoja au zaidi. Mmoja wao ni **mratibu mkuu** — yeyote aliyetengeneza kikundi, mwanzoni.
 
 Unaweza kusoma jinsi wasimamizi na waratibu wanavyochaguliwa katika "Sheria na jinsi maamuzi hufanywa".

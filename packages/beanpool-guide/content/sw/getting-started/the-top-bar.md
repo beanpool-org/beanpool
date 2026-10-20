@@ -38,8 +38,8 @@ Ukaguzi mmoja wa polepole haugeuzi nukta kuwa nyekundu. Inakuwa nyekundu pale tu
 Kati ya haragwe na vitufe vilivyo upande wa kulia, aikoni ndogo huonekana pale tu ambapo kitu kinakuhitaji. Kila moja ni aina ya jambo. Iguse ili kwenda moja kwa moja huko.
 
 - **Kushikana mikono:** makubaliano yanakungoja. Mtu fulani anakungoja ukubali ombi lake, au makubaliano uliyomo bado hayajakamilika. Ikiwa kuna moja, mguso hufungua makubaliano hayo. Ikiwa kuna zaidi, hufungua **Biashara Zangu**.
-- **Sanduku la kura:** kura ambayo bado hujapiga. Mguso hufungua **Mali za Pamoja**, katika **Amua**. Ikiwa kura ya kwanza ni ya kwenye kikundi au kura ya wasimamizi katika biashara, mguso hufungua kikundi hicho au biashara hiyo badala yake. Kura ambayo huwezi kupiga bado haihesabiwi hapa, kwa mfano ile inayokuhitaji umalize biashara kwanza.
-- **Puto la maneno:** ujumbe ambao haujasomwa kutoka kwa mtu. Ikiwa ni kutoka kwa mtu mmoja, mguso hufungua mazungumzo hayo. Ikiwa ni kutoka kwa watu kadhaa, hufungua **Gumzo**, katika **Ujumbe**, ikionyesha tu yale ambayo hayajasomwa.
+- **Sanduku la kura:** kura ambayo bado hujapiga. Mguso hufungua **Pamoja**, katika **Amua**. Ikiwa kura ya kwanza ni ya kwenye kikundi au kura ya wasimamizi katika biashara, mguso hufungua kikundi hicho au biashara hiyo badala yake. Kura ambayo huwezi kupiga bado haihesabiwi hapa, kwa mfano ile inayokuhitaji umalize biashara kwanza.
+- **Puto la maneno:** ujumbe ambao haujasomwa kutoka kwa mtu. Ikiwa ni kutoka kwa mtu mmoja, mguso hufungua mazungumzo hayo. Ikiwa ni kutoka kwa watu kadhaa, hufungua **Gumzo**, katika **Jumbe**, ikionyesha tu yale ambayo hayajasomwa.
 - **Kikundi cha watu:** mistari mipya katika vikundi vyako, soga za biashara au soga za matukio. Soga ulizonyamazisha zinabaki kimya hapa. Mguso hufungua soga hiyo, au **Gumzo**, katika **Vikundi**, ikiwa zipo kadhaa.
 - **Ngao:** kwa watu wanaosaidia kuendesha jumuiya yako pekee. Huonekana wakati kuna kazi ya usimamizi inayongoja, kama vile ripoti ya kukagua au biashara iliyokwama inayohitaji uamuzi. Mguso huomba kifungo cha skrini ya simu yako, kisha hufungua mipangilio ya jumuiya yako kwenye kazi hiyo. Ikiwa mipangilio ya jumuiya yako inatumia msimbo wa kuingia, huomba huo pia.
 
@@ -83,6 +83,6 @@ Wakati mwingine upau wa kijani huonekana chini ya upau wa juu:
 
 ## Vichupo
 
-Chini ya upau wa juu kuna vichupo: **Nyumbani**, **Soko**, **Ramani**, **Gumzo**, **Mali za Pamoja** na **Leja**. Jina la kila kichupo liko juu ya aikoni yake. Kwenye simu, jumuiya ya eneo isiyo na Maharagwe haionyeshi **Mali za Pamoja** au **Leja**. Jumuiya ya kimataifa huonyesha vyote viwili, ikiwa na mifano kutoka kwa jumuiya ya eneo. Tazama "Maharagwe na jumuiya ya kimataifa".
+Chini ya upau wa juu kuna vichupo: **Nyumbani**, **Soko**, **Ramani**, **Gumzo**, **Pamoja** na **Leja**. Jina la kila kichupo liko juu ya aikoni yake. Kwenye simu, jumuiya ya eneo isiyo na Maharagwe haionyeshi **Pamoja** au **Leja**. Jumuiya ya kimataifa huonyesha vyote viwili, ikiwa na mifano kutoka kwa jumuiya ya eneo. Tazama "Maharagwe na jumuiya ya kimataifa".
 
 Kwenye ukurasa mrefu, gusa kichupo ambacho tayari uko juu yake ili kurudi juu kabisa. Hii inafanya kazi kwenye kila kichupo isipokuwa **Ramani**.

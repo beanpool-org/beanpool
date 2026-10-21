@@ -60,7 +60,10 @@ export default function OldWordsUnlockScreen() {
                 <RecoveryWordsEntry words={words} onChange={setWords} editable={!busy} label={t('Your old 12 words.')} colors={colors} />
             </View>
             <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill, opacity: busy || !typedAny ? 0.6 : 1 }]}
-                onPress={run} disabled={busy || !typedAny} accessibilityRole="button">
+                onPress={run} disabled={busy || !typedAny} accessibilityRole="button"
+                accessibilityLabel={busy ? t('Unlocking earlier messages...') : t('Unlock earlier messages')}
+                accessibilityHint={t('Verifies the 12 words and unlocks group chat history')}
+                accessibilityState={{ disabled: busy || !typedAny, busy }}>
                 {busy ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{t('Unlock earlier messages')}</Text>}
             </Pressable>
             {!!progress && <Text style={[styles.body, { color: colors.text.secondary }]} accessibilityLiveRegion="polite">{progress}</Text>}

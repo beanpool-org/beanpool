@@ -198,3 +198,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-02 - Add dynamic accessibilityLabel and busy state to report price submit button
 **Learning:** Submit buttons in report modals whose text child is conditionally replaced by an `ActivityIndicator` during submission leave screen reader users without feedback unless provided with a dynamic `accessibilityLabel` (`reportSubmitting ? 'Submitting feedback...' : 'Submit Feedback'`) and `accessibilityState={{ disabled: reportSubmitting, busy: reportSubmitting }}`.
 **Action:** Supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled, busy }}` on pricing report submit buttons rendering `ActivityIndicator` when submitting.
+
+## 2027-01-09 - Add dynamic accessibilityLabel, hint, and busy state to old words unlock submit button
+**Learning:** Unlock buttons in message history recovery flows whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without accessible text feedback when busy unless explicit dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` attributes are supplied.
+**Action:** Supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` on message recovery submit buttons rendering `ActivityIndicator` when busy.

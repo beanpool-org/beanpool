@@ -3501,5 +3501,14 @@
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "one": "Προσθήκη {name} ως υπευθύνου, με επώνυμη κάλυψη {n} φασολιού",
     "other": "Προσθήκη {name} ως υπευθύνου, με επώνυμη κάλυψη {n} φασολιών"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Ένας υπεύθυνος απενεργοποίησε το αντίγραφο αυτού του εργαλείου στον διακομιστή, οπότε διατηρείται μόνο σε αυτό το πρόγραμμα περιήγησης. Μπορείς να το ενεργοποιήσεις ξανά στις Ρυθμίσεις.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Δεν ήταν δυνατή η επικοινωνία με τον διακομιστή της κοινότητάς σου, οπότε δεν άλλαξε τίποτα. Δοκίμασε ξανά όταν είσαι συνδεδεμένος.",
+  "Keep a private copy on your community's server": "Διατήρηση ιδιωτικού αντιγράφου στον διακομιστή της κοινότητάς σου",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Διατηρείται σε αυτό το πρόγραμμα περιήγησης, με ένα ιδιωτικό αντίγραφο στον διακομιστή της κοινότητάς σου το οποίο μόνο εσύ μπορείς να διαβάσεις μέσω της εφαρμογής. Όπως και με οτιδήποτε σε αυτόν τον διακομιστή, ο διαχειριστής του θα μπορούσε.",
+  "One device at a time: the copy you changed last is the one kept.": "Μία συσκευή κάθε φορά: το αντίγραφο που άλλαξες τελευταίο είναι αυτό που διατηρείται.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Αφαιρεί τα δεδομένα αυτής της κοινότητας για το εργαλείο {tool} από αυτό το πρόγραμμα περιήγησης και το αντίγραφό του στον διακομιστή της κοινότητάς σου. Μια άλλη συσκευή συνδεδεμένη ως εσύ διατηρεί ό,τι έχει και σταματά να το στέλνει. Το ίδιο εργαλείο σε άλλη κοινότητα διατηρεί τα δικά του. Δεν μπορεί να αναιρεθεί.",
+  "You can edit a message for 15 minutes after sending it.": "Μπορείς να επεξεργαστείς ένα μήνυμα για 15 λεπτά μετά την αποστολή του.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Ο διακομιστής της κοινότητάς σου δεν μπορεί να κρατήσει αντίγραφο ακόμα, οπότε προς το παρόν μένει μόνο σε αυτό το πρόγραμμα περιήγησης.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Ο διακομιστής της κοινότητάς σου δεν διατηρεί πλέον αντίγραφο αυτού του εργαλείου, οπότε διατηρείται μόνο σε αυτό το πρόγραμμα περιήγησης. Μπορείς να ενεργοποιήσεις ξανά το αντίγραφο στις Ρυθμίσεις."
 }

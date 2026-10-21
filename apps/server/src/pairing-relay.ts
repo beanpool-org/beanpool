@@ -241,7 +241,8 @@ export function confirmPairingTransfer(sessionId: string, secret: string | undef
     if (session.status === 'burned') return { result: 'burned' };
     if (session.status !== 'confirming' || !session.confirmCode) return { result: 'not-confirming' };
     const typed = typeof digits === 'string' ? digits.trim() : '';
-    const right = CONFIRM_CODE.test(typed) && crypto.timingSafeEqual(Buffer.from(typed), Buffer.from(session.confirmCode));
+    // Check length match before timingSafeEqual to prevent length mismatch uncaught exceptions
+    const right = CONFIRM_CODE.test(typed) && typed.length === session.confirmCode.length && crypto.timingSafeEqual(Buffer.from(typed), Buffer.from(session.confirmCode));
     if (!right) {
         session.confirmTries++;
         if (session.confirmTries >= CONFIRM_TRIES) {

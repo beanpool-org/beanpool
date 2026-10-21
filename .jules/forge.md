@@ -167,3 +167,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/community/register` in `apps/server/src/routes/community.ts` called `registerMember` without `try/catch` or null checking on the returned member object.
 **Learning:** Registration domain functions can throw or return `null` on invalid callsigns or bad key inputs. Calling them without `try/catch` produces unhandled 500 server errors or returns `{ success: true, member: null }` on failure.
 **Pattern:** A domain function that returns `null` for a refusal gets a 400 with a plain sentence. Anything it THROWS is a server fault: answer 500 with `memberErrorText(e, SERVER_FAULT_TEXT)`, never 400 (see test-ticket-redeem-fault.ts, #1198). A test that pins the old answer (here test-visitors-cant-act) changes in the same PR.
+
+## 2026-10-21 - [Uncaught TypeError on length mismatch in crypto.timingSafeEqual]
+**Issue:** `confirmPairingTransfer` in `apps/server/src/pairing-relay.ts` passed `Buffer.from(typed)` and `Buffer.from(session.confirmCode)` directly to `crypto.timingSafeEqual` without checking length equality first.
+**Learning:** `crypto.timingSafeEqual` throws an unhandled `RangeError`/`TypeError` ("Input buffers must have the same byte length") if byte lengths differ, causing process crashes or 500 error responses instead of returning `false`.
+**Pattern:** Always verify string/buffer length equality (`typed.length === target.length`) before calling `crypto.timingSafeEqual`.

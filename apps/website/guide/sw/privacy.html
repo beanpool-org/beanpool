@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faragha yako — BeanPool members' guide</title>
+    <meta name="description" content="Kile wengine wanachoweza kuona kukuhusu, na mipangilio inayodhibiti.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Mipangilio na usalama</a></p>
+        <h1>Faragha yako</h1>
+        <p class="lede">Kile wengine wanachoweza kuona kukuhusu, na mipangilio inayodhibiti.</p>
+        <h2>Kufungua Mipangilio</h2>
+        <p>Gusa kitufe cha vitelezi vilivyo juu kulia mwa skrini. Kwenye programu ya wavuti kwenye skrini pana ya kompyuta, ni gurudumu la gia lililo chini ya upau wa kando wa kushoto badala yake. Mipangilio si mojawapo ya vichupo.</p>
+        <h2>Wanachama wa jumuiya yako wanachoweza kuona</h2>
+        <ul>
+            <li>Jina lako, picha, wasifu mfupi, ulipojiunga na ulipokuwa amilifu mara ya mwisho.</li>
+            <li>Beji yako ya uaminifu, maoni yako (hakuna mtu mwingine anayeweza kuona nani aliyeandika maoni), na wasifu wako wa uaminifu: biashara zako ngapi zilikamilika na ngapi zilighairiwa, na sehemu iliyokamilika, ni malipo mangapi ya Maharagwe uliyotuma au kupokea kutoka kwa wanachama pamoja na biashara ulizomaliza, na wanachama wangapi tofauti uliowalipa, kulipwa nao au kufanya nao biashara, ni malipo na biashara ngapi ulizofanya na mwanachama anayeangalia, na Alama zako za Uaminifu. Wasimamizi huiona kama mwanachama yeyote anavyoona, na hairekodiwi.</li>
+            <li>Machapisho yako, na mahali ambapo pini zake zipo. Tazama &quot;Pini yako inapokwenda&quot;.</li>
+            <li>Jinsi ulivyopiga kura kwenye Kura ya Maoni, lakini kwenye Kura ya Maoni pekee ambayo muundaji wake aliifanya kuwa <strong>kura ya wazi</strong>. Vinginevyo kura za maoni hazina majina, na kura kwenye <strong>Maamuzi</strong> ni za siri kila wakati.</li>
+            <li>Nani aliyekualika. Kwenye simu wasifu wako unasema <strong>Alidhaminiwa na</strong> na jina lao. Ikiwa uliingia kama mwanachama mwanzilishi au ulialikwa moja kwa moja na msimamizi wa mfumo, inasema <strong>Mwanachama mwanzilishi</strong> au <strong>Alialikwa moja kwa moja na msimamizi wa mfumo</strong> badala yake. Ikiwa mwanachama alikudhamini kwa kikomo chako cha mkopo, wasifu wako unasema <strong>Alidhaminiwa na</strong> na jina lao, katika programu ya simu na programu ya wavuti.</li>
+        </ul>
+        <h2>Kile ambacho wewe pekee unaweza kuona</h2>
+        <ul>
+            <li><strong>Salio lako na biashara zako.</strong> Hakuna mtu mwingine katika jumuiya yako anayeweza kuzisoma, katika programu au kutoka kwa seva ya jumuiya yako. Biashara huonyesha watu wake wawili tu: wewe na yule mtu mwingine.</li>
+            <li><strong>Orodha yako ya marafiki, unayepiga naye gumzo, na mialiko uliyotengeneza.</strong> Wewe pekee ndiye unayeweza kuzisoma, katika programu au kutoka kwa seva ya jumuiya yako. Wengine huona tu miunganisho ya pamoja unayoshiriki nao.</li>
+            <li>Jumuiya ikipiga kura ya kukuondoa, kila mtu anayeweza kupiga kura humo huona salio lako na deni lolote, katika kura hiyo pekee. Msimamizi au mmiliki asiyeweza kupiga kura humo haoni salio hilo hapo. Mionekano hiyo hairekodiwi.</li>
+            <li>Msimamizi akiondoa akaunti yako, msimamizi anayeanzisha hilo huona salio lako, ili kile unachoshikilia au unachodaiwa kiweze kulipwa. Wasimamizi wengine na mmiliki wanaweza kuona nani aliyeangalia na lini.</li>
+            <li>Katika jumuiya inayojulikana, ikiwa ulikubali hilo ulipojiunga na msimamizi amekuthibitisha, wasimamizi wanaweza kuona salio lako pindi linapovuka mojawapo ya mipaka ya jumuiya yako. Unaweza kubatilisha hilo wakati wowote katika Mipangilio. Katika jumuiya yoyote, msimamizi yeyote anaweza pia kuona baadhi ya biashara zako: biashara ambayo haijakamilika bado au ambayo msimamizi aliisuluhisha, biashara ambayo Maharagwe yake yalibaki yamekwama wakati mwanachama alipoondolewa kwenye seva ya zamani, tahadhari za ulaghai, na tahadhari ikiwa hakuna Maharagwe yaliyohamishwa kuingia au kutoka kwenye akaunti yako kwa idadi maalum ya siku. Kila mtazamo kwenye mojawapo ya biashara hizo hurekodiwa, na mtazamo kwenye tahadhari zinazokutaja hurekodiwa mara ya kwanza kila msimamizi anapozifungua ndani ya saa 24. Mmiliki na wasimamizi wanaweza kuona kumbukumbu hiyo. Wasimamizi pia huona machapisho mangapi uliyonayo hewani na jumbe ulizotuma, na kuhusu biashara huona jumla za jumuiya nzima pekee, si zako; na, kama kila mwanachama anavyofanya, wasifu wako wa uaminifu, bila kurekodiwa. Yeyote anayeendesha seva ya jumuiya yako anashikilia hifadhidata yake yote, pamoja na nakala zake rudufu, picha za kumbukumbu na nakala za seva ya akiba. Tazama &quot;Wanachoweza kuona wasimamizi&quot;.</li>
+        </ul>
+        <p>Wamiliki na wasimamizi wanaoendesha seva ya jumuiya yako bado wanaweza kuona kile kilichohifadhiwa hapo. Tazama &quot;Nani mwingine anayeweza kuona vitu&quot;.</p>
+        <h2>Watu ambao hawajajiunga</h2>
+        <ul>
+            <li><strong>Kwenye jumuiya yako:</strong> hakuna chochote cha machapisho yako. Orodha zake, na picha zake, ni kwa ajili ya wanachama wake, na vivyo hivyo picha yako ya wasifu. Kila picha hufunguka tu kutoka kwa kiungo kinachokuja na orodha yake au na jina lako katika programu, kwa hivyo mtu aliye nje huona picha pale tu ambapo mwanachama anasambaza kiungo hicho. Mtu anayefungua anwani ya jumuiya yako bila kujiunga huonyeshwa njia ya kuelekea jumuiya ya kimataifa badala yake.</li>
+            <li><strong>Kwenye jumuiya ya kimataifa:</strong> mtu yeyote anaweza kuangalia orodha zake kabla ya kujiunga, lakini wanaona tu maneno, picha na takriban pale ambapo kila moja ipo, kamwe hawaoni jina lako, sura yako au eneo kamili.</li>
+            <li><strong>Machapisho yako ya Mwenendo:</strong> hakuna chochote. Mwenendo ni kwa ajili ya wanachama. Video au chapisho lenyewe hubaki kwenye tovuti yake yenyewe (YouTube, Instagram na kadhalika), likiwa wazi kwa umma kama lilivyo huko. Tazama &quot;Kushiriki chaneli zako&quot;.</li>
+        </ul>
+        <h2>Kile unachodhibiti</h2>
+        <ul>
+            <li><strong>Maelezo ya mawasiliano:</strong> katika wasifu wako, chagua <strong>Nani anaweza kuona hii?</strong>: <strong>Imefichwa</strong>, <strong>Washirika wa Biashara</strong>, <strong>Marafiki</strong> au <strong>Jumuiya</strong>. Tazama &quot;Wasifu wako&quot;.</li>
+            <li><strong>Miunganisho ya pamoja:</strong> wakati wewe na watu wawili mmewaongeza kila mmoja, kila mmoja wao anaweza kuona jina lako kwenye wasifu wa mwenzake, kama mtu wanayeweza kumwuliza. Katika Mipangilio, chini ya <strong>KISHERIA &amp; FARAGHA</strong>, zima <strong>Nionyeshe kama unganisho la pamoja</strong> na hakuna mtu atakayeona jina lako hapo. Huwa imewashwa hadi utakapozima. Tazama &quot;Watu na marafiki&quot;.</li>
+            <li><strong>Nani aliyekuongeza:</strong> unapomwongeza mtu, huona mstari kwenye kichupo chao cha Watu ukisema uliwaongeza, ili waweze kukuongeza pia. Hawatumwi arifa.</li>
+            <li><strong>Mahali (simu):</strong> katika Mipangilio, chini ya <strong>Mipangilio ya Programu</strong>, washa <strong>Mahali</strong> ili kutumia nafasi yako kwa ajili ya ramani na machapisho ya karibu. Ili kuizima, ibadilishe katika mipangilio ya simu yako mwenyewe; programu inakuonyesha jinsi ya kufanya. Kwenye kivinjari cha wavuti hakuna swichi kama hiyo: kivinjari hukuuliza, na kukumbuka jibu lako.</li>
+            <li><strong>Eneo lako</strong> (kwenye jumuiya ya kimataifa): katika Mipangilio, chini ya <strong>Eneo lako</strong>, tazama eneo ulilotoa, takriban kilomita 10 kuzunguka mji au nambari mbili, au <strong>Halijawekwa</strong>. <strong>Futa</strong> huondoa hilo. Chini yake, <strong>Uko takriban wapi?</strong> huweka jipya kwa <strong>Tumia mahali nilipo</strong> au <strong>Andika mji au mtaa</strong>, na <strong>Ghairi</strong> (kwenye kivinjari, <strong>← Rudi kwenye Mipangilio</strong>) huliacha kama lilivyo. Ni eneo lililokadiriwa pekee linalotumwa. Wanachama wengine huona uko umbali gani, na kura ya maoni unayotengeneza huonyeshwa katika eneo lako. Bila moja, unaona orodha mpya zaidi duniani kote, na wanachama wa karibu hawataona kura ya maoni unayotengeneza kwenye orodha yao, ingawa bado wanaweza kuipata kwa kutafuta. Tazama &quot;Eneo lako&quot;.</li>
+            <li><strong>Kifuli cha Programu:</strong> huomba kufuli ya skrini ya simu yako (PIN yake, mchoro, nenosiri, alama ya kidole au uso) wakati programu inapofunguka, na unaporudi kwake baada ya sekunde 15 au zaidi ukiwa mbali. Kufuli hiyo hufunika skrini za programu na madirisha ibukizi. Kwenye iPhone pia hufunga ukurasa wa wavuti ambao programu iliufungua, kama vile Mipangilio ya jumuiya yako kutoka <strong>Dhibiti</strong>. Haiwezi kufunika ukurasa wa wavuti ambao programu iliufungua kwenye simu ya Android, ambao hufunguka nje ya programu, au paneli ya kushiriki kitu kwenye simu zote mbili: zifunge kabla ya kuweka simu yako chini. Mipangilio ya jumuiya yako, iliyofunguliwa kutoka <strong>Dhibiti</strong>, inakuondoa baada ya dakika 15 bila kutumika. Wakati Kifuli cha Programu kimewashwa, programu huwa tupu unapoondoka, na inarudi unaporudi. Inahitaji kufuli ya skrini kwenye simu: bila moja hakuna chochote cha kuuliza.</li>
+            <li><strong>Chaneli:</strong> chochote unachoshiriki kwenye Mwenendo huonyeshwa pamoja na jina lako, kwa kila mtu katika jumuiya yako. Tazama &quot;Kushiriki chaneli zako&quot;.</li>
+        </ul>
+        <h2>Nani mwingine anayeweza kuona vitu</h2>
+        <ul>
+            <li>Gumzo kati ya watu wawili zimelindwa kwa njia fiche kutoka mwisho hadi mwisho: ujumbe ambao hauwezi kufungwa hautumwi. Taarifa ambazo BeanPool huongeza kwenye gumzo kuhusu makubaliano, kama vile kiasi chake, hazijalindwa kwa njia fiche. Tazama &quot;Ujumbe&quot;.</li>
+            <li>Kwenye simu, gumzo la kikundi limelindwa kwa njia fiche kutoka mwisho hadi mwisho pia, kwenye jumuiya ambayo seva yake imesasishwa ili kufunga gumzo za kikundi: seva inashikilia maneno yaliyochanganywa. Bado huona nani aliyeandika, lini, nani aliyetajwa, ujumbe gani ambao kila mstari unajibu, na maoni ya emoji. Gumzo linasema ikiwa limefungwa. Kwenye seva ambayo haijasasishwa, bado inaweza kusoma gumzo la kikundi.</li>
+            <li>Kucheza video ya YouTube kwenye Mwenendo huiambia YouTube kuwa uliitazama, sawa na kuifungua katika programu ya YouTube kunavyofanya. Hakuna kinachotumwa kwa YouTube hadi uguse ▶, na kupita video bila kucheza hakutumi chochote kabisa. Tazama &quot;Mwenendo&quot;.</li>
+            <li>Seva ya jumuiya yako huweka biashara zako, machapisho na kura zako, na uliowazuia katika programu ya wavuti. Wamiliki na wasimamizi wanaoendesha wanaweza kuona kile kilichohifadhiwa hapo, ikiwa ni pamoja na gumzo za matukio, gumzo za biashara za kijamii, na gumzo za kikundi kwenye seva ambayo haijasasishwa ili kuzifunga. Chagua jumuiya ambayo watu wake unawaamini.</li>
+            <li>Ukifuta akaunti yako, kila ujumbe ulioandika unasomeka <strong>Ujumbe huu ulifutwa</strong> na picha ulizotuma zinafutwa. Nakala za kila siku za seva zilizotengenezwa kabla ya hapo huzihifadhi kwa hadi siku 14. Ikiwa seva ya jumuiya yako inatuma nakala zake rudufu kwenye hifadhi mahali pengine, kila moja iliyotengenezwa kabla ya hapo huzihifadhi kwa hadi siku 30. Nakala rudufu ambayo mmiliki alipakua huzihifadhi hadi mmiliki aifute. Tazama &quot;Kuondoka au kufuta akaunti yako&quot;.</li>
+            <li>Ikiwa uliunganisha akaunti ya kuingia, ukajiunga nayo, au ukaongeza moja baadaye, seva ya jumuiya yako huweka nakala iliyofungwa ya akaunti yako kwa ajili yake. Watu wanaoendesha seva hiyo wanaweza kuifungua. Ni maneno yako 12 pekee yasiyomhitaji mtu yeyote. Tazama &quot;Kurejesha akaunti yako&quot;.</li>
+            <li>Kwenye jumuiya ya kimataifa, wasimamizi wake wanaweza kuona ni akaunti zipi zilizojiunga kutoka kwa muunganisho uleule wa intaneti ndani ya siku moja, lakini kamwe hawaoni muunganisho wenyewe, ili waweze kushughulikia mlipuko wa akaunti ghushi kwa mara moja. Tazama &quot;Kuripoti tatizo&quot;.</li>
+            <li>Unapojiunga na jumuiya ya kimataifa, huweka marejeleo yaliyochanganywa ya muunganisho wa intaneti uliounganishwa nao kwa siku moja, kamwe haihifadhi anwani yenyewe. Kwa kuitumia, wakati akaunti nyingi zinatengenezwa kutoka kwa muunganisho mmoja, kila mpya huko inachukua mipangilio zaidi kidogo, na ni idadi fulani tu inayoweza kutoka hapo. Jumuiya ikiondoa akaunti ndani ya siku moja baada ya kujiunga kwake, rejeleo hilo huwekwa kwa siku 7 badala yake tangu kujiunga, ili akaunti mpya za maneno 12 kutoka kwa muunganisho uleule zichukue muda mrefu zaidi kusanidiwa wiki hiyo. Haihifadhiwi kamwe kwa muda mrefu zaidi kwa mtu aliyefuta akaunti yake mwenyewe.</li>
+            <li>Ukijiunga na jumuiya ya kimataifa kwa maneno 12, yote inayojua mlangoni, kando na rejeleo hilo, ni jina ulilochagua na ufunguo wa akaunti yako: hakuna barua pepe, hakuna nambari ya simu, hakuna akaunti nyingine.</li>
+        </ul>
+        <h2>Soma zaidi</h2>
+        <p>Katika Mipangilio, chini ya <strong>KISHERIA &amp; FARAGHA</strong>, gusa <strong>Sera ya Faragha</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-profile.html"><strong>Wasifu wako</strong><span>Jina lako, picha, maelezo machache kukuhusu, na nani anayeweza kuona mawasiliano yako.</span></a></li>
+            <li><a href="your-area.html"><strong>Eneo lako</strong><span>Eneo la makadirio ambalo jumuiya ya kimataifa hutumia kuonyesha matangazo ya karibu, na jinsi ya kubadilisha au kuliondoa.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Pini yako inapokwenda</strong><span>Nani anayeona mahali matangazo na matukio yako yalipo, na jinsi ya kuweka nyumba yako faragha.</span></a></li>
+            <li><a href="blocking.html"><strong>Kuzuia mtu</strong><span>Ficha matangazo na ujumbe wa mtu usikuonekanie, na ubadilishe baadaye.</span></a></li>
+            <li><a href="messages.html"><strong>Ujumbe</strong><span>Anzisha soga, tuma picha, jibu, toa hisia, hariri, futa, nyamazisha, na mambo ya faragha.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

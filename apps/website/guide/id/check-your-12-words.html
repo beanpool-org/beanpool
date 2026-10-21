@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12 katamu dan kunci server (pemilik) — BeanPool members' guide</title>
+    <meta name="description" content="Untuk pemilik komunitas. Memeriksa 12 katamu, mengambil alih atau memulihkan server dengan ponselmu, dan pemeriksaan otomatis oleh ponsel.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Pengaturan dan keamanan</a></p>
+        <h1>12 katamu dan kunci server (pemilik)</h1>
+        <p class="lede">Untuk pemilik komunitas. Memeriksa 12 katamu, mengambil alih atau memulihkan server dengan ponselmu, dan pemeriksaan otomatis oleh ponsel.</p>
+        <h2>Untuk siapa panduan ini</h2>
+        <p>Hanya untuk <strong>pemilik</strong> komunitas. Jika kamu bukan seorang pemilik, kamu tidak akan melihat semua ini.</p>
+        <h2>Mengapa pemilik diminta melakukannya</h2>
+        <p>Server komunitasmu menyimpan salinan terkunci dari kunci-kuncinya, untuk memindahkan komunitas ke server lain jika server aslinya hilang, dan cadangannya juga terkunci. Kunci-kunci tersebut dikunci ke akun para pemilik: pemilik mana pun dapat membukanya dengan ponsel mereka (lihat Mengambil alih atau memulihkan dengan ponselmu, di bawah). Jika kamu kehilangan ponselmu, 12 katamu akan memulihkan akunmu, dan bersamanya kunci untuk membuka gembok server serta cadangannya. Hal tersebut paling penting pada saat server itu sendiri hilang.</p>
+        <p>Oleh karena itu, aplikasi meminta setiap pemilik, dari waktu ke waktu, untuk memeriksa apakah mereka masih memiliki 12 kata yang benar. Kamu dapat memilih <strong>Nanti</strong>. Tidak ada yang pernah diblokir, dan kamu dapat terus melakukan semua hal yang dilakukan seorang pemilik.</p>
+        <h2>Kapan aplikasi meminta</h2>
+        <ul>
+            <li>Sekali, tidak lama setelah kamu menjadi pemilik.</li>
+            <li>Kembali 12 bulan setelah pemeriksaan terakhirmu.</li>
+        </ul>
+        <p>Aplikasi menampilkan kartu di bagian atas Pasar (di aplikasi web, di bagian atas setiap layar kecuali Peta): <strong>Periksa sekarang</strong> atau <strong>Nanti</strong>. <strong>Nanti</strong> akan menyingkirkan kartu tersebut sampai waktu jatuh tempo berikutnya. Kamu dapat memeriksa kapan saja dari <strong>Pengaturan</strong>: di bawah <strong>KUNCI KOMUNITAS</strong>, ketuk <strong>Periksa 12 katamu</strong> (di aplikasi web, <strong>Periksa sekarang</strong>).</p>
+        <h2>Cara memeriksa</h2>
+        <ul>
+            <li>Siapkan kertasmu yang berisi 12 kata tersebut.</li>
+            <li>Ketik kata-kata tersebut secara berurutan, dengan spasi di antaranya. Huruf besar dan spasi ekstra tidak berpengaruh.</li>
+            <li>Ketuk <strong>Periksa kataku</strong>.</li>
+        </ul>
+        <p>Jika benar, aplikasi akan menampilkan <strong>Ini adalah kata-kata yang benar</strong>. Jika tidak: <strong>Ini bukan kata-kata untuk akun ini.</strong>. Aplikasi tidak menyebutkan kata mana yang salah, jadi periksa kertasmu dan ketik ulang semuanya.</p>
+        <p>Pada ponsel tanpa salinan 12 katamu (ponsel yang dipulihkan dengan akun masuk), kata-kata yang benar juga menampilkan <strong>Simpan di ponsel ini</strong>. Ketuk tombol tersebut dan <strong>Lihat Frasa Pemulihan</strong> akan menampilkannya sejak saat itu. Ini adalah pemeriksaan yang sama dan penyimpanan yang sama dengan <strong>Tambahkan 12 katamu ke ponsel ini</strong> (lihat &quot;12 kata Anda&quot;).</p>
+        <p>Tidak dapat menemukannya? Jika ponsel ini masih menyimpannya, <strong>Pengaturan</strong>, lalu <strong>Lihat Frasa Pemulihan</strong>, akan menampilkannya. Tuliskan kembali, lalu periksa. Pada ponsel tanpa salinan, aplikasi akan memberitahukan hal itu: ketika kamu menemukannya, periksa di sini, lalu simpan.</p>
+        <h2>Apa yang dikirim, dan apa yang tidak</h2>
+        <ul>
+            <li>Pemeriksaan dilakukan di ponselmu (atau di browsermu, pada aplikasi web). Kata-katamu tidak pernah dikirim ke mana pun. Kotak input segera dikosongkan begitu pemeriksaan selesai, dan saat kamu meninggalkan layar. Kata-kata tersebut hanya disimpan jika kamu mengetuk <strong>Simpan di ponsel ini</strong>, dan hanya di ponsel ini saja.</li>
+            <li>Ketika kata-katanya benar, ponselmu hanya memberi tahu server komunitasmu bahwa kamu telah memeriksa, dan kapan, yang ditandatangani dengan akunmu.</li>
+            <li>Pemilik dan admin melihat, di Pengaturan server, tanggal &quot;12 kata diperiksa&quot; milik masing-masing pemilik, atau &quot;belum&quot;. Itu adalah pernyataanmu sendiri: server tidak dapat melihat atau memeriksa kata-katamu.</li>
+        </ul>
+        <h2>Mengambil alih atau memulihkan dengan ponselmu</h2>
+        <p>Jika server komunitasmu hilang, siapa pun yang menjalankan server siaga (atau server baru yang memulihkan cadangan) dapat meminta pemilik untuk membuka kunci-kunci yang terkunci. Salah satu pemilik saja sudah cukup. Kamu memerlukan versi terbaru aplikasi BeanPool. Aplikasi web juga berfungsi jika masih bisa dibuka, tetapi aplikasi web berada di alamat komunitasmu sendiri, yang mungkin ikut mati bersama server: aplikasi ponsel adalah yang paling bisa diandalkan.</p>
+        <ul>
+            <li>Pada Pengaturan server, mereka memilih <strong>Take over as the main server</strong>, lalu <strong>I understand: use an owner's phone</strong>, atau <strong>Open with an owner's phone</strong> saat memulihkan cadangan. Sebuah kode akan muncul di layar mereka.</li>
+            <li>Di aplikasi: <strong>Pengaturan</strong>, di bawah <strong>KUNCI KOMUNITAS</strong>, ketuk <strong>Ambil alih atau pulihkan dengan ponsel ini</strong>, dan arahkan kamera ke kode tersebut. Jika halaman server terbuka di ponselmu sendiri, mengetuk tautannya melakukan hal yang sama. Di aplikasi web, salin tautan dari layar mereka dan tempelkan di bawah <strong>Ambil alih atau pulihkan dengan browser ini</strong> di <strong>Pengaturan</strong>.</li>
+            <li>Aplikasi menunjukkan komunitas mana, server mana, dan apa yang akan terjadi. Jika server utamamu masih merespons, aplikasi menyatakannya dalam warna merah: pengambilalihan hanya untuk server yang benar-benar hilang.</li>
+            <li>Ketuk <strong>Buka kunci untuk pengambilalihan</strong> (atau <strong>Buka kunci cadangan</strong>). Ponselmu meminta pembukaan kuncinya sendiri terlebih dahulu: sidik jari, wajah, atau PIN. Aplikasi web tidak memiliki langkah seperti ini, itulah sebabnya aplikasi ponsel adalah tempat yang lebih aman untuk kunci pemilik.</li>
+            <li>Ponselmu membuka bagian kuncinya sendiri dan menyerahkan kunci tersebut ke server tersebut, terkunci sehingga hanya server tersebut yang dapat membacanya. Ponselmu tidak pernah melihat kunci server atau cadangannya.</li>
+            <li>Pada pengambilalihan, orang di server kemudian mengonfirmasi di layar mereka. Komunitas diberi tahu bahwa server telah dipindahkan, dan bahwa kamu yang telah membuka kunci-kuncinya.</li>
+        </ul>
+        <p>Aplikasi menolak, dan menjelaskan alasannya, jika gembok tersebut milik komunitas lain, jika gembok tidak dikunci untukmu, jika kode server telah kedaluwarsa (kode berlaku 10 menit dan hanya berfungsi sekali), atau jika kuncinya tidak dikunci oleh server komunitasmu sendiri.</p>
+        <h2>Ponselmu memeriksa gembok secara otomatis</h2>
+        <p>Setiap kali gembok komunitasmu berubah (pemilik ditambahkan atau dihapus, kode pemulihan baru dibuat), aplikasimu memeriksa, secara diam-diam, apakah ia masih dapat membuka bagian kuncinya. Aplikasi membukanya, langsung membuang kunci tersebut, dan memberi tahu server apakah pemeriksaan berhasil. Tidak ada yang diminta darimu.</p>
+        <p>Pemilik dan admin melihatnya di Pengaturan server, di sebelah tanggal 12 katamu: <strong>their phone opened the current lock</strong>, bersama tanggalnya, atau bahwa ponsel terakhir kali membuka kunci yang lebih lama. Jika dinyatakan bahwa ponselmu <strong>could NOT open</strong> gembok tersebut, periksa 12 katamu, dan minta pemilik lain untuk memeriksa Pengaturan server.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>12 katamu</strong><span>12 kata adalah kunci akunmu. Mengapa penting, di mana menemukannya, cara menyimpannya dengan aman, dan menambahkan akun masuk sebagai cadangan.</span></a></li>
+            <li><a href="recovery.html"><strong>Memulihkan akunmu</strong><span>Pulihkan akunmu di ponsel baru, dan lindungi dengan akun masuk yang terhubung.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

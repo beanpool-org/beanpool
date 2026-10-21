@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>जब व्यवस्थापक AI सहायक का उपयोग करे — BeanPool members' guide</title>
+    <meta name="description" content="स्वामी या व्यवस्थापक का AI सहायक आपके बारे में क्या पढ़ सकता है, यह क्या कभी नहीं देखता, और इसे कौन प्राप्त करता है।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">सेटिंग्स और सुरक्षा</a></p>
+        <h1>जब व्यवस्थापक AI सहायक का उपयोग करे</h1>
+        <p class="lede">स्वामी या व्यवस्थापक का AI सहायक आपके बारे में क्या पढ़ सकता है, यह क्या कभी नहीं देखता, और इसे कौन प्राप्त करता है।</p>
+        <p>आपके समुदाय के स्वामी अपने समुदाय के सर्वर से अपना स्वयं का AI सहायक (उदाहरण के लिए Claude या ChatGPT) कनेक्ट कर सकते हैं, ताकि इसकी देखरेख करने में मदद मिल सके: यह पूछने के लिए कि उन्हें किस चीज़ की आवश्यकता है, या खुली रिपोर्टों का सारांश देने के लिए। व्यवस्थापक भी ऐसा कर सकते हैं: वे अपने सहायक में अपने समुदाय का पता जोड़ते हैं और अपने फ़ोन पर इसे स्वीकृत करते हैं। वे इसे स्वयं कनेक्ट करते हैं, और वे इसे किसी भी समय डिस्कनेक्ट कर सकते हैं। जब कोई कनेक्ट होता है तो अन्य स्वामियों को सूचित किया जाता है।</p>
+        <h2>What it can read about you</h2>
+        <p>एक सहायक उससे बहुत कम देखता है जितना एक व्यवस्थापक <strong>सेटिंग्स</strong> में देखता है। आपके समुदाय का सर्वर तय करता है कि उसे क्या मिले, सहायक नहीं।</p>
+        <ul>
+            <li><strong>यदि कोई आपकी या आपकी पोस्ट की रिपोर्ट करता है</strong>, और व्यवस्थापक रिपोर्ट के शब्दों के लिए पूछता है: दिया गया कारण, आपकी पोस्ट का शीर्षक और विवरण, और आपका BeanPool नाम। कभी यह नहीं कि रिपोर्ट किसने की।</li>
+            <li><strong>यदि आप शामिल होने का अनुरोध करते हैं</strong>, और व्यवस्थापक संदेशों के लिए पूछता है: वह नाम और संदेश जो आपने अपने अनुरोध के साथ भेजा था, और वह समुदाय जिससे आपने कहा था कि आप आए हैं। कभी भी आपका फ़ोटो या आपकी कुंजी नहीं।</li>
+            <li><strong>पूरे समुदाय के लिए कुल योग</strong>, जैसे कि कितने सदस्य हैं और कितनी फलियाँ चलन में हैं। कभी भी आपका शेष नहीं।</li>
+        </ul>
+        <h2>What it never sees</h2>
+        <p>आपके संदेश और चैट, आपका शेष और व्यापार, आपकी कुंजियाँ, आपका पता, आपके फ़ोटो, नामों की सूची, और किसने किसकी रिपोर्ट की। यह आपके बारे में कुछ भी नहीं बदल सकता: यह आपको हटा नहीं सकता, आपको म्यूट नहीं कर सकता, आपकी पोस्ट हटा नहीं सकता या आपके शामिल होने के अनुरोध का उत्तर नहीं दे सकता। वे लोगों द्वारा किए जाते हैं। एक व्यवस्थापक उन्हें <strong>सेटिंग्स</strong> में या अपने फ़ोन पर करता है, और शामिल होने के अनुरोध का उत्तर ऐप में किसी भी सदस्य द्वारा दिया जाता है जो आमंत्रित कर सकता है।</p>
+        <p>एक सहायक यह सुझाव दे सकता है कि किसी रिपोर्ट के बारे में क्या करना है, उदाहरण के लिए आपकी पोस्ट को रखना है या उसे हटाना है। तब तक कुछ नहीं होता जब तक कि वह व्यवस्थापक जिसके लिए वह काम करता है रिपोर्ट को पढ़ता और अनुमोदित नहीं करता; इसके बारे में आप जो कुछ भी सुनते हैं वह आपके समुदाय के मॉडरेटरों से आता है, हमेशा की तरह।</p>
+        <h2>Who receives it</h2>
+        <p>सहायक जो पढ़ता है वह उस कंपनी के पास जाता है जो इसे चलाती है, ठीक वैसे ही जैसे जब आप किसी AI चैट में स्वयं कुछ पेस्ट करते हैं। सर्वर किसी रिपोर्ट के शब्द या शामिल होने का संदेश केवल तभी भेजता है जब व्यवस्थापक का सहायक उनके लिए पूछता है, जिसे किसी सदस्य के शब्द के रूप में चिह्नित किया जाता है न कि निर्देश के रूप में।</p>
+        <p>यदि आप चाहते हैं कि आपकी रिपोर्ट या आपके शामिल होने का संदेश किसी AI द्वारा न पढ़ा जाए, तो अपने व्यवस्थापकों से पूछें कि वे अपने सहायक का उपयोग कैसे करते हैं।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="what-the-admins-can-see.html"><strong>व्यवस्थापक क्या देख सकते हैं</strong><span>ऐसे समुदाय में जिसके व्यवस्थापक नामों की सूची रखते हैं: यह आपके बारे में क्या रखती है, इसे कौन पढ़ सकता है, सर्वर क्या रखता है, और पुष्टि होने का क्या अर्थ है।</span></a></li>
+            <li><a href="reporting.html"><strong>समस्या की रिपोर्ट करना</strong><span>किसी पोस्ट, कार्यक्रम, हलचल पोस्ट, परियोजना या उपक्रम के बारे में समुदाय के मॉडरेटर को बताएं।</span></a></li>
+            <li><a href="privacy.html"><strong>आपकी गोपनीयता</strong><span>दूसरे आपके बारे में क्या देख सकते हैं, और इसे नियंत्रित करने वाली सेटिंग्स।</span></a></li>
+            <li><a href="joining.html"><strong>BeanPool से जुड़ना</strong><span>जुड़ने के दो तरीके: किसी सदस्य के निमंत्रण से कोई समुदाय, या खुला होने पर वैश्विक समुदाय, 12 गुप्त शब्दों या एक साइन-इन के साथ। समुदाय में प्रवेश का अनुरोध, और दूसरों को आमंत्रित करना।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

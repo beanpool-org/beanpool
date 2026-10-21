@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/bn by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>বাজার ব্রাউজ করা — BeanPool members' guide</title>
+    <meta name="description" content="অনুসন্ধান, ফিল্টার এবং দূরত্বের মাধ্যমে প্রস্তাবসমূহ ও প্রয়োজনসমূহ খুঁজুন।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">বাজার</a></p>
+        <h1>বাজার ব্রাউজ করা</h1>
+        <p class="lede">অনুসন্ধান, ফিল্টার এবং দূরত্বের মাধ্যমে প্রস্তাবসমূহ ও প্রয়োজনসমূহ খুঁজুন।</p>
+        <h2>বাজার ট্যাব</h2>
+        <p>ট্যাবগুলোর সারিতে <strong>বাজার</strong>-এ ট্যাপ করুন। আপনি আপনার কমিউনিটির মানুষের প্রস্তাব এবং প্রয়োজনগুলো দেখতে পাবেন, নতুনগুলো প্রথমে, যেদিন পোস্ট করা হয়েছিল সে অনুযায়ী গ্রুপ করা।</p>
+        <p>ফোনে, ইভেন্টগুলো প্রথমে আসে। আপনি যদি ইতিমধ্যে অ্যাপটিকে আপনার অবস্থান ব্যবহারের অনুমতি দিয়ে থাকেন, তবে তালিকা এবং কমপ্যাক্ট ভিউগুলো তার পরিবর্তে <strong>সবচেয়ে কাছেরগুলো আগে</strong>-এর অধীনে নিকটতম তালিকাগুলো প্রথমে দেখায়, সাথে <strong>পোলসমূহ</strong>-এর অধীনে পোল থাকে। <strong>আপনার জন্য</strong> তার নিজস্ব ক্রম বজায় রাখে। তালিকাটি রিফ্রেশ করতে নিচে টানুন।</p>
+        <p>ওয়েব অ্যাপে বাজারটি কার্ড হিসেবে খোলে। তালিকা এবং কমপ্যাক্ট ভিউতে, ইভেন্টগুলো যে দিন পোস্ট করা হয়েছিল তার অধীনে থাকে। একটি স্থানীয় কমিউনিটিতে ওয়েব অ্যাপ নিকটতমগুলোকে প্রথমে রাখে না।</p>
+        <p>গ্লোবাল কমিউনিটিতে, ওয়েব অ্যাপ আপনার কাছের তালিকাগুলো প্রথমে দেখায়: আপনার <strong>দূরত্ব</strong>-এর ভেতরের সবচেয়ে কাছেরগুলো, অথবা আপনার এলাকার (যোগদানের সময় কমিউনিটিকে আপনি যে আনুমানিক স্থান দেন, বা <strong>সেটিংস</strong>-এ) ২৫০ কিমি-এর ভেতরের তালিকাগুলো, প্রতিটি কত দূরে তা সহ। তালিকার উপরের একটি লাইন বলে কোনটি দেখানো হচ্ছে। আপনার এলাকার কাছে এতে সব জায়গা থেকে নতুনগুলোর জন্য <strong>সর্বত্র দেখান</strong> থাকে। একটি <strong>দূরত্ব</strong> সেট থাকলে, আপনার এলাকায় ফিরে যেতে <strong>দূরত্ব</strong> খুলুন এবং <strong>রিসেট</strong>-এ ট্যাপ করুন, তারপর <strong>সর্বত্র দেখান</strong>-এ ট্যাপ করুন। ফোনে, গ্লোবাল কমিউনিটি আপনার এলাকার সবচেয়ে কাছের তালিকাগুলো সংরক্ষণ করে, তাই বাজার সেগুলোই দেখায়। &quot;কাছাকাছি জিনিস খোঁজা&quot; দেখুন।</p>
+        <p>গ্লোবাল কমিউনিটিতে, খুব কম তালিকা থাকা অবস্থায় বাজার <strong>উদাহরণ</strong> হিসেবে চিহ্নিত কয়েকটি কার্ডও দেখায়। মানুষ কী পোস্ট করে তা দেখানোর জন্য সেগুলো তৈরি করা হয়েছে, এবং সেগুলো খোলা বা উত্তর দেওয়া যায় না। যথেষ্ট আসল তালিকা এলেই সেগুলো চলে যায়।</p>
+        <p>ফোনে, আপনি নিচে স্ক্রোল করার সাথে সাথে অনুসন্ধান এবং ফিল্টারগুলো সরে যায়, যাতে আপনি আরও পোস্ট দেখতে পান। একটু উপরে স্ক্রোল করলে সেগুলো ফিরে আসে। শীর্ষে ফিরে যেতে আবার <strong>বাজার</strong>-এ ট্যাপ করুন।</p>
+        <h2>অনুসন্ধান</h2>
+        <p>শীর্ষে <strong>বাজারে অনুসন্ধান করুন...</strong> লিখুন। একটি ছোট ফোনে এটি কেবল <strong>অনুসন্ধান</strong> বলতে পারে। অনুসন্ধান সম্পর্কিত শব্দও খুঁজে বের করে: &quot;ফল&quot; লিখলে &quot;লেবু&quot; খুঁজে পায়। এটি চীনা, জাপানি এবং থাই ভাষার শব্দও খুঁজে পায়, এবং আপনার ব্লক করা ব্যক্তিদের পোস্ট বাদ দেয়। সংযোগ না থাকলে, এটি ইতিমধ্যে আপনার ফোনে যা আছে তা অনুসন্ধান করে।</p>
+        <p>অনুসন্ধানে কোনো শব্দ থাকা অবস্থায়, <strong>এই অনুসন্ধানটি হোমে সেভ করুন</strong> বোতামটি উপস্থিত হয়। এটি যোগ করার জন্য প্রস্তুত একটি সংরক্ষিত অনুসন্ধান সহ হোম খোলে: আপনার শব্দগুলো, আপনি কেবল একটি দেখে থাকলে <strong>প্রস্তাবসমূহ</strong> বা <strong>প্রয়োজনসমূহ</strong>, বিভাগ এবং দূরত্ব। <strong>ইভেন্টসমূহ</strong> বা <strong>পোলসমূহ</strong>-এর অধীনে কোনো বোতাম থাকে না। &quot;হোম&quot; দেখুন।</p>
+        <h2>ফিল্টারসমূহ</h2>
+        <p>অনুসন্ধানের নিচের বোতামগুলোর সারি আপনি কী দেখবেন তা বেছে নেয়:</p>
+        <ul>
+            <li><strong>সব</strong>, <strong>প্রস্তাবসমূহ</strong> বা <strong>প্রয়োজনসমূহ</strong>।</li>
+            <li><strong>আপনার জন্য:</strong> আপনি <strong>আগ্রহ কাস্টমাইজ করুন</strong>-এর অধীনে যে বিভাগগুলোতে স্টার দিয়েছেন সেগুলোর পোস্ট (হোমে সেট করা একই স্টার), এবং আপনার আসন্ন ইভেন্টগুলো, যেগুলোতে আপনি যাচ্ছেন বা আগ্রহী বলেছেন।</li>
+            <li><strong>ইভেন্টসমূহ</strong> এবং <strong>পোলসমূহ</strong>।</li>
+        </ul>
+        <p>দ্বিতীয় সারিটি এটিকে আরও সুনির্দিষ্ট করে। ফোনে:</p>
+        <ul>
+            <li><strong>সকল বিভাগ:</strong> খাবার, সরঞ্জাম বা বাগানের মতো একটি বিভাগ বেছে নিন।</li>
+            <li><strong>দূরত্ব:</strong> কোনো একটি বিন্দু থেকে নির্দিষ্ট দূরত্বের ভেতরের পোস্টগুলো। &quot;কাছাকাছি জিনিস খোঁজা&quot; দেখুন।</li>
+            <li><strong>আস্থা:</strong> কেবল এমন সদস্যদের পোস্ট যারা এখনও লেনদেন করেননি (<strong>প্রতিষ্ঠাতা</strong>), <strong>নবাগত</strong> সদস্যদের দ্বারা, অথবা অন্তত একটি নির্দিষ্ট আস্থার ব্যাজধারী সদস্যদের দ্বারা।</li>
+            <li><strong>শুধু শিম:</strong> যে পোস্টগুলোতে কিছু নগদ টাকাও চাওয়া হয়েছে সেগুলো লুকিয়ে রাখে।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে বোতামগুলো হলো <strong>বিভাগ</strong>, <strong>দূরত্ব</strong>, <strong>🌱 নতুন সদস্য</strong> (যে সদস্যরা এখনও লেনদেন করেননি) এবং <strong>🫘 শুধু শিম</strong>। কোনো আস্থা ফিল্টার নেই।</p>
+        <p>আপনি কোনো গ্রুপভুক্ত হলে, গ্রুপের বোতামগুলোর একটি সারিও প্রদর্শিত হয়। <strong>সব দল ও সর্বজনীন</strong> সবকিছু দেখায়; কোনো গ্রুপের বোতাম কেবল সেই গ্রুপের পোস্টগুলো দেখায়। ওয়েব অ্যাপে গ্রুপগুলো সারির পরিবর্তে একটি ড্রপডাউনে থাকে।</p>
+        <p>ফোনে, কোনো মিল না থাকলে <strong>সব ফিল্টার মুছে ফেলুন</strong>-এ ট্যাপ করুন। ওয়েব অ্যাপে একটি খালি তালিকা <strong>কোনো আইটেম পাওয়া যায়নি</strong> বলে, এবং এমন কোনো বোতাম নেই।</p>
+        <p>ফোনে, আপনি যখন নিচে স্ক্রোল করেছেন এবং কোনো অনুসন্ধান বা ফিল্টার চালু থাকে, তখন শীর্ষে একটি ছোট চিপ দেখায় এটি কী। এটি পরিবর্তন করতে চিপটিতে ট্যাপ করুন। অনুসন্ধান এবং প্রতিটি ফিল্টার মুছে ফেলতে এটিতে <strong>✕</strong> ট্যাপ করুন।</p>
+        <p><strong>আমার চুক্তিগুলো</strong>-এর পাশের বোতামটি তালিকাটি কেমন দেখাবে তা পরিবর্তন করে: একটি তালিকা, একটি গ্রিড বা কমপ্যাক্ট।</p>
+        <h2>একটি পোস্ট যা দেখায়</h2>
+        <ul>
+            <li>একটি ছবি, বা বিভাগের ছবি;</li>
+            <li><strong>প্রস্তাব</strong> বা <strong>প্রয়োজন</strong>;</li>
+            <li>শিমে মূল্য, ঘণ্টাপ্রতি মূল্য হলে <strong>/ঘণ্টা</strong> সহ;</li>
+            <li>প্রতিটি চুক্তির পরেও সক্রিয় থাকলে <strong>পুনরাবৃত্ত</strong>;</li>
+            <li>জ্বালানি বা উপকরণের জন্য ব্যক্তির কিছু নগদ টাকারও প্রয়োজন হলে <strong>নগদ টাকাও প্রয়োজন</strong>;</li>
+            <li>কেবল সেই গ্রুপটি দেখতে পারলে একটি তালা এবং গ্রুপের নাম;</li>
+            <li>কে এটি পোস্ট করেছেন, তাদের আস্থার ব্যাজ এবং স্টার সহ। যে সদস্য এখনও লেনদেন করেননি তার ক্ষেত্রে <strong>প্রতিষ্ঠাতা</strong> প্রদর্শিত হয়।</li>
+        </ul>
+        <p>একটি পোস্ট খুলতে সেটিতে ট্যাপ করুন।</p>
+        <h2>একটি পোস্টে</h2>
+        <ul>
+            <li><strong>বার্তা</strong> এবং তাদের নাম: প্রতিশ্রুতিবদ্ধ হওয়ার আগে একটি প্রশ্ন জিজ্ঞাসা করুন।</li>
+            <li>তাদের প্রোফাইল, পর্যালোচনা এবং আস্থা দেখতে তাদের নামে ট্যাপ করুন।</li>
+            <li>পোস্টটি প্রতারণামূলক, আপত্তিকর, বিভ্রান্তিকর হলে বা কোনো শিশুকে ঝুঁকিতে ফেললে (<strong>শিশু সুরক্ষা</strong>) <strong>পোস্টের বিরুদ্ধে রিপোর্ট করুন</strong>।</li>
+            <li>আপনার ফোনে তাদের পোস্ট এবং চ্যাট লুকাতে <strong>ব্যবহারকারীকে ব্লক করুন</strong>। এটি আপনার অ্যাডমিনদেরও জানিয়ে দেয়। &quot;কাউকে ব্লক করা&quot; দেখুন।</li>
+        </ul>
+        <p>ওয়েব অ্যাপে কোনো পোস্টের বোতামগুলো হলো <strong>💬 বার্তা</strong> এবং <strong>🚩 রিপোর্ট করুন</strong>। কাউকে তাদের প্রোফাইল থেকে ব্লক করুন।</p>
+        <p>গ্লোবাল কমিউনিটিতে কোনো পোস্টে শিমে মূল্য থাকে না: এটি বলে বিনিময়ে ব্যক্তি কী চান। যেখানে মূল্য থাকার কথা, সেখানে এটি বলে &quot;🏘️ একটি স্থানীয় সম্প্রদায়ে এটি শিমে একটি মূল্য ›&quot;। এটি চাওয়ার বদলে পোস্টটি <strong>অনুরোধ · শিম নিরাপদে রাখা হয়েছে 🏘️</strong> দেখায়: একটি স্থানীয় কমিউনিটিতে চুক্তি কীভাবে কাজ করে তা দেখতে এটিতে ট্যাপ করুন। অন্য সব জায়গার মতোই ব্যক্তির সাথে বার্তা আদান-প্রদান কাজ করে। &quot;শিম ও বিশ্বব্যাপী কমিউনিটি&quot; দেখুন।</p>
+        <p>আপনি এখনও কোনো পোস্ট সংরক্ষণ বা শেয়ার করতে পারবেন না।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>হোম</strong><span>হোম কী, ফোনে এবং ওয়েব অ্যাপে এটি কোন কার্ডগুলো দেখায়, কীভাবে সেগুলো যোগ, স্থানান্তর বা অপসারণ করবেন, পছন্দ নির্বাচন এবং সাইন আউটের সময় গোপনীয়তা।</span></a></li>
+            <li><a href="posting.html"><strong>প্রস্তাব বা প্রয়োজন পোস্ট করা</strong><span>আপনি যা করতে বা দিতে পারেন, অথবা আপনি যা খুঁজছেন তা পোস্ট করুন।</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>ধাপে ধাপে একটি চুক্তি</strong><span>অনুরোধ থেকে অর্থ প্রদান পর্যন্ত, প্রস্তাব ও প্রয়োজনের জন্য, এবং একটি পর্যালোচনা রেখে যাওয়া।</span></a></li>
+            <li><a href="near-you.html"><strong>কাছাকাছি জিনিস খোঁজা</strong><span>শুধুমাত্র আপনার একটি নির্দিষ্ট দূরত্বের মধ্যে, বা আপনার নির্বাচিত যেকোনো স্থানের পোস্ট দেখান।</span></a></li>
+            <li><a href="trust-badges.html"><strong>আস্থার ব্যাজ</strong><span>নবাগত, বাসিন্দা, পরিচালক এবং প্রবীণ। তাদের অর্থ কী এবং কেন তারা কোনো সুবিধা আনলক করে না।</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>শিম ও বিশ্বব্যাপী কমিউনিটি</strong><span>বিশ্বব্যাপী কমিউনিটি কী উদ্দেশ্যে, অনেকের মাঝে একটি কমিউনিটি, এবং সেখানে আপনি কী দেখতে পান: 🏘️ স্থানীয় সম্প্রদায় চিহ্নিতকারী, উদাহরণ উপত্যকা নমুনা কমিউনিটি, কেন শিম সেখানে অপেক্ষা করে, এবং কীভাবে স্থানীয় কমিউনিটি শুরু করবেন বা খুঁজবেন।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

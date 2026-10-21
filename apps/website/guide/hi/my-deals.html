@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>मेरे सौदे — BeanPool members' guide</title>
+    <meta name="description" content="आपके प्रत्येक व्यापार, आपके प्रत्येक पोस्ट और आपके पिछले सौदों के लिए एक स्थान।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">बाज़ार</a></p>
+        <h1>मेरे सौदे</h1>
+        <p class="lede">आपके प्रत्येक व्यापार, आपके प्रत्येक पोस्ट और आपके पिछले सौदों के लिए एक स्थान।</p>
+        <h2>Opening it</h2>
+        <p>बाज़ार टैब के शीर्ष पर <strong>मेरे सौदे</strong> पर टैप करें। इस पर एक लाल संख्या आपके प्रगति पर चल रहे सौदों को गिनती है।</p>
+        <p>वैश्विक समुदाय पर कोई सौदे नहीं होते हैं, इसलिए <strong>मेरे सौदे</strong> एक स्थानीय समुदाय, Example Valley के तीन उदाहरण सौदे दिखाता है, जिस पर <strong>🏘️ Local community</strong> अंकित होता है: एक जो आपकी प्रतीक्षा कर रहा है, एक जिसमें फलियाँ सुरक्षित रखी गई हैं, और एक जो पूरा हो चुका है। उनके बटन बताते हैं कि सौदे स्थानीय समुदाय में क्यों रहते हैं, और कुछ नहीं बदलते। &quot;फलियाँ और वैश्विक समुदाय&quot; देखें।</p>
+        <h2>Three tabs</h2>
+        <ul>
+            <li><strong>प्रगति पर:</strong> चल रहे सौदे, और उत्तर की प्रतीक्षा कर रहे अनुरोध। प्रत्येक दिखाता है कि यह कहाँ खड़ा है: <strong>ट्रस्ट में रखी गई</strong> (फलियाँ रोकी गई हैं), <strong>कार्रवाई आवश्यक</strong> (किसी ने अनुरोध किया है और आपको उत्तर देने की आवश्यकता है) या <strong>स्वीकृति की प्रतीक्षा</strong> (आपने अनुरोध किया है और उनकी प्रतीक्षा कर रहे हैं)।</li>
+            <li><strong>मेरी पोस्ट्स:</strong> आपके ऑफ़र और ज़रूरतें जो चालू हैं, या <strong>रोका गया</strong> हैं। जिस पोस्ट के लिए किसी ने अनुरोध किया है वह <strong>कार्रवाई आवश्यक</strong> दिखाती है।</li>
+            <li><strong>इतिहास:</strong> समाप्त, रद्द और अस्वीकृत सौदे। <strong>सभी</strong>, <strong>प्राप्त</strong> या <strong>दिए गए</strong> चुनें। प्रत्येक तारीख, राशि और दूसरे व्यक्ति को दिखाता है।</li>
+        </ul>
+        <p>वेब ऐप में, <strong>प्रगति पर</strong> केवल उन सौदों को सूचीबद्ध करता है जिनमें फलियाँ रोकी गई हैं, इसलिए उत्तर की प्रतीक्षा कर रहा अनुरोध वहाँ नहीं होता है। <strong>मेरी पोस्ट</strong> केवल आपकी लाइव पोस्ट दिखाती है, प्रत्येक पर <strong>सक्रिय</strong> अंकित होता है: रोकी गई पोस्ट सूचीबद्ध नहीं होती हैं।</p>
+        <p>पोस्ट खोलने के लिए <strong>प्रगति पर</strong> या <strong>मेरी पोस्ट्स</strong> में किसी सौदे पर टैप करें। वहीं आप किसी सौदे को स्वीकार करते हैं, पूरा करते हैं या रद्द करते हैं। जिस अनुरोध का कोई उत्तर नहीं देता वह 7 दिनों के बाद अपने आप समाप्त हो जाता है।</p>
+        <h2>Reviews</h2>
+        <p><strong>इतिहास</strong> में पूरे किए गए व्यापार में एक <strong>समीक्षा करें</strong> बटन होता है। आपके समीक्षा करने के बाद, यह <strong>संपादित करें</strong> कहता है, और आप अपने सितारे बदल सकते हैं।</p>
+        <p>वेब ऐप में बटन <strong>समीक्षा लिखें</strong> कहता है, और केवल तब तक जब तक आपने उस व्यापार की समीक्षा न की हो। वहाँ समीक्षा बदलने के लिए, पोस्ट खोलें।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>सौदा, चरण-दर-चरण</strong><span>पूछने से लेकर भुगतान पाने तक, किसी ऑफ़र और ज़रूरत के लिए, और समीक्षा छोड़ना।</span></a></li>
+            <li><a href="posting.html"><strong>ऑफ़र या ज़रूरत पोस्ट करना</strong><span>कुछ ऐसा डालें जो आप कर सकते हैं या दे सकते हैं, या जो आप ढूंढ रहे हैं।</span></a></li>
+            <li><a href="your-balance.html"><strong>आपका शेष और इतिहास</strong><span>आपके पास कितनी फलियाँ हैं, क्या रोका गया है, और प्रत्येक व्यापार और उपहार।</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>जब सौदा गलत हो जाए</strong><span>सौदा रद्द करना, और जब आप सहमत नहीं हो पाते तो क्या होता है।</span></a></li>
+            <li><a href="the-top-bar.html"><strong>शीर्ष पट्टी</strong><span>फली, छोटे आइकन जो दिखाते हैं कि कब किसी चीज़ को आपकी ज़रूरत है, और ऊपर दाईं ओर के बटन।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>മാപ്പ് കാണിക്കുന്നത് — BeanPool members' guide</title>
+    <meta name="description" content="മാപ്പിലെ പിന്നുകൾ, അവയുടെ നിറങ്ങളുടെ അർത്ഥം, ചുറ്റുമുള്ള ബട്ടണുകൾ.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">മാപ്പ്</a></p>
+        <h1>മാപ്പ് കാണിക്കുന്നത്</h1>
+        <p class="lede">മാപ്പിലെ പിന്നുകൾ, അവയുടെ നിറങ്ങളുടെ അർത്ഥം, ചുറ്റുമുള്ള ബട്ടണുകൾ.</p>
+        <h2>പിന്നുകൾ</h2>
+        <p>ടാബുകളുടെ വരിയിൽ <strong>മാപ്പ്</strong> ടാപ്പ് ചെയ്യുക. മാപ്പ് നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ പോസ്റ്റുകൾ കാണിക്കുന്നു:</p>
+        <ul>
+            <li><strong>പച്ച പിന്നുകൾ:</strong> ഓഫറുകൾ.</li>
+            <li><strong>ഓറഞ്ച് പിന്നുകൾ:</strong> ആവശ്യങ്ങൾ.</li>
+            <li><strong>കലണ്ടറുള്ള പർപ്പിൾ പിന്നുകൾ:</strong> ഇതുവരെ അവസാനിക്കാത്ത ഇവന്റുകൾ.</li>
+        </ul>
+        <p>ഒരു പിൻ പോസ്റ്റിന്റെ വിഭാഗ ചിത്രം കാണിക്കുന്നു. നിരവധി ഓഫറുകളും ആവശ്യങ്ങളും പരസ്പരം അടുത്തിരിക്കുന്നിടത്ത്, അവ ഒരു സംഖ്യയുള്ള ഒരു വൃത്തമായി മാറുന്നു. ഫോണിൽ ഈ വൃത്തം നീലനിറത്തിലും വെബ് ആപ്പിൽ ഇരുണ്ട ചാരനിറത്തിലുമാണ്. അവ ഓരോന്നായി കാണാൻ സൂം ഇൻ ചെയ്യുക. ഇവന്റുകൾ എപ്പോഴും അവയുടേതായ രീതിയിൽ പ്രത്യേകം കാണിക്കുന്നു.</p>
+        <p>ആളുകളും ഗ്രൂപ്പുകളും മാപ്പിൽ ഇല്ല. വെബ് ആപ്പിൽ, ഒരു സ്ഥലം സജ്ജീകരിച്ചിട്ടുള്ള ഒരു സംരംഭം അതിന്റെ ചിത്രത്തോടുകൂടിയ ചതുരാകൃതിയിലുള്ള പിന്നായി കാണിക്കുന്നു. സംരംഭം തുറക്കാൻ അതിൽ ടാപ്പ് ചെയ്യുക.</p>
+        <p>പോളുകളും മാപ്പിൽ ഇല്ല. ഇതിനൊരു അപവാദം ഫോണിൽ, ആഗോള കമ്മ്യൂണിറ്റിയിലാണ്, അവിടെ ഒരു പോൾ അത് പോസ്റ്റ് ചെയ്തയാളുടെ പ്രദേശത്ത് ഒരു പിന്നായി കാണിക്കാം. ഇത് ഒരു ഓറഞ്ച് നിറത്തിലുള്ള ആവശ്യത്തിന്റെ പിൻ പോലെ കാണപ്പെടുന്നു, കൂടാതെ <strong>എല്ലാം</strong> എന്നതിന് കീഴിൽ മാത്രമേ കാണിക്കൂ.</p>
+        <h2>ഒരു പിന്നിൽ ടാപ്പ് ചെയ്യൽ</h2>
+        <ul>
+            <li><strong>ഒരു ഓഫറോ ആവശ്യമോ:</strong> ഒരു കാർഡ് അതിന്റെ ശീർഷകവും ആരാണ് പോസ്റ്റ് ചെയ്തതെന്നും കാണിക്കുന്നു. അത് തുറക്കാൻ <strong>വിവരങ്ങൾ കാണുക</strong> ടാപ്പ് ചെയ്യുക. ഫോണിൽ, അവരുടെ പ്രൊഫൈൽ കാണാൻ അവരുടെ പേരിൽ ടാപ്പ് ചെയ്യുക. കാർഡ് അടയ്ക്കാൻ മാപ്പിലോ <strong>✕</strong> എന്നതിലോ ടാപ്പ് ചെയ്യുക.</li>
+            <li><strong>ഒരു ഇവന്റ്:</strong> എപ്പോൾ, എവിടെ, എത്രപേർ പങ്കെടുക്കുന്നു എന്നിവ ഒരു കാർഡ് കാണിക്കുന്നു. <strong>ഇവന്റ് കാണുക</strong> ടാപ്പ് ചെയ്യുക. വെബ് ആപ്പിൽ ബട്ടൺ <strong>വിവരങ്ങൾ കാണുക</strong> എന്നാണ്, കൂടാതെ നിങ്ങൾക്ക് കാർഡിൽ <strong>പോകുന്നു</strong> അല്ലെങ്കിൽ <strong>താൽപ്പര്യമുണ്ട്</strong> ടാപ്പ് ചെയ്യാനും കഴിയും.</li>
+        </ul>
+        <h2>ഫിൽട്ടറുകൾ</h2>
+        <p>ഫോണിൽ, മാപ്പിന്റെ മുകളിൽ:</p>
+        <ul>
+            <li><strong>എല്ലാം</strong>, <strong>ഓഫറുകൾ</strong>, <strong>ആവശ്യങ്ങൾ</strong> അല്ലെങ്കിൽ <strong>ഇവന്റുകൾ</strong>. ഒഴിവാക്കാൻ <strong>✕</strong> ടാപ്പ് ചെയ്യുക.</li>
+            <li>ഒരു വിഭാഗം കാണിക്കാൻ <strong>എല്ലാ വിഭാഗങ്ങളും</strong>.</li>
+            <li>ഇവന്റുകൾക്കായി: <strong>എല്ലാം</strong>, <strong>ഇന്ന്</strong>, <strong>ഈ വാരാന്ത്യത്തിൽ</strong> അല്ലെങ്കിൽ <strong>അടുത്ത 7 ദിവസം</strong>. അവയ്ക്ക് അനുയോജ്യമായ രീതിയിൽ മാപ്പ് നീങ്ങുന്നു.</li>
+        </ul>
+        <p>വെബ് ആപ്പിൽ മാപ്പിന് ഇവന്റ് തീയതി ചിപ്പുകൾ മാത്രമേ ഉള്ളൂ: <strong>ഇന്ന്</strong>, <strong>ഈ വാരാന്ത്യത്തിൽ</strong>, <strong>അടുത്ത 7 ദിവസം</strong>, <strong>എല്ലാ ഇവന്റുകളും</strong>. നിങ്ങളുടെ കമ്മ്യൂണിറ്റിക്ക് വരാനിരിക്കുന്ന ഒരു ഇവന്റ് ഉള്ളപ്പോൾ മാത്രമേ അവ കാണിക്കൂ.</p>
+        <h2>ഇടതുവശത്തുള്ള ബട്ടണുകൾ</h2>
+        <ul>
+            <li>ഫോണിൽ, ചന്ദ്രനോ സൂര്യനോ: ഡാർക്ക് അല്ലെങ്കിൽ ലൈറ്റ് മാപ്പ്.</li>
+            <li>ടാർഗെറ്റ്: നിങ്ങൾ എവിടെയാണെന്ന് കാണിക്കുക. ആദ്യമായി ഉപയോഗിക്കുമ്പോൾ, നിങ്ങളുടെ ലൊക്കേഷൻ ഉപയോഗിക്കാനുള്ള അനുമതി ആപ്പ് ചോദിക്കുന്നു.</li>
+            <li><strong>+</strong>, <strong>−</strong>: സൂം ചെയ്യുക.</li>
+        </ul>
+        <p>നിങ്ങളുടെ കമ്മ്യൂണിറ്റി സേവനം നൽകുന്ന പ്രദേശം ആമ്പർ വൃത്തം കാണിക്കുന്നു.</p>
+        <h2>മാപ്പിൽ നിന്ന് ഒരു പോസ്റ്റ് ചേർക്കൽ</h2>
+        <p><strong>+ ADD POST</strong> ടാപ്പ് ചെയ്യുക. വെബ് ആപ്പിൽ, താഴെ വലതുവശത്തുള്ള വട്ടത്തിലുള്ള <strong>+</strong> ടാപ്പ് ചെയ്യുക. &quot;ഒരു ഓഫറോ ആവശ്യമോ പോസ്റ്റ് ചെയ്യൽ&quot; കാണുക.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>നിങ്ങളുടെ പിൻ എവിടെ വരുന്നു</strong><span>നിങ്ങളുടെ പോസ്റ്റുകളും ഇവന്റുകളും എവിടെയാണെന്ന് ആർക്കൊക്കെ കാണാം, വീട് എങ്ങനെ സ്വകാര്യമായി സൂക്ഷിക്കാം.</span></a></li>
+            <li><a href="near-you.html"><strong>അടുത്തുള്ള കാര്യങ്ങൾ കണ്ടെത്തൽ</strong><span>നിങ്ങളുടെ അല്ലെങ്കിൽ നിങ്ങൾ തിരഞ്ഞെടുക്കുന്ന സ്ഥലത്തിന്റെ നിശ്ചിത ദൂരത്തിലുള്ള പോസ്റ്റുകൾ മാത്രം കാണിക്കുക.</span></a></li>
+            <li><a href="events.html"><strong>ഇവന്റുകൾ</strong><span>ഒരു സ്ഥലത്തോ ഓൺലൈനിലോ ഒറ്റത്തവണയോ ആവർത്തിച്ചോ ഇവന്റ് ഉണ്ടാക്കുക; പങ്കെടുക്കുമെന്ന് അറിയിക്കുക, ഓർമ്മപ്പെടുത്തൽ നേടുക, പങ്കിടുക, ഹോസ്റ്റായി നടത്തുക.</span></a></li>
+            <li><a href="posting.html"><strong>ഒരു ഓഫറോ ആവശ്യമോ പോസ്റ്റ് ചെയ്യൽ</strong><span>നിങ്ങൾക്ക് ചെയ്യാൻ അല്ലെങ്കിൽ നൽകാൻ കഴിയുന്നതോ, അല്ലെങ്കിൽ നിങ്ങൾ അന്വേഷിക്കുന്നതോ ആയ കാര്യങ്ങൾ പങ്കിടുക.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

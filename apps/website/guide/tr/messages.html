@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesajlar — BeanPool members' guide</title>
+    <meta name="description" content="Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Sohbet</a></p>
+        <h1>Mesajlar</h1>
+        <p class="lede">Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.</p>
+        <h2>Sohbetleriniz</h2>
+        <p><strong>Sohbet</strong> üst kısmında üç düğmeye sahiptir: <strong>Mesajlar</strong>, <strong>Gruplar</strong> ve <strong>Kişiler</strong>.</p>
+        <p>Sekmeler satırında <strong>Sohbet</strong>'e, ardından <strong>Mesajlar</strong>'a dokunun. Kişilerle olan sohbetleriniz orada listelenir. Size ihtiyacı olan anlaşmalar en üstte, <strong>İşlem Gerekiyor</strong> altında yer alır.</p>
+        <p>Bir gruba, girişime veya etkinliğe ait olan sohbetler burada değil, <strong>Gruplar</strong> altındadır. Bkz. &quot;Gruplar&quot;.</p>
+        <ul>
+            <li><strong>Sohbetleri, ilanları, ortakları ara...</strong> ile arama yapın.</li>
+            <li>Filtre düğmesi <strong>En Son</strong> veya <strong>Okunmamış</strong> seçeneğine göre (ve topluluğunuzun Fasulye kullandığı yerlerde her anlaşmadaki Fasulyeye göre, önce en yüksek veya en düşük) sıralar ve <strong>Yalnızca Okunmamış</strong> veya <strong>Yalnızca Arkadaşlar</strong> seçeneklerini gösterebilir.</li>
+            <li>Telefonda, aşağı kaydırdıkça arama ve filtre düğmesi kaybolur. Biraz yukarı kaydırdığınızda geri gelirler. En üste atlamak için tekrar <strong>Sohbet</strong>'e dokunun.</li>
+        </ul>
+        <p>Web uygulamasında bu, <strong>Sohbet</strong> sekmesidir. Üst kısımda <strong>Tümü</strong>, <strong>İşlemler</strong>, <strong>Doğrudan</strong> ve <strong>Gruplar</strong> ile birlikte grupların ve etkinliklerin sohbetleri de dahil tüm sohbetlerinizi listeler; arama veya filtresi yoktur.</p>
+        <h2>Sohbet başlatma</h2>
+        <ul>
+            <li>Bir ilandan: <strong>Mesaj</strong> seçeneğine ve kişinin adına dokunun.</li>
+            <li><strong>Sohbet</strong> içinden: kalem düğmesine dokunun, ardından kişiyi adına göre bulun. Dünya çapındaki toplulukta Yeni Mesaj, anlaşma yaptığınız kişileri ve arkadaşlarınızı listeler. Başka birini bulmak için adının en az 2 harfini yazın.</li>
+            <li>Arkadaşlarınızdan: <strong>Sohbet</strong>, ardından <strong>Kişiler</strong>, ardından <strong>Arkadaşlar</strong> yolunu izleyin ve bir adın yanındaki mesaj düğmesine dokunun.</li>
+        </ul>
+        <p>Web uygulamasında <strong>✉️ Yeni Doğrudan Mesaj</strong> seçeneğini veya bir ilandaki <strong>💬 Mesaj</strong> düğmesini kullanın. Arkadaşlarınız <strong>Kişiler</strong> sekmesi altındadır.</p>
+        <h2>Gönderme</h2>
+        <ul>
+            <li><strong>Mesaj...</strong> alanına yazın ve gönder düğmesine dokunun.</li>
+            <li>Fotoğraf göndermek için <strong>+</strong> simgesine, ardından <strong>Kamera</strong> veya <strong>Galeri</strong> seçeneğine dokunun. Web uygulamasında <strong>📎</strong> düğmesini kullanın veya bir resmi doğrudan sohbete yapıştırın ya da sürükleyin — önce resmi gösterir ve önceden yazdığınız her şey resim alt yazısı olarak onunla birlikte gider. Fotoğraflar yalnızca iki kişi arasındaki sohbetlerde gönderilebilir.</li>
+        </ul>
+        <p>Mesajınızın altındaki onay işaretleri:</p>
+        <ul>
+            <li>tek onay işareti: gönderildi;</li>
+            <li>iki mavi onay işareti: okundu;</li>
+            <li>bir saat: hâlâ gönderiliyor;</li>
+            <li><strong>iletilmedi</strong>: başarısız oldu. <strong>Yeniden Gönder</strong> veya <strong>Sil</strong> için üzerine dokunun.</li>
+        </ul>
+        <p>Saat ve <strong>iletilmedi</strong> telefondadır. Web uygulamasında başarısız olan bir mesaj kutuda kalır ve uygulama bunu belirtir.</p>
+        <h2>Yanıtlama, tepki verme, düzenleme, silme</h2>
+        <p>Telefonda bir mesaja dokunun. Yanında küçük yuvarlak düğmeler belirir:</p>
+        <ul>
+            <li><strong>Yanıtla</strong>, bir sonraki yazacağınız şeyin üzerinde alıntılar. Neye yanıt verdiğine geri dönmek için gönderilen bir mesajdaki alıntıya dokunun.</li>
+            <li><strong>Tepki Ver</strong> yedi emoji açar. Eklemek için birine dokunun, geri almak için tekrar dokunun. Her biri için bir tepki; farklı birine dokunmak onu değiştirir. Tepkiler mesajın altında küçük bir rozet olarak görünür.</li>
+            <li>Kendi mesajlarınızda, gönderdikten sonra 15 dakika boyunca <strong>Düzenle</strong>. Mesaj daha sonra <strong>düzenlendi</strong> olarak gösterilir. Fotoğraflar düzenlenemez.</li>
+            <li>Kendi mesajlarınızda, istediğiniz zaman <strong>Sil</strong> — zaman sınırı yoktur. Bir kez <strong>Herkesten silinsin mi?</strong> diye sorar. Mesaj daha sonra ikiniz için de <strong>Bu mesaj silindi</strong> olarak görünür ve hiç kimse mesaja tepki veremez veya yanıtlayamaz.</li>
+        </ul>
+        <p>Aynı düğmeler bir grubun sohbetinde de vardır. Bkz. &quot;Gruplar&quot;.</p>
+        <p>Web uygulamasında <strong>Yanıtla</strong>, <strong>Tepki Ver</strong> ve <strong>Düzenle</strong> her mesajda küçük sözcükler halindedir ve <strong>Sil</strong> yoktur: bir mesajı telefon uygulamasından silin.</p>
+        <p>Silmek, kelimeleri topluluğunuzun sunucusundan da kaldırır; böylece daha sonra oturum açan yeni bir telefon onları asla görmez.</p>
+        <h2>Bir sohbeti sessize alma</h2>
+        <p>Sağ üstteki <strong>⋯</strong> simgesine (bir grup sohbetinde <strong>⋮</strong>), ardından <strong>Bildirimleri sessize al</strong> seçeneğine dokunun: <strong>8 saatliğine</strong>, <strong>1 haftalığına</strong> veya <strong>Her zaman</strong>. Geri almak için aynı düğmeye ve <strong>Sesi aç</strong> seçeneğine dokunun. Web uygulaması henüz bir sohbeti sessize alamaz. Bkz. &quot;Sohbeti susturma&quot;.</p>
+        <h2>Neler gizlidir</h2>
+        <ul>
+            <li>İki kişi arasındaki sohbet <strong>uçtan uca şifreli</strong>dir: telefonunuzda kilitlenir ve onlarınkinde açılır; böylece topluluğunuzun sunucusu bunu okuyamaz. Telefonda sohbetin üst kısmında <strong>Uçtan uca şifreli</strong> ifadesi gösterilir. İçindeki fotoğraflar da şifrelenir ve düzenlemeleriniz de öyledir.</li>
+            <li>Her mesaj aynı zamanda kimin gönderdiğine, o tek mesaja, sohbetine ve bir yanıt ise yanıtladığı mesaja kilitlenir. Böylece sunucu mesajınızı diğer kişinin mesajı gibi gösteremez, yeni bir mesaj olarak yeniden gönderemez veya yanıtınızı farklı bir mesaja yönlendiremez. Bunu denediğinde, uygulama kelimeler yerine sohbetin ortasında kimseye ait olmadan <strong>Bu mesaj doğrulanamadı, bu nedenle gösterilmiyor.</strong> uyarısını gösterir. Sunucunun başka bir fotoğrafla değiştirdiği bir fotoğrafta <strong>Görsel kullanılamıyor</strong> yazar.</li>
+            <li>Sunucu bir mesajı başka bir sohbete koyarsa, uygulama onu orada reddeder. Aynı kişiyle olan iki sohbetiniz tek bir sohbette birleştirildiğinde her mesaj geldiği sohbeti taşır. Bu güncellemeden sonra gönderilen bir mesaj altında <strong>Başka bir sohbetten buraya taşındı.</strong> ile gösterilir. Bundan önce gönderilen bir mesaj ise bunun yerine eski sürüm satırını gösterir (aşağıya bakın).</li>
+            <li>Her mesaj ayrıca yazıldığı sırada yazarının sahip olduğu en yeni mesajı hatırlar. Sunucu onu o mesajdan önce gösterirse altında <strong>Yazıldığı sıra dışında gösteriliyor.</strong> yazar. Aynı anda yazılmış ve biri diğerinden sonra olmayan iki mesaj bu uyarı olmadan her iki sırada da gelebilir.</li>
+            <li>İki kişi arasındaki bir sohbette kilitli olmayan herhangi bir şey asla iki kişiden birinin sözleri olarak gösterilmez: sohbetin ortasında <strong>Bu mesaj şifrelenmemişti, bu nedenle BeanPool kimin yazdığını doğrulayamaz.</strong> yazar ve sözleri gösterilmez. Sohbet listeniz de aynı satırı gösterir.</li>
+            <li>Topluluğunuzun yöneticilerinin sunucunun yönetici sayfasından size gönderdiği bir mesaj kilitli değildir ve özel bir mesaj değildir. Sohbetin ortasında, asla birinin kendi mesajı olarak değil, altında <strong>Topluluğunuzun yöneticilerinden. Özel bir mesaj değildir: topluluğun sunucusu bunu okuyabilir.</strong> ifadesiyle gösterilir.</li>
+            <li>Bu güncellemeden önce herhangi bir uygulama tarafından gönderilen mesajlar bu denetimler olmadan kilitlenmişti: sunucu kimden geldiklerini değiştirmiş veya birini yeniden göndermiş olabilirdi. Yine de açılırlar ve her birinin altında, sohbette nerede olursa olsun <strong>Uygulamanın daha eski bir sürümünden gönderildi: BeanPool kimin yazdığını doğrulayamaz.</strong> yazar. Hâlâ daha eski bir uygulamada olan biri, güncelleyene kadar güncellenmiş bir uygulamadan gelen mesajları okuyamaz.</li>
+            <li>Bir yanıt, yanıtladığı mesajı o mesajın kendisinin gösterildiği şekilde gösterir. Yazarın adını yalnızca mesajı açıldığında belirtir ve altında eski sürüm satırı gibi o mesajın satırını taşır. Sunucunun duyurularından biri için <strong>Duyuru</strong> ve yöneticilerin mesajı için <strong>Topluluğunuzun yöneticileri</strong> adını belirtir. Açılmayan veya kilitlenmeyen herhangi bir şey, kelimelerinin yerine geçen satırla birlikte <strong>Doğrulanmadı</strong> olarak alıntılanır.</li>
+            <li>Dolayısıyla tek başına sunucu, ikinizden birinin yazmadığı kelimeleri yazmış gibi görünmesini sağlayamaz. Yine de bir mesajı geride tutabilir, geç teslim edebilir veya <strong>Bu mesaj silindi</strong> şeklinde görünmesini sağlayabilir. Düzenlenmiş bir mesajın yeni kelimeleri yerine önceki kelimelerini gösterebilir: her ikisi de gerçekten gönderene aittir. Her mesajın hangi mesaja yanıt verdiğini görür ancak bunu fark edilmeden değiştiremez. İki kişinin de adına bir emoji tepkisi ekleyebilir veya kaldırabilir: tepkiler kilitli değildir. Ve bir sohbete kendi duyurularını ekleyebilir. Bir duyuru bir duyuru olarak gösterilir, <strong>Duyuru</strong> olarak alıntılanır ve sohbet listenizde asla ikinizden biri olarak değil <strong>Duyuru:</strong> olarak okunur.</li>
+            <li>Kilitleme, bir mesajın ikinizden birinden geldiğini kanıtlar, hangisinden geldiğini değil: diğer kişi sunucunuzu işleten kişilerin yardımıyla sizin adınıza kelimeler koyabilir.</li>
+            <li>Bunların tümü, uygulamanızın şifrelemenin kendisinin yaptığı gibi topluluğunuzun sunucusundan aldığı diğer kişinin gerçek anahtarına sahip olmasına dayanır. Web uygulamasında ayrıca topluluğunuzun sunucusunun tarayıcınıza gönderdiği uygulamanın kendisine de dayanır. Telefon uygulaması uygulama mağazasından gelir.</li>
+            <li>Kilitlenemeyen bir mesaj gönderilmez. Uygulama henüz diğer kişinin anahtarını bulamazsa veya kilitleme başarısız olursa kelimeleriniz bunu belirten bir satırla birlikte mesaj kutusunda kalır. Bir süre sonra tekrar gönderin. Topluluğunuzun sunucusu da iki kişi arasında kilitlenmemiş bir mesajı reddeder.</li>
+            <li>BeanPool'un bir anlaşma hakkında sohbete eklediği duyurular şifrelenmez: takas için tutulan, ödenen veya iptal edildiğinde geri verilen Fasulyeler, tutar ve bir yöneticinin takılan bir takası nasıl ve neden sonuçlandırdığı. Topluluğunuzun sunucusunu işleten kişiler bunları okuyabilir.</li>
+            <li>Sunucu ayrıca kimin kime ne zaman mesaj gönderdiğini, her birinin hangi mesaja yanıt verdiğini bilir ve emoji tepkilerini görür. Uygulamanın daha eski bir sürümünün kilit olmadan gönderdiği bir mesaj sunucuda okunabilir kalır.</li>
+            <li>Bir grubun sohbeti de telefonda ve web uygulamasında <strong>uçtan uca şifreli</strong>dir: yalnızca grubun üyeleri okuyabilir ve topluluğunuzun sunucusunu işleten kişiler okuyamaz. Mesaj kutusunun üzerinde <strong>Uçtan uca şifreli</strong> olduğu belirtilir. Topluluğunuzun sunucusu yine de kimin ne zaman yazdığını, kimden bahsedildiğini, her satırın hangi mesaja yanıt verdiğini ve emoji tepkilerini görür. Bir grubun sohbetini yalnızca katıldığınız günden itibaren görürsünüz: daha önce yazılan hiçbir şey gösterilmez ve telefonunuz bunun anahtarını asla tutmaz. Kilitlenemeyen bir mesaj gönderilmez. Bir üye tarafından yazıldığı denetlenemeyen bir satır kimseye ait olmadan <strong>Bu mesaj doğrulanamadı.</strong> şeklinde görünür. Topluluğunuzun sunucusu eskiyse ve henüz grup sohbetlerini kilitleyemiyorsa sohbet bunu belirtir ve sunucu okuyabilir. Sunucu güncellendiğinde bu önceki mesajlar kaldırılır ve sohbette bir satır bunu belirtir. Bkz. &quot;Gruplar&quot;.</li>
+            <li>Web uygulamasında bir grubun sohbeti aynı şekilde çalışır ancak içinde fotoğraf gönderemezsiniz.</li>
+            <li>Girişim ve etkinlik sohbetleri şifrelenmez. Topluluğunuzun sunucusunu işleten kişiler bunları okuyabilir ve sunucu bunların içine herhangi birinin adıyla yazabilir.</li>
+            <li>İki kişi arasındaki bir sohbet asla bunlardan birine dönüştürülemez. Uygulamanız bir sohbeti iki kişi arasındaki bir sohbet olarak gördüğünde veya sohbet şifreli bir mesaj barındırdığında sunucu ne derse desin öyle kalır: yalnızca yukarıdaki tüm kontrollerle birlikte o sohbet olarak açılır ve içinde gönderdiğiniz her şey her zaman kilitlenir. Sohbeti hiç görmemiş ve şifrelenmiş mesajlarından hiçbirine sahip olmayan bir telefon veya tarayıcı bunu ayırt edemez: ona göre bu tür bir sohbet sunucu tarafından okunabilen diğer herhangi bir grup sohbeti gibi görünür. Web uygulamasında bu durum o zamandan beri çıkış yapılmış bir tarayıcı, gizli bir pencere veya site verileri temizlenmiş bir tarayıcı için de geçerlidir: web uygulaması hangi sohbetlerin iki kişi arasında olduğunu unutur. Telefon uygulaması bu listeyi tutar.</li>
+            <li>Bir mesajı silmek topluluğunuzun sunucusundan onu değiştirmesini ister. Birinin zaten okuduğu bir kopyaya veya ekran görüntüsüne ulaşamaz.</li>
+            <li>Hesabınızı silmek her türlü sohbette yazdığınız her mesaja aynı şeyi yapar ve gönderdiğiniz fotoğrafları siler. Bkz. &quot;Ayrılma veya hesabı silme&quot;.</li>
+            <li>Bir etkinliğin sohbeti düzenleyici ve katılan herkes tarafından da okunabilir (düzenleyicinin kişileri içeri aldığı durumlarda, düzenleyicinin içeri aldıkları).</li>
+            <li>Bir girişimin sohbeti topluluğunuzun herhangi bir üyesi tarafından okunabilir. Bu, girişimin herkese açık tartışmasıdır, sayfasının gösterdiği tartışmanın aynısıdır ve topluluktaki herkes de içine yazabilir. Sorumluları için özel bir sohbet değildir.</li>
+        </ul>
+        <h2>Birini sohbetten engelleme</h2>
+        <p>Sohbetin üst kısmındaki adına dokunun. Profili açılır. <strong>Engelle</strong>'ye, ardından <strong>Kullanıcıyı Engelle</strong>'ye dokunun. Web uygulamasında sohbetin üst kısmındaki <strong>Engelle</strong>'ye, ardından <strong>Tamam</strong>'a dokunun. Bkz. &quot;Birini engelleme&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>Kişiler ve arkadaşlar</strong><span>Topluluk üyelerini bulma, arkadaş ekleme ve birine kefil olma.</span></a></li>
+            <li><a href="blocking.html"><strong>Birini engelleme</strong><span>Birinin ilanlarını ve mesajlarını sizden gizleyin ve daha sonra bu işlemi geri alın.</span></a></li>
+            <li><a href="event-chat.html"><strong>Etkinlik odası</strong><span>Etkinliğin ev sahibi ve katılan herkesle sohbet edin.</span></a></li>
+            <li><a href="groups.html"><strong>Gruplar</strong><span>Gruplarınız ve sohbetleri, grup içinde konuşma, grup kurma, insanları davet etme, davetle katılma ve grubun kendi oylamaları.</span></a></li>
+            <li><a href="mute.html"><strong>Sohbeti susturma</strong><span>Bir kişinin, grubun veya girişimin sohbetini 8 saat, bir hafta veya tamamen sessize alın.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Üst çubuk</strong><span>Fasulye simgesi, dikkatiniz gerektiğinde beliren küçük simgeler ve sağ üstteki düğmeler.</span></a></li>
+            <li><a href="key-changed.html"><strong>Sohbette anahtarın değiştiği uyarısı çıkarsa</strong><span>Sohbetin neden mesaj göndermeyi durdurduğu, anahtar kodunun kişiyle nasıl doğrulanacağı ve ne zaman devam edileceği.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

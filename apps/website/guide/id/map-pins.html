@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yang ditampilkan peta — BeanPool members' guide</title>
+    <meta name="description" content="Pin di Peta, arti warnanya, dan tombol-tombol di sekitarnya.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Peta</a></p>
+        <h1>Yang ditampilkan peta</h1>
+        <p class="lede">Pin di Peta, arti warnanya, dan tombol-tombol di sekitarnya.</p>
+        <h2>Pin-pin di peta</h2>
+        <p>Ketuk <strong>Peta</strong> di baris tab. Peta menampilkan postingan komunitasmu:</p>
+        <ul>
+            <li><strong>Pin hijau:</strong> Penawaran.</li>
+            <li><strong>Pin oranye:</strong> Permintaan.</li>
+            <li><strong>Pin ungu dengan kalender:</strong> acara yang belum selesai.</li>
+        </ul>
+        <p>Sebuah pin menampilkan gambar kategori dari postingan tersebut. Ketika banyak Penawaran dan Permintaan berada berdekatan, mereka bergabung menjadi lingkaran dengan angka. Lingkaran tersebut berwarna biru di ponsel dan abu-abu gelap di web app. Perbesar peta untuk melihatnya satu per satu. Acara selalu ditampilkan tersendiri.</p>
+        <p>Orang dan grup tidak berada di peta. Di web app, usaha yang telah menetapkan tempat muncul sebagai pin persegi dengan fotonya. Ketuk untuk membuka usaha tersebut.</p>
+        <p>Jajak pendapat juga tidak berada di peta. Satu pengecualian adalah di ponsel, dalam komunitas global, tempat jajak pendapat dapat muncul sebagai pin di wilayah pembuatnya. Tampilannya seperti pin Permintaan berwarna oranye, dan hanya muncul di bawah <strong>Semua</strong>.</p>
+        <h2>Mengetuk pin</h2>
+        <ul>
+            <li><strong>Penawaran atau Permintaan:</strong> kartu menampilkan judul dan siapa yang mempostingnya. Ketuk <strong>Lihat Detail</strong> untuk membukanya. Di ponsel, ketuk nama mereka untuk melihat profilnya. Ketuk peta atau tanda <strong>✕</strong> untuk menutup kartu.</li>
+            <li><strong>Acara:</strong> kartu menampilkan waktu dan tempat pelaksanaan, serta berapa banyak yang hadir. Ketuk <strong>Lihat acara</strong>. Di web app tombolnya adalah <strong>Lihat Detail</strong>, dan kamu juga dapat mengetuk <strong>Hadir</strong> atau <strong>Tertarik</strong> pada kartu.</li>
+        </ul>
+        <h2>Filter</h2>
+        <p>Di ponsel, di bagian atas peta:</p>
+        <ul>
+            <li><strong>Semua</strong>, <strong>Penawaran</strong>, <strong>Permintaan</strong>, atau <strong>Acara</strong>. Ketuk <strong>✕</strong> untuk menghapus filter.</li>
+            <li><strong>Semua Kategori</strong> untuk menampilkan satu kategori.</li>
+            <li>Untuk acara: <strong>Semua</strong>, <strong>Hari ini</strong>, <strong>Akhir pekan ini</strong>, atau <strong>7 hari ke depan</strong>. Peta akan bergeser menyesuaikan lokasinya.</li>
+        </ul>
+        <p>Di web app peta hanya memiliki tombol tanggal acara: <strong>Hari ini</strong>, <strong>Akhir pekan ini</strong>, <strong>7 hari ke depan</strong>, dan <strong>Semua acara</strong>. Tombol-tombol ini hanya muncul selama komunitasmu memiliki acara mendatang.</p>
+        <h2>Tombol-tombol di sebelah kiri</h2>
+        <ul>
+            <li>Di ponsel, ikon bulan atau matahari: peta bertema gelap atau terang.</li>
+            <li>Ikon target: menampilkan lokasimu saat ini. Pertama kali digunakan, aplikasi akan meminta izin untuk menggunakan lokasimu.</li>
+            <li><strong>+</strong> dan <strong>−</strong>: perbesar dan perkecil.</li>
+        </ul>
+        <p>Lingkaran kuning jingga menunjukkan wilayah yang dilayani oleh komunitasmu.</p>
+        <h2>Menambahkan postingan dari peta</h2>
+        <p>Ketuk <strong>+ TAMBAH POSTINGAN</strong>. Di web app, ketuk tanda bulat <strong>+</strong> di kanan bawah. Lihat &quot;Memasang Penawaran atau Permintaan&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="pin-locations.html"><strong>Lokasi pin kamu</strong><span>Siapa yang melihat lokasi kiriman dan acaramu, serta cara menjaga privasi tempat tinggalmu.</span></a></li>
+            <li><a href="near-you.html"><strong>Menemukan hal di dekatmu</strong><span>Tampilkan hanya kiriman dalam jarak tertentu darimu, atau dari tempat mana pun yang kamu pilih.</span></a></li>
+            <li><a href="events.html"><strong>Acara</strong><span>Buat acara, langsung di lokasi atau online, sekali atau berulang; konfirmasi kehadiran, pasang pengingat, bagikan, dan kelola sebagai tuan rumah.</span></a></li>
+            <li><a href="posting.html"><strong>Memasang Penawaran atau Permintaan</strong><span>Tawarkan keahlian atau barang yang bisa kamu berikan, atau tulis hal yang kamu butuhkan.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

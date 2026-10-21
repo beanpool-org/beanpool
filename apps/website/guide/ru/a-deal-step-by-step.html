@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сделка шаг за шагом — BeanPool members' guide</title>
+    <meta name="description" content="От первого вопроса до оплаты, для Предложения и для Спроса, и написание отзыва.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Рынок</a></p>
+        <h1>Сделка шаг за шагом</h1>
+        <p class="lede">От первого вопроса до оплаты, для Предложения и для Спроса, и написание отзыва.</p>
+        <h2>В чём суть</h2>
+        <p>Когда начинается сделка, бобы покупателя <strong>удерживаются</strong>. Никто не может потратить удерживаемые бобы. Когда работа выполнена, плательщик переводит их, и исполнитель получает оплату. На некоторых экранах приложения бобы называются «кредитами» — это одно и то же.</p>
+        <p>Вы можете запрашивать, принимать или одобрять до 100 сделок в течение любых 24 часов. Оплачиваемая вами сделка также считается одним из ваших 100 платежей в сутки (см. «Отправка подарка»). Перевод бобов, отмена и получение оплаты никогда не ограничиваются.</p>
+        <h2>Принятие чужого Предложения</h2>
+        <ul>
+            <li>Откройте Предложение и нажмите <strong>Принять Предложение</strong>.</li>
+            <li>Если указана почасовая оплата, укажите количество часов.</li>
+            <li>Нажмите <strong>Подтвердить</strong>. Ваши бобы сразу же удерживаются, а продавцу приходит уведомление. Ждать подтверждения продавца не нужно.</li>
+            <li>Открывается чат с продавцом. Договоритесь о времени и месте.</li>
+        </ul>
+        <p>Сначала необходимо опубликовать хотя бы одно собственное Предложение. Если вы этого ещё не сделали, приложение предложит кнопку <strong>Создать Предложение</strong>.</p>
+        <h2>Помощь по чужому Спросу</h2>
+        <ul>
+            <li>Откройте Спрос и нажмите <strong>Предложить выполнение</strong>, затем <strong>Подтвердить</strong>.</li>
+            <li>Автор объявления принимает решение. До этого момента вы можете нажать <strong>Отозвать запрос</strong>. Если автор не ответит в течение 7 дней, запрос автоматически аннулируется, о чём вы оба получите уведомление.</li>
+            <li>Автор видит ваш отклик в разделе <strong>Запросы на выполнение</strong> и может написать вам <strong>Сообщение</strong>, нажать <strong>Отклонить</strong> или <strong>Подтвердить и зарезервировать</strong>.</li>
+            <li>Когда автор одобряет запрос, его бобы удерживаются. Если объявление не является повторяющимся, все остальные откликнувшиеся видят свои запросы отклонёнными.</li>
+        </ul>
+        <p>В веб-приложении кнопка <strong>Отозвать запрос</strong> называется <strong>Отозвать предложение</strong>, а кнопка <strong>Подтвердить и зарезервировать</strong> — <strong>Принять и удержать на счёте</strong>. Автор Спроса в веб-приложении может только <strong>Отклонить</strong> или одобрить отклик: кнопки <strong>Сообщение</strong> в запросе там нет.</p>
+        <h2>Пока бобы удерживаются</h2>
+        <p>Оба участника видят кнопку <strong>Сообщение</strong> для связи и кнопку <strong>Отменить удержание в сделке</strong>, чтобы отменить сделку. В веб-приложении кнопку <strong>Сообщение</strong> видит только тот, кто не создавал объявление, а кнопка отмены называется <strong>Отменить удержание</strong>.</p>
+        <ul>
+            <li>Выполните работу или передайте вещь.</li>
+            <li>Плательщик нажимает <strong>Перевести кредиты</strong>, затем ещё раз <strong>Перевести кредиты</strong> для подтверждения. При почасовой работе плательщик сначала вводит фактически отработанное количество часов. Если часов оказалось меньше, остаток возвращается плательщику. Если больше — дополнительная сумма списывается с плательщика. Каждый час оплачивается по ставке, оговорённой при создании сделки.</li>
+            <li>Продавец сразу же получает оплату за вычетом комиссии Рынка в размере 1,5%, которая поступает в Фонд общих проектов вашего сообщества.</li>
+        </ul>
+        <p>Только плательщик может перевести бобы. Ограничений по времени нет: бобы остаются на удержании, пока их не переведут или пока сделка не будет отменена. Через неделю и далее каждую неделю плательщик получает напоминание.</p>
+        <p>Цена в объявлении не может измениться, пока по нему есть открытый запрос или удерживаются бобы. В сделке сохраняется та цена, на условиях которой она была начата. Чтобы изменить цену, автору объявления нужно сначала отклонить или отменить сделку.</p>
+        <h2>Повторяющееся объявление</h2>
+        <p>Повторяющееся объявление остаётся активным после каждой сделки, и по нему могут одновременно идти сделки с несколькими участниками. Любое другое объявление помечается как завершённое.</p>
+        <h2>Отзывы</h2>
+        <p>После перевода бобов плательщику предлагается оценить сделку: поставить от 1 до 5 звёзд и оставить краткий комментарий (необязательно). Нажмите <strong>Отправить оценку</strong> или <strong>Пропустить</strong>.</p>
+        <p>Оба участника могут поставить оценку позже: нажмите <strong>Оценить</strong> и имя на завершённом объявлении (но не на повторяющемся объявлении, которое снова возвращается в ленту) либо нажмите <strong>Оставить отзыв</strong> в меню «Мои сделки» во вкладке «История». Вы можете изменить свою оценку: новая оценка заменит старую.</p>
+        <p>Все участники вашего сообщества видят звёзды и текст отзыва. Только двое участников сделки могут видеть, кто именно оставил отзыв и к какой сделке он относится.</p>
+        <p>Звёзды имеют значение. Низкий средний балл снижает объём доверия, который другой участник зарабатывает в сделках. Будьте справедливы.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>Мои сделки</strong><span>Единое место для текущих обменов, активных объявлений и истории сделок.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>Если сделка не удалась</strong><span>Отмена сделки и порядок действий, если не получается договориться.</span></a></li>
+            <li><a href="posting.html"><strong>Публикация объявления</strong><span>Предложите то, что умеете или готовы отдать, или опубликуйте то, что ищете.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Как устроен BeanPool</strong><span>Бобы, обмен, предложения и спрос, а также кредит простыми словами.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

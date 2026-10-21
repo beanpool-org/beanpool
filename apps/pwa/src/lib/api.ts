@@ -1630,9 +1630,11 @@ export async function rejectMarketplaceRequest(
 }
 
 export async function cancelMarketplaceRequest(
-    transactionId: string, cancellerPublicKey: string
+    transactionId: string, requesterPublicKey: string
 ): Promise<{ success: boolean }> {
-    return request('POST', '/api/marketplace/transactions/cancel-request', { transactionId, cancellerPublicKey });
+    // The node reads the one who asked as `buyerPublicKey`, whichever side they are (the engine checks the role): the
+    // borrower on a lendable Offer, the helper on a Need.
+    return request('POST', '/api/marketplace/transactions/cancel-request', { transactionId, buyerPublicKey: requesterPublicKey });
 }
 
 export async function completeMarketplaceTransaction(

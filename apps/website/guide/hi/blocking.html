@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>किसी को ब्लॉक करना — BeanPool members' guide</title>
+    <meta name="description" content="किसी के पोस्ट और संदेशों को अपने से छिपाएं, और बाद में इसे पहले जैसा करें।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">सेटिंग्स और सुरक्षा</a></p>
+        <h1>किसी को ब्लॉक करना</h1>
+        <p class="lede">किसी के पोस्ट और संदेशों को अपने से छिपाएं, और बाद में इसे पहले जैसा करें।</p>
+        <h2>Blocking</h2>
+        <ul>
+            <li>उनकी प्रोफ़ाइल पर: <strong>ब्लॉक करें</strong>, या नीचे <strong>ब्लॉक करें</strong> और उनके नाम पर टैप करें।</li>
+            <li>उनकी किसी पोस्ट पर (फ़ोन ऐप): <strong>उपयोगकर्ता को ब्लॉक करें</strong> पर टैप करें। वेब ऐप में किसी पोस्ट में कोई ब्लॉक बटन नहीं होता है।</li>
+            <li>चैट से: उनकी प्रोफ़ाइल खोलने के लिए शीर्ष पर उनके नाम पर टैप करें, फिर <strong>ब्लॉक करें</strong> पर टैप करें। वेब ऐप में, एक व्यक्ति के साथ चैट के शीर्ष पर भी <strong>ब्लॉक करें</strong> होता है।</li>
+        </ul>
+        <p>फ़ोन ऐप में, <strong>उपयोगकर्ता को ब्लॉक करें</strong> के साथ पुष्टि करें। वेब ऐप में, आपका ब्राउज़र आपसे पुष्टि करने के लिए कहता है: <strong>ठीक है</strong> पर टैप करें।</p>
+        <h2>What it does</h2>
+        <ul>
+            <li>बाज़ार में उनकी पोस्ट आपसे छिपी रहती हैं।</li>
+            <li>वे आपकी चैट और लोग सूची से गायब हो जाते हैं, और आप एक-दूसरे को संदेश नहीं भेज सकते। फ़ोन ऐप में, जिसे आपने जोड़ा था वह अभी भी आपके <strong>मित्र</strong> टैब पर दिखाई देता है: नीचे &quot;यह क्या नहीं करता है&quot; देखें। वेब ऐप उन्हें हर सूची से छिपा देता है।</li>
+            <li>उनकी पल्स पोस्ट अभी भी दिखाई देती हैं। फ़ोन पर, नक्शे पर उनके पिन भी अभी दिखाई देते हैं। वेब ऐप का नक्शा उन्हें छिपा देता है।</li>
+            <li>आपके खाते पर, उनसे प्राप्त फलियों पर उनके द्वारा भेजे गए किसी भी नोट के बजाय &quot;आपके द्वारा ब्लॉक किए गए सदस्य से फलियाँ&quot; दिखाई देता है।</li>
+            <li>एक रिपोर्ट आपके समुदाय के मॉडरेटरों के पास जाती है, जो इसकी जांच कर सकते हैं।</li>
+        </ul>
+        <h2>What your community does about it</h2>
+        <p>आपका समुदाय उन ब्लॉकों के लिए ऐसा करता है जो वह आपके लिए रखता है। आज वह वेब ऐप में किया गया ब्लॉक है। फ़ोन ऐप में किया गया ब्लॉक उसी फ़ोन पर रहता है, और आपके समुदाय को इसके बारे में पता नहीं होता है।</p>
+        <ul>
+            <li>उनके सीधे संदेश आप तक कभी नहीं पहुंचते। आपका समुदाय किसी भी फ़ोन या कंप्यूटर पर उन्हें आप तक नहीं पहुंचाता है, और आपको उनके लिए कोई अधिसूचना और कोई अपठित संख्या नहीं मिलती है।</li>
+            <li>यदि वे आपके साथ एक नई चैट शुरू करते हैं, तो यह आपकी चैट में दिखाई नहीं देती है।</li>
+            <li>यदि आप उन्हें अनब्लॉक करते हैं, तो ब्लॉक रहने के दौरान उनके द्वारा भेजा गया कुछ भी नहीं आता है। केवल उसके बाद उनके द्वारा भेजे गए संदेश ही आप तक पहुंचते हैं।</li>
+            <li>यदि वे आपके किसी संदेश पर प्रतिक्रिया देते हैं, या अपने किसी पुराने संदेश को बदलते हैं, तो आप उसे नहीं देखते हैं।</li>
+            <li>जब वे किसी समूह चैट में लिखते हैं, तब भी आपको कोई सूचना नहीं मिलती है, भले ही वे @ के साथ आपका उल्लेख करें।</li>
+            <li>यदि वे आपकी किसी लिस्टिंग पर किसी सौदे के लिए अनुरोध करते हैं, तो अनुरोध बिना किसी सूचना के आपके सौदों में प्रतीक्षा करता है। यदि आप इसे छोड़ देते हैं, तो यह 7 दिनों के बाद समाप्त हो जाता है, वह भी बिना किसी सूचना के।</li>
+            <li>यदि वे आपके किसी ऑफ़र को तुरंत स्वीकार करते हैं, तो आपको कोई सूचना नहीं मिलती है, और यदि वे बाद में उस सौदे को रद्द कर देते हैं तो भी कोई सूचना नहीं मिलती है। सौदा अभी भी आपके सौदों में दिखाई देता है, और उसके संदेश उनके साथ आपकी चैट में दिखाई देते हैं, जैसे किसी के भी साथ। उनकी फलियाँ हमेशा की तरह रोक ली जाती हैं और वापस कर दी जाती हैं।</li>
+            <li>वे केवल आपके पते पर कोई लिस्टिंग नहीं बना सकते।</li>
+            <li>आप उन्हें जोड़ नहीं सकते। यदि वे आपको जोड़ते हैं, तो आपको सूचित नहीं किया जाता है। यदि उन्होंने आपको जोड़ा था, तो आपके लोग टैब पर &quot;आपको जोड़ा&quot; पंक्ति चली जाती है। आपके मित्र अब आपके द्वारा ब्लॉक किए गए व्यक्ति की प्रोफ़ाइल पर आपको एक सामान्य संबंध के रूप में नहीं देखते हैं।</li>
+            <li>यदि वे आपको एक नोट के साथ फलियाँ भेजते हैं, तो फलियाँ पूरी आती हैं और नोट नहीं आता है। इसके बजाय आप &quot;आपके द्वारा ब्लॉक किए गए सदस्य से फलियाँ&quot; देखते हैं, और उन्हें अनब्लॉक करने के बाद भी आप यही देखते हैं।</li>
+        </ul>
+        <h2>What it does not do</h2>
+        <ul>
+            <li>उन्हें नहीं बताया जाता है। उनके लिए, उनके संदेश भेजे गए प्रतीत होते हैं, और उनकी फलियों के साथ वाले नोट भी वैसे ही दिखाई देते हैं।</li>
+            <li>यह मित्रता को समाप्त नहीं करता है: यदि आपने उन्हें जोड़ा था, तो वे अभी भी आपके मित्र हैं, और यदि आपका संपर्क मित्रों पर सेट है तो वे अभी भी इसे देखते हैं। उसे भी समाप्त करने के लिए, <strong>ब्लॉक किए गए उपयोगकर्ताओं को प्रबंधित करें</strong> खोलें (वेब पर, <strong>ब्लॉक किए गए सदस्यों का प्रबंधन करें</strong>; नीचे &quot;अनब्लॉक करना&quot; देखें) और उनके नाम के नीचे <strong>मित्रों से भी हटाएं</strong> पर टैप करें। यह केवल आपके द्वारा जोड़े गए व्यक्ति के लिए ही होता है। वे ब्लॉक रहते हैं। वे हटाए जाने पर ध्यान दे सकते हैं।</li>
+            <li>समूह चैट, इवेंट चैट और परियोजना और उपक्रम चैट साझा की जाती हैं: उनमें मौजूद हर कोई समान संदेश देखता है। वहाँ उनके संदेश अभी भी दिखाई देते हैं, आपको भी और बाकी सभी को भी।</li>
+            <li>उनके साथ आपका जो सौदा पहले से चल रहा है, वह अपनी सूचनाओं और अधिसूचनाओं के साथ पहले की तरह चलता रहता है।</li>
+            <li>यदि आपने उनके साथ पहले व्यापार किया है, तो वे अभी भी आपको फलियाँ भेज सकते हैं। प्रत्येक फली बिना किसी सूचना के पहुंचती है।</li>
+            <li>आपके समुदाय से नोटिस अभी भी आते हैं, भले ही उन्होंने ही उन्हें शुरू किया हो। उदाहरण के लिए, जब कोई आपको किसी समूह के प्रमुख संयोजक के रूप में बदलने के लिए वोट खोलता है तो आपको सूचित किया जाता है, और आपको अपने समुदाय को चलाने वाले लोगों से संदेश प्राप्त होते हैं।</li>
+            <li>वे अभी भी आपकी पोस्ट देख सकते हैं।</li>
+            <li>फ़ोन ऐप में, ब्लॉक केवल आपके खाते के लिए, इसी फ़ोन पर रखा जाता है। इस फ़ोन का कोई अन्य खाता आपके ब्लॉक प्राप्त नहीं करता है।</li>
+            <li>फ़ोन ऐप में, यदि आप साइन आउट करते हैं, या इस फ़ोन के खाते को किसी अन्य खाते से बदलते हैं, तो आपके ब्लॉक फ़ोन पर बने रहते हैं। उसी खाते से वापस आएं और वे अभी भी वहीं हैं।</li>
+            <li>फ़ोन ऐप में, यदि आप ऐप को दोबारा इंस्टॉल करते हैं या किसी अन्य फ़ोन का उपयोग करते हैं, तो उन्हें फिर से ब्लॉक करें।</li>
+            <li>वेब ऐप में, आपका समुदाय आपके ब्लॉक आपके खाते के साथ रखता है। किसी भी ब्राउज़र पर साइन इन करें और वे वापस आ जाते हैं। साइन आउट करने से उस कंप्यूटर पर उनके बारे में कुछ भी नहीं बचता है। &quot;वेब ब्राउज़र में BeanPool का उपयोग&quot; देखें।</li>
+            <li>आपके समुदाय के सर्वर को चलाने वाले लोग देख सकते हैं कि आपने वेब ऐप में किसे ब्लॉक किया है, जैसे वे रिपोर्ट देख सकते हैं।</li>
+            <li>फ़ोन ऐप और वेब ऐप अलग-अलग सूचियाँ रखते हैं। एक में किया गया ब्लॉक दूसरे में दिखाई नहीं देता।</li>
+        </ul>
+        <h2>Unblocking</h2>
+        <ul>
+            <li><strong>सेटिंग्स</strong> खोलें। <strong>कानूनी और गोपनीयता</strong> के तहत, <strong>ब्लॉक किए गए उपयोगकर्ताओं को प्रबंधित करें</strong> पर टैप करें।</li>
+            <li>किसी नाम के आगे <strong>अनब्लॉक करें</strong>, या <strong>सभी को अनब्लॉक करें</strong> पर टैप करें।</li>
+        </ul>
+        <p>वेब ऐप में, ब्लॉक करने और अनब्लॉक करने के लिए आपके समुदाय से कनेक्शन की आवश्यकता होती है। बिना कनेक्शन के, ऐप ऐसा कहता है और कुछ भी नहीं बदलता है। जब आप वापस ऑनलाइन हों तो पुन: प्रयास करें।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>समस्या की रिपोर्ट करना</strong><span>किसी पोस्ट, कार्यक्रम, हलचल पोस्ट, परियोजना या उपक्रम के बारे में समुदाय के मॉडरेटर को बताएं।</span></a></li>
+            <li><a href="messages.html"><strong>संदेश</strong><span>चैट शुरू करें, फ़ोटो भेजें, जवाब दें, प्रतिक्रिया दें, संपादित करें, हटाएं, म्यूट करें, और क्या निजी है।</span></a></li>
+            <li><a href="privacy.html"><strong>आपकी गोपनीयता</strong><span>दूसरे आपके बारे में क्या देख सकते हैं, और इसे नियंत्रित करने वाली सेटिंग्स।</span></a></li>
+            <li><a href="getting-help.html"><strong>मदद पाना</strong><span>जब आप अटक जाएं तो कहाँ देखें, और किससे पूछें।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

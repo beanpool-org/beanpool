@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的交易 — BeanPool members' guide</title>
+    <meta name="description" content="集中管理你参与的每一笔交易、发布的每一条信息以及过去的交易历史。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市集</a></p>
+        <h1>我的交易</h1>
+        <p class="lede">集中管理你参与的每一笔交易、发布的每一条信息以及过去的交易历史。</p>
+        <h2>打开方式</h2>
+        <p>点按市集标签页顶部的<strong>我的交易</strong>。其上的红色数字统计你正在进行中的交易数量。</p>
+        <p>在全球社区中没有实际交易，因此<strong>我的交易</strong>展示了来自本地社区（Example Valley）的三笔示例交易，并标有 <strong>🏘️ 本地社区</strong>：一笔等待你处理，一笔豆子安全托管中，一笔已完成。其中的按钮会说明为什么交易只存在于本地社区中，且不会改变任何内容。参见“豆子与全球社区”。</p>
+        <h2>三个标签页</h2>
+        <ul>
+            <li><strong>进行中：</strong>正在进行的交易，以及等待答复的申请。每笔交易都会显示其当前状态：<strong>信托托管中</strong>（豆子已被暂管）、<strong>需要处理</strong>（有人发出了申请，需要你回应）或 <strong>Awaiting Approval</strong>（你发出了申请，正在等待对方回应）。</li>
+            <li><strong>我的发布：</strong>你当前展示中或处于 <strong>已暂停</strong> 状态的“提供”与“需求”。有人申请的刊登会显示<strong>需要处理</strong>。</li>
+            <li><strong>历史记录：</strong>已完成、已取消和已拒绝的交易。可选择<strong>全部</strong>、<strong>收到</strong>或<strong>付出</strong>。每笔记录都会显示日期、数额和交易对象。</li>
+        </ul>
+        <p>在 Web 应用中，<strong>进行中</strong>仅列出已暂管豆子的交易，因此等待答复的申请不会出现在那里。<strong>我的发布</strong>仅显示你当前有效的刊登，每项均标有<strong>活跃</strong>：已暂停的刊登不予列出。</p>
+        <p>点按<strong>进行中</strong>或<strong>我的发布</strong>中的某笔交易即可打开对应的刊登。你可以在那里接受、完成或取消交易。无人答复的申请在 7 天后将自动终止。</p>
+        <h2>评价</h2>
+        <p>在<strong>历史记录</strong>中已完成的交易带有一个<strong>检查</strong>按钮。完成评价后，该按钮会变为<strong>编辑</strong>，你可以修改评分星级。</p>
+        <p>在 Web 应用中，该按钮显示为<strong>留下评价</strong>，且仅在你对该交易完成评价前显示。若要在 Web 应用中修改评价，请打开该刊登。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>交易步骤详解</strong><span>从发起询问到完成付款，针对提供与需求的流程，以及留下评价。</span></a></li>
+            <li><a href="posting.html"><strong>发布提供或需求</strong><span>发布你能做或能给予的事情，或者你正在寻找的东西。</span></a></li>
+            <li><a href="your-balance.html"><strong>余额与账目历史</strong><span>你拥有的豆子数量、交易中暂扣的豆子，以及每一笔交易与赠送记录。</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>交易出现问题时</strong><span>取消交易，以及双方无法达成一致时该如何处理。</span></a></li>
+            <li><a href="the-top-bar.html"><strong>顶部栏</strong><span>豆子图标、有待处理事项时显示的小图标，以及右上角的按钮。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

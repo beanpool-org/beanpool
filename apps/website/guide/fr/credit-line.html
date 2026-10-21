@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votre ligne de crédit — BeanPool members' guide</title>
+    <meta name="description" content="Jusqu'où descendre sous zéro et comment elle augmente.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Registre</a></p>
+        <h1>Votre ligne de crédit</h1>
+        <p class="lede">Jusqu'où descendre sous zéro et comment elle augmente.</p>
+        <h2>Ce que c'est</h2>
+        <p>Votre ligne de crédit vous permet de dépenser plus de haricots que vous n'en possédez et de passer sous zéro. C'est la promesse d'aider les autres plus tard. Être sous zéro ne coûte rien : il n'y a aucun intérêt.</p>
+        <h2>Où la voir</h2>
+        <p>Sur le <strong>Registre</strong>, sous votre solde, une barre indique votre position :</p>
+        <ul>
+            <li>zéro se trouve au milieu ;</li>
+            <li>l'extrémité gauche représente <strong>votre limite</strong>, le niveau le plus bas où vous pouvez descendre ;</li>
+            <li>les repères à gauche indiquent jusqu'où vos Offres vous permettent d'aller ;</li>
+            <li>au-delà de <strong>+200</strong> sur la droite commence l'application des frais de circulation.</li>
+        </ul>
+        <p>Sur le téléphone, touchez la barre pour ouvrir les <strong>Infos sur le curseur de crédit</strong>, qui expliquent chaque partie.</p>
+        <h2>Comment elle s'ouvre</h2>
+        <p>Elle commence à zéro. Elle s'ouvre dès que vous concluez votre premier échange sur le marché (un échange de 1 ou 2 haricots seulement est trop petit pour compter), ou lorsque quelqu'un désigné pour accueillir les nouveaux arrivants se porte garant pour vous. Jusque-là, le Registre indique <strong>Pas encore de ligne de crédit</strong>. Vous pouvez toujours échanger avec les haricots que vous détenez.</p>
+        <h2>Comment elle augmente</h2>
+        <ul>
+            <li><strong>Confiance :</strong> les échanges conclus renforcent la confiance, en particulier lorsqu'ils ont lieu avec de nombreuses personnes différentes. Voir « Limite de 500 haricots ».</li>
+            <li><strong>Évaluations :</strong> les étoiles ne peuvent que réduire la confiance que vous gagnez. Une moyenne de 5 étoiles la préserve intégralement ; une moyenne inférieure en retire une partie.</li>
+            <li>La ligne de crédit la plus profonde peut atteindre 2 000 haricots. Une communauté qui confirme l'identité de ses membres peut fixer un plafond plus élevé, jusqu'à 5 000 (voir ci-dessous).</li>
+        </ul>
+        <h2>Vos Offres déterminent ce que vous pouvez utiliser</h2>
+        <p>Vous ne pouvez utiliser de votre ligne de crédit que ce que vos Offres actives permettent :</p>
+        <ul>
+            <li>aucune Offre : rien ;</li>
+            <li>1 Offre : jusqu'à −200 ;</li>
+            <li>2 : −500 ;</li>
+            <li>3 : −1 000 ;</li>
+            <li>4 : −1 500 ;</li>
+            <li>5 : −2 000.</li>
+        </ul>
+        <p>La ligne sous la barre vous indique la marche à suivre, par exemple « Publiez une offre pour ouvrir votre ligne de crédit ».</p>
+        <h2>Dans une communauté avec identités confirmées</h2>
+        <p>Certaines communautés ont des administrateurs qui connaissent chaque membre par son nom. Si la vôtre a activé <strong>le plancher de confiance connu</strong>, un membre confirmé par un administrateur bénéficie immédiatement d'une ligne de crédit : 1 000 haricots, sauf si votre communauté a choisi un autre montant. Cela représente environ 25 heures de travail pour lesquelles la communauté vous accorde sa confiance.</p>
+        <ul>
+            <li>Une Offre active vous permet de l'utiliser en entier. Sans aucune Offre, vous ne pouvez pas l'utiliser.</li>
+            <li>La confiance que vous gagnez en échangeant s'y ajoute, jusqu'au plafond de votre communauté (2 000 haricots à moins qu'elle n'ait choisi davantage, jusqu'à 5 000).</li>
+            <li>Un administrateur peut vous attribuer une limite plus basse, par exemple pendant que vous débutez. Cela ne vous retire jamais de haricots : si vous êtes déjà en dessous, vos dépenses sont suspendues jusqu'à ce que vous repassiez au-dessus.</li>
+            <li>Si vous remboursez une dette issue d'un compte précédent, les haricots que vous recevez au-dessus de 0 vont aux Communs jusqu'à son remboursement complet. Votre Registre indique le montant restant dû. Vous pouvez aussi en régler une partie ou la totalité vous-même dans <strong>Registre → Payer aux Communs</strong> : votre code de remboursement y est prérempli (ou saisissez celui qu'un administrateur vous transmet). Ce que vous payez avec le code est immédiatement déduit de la dette, et lorsqu'il ne reste rien, la dette est réglée : plus rien n'est prélevé, que ce soit par paiement ou sur ce que vous recevez. Un versement sans le code va aux Communs mais ne se déduit pas de votre dette, et l'application vous le signale : pour qu'il soit pris en compte, demandez à un administrateur de le rattacher à votre dette avec sa référence. Tant que ce n'est pas fait, la dette continue d'être amortie : lors de votre prochaine réception de haricots, le solde restant est prélevé sur ce que vous détenez au-dessus de 0. Le montant figurant dans le message de l'administrateur correspond à ce qui restait lors de son envoi : s'il reste moins désormais, votre serveur refuse un paiement plus important et indique le montant exact restant, et rien n'est débité. Si l'application signale qu'un paiement a pu aboutir, touchez <strong>Réessayer</strong> sur le même écran : un même paiement n'est jamais réglé deux fois. Si vous avez quitté cet écran, vérifiez votre Registre avant de payer à nouveau.</li>
+        </ul>
+        <h2>Suspension par les administrateurs</h2>
+        <p>Les administrateurs de votre communauté peuvent suspendre la ligne de crédit d'un membre : en totalité, ou, dans une communauté avec membres confirmés, la part issue de la confirmation de membre.</p>
+        <ul>
+            <li>S'ils suspendent la totalité, ou si la part confirmée constitue toute votre ligne, le Registre indique <strong>Votre ligne de crédit est suspendue</strong> : vous ne pouvez plus dépenser à découvert tant que dure la mesure, mais vous pouvez toujours vendre et recevoir des haricots, et dépenser ce que vous détenez au-dessus de zéro. Si vous étiez à découvert au moment de la suspension, le Registre indique aussi le montant de ce découvert : vendre ou recevoir des haricots fait remonter votre solde, et dès que vous repassez au-dessus de zéro, vous pouvez dépenser vos avoirs.</li>
+            <li>S'ils suspendent la part confirmée et que vous disposez également de crédit issu d'un parrainage, d'échanges ou d'une subvention, la barre reste en place, assortie d'une mention précisant que la part confirmée est suspendue et que le reste fonctionne comme avant. Si vous vous trouvez en dessous du montant restant, le Registre affiche également <strong>Dépenses suspendues</strong> (voir ci-dessous).</li>
+        </ul>
+        <p>Votre niveau ne change pas : c'est celui que vous confère votre ligne de crédit lorsqu'elle n'est pas suspendue, même si les administrateurs avaient fixé votre ligne plus bas ou plus haut que celle de la communauté, aussi bien sur votre profil que sur vos annonces. Pour en demander la raison ou obtenir sa réouverture, adressez-vous à l'un des administrateurs.</p>
+        <h2>Dépenses suspendues</h2>
+        <p>Si vous descendez en dessous de ce que vos Offres autorisent, par exemple parce que vous avez retiré une Offre, le Registre indique <strong>Dépenses suspendues</strong>. Vous pouvez toujours gagner des haricots et vendre. Publiez une Offre, ou gagnez des haricots pour remonter, et la suspension se lève. Rien ne vous est retiré.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>Badges de mérite</strong><span>Arrivant, Résident, Pilier et Doyen. Leur signification et pourquoi ils ne débloquent rien.</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>Limite de 500 haricots</strong><span>Pourquoi échanger avec de nombreuses personnes crée plus de confiance qu'échanger beaucoup avec une seule.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Comment marche BeanPool</strong><span>Haricots, échanges, offres et demandes, et crédit, en mots simples.</span></a></li>
+            <li><a href="posting.html"><strong>Publier Offre ou Demande</strong><span>Proposez un service ou un bien, ou exprimez un besoin que vous recherchez.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

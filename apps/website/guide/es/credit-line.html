@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/es by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tu línea de crédito — BeanPool members' guide</title>
+    <meta name="description" content="Hasta cuánto puedes tener saldo negativo y cómo se incrementa.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">Registro</a></p>
+        <h1>Tu línea de crédito</h1>
+        <p class="lede">Hasta cuánto puedes tener saldo negativo y cómo se incrementa.</p>
+        <h2>Qué es</h2>
+        <p>Tu línea de crédito te permite gastar más frijoles de los que tienes y pasar a saldo negativo. Es una promesa de ayudar a otros más adelante. Estar por debajo de cero no cuesta nada: no hay intereses.</p>
+        <h2>Dónde verla</h2>
+        <p>En el <strong>Registro</strong>, debajo de tu saldo, una barra muestra dónde te encuentras:</p>
+        <ul>
+            <li>el cero está en el medio;</li>
+            <li>el extremo izquierdo es <strong>tu límite</strong>, lo más bajo a lo que puedes llegar;</li>
+            <li>las marcas de la izquierda muestran hasta dónde te permiten llegar tus Ofertas;</li>
+            <li>más allá de <strong>+200</strong> a la derecha es donde comienza la comisión de circulación.</li>
+        </ul>
+        <p>En el teléfono, toca la barra para ver <strong>Información del control deslizante de crédito</strong>, que explica cada parte.</p>
+        <h2>Cómo se abre</h2>
+        <p>Comienza en cero. Se abre cuando completas tu primer intercambio en el mercado (un intercambio de solo 1 o 2 frijoles es demasiado pequeño para contar), o cuando alguien elegido para recibir a los recién llegados te avala. Hasta entonces, el Registro dice <strong>Sin línea de crédito aún</strong>. Todavía puedes intercambiar con los frijoles que tienes.</p>
+        <h2>Cómo crece</h2>
+        <ul>
+            <li><strong>Confianza:</strong> los intercambios completados generan confianza, especialmente con muchas personas diferentes. Consulta &quot;El límite de 500 frijoles por socio&quot;.</li>
+            <li><strong>Valoraciones:</strong> las estrellas solo pueden reducir la confianza que ganas. Un promedio de 5 estrellas la conserva toda; un promedio inferior le resta una parte.</li>
+            <li>Lo máximo a lo que llega cualquier línea de crédito es 2,000 frijoles. Una comunidad que confirma a sus miembros puede fijar un tope mayor, de hasta 5,000 (ver más abajo).</li>
+        </ul>
+        <h2>Tus Ofertas determinan cuánto puedes usar</h2>
+        <p>Solo puedes usar de tu línea de crédito lo que tus Ofertas activas permitan:</p>
+        <ul>
+            <li>sin Ofertas: nada;</li>
+            <li>1 Oferta: hasta −200;</li>
+            <li>2: −500;</li>
+            <li>3: −1,000;</li>
+            <li>4: −1,500;</li>
+            <li>5: −2,000.</li>
+        </ul>
+        <p>La línea debajo de la barra te lo indica, por ejemplo &quot;Publica una oferta para abrir tu línea de crédito&quot;.</p>
+        <h2>En una comunidad conocida</h2>
+        <p>Algunas comunidades tienen administradores que conocen a cada miembro por su nombre. Si la tuya ha activado <strong>el límite mínimo conocido</strong>, un miembro confirmado por un administrador obtiene una línea de crédito de inmediato: 1,000 frijoles, a menos que tu comunidad haya elegido otra cantidad. Eso equivale a unas 25 horas de trabajo por las que la comunidad confía en ti.</p>
+        <ul>
+            <li>Una Oferta activa te permite usarla toda. Sin Ofertas, no puedes usarla.</li>
+            <li>La confianza que ganas intercambiando se suma a ella, hasta el tope de tu comunidad (2,000 frijoles a menos que haya elegido más, hasta 5,000).</li>
+            <li>Un administrador puede establecer un límite menor para ti, por ejemplo mientras eres nuevo. Eso nunca te quita frijoles: si ya estás por debajo de él, los gastos se pausan hasta que vuelvas a estar por encima.</li>
+            <li>Si estás saldando una deuda de una cuenta anterior, los frijoles que recibas por encima de 0 van a los Bienes comunes hasta que se pague. Tu Registro indica cuánto queda. También puedes pagar parte o la totalidad tú mismo en <strong>Registro → Pagar a Bienes comunes</strong>: tu código de reembolso ya está completado allí (o introduce el que te dé un administrador). Lo que pagues con el código se descuenta de la deuda de inmediato, y cuando no queda nada la deuda está saldada: no se descuenta nada más, ni mediante un pago ni de lo que recibas. Un pago sin el código va a los Bienes comunes pero no se descuenta de tu deuda, y la app lo indica: para que cuente, pídele a un administrador que lo aplique a tu deuda con su referencia. Hasta que lo haga, la deuda aún se sigue saldando: la próxima vez que recibas frijoles, lo que quede se tomará de lo que tengas por encima de 0. El monto en el mensaje del administrador es lo que quedaba cuando lo compartió: si ahora queda menos, tu servidor rechaza un pago mayor e indica cuánto queda, y no se paga nada. Si la app indica que un pago puede haberse procesado, toca <strong>Reintentar</strong> en la misma pantalla: el mismo pago nunca se cobra dos veces. Si saliste de esa pantalla, revisa tu Registro antes de volver a pagar.</li>
+        </ul>
+        <h2>Congelada por los administradores</h2>
+        <p>Los administradores de tu comunidad pueden congelar la línea de crédito de un miembro: toda ella o, en una comunidad conocida, la parte que proviene de ser un miembro confirmado.</p>
+        <ul>
+            <li>Si congelan toda ella, o la parte confirmada es toda la línea que tienes, el Registro dice <strong>Tu línea de crédito está congelada</strong>: no puedes gastar en débito mientras dure, pero aún puedes vender y recibir frijoles, y gastar lo que tengas por encima de cero. Si estabas en débito cuando la congelaron, el Registro también indica cuántos frijoles tienes en débito: vender o recibir frijoles te devuelve a saldo positivo, y una vez que estés por encima de cero puedes gastar lo que tengas.</li>
+            <li>Si congelan la parte confirmada y también tienes crédito de un aval, de intercambios o de un subsidio, la barra se mantiene, con una nota debajo indicando que la parte confirmada está congelada y el resto funciona como antes. Si estás por debajo de lo que queda, el Registro también dice <strong>Gastos pausados</strong> (más abajo).</li>
+        </ul>
+        <p>Tu nivel no cambia: es el que te otorga tu línea de crédito cuando no está congelada, incluso si los administradores hubieran fijado tu línea por debajo o por encima de la de la comunidad, tanto en tu perfil como en tus publicaciones. Para preguntar por qué, o para que se vuelva a abrir, consulta a uno de los administradores.</p>
+        <h2>Gastos pausados</h2>
+        <p>Si bajas de lo que permiten tus Ofertas, por ejemplo porque retiraste una Oferta, el Registro dice <strong>Gastos pausados</strong>. Todavía puedes ganar y vender. Publica una Oferta, o gana hasta recuperarte, y la pausa se levantará. No se te quita nada.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>Insignias</strong><span>Recién llegado, Residente, Cuidador y Anciano. Qué significan y por qué no desbloquean nada.</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>Límite de 500 frijoles por socio</strong><span>Por qué intercambiar con muchas personas genera más confianza que comerciar mucho con una sola.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cómo funciona BeanPool</strong><span>Frijoles, intercambios, ofertas y necesidades, y crédito, en palabras sencillas.</span></a></li>
+            <li><a href="posting.html"><strong>Publicar Oferta o Necesidad</strong><span>Ofrece algo que puedes hacer o dar, o pide algo que estés buscando.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حظر شخص ما — BeanPool members' guide</title>
+    <meta name="description" content="إخفاء منشورات ورسائل شخص ما عنك، وإلغاء ذلك لاحقًا.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">الإعدادات والأمان</a></p>
+        <h1>حظر شخص ما</h1>
+        <p class="lede">إخفاء منشورات ورسائل شخص ما عنك، وإلغاء ذلك لاحقًا.</p>
+        <h2>الحظر</h2>
+        <ul>
+            <li>في ملفه الشخصي: اضغط على <strong>حظر</strong>، أو <strong>حظر</strong> واسمه في الأسفل.</li>
+            <li>في أحد منشوراته (تطبيق الهاتف): اضغط على <strong>حظر المستخدم</strong>. لا يحتوي المنشور في تطبيق الويب على زر حظر.</li>
+            <li>من المحادثة: اضغط على اسمه في الأعلى لفتح ملفه الشخصي، ثم <strong>حظر</strong>. في تطبيق الويب، تحتوي المحادثة الفردية مع شخص واحد على <strong>حظر</strong> في الأعلى أيضًا.</li>
+        </ul>
+        <p>في تطبيق الهاتف، أكد عبر <strong>حظر المستخدم</strong>. وفي تطبيق الويب، يطلب منك متصفحك التأكيد: اضغط على <strong>موافق</strong>.</p>
+        <h2>ماذا يفعل الحظر</h2>
+        <ul>
+            <li>تُخفى منشوراته في السوق عنك.</li>
+            <li>يختفي من محادثاتك ومن قائمة الأشخاص، ولا يمكنكما مراسلة بعضكما البعض. وفي تطبيق الهاتف، يظل الشخص الذي أضفته يظهر في علامة تبويب <strong>الأصدقاء</strong>: انظر &quot;ما لا يفعله الحظر&quot; أدناه. ويخفيهم تطبيق الويب من كل قائمة.</li>
+            <li>تظل منشوراته في النبض ظاهرة. وعلى الهاتف، تظل دبابيسه على الخريطة ظاهرة أيضًا. بينما تخفيها خريطة تطبيق الويب.</li>
+            <li>في سجلك، تظهر الفاصوليا الواردة منه كـ &quot;فاصوليا من عضو قمت بحظره&quot; بدلاً من أي ملاحظة أرسلها.</li>
+            <li>يُرسل بلاغ إلى مشرفي مجتمعك، الذين يمكنهم النظر في الأمر.</li>
+        </ul>
+        <h2>ما يفعله مجتمعك حيال ذلك</h2>
+        <p>يقوم مجتمعك بهذا الإجراء لعمليات الحظر التي يحتفظ بها لك. وهي اليوم عمليات الحظر التي تتم في تطبيق الويب. أما الحظر الذي يتم في تطبيق الهاتف فيبقى على ذلك الهاتف، ولا يعرف مجتمعك عنه شيئًا.</p>
+        <ul>
+            <li>رسائله المباشرة لا تصل إليك أبدًا. ولا يسلمها مجتمعك إليك على أي هاتف أو كمبيوتر، ولا تتلقى أي إشعار أو عدد للرسائل غير المقروءة منها.</li>
+            <li>إذا بدأ محادثة جديدة معك، فلن تظهر في محادثاتك.</li>
+            <li>إذا ألغيت حظره، فلن يصل أي شيء أرسله أثناء الحظر. وفقط الرسائل التي يرسلها بعد ذلك هي التي تصل إليك.</li>
+            <li>إذا تفاعل مع إحدى رسائلك، أو غيّر إحدى رسائله القديمة، فلن ترى ذلك.</li>
+            <li>لا تتلقى أي إشعار عندما يكتب في محادثة جماعية، حتى عندما يشير إليك باستخدام @.</li>
+            <li>إذا طلب صفقة على إحدى قوائمك، ينتظر الطلب في صفقاتك دون إشعار. وإذا تركته، ينتهي بعد 7 أيام، ودون إشعار أيضًا.</li>
+            <li>إذا قبل أحد عروضك على الفور، فلن تتلقى أي إشعار، ولا أي إشعار إذا ألغى تلك الصفقة بعد ذلك. ولا تزال الصفقة تظهر في صفقاتك، ورسائلها في محادثتك معه، كما هو الحال مع أي شخص. وتُحجز فاصولياه وتُعاد كالمعتاد.</li>
+            <li>لا يمكنه إنشاء قائمة موجهة إليك وحدك.</li>
+            <li>لا يمكنك إضافته. وإذا أضافك، فلن يتم إخبارك. وإذا كان قد أضافك، يختفي سطر &quot;أضافك&quot; في علامة تبويب الأشخاص. ولا يعود أصدقاؤك يرونك كجهة اتصال مشتركة في الملف الشخصي للشخص الذي حظرته.</li>
+            <li>إذا أرسل إليك فاصوليا مع ملاحظة، تصل الفاصوليا كاملة ولا تصل الملاحظة. وترى بدلاً من ذلك &quot;فاصوليا من عضو قمت بحظره&quot;، وتستمر في رؤية ذلك حتى بعد إلغاء حظره.</li>
+        </ul>
+        <h2>ما لا يفعله الحظر</h2>
+        <ul>
+            <li>لا يتم إخطاره. وتظهر الرسائل بالنسبة له كأنها أُرسلت، وكذلك الملاحظات المرفقة مع الفاصوليا.</li>
+            <li>لا ينهي الصداقة: إذا كنت قد أضفته، فإنه لا يزال صديقك، وإذا كانت جهة اتصالك مضبوطة على &quot;الأصدقاء&quot; فإنه لا يزال يراها. ولإنهاء ذلك أيضًا، افتح <strong>إدارة المستخدمين المحظورين</strong> (على الويب، <strong>إدارة الأعضاء المحظورين</strong>؛ انظر &quot;إلغاء الحظر&quot; أدناه) واضغط على <strong>إزالة أيضًا من الأصدقاء</strong> تحت اسمه. ولا يوجد هذا الخيار إلا لشخص أضفته أنت. ويظل محظورًا. ويمكنه ملاحظة الإزالة.</li>
+            <li>المحادثات الجماعية، ومحادثات الفعاليات، ومحادثات المشاريع والمؤسسات مشتركة: يرى الجميع فيها نفس الرسائل. ورسائله هناك تظل ظاهرة لك كما للجميع.</li>
+            <li>الصفقة القائمة بالفعل معه تستمر كما كانت من قبل، بإشعاراتها وتنبيهاتها.</li>
+            <li>إذا كنت قد تداولت معه من قبل، فلا يزال بإمكانه إرسال فاصوليا إليك. وتصل كل فاصوليا دون إشعار.</li>
+            <li>الإخطارات من مجتمعك تظل تصلك، حتى عندما يبدؤها هو. على سبيل المثال، يتم إخبارك عندما يفتح شخص تصويتًا لاستبدالك كمنسق رئيسي لمجموعة، وتتلقى رسائل من مسؤولي مجتمعك.</li>
+            <li>لا يزال بإمكانه رؤية منشوراتك.</li>
+            <li>في تطبيق الهاتف، يُحتفظ بالحظر على هذا الهاتف ولحسابك فقط. ولا يحصل حساب آخر على هذا الهاتف على قوائم حظرك.</li>
+            <li>في تطبيق الهاتف، إذا قمت بتسجيل الخروج، أو استبدلت حساب هذا الهاتف بآخر، تظل عمليات الحظر الخاصة بك على الهاتف. وإذا عدت بنفس الحساب، فستجدها لا تزال موجودة.</li>
+            <li>في تطبيق الهاتف، إذا أعدت تثبيت التطبيق أو استخدمت هاتفًا آخر، فاحظره مرة أخرى.</li>
+            <li>في تطبيق الويب، يحتفظ مجتمعك بعمليات الحظر مع حسابك. سجل الدخول من أي متصفح وستعود. وتسجيل الخروج لا يترك أي شيء عنها على ذلك الكمبيوتر. انظر &quot;استخدام BeanPool في متصفح ويب&quot;.</li>
+            <li>يمكن للأشخاص الذين يديرون خادم مجتمعك رؤية من حظرته في تطبيق الويب، كما يمكنهم رؤية البلاغات.</li>
+            <li>يحتفظ تطبيق الهاتف وتطبيق الويب بقوائم منفصلة. والحظر في أحدهما لا يظهر في الآخر.</li>
+        </ul>
+        <h2>إلغاء الحظر</h2>
+        <ul>
+            <li>افتح <strong>الإعدادات</strong>. تحت <strong>الشروط القانونية والخصوصية</strong>، اضغط على <strong>إدارة المستخدمين المحظورين</strong>.</li>
+            <li>اضغط على <strong>إلغاء الحظر</strong> بجوار الاسم، أو <strong>إلغاء حظر الكل</strong>.</li>
+        </ul>
+        <p>في تطبيق الويب، يتطلب الحظر وإلغاء الحظر اتصالاً بمجتمعك. وبدونه يخبرك التطبيق بذلك ولا يتغير أي شيء. حاول مرة أخرى عند استعادة الاتصال.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>الإبلاغ عن مشكلة</strong><span>أخبر مشرفي مجتمعك عن منشور، أو فعالية، أو منشور نبض، أو مشروع، أو مؤسسة.</span></a></li>
+            <li><a href="messages.html"><strong>الرسائل</strong><span>بدء محادثة، وإرسال الصور، والرد، والتفاعل، والتعديل، والحذف، والكتم، وما هو خاص.</span></a></li>
+            <li><a href="privacy.html"><strong>خصوصيتك</strong><span>ما يمكن للآخرين رؤيته عنك، والإعدادات التي تتحكم في ذلك.</span></a></li>
+            <li><a href="getting-help.html"><strong>طلب المساعدة</strong><span>أين تبحث عندما تواجه مشكلة، ومن تسأل.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

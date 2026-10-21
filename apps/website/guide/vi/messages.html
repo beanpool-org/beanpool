@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tin nhắn — BeanPool members' guide</title>
+    <meta name="description" content="Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Tin nhắn</h1>
+        <p class="lede">Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.</p>
+        <h2>Cuộc trò chuyện của bạn</h2>
+        <p><strong>Trò chuyện</strong> có ba nút ở trên cùng: <strong>Tin nhắn</strong>, <strong>Nhóm</strong> và <strong>Mọi người</strong>.</p>
+        <p>Nhấn vào <strong>Trò chuyện</strong> trong hàng thẻ, sau đó chọn <strong>Tin nhắn</strong>. Các cuộc trò chuyện của bạn với mọi người được liệt kê ở đó. Các giao dịch cần bạn xử lý nằm ở trên cùng, trong phần <strong>Cần hành động</strong>.</p>
+        <p>Các cuộc trò chuyện thuộc về một nhóm, một doanh nghiệp hoặc một sự kiện nằm trong phần <strong>Nhóm</strong>, chứ không phải ở đây. Xem &quot;Nhóm&quot;.</p>
+        <ul>
+            <li>Tìm kiếm bằng <strong>Tìm cuộc trò chuyện, bài đăng, đối tác...</strong>.</li>
+            <li>Nút bộ lọc sắp xếp theo <strong>Gần đây</strong> hoặc <strong>Chưa đọc</strong> (và ở nơi cộng đồng của bạn sử dụng Đậu, theo số Đậu trong mỗi giao dịch, cao nhất hoặc thấp nhất trước), đồng thời có thể hiển thị <strong>Chỉ tin chưa đọc</strong> hoặc <strong>Chỉ bạn bè</strong>.</li>
+            <li>Trên điện thoại, nút tìm kiếm và bộ lọc sẽ trượt biến mất khi bạn cuộn xuống. Cuộn lên một chút và chúng sẽ quay trở lại. Nhấn vào <strong>Trò chuyện</strong> lần nữa để nhảy lên đầu trang.</li>
+        </ul>
+        <p>Trong ứng dụng web, đây là thẻ <strong>Chat</strong>. Thẻ này liệt kê tất cả các cuộc trò chuyện của bạn, bao gồm cả của các nhóm và sự kiện, với <strong>Tất cả</strong>, <strong>Giao dịch</strong>, <strong>Trực tiếp</strong> và <strong>Nhóm</strong> ở trên cùng, đồng thời không có tính năng tìm kiếm hoặc bộ lọc.</p>
+        <h2>Bắt đầu cuộc trò chuyện</h2>
+        <ul>
+            <li>Từ một bài đăng: nhấn vào <strong>Tin nhắn</strong> và tên của người đó.</li>
+            <li>Từ <strong>Trò chuyện</strong>: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ.</li>
+            <li>Từ bạn bè của bạn: <strong>Trò chuyện</strong>, sau đó chọn <strong>Mọi người</strong>, rồi <strong>Bạn bè</strong>, và nhấn vào nút tin nhắn bên cạnh một cái tên.</li>
+        </ul>
+        <p>Trong ứng dụng web, hãy sử dụng <strong>✉️ Tin nhắn trực tiếp mới</strong>, hoặc nút <strong>💬 Nhắn tin</strong> trên một bài đăng. Bạn bè của bạn nằm dưới thẻ <strong>Mọi người</strong>.</p>
+        <h2>Gửi</h2>
+        <ul>
+            <li>Nhập vào ô <strong>Nhập tin nhắn...</strong> và nhấn vào nút gửi.</li>
+            <li>Để gửi ảnh, nhấn vào <strong>+</strong>, sau đó chọn <strong>Máy ảnh</strong> hoặc <strong>Thư viện ảnh</strong>. Trong ứng dụng web, hãy sử dụng nút <strong>📎</strong>, hoặc dán hay kéo ảnh trực tiếp vào đoạn chat — ứng dụng sẽ hiển thị hình ảnh trước cho bạn, và bất cứ nội dung gì bạn đã nhập sẽ đi kèm làm chú thích. Ảnh chỉ có thể được gửi trong các cuộc trò chuyện giữa hai người.</li>
+        </ul>
+        <p>Các dấu tích bên dưới tin nhắn của bạn:</p>
+        <ul>
+            <li>một dấu tích: đã gửi;</li>
+            <li>hai dấu tích màu xanh lam: đã đọc;</li>
+            <li>một chiếc đồng hồ: vẫn đang gửi;</li>
+            <li><strong>! chưa được gửi</strong>: gửi không thành công. Nhấn vào đó để <strong>Gửi lại</strong> hoặc <strong>Hủy bỏ</strong>.</li>
+        </ul>
+        <p>Đồng hồ và <strong>! chưa được gửi</strong> chỉ có trên điện thoại. Trong ứng dụng web, tin nhắn gửi không thành công sẽ ở lại trong ô nhập, và ứng dụng sẽ thông báo như vậy.</p>
+        <h2>Trả lời, bày tỏ cảm xúc, chỉnh sửa, xóa</h2>
+        <p>Trên điện thoại, hãy nhấn vào một tin nhắn. Các nút tròn nhỏ sẽ xuất hiện bên cạnh tin nhắn:</p>
+        <ul>
+            <li><strong>Trả lời</strong> trích dẫn tin nhắn đó phía trên nội dung bạn viết tiếp theo. Nhấn vào phần trích dẫn trong một tin nhắn đã gửi để quay lại tin nhắn mà nó trả lời.</li>
+            <li><strong>Bày tỏ cảm xúc</strong> mở ra bảy biểu tượng cảm xúc. Nhấn vào một biểu tượng để thêm vào, nhấn lần nữa để gỡ bỏ. Mỗi người chỉ có một biểu tượng cảm xúc; nhấn vào biểu tượng khác sẽ đổi biểu tượng. Các lượt bày tỏ cảm xúc hiển thị dưới dạng một huy hiệu nhỏ bên dưới tin nhắn.</li>
+            <li><strong>Chỉnh sửa</strong>, trên các tin nhắn của chính bạn, trong vòng 15 phút sau khi gửi. Tin nhắn sau đó sẽ hiển thị <strong>đã chỉnh sửa</strong>. Ảnh không thể chỉnh sửa được.</li>
+            <li><strong>Xóa</strong>, trên các tin nhắn của chính bạn, vào bất kỳ lúc nào — không có giới hạn thời gian. Ứng dụng sẽ hỏi <strong>Xóa cho mọi người?</strong> một lần. Tin nhắn sau đó hiển thị <strong>Tin nhắn này đã bị xóa</strong> cho cả hai bạn, và không ai có thể bày tỏ cảm xúc hay trả lời tin nhắn đó.</li>
+        </ul>
+        <p>Các nút tương tự cũng có trong đoạn chat của một nhóm. Xem &quot;Nhóm&quot;.</p>
+        <p>Trong ứng dụng web, <strong>Trả lời</strong>, <strong>Bày tỏ cảm xúc</strong> và <strong>Chỉnh sửa</strong> là các chữ nhỏ trên mỗi tin nhắn, và không có nút <strong>Xóa</strong>: hãy xóa tin nhắn từ ứng dụng điện thoại.</p>
+        <p>Việc xóa cũng gỡ các từ ngữ khỏi máy chủ cộng đồng của bạn, do đó một chiếc điện thoại mới đăng nhập sau này sẽ không bao giờ nhìn thấy chúng.</p>
+        <h2>Tắt thông báo cuộc trò chuyện</h2>
+        <p>Nhấn vào <strong>⋯</strong> ở trên cùng bên phải (<strong>⋮</strong> trong đoạn chat nhóm), sau đó chọn <strong>Tắt thông báo</strong>: <strong>Trong 8 giờ</strong>, <strong>Trong 1 tuần</strong> hoặc <strong>Luôn luôn</strong>. Nhấn vào nút tương tự và chọn <strong>Bật thông báo</strong> để hoàn tác. Ứng dụng web hiện chưa thể tắt thông báo cuộc trò chuyện. Xem &quot;Tắt thông báo chat&quot;.</p>
+        <h2>Điều gì là riêng tư</h2>
+        <ul>
+            <li>Cuộc trò chuyện giữa hai người được <strong>Mã hóa đầu cuối</strong>: tin nhắn được khóa trên điện thoại của bạn và mở khóa trên điện thoại của họ, do đó máy chủ của cộng đồng bạn không thể đọc được. Trên điện thoại, cuộc trò chuyện hiển thị <strong>Mã hóa đầu cuối</strong> ở trên cùng. Ảnh trong đó cũng được mã hóa, và các bản chỉnh sửa của bạn cũng vậy.</li>
+            <li>Mỗi tin nhắn cũng được khóa gắn liền với người gửi, với riêng tin nhắn đó, với cuộc trò chuyện đó và nếu là phản hồi thì gắn với tin nhắn mà nó trả lời. Vì vậy máy chủ không thể hiển thị tin nhắn của bạn như của người kia, gửi lại tin nhắn đó dưới dạng tin nhắn mới, hoặc trỏ câu trả lời của bạn vào một tin nhắn khác. Nếu máy chủ cố gắng làm vậy, ứng dụng sẽ hiển thị <strong>Tin nhắn này không thể xác minh, nên không được hiển thị.</strong> ở giữa đoạn chat, không thuộc về ai cả, thay vì nội dung tin nhắn. Một bức ảnh bị máy chủ tráo đổi sẽ hiển thị <strong>Không có hình ảnh</strong>.</li>
+            <li>Nếu máy chủ đưa một tin nhắn vào cuộc trò chuyện khác, ứng dụng sẽ từ chối tin nhắn đó ở đó. Khi hai cuộc trò chuyện của bạn với cùng một người được ghép làm một, mỗi tin nhắn sẽ mang theo cuộc trò chuyện gốc của nó. Tin nhắn được gửi kể từ bản cập nhật này sau đó sẽ hiển thị dòng <strong>Đã được chuyển đến đây từ cuộc trò chuyện khác.</strong> bên dưới. Tin nhắn được gửi trước đó sẽ hiển thị dòng thông báo phiên bản cũ hơn thay vào đó (xem bên dưới).</li>
+            <li>Mỗi tin nhắn cũng ghi nhớ tin nhắn mới nhất mà người viết có khi họ viết tin nhắn đó. Nếu máy chủ hiển thị tin nhắn đó trước tin nhắn kia, dòng <strong>Hiển thị không theo thứ tự lúc viết.</strong> sẽ xuất hiện bên dưới. Hai tin nhắn được viết cùng một thời điểm, không có tin nhắn nào viết sau tin nhắn kia, có thể đến theo bất kỳ thứ tự nào mà không hiện dòng này.</li>
+            <li>Bất cứ nội dung nào trong cuộc trò chuyện giữa hai người không được khóa sẽ không bao giờ hiển thị như lời của một trong hai người: dòng chữ <strong>Tin nhắn này không được mã hóa, nên BeanPool không thể xác nhận người viết.</strong> sẽ xuất hiện ở giữa đoạn chat, và nội dung của nó sẽ không được hiển thị. Danh sách cuộc trò chuyện của bạn cũng hiển thị cùng một dòng đó.</li>
+            <li>Tin nhắn mà quản trị viên cộng đồng gửi cho bạn từ trang quản trị của máy chủ không được khóa, và không phải là tin nhắn riêng tư. Tin nhắn này hiển thị ở giữa đoạn chat, không bao giờ là tin nhắn riêng của ai đó, với dòng <strong>Từ quản trị viên cộng đồng của bạn. Không phải tin nhắn riêng tư: máy chủ của cộng đồng có thể đọc được tin nhắn này.</strong> ở bên dưới.</li>
+            <li>Các tin nhắn được gửi trước bản cập nhật này, bằng bất kỳ ứng dụng nào, đã được khóa mà không có các bước kiểm tra này: máy chủ có thể đã thay đổi người gửi dường như là ai, hoặc gửi lại tin nhắn. Chúng vẫn mở được, và mỗi tin nhắn đều hiển thị dòng <strong>Được gửi từ phiên bản ứng dụng cũ hơn: BeanPool không thể xác nhận người viết.</strong> ở bên dưới, bất kể nằm ở đâu trong đoạn chat. Người vẫn đang dùng ứng dụng cũ hơn không thể đọc tin nhắn từ ứng dụng đã cập nhật cho đến khi họ cập nhật.</li>
+            <li>Tin trả lời hiển thị tin nhắn mà nó trả lời theo cách chính tin nhắn đó được hiển thị. Tin trả lời chỉ nêu tên người viết khi tin nhắn của họ đã mở được, và mang theo dòng ghi chú bên dưới tin nhắn đó, chẳng hạn như dòng về phiên bản cũ hơn. Tin trả lời sẽ ghi tên <strong>Thông báo</strong> đối với một thông báo của máy chủ và <strong>Quản trị viên cộng đồng của bạn</strong> đối với tin nhắn của quản trị viên. Bất cứ điều gì không mở được hoặc không được khóa sẽ được trích dẫn là <strong>Chưa xác nhận</strong>, cùng dòng chữ thay thế cho nội dung của nó.</li>
+            <li>Do đó, một mình máy chủ không thể làm cho ai trong hai bạn dường như đã viết những lời bạn không hề viết. Máy chủ vẫn có thể giữ lại tin nhắn, gửi trễ, hoặc làm cho tin nhắn hiển thị <strong>Tin nhắn này đã bị xóa</strong>. Nó có thể hiển thị nội dung trước đó của một tin nhắn đã chỉnh sửa thay vì nội dung mới: cả hai thực sự đều là của người gửi. Nó thấy tin nhắn nào trả lời tin nhắn nào, nhưng không thể bí mật thay đổi điều đó mà không bị phát hiện. Nó có thể thêm hoặc bớt biểu tượng cảm xúc dưới danh nghĩa của một trong hai người: các lượt bày tỏ cảm xúc không được khóa. Và nó có thể thêm thông báo của chính mình vào cuộc trò chuyện. Một thông báo sẽ hiển thị dưới dạng thông báo, được trích dẫn là <strong>Thông báo</strong>, và hiển thị <strong>Thông báo:</strong> trong danh sách cuộc trò chuyện của bạn, không bao giờ dưới danh nghĩa của ai trong hai bạn.</li>
+            <li>Việc khóa chứng minh rằng tin nhắn đến từ một trong hai bạn, chứ không chứng minh là ai: người kia, với sự giúp đỡ của những người vận hành máy chủ của bạn, có thể mạo danh bạn để viết nội dung.</li>
+            <li>Tất cả những điều này dựa trên việc ứng dụng của bạn có khóa thực sự của người kia, mà ứng dụng nhận được từ máy chủ của cộng đồng bạn, cũng giống như chính việc mã hóa vậy. Trong ứng dụng web, điều này còn phụ thuộc vào chính ứng dụng, do máy chủ của cộng đồng gửi đến trình duyệt của bạn. Ứng dụng điện thoại đến từ cửa hàng ứng dụng.</li>
+            <li>Tin nhắn không thể khóa sẽ không được gửi đi. Nếu ứng dụng chưa thể tìm thấy khóa của người kia, hoặc việc khóa không thành công, nội dung bạn viết sẽ ở lại trong ô nhập tin nhắn kèm một dòng thông báo lý do. Hãy gửi lại sau chốc lát. Máy chủ cộng đồng của bạn cũng từ chối tin nhắn giữa hai người nếu không được khóa.</li>
+            <li>Các thông báo mà BeanPool thêm vào cuộc trò chuyện về một giao dịch không được mã hóa: Đậu được giữ cho giao dịch, được thanh toán, hoặc được hoàn trả khi bị hủy, số lượng, và cách một quản trị viên giải quyết một giao dịch bị tắc nghẽn và lý do. Những người vận hành máy chủ cộng đồng của bạn có thể đọc được chúng.</li>
+            <li>Máy chủ cũng biết ai đã nhắn tin cho ai, và vào lúc nào, mỗi tin nhắn trả lời tin nhắn nào, đồng thời thấy các lượt bày tỏ cảm xúc. Tin nhắn mà phiên bản ứng dụng cũ hơn gửi mà không có khóa vẫn có thể đọc được trên máy chủ.</li>
+            <li>Đoạn chat của một nhóm cũng được <strong>Mã hóa đầu cuối</strong>, trên điện thoại và trong ứng dụng web: chỉ các thành viên của nhóm mới có thể đọc được, và những người vận hành máy chủ cộng đồng của bạn không thể đọc. Phía trên ô nhập tin nhắn có thông báo rằng cuộc trò chuyện được <strong>Mã hóa đầu cuối</strong>. Máy chủ cộng đồng của bạn vẫn thấy ai đã viết, thời gian nào, ai được nhắc đến, mỗi dòng trả lời tin nhắn nào, và các lượt bày tỏ cảm xúc. Bạn chỉ thấy đoạn chat của một nhóm kể từ ngày bạn tham gia: không có nội dung nào được viết trước đó được hiển thị, và điện thoại của bạn không bao giờ giữ khóa cho nội dung đó. Tin nhắn không thể khóa sẽ không được gửi đi. Một dòng không thể xác minh là do một thành viên viết sẽ hiển thị <strong>Không thể xác minh tin nhắn này.</strong>, không thuộc về ai cả. Nếu máy chủ cộng đồng của bạn đã cũ và chưa thể khóa các đoạn chat nhóm, đoạn chat sẽ nói như vậy, và máy chủ có thể đọc được nó. Khi máy chủ được cập nhật, các tin nhắn cũ hơn đó sẽ bị gỡ bỏ, và một dòng trong đoạn chat sẽ thông báo điều đó. Xem \&quot;Nhóm\&quot;.</li>
+            <li>Trong ứng dụng web, đoạn chat của nhóm hoạt động theo cách tương tự, nhưng bạn không thể gửi ảnh trong đó.</li>
+            <li>Các cuộc trò chuyện của doanh nghiệp và sự kiện không được mã hóa. Những người vận hành máy chủ cộng đồng của bạn có thể đọc được chúng, và máy chủ có thể viết vào đó dưới danh nghĩa của bất kỳ ai.</li>
+            <li>Cuộc trò chuyện giữa hai người không bao giờ có thể bị biến thành một trong những loại trò chuyện đó. Khi ứng dụng của bạn đã nhận diện một cuộc trò chuyện là giữa hai người, hoặc nó chứa một tin nhắn được mã hóa, nó sẽ luôn giữ nguyên như vậy, bất kể máy chủ nói gì: cuộc trò chuyện chỉ mở ra đúng như dạng chat đó, với tất cả các kiểm tra ở trên, và nội dung bạn gửi trong đó luôn luôn được khóa. Một chiếc điện thoại hoặc trình duyệt chưa từng thấy cuộc trò chuyện đó, và không nhận được bất kỳ tin nhắn mã hóa nào của nó, sẽ không thể phân biệt: đối với nó, cuộc trò chuyện như vậy trông giống như mọi đoạn chat nhóm khác, mà máy chủ có thể đọc được. Trong ứng dụng web, điều này cũng xảy ra đối với trình duyệt đã đăng xuất sau đó, cửa sổ ẩn danh, hoặc trình duyệt đã bị xóa dữ liệu trang web: ứng dụng web quên mất cuộc trò chuyện nào từng là giữa hai người. Ứng dụng điện thoại lưu giữ danh sách đó.</li>
+            <li>Xóa một tin nhắn là yêu cầu máy chủ cộng đồng của bạn thay thế tin nhắn đó. Thao tác này không thể can thiệp vào bản sao mà ai đó đã đọc, hoặc một ảnh chụp màn hình.</li>
+            <li>Xóa tài khoản của bạn cũng làm điều tương tự đối với mọi tin nhắn bạn từng viết, trong mọi loại cuộc trò chuyện, và xóa các hình ảnh bạn đã gửi. Xem \&quot;Rời khỏi hoặc xóa tài khoản\&quot;.</li>
+            <li>Đoạn chat của sự kiện cũng có thể được đọc bởi người tổ chức và tất cả những người tham gia (nơi người tổ chức phê duyệt người tham gia, là những người mà người tổ chức đã cho vào).</li>
+            <li>Đoạn chat của một doanh nghiệp có thể được đọc bởi bất kỳ thành viên nào trong cộng đồng của bạn. Đó là cuộc thảo luận công khai của doanh nghiệp, giống như cuộc thảo luận hiển thị trên trang của doanh nghiệp đó, và bất kỳ ai trong cộng đồng cũng có thể viết vào đó. Đó không phải là cuộc trò chuyện riêng tư dành cho những người quản lý của doanh nghiệp.</li>
+        </ul>
+        <h2>Chặn ai đó khỏi cuộc trò chuyện</h2>
+        <p>Nhấn vào tên của họ ở đầu cuộc trò chuyện. Hồ sơ của họ sẽ mở ra. Nhấn vào <strong>Chặn</strong>, sau đó nhấn <strong>Chặn người dùng</strong>. Trong ứng dụng web, nhấn vào <strong>Chặn</strong> ở đầu cuộc trò chuyện, sau đó chọn <strong>OK</strong>. Xem \&quot;Chặn một người\&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>Mọi người và bạn bè</strong><span>Tìm thành viên trong cộng đồng, kết bạn và bảo lãnh cho một người.</span></a></li>
+            <li><a href="blocking.html"><strong>Chặn một người</strong><span>Ẩn bài đăng và tin nhắn của ai đó khỏi bạn và bỏ chặn bất cứ lúc nào.</span></a></li>
+            <li><a href="event-chat.html"><strong>Chat sự kiện</strong><span>Trò chuyện với người tổ chức và tất cả những người tham gia sự kiện.</span></a></li>
+            <li><a href="groups.html"><strong>Nhóm</strong><span>Các nhóm và đoạn chat nhóm, trò chuyện, tạo nhóm, mời người khác, tham gia qua lời mời và các cuộc bỏ phiếu riêng của nhóm.</span></a></li>
+            <li><a href="mute.html"><strong>Tắt thông báo chat</strong><span>Tắt tiếng một cuộc trò chuyện — cá nhân, nhóm hoặc dự án — trong 8 giờ, một tuần hoặc vĩnh viễn.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Thanh trên cùng</strong><span>Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.</span></a></li>
+            <li><a href="key-changed.html"><strong>Khi đoạn chat báo khóa của người trò chuyện đã đổi</strong><span>Tại sao đoạn chat ngừng gửi tin, cách kiểm tra mã khóa với người đó và khi nào nên tiếp tục.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

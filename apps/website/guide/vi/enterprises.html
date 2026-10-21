@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dự án và sáng kiến chung — BeanPool members' guide</title>
+    <meta name="description" content="Các dự án chung có quỹ đậu riêng: tìm kiếm, ủng hộ hoặc khởi tạo một dự án.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Chung</a></p>
+        <h1>Dự án và sáng kiến chung</h1>
+        <p class="lede">Các dự án chung có quỹ đậu riêng: tìm kiếm, ủng hộ hoặc khởi tạo một dự án.</p>
+        <h2>Dự án và doanh nghiệp là gì</h2>
+        <p>Dự án và doanh nghiệp là các nhóm có nắm giữ Đậu. Mỗi nhóm đều có số đậu riêng, các Lời đề nghị và Nhu cầu riêng, cùng hạn mức tín dụng riêng.</p>
+        <p>Trên cộng đồng toàn cầu không có doanh nghiệp, do đó <strong>Chung</strong> hiển thị một ví dụ từ cộng đồng địa phương, Tiệm bánh Example Valley, được đánh dấu <strong>🏘️ Cộng đồng địa phương</strong>. Các nút của nó, chẳng hạn như <strong>Cam kết đóng góp</strong> và <strong>Tạm dừng</strong>, giải thích lý do tại sao các doanh nghiệp hoạt động trong cộng đồng địa phương, và không làm thay đổi điều gì. Xem &quot;Đậu và cộng đồng toàn cầu&quot;.</p>
+        <ul>
+            <li>Một <strong>dự án</strong> có người phụ trách, mục tiêu tính bằng Đậu và thường có ngày kết thúc: quyên góp 500 Đậu để làm mái che mới, xây dựng nhà lưới trước tháng 11. <strong>Người phụ trách</strong> điều hành dự án; <strong>người cộng tác</strong> hỗ trợ. Khi đạt được mục tiêu, các khoản cam kết đóng góp sẽ được chuyển vào tài khoản của dự án và dự án không nhận thêm nữa. Khi công việc hoàn tất, người phụ trách sẽ tiến hành giải thể. Sau 7 ngày, người phụ trách hoàn tất việc này, và số đậu còn lại sẽ được chuyển về Commons.</li>
+            <li>Một <strong>doanh nghiệp</strong> hoạt động liên tục và giao dịch: một thư viện công cụ, đàn gà lấy trứng, một quầy hàng ở chợ. Các <strong>người quản lý</strong> cùng nhau điều hành và bảo đảm cho doanh nghiệp. Một trong số họ là <strong>người quản lý chính</strong>.</li>
+        </ul>
+        <p>Một doanh nghiệp có các giới hạn hàng ngày riêng, gấp mười lần của một thành viên: 1.000 khoản thanh toán, 300 người chưa từng thanh toán trước đây, 1.000 giao dịch được phê duyệt, 1.000 bài đăng mới và 50.000 thay đổi. Những việc một người quản lý làm cho doanh nghiệp được tính vào giới hạn của doanh nghiệp, không tính vào giới hạn của riêng người quản lý. Việc đó cũng được tính vào giới hạn những gì người quản lý đó làm cho tất cả các doanh nghiệp họ cùng quản lý, vốn có cùng giới hạn: dù bạn quản lý bao nhiêu doanh nghiệp, bạn có thể thực hiện khối lượng công việc tương đương một doanh nghiệp mỗi ngày cho các doanh nghiệp đó, bên cạnh giới hạn cá nhân của bạn. Vì vậy, một doanh nghiệp có từ hai người quản lý trở lên vẫn có thể sử dụng hết các giới hạn của mình. Khi một doanh nghiệp đã dùng hết một trong các giới hạn trong ngày, những gì bạn làm liên quan đến giới hạn đó cho doanh nghiệp sẽ được tính vào giới hạn cá nhân của bạn, như thể bạn tự làm cho chính mình. Nếu bạn chạm giới hạn của mình, ứng dụng sẽ thông báo và nêu tên doanh nghiệp đó. Do đó, một người quản lý dùng hết giới hạn trong ngày chỉ tự giới hạn bản thân họ: mọi người quản lý khác vẫn còn nguyên giới hạn của họ. Việc điều hành doanh nghiệp luôn được tính vào các thay đổi của riêng người quản lý: tiếp nhận, xóa hoặc thay thế người quản lý, từ nhiệm, tạm dừng, giải thể, và hoàn tất hoặc từ chối các giao dịch của doanh nghiệp.</p>
+        <h2>Cách tìm kiếm</h2>
+        <p>Nhấn <strong>Chung</strong>, sau đó nhấn <strong>Nhóm</strong>, và chọn <strong>Dự án</strong> hoặc <strong>Doanh nghiệp</strong>. Mỗi mục hiển thị trạng thái, mục đích và số dư của nó. Trên điện thoại, các nhóm bạn quản lý nằm trong mục <strong>Nhóm của bạn</strong>. Nhấn vào một nhóm để mở nhóm đó.</p>
+        <h2>Trang doanh nghiệp hiển thị những gì</h2>
+        <p>Mọi thành viên đều có thể nhìn thấy:</p>
+        <ul>
+            <li><strong>Mục đích</strong> của doanh nghiệp;</li>
+            <li><strong>Số dư</strong>, hạn mức tín dụng, các Lời đề nghị đang mở và thặng dư của doanh nghiệp;</li>
+            <li><strong>Thu &amp; Chi (Lãi &amp; Lỗ)</strong>: từng hạt đậu ra và vào. Các người quản lý thấy ai đã trả hoặc được trả cùng ghi chú đi kèm; các thành viên khác thấy số tiền, và thấy đầy đủ các khoản thanh toán của chính mình;</li>
+            <li>các người quản lý của doanh nghiệp;</li>
+            <li><strong>Tin đăng</strong>, <strong>Hoạt động gần đây</strong> và phần <strong>Thảo luận</strong> mà bạn có thể viết vào.</li>
+        </ul>
+        <p>Ở dưới cùng, có nút <strong>Báo cáo doanh nghiệp</strong> (<strong>Báo cáo dự án</strong> đối với một dự án) nếu có điều gì đó không đúng.</p>
+        <h2>Ủng hộ một doanh nghiệp</h2>
+        <ul>
+            <li><strong>Cam kết góp đậu cho một dự án:</strong> trên trang của dự án, bên dưới hộp gây quỹ, nhập số tiền và nhấn <strong>Cam kết góp đậu</strong>. Bạn có thể thực hiện hoặc thay đổi tối đa 20 cam kết đóng góp trong bất kỳ khoảng thời gian 24 giờ nào, bao gồm cả bảo chứng của người quản lý, và cam kết góp đậu cũng được tính là một khoản thanh toán của bạn. Các khoản cam kết được giữ tạm thời cho đến khi dự án đạt được mục tiêu, sau đó tất cả sẽ chuyển vào tài khoản doanh nghiệp. Sau đó, dự án không nhận thêm cam kết nào nữa, và doanh nghiệp đang giải thể hoặc đã đóng cửa cũng vậy: trang của doanh nghiệp sẽ thông báo tại vị trí của hộp cam kết trước đây, và số đậu vẫn ở lại với bạn. Nếu một dự án bị hủy trước khi đạt mục tiêu, mọi khoản cam kết sẽ được hoàn trả cho người đã đóng góp.</li>
+            <li><strong>Giao dịch với doanh nghiệp:</strong> các Lời đề nghị và Nhu cầu của doanh nghiệp hiển thị trên Chợ như của mọi người.</li>
+            <li><strong>Trở thành người quản lý:</strong> xem &quot;Người quản lý&quot;.</li>
+        </ul>
+        <h2>Nếu bạn là người quản lý</h2>
+        <p>Nếu bạn quản lý một doanh nghiệp, hoặc hỗ trợ điều hành một dự án, trang của doanh nghiệp sẽ có mục <strong>Kiểm soát của người vận hành</strong>:</p>
+        <ul>
+            <li><strong>Đăng lời đề nghị</strong> và <strong>Đăng nhu cầu:</strong> đăng bài dưới danh nghĩa của doanh nghiệp.</li>
+            <li><strong>Đến Dự án chung:</strong> chuyển một phần thặng dư của doanh nghiệp vào Commons.</li>
+            <li>Trong ứng dụng web, <strong>Đặt ghim bản đồ</strong> đặt doanh nghiệp lên bản đồ.</li>
+        </ul>
+        <p>Việc tạm dừng và đóng cửa doanh nghiệp nằm trong cùng một bảng điều khiển trên ứng dụng web. Trên điện thoại, chúng nằm trong một thẻ riêng bên dưới, <strong>Kiểm soát chu kỳ &amp; mùa vụ</strong>, thẻ này chỉ hiển thị các nút bạn có quyền sử dụng:</p>
+        <ul>
+            <li><strong>Tạm dừng theo mùa:</strong> bất kỳ người quản lý nào. Tin đăng của doanh nghiệp tạm dừng để không ai có thể mua, và hạn mức tín dụng giữ nguyên vị trí, trong tối đa 90 ngày. <strong>Tiếp tục doanh nghiệp</strong> (<strong>Tiếp tục dự án</strong>) sẽ kết thúc việc tạm dừng.</li>
+            <li><strong>Bắt đầu giải thể:</strong> người quản lý chính, người quản lý duy nhất hoặc quản trị viên cộng đồng. Thời gian chờ 7 ngày bắt đầu; không có gì tự động đóng cửa doanh nghiệp. Bất kỳ người quản lý nào hoặc quản trị viên cộng đồng đều có thể nhấn <strong>Dừng giải thể</strong> trong thời gian chờ.</li>
+            <li><strong>Hoàn tất giải thể:</strong> sau khi hết 7 ngày, người quản lý chính, người quản lý duy nhất hoặc quản trị viên cộng đồng sẽ hoàn tất việc đóng cửa. Xem &quot;Quy tắc và cách quyết định vận hành&quot;.</li>
+        </ul>
+        <p>Trước khi một dự án đạt được mục tiêu, người phụ trách cũng có thể hủy dự án, và mọi khoản cam kết sẽ được hoàn trả.</p>
+        <h2>Khởi tạo dự án hoặc doanh nghiệp</h2>
+        <ul>
+            <li>Trên web, nhấn <strong>Chung</strong>, sau đó nhấn <strong>+ Tạo nhóm</strong>, rồi nhấn <strong>Bắt đầu dự án hoặc dự án cộng đồng →</strong> hoặc <strong>+ Bắt đầu một doanh nghiệp</strong>. Trong ứng dụng điện thoại, nhấn <strong>Chung</strong>, sau đó nhấn <strong>Nhóm</strong>, chọn <strong>Dự án</strong> hoặc <strong>Doanh nghiệp</strong>, rồi nhấn nút tròn <strong>+</strong>.</li>
+            <li>Chọn <strong>Dự án</strong> hoặc <strong>Doanh nghiệp</strong>.</li>
+            <li>Đặt cho nó một <strong>Tên</strong> và một <strong>Mục đích</strong>.</li>
+            <li>Đối với dự án, đặt <strong>Mục tiêu gây quỹ</strong> (<strong>Số tiền mục tiêu gây quỹ</strong> trong ứng dụng web) và thời hạn chót nếu bạn muốn.</li>
+            <li>Thêm ảnh nếu bạn thích.</li>
+            <li>Nhấn <strong>Khởi động sáng kiến</strong> (<strong>Đề xuất doanh nghiệp 🌱</strong> trong ứng dụng web; dự án hoặc doanh nghiệp vẫn bắt đầu ngay lập tức).</li>
+        </ul>
+        <p>Nó sẽ bắt đầu ngay lập tức, và bạn là người phụ trách (đối với dự án) hoặc người quản lý chính (đối với doanh nghiệp). Không cần cuộc bỏ phiếu nào của cộng đồng để bắt đầu.</p>
+        <p>Bạn có thể bắt đầu 3 dự án hoặc doanh nghiệp trong bất kỳ khoảng thời gian 24 giờ nào, và có tối đa 20 nhóm đang chạy cùng lúc. Vượt quá mức đó ứng dụng sẽ từ chối. Nếu bạn có 20 nhóm đang chạy, hãy giải thể một nhóm trước khi bắt đầu nhóm khác.</p>
+        <p>Tên, mục đích và ảnh hiện chưa thể thay đổi được trong ứng dụng.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="keepers.html"><strong>Người quản lý</strong><span>Những người điều hành và chịu trách nhiệm cho dự án. Cách tham gia, phản đối và từ nhiệm.</span></a></li>
+            <li><a href="commons-fund.html"><strong>Quỹ Commons</strong><span>Số đậu chung của cộng đồng: nguồn gốc từ đâu và được chi tiêu như thế nào.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>Đề xuất một Quyết định</strong><span>Yêu cầu cộng đồng cùng đưa ra một quyết định có tính ràng buộc.</span></a></li>
+            <li><a href="rules.html"><strong>Quy tắc và cách quyết định vận hành</strong><span>Bỏ phiếu, tỷ lệ tham gia, bỏ phiếu kín, ai có quyền bỏ phiếu, đình chỉ, xóa thành viên, người quản lý, cùng người triệu tập.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Đậu và cộng đồng toàn cầu</strong><span>Mục đích của cộng đồng toàn cầu, một trong nhiều cộng đồng, và những gì bạn thấy: dấu hiệu 🏘️ Cộng đồng địa phương, cộng đồng mẫu Example Valley, lý do Đậu chờ ở đó và cách bắt đầu hoặc tìm cộng đồng địa phương.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

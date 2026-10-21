@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pazarda gezinme — BeanPool members' guide</title>
+    <meta name="description" content="Arama, filtreler ve mesafe ile Teklifleri ve İhtiyaçları bulun.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Pazar</a></p>
+        <h1>Pazarda gezinme</h1>
+        <p class="lede">Arama, filtreler ve mesafe ile Teklifleri ve İhtiyaçları bulun.</p>
+        <h2>Pazar sekmesi</h2>
+        <p>Sekme satırında <strong>Pazar</strong> seçeneğine dokunun. Topluluğunuzdaki insanların ne teklif ettiğini ve ne aradığını, en yeniden başlayarak ve paylaşıldıkları güne göre gruplanmış olarak görürsünüz.</p>
+        <p>Telefonda etkinlikler ilk sırada gelir. Uygulamanın konumunuzu kullanmasına zaten izin verdiyseniz liste ve kompakt görünümler bunun yerine <strong>Önce en yakın</strong> altında en yakın ilanları ve <strong>Anketler</strong> altında anketleri gösterir. <strong>Sana Özel</strong> kendi sırasını korur. Listeyi yenilemek için aşağı çekin.</p>
+        <p>Web uygulamasında Pazar kartlar halinde açılır. Liste ve kompakt görünümlerde etkinlikler paylaşıldıkları günün altında yer alır. Yerel bir toplulukta web uygulaması en yakın olanları ilk sıraya koymaz.</p>
+        <p>Küresel toplulukta web uygulaması önce yakınınızdaki ilanları gösterir: her biri ne kadar uzakta olduğu bilgisiyle birlikte <strong>Mesafe</strong>'niz içindeki veya bölgenizin (katılırken topluluğa verdiğiniz yaklaşık konum veya <strong>Ayarlar</strong>'daki) 250 km yakınındaki en yakın ilanlar. Listenin üzerindeki bir satır hangisi olduğunu belirtir. Bölgenizin yakınındayken her yerden en yenileri görmek için <strong>Her yeri göster</strong> seçeneği bulunur. Bir <strong>Mesafe</strong> seçiliyken bölgenize geri dönmek için <strong>Mesafe</strong>'yi açıp <strong>Sıfırla</strong>'ya dokunun, ardından <strong>Her yeri göster</strong> seçeneğine dokunun. Telefonda küresel topluluk bölgenize en yakın ilanları tutar, bu nedenle Pazar bunları gösterir. &quot;Yakınınızdakileri bulma&quot; bölümüne bakın.</p>
+        <p>Küresel toplulukta yalnızca birkaç ilan varken Pazar ayrıca <strong>Örnek</strong> olarak işaretlenmiş birkaç kart gösterir. İnsanların neler paylaştığını göstermek için kurgulanmışlardır; açılamaz veya yanıtlanamazlar. Yeterince gerçek ilan olduğunda kaybolurlar.</p>
+        <p>Telefonda arama ve filtreler siz aşağı kaydırdıkça kayarak uzaklaşır, böylece daha fazla gönderi görürsünüz. Biraz yukarı kaydırdığınızda geri gelirler. En üste geri dönmek için <strong>Pazar</strong>'a tekrar dokunun.</p>
+        <h2>Arama</h2>
+        <p>Üstteki <strong>Pazarda ara...</strong> alanına yazın. Küçük bir telefonda yalnızca <strong>Ara</strong> yazabilir. Arama ayrıca ilgili kelimeleri de bulur: &quot;meyve&quot; kelimesi &quot;limon&quot;u bulur. Çince, Japonca ve Tayca kelimeleri de bulur ve engellediğiniz kişilerin gönderilerini dışarıda bırakır. Bağlantı olmadığında zaten telefonunuzda olanlar içinde arama yapar.</p>
+        <p>Aramada kelimeler varken <strong>Bu aramayı Ana Sayfa'ya kaydet</strong> düğmesi görünür. Ana Sayfa'yı eklenmeye hazır kayıtlı bir aramayla açar: kelimeleriniz, yalnızca birine bakıyorsanız <strong>Teklifler</strong> veya <strong>İhtiyaçlar</strong>, kategori ve mesafe. <strong>Etkinlikler</strong> veya <strong>Anketler</strong> altında düğme yoktur. &quot;Ana Sayfa&quot; bölümüne bakın.</p>
+        <h2>Filtreler</h2>
+        <p>Aramanın altındaki düğme satırı ne göreceğinizi seçer:</p>
+        <ul>
+            <li><strong>Tümü</strong>, <strong>Teklifler</strong> veya <strong>İhtiyaçlar</strong>.</li>
+            <li><strong>Sana Özel:</strong> <strong>İlgi Alanlarını Özelleştir</strong> altında yıldızladığınız kategorilerdeki gönderiler (Ana Sayfa'da ayarladığınız yıldızların aynısı) ve katılacağınızı veya ilgilendiğinizi belirttiğiniz yaklaşan etkinlikleriniz.</li>
+            <li><strong>Etkinlikler</strong> ve <strong>Anketler</strong>.</li>
+        </ul>
+        <p>İkinci satır filtreyi daraltır. Telefonda:</p>
+        <ul>
+            <li><strong>Tüm Kategoriler:</strong> Yiyecek, Aletler veya Bahçe gibi bir kategori seçin.</li>
+            <li><strong>Mesafe:</strong> yalnızca bir noktaya belirli bir mesafedeki gönderiler. &quot;Yakınınızdakileri bulma&quot; bölümüne bakın.</li>
+            <li><strong>Güven:</strong> yalnızca henüz takas yapmamış üyelerin (<strong>Kurucu</strong>), <strong>Yeni Gelenler</strong>'in veya en az belirli bir güven rozetine sahip üyelerin gönderileri.</li>
+            <li><strong>Yalnızca fasulye:</strong> biraz nakit de isteyen gönderileri gizler.</li>
+        </ul>
+        <p>Web uygulamasında düğmeler <strong>Kategori</strong>, <strong>Mesafe</strong>, <strong>🌱 Yeni üyeler</strong> (henüz takas yapmamış üyeler) ve <strong>🫘 Yalnızca fasulye</strong> şeklindedir. Güven filtresi yoktur.</p>
+        <p>Gruplara üyeyseniz bir grup düğmeleri satırı da görünür. <strong>👥 Tüm Gruplar ve Herkese Açık</strong> her şeyi gösterir; bir grup düğmesi yalnızca o grup için olan gönderileri gösterir. Web uygulamasında gruplar bir satır yerine bir açılır menüdedir.</p>
+        <p>Telefonda hiçbir şey eşleşmezse <strong>Tüm Filtreleri Temizle</strong> seçeneğine dokunun. Web uygulamasında boş bir liste <strong>Öğe bulunamadı</strong> der ve böyle bir düğme yoktur.</p>
+        <p>Telefonda aşağı kaydırdığınızda ve bir arama veya filtre açık olduğunda, üstteki küçük bir etiket bunun ne olduğunu gösterir. Değiştirmek için etikete dokunun. Aramayı ve her filtreyi temizlemek için üzerindeki <strong>✕</strong> işaretine dokunun.</p>
+        <p><strong>Takaslarım</strong>'ın yanındaki düğme listenin nasıl görüneceğini değiştirir: liste, ızgara veya kompakt.</p>
+        <h2>Bir gönderinin gösterdikleri</h2>
+        <ul>
+            <li>bir fotoğraf veya kategorinin resmi;</li>
+            <li><strong>TEKLİF</strong> veya <strong>İHTİYAÇ</strong>;</li>
+            <li>saatlik fiyatlandırılmışsa <strong>/Sa</strong> ile birlikte fasulye cinsinden fiyat;</li>
+            <li>her takastan sonra açık kalıyorsa <strong>TEKRARLAYAN</strong>;</li>
+            <li>kişi yakıt veya malzeme için biraz nakde de ihtiyaç duyuyorsa <strong>NAKİT DE GEÇERLİ</strong>;</li>
+            <li>yalnızca o grup görebiliyorsa bir kilit ve grup adı;</li>
+            <li>güven rozeti ve yıldızlarıyla birlikte kimin paylaştığı. Henüz takas yapmamış bir üye <strong>KURUCU</strong> gösterir.</li>
+        </ul>
+        <p>Açmak için bir gönderiye dokunun.</p>
+        <h2>Bir gönderide</h2>
+        <ul>
+            <li><strong>Mesaj</strong> ve adları: taahhütte bulunmadan önce bir soru sorun.</li>
+            <li>Profillerini, değerlendirmelerini ve güvenlerini görmek için adlarına dokunun.</li>
+            <li>Dolandırıcılık, saldırgan, yanıltıcı ise veya bir çocuğu riske atıyorsa ilanı bildirin (<strong>İlanı Bildir</strong> - <strong>Çocuk güvenliği</strong>).</li>
+            <li>Telefonunuzda gönderilerini ve sohbetlerini gizlemek için <strong>Kullanıcıyı Engelle</strong> seçeneğini kullanın. Bu ayrıca yöneticilerinize de haber verir. &quot;Birini engelleme&quot; bölümüne bakın.</li>
+        </ul>
+        <p>Web uygulamasında bir gönderideki düğmeler <strong>💬 Mesaj Gönder</strong> ve <strong>🚩 Bildir</strong> şeklindedir. Birini profilinden engelleyin.</p>
+        <p>Küresel toplulukta bir gönderinin Fasulye cinsinden fiyatı yoktur: kişinin karşılığında ne istediğini söyler. Fiyatın olacağı yerde &quot;🏘️ Yerel bir toplulukta bu fasulye cinsinden bir fiyattır ›&quot; yazar. İlanı talep etmek yerine gönderi <strong>Talep · Fasulyeler güvende tutulur 🏘️</strong> seçeneğini gösterir: yerel bir toplulukta bir takasın nasıl işlediğini görmek için dokunun. Kişiye mesaj göndermek her yerdeki gibi çalışır. &quot;Fasulye ve küresel topluluk&quot; bölümüne bakın.</p>
+        <p>Henüz bir gönderiyi kaydedemez veya paylaşamazsınız.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Ana Sayfa</strong><span>Ana Sayfa nedir, telefonda ve web uygulamasında hangi kartları gösterir, nasıl eklenir, taşınır veya kaldırılır, ilgi alanları seçimi ve çıkışta gizlilik.</span></a></li>
+            <li><a href="posting.html"><strong>Teklif veya İhtiyaç paylaşma</strong><span>Yapabileceğiniz, verebileceğiniz bir şey veya aradığınız bir şeyi paylaşın.</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>Adım adım bir takas</strong><span>Teklif ve İhtiyaç için sormaktan ödeme almaya kadar tüm aşamalar ve değerlendirme bırakma.</span></a></li>
+            <li><a href="near-you.html"><strong>Yakınınızdakileri bulma</strong><span>Yalnızca size veya seçtiğiniz herhangi bir yere belirli bir mesafedeki ilanları gösterin.</span></a></li>
+            <li><a href="trust-badges.html"><strong>Güven rozetleri</strong><span>Yeni Gelen, Sakin, Temsilci ve Büyük. Anlamları ve neden ayrıcalık kilidi açmadıkları.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Fasulye ve küresel topluluk</strong><span>Küresel topluluğun amacı, birçok topluluktan biri olması, orada gördükleriniz: 🏘️ Yerel topluluk işareti, örnek topluluk Example Valley, Fasulyelerin neden beklediği ve yerel topluluk başlatma veya bulma.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

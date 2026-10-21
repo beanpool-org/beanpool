@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menemukan hal di dekatmu — BeanPool members' guide</title>
+    <meta name="description" content="Tampilkan hanya kiriman dalam jarak tertentu darimu, atau dari tempat mana pun yang kamu pilih.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Peta</a></p>
+        <h1>Menemukan hal di dekatmu</h1>
+        <p class="lede">Tampilkan hanya kiriman dalam jarak tertentu darimu, atau dari tempat mana pun yang kamu pilih.</p>
+        <h2>Pada tab Pasar</h2>
+        <ul>
+            <li>Ketuk <strong>Pasar</strong>, lalu <strong>Jarak</strong> di baris filter kedua. Pilihan ini tidak muncul saat <strong>Acara</strong> dipilih.</li>
+            <li><strong>Lokasi &amp; Radius</strong> akan terbuka (<strong>Atur Lokasi &amp; Radius</strong> di web app). Untuk menggunakan posisimu saat ini, ketuk tombol target. Atau ketuk peta, atau geser pin, untuk memilih titik pusat lainnya.</li>
+            <li>Tentukan seberapa jauh dengan <strong>Radius pencarian</strong>: mulai dari 100 meter hingga 50 kilometer.</li>
+            <li>Ketuk <strong>Terapkan</strong>. Tombol kemudian menampilkan jaraknya, seperti <strong>5km</strong>.</li>
+            <li>Untuk kembali menampilkan semuanya, buka kembali dan ketuk <strong>Atur Ulang</strong>. Di web app kamu juga dapat mengetuk tanda <strong>✕</strong> pada <strong>Jarak</strong>.</li>
+        </ul>
+        <p>Di ponsel, postingan tanpa lokasi selalu ditampilkan. Di web app, filter <strong>Jarak</strong> menyembunyikannya, kecuali jajak pendapat. Di komunitas global, web app juga menyaringnya saat daftar berada di dekatmu (di bawah).</p>
+        <p>Jika browsermu sudah mengizinkan BeanPool untuk menggunakan lokasimu, pemilih dapat langsung terbuka di tempatmu berada sekarang. Jika tidak, pemilih akan terbuka di titik yang tetap. Periksa pin, atau ketuk tombol target atau peta, sebelum kamu mengetuk <strong>Terapkan</strong>. Di komunitas global web app mengirimkan titik pusat yang kamu pilih ke komunitas, dibulatkan ke sekitar 11 meter.</p>
+        <p>Di ponsel, pemilih terbuka di titik pusat terakhir yang kamu pilih, atau di titik tetap, jadi ketuk tombol target terlebih dahulu.</p>
+        <h2>Pada Peta</h2>
+        <p>Peta tidak memiliki filter jarak tersendiri. Ketuk tombol target di sebelah kiri untuk melihat lokasimu, lalu jelajahi sekitar dan perbesar.</p>
+        <h2>Di komunitas global, di web app</h2>
+        <p>Komunitas global memiliki listing dari mana saja, sehingga <strong>Pasar</strong> dan <strong>Peta</strong> pada web app dimulai dari lokasi di dekatmu:</p>
+        <ul>
+            <li>Dengan <strong>Jarak</strong> yang dipilih di Pasar, keduanya menampilkan listing terdekat di dalamnya, diurutkan dari yang terdekat. Peta menampilkan hingga 200 pin.</li>
+            <li>Tanpa filter jarak, keduanya menampilkan listing terdekat dalam radius 250 km dari wilayahmu: perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau nanti di <strong>Pengaturan</strong>, di bawah <strong>Wilayahmu</strong>. Baris di atas daftar Pasar bertuliskan <strong>Terdekat dari area Anda terlebih dahulu, dalam 250 km.</strong> Ketuk <strong>Tampilkan di mana saja</strong> untuk melihat yang terbaru dari mana saja, dan <strong>Dekat area Anda</strong> untuk kembali.</li>
+            <li>Tanpa keduanya, kamu melihat yang terbaru dari mana saja, dan <strong>Lihat apa yang ada di dekat Anda</strong> membuka pemilih jarak. Baris di atas daftar Pasar memberi tahu pilihan mana yang sedang kamu lihat. Jika menggunakan <strong>Jarak</strong>, baris ini tidak memiliki tombol: buka <strong>Jarak</strong> dan ketuk <strong>Atur Ulang</strong>. Kamu kemudian kembali ke dekat wilayahmu, atau, jika belum mengatur wilayah, kamu melihat yang terbaru dari mana saja.</li>
+            <li>Setiap listing menunjukkan seberapa jauh jaraknya, seperti <strong>📍 12 km</strong>. Listingmu sendiri selalu ada di Peta, dan di Pasar dekat wilayahmu, di mana pun lokasinya. Dengan filter <strong>Jarak</strong>, Pasar hanya menampilkan apa yang berada di dalamnya, termasuk milikmu.</li>
+            <li>Saat daftar berada di dekatmu, postingan tanpa lokasi tidak disertakan. Jajak pendapat dari seseorang yang belum mengatur wilayahnya adalah salah satunya. Untuk melihatnya, atur ulang <strong>Jarak</strong> jika kamu memilihnya, lalu ketuk <strong>Tampilkan di mana saja</strong>.</li>
+            <li>Di bawah <strong>Acara</strong> daftarnya tidak pernah dipotong oleh wilayahmu atau <strong>Jarak</strong> milikmu, seperti sebelumnya.</li>
+            <li>Jika tidak ada apa pun di dekatmu, Peta memberi tahu demikian, dengan tombol <strong>Tampilkan di mana saja</strong>. Kemudian <strong>Dekat area Anda</strong> (atau <strong>Near the place you picked</strong>) membawa kembali daftar terdekat.</li>
+        </ul>
+        <p>Pencarian web app hanya mencari melalui listing yang ada di layar. <strong>Tampilkan di mana saja</strong> menampilkan listing terbaru dari mana saja, bukan setiap listing yang ada, jadi listing yang jauh dan bukan baru tidak akan muncul dalam pencarian. Di setiap komunitas lain web app tidak membatasi Pasar atau Peta berdasarkan wilayahmu. Keduanya menampilkan 50 listing yang paling baru diubah dan milikmu sendiri, dan pencarian hanya mencari di antaranya.</p>
+        <h2>Di komunitas global, di ponsel</h2>
+        <p>Ponsel menyimpan listing yang paling dekat dengan wilayahmu: hingga 500, dalam jarak 250 km. Ponsel juga menyimpan listing milikmu sendiri, dan setiap listing yang kamu miliki kesepakatan, obrolan, atau jawaban di dalamnya. Pasar dan Peta menampilkan apa yang disimpan ponsel. Tanpa mengatur wilayah, ponsel menyimpan listing terbaru sebagai gantinya, dan baris di atas Pasar memberi tahu demikian. Lihat &quot;Wilayahmu&quot;.</p>
+        <h2>Acara di dekatmu</h2>
+        <p>Di ponsel, kartu acara menampilkan seberapa jauh jaraknya setelah kamu mengizinkan aplikasi menggunakan lokasimu. Di web app kartu menampilkannya dari titik pusat yang kamu pilih di <strong>Jarak</strong>. Di komunitas global, jika kamu belum memilihnya, kartu menampilkannya dari wilayahmu (bukan di bawah <strong>Acara</strong>). Di Peta, web app menampilkannya dari lokasimu setelah kamu mengetuk target.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>Menjelajahi pasar</strong><span>Cari Penawaran dan Permintaan dengan pencarian, filter, dan jarak.</span></a></li>
+            <li><a href="map-pins.html"><strong>Yang ditampilkan peta</strong><span>Pin di Peta, arti warnanya, dan tombol-tombol di sekitarnya.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Lokasi pin kamu</strong><span>Siapa yang melihat lokasi kiriman dan acaramu, serta cara menjaga privasi tempat tinggalmu.</span></a></li>
+            <li><a href="events.html"><strong>Acara</strong><span>Buat acara, langsung di lokasi atau online, sekali atau berulang; konfirmasi kehadiran, pasang pengingat, bagikan, dan kelola sebagai tuan rumah.</span></a></li>
+            <li><a href="your-area.html"><strong>Wilayahmu</strong><span>Perkiraan wilayah yang digunakan komunitas global untuk menampilkan kiriman terdekat, dan cara mengubah atau menghapusnya.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

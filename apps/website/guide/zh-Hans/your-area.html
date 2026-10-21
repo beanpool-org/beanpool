@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>所在区域 — BeanPool members' guide</title>
+    <meta name="description" content="全球社区向你展示附近帖子所使用的大致位置，以及如何更改或清除该位置。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">设置与安全</a></p>
+        <h1>所在区域</h1>
+        <p class="lede">全球社区向你展示附近帖子所使用的大致位置，以及如何更改或清除该位置。</p>
+        <h2>什么是所在区域</h2>
+        <p>在全球社区中，你的区域代表你所处的大致范围：以某个城镇或地点为中心约 10 公里的范围，绝不是你的确切住址。全球社区使用该区域向你展示附近的内容：即该区域周围 250 公里以内的最近 500 条刊登。参见“加入多个社区”。</p>
+        <p>你在加入社区时的<strong>你大概在哪里?</strong> 步骤中提供该位置，也可以通过<strong>暂时跳过</strong>跳过此步。你可以随时更改或清除该区域。它属于你在全球社区中的账户，因此你的手机和 Web 应用使用同一设置。</p>
+        <p>你的其他社区不会要求提供此信息。如果某个社区的服务器配置为以相同方式运行，其“设置”中也会显示<strong>你的区域</strong>。</p>
+        <h2>查看你的区域</h2>
+        <ul>
+            <li>打开“设置”：点按屏幕右上角的滑块图标按钮（在宽屏电脑上，点击左侧边栏的齿轮图标）。</li>
+            <li>在 <strong>应用设置</strong> 下，点按<strong>你的区域</strong>。在手机上，它紧挨在<strong>位置</strong>下方。</li>
+        </ul>
+        <p>它会显示<strong>周围约 10 公里</strong>以及你输入的城镇名称，或者如果你使用了自身位置则显示两组坐标数字，若未设置则显示<strong>未设置</strong>。城镇名称仅保存在你输入它的手机或浏览器本地，因此在其他设备上你将看到这两组坐标数字。如果应用无法连接到社区，该行会显示<strong>当前无法检查</strong>。</p>
+        <h2>更改区域</h2>
+        <ul>
+            <li>在<strong>你的区域</strong>中，在<strong>你大概在哪里?</strong> 下方，点按<strong>使用我的位置</strong>，或点按<strong>输入城镇或街区</strong>并从列表中选择你的城镇。</li>
+            <li>保存后，你将返回“设置”。</li>
+            <li>点按<strong>取消</strong>（在浏览器中为 <strong>← 返回设置</strong>）可保持原样。</li>
+        </ul>
+        <p>你的手机或浏览器会在发送前将地点模糊处理到大约 10 公里范围，社区服务器接收后会再次进行模糊处理，因此你的确切位置绝不会被发送或保存。<strong>使用我的位置</strong>仅读取一次你的当前位置。若要查找城镇，你输入的内容会发送给 OpenStreetMap，地点列表正是来源于此。</p>
+        <p>当你的区域发生更改时，手机在下次同步时会将已保存的刊登替换为新区域附近的刊登。如果你在 Web 应用或另一部手机上进行了更改，你的手机将在大约一小时内同步更新。</p>
+        <h2>清除区域</h2>
+        <ul>
+            <li>在<strong>你的区域</strong>中，点按<strong>清除</strong>。该按钮仅在你已设置区域时才会显示。</li>
+        </ul>
+        <p>没有设置区域时，你仍可照常使用全球社区。你的手机会保留来自各地的最新 100 条刊登，而不是你附近的刊登，市集上方的一行提示会显示 <strong>You're seeing the newest listings worldwide. Set your area to see what's near you.</strong>。轻触该提示即可设置区域。在 Web 应用中，市集和地图会展示来自各地的最新内容：参见“查找附近的内容”。</p>
+        <h2>谁能看到什么</h2>
+        <ul>
+            <li>其他成员可以看到你距离有多远，你发起的投票也会展示在你所在的区域。参见“个人隐私”。</li>
+            <li>如果未设置区域，附近的成员在其列表中看不到你发起的投票，不过他们仍可通过搜索找到。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="communities.html"><strong>加入多个社区</strong><span>用一个账户加入多个社区、在它们之间切换、跟随你的社区迁移到新地址，以及查看全球社区向你展示的内容。</span></a></li>
+            <li><a href="privacy.html"><strong>个人隐私</strong><span>他人能看到的关于你的信息，以及控制这些信息的设置项。</span></a></li>
+            <li><a href="near-you.html"><strong>查找附近的内容</strong><span>仅显示距离你或你选择的任意地点一定范围内的帖子。</span></a></li>
+            <li><a href="joining.html"><strong>加入 BeanPool</strong><span>两种加入方式：凭成员邀请加入本地社区，或在开放时凭 12 个助记词或一次登录加入全球社区。申请加入社区以及如何邀请他人。</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>浏览市集</strong><span>通过搜索、分类筛选和距离范围查找提供与需求。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

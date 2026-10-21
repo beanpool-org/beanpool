@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mensagens — BeanPool members' guide</title>
+    <meta name="description" content="Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Conversas</a></p>
+        <h1>Mensagens</h1>
+        <p class="lede">Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.</p>
+        <h2>Suas conversas</h2>
+        <p><strong>Conversas</strong> tem três botões no topo: <strong>Mensagens</strong>, <strong>Grupos</strong> e <strong>Pessoas</strong>.</p>
+        <p>Toque em <strong>Conversas</strong> na barra de abas e depois em <strong>Mensagens</strong>. Suas conversas com pessoas estão listadas lá. Acordos que precisam da sua atenção ficam no topo, sob <strong>Ação necessária</strong>.</p>
+        <p>Conversas que pertencem a um grupo, empreendimento ou evento ficam em <strong>Grupos</strong>, não aqui. Veja &quot;Grupos&quot;.</p>
+        <ul>
+            <li>Busque com <strong>Buscar conversas, publicações, parceiros...</strong>.</li>
+            <li>O botão de filtro ordena por <strong>Recentes</strong> ou <strong>Não lidas</strong> (e, onde sua comunidade usa feijões, pelos feijões em cada acordo, do maior para o menor ou vice-versa) e pode mostrar <strong>Apenas não lidas</strong> ou <strong>Apenas amigos</strong>.</li>
+            <li>No celular, os botões de busca e de filtro deslizam para fora da tela conforme você rola para baixo. Role um pouco para cima e eles retornam. Toque em <strong>Conversas</strong> novamente para ir direto ao topo.</li>
+        </ul>
+        <p>No app web, essa é a aba <strong>Bate-papo</strong>. Ela lista todas as suas conversas, de grupos e eventos também, com <strong>Todas</strong>, <strong>Transações</strong>, <strong>Diretas</strong> e <strong>Grupos</strong> no topo, e não possui busca nem filtros.</p>
+        <h2>Iniciando uma conversa</h2>
+        <ul>
+            <li>A partir de uma publicação: toque em <strong>Mensagem</strong> e no nome da pessoa.</li>
+            <li>A partir de <strong>Conversas</strong>: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela.</li>
+            <li>A partir dos seus amigos: <strong>Conversas</strong>, depois <strong>Pessoas</strong>, depois <strong>Amigos</strong>, e toque no botão de mensagem ao lado de um nome.</li>
+        </ul>
+        <p>No app web, use <strong>✉️ Nova mensagem direta</strong> ou o botão <strong>💬 Mensagem</strong> em uma publicação. Seus amigos ficam sob a aba <strong>Pessoas</strong>.</p>
+        <h2>Enviando</h2>
+        <ul>
+            <li>Digite em <strong>Mensagem...</strong> e toque no botão de envio.</li>
+            <li>Para enviar uma foto, toque em <strong>+</strong> e depois em <strong>Câmera</strong> ou <strong>Galeria</strong>. No app web, use o botão <strong>📎</strong>, ou cole ou arraste uma foto diretamente para a conversa — ela é exibida primeiro, e qualquer texto que você já tenha digitado segue com ela como legenda. Fotos só podem ser enviadas em conversas entre duas pessoas.</li>
+        </ul>
+        <p>As marcas de confirmação sob a sua mensagem:</p>
+        <ul>
+            <li>uma marca: enviada;</li>
+            <li>duas marcas azuis: lida;</li>
+            <li>um relógio: ainda enviando;</li>
+            <li><strong>não entregue</strong>: falhou. Toque nela para <strong>Reenviar</strong> ou <strong>Descartar</strong>.</li>
+        </ul>
+        <p>O relógio e a indicação <strong>não entregue</strong> existem no celular. No app web, uma mensagem que falha permanece na caixa de texto e o app avisa sobre isso.</p>
+        <h2>Responder, reagir, editar, apagar</h2>
+        <p>No celular, toque em uma mensagem. Pequenos botões redondos aparecem ao lado dela:</p>
+        <ul>
+            <li><strong>Responder</strong> inclui uma citação dela acima do que você escrever a seguir. Toque na citação em uma mensagem enviada para voltar até o que ela responde.</li>
+            <li><strong>Reagir</strong> abre sete emojis. Toque em um para adicioná-lo, toque nele novamente para retirá-lo. Uma reação por pessoa; tocar em uma diferente substitui a anterior. As reações aparecem como um pequeno selo sob a mensagem.</li>
+            <li><strong>Editar</strong>, nas suas próprias mensagens, por até 15 minutos após o envio. A mensagem exibe então <strong>editada</strong>. Fotos não podem ser editadas.</li>
+            <li><strong>Excluir</strong>, nas suas próprias mensagens, a qualquer momento — não há limite de tempo. O app pergunta <strong>Excluir para todos?</strong> uma vez. A mensagem passa a exibir <strong>Esta mensagem foi apagada</strong> para ambos, e ninguém pode reagir ou responder a ela.</li>
+        </ul>
+        <p>Os mesmos botões estão presentes na conversa de um grupo. Veja &quot;Grupos&quot;.</p>
+        <p>No app web, <strong>Responder</strong>, <strong>Reagir</strong> e <strong>Editar</strong> são pequenos links de texto em cada mensagem, e não há <strong>Excluir</strong>: exclua uma mensagem a partir do app de celular.</p>
+        <p>Apagar uma mensagem retira o texto do servidor da comunidade também, para que um novo celular que se conecte mais tarde nunca a veja.</p>
+        <h2>Silenciando uma conversa</h2>
+        <p>Toque em <strong>⋯</strong> no canto superior direito (<strong>⋮</strong> na conversa de um grupo) e depois em <strong>Silenciar notificações</strong>: <strong>Por 8 horas</strong>, <strong>Por uma semana</strong> ou <strong>Para sempre</strong>. Toque no mesmo botão e em <strong>Reativar notificações</strong> para desfazer. O app web ainda não consegue silenciar uma conversa. Veja &quot;Silenciando uma conversa&quot;.</p>
+        <h2>O que é privado</h2>
+        <ul>
+            <li>Uma conversa entre duas pessoas é <strong>criptografada de ponta a ponta</strong>: é protegida no seu celular e decodificada no da outra pessoa, de forma que o servidor da sua comunidade não consegue lê-la. No celular, a conversa exibe <strong>Criptografia de ponta a ponta</strong> no topo. As fotos nela são criptografadas também, assim como as suas edições.</li>
+            <li>Cada mensagem também é associada a quem a enviou, àquela mensagem específica, àquela conversa e, caso seja uma resposta, à mensagem que ela responde. Dessa forma, o servidor não pode exibir uma mensagem sua como se fosse da outra pessoa, enviá-la novamente como uma mensagem nova nem apontar sua resposta para uma mensagem diferente. Onde ele tentar fazer isso, o aplicativo exibe <strong>Esta mensagem não pôde ser verificada, então não é exibida.</strong> no meio da conversa, como se não pertencesse a ninguém, em vez do texto. Uma foto que o servidor tente substituir por outra exibirá <strong>Imagem indisponível</strong>.</li>
+            <li>Se o servidor colocar uma mensagem em outra conversa, o aplicativo a recusará lá. Quando duas conversas suas com a mesma pessoa são unificadas em uma só, cada mensagem mantém a indicação da conversa de onde partiu. Uma enviada a partir desta atualização é exibida com a frase <strong>Movido para cá de outra conversa.</strong> logo abaixo. Uma enviada antes disso exibe a frase de versão anterior (veja abaixo).</li>
+            <li>Cada mensagem também se lembra da mensagem mais recente que o autor tinha no momento em que a escreveu. Se o servidor a exibir antes dessa mensagem, ela traz a indicação <strong>Exibido fora da ordem em que foi escrito.</strong> abaixo dela. Duas mensagens escritas exatamente no mesmo momento, sem que uma preceda a outra, podem aparecer em qualquer ordem sem essa indicação.</li>
+            <li>Qualquer conteúdo em uma conversa entre duas pessoas que não esteja protegido nunca é exibido como texto de nenhuma das partes: exibe <strong>Esta mensagem não estava criptografada, por isso o BeanPool não pode confirmar o autor.</strong> no meio da conversa, e as palavras não são exibidas. Sua lista de conversas exibe a mesma linha.</li>
+            <li>Uma mensagem que os administradores da sua comunidade enviarem para você a partir da página de administração do servidor não é protegida e não é uma mensagem privada. Ela aparece no meio da conversa, nunca como uma mensagem pessoal de alguém, com a anotação <strong>Da administração da sua comunidade. Não é uma mensagem privada: o servidor da comunidade pode ler.</strong> embaixo.</li>
+            <li>Mensagens enviadas antes desta atualização, por qualquer aplicativo, foram protegidas sem essas verificações: o servidor poderia ter alterado quem parecia ser o autor ou enviado alguma novamente. Elas ainda se abrem, e cada uma exibe <strong>Enviado de uma versão antiga do app: o BeanPool não pode confirmar o autor.</strong> logo abaixo, onde quer que esteja na conversa. Alguém que ainda esteja em um app mais antigo não pode ler mensagens de um app atualizado até que atualize o seu.</li>
+            <li>Uma resposta exibe a mensagem respondida da mesma forma como essa mensagem é exibida. Ela só cita o nome do autor quando a mensagem pôde ser aberta e traz a linha daquela mensagem logo abaixo, como a de versão anterior. Ela indica <strong>Aviso</strong> para um aviso do servidor e <strong>Administradores da comunidade</strong> para a mensagem dos administradores. Qualquer coisa que não abriu ou não estava protegida é citada como <strong>Não confirmado</strong>, com a linha que substitui as palavras.</li>
+            <li>Portanto, o servidor sozinho não consegue fazer parecer que qualquer um de vocês escreveu palavras que não escreveu. Ele ainda pode reter uma mensagem, entregá-la com atraso ou fazer com que exiba <strong>Esta mensagem foi apagada</strong>. Ele pode exibir o texto antigo de uma mensagem editada em vez do novo: ambos realmente pertencem ao remetente. Ele vê qual mensagem cada uma responde, mas não pode alterar isso sem ser notado. Ele pode adicionar ou remover uma reação de emoji no nome de qualquer uma das pessoas: reações não são protegidas. E ele pode adicionar seus próprios comunicados a uma conversa. Um aviso aparece como aviso, é citado como <strong>Aviso</strong> e aparece como <strong>Aviso:</strong> na sua lista de conversas, nunca como se partisse de vocês.</li>
+            <li>A proteção comprova que uma mensagem veio de um de vocês dois, mas não de qual deles: a outra pessoa, com a ajuda dos responsáveis pelo servidor, poderia atribuir palavras ao seu nome.</li>
+            <li>Tudo isso depende de o seu app possuir a chave real da outra pessoa, obtida do servidor da comunidade, assim como a própria criptografia depende disso. No app web, depende também do próprio aplicativo enviado pelo servidor ao seu navegador. O aplicativo de celular vem da loja de aplicativos.</li>
+            <li>Uma mensagem que não puder ser protegida não é enviada. Se o app ainda não conseguir encontrar a chave da outra pessoa, ou se a criptografia falhar, suas palavras continuam na caixa de texto com uma linha informando isso. Envie novamente em instantes. O servidor da comunidade também recusa qualquer mensagem entre duas pessoas que não esteja protegida.</li>
+            <li>Os avisos que o BeanPool adiciona a uma conversa sobre um acordo não são criptografados: feijões retidos para a troca, pagos ou devolvidos quando ela é cancelada, o valor correspondente e como um administrador resolveu uma negociação travada e por quê. As pessoas que gerenciam o servidor da comunidade podem lê-los.</li>
+            <li>O servidor também sabe quem enviou mensagem para quem, quando, qual mensagem cada uma responde e vê as reações com emojis. Uma mensagem que uma versão mais antiga do app enviou sem proteção permanece legível no servidor.</li>
+            <li>A conversa de um grupo também é <strong>criptografada de ponta a ponta</strong>, no celular e no app web: somente os membros do grupo podem lê-la, e os responsáveis pelo servidor da comunidade não podem. Acima da caixa de mensagem, o app informa que ela é <strong>Criptografada de ponta a ponta</strong>. O servidor da comunidade ainda vê quem escreveu, quando, quem foi mencionado, a qual mensagem cada linha responde e as reações com emojis. Você vê a conversa de um grupo somente a partir do dia em que entrou: nada escrito antes é exibido e seu celular nunca detém a chave para isso. Uma mensagem que não puder ser protegida não é enviada. Uma linha que não puder ser verificada como escrita por um membro exibe <strong>Esta mensagem não pôde ser verificada.</strong>, como de ninguém. Se o servidor da comunidade for mais antigo e ainda não puder proteger conversas de grupo, a conversa informa isso e o servidor pode lê-la. Quando o servidor for atualizado, essas mensagens anteriores serão removidas e uma linha na conversa avisará isso. Veja &quot;Grupos&quot;.</li>
+            <li>No app web, a conversa de um grupo funciona da mesma forma, mas você não pode enviar fotos nela.</li>
+            <li>As conversas de empreendimentos e eventos não são criptografadas. As pessoas que gerenciam o servidor da comunidade podem lê-las, e o servidor poderia escrever nelas em nome de qualquer pessoa.</li>
+            <li>Uma conversa entre duas pessoas nunca pode ser transformada em uma dessas conversas abertas. Depois que o seu aplicativo tiver identificado uma conversa como sendo entre duas pessoas, ou caso ela contenha uma mensagem criptografada, ela permanecerá assim, independentemente do que o servidor disser: só abre como essa conversa específica, com todas as verificações acima, e tudo o que você enviar nela será sempre protegido. Um celular ou navegador que nunca tenha visto a conversa e que não tenha recebido nenhuma de suas mensagens criptografadas não consegue saber: para ele, essa conversa parece a de qualquer outro grupo, legível pelo servidor. No app web, isso se aplica também a um navegador onde a sessão tenha sido encerrada desde então, a uma janela anônima ou a um navegador cujos dados do site tenham sido limpos: o app web esquece quais conversas eram entre duas pessoas. O aplicativo de celular guarda essa lista.</li>
+            <li>Apagar uma mensagem solicita ao servidor da comunidade que a substitua. Isso não alcança uma cópia que alguém já tenha lido nem uma captura de tela.</li>
+            <li>Excluir sua conta faz o mesmo com todas as mensagens que você escreveu, em qualquer tipo de conversa, e apaga as fotos enviadas. Veja &quot;Sair ou excluir sua conta&quot;.</li>
+            <li>A conversa de um evento também pode ser lida pelo anfitrião e por todas as pessoas que vão comparecer (onde o anfitrião aprova entradas, aquelas que ele autorizou).</li>
+            <li>A conversa de um empreendimento pode ser lida por qualquer membro da sua comunidade. É a discussão pública do empreendimento, a mesma exibida na página dele, e qualquer membro da comunidade pode escrever nela também. Não é uma conversa privada para seus custódios.</li>
+        </ul>
+        <h2>Bloqueando alguém a partir de uma conversa</h2>
+        <p>Toque no nome da pessoa no topo da conversa. O perfil dela se abrirá. Toque em <strong>Bloquear</strong> e depois em <strong>Bloquear usuário</strong>. No app web, toque em <strong>Bloquear</strong> no topo da conversa e depois em <strong>OK</strong>. Veja &quot;Bloquear alguém&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>Pessoas e amigos</strong><span>Encontre membros da sua comunidade, adicione amigos e apoie alguém.</span></a></li>
+            <li><a href="blocking.html"><strong>Bloquear alguém</strong><span>Oculte as publicações e mensagens de alguém e desfaça isso quando quiser.</span></a></li>
+            <li><a href="event-chat.html"><strong>Chat do evento</strong><span>Converse com o anfitrião e todos que vão ao evento.</span></a></li>
+            <li><a href="groups.html"><strong>Grupos</strong><span>Seus grupos e chats, conversas, criar um grupo, convidar pessoas, entrar por convite e as votações internas do grupo.</span></a></li>
+            <li><a href="mute.html"><strong>Silenciar conversa</strong><span>Silencie uma conversa — individual, de grupo ou de empreendimento — por 8 horas, uma semana ou para sempre.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Barra superior</strong><span>O feijão, os pequenos ícones que avisam quando algo precisa de você e os botões no canto superior direito.</span></a></li>
+            <li><a href="key-changed.html"><strong>Se a chave do chat mudou</strong><span>Por que uma conversa para de enviar, como checar o código de chave com a pessoa e quando continuar.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

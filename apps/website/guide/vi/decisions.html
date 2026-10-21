@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bỏ phiếu cho Quyết định — BeanPool members' guide</title>
+    <meta name="description" content="Tìm các Quyết định đang mở, bỏ phiếu, đổi phiếu bầu và xem kết quả.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Chung</a></p>
+        <h1>Bỏ phiếu cho Quyết định</h1>
+        <p class="lede">Tìm các Quyết định đang mở, bỏ phiếu, đổi phiếu bầu và xem kết quả.</p>
+        <h2>Nơi tìm</h2>
+        <p>Nhấn <strong>Chung</strong>, sau đó nhấn <strong>Quyết định</strong>. Các Quyết định đang mở nằm trong mục <strong>Quyết định đang mở</strong>.</p>
+        <p>Một Quyết định có tính ràng buộc: nếu được thông qua, máy chủ của cộng đồng bạn sẽ tự động thực thi. Quản trị viên chỉ có thể dừng một quyết định bằng cách đưa ra lý do bằng văn bản để các thành viên có thể đọc. Các quy tắc về việc ai có thể bỏ phiếu, cần tỷ lệ tham gia bao nhiêu và cần bao nhiêu phiếu Đồng ý nằm trong mục &quot;Quy tắc và cách quyết định vận hành&quot;.</p>
+        <p>Cộng đồng toàn cầu không có Quyết định. Bất kỳ ai cũng có thể tham gia bằng 12 từ hoặc phương thức đăng nhập, vì vậy một người có nhiều tài khoản có thể làm sai lệch kết quả bỏ phiếu ở đó. Thay vào đó, những người điều hành sẽ phụ trách việc này: xem &quot;Báo cáo vấn đề&quot;. Quyết định thuộc về các cộng đồng địa phương. Các cuộc thăm dò ý kiến vẫn hoạt động ở mọi nơi.</p>
+        <p>Trên cộng đồng toàn cầu, <strong>Chung</strong> hiển thị một Quyết định ví dụ từ một cộng đồng địa phương, được đánh dấu <strong>🏘️ Cộng đồng địa phương</strong>, để bạn có thể xem cách hoạt động. Các nút <strong>Bỏ phiếu ĐỒNG Ý</strong> và <strong>Bỏ phiếu KHÔNG ĐỒNG Ý</strong> của nó giải thích lý do tại sao việc bỏ phiếu diễn ra trong cộng đồng địa phương, và không ghi nhận phiếu bầu nào. Xem &quot;Đậu và cộng đồng toàn cầu&quot;.</p>
+        <h2>Đọc một Quyết định</h2>
+        <p>Mỗi Quyết định hiển thị:</p>
+        <ul>
+            <li>nội dung của quyết định, và điều gì sẽ xảy ra nếu quyết định được thông qua;</li>
+            <li>cách tính phiếu bầu: một thành viên một phiếu bầu, hoặc tín chỉ biểu quyết đối với các quyết định về số đậu của Commons;</li>
+            <li>thời gian còn lại. Cuộc bỏ phiếu diễn ra trong 7 ngày;</li>
+            <li><strong>Tỷ lệ tham gia:</strong> cần bao nhiêu phiếu bầu, và đã đạt được hay chưa;</li>
+            <li><strong>Kiểm phiếu:</strong> số phiếu Đồng ý và Không đồng ý cho đến thời điểm hiện tại, và cần bao nhiêu phiếu Đồng ý.</li>
+        </ul>
+        <h2>Bỏ phiếu</h2>
+        <ul>
+            <li>Nhấn <strong>Bỏ phiếu ĐỒNG Ý</strong> hoặc <strong>Bỏ phiếu KHÔNG ĐỒNG Ý</strong>. Trên điện thoại, ứng dụng thông báo <strong>Đã ghi nhận phiếu bầu</strong>. Trong ứng dụng web, thẻ sẽ cập nhật.</li>
+            <li>Sau đó, thẻ cho biết bạn đã bỏ phiếu như thế nào, chẳng hạn như &quot;Bạn đã bỏ phiếu Đồng ý&quot;.</li>
+            <li>Để thay đổi quyết định trước khi cuộc bỏ phiếu kết thúc, hãy nhấn vào nút khác, chẳng hạn như <strong>Đổi thành Không đồng ý</strong>.</li>
+        </ul>
+        <p>Mỗi Quyết định là một cuộc <strong>bỏ phiếu kín</strong>. Các thành viên chỉ thấy tổng số phiếu, không bao giờ thấy ai đã bỏ phiếu như thế nào. Phiếu bầu của riêng bạn chỉ hiển thị cho bạn.</p>
+        <h2>Quyết định về số đậu của Commons</h2>
+        <p>Các quyết định này sử dụng <strong>tín chỉ biểu quyết</strong>. Bạn nhận được tín chỉ biểu quyết từ các giao dịch đã hoàn tất của mình, được cấp mới cho mỗi Quyết định. Sử dụng <strong>−</strong> và <strong>+</strong> để chọn số lượng phiếu bầu muốn bỏ. Càng nhiều phiếu bầu thì chi phí càng cao: 2 phiếu tốn 4 tín chỉ, 3 phiếu tốn 9 tín chỉ.</p>
+        <p>Nếu bạn chưa hoàn tất giao dịch nào, bạn không thể bỏ phiếu cho các quyết định này. Bạn vẫn có thể bỏ phiếu cho các Quyết định khác, miễn là bạn đã tham gia trước khi quyết định đó được mở và tín dụng của bạn không bị đóng băng.</p>
+        <h2>Kết quả</h2>
+        <p>Nhấn <strong>Lịch sử quyết định</strong>. Chọn <strong>Tất cả</strong>, <strong>Đã thực thi</strong>, <strong>Thất bại</strong> hoặc <strong>Vô hiệu</strong>. Mỗi mục hiển thị tỷ lệ tham gia và kết quả kiểm phiếu cuối cùng, cùng những gì đã diễn ra, ví dụ như có quá ít người tham gia bỏ phiếu.</p>
+        <h2>Xem thêm</h2>
+        <p>Trên điện thoại, nhấn vào biểu tượng <strong>ⓘ</strong> bên cạnh tiêu đề Commons để biết cách thức hoạt động của đậu trong Commons và việc bỏ phiếu. Trong ứng dụng web, mở <strong>Sổ cái</strong>, nhấn <strong>Ví</strong>, sau đó nhấn <strong>Quỹ Commons ⓘ</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>Đề xuất một Quyết định</strong><span>Yêu cầu cộng đồng cùng đưa ra một quyết định có tính ràng buộc.</span></a></li>
+            <li><a href="rules.html"><strong>Quy tắc và cách quyết định vận hành</strong><span>Bỏ phiếu, tỷ lệ tham gia, bỏ phiếu kín, ai có quyền bỏ phiếu, đình chỉ, xóa thành viên, người quản lý, cùng người triệu tập.</span></a></li>
+            <li><a href="polls.html"><strong>Thăm dò</strong><span>Hỏi cộng đồng một câu hỏi nhanh. Thăm dò thể hiện ý kiến; tự chúng không làm thay đổi điều gì.</span></a></li>
+            <li><a href="commons-fund.html"><strong>Quỹ Commons</strong><span>Số đậu chung của cộng đồng: nguồn gốc từ đâu và được chi tiêu như thế nào.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Thanh trên cùng</strong><span>Hạt đậu, các biểu tượng nhỏ hiện lên khi có việc cần bạn, và các nút ở góc trên bên phải.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Đậu và cộng đồng toàn cầu</strong><span>Mục đích của cộng đồng toàn cầu, một trong nhiều cộng đồng, và những gì bạn thấy: dấu hiệu 🏘️ Cộng đồng địa phương, cộng đồng mẫu Example Valley, lý do Đậu chờ ở đó và cách bắt đầu hoặc tìm cộng đồng địa phương.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

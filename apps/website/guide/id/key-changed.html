@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saat kunci atau nama berubah — BeanPool members' guide</title>
+    <meta name="description" content="Mengapa obrolan berhenti mengirim pesan, cara memeriksa kode kunci dengan orang tersebut, dan kapan harus melanjutkan.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Obrolan</a></p>
+        <h1>Saat kunci atau nama berubah</h1>
+        <p class="lede">Mengapa obrolan berhenti mengirim pesan, cara memeriksa kode kunci dengan orang tersebut, dan kapan harus melanjutkan.</p>
+        <h2>Apa artinya</h2>
+        <p>Setiap pesan antara dua orang dikunci sehingga hanya ponsel orang tersebut yang dapat membukanya. Pesan dikunci ke <strong>kunci</strong> mereka, bukan ke nama mereka. Ponselmu mengingat kunci mana yang digunakannya untuk mengunci obrolanmu.</p>
+        <p>Jika komunitasmu sekarang mencantumkan kunci yang berbeda untuk orang tersebut, ponselmu berhenti dan memberitahumu, alih-alih mengirim secara diam-diam ke kunci baru. Di bagian atas obrolan kamu melihat <strong>Kunci di balik &quot;Ben&quot; telah berubah.</strong>. Kotak pesan berwarna abu-abu dan menyatakan pengiriman dijeda.</p>
+        <p>Pesan-pesanmu sebelumnya dengan mereka biasanya masih dapat dibaca seperti biasa. Pada ponsel yang baru saja kamu pulihkan atau atur ulang, pesan dari kunci baru terbaca <strong>Dikirim dari kunci baru. Ditampilkan setelah kamu melanjutkan.</strong> sampai kamu memutuskan.</p>
+        <p>Ini berlaku di aplikasi ponsel. Aplikasi web belum mengingat kunci.</p>
+        <h2>Mengapa hal ini bisa terjadi</h2>
+        <ul>
+            <li><strong>Mereka mendapatkan ponsel baru dan memperbarui kunci.</strong> Ini adalah alasan yang biasa terjadi. Kunci lama mereka hilang, jadi mereka memiliki kunci baru.</li>
+            <li><strong>Ada yang salah.</strong> Server komunitas mencantumkan siapa yang ada di setiap obrolan. Server yang ingin membaca pesanmu dapat menempatkan kunci orang lain di balik nama temanmu. Namanya tampak benar, tetapi kuncinya tidak.</li>
+        </ul>
+        <p>Ponselmu tidak dapat membedakan kedua hal ini dengan sendirinya. Kamu bisa membedakannya, dengan kode kunci.</p>
+        <h2>Memeriksa kode kunci dengan orang tersebut</h2>
+        <ul>
+            <li>Banner menampilkan sebuah kode: 20 digit dalam lima kelompok yang masing-masing terdiri dari empat angka.</li>
+            <li>Minta orang tersebut untuk membuka <strong>Pengaturan</strong>, lalu <strong>Perlindungan Akun</strong>, dan membacakan <strong>Kode kunci saya</strong> milik mereka.</li>
+            <li><strong>Kode kunci saya</strong> hanya ada di aplikasi ponsel. Jika orang tersebut hanya menggunakan aplikasi web, mereka belum dapat membacakannya untukmu: ketuk <strong>Nanti saja</strong> sampai mereka dapat membuka aplikasi ponsel.</li>
+            <li>Periksa <strong>secara langsung, atau melalui panggilan telepon atau video</strong> saat kamu yakin itu memang mereka. Jangan memeriksanya melalui pesan di BeanPool: jika kuncinya salah, siapa pun yang menjawab juga bukan orang yang sebenarnya.</li>
+            <li>Jika setiap digit cocok, centang <strong>Saya sudah memeriksa dengan Ben: kode kunci di Pengaturannya cocok dengan ini.</strong>, lalu ketuk <strong>Lanjutkan dengan kunci baru</strong>.</li>
+        </ul>
+        <p>Sejak saat itu pesanmu akan dikirim ke kunci yang baru. Banner dan label <strong>kunci berubah</strong> pada obrolan di <strong>Obrolan</strong> akan hilang, dan pesan-pesanmu sebelumnya masih dapat dibaca.</p>
+        <p>Kode ini bukan rahasia. Kode ini aman untuk dibacakan.</p>
+        <h2>Jika kode tidak cocok, atau kamu tidak dapat memeriksanya</h2>
+        <p>Ketuk <strong>Nanti saja</strong>. Tidak ada yang dikirim dan tidak ada yang berubah. Kamu dapat kembali ke obrolan nanti.</p>
+        <p>Obrolan yang dijeda dapat tetap dijeda sampai kamu melanjutkan. Tidak ada cara lain untuk terus berbicara di dalamnya: komunitasmu menyimpan satu obrolan untuk kalian berdua, jadi memulai obrolan baru dengan orang yang sama akan membuka obrolan yang sama ini.</p>
+        <p>Jika kode tidak cocok, jangan lanjutkan. Beri tahu orang tersebut dan admin komunitasmu: seseorang mungkin mencoba membaca pesan-pesanmu.</p>
+        <h2>Jika banner tidak menawarkan kunci untuk melanjutkan</h2>
+        <p>Terkadang komunitas tidak mencantumkan satu kunci tunggal untuk orang tersebut dalam obrolan antara dua orang: komunitas mencantumkan beberapa kunci, atau tidak ada sama sekali. Saat itu tidak ada kunci untuk melanjutkan, sehingga banner menyatakan hal itu dan hanya menawarkan <strong>Nanti saja</strong>. Tidak ada yang dikirim. Bicaralah dengan orang tersebut secara langsung atau melalui panggilan telepon. Ponselmu akan memeriksa obrolan lagi dengan sendirinya saat daftar komunitas berubah, dan obrolan baru dengan orang yang sama adalah obrolan yang sama ini.</p>
+        <h2>Jika banner menyatakan ponselmu sedang memeriksa obrolan dari awal</h2>
+        <p>Setelah kamu memulihkan ponselmu dari 12 katamu, atau memperbarui aplikasi, ponselmu memeriksa setiap obrolan terhadap pesan-pesan awalnya sendiri. Jika pesan-pesan tersebut berasal dari kunci yang berbeda dari yang sekarang diberikan komunitasmu untuk orang tersebut, banner dimulai dengan <strong>Ponsel ini sedang memeriksa obrolan ini dari awal, seperti setelah kamu memulihkan atau memperbarui aplikasi.</strong>. Periksa kodenya dengan orang tersebut seperti di atas. Setelah kamu mengatur ulang memori obrolan komunitas, pesan dimulai dengan <strong>Memori obrolan komunitas ini telah diatur ulang, jadi ponsel ini memeriksa obrolan ini dari awal.</strong> sebagai gantinya.</p>
+        <h2>Memori obrolan</h2>
+        <p>Ponselmu menyimpan memori kecil untuk setiap komunitas: kunci mana yang menjadi lawan bicara di setiap obrolanmu, dan obrolan mana yang bersifat pribadi. Memori ini disimpan di ponsel, dan server komunitas tidak dapat memindahkan obrolan ke kunci lain dengan sendirinya: hanya kamu yang dapat melakukannya, pada banner. Memori ini tetap ada di ponsel saat kamu keluar, jadi keluar dan masuk kembali tidak membersihkannya. Ponsel tidak pernah mengaturnya ulang sendiri.</p>
+        <p>Kamu dapat mengaturnya ulang untuk satu komunitas: buka <strong>Pengaturan</strong>, ketuk <strong>Memori obrolan</strong> di bawah <strong>AKUN &amp; IDENTITAS</strong>, ketuk <strong>Atur ulang</strong> di sebelah komunitas, baca peringatannya, dan ketuk <strong>Atur ulang</strong> lagi. Aplikasi mengarahkanmu ke sini hanya ketika dinyatakan bahwa aplikasi tidak dapat membaca memori tersebut dan mencoba lagi tidak membantu.</p>
+        <p>Setelah pengaturan ulang, ponselmu memeriksa setiap obrolan di komunitas itu lagi dari awal, dari pesan-pesan yang disimpannya. Obrolan yang pesannya berasal dari kunci yang berbeda dari yang sekarang diberikan komunitas akan menampilkan banner lagi, dimulai dengan <strong>Memori obrolan komunitas ini telah diatur ulang, jadi ponsel ini memeriksa obrolan ini dari awal.</strong>. Periksa kodenya dengan orang tersebut seperti di atas.</p>
+        <p>Dua hal dapat berubah setelah pengaturan ulang, dan peringatan menyatakan hal itu sebelum kamu mengonfirmasi: obrolan yang dijeda karena kuncinya berubah dapat terbuka dengan kunci baru, dan obrolan pribadi yang telah menghilang dari Obrolan dapat kembali sebagai obrolan grup yang dapat dibaca oleh komunitas. Periksa kode kunci, atau siapa yang ada di dalam obrolan, sebelum kamu mengirim pesan.</p>
+        <p>Pengaturan ulang tidak membantu obrolan yang tidak dapat dicocokkan ponselmu ke satu kunci: obrolan diperiksa lagi dan berhenti lagi. Periksa kodenya dengan orang tersebut sebagai gantinya (di atas).</p>
+        <p>Ini berlaku di aplikasi ponsel. Aplikasi web tidak memiliki memori obrolan.</p>
+        <h2>Jika banner menyatakan ponselmu tidak dapat mencocokkan obrolan ke satu kunci</h2>
+        <p>Terkadang pesan-pesan sebelumnya dalam obrolan terkunci pada kunci-kunci yang tidak dapat dicocokkan ponselmu ke satu orang. Di atas kotak pesan tertulis <strong>Ponsel ini tidak dapat mencocokkan obrolan ini ke satu kunci, jadi pengiriman dinonaktifkan.</strong> dan banner menampilkan kode kunci yang sekarang dicantumkan komunitasmu untuk orang tersebut.</p>
+        <p>Beberapa pesan mungkin masih muncul. Pesan-pesan itu mungkin bukan dari orang yang namanya tertera pada obrolan: pesan-pesan awal mereka sendiri dapat menjadi pesan yang bertuliskan <strong>Pesan ini tidak dapat diverifikasi, jadi tidak ditampilkan.</strong>. Pesan-pesan tersebut tetap seperti itu, bahkan setelah kamu melanjutkan.</p>
+        <p>Periksa kodenya dengan orang tersebut seperti di atas, secara langsung atau lewat panggilan telepon. Jika cocok, centang kotaknya dan ketuk <strong>Lanjutkan dengan kunci baru</strong>: sejak saat itu pesanmu akan dikirim ke kunci tersebut. Jika tidak cocok, atau kamu tidak dapat memeriksanya, ketuk <strong>Nanti saja</strong>. Obrolan baru dengan orang yang sama adalah obrolan yang sama ini, jadi tidak ada hal lain untuk dicoba. Jika komunitas tidak mencantumkan satu kunci tunggal untuk mereka, banner hanya menawarkan <strong>Nanti saja</strong>, dan ponselmu memeriksa obrolan lagi dengan sendirinya saat daftar komunitas berubah.</p>
+        <h2>Apa yang dapat diperiksa oleh ponselmu, dan apa yang tidak</h2>
+        <p>Ponselmu memeriksa sebuah obrolan terhadap pesan-pesan yang sudah disimpannya. Ponsel yang dipulihkan, atau ponsel yang sudah ada saat pembaruan, hanya diarahkan oleh server yang menahan atau menyertakan bagian paling awal dari obrolan dalam apa yang dikirimkannya. Ponsel yang sudah menyimpan bagian paling awal tersebut tidak diarahkan oleh apa pun yang dikirimkan server setelah pembaruan.</p>
+        <p>Jadi, ponsel yang baru saja kamu pulihkan, atau baru saja diperbarui, dapat disesatkan mengenai kunci suatu obrolan. Sebuah banner tidak dapat memastikan ketiadaan hal itu. <strong>Konfirmasikan kunci yang berubah secara langsung</strong>, atau melalui panggilan telepon saat kamu tahu pasti bahwa itu mereka.</p>
+        <h2>Jika komunitas memberikan tanggal</h2>
+        <p>Ketika komunitasmu dapat menunjukkan bahwa kunci akun telah diperbarui, banner menyatakan hal itu, misalnya: <strong>Komunitas ini menyatakan kunci akun diperbarui pada 3 Okt 2026.</strong>. Itu membantumu memahami apa yang terjadi, tetapi hal itu tidak menggantikan keharusan memeriksa kode: server juga bisa menyatakan hal tersebut.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Pesan</strong><span>Mulai obrolan, kirim foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.</span></a></li>
+            <li><a href="your-12-words.html"><strong>12 katamu</strong><span>12 kata adalah kunci akunmu. Mengapa penting, di mana menemukannya, cara menyimpannya dengan aman, dan menambahkan akun masuk sebagai cadangan.</span></a></li>
+            <li><a href="people.html"><strong>Orang dan teman</strong><span>Mencari anggota komunitas, profil dan lencana mereka, serta menandai teman agar kamu tahu jika ada yang keluar.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -40,7 +40,8 @@ const noPr = args.includes('--no-pr');
 
 function run(cmd, cmdArgs, cwd, { quiet = false } = {}) {
     try {
-        return execFileSync(cmd, cmdArgs, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', quiet ? 'ignore' : 'pipe'] }).trim();
+        // maxBuffer: a published copy can pass execFileSync's default 1 MiB (see build.mjs's git()).
+        return execFileSync(cmd, cmdArgs, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', quiet ? 'ignore' : 'pipe'], maxBuffer: 256 * 1024 * 1024 }).trim();
     } catch (e) {
         const out = [e.stdout, e.stderr].filter(Boolean).join('\n').trim();
         throw new Error(`${cmd} ${cmdArgs.join(' ')} failed${out ? `:\n${out}` : ''}`);

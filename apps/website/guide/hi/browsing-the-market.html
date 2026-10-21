@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/hi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>बाज़ार ब्राउज़ करना — BeanPool members' guide</title>
+    <meta name="description" content="खोज, फ़िल्टर और दूरी के साथ ऑफ़र और ज़रूरतें ढूंढें।">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">बाज़ार</a></p>
+        <h1>बाज़ार ब्राउज़ करना</h1>
+        <p class="lede">खोज, फ़िल्टर और दूरी के साथ ऑफ़र और ज़रूरतें ढूंढें।</p>
+        <h2>The Market tab</h2>
+        <p>टैब की पंक्ति में <strong>बाज़ार</strong> पर टैप करें। आप देखते हैं कि आपके समुदाय के लोग क्या पेशकश कर रहे हैं और क्या ढूंढ रहे हैं, सबसे नया पहले, उनके पोस्ट किए जाने के दिन के अनुसार समूहीकृत।</p>
+        <p>फ़ोन पर, कार्यक्रम पहले आते हैं। यदि आपने पहले से ही ऐप को अपनी लोकेशन का उपयोग करने की अनुमति दी है, तो सूची और कॉम्पैक्ट दृश्य इसके बजाय निकटतम लिस्टिंग को पहले दिखाते हैं, <strong>निकटतम पहले</strong> के तहत, और पोल <strong>पोल</strong> के तहत। <strong>★ आपके लिए</strong> अपना क्रम बनाए रखता है। सूची को ताज़ा करने के लिए उसे नीचे खींचें।</p>
+        <p>वेब ऐप में बाज़ार कार्ड के रूप में खुलता है। सूची और कॉम्पैक्ट दृश्यों में, कार्यक्रम उस दिन के तहत होते हैं जिस दिन वे पोस्ट किए गए थे। किसी स्थानीय समुदाय पर वेब ऐप निकटतम को पहले नहीं रखता है।</p>
+        <p>वैश्विक समुदाय पर, वेब ऐप आपके नज़दीक की लिस्टिंग पहले दिखाता है: आपकी <strong>दूरी</strong> के भीतर सबसे नज़दीकी, या आपके क्षेत्र के 250 किमी के भीतर (वह अनुमानित स्थान जो आप शामिल होने पर समुदाय को देते हैं, या <strong>सेटिंग्स</strong> में), प्रत्येक इस जानकारी के साथ कि वह कितनी दूर है। सूची के ऊपर की एक पंक्ति बताती है कि कौन सी। आपके क्षेत्र के पास इसमें हर जगह से नवीनतम के लिए <strong>हर जगह दिखाएं</strong> होता है। चुनी गई <strong>दूरी</strong> के साथ, अपने क्षेत्र में वापस जाने के लिए <strong>दूरी</strong> खोलें और <strong>रीसेट करें</strong> पर टैप करें, फिर <strong>हर जगह दिखाएं</strong> पर टैप करें। फ़ोन पर, वैश्विक समुदाय आपके क्षेत्र के सबसे नज़दीक की लिस्टिंग रखता है, इसलिए बाज़ार वही दिखाता है। &quot;अपने नज़दीक चीज़ें ढूंढना&quot; देखें।</p>
+        <p>वैश्विक समुदाय पर, जब तक केवल कुछ ही लिस्टिंग हैं, बाज़ार <strong>उदाहरण</strong> अंकित कुछ कार्ड भी दिखाता है। वे यह दिखाने के लिए बनाए गए हैं कि लोग क्या पोस्ट करते हैं, और उन्हें खोला या उनका उत्तर नहीं दिया जा सकता। पर्याप्त वास्तविक लिस्टिंग होने पर वे हट जाते हैं।</p>
+        <p>फ़ोन पर, जैसे ही आप नीचे स्क्रॉल करते हैं खोज और फ़िल्टर हट जाते हैं, जिससे आप अधिक पोस्ट देख पाते हैं। थोड़ा ऊपर स्क्रॉल करें और वे वापस आ जाते हैं। सीधे शीर्ष पर जाने के लिए, दोबारा <strong>बाज़ार</strong> पर टैप करें।</p>
+        <h2>Search</h2>
+        <p>शीर्ष पर <strong>मार्केटप्लेस में खोजें...</strong> में टाइप करें। छोटे फ़ोन पर यह केवल <strong>खोजें</strong> कह सकता है। खोज संबंधित शब्दों को भी ढूंढती है: &quot;फल&quot; &quot;नींबू&quot; ढूंढ लेता है। यह चीनी, जापानी और थाई में भी शब्द ढूंढती है, और उन लोगों की पोस्ट छोड़ देती है जिन्हें आपने ब्लॉक किया है। बिना कनेक्शन के, यह आपके फ़ोन में पहले से मौजूद सामग्री में खोज करती है।</p>
+        <p>जब खोज में शब्द होते हैं, तो एक बटन <strong>इस खोज को होम में सहेजें</strong> दिखाई देता है। यह जोड़ने के लिए तैयार एक सहेजी गई खोज के साथ होम खोलता है: आपके शब्द, <strong>ऑफ़र</strong> या <strong>ज़रूरतें</strong> यदि आप केवल एक को देख रहे थे, श्रेणी और दूरी। <strong>कार्यक्रम</strong> या <strong>पोल</strong> के तहत कोई बटन नहीं होता है। &quot;होम&quot; देखें।</p>
+        <h2>Filters</h2>
+        <p>खोज के नीचे बटनों की पंक्ति चुनती है कि आप क्या देखते हैं:</p>
+        <ul>
+            <li><strong>सभी</strong>, <strong>ऑफ़र</strong> या <strong>ज़रूरतें</strong>।</li>
+            <li><strong>★ आपके लिए:</strong> <strong>रुचियां कस्टमाइज़ करें</strong> के तहत आपके द्वारा तारांकित श्रेणियों की पोस्ट (वही सितारे जो आपने होम पर सेट किए हैं), और आपके आगामी कार्यक्रम, वे जिनमें आपने कहा है कि आप जा रहे हैं या आपकी रुचि है।</li>
+            <li><strong>कार्यक्रम</strong> और <strong>पोल</strong>।</li>
+        </ul>
+        <p>दूसरी पंक्ति इसे और सीमित करती है। फ़ोन पर:</p>
+        <ul>
+            <li><strong>सभी श्रेणियां:</strong> एक श्रेणी चुनें, जैसे भोजन, उपकरण या बगीचा।</li>
+            <li><strong>दूरी:</strong> केवल किसी बिंदु से एक दूरी के भीतर की पोस्ट। &quot;अपने नज़दीक चीज़ें ढूंढना&quot; देखें।</li>
+            <li><strong>विश्वास:</strong> केवल उन सदस्यों की पोस्ट जिन्होंने अभी तक व्यापार नहीं किया है (<strong>संस्थापक</strong>), <strong>नवागंतुक</strong> द्वारा, या कम से कम एक निश्चित विश्वास बैज वाले सदस्यों द्वारा।</li>
+            <li><strong>केवल फलियाँ:</strong> ऐसी पोस्ट छिपाता है जो कुछ नकदी भी मांगती हैं।</li>
+        </ul>
+        <p>वेब ऐप में बटन <strong>श्रेणी</strong>, <strong>दूरी</strong>, <strong>🌱 नए सदस्य</strong> (सदस्य जिन्होंने अभी तक व्यापार नहीं किया है) और <strong>🫘 केवल फलियाँ</strong> हैं। वहाँ कोई विश्वास फ़िल्टर नहीं है।</p>
+        <p>यदि आप समूहों से संबंधित हैं, तो समूह बटनों की एक पंक्ति भी दिखाई देती है। <strong>सभी समूह और सार्वजनिक</strong> सब कुछ दिखाता है; किसी समूह का बटन केवल उस समूह के लिए पोस्ट दिखाता है। वेब ऐप में समूह एक पंक्ति के बजाय ड्रॉपडाउन में होते हैं।</p>
+        <p>फ़ोन पर, यदि कुछ भी मेल नहीं खाता है, तो <strong>सभी फ़िल्टर साफ़ करें</strong> पर टैप करें। वेब ऐप में एक खाली सूची कहती है <strong>कोई आइटम नहीं मिला</strong>, और ऐसा कोई बटन नहीं होता है।</p>
+        <p>फ़ोन पर, जब आप नीचे स्क्रॉल कर चुके होते हैं और कोई खोज या फ़िल्टर चालू होता है, तो शीर्ष पर एक छोटा चिप दिखाता है कि वह क्या है। इसे बदलने के लिए चिप पर टैप करें। खोज और प्रत्येक फ़िल्टर को साफ़ करने के लिए उस पर <strong>✕</strong> पर टैप करें।</p>
+        <p><strong>मेरे सौदे</strong> के पास वाला बटन बदलता है कि सूची कैसी दिखेगी: एक सूची, एक ग्रिड, या कॉम्पैक्ट।</p>
+        <h2>What a post shows</h2>
+        <ul>
+            <li>एक फ़ोटो, या श्रेणी का चित्र;</li>
+            <li><strong>ऑफ़र</strong> या <strong>ज़रूरत</strong>;</li>
+            <li>फलियों में कीमत, प्रति घंटा कीमत होने पर <strong>/घंटा</strong> के साथ;</li>
+            <li><strong>आवर्ती</strong> यदि यह प्रत्येक सौदे के बाद खुली रहती है;</li>
+            <li><strong>नकद भी</strong> यदि व्यक्ति को ईंधन या सामग्री के लिए कुछ नकदी की भी आवश्यकता है;</li>
+            <li>एक ताला और समूह का नाम यदि केवल वह समूह इसे देख सकता है;</li>
+            <li>किसने इसे पोस्ट किया, उनके विश्वास बैज और सितारों के साथ। जिस सदस्य ने अभी तक व्यापार नहीं किया है वह <strong>संस्थापक</strong> दिखाता है।</li>
+        </ul>
+        <p>पोस्ट खोलने के लिए उस पर टैप करें।</p>
+        <h2>On a post</h2>
+        <ul>
+            <li><strong>संदेश</strong> और उनका नाम: प्रतिबद्ध होने से पहले एक प्रश्न पूछें।</li>
+            <li>उनकी प्रोफ़ाइल, समीक्षाएं और विश्वास देखने के लिए उनके नाम पर टैप करें।</li>
+            <li><strong>पोस्ट की रिपोर्ट करें</strong> यदि यह एक घोटाला, आपत्तिजनक, भ्रामक है, या किसी बच्चे को जोखिम में डालती है (<strong>बाल सुरक्षा</strong>)।</li>
+            <li>अपने फ़ोन पर उनकी पोस्ट और चैट छिपाने के लिए <strong>उपयोगकर्ता को ब्लॉक करें</strong>। यह आपके व्यवस्थापकों को भी बताता है। &quot;किसी को ब्लॉक करना&quot; देखें।</li>
+        </ul>
+        <p>वेब ऐप में किसी पोस्ट पर बटन <strong>💬 संदेश</strong> और <strong>🚩 रिपोर्ट करें</strong> होते हैं। किसी को उनकी प्रोफ़ाइल से ब्लॉक करें।</p>
+        <p>वैश्विक समुदाय पर किसी पोस्ट की फलियों में कोई कीमत नहीं होती है: यह बताती है कि व्यक्ति बदले में क्या चाहेगा। जहाँ कीमत होगी, वहाँ यह कहता है &quot;🏘️ स्थानीय समुदाय में यह फलियों में कीमत है ›&quot;। इसके लिए पूछने के स्थान पर, पोस्ट <strong>अनुरोध · फलियाँ सुरक्षित रखी गईं 🏘️</strong> दिखाती है: स्थानीय समुदाय में सौदा कैसे काम करता है यह देखने के लिए इस पर टैप करें। व्यक्ति को संदेश भेजना कहीं की भी तरह काम करता है। &quot;फलियाँ और वैश्विक समुदाय&quot; देखें।</p>
+        <p>आप अभी किसी पोस्ट को सहेज या साझा नहीं कर सकते।</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>होम</strong><span>होम क्या है, यह फ़ोन और वेब ऐप पर कौन से कार्ड दिखाता है, उन्हें कैसे जोड़ें, हटाएं या बदलें, अपनी पसंद चुनना, और साइन आउट करने पर गोपनीयता।</span></a></li>
+            <li><a href="posting.html"><strong>ऑफ़र या ज़रूरत पोस्ट करना</strong><span>कुछ ऐसा डालें जो आप कर सकते हैं या दे सकते हैं, या जो आप ढूंढ रहे हैं।</span></a></li>
+            <li><a href="a-deal-step-by-step.html"><strong>सौदा, चरण-दर-चरण</strong><span>पूछने से लेकर भुगतान पाने तक, किसी ऑफ़र और ज़रूरत के लिए, और समीक्षा छोड़ना।</span></a></li>
+            <li><a href="near-you.html"><strong>अपने नज़दीक चीज़ें ढूंढना</strong><span>केवल अपने से, या अपनी पसंद के किसी भी स्थान से तय दूरी के भीतर के पोस्ट दिखाएं।</span></a></li>
+            <li><a href="trust-badges.html"><strong>विश्वास बैज</strong><span>नवागंतुक, निवासी, प्रबंधक और वरिष्ठ। उनका क्या अर्थ है, और वे कुछ भी अनलॉक क्यों नहीं करते।</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>फलियाँ और वैश्विक समुदाय</strong><span>वैश्विक समुदाय किसलिए है, कई में से एक समुदाय, और आप वहाँ क्या देखते हैं: 🏘️ समुदाय मार्कर, उदाहरण समुदाय Example Valley, फलियाँ वहाँ क्यों प्रतीक्षा करती हैं, और स्थानीय समुदाय कैसे खोजें या शुरू करें।</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

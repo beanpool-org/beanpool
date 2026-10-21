@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voter une Décision — BeanPool members' guide</title>
+    <meta name="description" content="Trouver les Décisions ouvertes, voter, modifier votre vote et voir les résultats.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Communs</a></p>
+        <h1>Voter une Décision</h1>
+        <p class="lede">Trouver les Décisions ouvertes, voter, modifier votre vote et voir les résultats.</p>
+        <h2>Où les trouver</h2>
+        <p>Touchez <strong>Communs</strong>, puis <strong>Décider</strong>. Les Décisions en cours se trouvent sous <strong>Décisions en cours</strong>.</p>
+        <p>Une Décision est contraignante : si elle est adoptée, le serveur de votre communauté l'exécute de lui-même. Un administrateur ne peut en interrompre une qu'en fournissant un motif écrit consultable par les membres. Les règles concernant les personnes autorisées à voter, la participation requise et la part de Oui nécessaire figurent dans « Règles et décisions ».</p>
+        <p>La communauté globale ne comporte pas de Décisions. Tout le monde peut la rejoindre, avec 12 mots ou une connexion, de sorte qu'une personne possédant plusieurs comptes pourrait y faire basculer un vote. Ce sont ses modérateurs qui veillent sur elle à la place : voir « Signaler un problème ». Les Décisions relèvent des communautés locales. Les sondages fonctionnent en revanche partout.</p>
+        <p>Sur la communauté globale, l'onglet <strong>Communs</strong> présente une Décision d'exemple provenant d'une communauté locale, signalée par <strong>🏘️ Communauté locale</strong>, afin que vous puissiez voir comment cela fonctionne. Ses boutons <strong>Voter OUI</strong> et <strong>Voter NON</strong> expliquent pourquoi le vote a lieu dans une communauté locale et n'enregistrent aucun vote. Voir « Haricots et communauté globale ».</p>
+        <h2>Lire une Décision</h2>
+        <p>Chaque Décision indique :</p>
+        <ul>
+            <li>son objet, et ce qui se passera si elle est adoptée ;</li>
+            <li>le mode de comptabilisation des voix : un membre une voix, ou des crédits de voix pour les décisions concernant les haricots des Communs ;</li>
+            <li>le temps restant. Le vote dure 7 jours ;</li>
+            <li>la <strong>Participation :</strong> le nombre de voix nécessaires, et si ce seuil est déjà atteint ;</li>
+            <li>le <strong>Résultat :</strong> les Oui et Non exprimés jusqu'ici, et la proportion de Oui requise.</li>
+        </ul>
+        <h2>Voter</h2>
+        <ul>
+            <li>Touchez <strong>Voter OUI</strong> ou <strong>Voter NON</strong>. Sur le téléphone, l'application affiche <strong>Vote enregistré</strong>. Dans l'application web, la carte se met à jour.</li>
+            <li>La carte indique alors votre choix, comme « Vous avez voté Oui ».</li>
+            <li>Pour changer d'avis avant la clôture, touchez l'autre bouton, par exemple <strong>Changer pour Non</strong>.</li>
+        </ul>
+        <p>Chaque Décision est un <strong>vote secret</strong>. Les membres voient les totaux, jamais qui a voté quoi. Votre propre vote n'apparaît qu'à vous seul.</p>
+        <h2>Décisions concernant les haricots des Communs</h2>
+        <p>Celles-ci utilisent des <strong>crédits de voix</strong>. Vous recevez des crédits de voix grâce à vos échanges conclus, renouvelés à chaque Décision. Utilisez <strong>−</strong> et <strong>+</strong> pour choisir le nombre de voix à attribuer. Plus de voix coûtent plus cher : 2 voix coûtent 4 crédits, 3 voix coûtent 9 crédits.</p>
+        <p>Si vous n'avez pas encore conclu d'échange, vous ne pouvez pas voter sur ces décisions. Vous pouvez toujours voter sur les autres Décisions, tant que vous avez rejoint la communauté avant leur ouverture et que votre crédit n'est pas gelé.</p>
+        <h2>Résultats</h2>
+        <p>Touchez <strong>Historique des décisions</strong>. Choisissez <strong>Tout</strong>, <strong>Exécutée</strong>, <strong>Rejetée</strong> ou <strong>Annulée</strong>. Chacune affiche la participation et le résultat finals, ainsi que l'issue, par exemple si trop peu de personnes ont voté.</p>
+        <h2>En savoir plus</h2>
+        <p>Sur le téléphone, touchez le <strong>ⓘ</strong> à côté du titre Communs pour comprendre le fonctionnement des haricots des Communs et du vote. Dans l'application web, ouvrez le <strong>Registre</strong>, touchez <strong>Portefeuille</strong>, puis <strong>Fonds des Communs ⓘ</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>Proposer une Décision</strong><span>Demander à la communauté de voter une décision contraignante.</span></a></li>
+            <li><a href="rules.html"><strong>Règles et décisions</strong><span>Vote, participation, vote secret, qui peut voter, suspension, exclusion d'un membre, gestionnaires, coordinateurs et coordinateurs principaux.</span></a></li>
+            <li><a href="polls.html"><strong>Sondages</strong><span>Poser une question rapide à la communauté. Les sondages reflètent des avis ; ils ne changent rien à eux seuls.</span></a></li>
+            <li><a href="commons-fund.html"><strong>Les Communs</strong><span>Les haricots partagés de votre communauté : d'où ils viennent et comment ils sont utilisés.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Barre du haut</strong><span>Le haricot, les petites icônes signalant ce qui vous attend et les boutons en haut à droite.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Haricots et communauté globale</strong><span>Le rôle de la communauté globale, une communauté parmi d'autres, et ce que vous y voyez : le repère 🏘️ Communauté locale, la communauté exemple Example Valley, l'attente des haricots et comment lancer ou trouver une communauté locale.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Événements — BeanPool members' guide</title>
+    <meta name="description" content="Créer un événement, sur place ou en ligne, unique ou récurrent ; s'inscrire, recevoir un rappel, le partager et le gérer en tant qu'hôte.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Communs</a></p>
+        <h1>Événements</h1>
+        <p class="lede">Créer un événement, sur place ou en ligne, unique ou récurrent ; s'inscrire, recevoir un rappel, le partager et le gérer en tant qu'hôte.</p>
+        <h2>Trouver des événements</h2>
+        <ul>
+            <li>Dans le <strong>Marché</strong>, touchez <strong>Événements</strong>. Choisissez <strong>Aujourd'hui</strong>, <strong>Ce week-end</strong> ou <strong>7 prochains jours</strong>.</li>
+            <li>Sur la <strong>Carte</strong>, les événements sont représentés par des repères violets. Sur le téléphone, touchez <strong>Événements</strong> pour n'afficher qu'eux. Dans l'application web, ils sont toujours visibles, et les pastilles de date permettent de restreindre la sélection.</li>
+        </ul>
+        <h2>Vos événements</h2>
+        <p>Dans le <strong>Marché</strong>, touchez <strong>★ Pour vous</strong>. <strong>Vos événements</strong> est le premier élément affiché : tout ce pour quoi vous avez indiqué <strong>Participe</strong> ou <strong>Intéressé</strong>, du plus proche au plus lointain. Touchez-en un pour l'ouvrir.</p>
+        <p>Cette section n'apparaît que lorsque vous avez un événement à venir, et elle ne contient que vos propres réponses — personne d'autre ne peut la voir.</p>
+        <h2>Participer</h2>
+        <p>Sur la fiche d'un événement, touchez <strong>Participe</strong> ou <strong>Intéressé</strong>. Touchez à nouveau votre choix pour l'annuler.</p>
+        <p>Lorsque vous indiquez <strong>Participe</strong> :</p>
+        <ul>
+            <li>vous pouvez lire la <strong>Note pour les participants</strong> de l'hôte, une fois que l'hôte vous a fait entrer, si l'hôte a activé cette option ;</li>
+            <li>vous pouvez ouvrir le <strong>chat événement</strong>. Voir « Chat événement » ;</li>
+            <li>pour un événement en ligne, vous voyez son <strong>Lien de participation</strong> et un bouton <strong>Rejoindre</strong>, selon les mêmes conditions que la note.</li>
+        </ul>
+        <p>Touchez l'événement pour tout afficher, ainsi que <strong>Afficher sur la carte</strong>. Sur le téléphone, cela ouvre votre application de cartes. Dans l'application web, cela montre l'emplacement sur la Carte.</p>
+        <h2>Recevoir un rappel</h2>
+        <p>Lorsque vous indiquez <strong>Participe</strong> ou <strong>Intéressé</strong>, l'événement affiche <strong>Me rappeler</strong> et le délai avant le début auquel vous serez averti — <strong>1 jour avant (votre choix par défaut)</strong> tant que vous ne le modifiez pas.</p>
+        <ul>
+            <li>Touchez <strong>Modifier</strong> pour choisir <strong>1 semaine avant</strong>, <strong>1 jour avant</strong>, <strong>2 heures avant</strong>, <strong>1 heure avant</strong> ou <strong>30 minutes avant</strong>. Vous pouvez en cocher plusieurs.</li>
+            <li>Ne cochez rien pour ne recevoir aucun rappel pour cet événement.</li>
+            <li>Touchez ensuite <strong>Enregistrer pour cet événement</strong>. Une case cochée n'est pas enregistrée tant que vous ne l'avez pas fait.</li>
+            <li>Touchez <strong>Utiliser mon réglage par défaut</strong> pour revenir à votre choix habituel.</li>
+        </ul>
+        <p>Pour modifier votre choix habituel pour tous les événements, voir « Notifications ».</p>
+        <p>Les rappels arrivent sous forme d'alertes sur votre téléphone, avec vos alertes de Marché, et s'arrêtent donc si vous désactivez ces dernières. Vous n'êtes jamais prévenu d'un événement annulé ou terminé, ni pour une heure qui était déjà passée lorsque vous avez dit participer.</p>
+        <h2>En parler à quelqu'un</h2>
+        <p>Ouvrez l'événement et touchez <strong>Partager</strong>. Le menu de partage habituel de votre téléphone s'ouvre avec le nom de l'événement, sa date et heure, son lieu et un lien. Sur un ordinateur, le lien est copié afin que vous puissiez le coller.</p>
+        <p>Toute personne qui touche ce lien ouvre l'événement — dans l'application si elle l'a, sinon dans l'application web. Une personne qui n'est pas membre de votre communauté arrive sur sa page d'adhésion. Dans un navigateur web, la communauté globale lui présente d'abord l'événement, comme le voit un visiteur, et le rouvre une fois qu'elle a rejoint.</p>
+        <h2>L'ajouter à votre calendrier</h2>
+        <p>Ouvrez l'événement et touchez <strong>Ajouter au calendrier</strong>.</p>
+        <ul>
+            <li>Sur l'<strong>application web</strong>, un fichier de calendrier se télécharge. Ouvrez-le et votre calendrier vous proposera d'ajouter l'événement.</li>
+            <li>Sur un <strong>iPhone</strong>, le même fichier est transmis à votre téléphone, qui propose <strong>Ajouter au calendrier</strong>.</li>
+            <li>Sur <strong>Android</strong>, Google Agenda s'ouvre avec l'événement déjà renseigné. Vérifiez-le et enregistrez.</li>
+        </ul>
+        <p>L'entrée comporte le nom, l'heure, le lieu et le lien vers l'événement. Si l'hôte modifie l'heure ultérieurement, votre calendrier ne se met pas à jour tout seul — l'application vous préviendra tout de même, et l'événement affiche toujours la nouvelle heure.</p>
+        <h2>Créer un événement</h2>
+        <ul>
+            <li>Touchez <strong>+ PUBLIER</strong> dans l'onglet Marché ou sur la Carte, puis <strong>Événement</strong>.</li>
+            <li><strong>Titre</strong>, et date/heure où il <strong>Commence</strong>. L'heure de <strong>Fin</strong> est facultative ; elle est réglée à 2 heures plus tard sauf si vous la changez.</li>
+            <li>Les horaires sont dans le fuseau horaire de l'événement, déduit du repère. Si ce n'est pas votre fuseau, une ligne sous les horaires l'indique. Touchez <strong>Modifier</strong> à côté si elle est incorrecte.</li>
+            <li><strong>Répétition :</strong> choisissez la fréquence, par exemple chaque semaine ce jour-là ou une fois par mois, ou laissez <strong>Ne se répète pas</strong>. <strong>Jusqu'au</strong> est facultatif : laissez vide et l'événement se répétera jusqu'à ce que vous l'annuliez.</li>
+            <li>Choisissez <strong>Sur place</strong> ou <strong>En ligne</strong>. Pour un événement en ligne, il n'y a ni lieu ni repère : ajoutez plutôt un <strong>Lien de participation</strong>. Seuls vous et les participants le voyez (si vous filtrez les entrées, seules les personnes que vous faites entrer). Ses horaires sont dans votre fuseau horaire, et tout le monde les voit dans le sien, signalés par <strong>votre heure locale</strong>.</li>
+            <li><strong>Nom du lieu</strong>, comme « Salle des fêtes ».</li>
+            <li>Placez le repère sur la carte : touchez la carte, recherchez dans <strong>Trouver une adresse</strong>, ou touchez <strong>Utiliser ma position</strong>. Touchez <strong>Approximatif (~100 m)</strong> si vous ne souhaitez pas indiquer l'emplacement exact. Voir « Emplacement du repère ».</li>
+            <li>Une <strong>Description</strong>, et une photo si vous le souhaitez.</li>
+            <li><strong>Note pour les participants :</strong> toute personne qui touche Participe la voit, sauf si vous cochez <strong>Seules les personnes que j'autorise voient la note et la discussion</strong> (coché par défaut sur la communauté globale, où n'importe qui peut s'inscrire en une minute) : seules les personnes que vous autorisez voient alors la note et le chat événement. Un bon endroit pour l'adresse exacte ou un code de portail ; le nom du lieu est visible par tous.</li>
+            <li><strong>Qui peut le voir :</strong> toute votre communauté, ou un groupe précis.</li>
+            <li>Si vous gérez un projet ou une entreprise ou êtes coordinateur d'un groupe, <strong>Publier en tant que</strong> vous permet de publier l'événement en son nom. Un groupe n'organise que pour ses propres membres ; une entreprise organise pour toute la communauté, de sorte qu'un événement d'entreprise n'est jamais réservé à un groupe seul.</li>
+            <li>Touchez <strong>Créer</strong>. Votre événement est présent sur le Marché et sur la Carte.</li>
+        </ul>
+        <p>Dans l'application web, le champ de titre est <strong>What's happening</strong>, les boutons de repère sont <strong>📍 Ma position</strong> et <strong>📌 Placer un repère</strong>, et le dernier bouton est <strong>Créer l'événement</strong>.</p>
+        <p>Vous pouvez avoir 5 événements à venir en même temps. Les événements d'un groupe sont imputés sur le compte du groupe, et ceux d'une entreprise sur celui de l'entreprise.</p>
+        <h2>Gérer votre événement</h2>
+        <p>Ouvrez votre événement. En tant qu'hôte, vous pouvez :</p>
+        <ul>
+            <li>voir les <strong>Participants</strong>, et faire entrer les personnes : <strong>Faire entrer</strong> à côté d'un nom (touchez à nouveau pour retirer l'accès), ou <strong>Faire entrer tout le monde</strong>. Vos propres amis sont admis dès qu'ils touchent Participe. Si vous décochez <strong>Seules les personnes que j'autorise voient la note et la discussion</strong>, chaque participant voit la note et l'historique du chat, et le chat indique que l'hôte l'a ouvert ;</li>
+            <li><strong>Modifier l'événement</strong>. Si vous changez l'heure ou le lieu, tous les participants en sont avertis ;</li>
+            <li><strong>Copier vers une autre date</strong>, pour le reprogrammer ;</li>
+            <li><strong>Annuler l'événement</strong>, puis confirmer (<strong>Annuler l'événement</strong> à nouveau sur le téléphone, <strong>OK</strong> dans l'application web). Tous les participants voient qu'il est annulé, et son chat passe en lecture seule.</li>
+        </ul>
+        <h2>Événements récurrents</h2>
+        <p>Un événement récurrent affiche <strong>↻</strong> et sa fréquence à côté de sa date, comme <strong>Tous les vendredis</strong> ou <strong>Chaque mois le 16</strong>. Sa carte affiche la prochaine date ; ouvrez-la pour voir les <strong>Prochaines dates</strong>.</p>
+        <p>Si vous en êtes l'hôte, chacune des prochaines dates propose :</p>
+        <ul>
+            <li><strong>Annuler cette date :</strong> ce jour-là uniquement est annulé. Tous les participants inscrits à cette date en sont informés.</li>
+            <li><strong>Modifier cette date uniquement :</strong> ce jour-là est annulé et vous créez un événement ponctuel à une autre date.</li>
+            <li><strong>Rétablir :</strong> une date annulée est remise en place.</li>
+        </ul>
+        <p><strong>Annuler l'événement</strong> annule toutes les dates, et son chat passe en lecture seule. Jusque-là, le chat reste ouvert entre les dates, jusqu'à la dernière ; sans date de fin (<strong>Jusqu'au</strong>), il reste ouvert jusqu'à ce que vous annuliez l'événement.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="event-chat.html"><strong>Chat événement</strong><span>Échanger avec l'hôte et tous les participants à un événement.</span></a></li>
+            <li><a href="notifications.html"><strong>Notifications</strong><span>Choisir les alertes reçues sur votre téléphone et le moment où les événements vous sont rappelés.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Emplacement du repère</strong><span>Qui voit l'emplacement de vos annonces et événements, et comment préserver l'intimité de votre domicile.</span></a></li>
+            <li><a href="map-pins.html"><strong>Ce que montre la Carte</strong><span>Les repères sur la Carte, la signification de leurs couleurs et les boutons autour.</span></a></li>
+            <li><a href="polls.html"><strong>Sondages</strong><span>Poser une question rapide à la communauté. Les sondages reflètent des avis ; ils ne changent rien à eux seuls.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チャンネルの共有 — BeanPool members' guide</title>
+    <meta name="description" content="YouTube、ブログ、Instagramなどのチャンネルをパルスに連携します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#pulse">パルス</a></p>
+        <h1>チャンネルの共有</h1>
+        <p class="lede">YouTube、ブログ、Instagramなどのチャンネルをパルスに連携します。</p>
+        <h2>チャンネルの追加</h2>
+        <ul>
+            <li><strong>パルス</strong>で、<strong>+ チャンネル</strong>をタップします。スマートフォンでは<strong>設定</strong>を開いて<strong>チャンネル＆ショーケース</strong>をタップすることもできます。</li>
+            <li><strong>+ チャンネルを追加</strong>をタップします。</li>
+            <li><strong>どこに投稿していますか？</strong>の下で、サイトを選択します。</li>
+            <li><strong>リンクまたはハンドル名</strong>を入力または貼り付けます。</li>
+            <li><strong>どんな内容ですか？</strong>の下で、トピックを選択します。</li>
+            <li><strong>チャンネルを追加</strong>をタップします。</li>
+        </ul>
+        <p>サイトごとに仕組みが少し異なります。画面にいずれかの種類が表示されます：</p>
+        <ul>
+            <li><strong>自動更新</strong>（YouTube、SoundCloud、ブログ）：新しい投稿が自動的にPulseに表示されます。</li>
+            <li><strong>投稿ごとにタップ</strong>（Instagram、TikTok、Facebook）：投稿を手動で1件ずつ共有します。画面に<strong>Connect TikTok</strong>または<strong>Connect Instagram</strong>が表示されている場合は、代わりにアカウントを連携できます。連携時、および<strong>↻ 動画を同期</strong>をタップするたびに投稿が取り込まれます。コミュニティのサーバーが自動で取得することはありません。連携はこのスマートフォン上でのみ保持されます。スマートフォンからサインアウトすると解除されます。戻ってきた際もチャンネルのバッジは維持されますが、再び投稿を取り込むには<strong>連携解除</strong>をタップし、再度<strong>Connect TikTok</strong>または<strong>Connect Instagram</strong>をタップしてください。</li>
+            <li><strong>カードとして表示</strong>（ウェブサイト）。</li>
+        </ul>
+        <p><strong>Connect TikTok</strong>と<strong>Connect Instagram</strong>はスマートフォンアプリにのみあります。Webアプリでは、<strong>+ 投稿を共有</strong>で各投稿を共有します。</p>
+        <h2>認証済みアカウント</h2>
+        <ul>
+            <li><strong>Connect TikTok</strong>または<strong>Connect Instagram</strong>をタップすると、コミュニティのサーバーがInstagramまたはTikTokに対し、どのアカウントでサインインしたかを問い合わせます。チャンネルのアカウントと一致した場合にのみ、チャンネルが認証済みとしてマークされます。</li>
+            <li>異なるアカウントでサインインしましたか？画面にその旨が表示されます。正しいアカウントでサインインし、同じ<strong>接続</strong>ボタンをもう一度タップしてください。</li>
+            <li>確認できるように、チャンネルは<strong>@ハンドル名</strong>として追加してください。短縮リンクでは確認できません。</li>
+            <li>Facebookのチャンネルが認証済みとしてマークされることはありません。</li>
+            <li>チャンネルに<strong>再連携して認証バッジを復元</strong>と表示されている場合は、<strong>Reconnect TikTok</strong>または<strong>Reconnect Instagram</strong>をタップしてください。</li>
+        </ul>
+        <h2>各チャンネルでの操作</h2>
+        <ul>
+            <li><strong>ローカルフィードに表示</strong>：オフにすると、このチャンネルの投稿がPulseに表示されなくなります。</li>
+            <li><strong>+ 投稿を共有</strong>：投稿を1件手動で追加します。</li>
+            <li><strong>変更</strong>（Webアプリでは<strong>カテゴリーを変更</strong>）：別のトピックを選択します。</li>
+            <li><strong>メインにする</strong>：メインの動画チャンネルを選択します。</li>
+            <li><strong>削除</strong>：チャンネルを解除します。</li>
+        </ul>
+        <h2>1件の投稿の共有</h2>
+        <p><strong>Pulseに投稿を共有</strong>をタップします。<strong>投稿のURL</strong>を貼り付け、どのチャンネルとトピックに属するかを確認して、<strong>Pulseに共有</strong>をタップします。</p>
+        <h2>注意事項</h2>
+        <p>Pulseに共有した内容はすべて、あなたの名前と写真とともに表示されます。コミュニティの全員が見ることができます。参加していない人は見ることができません。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-pulse.html"><strong>The Pulse</strong><span>近隣住民が作成・共有した外部コンテンツを1つのフィードで確認できます。</span></a></li>
+            <li><a href="learn.html"><strong>学びレーン</strong><span>BeanPoolに関する短い動画と、対応するガイドページについて説明します。</span></a></li>
+            <li><a href="your-profile.html"><strong>プロフィール</strong><span>名前、写真、自己紹介、連絡先情報を閲覧できる範囲について説明します。</span></a></li>
+            <li><a href="privacy.html"><strong>プライバシー</strong><span>他のメンバーに公開される情報と、それを管理する設定について説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

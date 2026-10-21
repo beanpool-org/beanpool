@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>كلماتك الـ 12 ومفاتيح الخادم (المالكون) — BeanPool members' guide</title>
+    <meta name="description" content="لمالكي المجتمع. التحقق من كلماتك الـ 12، وتولي الخادم أو استعادته بهاتفك، والفحص الذي يجريه هاتفك تلقائيًا.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">الإعدادات والأمان</a></p>
+        <h1>كلماتك الـ 12 ومفاتيح الخادم (المالكون)</h1>
+        <p class="lede">لمالكي المجتمع. التحقق من كلماتك الـ 12، وتولي الخادم أو استعادته بهاتفك، والفحص الذي يجريه هاتفك تلقائيًا.</p>
+        <h2>لمن هذا الدليل</h2>
+        <p>فقط <strong>لمالكي</strong> المجتمع. إذا لم تكن مالكًا، فلن ترى أيًا من هذا.</p>
+        <h2>سبب سؤال المالكين</h2>
+        <p>يحتفظ خادم مجتمعك بنسخة مقفلة من مفاتيحه، لنقل المجتمع إلى خادم آخر في حال فُقد خادمه، كما أن نسخه الاحتياطية مقفلة أيضًا. وهي مقفلة ومربوطة بحسابات المالكين: يمكن لأي مالك واحد فتحها باستخدام هاتفه (انظر تولي الإدارة أو الاستعادة بهاتفك، أدناه). إذا فقدت هاتفك، فإن كلماتك الـ 12 تستعيد حسابك، ومعها مفتاحك لقفل الخادم ونسخه الاحتياطية. وهذا الأمر بالغ الأهمية تحديدًا في اليوم الذي يختفي فيه الخادم نفسه.</p>
+        <p>لذا يطلب التطبيق من كل مالك، بين الحين والآخر، التحقق من أنه لا يزال يحتفظ بالكلمات الـ 12 الصحيحة. يمكنك اختيار <strong>لاحقًا</strong>. لا يتم حظر أي شيء أبدًا، ويمكنك الاستمرار في القيام بكل ما يفعله المالك.</p>
+        <h2>متى يطلب التطبيق ذلك</h2>
+        <ul>
+            <li>مرة واحدة، بعد وقت قصير من أن تصبح مالكًا.</li>
+            <li>مرة أخرى بعد 12 شهرًا من آخر فحص لك.</li>
+        </ul>
+        <p>يعرض التطبيق بطاقة في أعلى السوق (في تطبيق الويب، في أعلى كل شاشة باستثناء الخريطة): <strong>تحقق الآن</strong> أو <strong>لاحقًا</strong>. يؤدي خيار <strong>لاحقًا</strong> إلى إخفاء البطاقة حتى يحين الموعد التالي. يمكنك التحقق في أي وقت من <strong>الإعدادات</strong>: تحت <strong>مفاتيح المجتمع</strong>، اضغط على <strong>تحقق من كلماتك الـ 12</strong> (في تطبيق الويب، <strong>تحقق الآن</strong>).</p>
+        <h2>كيفية التحقق</h2>
+        <ul>
+            <li>أحضر ورقتك التي تحتوي على الـ 12 كلمة.</li>
+            <li>اكتبها بالترتيب، مع ترك مسافات بينها. الحروف الكبيرة والمسافات الإضافية لا تهم.</li>
+            <li>اضغط على <strong>فحص كلماتي</strong>.</li>
+        </ul>
+        <p>إذا كانت صحيحة، يقول التطبيق <strong>هذه هي الكلمات الصحيحة</strong>. وإذا لم تكن كذلك: <strong>هذه ليست الكلمات الخاصة بهذا الحساب.</strong> لا يحدد التطبيق الكلمة الخاطئة، لذا تحقق من الورقة واكتبها جميعًا مرة أخرى.</p>
+        <p>على الهاتف الذي لا يحتوي على نسخة من كلماتك الـ 12 (هاتف تم استرداده بحساب تسجيل دخول)، تظهر الكلمات الصحيحة أيضًا خيار <strong>حفظها على هذا الهاتف</strong>. اضغط عليه وسيُظهرها خيار <strong>عرض عبارة الاسترداد</strong> من ذلك الحين فصاعدًا. وهو نفس الفحص ونفس الحفظ كما في <strong>أضف كلماتك الـ 12 إلى هذا الهاتف</strong> (انظر «كلماتك الـ 12»).</p>
+        <p>ألا يمكنك العثور عليها؟ إذا كان هذا الهاتف لا يزال يحتفظ بها، فإن <strong>الإعدادات</strong>، ثم <strong>عرض عبارة الاسترداد</strong>، يعرضها. اكتبها مرة أخرى، ثم تحقق منها. وعلى الهاتف الذي لا توجد به نسخة، يُعلمك التطبيق بذلك: عندما تعثر عليها، تحقق منها هنا، ثم احفظها.</p>
+        <h2>ما الذي يتم إرساله، وما الذي لا يُرسل</h2>
+        <ul>
+            <li>يتم الفحص على هاتفك (أو في متصفحك، في تطبيق الويب). لا يتم إرسال كلماتك إلى أي مكان أبدًا. يتم إفراغ المربع بمجرد ظهور نتيجة الفحص، وعند مغادرة الشاشة. ولا يتم حفظها إلا إذا ضغطت على <strong>حفظها على هذا الهاتف</strong>، وحينها تُحفظ على هذا الهاتف فقط.</li>
+            <li>عندما تكون الكلمات صحيحة، يخبر هاتفك خادم مجتمعك فقط بأنك قمت بالتحقق، ومتى تم ذلك، وموقعًا بحسابك.</li>
+            <li>يرى المالكون والمشرفون، في إعدادات الخادم، تاريخ «فحص الكلمات الـ 12» لكل مالك، أو «ليس بعد». هذا هو تصريحك أنت: لا يمكن للخادم رؤية كلماتك أو التحقق منها.</li>
+        </ul>
+        <h2>تولي الإدارة أو الاستعادة بهاتفك</h2>
+        <p>إذا فُقد خادم مجتمعك، يمكن للشخص الذي يدير الخادم الاحتياطي الجاهز (أو خادم جديد يستعيد نسخة احتياطية) أن يطلب من أحد المالكين فتح المفاتيح المقفلة. ويكفي أي مالك واحد. تحتاج إلى أحدث إصدار من تطبيق BeanPool. يعمل تطبيق الويب أيضًا إذا كان لا يزال يفتح، ولكنه يعمل على عنوان مجتمعك الخاص، والذي قد يتعطل مع تعطل الخادم: تطبيق الهاتف هو الخيار الموثوق به.</p>
+        <ul>
+            <li>في إعدادات الخادم، يختارون <strong>Take over as the main server</strong>، ثم <strong>I understand: use an owner's phone</strong>، أو <strong>Open with an owner's phone</strong> عند استعادة نسخة احتياطية. يظهر رمز على شاشتهم.</li>
+            <li>في التطبيق: <strong>الإعدادات</strong>، وتحت <strong>مفاتيح المجتمع</strong>، اضغط على <strong>تولي الإدارة أو الاسترداد باستخدام هذا الهاتف</strong>، ووجّه الكاميرا نحو الرمز. إذا كانت صفحة الخادم مفتوحة على هاتفك نفسه، فإن الضغط على الرابط يؤدي نفس الغرض. وفي تطبيق الويب، انسخ الرابط من شاشتهم والصقه تحت <strong>تولي الإدارة أو الاستعادة عبر هذا المتصفح</strong> في <strong>الإعدادات</strong>.</li>
+            <li>يعرض التطبيق أي مجتمع، وأي خادم، وما الذي سيحدث. وإذا كان خادمك الرئيسي لا يزال يستجيب، فإنه يقول ذلك باللون الأحمر: لا يُستخدم تولي الإدارة إلا لخادم مفقود بالفعل.</li>
+            <li>اضغط على <strong>إلغاء القفل لتولي الإدارة</strong> (أو <strong>إلغاء قفل النسخة الاحتياطية</strong>). يطلب هاتفك إلغاء قفله أولاً: ببصمة الإصبع أو الوجه أو رمز PIN. لا يتضمن تطبيق الويب مثل هذه الخطوة، ولهذا السبب يعد تطبيق الهاتف المكان الأكثر أمانًا لمفتاح المالك.</li>
+            <li>يفتح هاتفك الجزء الخاص به من القفل ويسلم المفتاح إلى ذلك الخادم، مقفلاً بحيث لا يمكن إلا لذلك الخادم قراءته. لا يرى هاتفك أبدًا مفاتيح الخادم أو النسخة الاحتياطية.</li>
+            <li>عند تولي الإدارة، يقوم الشخص الموجود على الخادم بالتأكيد على شاشته. ويتم إبلاغ المجتمع بأنه قد انتقل، وبأنك فتحت المفاتيح.</li>
+        </ul>
+        <p>يرفض التطبيق ذلك، ويوضح السبب، إذا كان القفل يخص مجتمعًا آخر، أو إذا لم يكن مقفلاً لك، أو إذا انتهت صلاحية رمز الخادم (تستمر صلاحيته لمدة 10 دقائق ويعمل لمرة واحدة)، أو إذا لم تكن المفاتيح مقفلة بواسطة خادم مجتمعك نفسه.</p>
+        <h2>يتحقق هاتفك من القفل تلقائيًا</h2>
+        <p>في كل مرة يتغير فيها قفل مجتمعك (إضافة مالك أو إزالته، أو إنشاء رمز استرداد جديد)، يتحقق تطبيقك، بهدوء، من أنه لا يزال بإمكانه فتح الجزء الخاص به. فهو يفتحه، ويتخلص من المفتاح على الفور، ويخبر الخادم بما إذا كان ذلك قد نجح. لا يُطلب منك أي شيء.</p>
+        <p>يرى المالكون والمشرفون ذلك في إعدادات الخادم، بجانب تاريخ كلماتك الـ 12: <strong>their phone opened the current lock</strong>، مع التاريخ، أو أنه فتح قفلاً أقدم في آخر مرة. وإذا أظهر أن هاتفك <strong>could NOT open</strong> القفل، فتحقق من كلماتك الـ 12، واطلب من مالك آخر إلقاء نظرة على إعدادات الخادم.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>كلماتك الـ 12</strong><span>الكلمات الـ 12 هي مفتاح حسابك. لماذا هي مهمة، وأين تجدها، وكيف تحافظ عليها بأمان، وإضافة تسجيل دخول كطريقة ثانية للوصول.</span></a></li>
+            <li><a href="recovery.html"><strong>استعادة حسابك</strong><span>استعد حسابك على هاتف جديد، واحمِه بحساب تسجيل دخول.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

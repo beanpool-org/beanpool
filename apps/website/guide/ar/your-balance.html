@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رصيدك وسجلك — BeanPool members' guide</title>
+    <meta name="description" content="كم لديك من الفاصوليا، وما هو محجوز، وكل معاملة وهدية.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">السجل</a></p>
+        <h1>رصيدك وسجلك</h1>
+        <p class="lede">كم لديك من الفاصوليا، وما هو محجوز، وكل معاملة وهدية.</p>
+        <h2>فتحه</h2>
+        <p>اضغط على <strong>السجل</strong> في صف علامات التبويب. يظهر رصيدك في أعلى اليمين، بـ <strong>فاصوليا</strong>. ويمكن أن يكون تحت الصفر؛ انظر &quot;حد الائتمان الخاص بك&quot;.</p>
+        <p>لا توجد فاصوليا في المجتمع العالمي، لذا يعرض السجل عضوًا نموذجيًا من مجتمع محلي، وهو وادي المثال، مميزًا بـ <strong>🏘️ مجتمع محلي</strong>. توضح أزراره سبب وجود الفاصوليا في المجتمع المحلي، ولا ترسل أي شيء. انظر &quot;فاصوليا والمجتمع العالمي&quot;.</p>
+        <p>يحتوي السجل على علامتي تبويب: <strong>المستويات</strong> (ثقتك، انظر &quot;شارات الثقة&quot;) و<strong>المحفظة</strong>. على الهاتف، اضغط على رصيدك للانتقال مباشرة إلى المحفظة.</p>
+        <h2>علامة تبويب المحفظة</h2>
+        <ul>
+            <li><strong>رصيدك</strong>، وحوالي كم ساعة من المساعدة يعادلها، بمعدل 40 فاصوليا في الساعة.</li>
+            <li><strong>المشاع:</strong> الصندوق المشترك لمجتمعك.</li>
+            <li><strong>الحد الأدنى للائتمان:</strong> إلى أي مدى يمكنك النزول تحت الصفر.</li>
+            <li>مقدار ما هو محجوز من فاصولياك في صفقات قيد التنفيذ، عند وجود صفقات.</li>
+            <li><strong>التداول المجتمعي:</strong> يظهر عندما تحتفظ بالفاصوليا. انظر &quot;رسوم التداول&quot;.</li>
+            <li><strong>تعهدات المشاريع:</strong> الفاصوليا التي تعهدت بها للمشاريع، إن وجدت.</li>
+            <li><strong>إرسال فاصوليا:</strong> لإرسال هدية. انظر &quot;إرسال هدية&quot;.</li>
+        </ul>
+        <p>في تطبيق الويب، تكون علامة تبويب المحفظة أقصر: <strong>حد السحب على المكشوف</strong>، و<strong>الصندوق المشترك</strong>، و<strong>إرسال فاصوليا</strong>، و<strong>التداول المجتمعي</strong>. ويظهر رصيدك في الجزء العلوي من السجل.</p>
+        <h2>المعاملات الأخيرة</h2>
+        <p>كل صفقة وهدية ورسم، الأحدث أولاً، مع ملاحظة، والوقت، وإشارة زائد أو ناقص. على الهاتف يذكر كل سطر أيضًا مع من كانت المعاملة؛ وفي تطبيق الويب يُكتب <strong>مُرسل</strong> أو <strong>المستلمة</strong>. وإذا كانت الملاحظة تذكر منشورًا، فاضغط على <strong>عرض العرض</strong> لفتحه.</p>
+        <p>أنت وحدك من يمكنه رؤية رصيدك وهذه المعاملات. ولا يمكن لأي شخص آخر في مجتمعك قراءتها. خيار <strong>تصدير CSV</strong> (<strong>تصدير بياناتي</strong> في تطبيق الويب) يحفظ معاملاتك الخاصة كملف.</p>
+        <p>لا تحتوي القائمة على بحث أو مرشحات حتى الآن.</p>
+        <h2>أزرار ⓘ</h2>
+        <p>على الهاتف، اضغط على <strong>ⓘ</strong> بجوار رصيدك للحصول على شرح قصير لرصيدك وحدك الأدنى.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="credit-line.html"><strong>حد الائتمان الخاص بك</strong><span>إلى أي مدى يمكنك النزول تحت الصفر، وكيف ينمو هذا الحد.</span></a></li>
+            <li><a href="gifts.html"><strong>إرسال هدية</strong><span>أرسل فاصوليا إلى شخص ما، دون معاملة تجارية.</span></a></li>
+            <li><a href="circulation-fee.html"><strong>رسوم التداول</strong><span>رسوم شهرية صغيرة على الأرصدة الكبيرة، لكي تستمر الفاصوليا في الحركة. أول 200 مجانية.</span></a></li>
+            <li><a href="my-deals.html"><strong>صفقاتي</strong><span>مكان واحد لكل معاملة تشارك فيها، وكل منشور لديك، وتداولاتك السابقة.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>فاصوليا والمجتمع العالمي</strong><span>ما الغرض من المجتمع العالمي، مجتمع بين كثيرين، وما تراه هناك: علامة 🏘️ مجتمع محلي، والمجتمع النموذجي وادي المثال، ولماذا تنتظر الفاصوليا هناك، وكيف تبدأ مجتمعًا محليًا أو تعثر عليه.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

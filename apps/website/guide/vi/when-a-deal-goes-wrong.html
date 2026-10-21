@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khi giao dịch trục trặc — BeanPool members' guide</title>
+    <meta name="description" content="Hủy giao dịch và những gì xảy ra khi hai bên không thể thống nhất ý kiến.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Chợ</a></p>
+        <h1>Khi giao dịch trục trặc</h1>
+        <p class="lede">Hủy giao dịch và những gì xảy ra khi hai bên không thể thống nhất ý kiến.</p>
+        <h2>Trao đổi trước</h2>
+        <p>Hầu hết các vấn đề đều là do hiểu lầm. Nhấn <strong>Nhắn tin</strong> trên bài đăng và cùng trao đổi để làm rõ.</p>
+        <h2>Hủy bỏ</h2>
+        <ul>
+            <li><strong>Trước khi được đồng ý:</strong> người đã yêu cầu nhấn <strong>Rút lại đề nghị</strong>. Người đã đăng Nhu cầu nhấn <strong>Từ chối</strong>, sau đó nhấn <strong>Từ chối</strong>, và có thể thêm một tin nhắn ngắn. Một yêu cầu không có ai trả lời sẽ tự kết thúc sau 7 ngày.</li>
+            <li><strong>Trong khi đậu đang được giữ:</strong> một trong hai bạn có thể nhấn <strong>Hủy giữ uỷ thác</strong>, sau đó nhấn <strong>Có, Hủy</strong>. Tất cả số đậu đang được giữ sẽ trở lại với người thanh toán, và bài đăng sẽ quay lại Chợ. Người kia sẽ được thông báo.</li>
+        </ul>
+        <p>Trong ứng dụng web, <strong>Rút lại đề nghị</strong> là <strong>Hủy đề nghị</strong>, và <strong>Từ chối</strong> sẽ từ chối ngay lập tức mà không có tin nhắn. Để hủy một giao dịch đang bị giữ tại đó, hãy nhấn <strong>Hủy giữ tiền</strong>, sau đó nhấn <strong>OK</strong>.</p>
+        <p>Bất kỳ ai trong hai người đều có thể tự hủy giao dịch, vào bất kỳ lúc nào trước khi đậu được giải phóng. Điều đó bao gồm cả sau khi công việc đã hoàn thành. Nếu điều đó xảy ra với bạn, hãy trao đổi với họ, rồi sau đó tìm đến các quản trị viên cộng đồng của bạn.</p>
+        <h2>Khi hai bên không thể thống nhất</h2>
+        <p>Ứng dụng không có nút &quot;tranh chấp&quot;. Hãy nhờ các quản trị viên cộng đồng của bạn giúp đỡ. Họ trông coi máy chủ của cộng đồng, và họ có thể giải quyết một giao dịch bị bế tắc theo một trong ba cách:</p>
+        <ul>
+            <li>thanh toán cho người bán (áp dụng mức phí 1,5% thông thường);</li>
+            <li>trả lại toàn bộ số đậu cho người mua;</li>
+            <li>chia đôi số đậu cho hai bên.</li>
+        </ul>
+        <p>Một quản trị viên không thể giải quyết giao dịch mà chính họ tham gia, hoặc giao dịch liên quan đến một doanh nghiệp mà họ quản lý.</p>
+        <p>Cả hai bạn đều nhận được thông báo (&quot;Có tin tức mới về một trong các giao dịch của bạn.&quot;) và một dòng trong đoạn chat cho biết giao dịch đã được giải quyết như thế nào. Dòng chat sẽ nêu tên quản trị viên bằng bí danh của họ, hoặc ghi &quot;một quản trị viên cộng đồng&quot;. Bản thân thông báo không nêu tên bất kỳ ai.</p>
+        <h2>Nếu ai đó không trung thực</h2>
+        <ul>
+            <li>Để lại một đánh giá công bằng. Số sao thấp làm giảm mức độ tin cậy mà họ nhận được.</li>
+            <li>Báo cáo bài đăng của họ, hoặc chặn họ. Xem &quot;Báo cáo vấn đề&quot; và &quot;Chặn một người&quot;.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Giao dịch từng bước một</strong><span>Từ yêu cầu đến khi nhận thanh toán, cho Lời đề nghị và Nhu cầu, cùng việc để lại đánh giá.</span></a></li>
+            <li><a href="getting-help.html"><strong>Nhận trợ giúp</strong><span>Tìm ở đâu khi bạn gặp khó khăn và nên hỏi ai.</span></a></li>
+            <li><a href="reporting.html"><strong>Báo cáo vấn đề</strong><span>Báo cho kiểm duyệt viên cộng đồng về bài đăng, sự kiện, bài đăng Nhịp đập hoặc dự án.</span></a></li>
+            <li><a href="rules.html"><strong>Quy tắc và cách quyết định vận hành</strong><span>Bỏ phiếu, tỷ lệ tham gia, bỏ phiếu kín, ai có quyền bỏ phiếu, đình chỉ, xóa thành viên, người quản lý, cùng người triệu tập.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

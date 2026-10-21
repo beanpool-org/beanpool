@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/it by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persone e amici — BeanPool members' guide</title>
+    <meta name="description" content="Trovare membri della comunità, i loro profili e badge di fiducia, e contrassegnare gli amici per accorgersi se qualcuno esce.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Persone e amici</h1>
+        <p class="lede">Trovare membri della comunità, i loro profili e badge di fiducia, e contrassegnare gli amici per accorgersi se qualcuno esce.</p>
+        <h2>Trovare persone</h2>
+        <p>Tocca <strong>Parla</strong>, poi <strong>Persone</strong>. Nella web app, tocca <strong>Persone</strong> nella riga delle schede. Ci sono tre pulsanti:</p>
+        <ul>
+            <li><strong>Amici:</strong> le persone che hai aggiunto.</li>
+            <li><strong>Comunità:</strong> ogni membro. Cerca per nome. Sul telefono, ordina per <strong>Più recenti</strong>, <strong>Nome</strong>, <strong>Amici</strong>, <strong>Affidabili</strong> o <strong>Attivi</strong>. Sulla comunità globale mostra i membri più vicini alla tua zona: digita almeno 2 lettere di un nome per trovare chiunque altro.</li>
+            <li><strong>Inviti:</strong> invita qualcuno di nuovo. Vedi &quot;Entrare in BeanPool&quot;. Se non sei ancora entrato, questo pulsante dice <strong>Registrati</strong>. Quando delle persone hanno chiesto di entrare nella tua comunità, mostra quante sono, e sono elencate sotto <strong>Vogliono entrare</strong>. Nella web app questo pulsante è sempre <strong>🎟️ Inviti</strong>, senza conteggio e senza l'elenco <strong>Vogliono entrare</strong>.</li>
+        </ul>
+        <p>Tocca una persona per visualizzarne il profilo: le sue recensioni e i suoi annunci, e, sul telefono in una comunità con i fagioli, il suo badge di fiducia e i suoi scambi. Vedi &quot;Il tuo profilo&quot;.</p>
+        <h2>Amici</h2>
+        <ul>
+            <li>In <strong>Comunità</strong>, tocca <strong>+ Aggiungi</strong> accanto a un nome. Cambia in <strong>Aggiunto</strong>. Tocca <strong>Aggiunto</strong> per rimuoverlo di nuovo. Nella web app cambia in <strong>✓ Amico</strong>, che non puoi toccare: per rimuovere qualcuno, usa <strong>Rimuovi</strong> sotto <strong>Amici</strong>.</li>
+            <li>In <strong>Amici</strong>, tocca il pulsante del messaggio per avviare una chat, oppure il pulsante di rimozione, poi <strong>Rimuovi</strong>, per togliere qualcuno.</li>
+            <li>Quando qualcuno ti aggiunge, in cima ad <strong>Amici</strong> compare chi lo ha fatto, ad esempio &quot;Sam ti ha aggiunto&quot;, con <strong>Aggiungi a tua volta</strong>. Tocca il suo nome per vedere prima il suo profilo. Non c'è alcuna notifica. La riga scompare quando aggiungi a tua volta la persona, o dopo 30 giorni. Vengono mostrati fino a 20 utenti, poi quanti altri ancora.</li>
+            <li>Puoi aggiungere fino a 100 persone nell'arco di 24 ore. Anche rimuovere qualcuno viene conteggiato. Se raggiungi il limite, l'app lo segnala e indica quando potrai aggiungere nuovamente qualcuno.</li>
+            <li>Non puoi aggiungere qualcuno che hai bloccato: prima sbloccalo. Vedi &quot;Bloccare qualcuno&quot;.</li>
+        </ul>
+        <p>Gli amici sono una scorciatoia per te. Se scegli <strong>Amici</strong> per i tuoi dettagli di contatto, solo loro potranno vederli. Vedi &quot;Il tuo profilo&quot;.</p>
+        <p>Nessun altro può leggere il tuo elenco degli amici. La persona che aggiungi vede che l'hai aggiunta.</p>
+        <h2>Collegamenti in comune</h2>
+        <p>Il profilo di un membro può mostrare i <strong>collegamenti in comune</strong>: persone a cui puoi chiedere informazioni su di lui. Qualcuno viene mostrato lì solo quando siete amici reciproci con qualcuno che è a sua volta amico reciproco con lui. Ciò significa che tu e quella persona vi siete aggiunti a vicenda, e anche quella persona e il membro si sono aggiunti a vicenda. Aggiungere qualcuno da solo non inserisce mai nessuno lì, e nemmeno se qualcuno aggiunge te. Ne vengono mostrati fino a 12. Tocca un nome per visualizzarne il profilo.</p>
+        <p>Puoi scegliere di non essere mostrato come collegamento in comune di nessuno. Nelle Impostazioni, sotto <strong>NOTE LEGALI E PRIVACY</strong>, disattiva <strong>Mostrami come collegamento in comune</strong>. A quel punto nessuno vedrà il tuo nome lì e non verrai conteggiato. L'opzione è attiva finché non la disattivi. Vedi &quot;La tua privacy&quot;.</p>
+        <h2>Garantire per qualcuno</h2>
+        <p>Alcuni membri vengono scelti dalla comunità per accogliere i nuovi arrivati. Possono garantire per un nuovo membro, il che assegna a quella persona una piccola linea di credito con cui iniziare. Sul profilo della persona toccano <strong>Garantisci per il membro</strong> e scelgono <strong>Leggera</strong> (25), <strong>Standard</strong> (50) o <strong>Profonda</strong> (100). Nessun fagiolo esce dal portafoglio di chi garantisce.</p>
+        <p>Chi può garantire viene deciso da un amministratore o da una Decisione della comunità, mai da un badge. Vedi &quot;Regole e decisioni&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Messaggi</strong><span>Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.</span></a></li>
+            <li><a href="your-profile.html"><strong>Il tuo profilo</strong><span>Il tuo nome, la foto, qualche parola su di te e chi può vedere i tuoi dettagli di contatto.</span></a></li>
+            <li><a href="joining.html"><strong>Entrare in BeanPool</strong><span>Due modi per entrare: una comunità, con l'invito di un membro, o la comunità globale se aperta, con 12 parole segrete o un accesso. Chiedere di entrare e invitare altri.</span></a></li>
+            <li><a href="blocking.html"><strong>Bloccare qualcuno</strong><span>Nascondi i post e i messaggi di qualcuno e ripristinali in seguito se lo desideri.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Birini engelleme — BeanPool members' guide</title>
+    <meta name="description" content="Birinin ilanlarını ve mesajlarını sizden gizleyin ve daha sonra bu işlemi geri alın.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Ayarlar ve güvenlik</a></p>
+        <h1>Birini engelleme</h1>
+        <p class="lede">Birinin ilanlarını ve mesajlarını sizden gizleyin ve daha sonra bu işlemi geri alın.</p>
+        <h2>Engelleme</h2>
+        <ul>
+            <li>Profillerinde: <strong>Engelle</strong> seçeneğine veya daha altta <strong>Engelle</strong> ve adlarına dokunun.</li>
+            <li>Gönderilerinden birinde (telefon uygulaması): <strong>Kullanıcıyı Engelle</strong> seçeneğine dokunun. Web uygulamasındaki bir ilanın engelleme düğmesi yoktur.</li>
+            <li>Bir sohbetten: profillerini açmak için üstteki adlarına, ardından <strong>Engelle</strong> seçeneğine dokunun. Web uygulamasında tek bir kişiyle yapılan sohbetin üst kısmında da <strong>Engelle</strong> seçeneği bulunur.</li>
+        </ul>
+        <p>Telefon uygulamasında <strong>Kullanıcıyı Engelle</strong> ile onaylayın. Web uygulamasında tarayıcınız onaylamanızı ister: <strong>Tamam</strong>'a dokunun.</p>
+        <h2>Neler yapar</h2>
+        <ul>
+            <li>Pazar'daki ilanları sizden gizlenir.</li>
+            <li>Sohbetlerinizden ve Kişiler listesinden kaybolurlar ve birbirinize mesaj gönderemezsiniz. Telefon uygulamasında eklemiş olduğunuz biri yine de <strong>Arkadaşlar</strong> sekmenizde görünür: aşağıdaki &quot;Neler yapmaz&quot; bölümüne bakın. Web uygulaması onları her listeden gizler.</li>
+            <li>Nabız gönderileri görünmeye devam eder. Telefonda Harita üzerindeki iğneleri de görünmeye devam eder. Web uygulamasının Haritası onları gizler.</li>
+            <li>Defterinizde onlardan gelen Fasulyeler, gönderdikleri herhangi bir not yerine &quot;Engellediğiniz bir üyeden gelen fasulyeler&quot; olarak görünür.</li>
+            <li>Topluluğunuzun inceleyebileceği moderatörlerine bir bildirim gider.</li>
+        </ul>
+        <h2>Topluluğunuz bu konuda ne yapar</h2>
+        <p>Topluluğunuz bunu sizin için tuttuğu engellemeler için yapar. Bugün bu, web uygulamasında yapılan bir engellemedir. Telefon uygulamasında yapılan bir engelleme o telefonda kalır ve topluluğunuz bunu bilmez.</p>
+        <ul>
+            <li>Doğrudan mesajları size asla ulaşmaz. Topluluğunuz bunları hiçbir telefonda veya bilgisayarda size teslim etmez; onlar için bildirim veya okunmamış mesaj sayısı almazsınız.</li>
+            <li>Sizinle yeni bir sohbet başlatırlarsa bu sohbetlerinizde görünmez.</li>
+            <li>Engellerini kaldırırsanız engelliyken gönderdikleri hiçbir şey gelmez. Yalnızca bundan sonra gönderecekleri mesajlar size ulaşır.</li>
+            <li>Mesajlarınızdan birine ifade bırakırlarsa veya eski mesajlarından birini değiştirirlerse bunu görmezsiniz.</li>
+            <li>Bir grup sohbetinde yazdıklarında, sizden @ ile bahsetseler bile hiçbir bildirim almazsınız.</li>
+            <li>İlanlarınızdan biri için bir takas talep ederlerse talep bildirim olmadan takaslarınızda bekler. Bırakırsanız yine bildirim olmadan 7 gün sonra sona erer.</li>
+            <li>Tekliflerinizden birini hemen kabul ederlerse hiçbir bildirim almazsınız ve daha sonra o anlaşmayı iptal ederlerse de bildirim almazsınız. Anlaşma herkesinki gibi takaslarınızda ve mesajları onlarla olan sohbetinizde görünmeye devam eder. Fasulyeleri her zamanki gibi emanete alınır ve geri verilir.</li>
+            <li>Yalnızca size hitap eden bir ilan oluşturamazlar.</li>
+            <li>Onları ekleyemezsiniz. Sizi eklerlerse size haber verilmez. Sizi eklemişlerse Kişiler sekmenizdeki &quot;seni ekledi&quot; satırı kalkar. Arkadaşlarınız engellediğiniz kişinin profilinde sizi artık ortak bir bağlantı olarak görmez.</li>
+            <li>Size bir notla Fasulye gönderirlerse Fasulyeler eksiksiz ulaşır, not ise ulaşmaz. Bunun yerine &quot;Engellediğiniz bir üyeden gelen fasulyeler&quot; görürsünüz ve engellerini kaldırdıktan sonra da bunu görmeye devam edersiniz.</li>
+        </ul>
+        <h2>Neler yapmaz</h2>
+        <ul>
+            <li>Onlara haber verilmez. Onlara göre mesajları gönderilmiş görünür, Fasulyeleriyle birlikte gönderdikleri notlar da öyle.</li>
+            <li>Arkadaşlığı bitirmez: onları eklediyseniz hâlâ arkadaşınızdırlar ve iletişim bilginiz Arkadaşlar olarak ayarlanmışsa bunu görmeye devam ederler. Bunu da bitirmek için <strong>Engellenen Kullanıcıları Yönet</strong>'i açın (web'de <strong>Engellenen Üyeleri Yönet</strong>; aşağıdaki &quot;Engeli kaldırma&quot; bölümüne bakın) ve adlarının altındaki <strong>Arkadaşlardan da çıkar</strong> seçeneğine dokunun. Yalnızca eklediğiniz biri için oradadır. Engelli kalmaya devam ederler. Çıkarıldıklarını fark edebilirler.</li>
+            <li>Grup sohbetleri, etkinlik sohbetleri ile proje ve girişim sohbetleri paylaşımlıdır: içlerindeki herkes aynı mesajları görür. Oradaki mesajları herkese olduğu gibi size de görünmeye devam eder.</li>
+            <li>Onlarla halihazırda yaptığınız bir anlaşma, uyarıları ve bildirimleriyle daha önce olduğu gibi devam eder.</li>
+            <li>Daha önce onlarla takas yaptıysanız size yine Fasulye gönderebilirler. Her Fasulye bildirim olmadan ulaşır.</li>
+            <li>Onlar başlatmış olsa bile topluluğunuzdan gelen bildirimler gelmeye devam eder. Örneğin bir grupta baş koordinatörlük görevinizin devredilmesi için biri oylama açtığında size haber verilir ve topluluğunuzu yöneten kişilerden mesajlar alırsınız.</li>
+            <li>Gönderilerinizi yine de görebilirler.</li>
+            <li>Telefon uygulamasında engelleme yalnızca hesabınız için bu telefonda tutulur. Bu telefondaki başka bir hesap engellemelerinizi almaz.</li>
+            <li>Telefon uygulamasında çıkış yaparsanız veya bu telefonun hesabını başka bir hesapla değiştirirseniz engellemeleriniz telefonda kalır. Aynı hesapla geri geldiğinizde hâlâ oradadırlar.</li>
+            <li>Telefon uygulamasında uygulamayı yeniden yüklerseniz veya başka bir telefon kullanırsanız onları tekrar engelleyin.</li>
+            <li>Web uygulamasında topluluğunuz engellemelerinizi hesabınızla birlikte tutar. Herhangi bir tarayıcıda oturum açtığınızda geri gelirler. Çıkış yapmak o bilgisayarda bunlarla ilgili hiçbir şey bırakmaz. &quot;Web tarayıcısında BeanPool kullanımı&quot; bölümüne bakın.</li>
+            <li>Topluluğunuzun sunucusunu işletenler, bildirimleri görebildikleri gibi web uygulamasında kimi engellediğinizi de görebilirler.</li>
+            <li>Telefon uygulaması ve web uygulaması ayrı listeler tutar. Birindeki engelleme diğerinde görünmez.</li>
+        </ul>
+        <h2>Engeli kaldırma</h2>
+        <ul>
+            <li><strong>Ayarlar</strong>'ı açın. <strong>YASAL VE GİZLİLİK</strong> altında <strong>Engellenen Kullanıcıları Yönet</strong> seçeneğine dokunun.</li>
+            <li>Bir adın yanındaki <strong>Engeli Kaldır</strong> seçeneğine veya <strong>Tümünün Engelini Kaldır</strong> seçeneğine dokunun.</li>
+        </ul>
+        <p>Web uygulamasında engelleme ve engeli kaldırma işlemleri için topluluğunuza bağlantı gerekir. Bağlantı yoksa uygulama bunu belirtir ve hiçbir şey değişmez. Tekrar çevrimiçi olduğunuzda yeniden deneyin.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>Sorun bildirme</strong><span>Bir ilan, etkinlik, Nabız paylaşımı, proje veya girişim hakkında topluluk moderatörlerine bildirimde bulunun.</span></a></li>
+            <li><a href="messages.html"><strong>Mesajlar</strong><span>Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.</span></a></li>
+            <li><a href="privacy.html"><strong>Gizliliğiniz</strong><span>Başkalarının sizin hakkınızda neleri görebileceği ve bunu denetleyen ayarlar.</span></a></li>
+            <li><a href="getting-help.html"><strong>Yardım alma</strong><span>Takıldığınızda nereye bakacağınız ve kime soracağınız.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

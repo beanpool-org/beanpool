@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pessoas e amigos — BeanPool members' guide</title>
+    <meta name="description" content="Encontre membros da sua comunidade, adicione amigos e apoie alguém.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Conversas</a></p>
+        <h1>Pessoas e amigos</h1>
+        <p class="lede">Encontre membros da sua comunidade, adicione amigos e apoie alguém.</p>
+        <h2>Encontrando pessoas</h2>
+        <p>Toque em <strong>Conversas</strong> e depois em <strong>Pessoas</strong>. No app web, toque em <strong>Pessoas</strong> na linha de abas. Existem três botões:</p>
+        <ul>
+            <li><strong>Amigos:</strong> pessoas que você adicionou.</li>
+            <li><strong>Comunidade:</strong> todos os membros. Busque pelo nome. No celular, ordene por <strong>Mais recentes</strong>, <strong>Nome</strong>, <strong>Amigos</strong>, <strong>Confiáveis</strong> ou <strong>Ativos</strong>. Na comunidade global são exibidos os membros mais próximos da sua região: digite pelo menos 2 letras de um nome para encontrar qualquer outra pessoa.</li>
+            <li><strong>Convites:</strong> convide alguém novo. Veja &quot;Entrando no BeanPool&quot;. Se você ainda não entrou, este botão exibe <strong>Cadastrar-se</strong>. Quando pessoas tiverem solicitado entrada na sua comunidade, ele exibe a quantidade e elas são listadas sob <strong>Querem entrar</strong>. No app web este botão é sempre <strong>🎟️ Convites</strong>, sem contagem e sem a lista de <strong>Querem entrar</strong>.</li>
+        </ul>
+        <p>Toque em uma pessoa para ver seu perfil: suas avaliações e publicações e, no celular em uma comunidade com feijões, seu selo de confiança e suas trocas. Veja &quot;Seu perfil&quot;.</p>
+        <h2>Amigos</h2>
+        <ul>
+            <li>Em <strong>Comunidade</strong>, toque em <strong>+ Adicionar</strong> ao lado de um nome. O botão muda para <strong>Adicionado</strong>. Toque em <strong>Adicionado</strong> para remover a pessoa novamente. No app web ele muda para <strong>✓ Amigo</strong>, no qual não é possível tocar: para remover alguém, use <strong>Remover</strong> sob <strong>Amigos</strong>.</li>
+            <li>Em <strong>Amigos</strong>, toque no botão de mensagem para iniciar uma conversa, ou no botão de remover e depois em <strong>Remover</strong> para tirar alguém da lista.</li>
+            <li>Quando alguém adiciona você, o topo de <strong>Amigos</strong> diz quem adicionou, como &quot;Sam adicionou você&quot;, com a opção <strong>Adicionar de volta</strong>. Toque no nome da pessoa para ver seu perfil primeiro. Nenhuma notificação é enviada. O aviso desaparece quando você adiciona de volta ou após 30 dias. São exibidas até 20 pessoas e, depois, quantas mais adicionaram você.</li>
+            <li>Você pode adicionar até 100 pessoas em qualquer período de 24 horas. Remover alguém também entra nessa contagem. Se você atingir o limite, o aplicativo avisará quando você poderá adicionar alguém novamente.</li>
+            <li>Não é possível adicionar alguém que você tenha bloqueado: desbloqueie a pessoa primeiro. Veja &quot;Bloquear alguém&quot;.</li>
+        </ul>
+        <p>Amigos funcionam como um atalho para você. Se você escolher <strong>Amigos</strong> para seus dados de contato, apenas eles poderão vê-los. Veja &quot;Seu perfil&quot;.</p>
+        <p>Ninguém mais pode ler a sua lista de amigos. A pessoa que você adiciona vê que você a adicionou.</p>
+        <h2>Conexões em comum</h2>
+        <p>O perfil de um membro pode exibir <strong>conexões em comum</strong>: pessoas às quais você pode perguntar sobre esse membro. Alguém só aparece ali quando você e essa pessoa são amigos mútuos e ela e o membro também são amigos mútuos. Isso significa que você e essa pessoa adicionaram um ao outro, e essa pessoa e o membro também adicionaram um ao outro. Adicionar alguém por conta própria nunca inclui ninguém ali, nem alguém adicionar você. Até 12 pessoas são exibidas. Toque em um nome para ver o perfil correspondente.</p>
+        <p>Você pode optar por não ser exibido como conexão em comum de ninguém. Nas Configurações, sob <strong>Jurídico e privacidade</strong>, desative <strong>Mostrar-me como conexão em comum</strong>. Ninguém verá seu nome ali e você não será contabilizado. A opção permanece ativa até que você a desative. Veja &quot;Sua privacidade&quot;.</p>
+        <h2>Apoiando alguém</h2>
+        <p>Alguns membros são escolhidos pela comunidade para acolher recém-chegados. Eles podem apoiar um novo membro, o que oferece a essa pessoa uma linha de crédito inicial para começar a negociar. No perfil da pessoa, eles tocam em <strong>Apoiar membro</strong> e escolhem <strong>Leve</strong> (25), <strong>Padrão</strong> (50) ou <strong>Profundo</strong> (100). Nenhum feijão sai da carteira de quem apoia.</p>
+        <p>Quem tem autorização para apoiar membros é decidido por um administrador ou por uma Decisão da comunidade, nunca por um selo. Veja &quot;Regras e como funcionam as decisões&quot;.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="messages.html"><strong>Mensagens</strong><span>Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.</span></a></li>
+            <li><a href="your-profile.html"><strong>Seu perfil</strong><span>Seu nome, foto, algumas palavras sobre você e quem pode ver seus dados de contato.</span></a></li>
+            <li><a href="joining.html"><strong>Entrar no BeanPool</strong><span>Duas formas de entrar: uma comunidade com convite de membro, ou a comunidade global se estiver aberta, com 12 palavras secretas ou login. Pedir entrada e convidar outros.</span></a></li>
+            <li><a href="blocking.html"><strong>Bloquear alguém</strong><span>Oculte as publicações e mensagens de alguém e desfaça isso quando quiser.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

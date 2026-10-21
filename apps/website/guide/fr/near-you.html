@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trouver près de chez vous — BeanPool members' guide</title>
+    <meta name="description" content="Afficher uniquement les annonces à une certaine distance de vous ou d'un lieu choisi.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">Carte</a></p>
+        <h1>Trouver près de chez vous</h1>
+        <p class="lede">Afficher uniquement les annonces à une certaine distance de vous ou d'un lieu choisi.</p>
+        <h2>Dans l'onglet Marché</h2>
+        <ul>
+            <li>Touchez <strong>Marché</strong>, puis <strong>Distance</strong> dans la deuxième ligne de filtres. Ce filtre n'apparaît pas lorsque <strong>Événements</strong> est sélectionné.</li>
+            <li><strong>Lieu et rayon</strong> s'ouvre (<strong>Définir l'emplacement et le rayon</strong> dans l'application web). Pour utiliser votre position actuelle, touchez le bouton de la cible. Vous pouvez aussi toucher la carte ou faire glisser le repère pour choisir un autre centre.</li>
+            <li>Choisissez la distance avec le <strong>Rayon de recherche</strong> : de 100 mètres à 50 kilomètres.</li>
+            <li>Touchez <strong>Appliquer</strong>. Le bouton affiche alors la distance, comme <strong>5km</strong>.</li>
+            <li>Pour revenir à l'affichage global, ouvrez-le à nouveau et touchez <strong>Réinitialiser</strong>. Dans l'application web, vous pouvez aussi toucher la croix <strong>✕</strong> sur <strong>Distance</strong>.</li>
+        </ul>
+        <p>Sur le téléphone, les publications sans localisation sont toujours affichées. Dans l'application web, choisir une <strong>Distance</strong> les masque, à l'exception des sondages. Sur la communauté globale, l'application web les exclut également lorsque la liste est centrée près de chez vous (voir ci-dessous).</p>
+        <p>Si votre navigateur autorise déjà BeanPool à utiliser votre position, le sélecteur peut s'ouvrir sur l'endroit où vous vous trouvez. Sinon, il s'ouvre sur un point fixe. Vérifiez le repère, ou touchez le bouton de la cible ou la carte avant de toucher <strong>Appliquer</strong>. Sur la communauté globale, l'application web transmet le centre que vous avez choisi à la communauté, arrondi à environ 11 mètres près.</p>
+        <p>Sur le téléphone, le sélecteur s'ouvre sur le dernier centre que vous avez choisi, ou sur un point fixe ; touchez donc d'abord le bouton de la cible.</p>
+        <h2>Sur la Carte</h2>
+        <p>La carte ne dispose pas de son propre filtre de distance. Touchez le bouton de la cible sur la gauche pour voir où vous êtes, puis explorez les environs et zoomez.</p>
+        <h2>Sur la communauté globale, dans l'application web</h2>
+        <p>La communauté globale rassemble des annonces du monde entier, de sorte que le <strong>Marché</strong> et la <strong>Carte</strong> de l'application web s'ouvrent en partant de ce qui est près de chez vous :</p>
+        <ul>
+            <li>Avec une <strong>Distance</strong> définie sur le Marché, les deux affichent les annonces les plus proches dans ce rayon, les plus proches d'abord. La Carte affiche jusqu'à 200 repères.</li>
+            <li>Sans distance définie, ils affichent les annonces les plus proches à moins de 250 km de votre zone : le lieu approximatif que vous renseignez lors de votre inscription, ou plus tard dans les <strong>Paramètres</strong>, sous <strong>Votre zone</strong>. Une ligne au-dessus de la liste du Marché indique <strong>Les plus proches de votre zone en premier, dans un rayon de 250 km.</strong> Touchez <strong>Afficher partout</strong> pour voir les plus récentes de partout, et <strong>Près de chez vous</strong> pour revenir.</li>
+            <li>Si vous n'avez défini ni l'une ni l'autre, vous voyez les plus récentes de partout, et <strong>Voir ce qui est près de chez vous</strong> ouvre le sélecteur de distance. Une ligne au-dessus de la liste du Marché précise ce que vous consultez actuellement. Avec une <strong>Distance</strong>, elle ne comporte aucun bouton : ouvrez <strong>Distance</strong> et touchez <strong>Réinitialiser</strong>. Vous revenez alors près de votre zone, ou, si aucune zone n'est définie, vous voyez les annonces les plus récentes de partout.</li>
+            <li>Chaque annonce indique son éloignement, comme <strong>📍 12 km</strong>. Vos propres annonces figurent toujours sur la Carte, et sur le Marché près de votre zone, où qu'elles se situent. Avec une <strong>Distance</strong>, le Marché ne montre que ce qui se trouve dans ce rayon, vos annonces y comprises.</li>
+            <li>Tant que la liste est centrée près de chez vous, les publications sans localisation sont exclues. Un sondage émanant de quelqu'un qui n'a pas défini sa zone en fait partie. Pour les voir, réinitialisez la <strong>Distance</strong> si vous en aviez choisi une, puis touchez <strong>Afficher partout</strong>.</li>
+            <li>Sous <strong>Événements</strong>, la liste n'est jamais restreinte par votre zone ou votre <strong>Distance</strong>, comme auparavant.</li>
+            <li>Si rien n'est proche, la Carte l'indique, avec le bouton <strong>Afficher partout</strong>. Ensuite, <strong>Près de chez vous</strong> (ou <strong>Près du lieu choisi</strong>) fait réapparaître les éléments les plus proches.</li>
+        </ul>
+        <p>La recherche de l'application web ne porte que sur les annonces présentes à l'écran. <strong>Afficher partout</strong> montre les annonces les plus récentes du monde entier, et non l'intégralité, de sorte qu'une annonce éloignée qui n'est pas récente ne ressortira pas dans la recherche. Dans toutes les autres communautés, l'application web ne restreint ni le Marché ni la Carte à votre zone. Ils affichent les 50 annonces les plus récemment modifiées ainsi que les vôtres, et la recherche ne porte que sur celles-ci.</p>
+        <h2>Sur la communauté globale, sur le téléphone</h2>
+        <p>Le téléphone conserve les annonces les plus proches de votre zone : jusqu'à 500, dans un rayon de 250 km. Il conserve également vos propres annonces ainsi que celles pour lesquelles vous avez un accord, une discussion ou une réponse. Le Marché et la Carte affichent ce que le téléphone conserve. Si aucune zone n'est définie, il conserve les annonces les plus récentes à la place, et une ligne au-dessus du Marché l'indique. Voir « Votre zone ».</p>
+        <h2>Événements près de chez vous</h2>
+        <p>Sur le téléphone, les fiches d'événement indiquent leur distance dès lors que vous avez autorisé l'application à utiliser votre position. Dans l'application web, elles l'indiquent par rapport au centre que vous avez choisi dans <strong>Distance</strong>. Sur la communauté globale, si vous n'en avez pas choisi, elles l'indiquent par rapport à votre zone (sauf sous <strong>Événements</strong>). Sur la Carte, l'application web l'affiche à partir de votre position dès que vous touchez la cible.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>Explorer le Marché</strong><span>Trouver des Offres et Demandes grâce à la recherche, aux filtres et à la distance.</span></a></li>
+            <li><a href="map-pins.html"><strong>Ce que montre la Carte</strong><span>Les repères sur la Carte, la signification de leurs couleurs et les boutons autour.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Emplacement du repère</strong><span>Qui voit l'emplacement de vos annonces et événements, et comment préserver l'intimité de votre domicile.</span></a></li>
+            <li><a href="events.html"><strong>Événements</strong><span>Créer un événement, sur place ou en ligne, unique ou récurrent ; s'inscrire, recevoir un rappel, le partager et le gérer en tant qu'hôte.</span></a></li>
+            <li><a href="your-area.html"><strong>Votre zone</strong><span>La zone approximative utilisée par la communauté globale pour afficher les annonces proches, et comment la modifier ou l'effacer.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

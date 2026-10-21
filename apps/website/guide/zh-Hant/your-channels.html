@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分享你的頻道 — BeanPool members' guide</title>
+    <meta name="description" content="將你的 YouTube、部落格、Instagram 等頻道展示在動態中。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#pulse">動態</a></p>
+        <h1>分享你的頻道</h1>
+        <p class="lede">將你的 YouTube、部落格、Instagram 等頻道展示在動態中。</p>
+        <h2>新增頻道</h2>
+        <ul>
+            <li>在 <strong>Pulse 動態</strong> 中，點擊 <strong>+ 頻道</strong>。在手機上，你也可以開啟<strong>設定</strong>並點擊<strong>頻道與櫥窗</strong>。</li>
+            <li>點擊 <strong>+ 新增頻道</strong>。</li>
+            <li>在<strong>你在哪裡發布？</strong>下方，選擇平台。</li>
+            <li>輸入或貼上<strong>你的連結或帳號</strong>。</li>
+            <li>在<strong>內容主題是什麼？</strong>下方，選擇主題。</li>
+            <li>點擊<strong>新增頻道</strong>。</li>
+        </ul>
+        <p>每個平台的運作方式略有不同。螢幕畫面會說明其機制：</p>
+        <ul>
+            <li><strong>自動更新</strong>（YouTube、SoundCloud、部落格）：新貼文會自動出現在 Pulse 動態中。</li>
+            <li><strong>每則貼文點一下</strong>（Instagram、TikTok、Facebook）：手動逐一分享每則貼文。當畫面提供<strong>連結 TikTok</strong> 或<strong>連結 Instagram</strong> 時，你可以改為綁定帳號。綁定後，你的貼文會在連線時以及每次點擊 <strong>↻ 同步影片</strong> 時同步匯入。你所在社群的伺服器不會自行擷取這些貼文。該連結僅保留在此手機上。從手機登出將會解除連結。當你返回時，頻道仍保留其徽章，但若要再次匯入貼文，請點擊<strong>斷開連線</strong>，然後再次點擊<strong>連結 TikTok</strong> 或<strong>連結 Instagram</strong>。</li>
+            <li><strong>以卡片呈現</strong>（一般網站）。</li>
+        </ul>
+        <p><strong>連結 TikTok</strong> 與 <strong>連結 Instagram</strong> 僅適用於手機應用程式。在網頁版應用程式中，請使用 <strong>+ 分享貼文</strong> 逐一手動分享每則貼文。</p>
+        <h2>驗證帳號</h2>
+        <ul>
+            <li>當你點擊<strong>連結 TikTok</strong> 或<strong>連結 Instagram</strong> 時，你社群的伺服器會向 Instagram 或 TikTok 確認你所登入的帳號。只有當該帳號與頻道上的帳號一致時，頻道才會標記為已驗證。</li>
+            <li>登入了不同的帳號？畫面會予以說明。請登入正確的帳號，然後再次點擊同一個<strong>連結</strong>按鈕。</li>
+            <li>新增頻道時請填寫你的 <strong>@帳號</strong>，以便進行查驗。短網址無法進行驗證。</li>
+            <li>Facebook 頻道絕不標記為已驗證。</li>
+            <li>如果頻道顯示<strong>重新連線以還原已驗證徽章</strong>，請點擊<strong>重新連結 TikTok</strong> 或<strong>重新連結 Instagram</strong>。</li>
+        </ul>
+        <h2>頻道個別設定</h2>
+        <ul>
+            <li><strong>顯示在在地動態：</strong>關閉此選項可防止該頻道的貼文出現在 Pulse 動態中。</li>
+            <li><strong>+ 分享貼文：</strong>手動新增單一貼文。</li>
+            <li><strong>變更</strong>（在網頁版應用程式中為<strong>變更分類</strong>）：選擇其他主題。</li>
+            <li><strong>設為主要：</strong>選擇你的主要影音頻道。</li>
+            <li><strong>移除：</strong>將頻道移除。</li>
+        </ul>
+        <h2>分享單一貼文</h2>
+        <p>點擊<strong>分享貼文至 Pulse</strong>。貼上<strong>貼文網址</strong>，確認所屬的頻道與主題，然後點擊<strong>分享到 Pulse</strong>。</p>
+        <h2>請記住</h2>
+        <p>無論你在 Pulse 動態上分享什麼，都會顯示你的姓名與相片。你社群中的每個人都能看見。尚未加入社群的人則無法查閱。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-pulse.html"><strong>社群動態</strong><span>鄰居在外部平台創作和分享的內容，彙整於一條動態消息中。</span></a></li>
+            <li><a href="learn.html"><strong>「學習」專區</strong><span>關於 BeanPool 的短片以及對應的指南頁面。</span></a></li>
+            <li><a href="your-profile.html"><strong>個人檔案</strong><span>你的暱稱、相片、個人簡述以及誰可以查看你的聯絡方式。</span></a></li>
+            <li><a href="privacy.html"><strong>個人隱私</strong><span>他人能看到的關於你的資訊，以及控制這些資訊的設定項。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

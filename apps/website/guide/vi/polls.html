@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/vi by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thăm dò — BeanPool members' guide</title>
+    <meta name="description" content="Hỏi cộng đồng một câu hỏi nhanh. Thăm dò thể hiện ý kiến; tự chúng không làm thay đổi điều gì.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Chung</a></p>
+        <h1>Thăm dò</h1>
+        <p class="lede">Hỏi cộng đồng một câu hỏi nhanh. Thăm dò thể hiện ý kiến; tự chúng không làm thay đổi điều gì.</p>
+        <h2>Thăm dò hay Quyết định?</h2>
+        <p>Một cuộc <strong>Thăm dò</strong> hỏi ý kiến mọi người: &quot;Chợ vào Chủ nhật hay Thứ bảy?&quot;. Tự nó không làm thay đổi điều gì. Để có quyết định mang tính ràng buộc, hãy đề xuất một Quyết định.</p>
+        <p>Trên cộng đồng toàn cầu, mỗi cuộc thăm dò đều ghi <strong>Cuộc thăm dò không chính thức; không quyết định điều gì</strong>. Bất kỳ ai cũng có thể tham gia bằng 12 từ hoặc phương thức đăng nhập, vì vậy một người có nhiều tài khoản có thể làm sai lệch kết quả kiểm phiếu, và ở đó không có Quyết định. Phía dưới có dòng &quot;🏘️ Trong cộng đồng địa phương, Quyết định có tính ràng buộc ›&quot; giải thích lý do tại sao một cuộc biểu quyết chỉ có tính ràng buộc trong cộng đồng địa phương.</p>
+        <p>Khi một cuộc thăm dò ẩn danh ở đó đã kết thúc, nó cũng cho biết có bao nhiêu phiếu bầu đến từ <strong>tài khoản mới hoặc tài khoản 12 từ</strong>, ví dụ như &quot;5 trong số 12 phiếu đến từ tài khoản mới hoặc tài khoản 12 từ&quot;. Mỗi phiếu bầu được tính theo trạng thái của tài khoản tại thời điểm bỏ phiếu: tài khoản mới là tài khoản vẫn còn các giới hạn của tài khoản mới, và tài khoản 12 từ là tài khoản được tạo bằng 12 từ mà chưa thêm phương thức đăng nhập. Khi có ít nhất 3 phiếu đến từ tài khoản mới hoặc tài khoản 12 từ, và các phiếu khác là không có hoặc có ít nhất 3 phiếu, mỗi câu trả lời cũng cho biết có bao nhiêu phiếu loại này trong câu trả lời đó. Mọi phiếu bầu vẫn được tính, và không có gì cho thấy ai đã bỏ phiếu.</p>
+        <p>Trong khi cuộc thăm dò đang mở, nó không hiển thị thông tin này. Nếu hiển thị, một người theo dõi cuộc thăm dò sau mỗi lượt bỏ phiếu có thể biết được từng phiếu bầu đến từ loại tài khoản nào và họ đã chọn phương án nào. Một cuộc biểu quyết công khai không bao giờ hiển thị điều này, dù đang mở hay đã đóng: nó hiển thị ai đã bỏ phiếu, do đó số lượng sẽ tiết lộ loại tài khoản của từng người bỏ phiếu. Cuộc thăm dò của một nhóm cũng không hiển thị điều này, và cuộc thăm dò trên cộng đồng địa phương cũng vậy.</p>
+        <h2>Bắt đầu một cuộc thăm dò</h2>
+        <ul>
+            <li>Nhấn <strong>+ ĐĂNG TIN</strong> trên tab Chợ hoặc trên Bản đồ.</li>
+            <li>Chọn <strong>Thăm dò ý kiến cộng đồng</strong>.</li>
+            <li>Viết <strong>Câu hỏi</strong>.</li>
+            <li>Thêm <strong>BỐI CẢNH / GHI CHÚ (TÙY CHỌN)</strong> nếu điều đó hữu ích. Phần này là tùy chọn.</li>
+            <li>Viết từ 2 đến 4 <strong>Lựa chọn</strong>. Nhấn <strong>+ Thêm lựa chọn</strong> để có thêm tùy chọn.</li>
+            <li>Chọn thời gian diễn ra: <strong>3 ngày</strong>, <strong>7 ngày</strong> hoặc <strong>14 ngày</strong>.</li>
+            <li>Chọn xem đó có phải là một <strong>Biểu quyết công khai</strong> hay không trước khi bạn nhấn <strong>Tạo</strong>. Nếu không bật, cuộc thăm dò sẽ là ẩn danh. Nếu tích chọn, các thành viên có thể thấy ai đã chọn phương án nào. Bạn không thể thay đổi thiết lập này sau khi cuộc thăm dò đã được đăng.</li>
+            <li>Nhấn <strong>Tạo</strong>.</li>
+        </ul>
+        <p>Trong ứng dụng web, loại là <strong>🗳️ Poll</strong>, phần ghi chú là <strong>Background / Context</strong>, nút tùy chọn là <strong>+ Thêm lựa chọn</strong> và nút cuối cùng là <strong>Tạo bình chọn</strong>. Trên Bản đồ của web, hãy nhấn vào nút tròn <strong>+</strong>.</p>
+        <p>Bạn có thể mở một cuộc thăm dò tại một thời điểm, và một cộng đồng có thể mở tối đa 5 cuộc thăm dò cùng lúc. Bạn cần có hạn mức tín dụng không bị đóng băng để bắt đầu hoặc trả lời một cuộc thăm dò.</p>
+        <h2>Tìm kiếm và trả lời thăm dò</h2>
+        <p>Các cuộc thăm dò nằm trong Chợ. Nhấn <strong>Thăm dò</strong> ở hàng trên cùng để chỉ xem các cuộc thăm dò.</p>
+        <ul>
+            <li>Nhấn vào một câu trả lời để chọn. Nhấn vào câu trả lời khác để thay đổi ý định, cho đến khi cuộc thăm dò kết thúc.</li>
+            <li>Thẻ sẽ hiển thị số người đã chọn mỗi câu trả lời.</li>
+        </ul>
+        <h2>Ai có thể thấy bạn đã bỏ phiếu thế nào</h2>
+        <p>Mỗi cuộc thăm dò đều cho biết nó thuộc loại nào, ở phía trên tỷ lệ tham gia:</p>
+        <ul>
+            <li><strong>Ẩn danh</strong> (loại thông thường): mọi người chỉ thấy số lượng người đã chọn mỗi câu trả lời. Không ai thấy ai đã chọn phương án nào, kể cả người đã tạo cuộc thăm dò.</li>
+            <li><strong>Biểu quyết công khai:</strong> người tạo đã chọn hiển thị người bỏ phiếu. Các thành viên có thể nhấn <strong>Xem người bỏ phiếu</strong> (<strong>Hiện người bỏ phiếu</strong> trong ứng dụng web) để xem ai đã chọn phương án nào. Thành viên bị đình chỉ chỉ thấy tổng số, cho đến khi thời gian đình chỉ kết thúc.</li>
+        </ul>
+        <p>Các chủ sở hữu và quản trị viên vận hành máy chủ cộng đồng vẫn có thể thấy từng phiếu bầu được lưu trữ tại đó.</p>
+        <h2>Đóng cuộc thăm dò sớm</h2>
+        <p>Nếu bạn là người tạo cuộc thăm dò, hãy nhấn <strong>Đóng cuộc thăm dò</strong>, sau đó nhấn <strong>Đóng cuộc thăm dò</strong> một lần nữa để xác nhận (<strong>OK</strong> trong ứng dụng web).</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="decisions.html"><strong>Bỏ phiếu cho Quyết định</strong><span>Tìm các Quyết định đang mở, bỏ phiếu, đổi phiếu bầu và xem kết quả.</span></a></li>
+            <li><a href="proposing-a-decision.html"><strong>Đề xuất một Quyết định</strong><span>Yêu cầu cộng đồng cùng đưa ra một quyết định có tính ràng buộc.</span></a></li>
+            <li><a href="events.html"><strong>Sự kiện</strong><span>Tạo sự kiện trực tiếp hoặc trực tuyến, một lần hoặc lặp lại; xác nhận tham gia, nhận nhắc nhở, chia sẻ và chủ trì sự kiện.</span></a></li>
+            <li><a href="rules.html"><strong>Quy tắc và cách quyết định vận hành</strong><span>Bỏ phiếu, tỷ lệ tham gia, bỏ phiếu kín, ai có quyền bỏ phiếu, đình chỉ, xóa thành viên, người quản lý, cùng người triệu tập.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Đậu và cộng đồng toàn cầu</strong><span>Mục đích của cộng đồng toàn cầu, một trong nhiều cộng đồng, và những gì bạn thấy: dấu hiệu 🏘️ Cộng đồng địa phương, cộng đồng mẫu Example Valley, lý do Đậu chờ ở đó và cách bắt đầu hoặc tìm cộng đồng địa phương.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

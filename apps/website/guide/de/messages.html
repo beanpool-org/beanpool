@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nachrichten — BeanPool members' guide</title>
+    <meta name="description" content="Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Chat</a></p>
+        <h1>Nachrichten</h1>
+        <p class="lede">Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.</p>
+        <h2>Deine Chats</h2>
+        <p>Der <strong>Chat</strong> hat oben drei Schaltflächen: <strong>Nachrichten</strong>, <strong>Gruppen</strong> und <strong>Personen</strong>.</p>
+        <p>Tippe in der Leiste der Reiter auf <strong>Chat</strong>, dann auf <strong>Nachrichten</strong>. Deine Chats mit Personen sind dort aufgelistet. Deals, die deine Aufmerksamkeit erfordern, stehen oben unter <strong>Aktion erforderlich</strong>.</p>
+        <p>Chats, die zu einer Gruppe, einem Betrieb oder einer Veranstaltung gehören, befinden sich unter <strong>Gruppen</strong>, nicht hier. Siehe „Gruppen“.</p>
+        <ul>
+            <li>Suche mit <strong>Chats, Beiträge, Partner suchen...</strong>.</li>
+            <li>Die Filter-Schaltfläche sortiert nach <strong>Neueste</strong> oder <strong>Ungelesen</strong> (und dort, wo deine Community Bohnen nutzt, nach den Bohnen in jedem Deal, höchste oder niedrigste zuerst) und kann <strong>Nur ungelesene</strong> oder <strong>Nur Freunde</strong> anzeigen.</li>
+            <li>Auf dem Telefon gleiten Suchfeld und Filter-Schaltfläche beim Herunterscrollen aus dem Bild. Scrolle ein Stück nach oben, und sie kehren zurück. Tippe erneut auf <strong>Chat</strong>, um ganz nach oben zu springen.</li>
+        </ul>
+        <p>In der Web-App ist dies der Reiter <strong>Chat</strong>. Er listet alle deine Chats auf, auch Gruppen- und Event-Chats, mit <strong>Alle</strong>, <strong>Transaktionen</strong>, <strong>Direkt</strong> und <strong>Gruppen</strong> ganz oben, und bietet keine Such- oder Filterfunktion.</p>
+        <h2>Einen Chat starten</h2>
+        <ul>
+            <li>Aus einem Beitrag: Tippe auf <strong>Nachricht</strong> und den Namen der Person.</li>
+            <li>Aus dem <strong>Chat</strong>: Tippe auf die Stift-Schaltfläche und suche die Person nach Namen. In der weltweiten Gemeinschaft listet „Neue Nachricht“ die Personen auf, mit denen du gehandelt hast, sowie deine Freunde. Um andere zu finden, gib mindestens 2 Buchstaben ihres Namens ein.</li>
+            <li>Aus deinen Freunden: <strong>Chat</strong>, dann <strong>Personen</strong>, dann <strong>Freunde</strong>, und tippe auf die Nachrichten-Schaltfläche neben einem Namen.</li>
+        </ul>
+        <p>Verwende in der Web-App <strong>✉️ Neue Direktnachricht</strong> oder die Schaltfläche <strong>💬 Nachricht</strong> an einem Beitrag. Deine Freunde befinden sich unter dem Reiter <strong>Leute</strong>.</p>
+        <h2>Senden</h2>
+        <ul>
+            <li>Schreibe in das Feld <strong>Nachricht…</strong> und tippe auf die Senden-Schaltfläche.</li>
+            <li>Um ein Foto zu senden, tippe auf <strong>+</strong>, dann auf <strong>Kamera</strong> oder <strong>Galerie</strong>. Verwende in der Web-App die Schaltfläche <strong>📎</strong> oder füge ein Bild direkt per Einfügen oder Ziehen in den Chat ein – das Bild wird dir zuerst angezeigt, und alles, was du bereits eingegeben hast, wird als Bildunterschrift mitgesendet. Fotos können nur in Chats zwischen zwei Personen gesendet werden.</li>
+        </ul>
+        <p>Die Häkchen unter deiner Nachricht:</p>
+        <ul>
+            <li>ein Häkchen: gesendet;</li>
+            <li>zwei blaue Häkchen: gelesen;</li>
+            <li>eine Uhr: wird noch gesendet;</li>
+            <li><strong>nicht zugestellt</strong>: fehlgeschlagen. Tippe darauf, um die Nachricht <strong>Erneut senden</strong> oder <strong>Verwerfen</strong>.</li>
+        </ul>
+        <p>Die Uhr und <strong>nicht zugestellt</strong> gibt es auf dem Telefon. In der Web-App bleibt eine fehlgeschlagene Nachricht im Textfeld und die App weist darauf hin.</p>
+        <h2>Antworten, reagieren, bearbeiten, löschen</h2>
+        <p>Tippe auf dem Telefon auf eine Nachricht. Daneben erscheinen kleine runde Schaltflächen:</p>
+        <ul>
+            <li><strong>Antworten</strong> zitiert die Nachricht über deiner nächsten Eingabe. Tippe in einer gesendeten Nachricht auf das Zitat, um zur beantworteten Nachricht zurückzuspringen.</li>
+            <li><strong>Reagieren</strong> öffnet sieben Emojis. Tippe auf eines, um es hinzuzufügen, tippe erneut darauf, um es zurückzunehmen. Eine Reaktion pro Person; das Antippen eines anderen Emojis tauscht es aus. Die Reaktionen erscheinen als kleines Abzeichen unter der Nachricht.</li>
+            <li><strong>Bearbeiten</strong>, bei eigenen Nachrichten, 15 Minuten lang nach dem Senden. Die Nachricht zeigt danach <strong>bearbeitet</strong>. Fotos können nicht bearbeitet werden.</li>
+            <li><strong>Löschen</strong>, bei eigenen Nachrichten, jederzeit – es gibt kein Zeitlimit. Es erfolgt eine einmalige Nachfrage: <strong>Für alle löschen?</strong>. Die Nachricht lautet danach für euch beide: <strong>Diese Nachricht wurde gelöscht</strong>, und niemand kann mehr darauf reagieren oder antworten.</li>
+        </ul>
+        <p>Dieselben Schaltflächen gibt es im Gruppenchat. Siehe „Gruppen“.</p>
+        <p>In der Web-App sind <strong>Antworten</strong>, <strong>Reagieren</strong> und <strong>Bearbeiten</strong> kleine Wörter an jeder Nachricht, und es gibt kein <strong>Löschen</strong>: Lösche Nachrichten über die Telefon-App.</p>
+        <p>Das Löschen entfernt den Text auch vom Server deiner Community, sodass ein neues Telefon, das sich später anmeldet, ihn niemals sieht.</p>
+        <h2>Einen Chat stummschalten</h2>
+        <p>Tippe oben rechts auf <strong>⋯</strong> (<strong>⋮</strong> in einem Gruppenchat), dann auf <strong>Benachrichtigungen stummschalten</strong>: <strong>Für 8 Stunden</strong>, <strong>Für eine Woche</strong> oder <strong>Immer</strong>. Tippe auf dieselbe Schaltfläche und auf <strong>Stummschaltung aufheben</strong>, um dies rückgängig zu machen. Die Web-App kann Chats derzeit noch nicht stummschalten. Siehe „Chat stummschalten“.</p>
+        <h2>Was privat ist</h2>
+        <ul>
+            <li>Ein Chat zwischen zwei Personen ist <strong>Ende-zu-Ende verschlüsselt</strong>: Er wird auf deinem Telefon gesperrt und erst auf deren Telefon entschlüsselt, sodass der Server deiner Community ihn nicht mitlesen kann. Auf dem Telefon zeigt der Chat oben <strong>Ende-zu-Ende verschlüsselt</strong> an. Fotos darin sind ebenfalls verschlüsselt, genau wie deine Bearbeitungen.</li>
+            <li>Jede Nachricht ist zudem an die absendende Person, an diese einzelne Nachricht, an ihren Chat und, falls es sich um eine Antwort handelt, an die beantwortete Nachricht gebunden. Der Server kann deine Nachricht also nicht als die der anderen Person darstellen, sie erneut als neue Nachricht senden oder deine Antwort auf eine andere Nachricht lenken. Versucht er dies, zeigt die App in der Mitte des Chats ohne Autorenzuordnung <strong>Diese Nachricht konnte nicht verifiziert werden und wird daher nicht angezeigt.</strong> anstelle des Textes. Ein Foto, das der Server durch ein anderes ersetzt, zeigt <strong>Bild nicht verfügbar</strong>.</li>
+            <li>Wenn der Server eine Nachricht in einen anderen Chat verschiebt, weist die App sie dort ab. Wenn zwei deiner Chats mit derselben Person zu einem zusammengeführt werden, trägt jede Nachricht den Chat in sich, aus dem sie stammt. Eine seit diesem Update gesendete Nachricht zeigt dann darunter <strong>Hierher aus einer anderen Unterhaltung verschoben.</strong> an. Eine davor gesendete Nachricht zeigt stattdessen den Hinweis auf eine ältere Version (siehe unten).</li>
+            <li>Jede Nachricht merkt sich auch die neueste Nachricht, die ihr Verfasser beim Schreiben hatte. Wenn der Server sie vor jener Nachricht anzeigt, steht darunter <strong>Wird nicht in der Reihenfolge angezeigt, in der sie geschrieben wurde.</strong>. Zwei Nachrichten, die genau im selben Moment verfasst wurden (keine nach der anderen), können ohne diesen Hinweis in beliebiger Reihenfolge erscheinen.</li>
+            <li>Alles in einem Chat zwischen zwei Personen, was nicht verschlüsselt ist, wird niemals als die Worte einer der beiden Personen dargestellt: In der Mitte des Chats steht <strong>Diese Nachricht war nicht verschlüsselt, daher kann BeanPool nicht bestätigen, wer sie geschrieben hat.</strong> und ihr Text wird nicht angezeigt. Deine Chatliste zeigt dieselbe Zeile.</li>
+            <li>Eine Nachricht, die die Admins deiner Community über die Admin-Seite des Servers an dich senden, ist nicht verschlüsselt und keine private Nachricht. Sie erscheint in der Mitte des Chats – niemals als persönliche Nachricht von jemandem – mit dem Zusatz <strong>Von den Admins deiner Community. Keine private Nachricht: Der Server der Community kann sie lesen.</strong> darunter.</li>
+            <li>Vor diesem Update von beliebigen Apps gesendete Nachrichten wurden ohne diese Prüfungen verschlüsselt: Der Server hätte verändern können, von wem sie zu stammen scheinen, oder eine Nachricht erneut senden können. Sie lassen sich weiterhin öffnen, und jede trägt an beliebiger Stelle im Chat darunter den Hinweis: <strong>Von einer älteren Version der App gesendet: BeanPool kann nicht bestätigen, wer sie geschrieben hat.</strong>. Jemand, der noch eine ältere App nutzt, kann Nachrichten einer aktualisierten App erst lesen, nachdem er das Update durchgeführt hat.</li>
+            <li>Eine Antwort zeigt die beantwortete Nachricht so an, wie diese Nachricht selbst dargestellt wird. Sie nennt den Verfasser nur, wenn sich dessen Nachricht öffnen ließ, und trägt die Zeile dieser Nachricht darunter, etwa den Hinweis auf eine ältere Version. Sie nennt <strong>Hinweis</strong> für Benachrichtigungen des Servers und <strong>Admins deiner Community</strong> für Mitteilungen der Admins. Alles, was sich nicht öffnen ließ oder nicht verschlüsselt war, wird als <strong>Nicht bestätigt</strong> zitiert – mit der Zeile, die anstelle des Textes steht.</li>
+            <li>Der Server allein kann also weder dich noch die andere Person so darstellen, als hättet ihr Worte verfasst, die ihr nicht geschrieben habt. Er kann eine Nachricht jedoch zurückhalten, verspätet zustellen oder als <strong>Diese Nachricht wurde gelöscht</strong> darstellen. Er kann den früheren Text einer bearbeiteten Nachricht statt des neuen anzeigen: Beide stammen tatsächlich vom Absender. Er sieht, welche Nachricht jede Nachricht beantwortet, kann dies aber nicht unbemerkt ändern. Er kann Emoji-Reaktionen im Namen beider Personen hinzufügen oder entfernen: Reaktionen sind nicht verschlüsselt. Und er kann einem Chat eigene Hinweise hinzufügen. Ein Hinweis wird als solcher dargestellt, als <strong>Hinweis</strong> zitiert und steht in deiner Chatliste als <strong>Hinweis:</strong>, niemals als Nachricht von einem von euch.</li>
+            <li>Die Verschlüsselung beweist, dass eine Nachricht von einer der beiden Personen stammt – nicht von welcher: Die andere Person könnte mit Unterstützung der Serverbetreiber Worte in deinem Namen verfassen.</li>
+            <li>All dies beruht darauf, dass deine App den echten Schlüssel der anderen Person kennt, den sie vom Server deiner Community erhält – genau wie die Verschlüsselung selbst. In der Web-App hängt dies zudem von der App selbst ab, die der Server deiner Community an deinen Browser sendet. Die Telefon-App stammt aus dem App Store.</li>
+            <li>Eine Nachricht, die nicht verschlüsselt werden kann, wird nicht gesendet. Wenn die App den Schlüssel der anderen Person noch nicht finden kann oder das Verschlüsseln fehlschlägt, verbleibt dein Text im Eingabefeld mit einem entsprechenden Hinweis. Sende die Nachricht kurz darauf erneut. Der Server deiner Community weist unverschlüsselte Nachrichten zwischen zwei Personen ebenfalls ab.</li>
+            <li>Die Mitteilungen, die BeanPool einem Chat zu einem Deal hinzufügt, sind nicht verschlüsselt: Bohnen, die für den Trade zurückgehalten, ausgezahlt oder bei Abbruch erstattet wurden, der Betrag und wie sowie warum ein Admin einen feststeckenden Trade beigelegt hat. Die Betreiber des Servers deiner Community können diese lesen.</li>
+            <li>Der Server weiß zudem, wer wem wann Nachrichten gesendet hat, welche Nachricht beantwortet wurde, und sieht die Emoji-Reaktionen. Eine Nachricht, die eine ältere Version der App unverschlüsselt gesendet hat, bleibt auf dem Server lesbar.</li>
+            <li>Der Chat einer Gruppe ist auf dem Telefon und in der Web-App ebenfalls <strong>Ende-zu-Ende verschlüsselt</strong>: Nur die Gruppenmitglieder können ihn lesen, die Betreiber des Servers deiner Community nicht. Über dem Eingabefeld steht <strong>Ende-zu-Ende verschlüsselt</strong>. Der Server deiner Community sieht weiterhin, wer wann geschrieben hat, wer erwähnt wurde, welche Nachricht beantwortet wurde, und die Emoji-Reaktionen. Du siehst den Gruppenchat erst ab dem Tag deines Beitritts: Vorher Geschriebenes wird nicht angezeigt, und dein Telefon besitzt niemals den Schlüssel dazu. Eine Nachricht, die nicht verschlüsselt werden kann, wird nicht gesendet. Eine Zeile, die nicht als von einem Mitglied verfasst bestätigt werden kann, lautet <strong>Diese Nachricht konnte nicht verifiziert werden.</strong> ohne Autorenzuordnung. Wenn der Server deiner Community älter ist und Gruppenchats noch nicht verschlüsseln kann, weist der Chat darauf hin und der Server kann mitlesen. Wird der Server aktualisiert, werden diese früheren Nachrichten entfernt, worauf eine Zeile im Chat hinweist. Siehe „Gruppen“.</li>
+            <li>In der Web-App funktioniert der Gruppenchat auf dieselbe Weise, du kannst darin jedoch keine Fotos versenden.</li>
+            <li>Betriebs- und Event-Chats sind nicht verschlüsselt. Die Betreiber des Servers deiner Community können sie lesen, und der Server könnte darin im Namen beliebiger Personen schreiben.</li>
+            <li>Ein Chat zwischen zwei Personen kann niemals in einen solchen Chat umgewandelt werden. Sobald deine App einen Chat als Chat zwischen zwei Personen erkannt hat oder er eine verschlüsselte Nachricht enthält, bleibt er ein solcher – ganz gleich, was der Server meldet: Er öffnet sich ausschließlich als dieser Chat mit allen oben genannten Prüfungen, und was du darin sendest, ist immer verschlüsselt. Ein Telefon oder Browser, der den Chat noch nie gesehen hat und dem keine seiner verschlüsselten Nachrichten übergeben wurden, kann das nicht unterscheiden: Für ihn sieht ein solcher Chat wie jeder andere Gruppenchat aus, der vom Server gelesen werden kann. In der Web-App gilt dies auch für Browser, die zwischenzeitlich abgemeldet wurden, private Fenster oder Browser nach dem Löschen der Websitedaten: Die Web-App vergisst, welche Chats zwischen zwei Personen stattfanden. Die Telefon-App behält diese Liste.</li>
+            <li>Das Löschen einer Nachricht fordert den Server deiner Community auf, sie zu ersetzen. Es erreicht keine Kopie, die bereits gelesen wurde, oder einen Screenshot.</li>
+            <li>Das Löschen deines Kontos bewirkt dasselbe mit jeder Nachricht, die du in jeder Art von Chat geschrieben hast, und löscht die von dir gesendeten Fotos. Siehe „Konto verlassen oder löschen“.</li>
+            <li>Der Chat einer Veranstaltung kann zudem vom Gastgeber und allen Teilnehmenden gelesen werden (wo der Gastgeber Teilnehmende einzeln zulässt: von den zugelassenen Teilnehmenden).</li>
+            <li>Der Chat eines Betriebs kann von jedem Mitglied deiner Community gelesen werden. Es ist die öffentliche Diskussion des Betriebs, dieselbe, die auch auf seiner Seite angezeigt wird, und jeder in der Community kann darin mitschreiben. Es ist kein privater Chat für seine Verwalter.</li>
+        </ul>
+        <h2>Jemanden aus einem Chat heraus blockieren</h2>
+        <p>Tippe oben im Chat auf den Namen der Person. Ihr Profil öffnet sich. Tippe auf <strong>Blockieren</strong>, dann auf <strong>Benutzer blockieren</strong>. Klicke in der Web-App oben im Chat auf <strong>Blockieren</strong>, dann auf <strong>OK</strong>. Siehe „Jemanden blockieren“.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="people.html"><strong>Leute und Freunde</strong><span>Mitglieder finden, Freunde, Profile, jemanden in eine Gruppe einladen und wer dich sehen kann.</span></a></li>
+            <li><a href="blocking.html"><strong>Jemanden blockieren</strong><span>Beiträge und Nachrichten einer Person ausblenden und dies später wieder aufheben.</span></a></li>
+            <li><a href="event-chat.html"><strong>Event-Chat</strong><span>Ein Gruppenchat für alle Teilnehmenden und wie er sich von anderen Chats unterscheidet.</span></a></li>
+            <li><a href="groups.html"><strong>Gruppen</strong><span>Einer Gruppe beitreten, eine gründen, Gruppenchats, offene und geschlossene Gruppen, Koordinatoren und neue Leitung wählen.</span></a></li>
+            <li><a href="mute.html"><strong>Chat stummschalten</strong><span>Benachrichtigungen für einen einzelnen Chat ausschalten, ohne ihn zu verlassen.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Die Leiste oben</strong><span>Die Bohne, kleine Symbole bei Handlungsbedarf und die Schaltflächen oben rechts.</span></a></li>
+            <li><a href="key-changed.html"><strong>Wenn ein Schlüssel im Chat wechselt</strong><span>Warum ein Chat den Versand stoppt, wie du den Schlüsselcode prüfst und wann du fortfahren kannst.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

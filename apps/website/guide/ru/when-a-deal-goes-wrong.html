@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ru by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Если сделка не удалась — BeanPool members' guide</title>
+    <meta name="description" content="Отмена сделки и порядок действий, если не получается договориться.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Рынок</a></p>
+        <h1>Если сделка не удалась</h1>
+        <p class="lede">Отмена сделки и порядок действий, если не получается договориться.</p>
+        <h2>Сначала обсудите</h2>
+        <p>Большинство сложностей вызваны простым недопониманием. Нажмите <strong>Сообщение</strong> в объявлении и обсудите ситуацию.</p>
+        <h2>Отмена</h2>
+        <ul>
+            <li><strong>До согласования:</strong> тот, кто отправил запрос, нажимает <strong>Отозвать запрос</strong>. Автор Спроса нажимает <strong>Отклонить</strong>, затем подтверждает отклонение и может добавить короткое сообщение. Запрос, на который никто не ответил, автоматически аннулируется через 7 дней.</li>
+            <li><strong>Пока бобы удерживаются:</strong> любой из участников может нажать <strong>Отменить удержание в сделке</strong>, затем <strong>Да, отменить</strong>. Все удержанные бобы возвращаются плательщику, а объявление снова появляется на рынке. Второй участник получает уведомление.</li>
+        </ul>
+        <p>В веб-приложении кнопка <strong>Отозвать запрос</strong> называется <strong>Отозвать предложение</strong>, а кнопка <strong>Отклонить</strong> отклоняет запрос сразу, без ввода сообщения. Чтобы отменить сделку с удержанием там, нажмите <strong>Отменить удержание</strong>, затем <strong>ОК</strong>.</p>
+        <p>Любой из участников может отменить сделку в одностороннем порядке в любой момент до перевода бобов — в том числе и после того, как работа уже выполнена. Если вы столкнулись с этим, сначала поговорите со вторым участником, а затем обратитесь к администраторам вашего сообщества.</p>
+        <h2>Если не удаётся договориться</h2>
+        <p>В приложении нет специальной кнопки «спор». Обратитесь за помощью к администраторам вашего сообщества. Они обслуживают сервер и могут разрешить зависшую сделку одним из трёх способов:</p>
+        <ul>
+            <li>перевести средства продавцу (взимается стандартная комиссия 1,5%);</li>
+            <li>вернуть все бобы покупателю;</li>
+            <li>разделить сумму поровну (50 на 50).</li>
+        </ul>
+        <p>Администратор не может разрешать сделку, в которой участвует сам либо в которой задействовано курируемое им предприятие.</p>
+        <p>Оба участника получают оповещение («Новости по одной из ваших сделок») и сообщение в чате с указанием принятого решения. В строке чата указывается позывной администратора или пишется «администратор сообщества». В самом системном уведомлении имена не раскрываются.</p>
+        <h2>Если кто-то поступает нечестно</h2>
+        <ul>
+            <li>Оставьте справедливый отзыв. Низкие оценки снижают доверие, которое участник зарабатывает в сделках.</li>
+            <li>Отправьте жалобу на объявление или заблокируйте участника. См. «Жалоба на нарушение» и «Блокировка участников».</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="a-deal-step-by-step.html"><strong>Сделка шаг за шагом</strong><span>От первого вопроса до оплаты, для Предложения и для Спроса, и написание отзыва.</span></a></li>
+            <li><a href="getting-help.html"><strong>Помощь</strong><span>Где искать ответы, если возникли трудности, и к кому обратиться.</span></a></li>
+            <li><a href="reporting.html"><strong>Жалоба на нарушение</strong><span>Обращение к модераторам сообщества по поводу объявления, события, записи в Пульсе, проекта или предприятия.</span></a></li>
+            <li><a href="rules.html"><strong>Правила и решения</strong><span>Голосование, явка, тайное голосование, кто голосует, приостановка, исключение участника, хранители, координаторы и старшие координаторы.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

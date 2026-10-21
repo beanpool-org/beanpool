@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat do evento — BeanPool members' guide</title>
+    <meta name="description" content="Converse com o anfitrião e todos que vão ao evento.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">Conversas</a></p>
+        <h1>Chat do evento</h1>
+        <p class="lede">Converse com o anfitrião e todos que vão ao evento.</p>
+        <h2>Quem participa</h2>
+        <p>Todo evento tem sua própria conversa. O anfitrião e todos que tocaram em <strong>Vou</strong> podem ler e escrever nela. Onde o anfitrião aprova a entrada das pessoas, participam apenas os confirmados que o anfitrião autorizou: até então, a conversa exibe <strong>O bate-papo abre quando o organizador permitir sua entrada.</strong> Se você mudar para <strong>Tenho interesse</strong>, ou tocar em <strong>Vou</strong> novamente para desmarcar, você sai da conversa. O anfitrião está sempre nela.</p>
+        <h2>Abrindo a conversa</h2>
+        <ul>
+            <li>Abra o evento e toque em <strong>Abrir conversa do evento</strong>.</li>
+            <li>Ou encontre-o em <strong>Conversas</strong>, sob <strong>Grupos</strong>, marcado como 📅 <strong>Evento</strong>. No app web, ele fica na aba <strong>Bate-papo</strong>, junto com suas outras conversas.</li>
+        </ul>
+        <p>No topo, uma caixa fixada mostra o <strong>Aviso para quem vai</strong> escrito pelo anfitrião, como o endereço exato. Toque no nome do evento bem no topo (no app web, <strong>Ver evento</strong>) para voltar ao evento.</p>
+        <h2>Escrevendo</h2>
+        <p>Digite em <strong>Mandar mensagem para quem vai…</strong> e toque no botão de enviar. Você pode enviar até 30 mensagens por minuto. A mensagem mais recente fica logo acima da caixa de mensagem e permanece visível quando o teclado se abre.</p>
+        <h2>Bom saber</h2>
+        <ul>
+            <li>As conversas de eventos não são criptografadas de ponta a ponta. O anfitrião, todas as pessoas confirmadas (onde o anfitrião aprova entradas, aquelas que ele autorizou) e as pessoas que gerenciam o servidor da sua comunidade podem lê-las. A conversa avisa isso acima da caixa de mensagem.</li>
+            <li>O anfitrião pode remover qualquer mensagem. Toque nela e, em seguida, em <strong>Remover</strong>. Ela passa a exibir &quot;removido pelo anfitrião&quot;.</li>
+            <li>Uma conversa de evento não tem respostas, reações, edição nem exclusão da sua própria mensagem — diferente de uma conversa com uma pessoa ou do bate-papo de um grupo. Peça ao anfitrião para remover algo que você queira apagar. Se você excluir sua conta, todas as mensagens escritas por você aqui passarão a exibir <strong>Esta mensagem foi apagada</strong>.</li>
+            <li>Quando o evento termina ou é cancelado, a conversa passa a ser somente para leitura. A conversa de um evento recorrente permanece aberta entre as datas: até sua última data se o anfitrião definiu um <strong>Até</strong>, e até que o anfitrião cancele o evento, caso contrário. Trinta dias após o término, ela é excluída.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="events.html"><strong>Eventos</strong><span>Crie um evento, presencial ou online, único ou recorrente; confirme presença, receba lembretes, compartilhe e gerencie como anfitrião.</span></a></li>
+            <li><a href="messages.html"><strong>Mensagens</strong><span>Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.</span></a></li>
+            <li><a href="pin-locations.html"><strong>Localização do marcador</strong><span>Quem vê onde estão seus anúncios e eventos, e como manter sua casa em privacidade.</span></a></li>
+            <li><a href="reporting.html"><strong>Denunciar problema</strong><span>Avise os moderadores da sua comunidade sobre uma publicação, evento, post no Pulso, projeto ou empreendimento.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

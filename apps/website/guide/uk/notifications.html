@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сповіщення — BeanPool members' guide</title>
+    <meta name="description" content="Виберіть, які сповіщення надходитимуть на ваш телефон і коли події нагадуватимуть про себе.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">Налаштування й безпека</a></p>
+        <h1>Сповіщення</h1>
+        <p class="lede">Виберіть, які сповіщення надходитимуть на ваш телефон і коли події нагадуватимуть про себе.</p>
+        <h2>Вибір сповіщень</h2>
+        <ul>
+            <li>Відкрийте <strong>Налаштування</strong>. У розділі <strong>Налаштування додатка</strong> торкніться <strong>Налаштування сповіщень</strong>.</li>
+            <li>Увімкніть або вимкніть кожен тип:</li>
+            <li><strong>Особисті повідомлення:</strong> коли хтось пише вам, публікує повідомлення в одній із ваших груп або згадує вас, чи коли відкривається голосування в групі або на підприємстві, де ви берете участь.</li>
+            <li><strong>Активність на ринку:</strong> запити, схвалення та відхилення щодо ваших угод, а також відомості про те, що сталося з дописом, про який ви повідомили, або з одним із ваших дописів, видалених адміністраторами. Також новини про події, які ви збираєтеся відвідати, повідомлення від адміністраторів вашої спільноти та відкриття спільноти поблизу місця, яким ви цікавилися.</li>
+            <li><strong>Утримання в трасті та система:</strong> боби утримано, вивільнено або оскаржено.</li>
+        </ul>
+        <p>У вебдодатку перший тип називається <strong>Повідомлення чату</strong>, а третій названо за словом <strong>Угоди</strong>. Вони визначають, що саме доходитиме до вашого телефону.</p>
+        <p>Зміни зберігаються автоматично. Вони зберігаються сервером вашої спільноти, тому закріплені за вашим обліковим записом.</p>
+        <p>Два сповіщення про ваш обліковий запис надходять завжди, і перемикача для них немає: про те, що ваш обліковий запис щойно було відновлено на іншому пристрої, та про те, що адміністратор почав перенесення вашого облікового запису на новий телефон. Якщо ви керуєте сервером своєї спільноти, сповіщення про сервер також надходять завжди.</p>
+        <h2>Що містить сповіщення</h2>
+        <p>Сповіщення на телефоні повідомляє лише тип новини, наприклад:</p>
+        <ul>
+            <li>«У вас нове повідомлення.»</li>
+            <li>«Є новини щодо однієї з ваших угод.»</li>
+            <li>«Подія, на яку ви йдете, скоро почнеться.»</li>
+            <li>«У вашої спільноти є оголошення для вас.»</li>
+        </ul>
+        <p>У ньому ніколи не вказується, від кого воно, яке це оголошення, скільки бобів або про що йдеться в повідомленні вашої спільноти. Сповіщення проходять через сервери Apple, Google та Expo на шляху до вашого телефону, а екран блокування може побачити будь-хто, тому решта інформації залишається у вашій спільноті. Відкрийте BeanPool, щоб побачити її.</p>
+        <p>BeanPool ніколи не запитує ваші 12 слів або пароль у сповіщенні.</p>
+        <h2>Коли ви торкаєтеся сповіщення</h2>
+        <p>Кожне сповіщення містить підпис вашої спільноти, створений виключно для вас. BeanPool перевіряє його перед виконанням будь-яких дій:</p>
+        <ul>
+            <li><strong>Підпис дійсний:</strong> BeanPool запитує у вашої спільноти, чого стосувалося сповіщення, і відкриває його, якщо воно надійшло зі спільноти, у якій ви перебуваєте. Сповіщення від іншої з ваших спільнот відкриває BeanPool там, де ви зупинилися: перемкніться на цю спільноту, щоб побачити його.</li>
+            <li><strong>Підпис недійсний:</strong> BeanPool нічого не відкриває і одноразово повідомляє: «Це сповіщення надійшло не від вашої спільноти. Ігноруйте його зміст. BeanPool ніколи не запитує ваші 12 слів або пароль у сповіщеннях.»</li>
+        </ul>
+        <p>Коли BeanPool відкрито, сповіщення з недійсним підписом не відображається взагалі, як і те, яке ви вже бачили.</p>
+        <p>Ваш телефон показує текст сповіщення до того, як BeanPool зможе перевірити його підпис. Тому той, хто заволодів адресою сповіщень вашого телефону, міг би розмістити власний текст на вашому екрані блокування. Дотик до такого сповіщення нічого не робить, і BeanPool повідомляє про це.</p>
+        <p>Сповіщення від спільноти, яку ви видалили з цього телефону, також нічого не робить.</p>
+        <p>Якщо сервер вашої спільноти ще не оновлено, його сповіщення не мають підпису. BeanPool показує їх загальними словами («Є новини від вашої спільноти.») і після дотику відкриває додаток там, де ви зупинилися.</p>
+        <h2>Оголошення під час перевірки BeanPool</h2>
+        <p>Час від часу ваш телефон дозволяє BeanPool зв'язуватися з вашою спільнотою у фоновому режимі. Якщо спільнота зберегла для вас повідомлення, яке ви ще не бачили, наприклад інформацію про те, що сталося з одним із ваших дописів, BeanPool один раз покаже його на вашому телефоні повністю.</p>
+        <p>Для цього не потрібно нічого, крім сервера вашої спільноти, тому спосіб працює, навіть якщо push-сповіщення не проходять. Це повідомлення надходить пізніше за звичайне сповіщення: телефон сам вирішує, коли саме, у проміжку від приблизно 15 хвилин до кількох годин.</p>
+        <h2>Нагадування про події</h2>
+        <p>Під перемикачами пункт <strong>Нагадування про події</strong> встановлює, за скільки часу до початку події, де ви вибрали <strong>Піду</strong> або <strong>Цікавить</strong>, ви отримаєте нагадування. Позначте <strong>за 1 тиждень</strong>, <strong>за 1 день</strong>, <strong>за 2 години</strong>, <strong>за 1 годину</strong> або <strong>за 30 хвилин</strong> (можна позначити кілька варіантів) або виберіть <strong>Вимкнено</strong>, щоб не отримувати їх зовсім.</p>
+        <p>Для всіх за замовчуванням установлено <strong>за 1 день</strong>. Це ваш стандартний вибір; для будь-якої конкретної події час можна налаштувати окремо в самій події. Див. розділ «Події».</p>
+        <p>Нагадування надходять разом зі сповіщеннями з категорії <strong>Активність на ринку</strong>, тому вони вимикаються, якщо вимкнути цю категорію. Ви ніколи не отримаєте нагадування про скасовану чи завершену подію, або про час, який уже минув на момент вашої згоди на участь. Якщо організатор переносить подію, нагадування переноситься разом із нею.</p>
+        <h2>Зовсім немає сповіщень?</h2>
+        <p>Перевірте у власних налаштуваннях телефону, чи дозволено сповіщення для BeanPool.</p>
+        <h2>Окремі чати</h2>
+        <p>Ви можете вимкнути сповіщення чату для окремої групи, проєкту або підприємства на 8 годин, на тиждень або назавжди. Див. розділ «Вимкнення звуку».</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="mute.html"><strong>Вимкнення звуку</strong><span>Вимкніть сповіщення чату — особистого, групи чи підприємства — на 8 годин, на тиждень або назавжди.</span></a></li>
+            <li><a href="messages.html"><strong>Повідомлення</strong><span>Початок чату, надсилання фотографій, відповіді, реакції, редагування, видалення, вимкнення звуку та конфіденційність.</span></a></li>
+            <li><a href="my-deals.html"><strong>Мої обміни</strong><span>Єдине місце для кожного вашого обміну, кожного активного оголошення та минулих угод.</span></a></li>
+            <li><a href="events.html"><strong>Події</strong><span>Створюйте подію — наживо чи онлайн, одноразову або регулярну; повідомляйте про участь, отримуйте нагадування, діліться та керуйте як організатор.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Відпустка</strong><span>Режим відпустки приховує ваші Пропозиції та призупиняє нові запити, поки ви відсутні.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Верхня панель</strong><span>Боб, маленькі піктограми, які з'являються, коли потрібна ваша дія, і кнопки у верхньому правому кутку.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

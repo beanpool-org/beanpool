@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/pt by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votar em uma Decisão — BeanPool members' guide</title>
+    <meta name="description" content="Encontre Decisões abertas, vote, altere seu voto e veja os resultados.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#commons">Bens comuns</a></p>
+        <h1>Votar em uma Decisão</h1>
+        <p class="lede">Encontre Decisões abertas, vote, altere seu voto e veja os resultados.</p>
+        <h2>Onde encontrar</h2>
+        <p>Toque em <strong>Bens comuns</strong> e depois em <strong>Decidir</strong>. As Decisões abertas ficam sob <strong>Decisões abertas</strong>.</p>
+        <p>Uma Decisão é vinculativa: se for aprovada, o servidor da sua comunidade a executa por conta própria. Um administrador só pode interromper uma decisão apresentando uma justificativa por escrito que os membros possam ler. As regras sobre quem pode votar, quanta participação é necessária e quanto de Sim é necessário estão em &quot;Regras e decisões&quot;.</p>
+        <p>A comunidade global não tem Decisões. Qualquer pessoa pode entrar nela, com 12 palavras ou um login, de modo que uma pessoa com várias contas poderia influenciar uma votação por lá. Em vez disso, seus moderadores cuidam dela: consulte &quot;Denunciar problema&quot;. As Decisões pertencem a comunidades locais. As enquetes continuam funcionando em qualquer lugar.</p>
+        <p>Na comunidade global, <strong>Bens comuns</strong> mostra um exemplo de Decisão de uma comunidade local, com o marcador <strong>🏘️ Comunidade local</strong>, para que você veja como funciona. Seus botões <strong>Votar SIM</strong> e <strong>Votar NÃO</strong> explicam por que as votações acontecem em uma comunidade local, e não registram voto algum. Consulte &quot;Feijões e comunidade global&quot;.</p>
+        <h2>Ler uma Decisão</h2>
+        <p>Cada Decisão mostra:</p>
+        <ul>
+            <li>sobre o que é e o que acontecerá se for aprovada;</li>
+            <li>como os votos são contados: um membro um voto, ou créditos de voz para decisões sobre os feijões dos Bens comuns;</li>
+            <li>quanto tempo resta. A votação dura 7 dias;</li>
+            <li><strong>Participação:</strong> de quantos votos precisa e se já foram alcançados;</li>
+            <li><strong>Placar:</strong> o Sim e o Não até o momento, e quanto de Sim é necessário.</li>
+        </ul>
+        <h2>Votar</h2>
+        <ul>
+            <li>Toque em <strong>Votar SIM</strong> ou <strong>Votar NÃO</strong>. No celular, o aplicativo exibe <strong>Voto registrado</strong>. No aplicativo web, o cartão é atualizado.</li>
+            <li>O cartão passa a informar como você votou, como &quot;Você votou Sim&quot;.</li>
+            <li>Para mudar de ideia antes do encerramento, toque no outro botão, como <strong>Mudar para Não</strong>.</li>
+        </ul>
+        <p>Toda Decisão é um <strong>voto secreto</strong>. Os membros veem os totais, nunca quem votou como. Seu próprio voto é mostrado apenas para você.</p>
+        <h2>Decisões sobre os feijões dos Bens comuns</h2>
+        <p>Estas usam <strong>créditos de voz</strong>. Você recebe créditos de voz a partir de suas trocas concluídas, renovados para cada Decisão. Use <strong>−</strong> e <strong>+</strong> para escolher quantos votos deseja atribuir. Mais votos custam mais: 2 votos custam 4 créditos, 3 votos custam 9.</p>
+        <p>Se você ainda não concluiu uma troca, não poderá votar nestas decisões. Você ainda pode votar nas outras Decisões, desde que tenha entrado antes de serem abertas e seu crédito não esteja congelado.</p>
+        <h2>Resultados</h2>
+        <p>Toque em <strong>Histórico de decisões</strong>. Escolha <strong>Tudo</strong>, <strong>Executada</strong>, <strong>Rejeitada</strong> ou <strong>Anulada</strong>. Cada uma mostra a participação e o placar finais, e o que aconteceu, por exemplo, se poucas pessoas votaram.</p>
+        <h2>Mais</h2>
+        <p>No celular, toque no <strong>ⓘ</strong> ao lado do título Bens comuns para ver como funcionam os feijões dos Bens comuns e a votação. No aplicativo web, abra o <strong>Registro</strong>, toque em <strong>Carteira</strong> e depois em <strong>Fundo dos Bens comuns ⓘ</strong>.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="proposing-a-decision.html"><strong>Propor uma Decisão</strong><span>Peça à comunidade para decidir algo de forma vinculativa.</span></a></li>
+            <li><a href="rules.html"><strong>Regras e decisões</strong><span>Votação, quórum, voto secreto, quem pode votar, suspensão, remoção de membros, custódios, coordenadores e coordenadores principais.</span></a></li>
+            <li><a href="polls.html"><strong>Enquetes</strong><span>Faça uma pergunta rápida à comunidade. Enquetes mostram opiniões; não mudam nada sozinhas.</span></a></li>
+            <li><a href="commons-fund.html"><strong>Bens comuns</strong><span>Os feijões compartilhados da sua comunidade: de onde vêm e como são usados.</span></a></li>
+            <li><a href="the-top-bar.html"><strong>Barra superior</strong><span>O feijão, os pequenos ícones que avisam quando algo precisa de você e os botões no canto superior direito.</span></a></li>
+            <li><a href="beans-and-the-global-community.html"><strong>Feijões e comunidade global</strong><span>Para que serve a comunidade global, uma comunidade entre várias, e o que você vê lá: o marcador 🏘️ Comunidade local, a comunidade de exemplo Example Valley, a espera dos feijões e como criar ou achar uma comunidade local.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通知設定 — BeanPool members' guide</title>
+    <meta name="description" content="選擇哪些提醒會推送到你的手機，以及活動何時向你發出提醒。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">設定與安全</a></p>
+        <h1>通知設定</h1>
+        <p class="lede">選擇哪些提醒會推送到你的手機，以及活動何時向你發出提醒。</p>
+        <h2>選擇你的提醒</h2>
+        <ul>
+            <li>開啟<strong>設定</strong>。在<strong>應用程式設定</strong>下，點選<strong>通知偏好設定</strong>。</li>
+            <li>開啟或關閉各種類型：</li>
+            <li><strong>私人訊息：</strong>有人傳送訊息給你、在你的群組中發言或提及你，或你所在的群組或在地事業發起投票時。</li>
+            <li><strong>市集活動：</strong>你交易中的請求、核准與拒絕，以及你舉報的貼文或管理員移除的你的貼文之後續進展。此外還包括你預計參加之活動的最新消息、來自社群管理員的公告，以及在你詢問過的地點附近發起的新社群。</li>
+            <li><strong>信任代管與系統：</strong>被代管、釋放或產生爭議的豆子。</li>
+        </ul>
+        <p>在網頁版應用程式中，第一項稱為<strong>聊天訊息</strong>，第三項以<strong>交易</strong>命名。它們設定了推送到你手機上的內容。</p>
+        <p>變更會自動儲存。這些設定由社群伺服器保存，因此會跟隨你的帳號。</p>
+        <p>關於你帳號的兩項提醒一律會送達，應用程式沒有提供開關：你的帳號剛在另一台裝置上還原，以及管理員開始將你的帳號移至新手機。如果你經營社群的伺服器，其關於伺服器的提醒也一律會送達。</p>
+        <h2>提醒顯示的內容</h2>
+        <p>手機上的提醒僅會說明是哪種消息，例如：</p>
+        <ul>
+            <li>「你有一則新訊息。」</li>
+            <li>「你的一筆交易有最新消息。」</li>
+            <li>「你預計參加的活動即將開始。」</li>
+            <li>「你的社群有一則公告通知你。」</li>
+        </ul>
+        <p>提醒絕不會顯示發送者是誰、哪則貼文、多少顆豆子，或是社群公告的詳細內容。提醒在送達你的手機途中會經過 Apple、Google 和 Expo 的伺服器，且任何人都可能看到鎖定螢幕，因此其餘詳細資訊保留在你的社群中。請開啟 BeanPool 查看。</p>
+        <p>BeanPool 絕不會在提醒中向你索取 12 個助記詞或密碼。</p>
+        <h2>當你點選提醒時</h2>
+        <p>每則提醒都帶有社群專為你一人建立的數位簽章。BeanPool 在執行任何操作前都會進行檢查：</p>
+        <ul>
+            <li><strong>通過檢查：</strong>如果是來自你目前所在的社群，BeanPool 會向你的社群詢問提醒的詳細內容並開啟它。來自你其他社群的提醒會在 BeanPool 中開啟你上次停頓的位置：切換至該社群即可查看。</li>
+            <li><strong>未通過檢查：</strong>BeanPool 不會開啟任何內容，並會通知你一次：「該通知並非來自你的社群。請忽略其內容。BeanPool 絕不會在通知中向你索取 12 個助記詞或密碼。」</li>
+        </ul>
+        <p>在 BeanPool 開啟期間，未通過檢查的提醒完全不會顯示，你已經看過的提醒也不會再顯示。</p>
+        <p>你的手機在 BeanPool 能夠檢查之前就會顯示提醒的文字。因此，取得你手機提醒位址的人可能會在你的鎖定螢幕上顯示他們自己的文字。點選該提醒不會有任何作用，BeanPool 也會對此發出提示。</p>
+        <p>來自你已從此手機移除之社群的提醒也不會有任何作用。</p>
+        <p>如果你社群的伺服器尚未更新，其提醒將不帶有數位簽章。BeanPool 會以通用文字顯示它們（「來自你的社群的消息。」），且當你點選時，會開啟你上次停頓的位置。</p>
+        <h2>BeanPool 簽入時的公告</h2>
+        <p>手機會不定期允許 BeanPool 在背景中與你的社群簽入連線。如果你的社群保留了你尚未查看的公告，例如你的一則貼文之後續處理情況，BeanPool 會在你的手機上完整顯示一次。</p>
+        <p>這只需要你的社群伺服器，因此即使提醒功能失效也能正常運作。它送達的時間會比即時提醒稍晚：由你的手機決定何時執行，大約在 15 分鐘至數小時之間。</p>
+        <h2>活動提醒</h2>
+        <p>在開關下方，<strong>活動提醒</strong>設定在你<strong>確定參加</strong>或<strong>感興趣</strong>的活動開始前多久通知你。勾選<strong>1 週前</strong>、<strong>1 天前</strong>、<strong>2 小時前</strong>、<strong>1 小時前</strong>或<strong>30 分鐘前</strong>（你可以勾選多個選項），或勾選<strong>關閉</strong>以完全不接收提醒。</p>
+        <p>每個人的預設值均為 <strong>1 天</strong>前。這是你的通用選擇；任何個別活動都可以在活動本身進行不同設定。請參閱「活動」。</p>
+        <p>提醒會隨你的<strong>市集活動</strong>提醒一併送達，因此如果你關閉該項目，提醒也會停止。對於已取消或已結束的活動，或者在你表示要參加時就已經過去的時間，你絕不會收到提醒。如果主辦人更改了活動時間，提醒也會隨之變更。</p>
+        <h2>完全沒有收到提醒？</h2>
+        <p>請在手機本身的設定中，檢查手機是否允許 BeanPool 傳送通知。</p>
+        <h2>個別靜音聊天室</h2>
+        <p>你可以將單一群組、專案或在地事業的聊天室靜音 8 小時、一週或永久靜音。請參閱「靜音聊天室」。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="mute.html"><strong>靜音聊天室</strong><span>將個人、群組或事業的對話靜音 8 小時、一週或永久靜音。</span></a></li>
+            <li><a href="messages.html"><strong>訊息</strong><span>發起聊天、傳送相片、回覆、表情回應、編輯、刪除、靜音以及隱私說明。</span></a></li>
+            <li><a href="my-deals.html"><strong>我的交易</strong><span>集中管理你參與的每一筆交易、發布的每一則刊登以及過去的交易紀錄。</span></a></li>
+            <li><a href="events.html"><strong>活動</strong><span>在實體或線上發起一次性或週期性活動；報名參加、接收提醒、分享活動並作為主辦方進行管理。</span></a></li>
+            <li><a href="holiday-mode.html"><strong>休假模式</strong><span>在外出時，休假模式會隱藏你的「提供」並暫停接收新的請求。</span></a></li>
+            <li><a href="the-top-bar.html"><strong>頂端列</strong><span>豆子圖示、有待處理事項時顯示的小圖示，以及右上角的按鈕。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

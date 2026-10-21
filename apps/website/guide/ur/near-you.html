@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ur by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اپنے قریب چیزیں تلاش کرنا — BeanPool members' guide</title>
+    <meta name="description" content="صرف اپنے یا کسی بھی منتخب مقام کے مخصوص فاصلے کے اندر کی پوسٹس دکھائیں۔">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#map">نقشہ</a></p>
+        <h1>اپنے قریب چیزیں تلاش کرنا</h1>
+        <p class="lede">صرف اپنے یا کسی بھی منتخب مقام کے مخصوص فاصلے کے اندر کی پوسٹس دکھائیں۔</p>
+        <h2>مارکیٹ ٹیب پر</h2>
+        <ul>
+            <li>فلٹرز کی دوسری قطار میں <strong>مارکیٹ</strong>، پھر <strong>فاصلہ</strong> پر ٹیپ کریں۔ جب <strong>تقریبات</strong> منتخب ہو تو یہ وہاں نہیں ہوتا۔</li>
+            <li><strong>مقام اور دائرہ</strong> کھلتا ہے (ویب ایپ میں <strong>مقام اور دائرہ طے کریں</strong>). آپ جہاں ہیں اسے استعمال کرنے کے لیے، ٹارگٹ بٹن پر ٹیپ کریں۔ یا کوئی دوسرا مرکز منتخب کرنے کے لیے نقشے پر ٹیپ کریں، یا پن کو گھسیٹیں۔</li>
+            <li><strong>تلاش کا دائرہ</strong> کے ساتھ فاصلہ منتخب کریں: 100 میٹر سے لے کر 50 کلومیٹر تک۔</li>
+            <li><strong>لاگو کریں</strong> پر ٹیپ کریں۔ اس کے بعد بٹن فاصلہ دکھاتا ہے، جیسے <strong>5km</strong>۔</li>
+            <li>ہر چیز پر واپس جانے کے لیے، اسے دوبارہ کھولیں اور <strong>ری سیٹ کریں</strong> پر ٹیپ کریں۔ ویب ایپ میں آپ <strong>فاصلہ</strong> پر <strong>✕</strong> پر بھی ٹیپ کر سکتے ہیں۔</li>
+        </ul>
+        <p>فون پر، بغیر کسی مقام والی پوسٹس ہمیشہ دکھائی جاتی ہیں۔ ویب ایپ میں <strong>فاصلہ</strong> انہیں چھپا دیتا ہے، سوائے پولز کے۔ عالمی کمیونٹی پر ویب ایپ انہیں اس وقت بھی چھوڑ دیتی ہے جب فہرست آپ کے قریب ہو (نیچے دیکھیں)۔</p>
+        <p>اگر آپ کا براؤزر پہلے سے BeanPool کو آپ کا مقام استعمال کرنے کی اجازت دیتا ہے، تو منتخب کنندہ آپ کے موجودہ مقام پر کھل سکتا ہے۔ اگر نہیں، تو یہ ایک مقررہ جگہ پر کھلتا ہے۔ <strong>لاگو کریں</strong> پر ٹیپ کرنے سے پہلے پن کو چیک کریں، یا ٹارگٹ بٹن یا نقشے پر ٹیپ کریں۔ عالمی کمیونٹی پر ویب ایپ آپ کا منتخب کردہ مرکز کمیونٹی کو بھیجتی ہے، جو تقریباً 11 میٹر تک درست ہوتا ہے۔</p>
+        <p>فون پر، منتخب کنندہ آپ کے منتخب کردہ آخری مرکز پر، یا ایک مقررہ جگہ پر کھلتا ہے، اس لیے پہلے ٹارگٹ بٹن پر ٹیپ کریں۔</p>
+        <h2>نقشے پر</h2>
+        <p>نقشے کا اپنا کوئی فاصلہ فلٹر نہیں ہے۔ آپ کہاں ہیں یہ دیکھنے کے لیے بائیں جانب ٹارگٹ بٹن پر ٹیپ کریں، پھر ادھر ادھر دیکھیں اور زوم کریں۔</p>
+        <h2>عالمی کمیونٹی پر، ویب ایپ میں</h2>
+        <p>عالمی کمیونٹی میں ہر جگہ سے لسٹنگز ہوتی ہیں، اس لیے ویب ایپ کی <strong>مارکیٹ</strong> اور <strong>نقشہ</strong> آپ کے قریب سے شروع ہوتے ہیں:</p>
+        <ul>
+            <li>مارکیٹ پر منتخب کردہ <strong>فاصلہ</strong> کے ساتھ، دونوں اس کے اندر کی قریب ترین لسٹنگز دکھاتے ہیں، قریب ترین پہلے۔ نقشہ 200 تک پنز دکھاتا ہے۔</li>
+            <li>بغیر کسی فاصلے کے، وہ آپ کے علاقے کے 250 کلومیٹر کے اندر کی قریب ترین لسٹنگز دکھاتے ہیں: وہ تخمینی جگہ جو آپ کمیونٹی میں شامل ہوتے وقت دیتے ہیں، یا بعد میں <strong>سیٹنگز</strong> میں، <strong>آپ کا علاقہ</strong> کے تحت دیتے ہیں۔ مارکیٹ کی فہرست کے اوپر ایک سطر کہتی ہے <strong>Nearest to your area first, within 250 km.</strong> ہر جگہ سے تازہ ترین دیکھنے کے لیے <strong>ہر جگہ دکھائیں</strong> پر، اور واپس آنے کے لیے <strong>آپ کے علاقے کے قریب</strong> پر ٹیپ کریں۔</li>
+            <li>دونوں میں سے کسی کے بغیر، آپ ہر جگہ سے تازہ ترین دیکھتے ہیں، اور <strong>دیکھیں کہ آپ کے قریب کیا ہے</strong> فاصلہ چننے والے کو کھولتا ہے۔ مارکیٹ کی فہرست کے اوپر کی ایک سطر بتاتی ہے کہ آپ ان میں سے کیا دیکھ رہے ہیں۔ ایک <strong>فاصلہ</strong> کے ساتھ اس کا کوئی بٹن نہیں ہوتا: <strong>فاصلہ</strong> کھولیں اور <strong>ری سیٹ کریں</strong> پر ٹیپ کریں۔ اس کے بعد آپ واپس اپنے علاقے کے قریب ہوتے ہیں، یا، بغیر کسی علاقے کے، آپ ہر جگہ سے تازہ ترین دیکھتے ہیں۔</li>
+            <li>ہر لسٹنگ بتاتی ہے کہ یہ کتنی دور ہے، جیسے <strong>📍 12 km</strong>۔ آپ کی اپنی لسٹنگز ہمیشہ نقشے پر اور آپ کے علاقے کے قریب مارکیٹ پر ہوتی ہیں، چاہے وہ کہیں بھی ہوں۔ ایک <strong>فاصلہ</strong> کے ساتھ، مارکیٹ صرف وہی دکھاتی ہے جو اس کے اندر ہو، آپ کی بھی۔</li>
+            <li>جب فہرست آپ کے قریب ہوتی ہے، تو بغیر مقام والی پوسٹس چھوڑ دی جاتی ہیں۔ کسی ایسے شخص کا پول جس نے اپنا علاقہ مقرر نہیں کیا ان میں سے ایک ہے۔ انہیں دیکھنے کے لیے، اگر آپ نے <strong>فاصلہ</strong> منتخب کیا تھا تو اسے ری سیٹ کریں، پھر <strong>ہر جگہ دکھائیں</strong> پر ٹیپ کریں۔</li>
+            <li><strong>تقریبات</strong> کے تحت فہرست کبھی بھی آپ کے علاقے یا آپ کے <strong>فاصلہ</strong> سے نہیں کٹتی، جیسا کہ پہلے تھا۔</li>
+            <li>اگر قریب کچھ نہیں ہے، تو نقشہ ایسا بتاتا ہے، <strong>ہر جگہ دکھائیں</strong> کے ساتھ۔ پھر <strong>آپ کے علاقے کے قریب</strong> (یا <strong>آپ کی منتخب کردہ جگہ کے قریب</strong>) قریب ترین چیزوں کو واپس لے آتا ہے۔</li>
+        </ul>
+        <p>ویب ایپ کی تلاش صرف اسکرین پر موجود لسٹنگز میں دیکھتی ہے۔ <strong>ہر جگہ دکھائیں</strong> ہر جگہ سے تازہ ترین لسٹنگز دکھاتا ہے، ہر ایک نہیں، اس لیے وہ لسٹنگ جو دور ہے اور نئی نہیں ہے وہ تلاش میں نہیں آئے گی۔ ہر دوسری کمیونٹی میں ویب ایپ مارکیٹ یا نقشے کو آپ کے علاقے کے حساب سے نہیں کاٹتی۔ وہ حال ہی میں تبدیل شدہ 50 لسٹنگز اور آپ کی اپنی لسٹنگز دکھاتے ہیں، اور تلاش صرف انہی میں دیکھتی ہے۔</p>
+        <h2>عالمی کمیونٹی پر، فون پر</h2>
+        <p>فون آپ کے علاقے کے قریب ترین لسٹنگز کو رکھتا ہے: 250 کلومیٹر کے اندر 500 تک۔ یہ آپ کی اپنی لسٹنگز کو بھی رکھتا ہے، اور کوئی بھی جس پر آپ کا کوئی سودا، چیٹ یا جواب ہو۔ مارکیٹ اور نقشہ وہی دکھاتے ہیں جو فون رکھتا ہے۔ بغیر کسی علاقے کے، یہ اس کی بجائے تازہ ترین لسٹنگز رکھتا ہے، اور مارکیٹ کے اوپر کی ایک سطر ایسا بتاتی ہے۔ &quot;آپ کا علاقہ&quot; دیکھیں۔</p>
+        <h2>آپ کے قریب تقریبات</h2>
+        <p>فون پر، ایک بار جب آپ ایپ کو اپنا مقام استعمال کرنے کی اجازت دے دیتے ہیں تو تقریب کے کارڈز دکھاتے ہیں کہ وہ کتنی دور ہیں۔ ویب ایپ میں وہ اسے اس مرکز سے دکھاتے ہیں جو آپ نے <strong>فاصلہ</strong> میں منتخب کیا تھا۔ عالمی کمیونٹی پر، اگر آپ نے کوئی منتخب نہیں کیا ہے، تو وہ اسے آپ کے علاقے سے دکھاتے ہیں (<strong>تقریبات</strong> کے تحت نہیں)۔ نقشے پر، ٹارگٹ پر ٹیپ کرنے کے بعد ویب ایپ اسے آپ سے دکھاتی ہے۔</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="browsing-the-market.html"><strong>مارکیٹ کا جائزہ</strong><span>تلاش، فلٹرز اور فاصلے کے ذریعے پیشکشیں اور ضروریات تلاش کریں۔</span></a></li>
+            <li><a href="map-pins.html"><strong>نقشہ کیا دکھاتا ہے</strong><span>نقشے پر پنز، ان کے رنگوں کے معنی، اور ان کے ارد گرد بٹنز۔</span></a></li>
+            <li><a href="pin-locations.html"><strong>آپ کی پن کا مقام</strong><span>کون دیکھتا ہے کہ آپ کی پوسٹس اور تقریبات کہاں ہیں، اور گھر کو نجی کیسے رکھیں۔</span></a></li>
+            <li><a href="events.html"><strong>تقریبات</strong><span>کسی جگہ یا آن لائن تقریب بنائیں؛ شرکت کی تصدیق کریں، یاددہانی حاصل کریں، شیئر کریں اور بطور میزبان چلائیں۔</span></a></li>
+            <li><a href="your-area.html"><strong>آپ کا علاقہ</strong><span>وہ تخمینی جگہ جو عالمی کمیونٹی آپ کو قریب کی فہرستیں دکھانے کے لیے استعمال کرتی ہے، اور اسے تبدیل یا صاف کرنے کا طریقہ۔</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

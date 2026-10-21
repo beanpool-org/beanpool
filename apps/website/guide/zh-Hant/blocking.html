@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>封鎖成員 — BeanPool members' guide</title>
+    <meta name="description" content="向自己隱藏某人的刊登和訊息，並可在日後取消封鎖。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">設定與安全</a></p>
+        <h1>封鎖成員</h1>
+        <p class="lede">向自己隱藏某人的刊登和訊息，並可在日後取消封鎖。</p>
+        <h2>封鎖操作</h2>
+        <ul>
+            <li>在對方的個人檔案上：點擊<strong>封鎖</strong>，或在較下方點擊<strong>封鎖</strong>及對方的姓名。</li>
+            <li>在對方的貼文上（手機應用程式）：點擊<strong>封鎖使用者</strong>。網頁版應用程式的貼文沒有封鎖按鈕。</li>
+            <li>從聊天室中：點擊頂端的對方姓名以開啟個人檔案，然後點擊<strong>封鎖</strong>。在網頁版應用程式中，與單一成員的一對一聊天室頂端也有<strong>封鎖</strong>按鈕。</li>
+        </ul>
+        <p>在手機應用程式中，點擊<strong>封鎖使用者</strong>進行確認。在網頁版應用程式中，瀏覽器會提示確認：點擊 <strong>好</strong>。</p>
+        <h2>封鎖後會發生什麼</h2>
+        <ul>
+            <li>對方在市集中的貼文將對你隱藏。</li>
+            <li>對方會從你的聊天室與成員名冊中消失，你們無法互相傳送訊息。在手機應用程式中，如果你先前已將對方加為好友，對方仍會顯示在你的<strong>好友</strong>分頁中：請參見下文「封鎖不會產生的影響」。網頁版應用程式則會將其從所有名單中隱藏。</li>
+            <li>對方的 Pulse 動態貼文仍會顯示。在手機上，對方在地圖上的圖釘亦仍會顯示。網頁版應用程式的地圖則會將其隱藏。</li>
+            <li>在你的帳本上，來自對方的豆子會顯示「來自被你封鎖成員的豆子」，而不會顯示對方傳送的任何備註。</li>
+            <li>系統會向你社群的版主發送檢舉，版主可對此進行調查。</li>
+        </ul>
+        <h2>你所在社群採取的處理措施</h2>
+        <p>社群會針對為你保留的封鎖記錄執行這些措施。目前是指在網頁版應用程式中所建立的封鎖。在手機應用程式中建立的封鎖僅保留在該手機上，你所在的社群並不知情。</p>
+        <ul>
+            <li>對方的私訊絕不會送達給你。你的社群不會在任何手機或電腦上將其傳送給你，你不會收到通知，也不會產生未讀計數。</li>
+            <li>如果對方嘗試與你發起新聊天，該聊天不會出現在你的聊天室列表中。</li>
+            <li>如果你解除對對方的封鎖，對方在被封鎖期間傳送的任何內容均不會送達。只有對方在此之後傳送的訊息才會送達給你。</li>
+            <li>如果對方對你的一則訊息作出表情回應，或修改了其舊訊息，你不會看見。</li>
+            <li>當對方在群組聊天中發言時（即使使用 @ 提及你），你也不會收到任何通知。</li>
+            <li>如果對方對你的一則刊登提出交易申請，該申請會在你的交易中靜默等待，不會發出通知。如果你未予理會，它會在 7 天後自動結束，同樣不會有任何通知。</li>
+            <li>如果對方直接接受了你的一則「提供」，你不會收到通知；若對方隨後取消該交易，你亦不會收到通知。該交易仍會顯示在你的交易記錄中，其訊息也會如常顯示在你們的聊天室中。對方的豆子會如常進行託管與退還。</li>
+            <li>對方無法建立僅發布給你的刊登。</li>
+            <li>你無法新增對方為好友。如果對方新增你為好友，你不會收到通知。如果對方先前已新增你，你的「聯絡人」分頁上的「已新增你」標註會消失。你的好友在被封鎖者的個人檔案中也不再看見你為共同聯絡人。</li>
+            <li>如果對方附帶備註向你傳送豆子，豆子會全額入帳，但備註不會顯示。你將看到「來自被你封鎖成員的豆子」，且在解除封鎖後該筆記錄仍維持此文字。</li>
+        </ul>
+        <h2>封鎖不會產生的影響</h2>
+        <ul>
+            <li>對方不會收到被封鎖的通知。在對方看來，訊息顯示為已傳送，隨豆子發送的備註亦同。</li>
+            <li>封鎖不會解除好友關係：如果你先前已將對方加為好友，對方仍是你的好友，且若你的聯絡方式設為「僅限好友」，對方仍可看見。若要解除好友關係，請開啟<strong>管理已封鎖的使用者</strong>（在網頁版中為<strong>管理已封鎖的成員</strong>；參見下文「解除封鎖」），並點擊其姓名下方的<strong>同時從好友名單中移除</strong>。該按鈕僅出現在你親自新增過的人員下方。對方仍保持封鎖狀態。對方可能會察覺被移除。</li>
+            <li>群組聊天、活動聊天以及專案與事業聊天為共享空間：其中的每個人都能看見相同的訊息。對方在這些聊天中的訊息仍會對你及其他所有人顯示。</li>
+            <li>你與對方已在進行中的交易會依舊繼續，相關提示與通知亦如常運作。</li>
+            <li>如果你先前曾與對方進行過交易，對方仍可向你傳送豆子。每顆豆子都會全額到帳，且不會發出通知。</li>
+            <li>來自你社群的通知仍會正常送達，即使該事項是由對方發起的亦然。例如，當有人發起投票提議更換你群組首席召集人的身分時你會收到通知，且你會收到來自社群營運團隊的訊息。</li>
+            <li>對方仍可查看你的刊登。</li>
+            <li>在手機應用程式中，封鎖名單僅保留在此手機上，且僅適用於你的帳號。此手機上的其他帳號不會繼承你的封鎖設定。</li>
+            <li>在手機應用程式中，如果你登出或在此手機上切換為其他帳號，你的封鎖設定仍會保留在手機中。使用原帳號返回時它們仍會存在。</li>
+            <li>在手機應用程式中，如果你重新安裝應用程式或更換其他手機，則需要重新封鎖對方。</li>
+            <li>在網頁版應用程式中，你所在的社群會將封鎖名單隨你的帳號一同保存。在任何瀏覽器登入時它們都會還原。登出後該電腦上不會留下任何相關資訊。參見「網頁版應用程式」。</li>
+            <li>營運你社群伺服器的人員可以在網頁版應用程式中查閱你封鎖了誰，正如他們可以查閱檢舉一樣。</li>
+            <li>手機應用程式與網頁版應用程式各自保留獨立的名單。在其中一端建立的封鎖不會自動同步至另一端。</li>
+        </ul>
+        <h2>解除封鎖</h2>
+        <ul>
+            <li>開啟<strong>設定</strong>。在<strong>法律與隱私</strong>下方，點擊<strong>管理已封鎖的使用者</strong>。</li>
+            <li>點擊姓名旁邊的<strong>解除封鎖</strong>，或點擊<strong>全部解除封鎖</strong>。</li>
+        </ul>
+        <p>在網頁版應用程式中，封鎖與解除封鎖都需要連線至你所在的社群。若無網路連線，應用程式會予以提示且不會變更任何內容。請在重新連線後再試。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="reporting.html"><strong>檢舉問題</strong><span>向社群協調員反映刊登、活動、動態內容、專案或事業方面的問題。</span></a></li>
+            <li><a href="messages.html"><strong>訊息</strong><span>發起聊天、傳送相片、回覆、表情回應、編輯、刪除、靜音以及隱私說明。</span></a></li>
+            <li><a href="privacy.html"><strong>個人隱私</strong><span>他人能看到的關於你的資訊，以及控制這些資訊的設定項。</span></a></li>
+            <li><a href="getting-help.html"><strong>取得協助</strong><span>遇到問題時在哪裡尋找答案，以及向誰求助。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

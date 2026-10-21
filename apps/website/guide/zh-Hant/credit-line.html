@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>信用額度 — BeanPool members' guide</title>
+    <meta name="description" content="你的餘額最多可以透支多少，以及額度如何增長。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#ledger">帳本</a></p>
+        <h1>信用額度</h1>
+        <p class="lede">你的餘額最多可以透支多少，以及額度如何增長。</p>
+        <h2>這是什麼</h2>
+        <p>你的信用額度讓你能支出超出所持有的豆子，並使餘額進入負數。這是日後為他人提供幫助的承諾。餘額為負數無需任何費用：沒有利息。</p>
+        <h2>在哪裡查看</h2>
+        <p>在<strong>帳本</strong>中，你的餘額下方有一條橫條顯示你目前的位置：</p>
+        <ul>
+            <li>零位於中間；</li>
+            <li>左端是<strong>你的限額</strong>，即你最多可透支的底線；</li>
+            <li>左側的刻度顯示你的「提供」允許你透支的深度；</li>
+            <li>右側超過 <strong>+200</strong> 之處則是開始計算流通費的起點。</li>
+        </ul>
+        <p>在手機上，點擊橫條可開啟<strong>信用滑桿說明</strong>，其中說明了各個部分。</p>
+        <h2>信用額度如何開啟</h2>
+        <p>一開始為零。當你在市集中完成首筆交易時（僅 1 或 2 顆豆子的交易金額太小而不計入），或當獲選負責接待新人的成員為你擔保時，信用額度即告開啟。在此之前，帳本會顯示<strong>尚無信用額度</strong>。你仍可使用自己持有的豆子進行交易。</p>
+        <h2>信用額度如何增長</h2>
+        <ul>
+            <li><strong>信任：</strong>已完成的交易能建立信任，特別是與許多不同對象進行的交易。參見「500 豆夥伴限額」。</li>
+            <li><strong>評分：</strong>星級評分只能降低你賺得的信任。平均 5 顆星可保留全部信任；平均星級較低則會扣除一部分。</li>
+            <li>任何信用額度的最大深度為 2,000 顆豆子。驗證成員身分的社群可設定更高的上限，最高可達 5,000 顆（見下文）。</li>
+        </ul>
+        <h2>你的「提供」決定了你可以使用多少額度</h2>
+        <p>你只能使用在線的「提供」所允許的信用額度：</p>
+        <ul>
+            <li>沒有「提供」：無法使用；</li>
+            <li>1 則「提供」：最高可透支至 −200；</li>
+            <li>2 則：−500；</li>
+            <li>3 則：−1,000；</li>
+            <li>4 則：−1,500；</li>
+            <li>5 則：−2,000。</li>
+        </ul>
+        <p>橫條下方的文字會提示你，例如「發布一則提供以開啟你的信用額度」。</p>
+        <h2>在熟人社群中</h2>
+        <p>有些社群的管理員熟識每一位成員。如果你所在社群啟用了<strong>熟人底線</strong>，經管理員確認的成員即可立即獲得信用額度：預設為 1,000 顆豆子，除非你所在社群選擇了其他金額。這相當於社群信任你約 25 小時的勞動價值。</p>
+        <ul>
+            <li>只要有 1 則在線的「提供」，即可使用全部額度。若沒有任何「提供」，則無法使用。</li>
+            <li>透過交易所賺得的信任會累加其上，最高可達你社群的上限（除非另有設定，否則為 2,000 顆豆子，最高可達 5,000 顆）。</li>
+            <li>管理員可以為你設定較小的限額，例如當你剛加入時。這絕不會從你那裡扣除豆子：如果你已經低於該限額，支出將暫停，直到你回到該限額以上。</li>
+            <li>如果你正在償還先前帳號的債務，你在 0 以上收到的豆子會轉入公共板塊，直到還清為止。你的帳本會顯示還剩多少。你也可以在<strong>帳本 → 向公共資金池付款</strong>中自行償還部分或全部款項：系統會自動填入你的還款代碼（或輸入管理員給你的代碼）。使用該代碼支付的款項會立即自債務中扣除，當全數償清時，債務即告結清：無論是主動付款或自你收款中扣除，都不會再被扣取任何款項。未附帶代碼的付款會轉入公共板塊，但不會折抵你的債務，應用程式會予以提示：若要計入，請聯絡管理員並提供交易單號以將其計入你的債務。在管理員處理之前，債務仍在償還中：下次你收到豆子時，剩餘欠額會從你在 0 以上持有的豆子中扣除。管理員訊息中的金額是他們發布時的剩餘金額：如果現在剩餘欠額更少，你的伺服器會拒絕較大金額的付款並說明還剩多少，且不會扣除任何款項。如果應用程式提示付款可能已完成，請在同一畫面點擊<strong>再試一次</strong>：同一筆付款絕不會被支付兩次。如果你已離開該畫面，請在再次付款前先檢查你的帳本。</li>
+        </ul>
+        <h2>遭管理員凍結</h2>
+        <p>你所在社群的管理員可以凍結成員的信用額度：可凍結全部額度，或在熟人社群中凍結來自已確認成員身分的部分。</p>
+        <ul>
+            <li>如果他們凍結了全部額度，或者已確認身分的部分就是你的全部額度，帳本會顯示<strong>你的信用額度已被凍結</strong>：在凍結期間你無法透支支出，但你仍可出售物品與接收豆子，並支出你在零以上持有的豆子。如果在凍結時你已處於透支狀態，帳本也會顯示你透支了多少顆豆子：出售物品或接收豆子可讓你回升，一旦回到零以上即可支出你所持有的豆子。</li>
+            <li>如果他們凍結了已確認身分的部分，而你同時擁有來自擔保、交易或補助的信用額度，橫條仍會保留，下方會註明已確認部分已凍結，其餘部分則如常運作。如果你低於剩餘的額度，帳本也會顯示<strong>支出功能已暫停</strong>（見下文）。</li>
+        </ul>
+        <p>你的等級不會改變：無論在個人檔案或刊登項目中，等級始終是由你未凍結時的信用額度所決定，即使管理員將你的額度設定為低於或高於社群標準亦然。若要詢問原因或申請重新開啟，請聯絡其中一位管理員。</p>
+        <h2>支出功能已暫停</h2>
+        <p>如果你的透支超過了「提供」所允許的額度（例如因為你下架了一則「提供」），帳本會顯示<strong>支出功能已暫停</strong>。你仍可賺取豆子與出售物品。發布一則「提供」或透過賺取豆子使餘額回升即可解除暫停。不會從你身上扣除任何東西。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="trust-badges.html"><strong>信任徽章</strong><span>新人、居民、總管和長者。它們的含義以及為什麼它們不解鎖任何權限。</span></a></li>
+            <li><a href="trading-partner-limit.html"><strong>500 豆夥伴限額</strong><span>為什麼與多人進行交易比與單一對象大量交易更能建立社群信任。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool 運作方式</strong><span>用通俗的話解釋豆子、交易、提供與需求以及信用。</span></a></li>
+            <li><a href="posting.html"><strong>發布提供或需求</strong><span>發布你能做或能給予的事情，或者你正在尋找的東西。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

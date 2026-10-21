@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ml by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ml">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ചാറ്റ് മ്യൂട്ട് ചെയ്യൽ — BeanPool members' guide</title>
+    <meta name="description" content="ഒരു ചാറ്റ് — വ്യക്തിയുടേതോ ഗ്രൂപ്പിന്റേതോ സംരംഭത്തിന്റേതോ — 8 മണിക്കൂർ, ഒരാഴ്ച അല്ലെങ്കിൽ പൂർണ്ണമായി നിശബ്ദമാക്കുക.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#talk">ചാറ്റ്</a></p>
+        <h1>ചാറ്റ് മ്യൂട്ട് ചെയ്യൽ</h1>
+        <p class="lede">ഒരു ചാറ്റ് — വ്യക്തിയുടേതോ ഗ്രൂപ്പിന്റേതോ സംരംഭത്തിന്റേതോ — 8 മണിക്കൂർ, ഒരാഴ്ച അല്ലെങ്കിൽ പൂർണ്ണമായി നിശബ്ദമാക്കുക.</p>
+        <h2>ഒരു ചാറ്റ് മ്യൂട്ട് ചെയ്യൽ</h2>
+        <p>ഒരു വ്യക്തിയുമായോ ഗ്രൂപ്പുമായോ ഉള്ള ഏതൊരു ചാറ്റിലും, നിങ്ങൾ അതിന്റെ സൂക്ഷിപ്പുകാരിൽ ഒരാളാണെങ്കിൽ ഒരു സംരംഭത്തിന്റെ ചാറ്റിലും:</p>
+        <ul>
+            <li>മുകളിൽ വലതുവശത്തുള്ള <strong>⋮</strong> ടാപ്പ് ചെയ്യുക (ഒരാളുമായുള്ള ചാറ്റിൽ <strong>⋯</strong>), തുടർന്ന് <strong>അറിയിപ്പുകൾ നിശബ്ദമാക്കുക</strong> തിരഞ്ഞെടുക്കുക.</li>
+            <li><strong>8 മണിക്കൂർ നേരത്തേക്ക്</strong>, <strong>ഒരു ആഴ്ചത്തേക്ക്</strong> അല്ലെങ്കിൽ <strong>എപ്പോഴും</strong> തിരഞ്ഞെടുക്കുക.</li>
+        </ul>
+        <p>ഇത് പഴയപടിയാക്കാൻ, അതേ ബട്ടൺ ടാപ്പ് ചെയ്യുക, തുടർന്ന് <strong>നിശബ്ദത മാറ്റുക</strong> തിരഞ്ഞെടുക്കുക.</p>
+        <p>മ്യൂട്ട് ചെയ്യുന്നത് ഇപ്പോൾ ഫോൺ ആപ്പിൽ മാത്രമേ ലഭ്യമാകൂ.</p>
+        <h2>മ്യൂട്ട് ചെയ്യുന്നത് എന്ത് മാറ്റമുണ്ടാക്കുന്നു</h2>
+        <ul>
+            <li>ഇത് ആ ചാറ്റിന്റെ അലേർട്ടുകൾ നിർത്തുന്നു. ഒരു ഗ്രൂപ്പിന്റെ ചാറ്റിൽ, നിങ്ങളെ @മെൻഷൻ ചെയ്യുന്ന ഒരാൾക്ക് ഇപ്പോഴും നിങ്ങളുടെ അടുത്ത് എത്താനാകും. &quot;മെൻഷനുകൾ (@പേര്)&quot; കാണുക.</li>
+            <li>ഒരു സംരംഭത്തിന്റെ ചാറ്റ് അലേർട്ടുകൾ ഒന്നും അയക്കില്ല, അതിനാൽ നിർത്താൻ ഒന്നുമില്ല. ഇത് മ്യൂട്ട് ചെയ്യുന്നത് താഴെ പറയുന്ന നമ്പറുകളിൽ നിന്ന് ഇതിനെ ഒഴിവാക്കുന്നു.</li>
+            <li>ചാറ്റ് തുടർന്നും പുതിയ സന്ദേശങ്ങൾ കാണിക്കും.</li>
+            <li><strong>ചാറ്റ്</strong>-ൽ, <strong>ഗ്രൂപ്പുകൾ</strong> എന്നതിന് കീഴിൽ, മ്യൂട്ട് ചെയ്ത ചാറ്റ് വെട്ടിയ ഒരു ബെൽ ചിഹ്നം കാണിക്കും. അതിന്റെ വായിക്കാത്ത എണ്ണം ഗ്രേ നിറമായിരിക്കും, കൂടാതെ അത് <strong>ഗ്രൂപ്പുകൾ</strong> എന്നതിലെ എണ്ണത്തിലേക്ക് ചേർക്കപ്പെടില്ല.</li>
+            <li>ഒരു ഗ്രൂപ്പിന്റെയോ സംരംഭത്തിന്റെയോ ചാറ്റിൽ, മുകളിലെ ബാറും ഇതിനെക്കുറിച്ച് നിശബ്ദമായിരിക്കും. ഒരാളുമായുള്ള മ്യൂട്ട് ചെയ്ത ഒരു ചാറ്റ് ഇപ്പോഴും അവിടെ കണക്കാക്കപ്പെടുന്നു.</li>
+            <li>നിങ്ങൾ ചാറ്റിൽ നിന്ന് പുറത്തുകടക്കുമ്പോഴും മ്യൂട്ട് നിലനിൽക്കും. നിങ്ങൾ ഒരു ഗ്രൂപ്പിന്റെയോ സംരംഭത്തിന്റെയോ ചാറ്റ് വീണ്ടും തുറക്കുമ്പോൾ, മുകളിൽ <strong>നിശബ്ദമാക്കി</strong> എന്ന് കാണിക്കും.</li>
+        </ul>
+        <h2>മറ്റ് ചാറ്റുകൾ</h2>
+        <p>ഇവന്റ് ചാറ്റുകൾ ഇതുവരെ മ്യൂട്ട് ചെയ്യാൻ കഴിയില്ല. നിങ്ങൾക്ക് ഇവ ചെയ്യാം:</p>
+        <ul>
+            <li><strong>ക്രമീകരണങ്ങൾ</strong>-ൽ, <strong>അറിയിപ്പ് മുൻഗണനകൾ</strong> എന്നതിന് കീഴിൽ മുഴുവൻ തരത്തിലുള്ള അലേർട്ടുകളും ഓഫാക്കുക. &quot;അറിയിപ്പുകൾ&quot; കാണുക;</li>
+            <li>നിങ്ങളെ ശല്യപ്പെടുത്തുന്ന ഒരാളെ ബ്ലോക്ക് ചെയ്യുക. &quot;ഒരാളെ ബ്ലോക്ക് ചെയ്യൽ&quot; കാണുക.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="notifications.html"><strong>അറിയിപ്പുകൾ</strong><span>ഏതൊക്കെ അലേർട്ടുകൾ ഫോണിൽ വരണമെന്നും ഇവന്റുകൾ എപ്പോൾ ഓർമ്മിപ്പിക്കണമെന്നും തിരഞ്ഞെടുക്കുക.</span></a></li>
+            <li><a href="blocking.html"><strong>ഒരാളെ ബ്ലോക്ക് ചെയ്യൽ</strong><span>ഒരാളുടെ പോസ്റ്റുകളും സന്ദേശങ്ങളും നിങ്ങളിൽ നിന്ന് മറയ്ക്കുക, പിന്നീട് മാറ്റുക.</span></a></li>
+            <li><a href="groups.html"><strong>ഗ്രൂപ്പുകൾ</strong><span>നിങ്ങളുടെ ഗ്രൂപ്പുകളും അവയിലെ ചാറ്റുകളും, സംസാരിക്കൽ, പുതിയ ഗ്രൂപ്പ് തുടങ്ങൽ, ക്ഷണിക്കൽ, ക്ഷണത്തിലൂടെ ചേരൽ, ഗ്രൂപ്പിന്റെ സ്വന്തം വോട്ടുകൾ.</span></a></li>
+            <li><a href="mentions.html"><strong>മെൻഷനുകൾ (@പേര്)</strong><span>ഗ്രൂപ്പ് ചാറ്റിൽ @ ചേർത്ത് പേര് എഴുതി ഒരാളെ അറിയിക്കുക.</span></a></li>
+            <li><a href="messages.html"><strong>സന്ദേശങ്ങൾ</strong><span>ചാറ്റ് ആരംഭിക്കുക, ഫോട്ടോകൾ അയയ്ക്കുക, മറുപടി നൽകുക, പ്രതികരിക്കുക, തിരുത്തുക, ഇല്ലാതാക്കുക, മ്യൂട്ട് ചെയ്യുക, സ്വകാര്യമായവ.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

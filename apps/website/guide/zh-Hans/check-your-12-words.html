@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hans by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>助记词与服务器密钥（所有者） — BeanPool members' guide</title>
+    <meta name="description" content="适用于社区所有者。核对 12 个助记词、用手机接管或恢复服务器，以及手机自身的自动检查。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#settings">设置与安全</a></p>
+        <h1>助记词与服务器密钥（所有者）</h1>
+        <p class="lede">适用于社区所有者。核对 12 个助记词、用手机接管或恢复服务器，以及手机自身的自动检查。</p>
+        <h2>适用对象</h2>
+        <p>仅限社区的<strong>所有者</strong>。如果你不是所有者，将看不到此处的任何内容。</p>
+        <h2>为什么要求所有者核对</h2>
+        <p>你所在社区的服务器保留着其密钥的锁定加密副本，以便在其原有服务器丢失时将社区迁移到另一台服务器，并且其备份也是锁定的。它们锁定在所有者的账户上：任何一位所有者都可以用自己的手机将其打开（参见下文“使用手机接管或恢复”）。如果你丢失了手机，你的 12 个助记词可以恢复你的账户，进而恢复你开启服务器锁及其备份的密钥。在服务器本身彻底丢失的那一天，这一点最为关键。</p>
+        <p>因此，应用会不时提醒每位所有者核对他们是否仍保留着正确的 12 个助记词。你可以选择<strong>稍后</strong>。任何操作都不会被阻断，你可以继续履行所有者的所有职责。</p>
+        <h2>应用何时提醒</h2>
+        <ul>
+            <li>在你成为所有者后不久，提醒一次。</li>
+            <li>在你上次核对后的 12 个月，再次提醒。</li>
+        </ul>
+        <p>应用会在市集顶部显示一张卡片（在 Web 应用中，除地图外的每个屏幕顶部均会显示）：<strong>立即核对</strong>或<strong>稍后</strong>。点击<strong>稍后</strong>会将卡片收起，直至下次到期。你可以随时从<strong>设置</strong>中进行核对：在 <strong>社区密钥</strong> 下，点按<strong>检查你的 12 位助记词</strong>（在 Web 应用中为<strong>立即核对</strong>）。</p>
+        <h2>如何核对</h2>
+        <ul>
+            <li>拿出抄写有 12 个助记词的纸张（助记词为英文单词）。</li>
+            <li>按顺序输入它们，词与词之间用空格隔开。大小写和多余的空格均不影响。</li>
+            <li>点按<strong>检查我的助记词</strong>。</li>
+        </ul>
+        <p>如果助记词正确，应用会显示 <strong>助记词正确无误。</strong>。如果不正确：<strong>这些不是此账户的助记词。</strong> 应用不会指出哪一个单词有误，因此请对照纸张并重新完整输入全部单词。</p>
+        <p>在没有保存助记词副本的手机上（即通过登录凭据账户恢复的手机），输入正确的单词还会出现<strong>保存在此手机上</strong>选项。点按后，<strong>查看恢复助记词</strong>从那时起便会显示它们。这与<strong>将你的 12 个助记词添加到此手机</strong>是相同的核对与保存操作（参见“你的 12 个助记词”）。</p>
+        <p>找不到助记词？如果当前手机仍保留有它们，打开<strong>设置</strong>，然后点按<strong>查看恢复助记词</strong>即可查看。将其重新抄写下来，然后再进行核对。在没有助记词副本的手机上，应用会给出相应提示：当你找到它们后，请在此处进行核对并保存。</p>
+        <h2>发送的数据与不发送的数据</h2>
+        <ul>
+            <li>核对过程在你手机本地进行（在 Web 应用中则在你的浏览器本地进行）。你的助记词绝不会发送到任何地方。一旦核对给出结果，以及在你离开该界面时，输入框就会立即清空。只有当你点按<strong>保存在此手机上</strong>时它们才会被保存，且仅保存在当前手机本地。</li>
+            <li>当助记词核对正确时，你的手机仅会告知社区服务器你已完成核对以及核对时间，并附带你账户的数字签名。</li>
+            <li>所有者和管理员可以在服务器的“设置”中看到每位所有者“助记词已核对”的日期，或显示“尚未核对”。这是你自己的声明：服务器无法查看或核验你的实际助记词。</li>
+        </ul>
+        <h2>使用手机接管或恢复</h2>
+        <p>如果社区原有的服务器丢失，运行备用服务器（或通过恢复备份来运行新服务器）的人员可以请求某位所有者开启锁定的密钥。任何一位所有者就已足够。你需要使用最新版本的 BeanPool 应用。如果 Web 应用仍能打开，也可以使用，但它位于社区自己的网址上，该网址可能已随服务器一同宕机：手机应用才是最值得依赖的工具。</p>
+        <ul>
+            <li>在服务器的“设置”中，操作人员选择 <strong>Take over as the main server</strong>，然后选择 <strong>I understand: use an owner's phone</strong>，或者在恢复备份时选择 <strong>Open with an owner's phone</strong>。其屏幕上会出现一个二维码。</li>
+            <li>在应用中：打开<strong>设置</strong>，在 <strong>社区密钥</strong> 下点按<strong>使用本机接管或恢复</strong>，并将相机对准该二维码。如果服务器页面是在你自己的手机上打开的，点按其中的链接效果相同。在 Web 应用中，从对方屏幕复制该链接，并将其粘贴到<strong>设置</strong>中的<strong>使用此浏览器接管或恢复</strong>下方。</li>
+            <li>应用会显示是哪个社区、哪台服务器，以及将要执行的操作。如果你的主服务器仍有响应，应用会以红色醒目提示：接管功能仅适用于真正彻底丢失的服务器。</li>
+            <li>点按<strong>解锁以进行接管</strong>（或<strong>解锁备份</strong>）。手机会先要求验证自身解锁凭据：指纹、面容或 PIN 码。Web 应用没有这一步验证，这也是为什么手机应用对所有者密钥而言更加安全。</li>
+            <li>手机打开其自身的锁扣部分，并将密钥交给该服务器，传输过程经过加密锁定，仅该服务器可以读取。你的手机绝不会看到服务器的原始密钥或备份数据。</li>
+            <li>在接管操作中，服务器前的人员随后在其屏幕上进行确认。社区成员会收到服务器已迁移以及你解锁了密钥的通知。</li>
+        </ul>
+        <p>如果锁属于另一个社区、未针对你的账户锁定、服务器代码已失效（有效期为 10 分钟且仅能使用一次），或者密钥并非由你社区自身的服务器锁定，应用会拒绝操作并说明原因。</p>
+        <h2>手机会自动检查密钥锁</h2>
+        <p>每次你社区的锁发生变更时（例如添加或移除了所有者、生成了新的恢复代码），你的应用都会在后台静默检查自己是否仍能打开其对应的部分。它打开锁扣，立即丢弃密钥，并告知服务器检查是否成功。此过程无需你进行任何操作。</p>
+        <p>所有者和管理员可以在服务器的“设置”中、在你的助记词日期旁边看到：<strong>their phone opened the current lock</strong> 以及具体日期，或者显示其上次打开的是较早版本的锁。如果提示你的手机 <strong>could NOT open</strong> 该锁，请核对你的 12 个助记词，并请另一位所有者查看服务器的“设置”。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="your-12-words.html"><strong>你的 12 个助记词</strong><span>这 12 个助记词是你账户的密钥。它们为何重要、在哪里找到、如何安全保存，以及添加登录方式作为备用找回途径。</span></a></li>
+            <li><a href="recovery.html"><strong>找回你的账户</strong><span>在新手机上恢复账户，并通过关联登录方式为账户提供额外保护。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

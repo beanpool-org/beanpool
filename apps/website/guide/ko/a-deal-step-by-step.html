@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ko by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>단계별 거래 진행 방식 — BeanPool members' guide</title>
+    <meta name="description" content="제공과 요청에서 요청부터 지급 완료까지의 과정, 후기 작성 안내예요.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">장터</a></p>
+        <h1>단계별 거래 진행 방식</h1>
+        <p class="lede">제공과 요청에서 요청부터 지급 완료까지의 과정, 후기 작성 안내예요.</p>
+        <h2>기본 원리</h2>
+        <p>거래가 시작되면 대금을 지급하는 사람의 콩이 <strong>안전하게 보관</strong>돼요. 이렇게 보관 중인 콩은 아무도 사용할 수 없어요. 작업이 완료되면 지급하는 사람이 콩을 전달하고 상대방에게 대금이 지급돼요. 화면의 몇몇 곳에서 콩을 &quot;크레딧&quot;이라고 부르기도 하지만 같은 의미예요.</p>
+        <p>24시간 동안 최대 100건의 거래를 요청, 수락 또는 승인할 수 있어요. 내가 비용을 지불하는 거래는 하루 100건의 결제 한도 중 하나로도 계산돼요(&quot;선물 보내기&quot; 참조). 콩을 전달하거나, 취소하거나, 대금을 받는 것은 절대 제한되지 않아요.</p>
+        <h2>다른 사람의 제공 이용하기</h2>
+        <ul>
+            <li>제공을 열고 <strong>제공 수락</strong>을 탭하세요.</li>
+            <li>시간당 가격인 경우 몇 시간인지 입력하세요.</li>
+            <li><strong>확인</strong>을 탭하세요. 내 콩이 즉시 안전하게 보관되고 판매자에게 알림이 가요. 판매자의 승인을 기다릴 필요가 없어요.</li>
+            <li>판매자와의 대화방이 열려요. 언제 어디서 만날지 합의하세요.</li>
+        </ul>
+        <p>먼저 본인의 제공을 최소 1개 이상 등록해 두어야 해요. 등록하지 않았다면 앱에서 <strong>제공 만들기</strong>를 안내해요.</p>
+        <h2>다른 사람의 요청 돕기</h2>
+        <ul>
+            <li>요청을 열고 <strong>이행 제안</strong>을 탭한 다음 <strong>확인</strong>을 누르세요.</li>
+            <li>요청을 올린 사람이 결정해요. 그전까지는 <strong>요청 철회</strong>를 탭할 수 있어요. 상대방이 7일 동안 응답하지 않으면 요청은 자동으로 종료되며 두 사람 모두에게 알림이 가요.</li>
+            <li>요청자는 <strong>이행 요청</strong> 아래에서 내 요청을 확인하고, <strong>메시지</strong>를 보내거나, <strong>거절</strong>하거나, <strong>승인 및 예치</strong>를 할 수 있어요.</li>
+            <li>요청자가 승인하면 해당 요청자의 콩이 안전하게 보관돼요. 게시물이 반복 가능으로 설정되어 있지 않은 한, 다른 사람이 지원한 요청은 거절된 것으로 표시돼요.</li>
+        </ul>
+        <p>웹 앱에서는 <strong>요청 철회</strong>가 <strong>제안 취소</strong>이고, <strong>승인 및 예치</strong>는 <strong>승인 및 신뢰 보관</strong>이에요. 요청을 올린 사람은 웹 앱에서 <strong>거절</strong>이나 승인만 할 수 있어요: 웹 앱의 요청에는 <strong>메시지</strong> 버튼이 없어요.</p>
+        <h2>콩이 보관되어 있는 동안</h2>
+        <p>두 사람 모두 대화를 나눌 수 있는 <strong>메시지</strong> 버튼과 거래를 취소할 수 있는 <strong>신뢰 보관 취소</strong> 버튼이 보여요. 웹 앱에서는 게시물을 등록하지 않은 사람에게만 <strong>메시지</strong>가 보이며, 취소 버튼은 <strong>신뢰 보관 취소</strong>로 표시돼요.</p>
+        <ul>
+            <li>작업을 수행하거나 물품을 전달하세요.</li>
+            <li>대금을 지급하는 사람이 <strong>크레딧 지급</strong>을 탭한 다음, 확인을 위해 <strong>크레딧 지급</strong>을 다시 탭해요. 시간제 작업의 경우 실제로 작업한 시간을 먼저 입력해요. 약속보다 적게 일했다면 남은 콩은 본인에게 돌아가요. 더 많이 일했다면 추가 금액이 차감돼요. 모든 시간은 거래가 성사된 요율로 지급돼요.</li>
+            <li>판매자에게 즉시 대금이 지급되며, 1.5%의 장터 수수료가 차감되어 커뮤니티의 공유지로 들어가요.</li>
+        </ul>
+        <p>대금을 지급하는 사람만이 콩을 전달할 수 있어요. 시간제한은 없어요: 콩이 전달되거나 거래가 취소될 때까지 콩은 계속 보관돼요. 1주일 후, 그리고 그 후 매주 지급하는 사람에게 알림이 가요.</p>
+        <p>누군가 요청 중이거나 콩이 보관되어 있는 동안에는 게시물의 가격을 변경할 수 없어요. 거래는 합의된 가격을 유지해요. 가격을 변경하려면 게시물을 올린 사람이 먼저 거래를 거절하거나 취소해야 해요.</p>
+        <h2>반복 가능 게시물</h2>
+        <p>반복 가능 게시물은 각 거래가 끝난 후 다시 등록 상태로 돌아가며, 여러 사람이 동시에 거래를 진행할 수 있어요. 그 밖의 모든 게시물은 완료된 것으로 표시돼요.</p>
+        <h2>후기</h2>
+        <p>콩을 전달한 후, 대금을 지급한 사람은 거래에 대한 평가를 요청받아요: 별점 1~5점과 선택 사항인 짧은 후기예요. <strong>별점 제출</strong>을 탭하거나 <strong>지금은 건너뛰기</strong>를 누르세요.</p>
+        <p>두 사람 모두 나중에 평가할 수 있어요: 완료된 게시물에서 <strong>평가하기</strong>와 상대방 이름을 탭하거나(다시 등록되는 반복 가능 게시물 제외), 내 거래의 기록에서 <strong>후기</strong>(웹 앱에서는 <strong>후기 남기기</strong>)를 탭하세요. 평점은 변경할 수 있으며 새 평점이 이전 평점을 대체해요.</p>
+        <p>커뮤니티의 모든 멤버가 후기의 별점과 내용을 읽을 수 있어요. 거래 당사자인 두 사람만이 누가 작성했는지와 어떤 거래에 대한 후기인지를 볼 수 있어요.</p>
+        <p>별점은 중요해요. 낮은 평균 평점은 상대방이 거래를 통해 쌓는 신뢰를 줄어들게 해요. 공정하게 평가해 주세요.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="my-deals.html"><strong>내 거래</strong><span>진행 중인 모든 거래, 내가 올린 게시글, 지난 거래 내역을 한곳에서 확인하세요.</span></a></li>
+            <li><a href="when-a-deal-goes-wrong.html"><strong>거래에 문제가 생겼을 때</strong><span>거래 취소 방법과 서로 합의되지 않을 때 진행되는 절차예요.</span></a></li>
+            <li><a href="posting.html"><strong>제공 또는 요청 등록하기</strong><span>내가 해줄 수 있거나 나눌 수 있는 것, 또는 구하는 것을 등록해 보세요.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool 작동 원리</strong><span>콩, 거래, 제공과 요청, 신용 한도를 알기 쉽게 설명해요.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 2.</p>
+    </main>
+</body>
+</html>

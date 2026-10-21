@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Ce que voient les admins
 summary: Dans une communauté où les administrateurs tiennent un registre de noms : ce qu'il contient sur vous, qui peut le lire, ce que garde le serveur et ce que signifie être confirmé.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## Le registre des noms
@@ -27,7 +27,7 @@ Un administrateur peut créer une copie PDF de la liste sur son téléphone, pou
 Un administrateur peut vous **confirmer** : il atteste que votre compte correspond bien à la personne inscrite sur votre fiche. Seule une personne qui vous connaît doit le faire, et dans certaines communautés, deux administrateurs doivent être d'accord.
 
 - Une confirmation ne mentionne aucun nom. Le serveur consigne quel compte, quelle entrée et quel administrateur, jamais qui vous êtes.
-- Il ne s'agit pas d'un badge de confiance, et pour l'instant cela ne modifie rien d'autre dans l'application.
+- Il ne s'agit pas d'un badge de confiance. Cela vous donne également une ligne de crédit immédiatement, le plancher connu, à moins que le propriétaire de votre communauté ne l'ait désactivé : voir « Votre ligne de crédit ».
 - Si un administrateur vous a invité nominativement, vous inscrire avec son invitation vous a confirmé sur votre fiche, par cet administrateur. « Confirmé » signifie uniquement qu'un administrateur certifie que ce compte est bien la personne désignée sur cette entrée.
 - Si vous remplacez un téléphone perdu et que votre compte adopte une nouvelle clé, votre confirmation suit automatiquement.
 - Si vous quittez la communauté ou supprimez votre compte, votre confirmation prend fin. Votre entrée reste sur la liste des administrateurs jusqu'à ce qu'un administrateur la supprime : demandez-leur de le faire.

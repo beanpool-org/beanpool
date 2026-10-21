@@ -8,6 +8,7 @@
  * mobile header: on the map that header floats over the page, so the banner sits over it rather than under it.
  */
 import { useEffect, useState } from 'react';
+import { t } from '@beanpool/core';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { formerAddressNotice, webAppHost, type FormerAddressNotice } from '../lib/former-address';
 
@@ -29,12 +30,14 @@ export function FormerAddressBanner({ signedIn = false }: { signedIn?: boolean }
     return (
         <div
             role="status"
+            aria-live="polite"
+            aria-label={t('Community address change alert')}
             data-testid="former-address-banner"
             className="relative z-[110] w-full shrink-0 bg-bp-gold-fill text-bp-gold-on px-4 py-2.5 text-sm font-medium border-b border-bp-gold-fill shadow-md"
         >
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <p className="m-0 flex-1 min-w-0 basis-48 leading-snug [overflow-wrap:anywhere]">
-                    This community has moved to <strong className="font-bold">{notice.primaryAddress}</strong>.
+                    {t('This community has moved to {address}.', { address: notice.primaryAddress })}
                 </p>
                 {' '}
                 <a
@@ -42,12 +45,12 @@ export function FormerAddressBanner({ signedIn = false }: { signedIn?: boolean }
                     rel="noreferrer"
                     className="inline-flex items-center min-h-[44px] max-w-full px-4 bg-white text-amber-900 font-bold rounded-lg shadow-sm no-underline hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-amber-700"
                 >
-                    Open it there
+                    {t('Open it there')}
                 </a>
             </div>
             {signedIn && (
                 <p className="m-0 mt-1.5 text-xs sm:text-sm leading-snug">
-                    You&apos;ll sign in there again, as you would in a new browser.
+                    {t("You'll sign in there again, as you would in a new browser.")}
                 </p>
             )}
         </div>

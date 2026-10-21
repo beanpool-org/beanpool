@@ -258,3 +258,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-20 - EnterpriseCard Focus Rings & Decorative Emoji Accessibility
 **Learning:** `EnterpriseCard.tsx` card container used `focus:outline-none focus:ring-2 focus:ring-emerald-500` which applied focus ring outlines on click, and rendered raw decorative emojis (`🌱`, `⏸️`, `⏳`, `🎉`, `🏛️`, `📈`) exposed to screen readers without `aria-hidden="true"`.
 **Action:** Replaced `focus:outline-none focus:ring-2` with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`, wrapped decorative emojis in `<span aria-hidden="true">`, and added `EnterpriseCard.test.tsx` verifying focus rings, keyboard interactions, and emoji hiding.
+
+## 2026-10-21 - FormerAddressBanner ARIA Live Region & Internationalization
+**Learning:** `FormerAddressBanner.tsx` displayed community migration alerts using `role="status"` without explicit `aria-live="polite"` or `aria-label`, preventing screen readers from describing the alert context, and hardcoded text strings without `t(...)` translation wrappers.
+**Action:** Added `aria-live="polite"` and `aria-label={t('Community address change alert')}` to the status container, wrapped text strings with `t(...)`, and verified test suite passing.

@@ -4424,7 +4424,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "{name} कौन से सदस्य हैं? केवल उसी की पुष्टि करें जिसे आप जानते हैं कि वह वही व्यक्ति है।",
   "Which member is this person? Confirm only someone you know is them.": "यह व्यक्ति कौन सा सदस्य है? केवल उसी की पुष्टि करें जिसे आप जानते हैं कि वह वही व्यक्ति है।",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "वे {amount} चुकाने के लिए काम करते हैं: 0 की एक निश्चित फ़्लोर सीमा, और 0 से ऊपर मिलने वाली प्रत्येक फली तब तक साझा संसाधन में जाती है जब तक कि यह चुकता न हो जाए।",
-  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "एक बार पुष्टि होने के बाद, उनकी सीमा {amount} तक बढ़ जाती है: आपके समुदाय की निश्चित फ़्लोर सीमा, जब तक वे एक प्रस्ताव लिस्टेड रखते हैं।",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "एक बार पुष्टि होने के बाद, जब तक वे एक प्रस्ताव लिस्टेड रखते हैं, उनकी सीमा में {amount} तक की वृद्धि होती है: आपके समुदाय की ज्ञात फ़्लोर सीमा।",
   "Find a member": "सदस्य खोजें",
   "Find a member by name": "नाम से सदस्य खोजें",
   "Nobody here is waiting to be confirmed.": "यहाँ कोई भी पुष्टि की प्रतीक्षा नहीं कर रहा है।",

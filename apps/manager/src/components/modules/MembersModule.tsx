@@ -232,7 +232,10 @@ export function MembersModule({
     rolesViewer,
     viewerRole: propsViewerRole,
 }: MembersModuleProps) {
-    const effectiveViewerRole: MemberNodeRole = propsViewerRole ?? (rolesViewer?.kind === 'key' ? rolesViewer.role : 'owner');
+    const effectiveViewerRole: MemberNodeRole | null =
+        propsViewerRole !== undefined
+            ? propsViewerRole
+            : (rolesViewer?.kind === 'key' ? rolesViewer.role : 'owner');
     const [searchTerm, setSearchTerm] = useState('');
     const [activeThreat, setActiveThreat] = useState<ThreatItem | null>(null);
     const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);

@@ -31,6 +31,8 @@ import {
     TRANSLATED_PAGES,
     LEGAL_PAGES,
     ALL_PAGES,
+    CHOOSE_LANGUAGE_WORDS,
+    getLanguageLinks,
     checkWebsite,
     pageContentHash,
     renderTranslatedPage,
@@ -711,5 +713,799 @@ test('nothing under apps/website/ is a translation source', () => {
     for (const lang of GUIDE_LANGS) {
         assert.ok(!fs.existsSync(path.join(WEBSITE_DIR, 'content', lang)), `apps/website/content/${lang} must NOT exist`);
         assert.ok(fs.existsSync(path.join(CONTENT_DIR, lang)), `apps/website-src/content/${lang} exists`);
+    }
+});
+
+test('every generated and English page has top menu language buttons (desktop and phone) with accessible name', () => {
+    // English pages
+    for (const page of ALL_PAGES) {
+        const file = path.join(WEBSITE_DIR, page);
+        const html = fs.readFileSync(file, 'utf8');
+
+        // Check desktop lang button
+        assert.ok(html.includes('class="lang-menu desktop-lang-menu"'), `en/${page} has desktop-lang-menu`);
+        assert.ok(html.includes(`aria-label="${CHOOSE_LANGUAGE_WORDS.en}"`), `en/${page} desktop button has aria-label="${CHOOSE_LANGUAGE_WORDS.en}"`);
+
+        // Check phone lang button on pages with phone menu (.has-menu / .nav-menu)
+        if (html.includes('class="nav-menu"')) {
+            assert.ok(html.includes('class="lang-menu phone-lang-menu"'), `en/${page} has phone-lang-menu`);
+            assert.ok(html.includes(`aria-label="${CHOOSE_LANGUAGE_WORDS.en}"`), `en/${page} phone button has aria-label="${CHOOSE_LANGUAGE_WORDS.en}"`);
+        }
+    }
+
+    // Translated pages
+    for (const lang of GUIDE_LANGS) {
+        for (const page of TRANSLATED_PAGES) {
+            const file = path.join(WEBSITE_DIR, lang, page);
+            const html = fs.readFileSync(file, 'utf8');
+
+            const expectedLabel = CHOOSE_LANGUAGE_WORDS[lang];
+            assert.ok(html.includes('class="lang-menu desktop-lang-menu"'), `${lang}/${page} has desktop-lang-menu`);
+            assert.ok(html.includes(`aria-label="${expectedLabel}"`), `${lang}/${page} desktop button has aria-label="${expectedLabel}"`);
+
+            if (html.includes('class="nav-menu"')) {
+                assert.ok(html.includes('class="lang-menu phone-lang-menu"'), `${lang}/${page} has phone-lang-menu`);
+                assert.ok(html.includes(`aria-label="${expectedLabel}"`), `${lang}/${page} phone button has aria-label="${expectedLabel}"`);
+            }
+        }
+    }
+});
+
+test('language menu in top menu opens the same list of 25 languages with own names and marks aria-current="page"', () => {
+    for (const lang of LANGS) {
+        const pagesToTest = lang === 'en' ? ALL_PAGES : TRANSLATED_PAGES;
+        for (const page of pagesToTest) {
+            const file = lang === 'en' ? path.join(WEBSITE_DIR, page) : path.join(WEBSITE_DIR, lang, page);
+            const html = fs.readFileSync(file, 'utf8');
+
+            const expectedLinks = getLanguageLinks(page, lang);
+
+            // Check desktop menu links
+            const desktopMenuMatch = html.match(/<details\s+class="lang-menu\s+desktop-lang-menu">([\s\S]*?)<\/details>/i);
+            assert.ok(desktopMenuMatch, `desktop menu found in ${lang}/${page}`);
+            const desktopDropdown = desktopMenuMatch[1];
+
+            const menusToTest = [desktopDropdown];
+
+            // Check phone menu links if page has phone menu
+            const phoneMenuMatch = html.match(/<details\s+class="lang-menu\s+phone-lang-menu">([\s\S]*?)<\/details>/i);
+            if (html.includes('class="nav-menu"')) {
+                assert.ok(phoneMenuMatch, `phone menu found in ${lang}/${page}`);
+                menusToTest.push(phoneMenuMatch[1]);
+            }
+
+            for (const menuHtml of menusToTest) {
+                const links = [...menuHtml.matchAll(/<a\s+href="([^"]*)"\s+hreflang="([^"]*)"\s+lang="([^"]*)"(?:\s+aria-current="([^"]*)")?>([^<]*)<\/a>/gi)];
+                assert.equal(links.length, 25, `${lang}/${page} menu contains 25 language links`);
+
+                for (let i = 0; i < 25; i++) {
+                    const [, href, hreflang, langAttr, ariaCurrent, text] = links[i];
+                    const exp = expectedLinks[i];
+                    assert.equal(hreflang, exp.lang);
+                    assert.equal(langAttr, exp.lang);
+                    assert.equal(href, exp.href);
+                    assert.equal(text, exp.name);
+                    if (exp.isCurrent) {
+                        assert.equal(ariaCurrent, 'page', `current language ${exp.lang} marked with aria-current="page"`);
+                    } else {
+                        assert.equal(ariaCurrent, undefined, `non-current language ${exp.lang} does not have aria-current`);
+                    }
+                }
+            }
+        }
+    }
+});
+
+test('keyboard interaction: Escape key closes open language menus and focuses summary button when menu had focus', () => {
+    const mainJsText = fs.readFileSync(path.join(WEBSITE_DIR, 'main.js'), 'utf8');
+    const dom = new JSDOM(`<!DOCTYPE html><html><body>
+        <input id="outside" />
+        <details class="lang-menu desktop-lang-menu" open>
+            <summary class="lang-btn" aria-label="Choose language">🌐</summary>
+            <div class="lang-dropdown">
+                <a id="link" href="/es/">Español</a>
+            </div>
+        </details>
+    </body></html>`, { runScripts: 'dangerously' });
+
+    dom.window.eval(mainJsText);
+
+    const details = dom.window.document.querySelector('.lang-menu');
+    const summary = dom.window.document.querySelector('.lang-btn');
+    const link = dom.window.document.querySelector('#link');
+    const outsideInput = dom.window.document.querySelector('#outside');
+    assert.equal(details.open, true, 'menu is initially open');
+
+    // Case 1: Focus within the menu -> Escape returns focus to summary
+    link.focus();
+    const event1 = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    dom.window.document.dispatchEvent(event1);
+
+    assert.equal(details.open, false, 'menu is closed after Escape key');
+    assert.equal(dom.window.document.activeElement, summary, 'focus returned to summary button');
+
+    // Case 2: Focus outside the menu -> Escape closes menu without stealing focus
+    details.open = true;
+    outsideInput.focus();
+    const event2 = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    dom.window.document.dispatchEvent(event2);
+
+    assert.equal(details.open, false, 'menu is closed after Escape key');
+    assert.equal(dom.window.document.activeElement, outsideInput, 'focus not stolen from outside input');
+});
+
+test('browser offer banner dismissal is remembered in localStorage and works without storage', () => {
+    const mainJsText = fs.readFileSync(path.join(WEBSITE_DIR, 'main.js'), 'utf8');
+
+    // Case 1: Dismiss button records dismissal in localStorage and suppresses banner on reload
+    const dom1 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom1.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(dom1.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    dom1.window.eval(mainJsText);
+
+    const banner1 = dom1.window.document.getElementById('read-in-banner');
+    assert.ok(banner1, 'banner shown initially');
+    const closeBtn = banner1.querySelector('.read-in-close');
+    closeBtn.click();
+
+    assert.equal(dom1.window.localStorage.getItem('beanpool_lang_banner_dismissed'), 'true', 'dismiss recorded in localStorage');
+    assert.equal(dom1.window.localStorage.getItem('beanpool_lang'), 'en', 'dismiss records en in localStorage');
+
+    // Next load with dismissal in localStorage but NO cookies:
+    const dom1Reload = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom1Reload.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(dom1Reload.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    dom1Reload.window.localStorage.setItem('beanpool_lang_banner_dismissed', 'true');
+    dom1Reload.window.eval(mainJsText);
+
+    assert.equal(dom1Reload.window.document.getElementById('read-in-banner'), null, 'banner suppressed on reload due to localStorage dismissal');
+
+    // Case 2: Clicking the recommendation link also marks dismissal in localStorage
+    const dom2 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom2.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(dom2.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    dom2.window.eval(mainJsText);
+
+    const banner2 = dom2.window.document.getElementById('read-in-banner');
+    assert.ok(banner2);
+    const langLink = banner2.querySelector('a');
+    langLink.click();
+    assert.equal(dom2.window.localStorage.getItem('beanpool_lang_banner_dismissed'), 'true', 'banner link click marks dismissal in localStorage');
+    assert.equal(dom2.window.localStorage.getItem('beanpool_lang'), 'es', 'banner link click records chosen language in localStorage');
+
+    // Case 3: When localStorage throws (SecurityError / disabled storage), banner still works without error
+    const dom3 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom3.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(dom3.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    Object.defineProperty(dom3.window, 'localStorage', {
+        get() {
+            throw new Error('SecurityError: The operation is insecure.');
+        }
+    });
+
+    assert.doesNotThrow(() => {
+        dom3.window.eval(mainJsText);
+    }, 'main.js does not throw when localStorage throws');
+    const banner3 = dom3.window.document.getElementById('read-in-banner');
+    assert.ok(banner3, 'banner still renders when localStorage throws');
+    assert.doesNotThrow(() => {
+        banner3.querySelector('.read-in-close').click();
+    }, 'dismiss button does not throw when localStorage throws');
+});
+
+test('mobile width (320px and 360px with 1.3x text) with language menu open has no horizontal scroll and dropdown scrolls internally', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    let browser;
+
+    try {
+        browser = await chromium.launch({ headless: true });
+        for (const width of [320, 360]) {
+            for (const testPage of ['index.html', 'ar/index.html']) {
+                const page = await browser.newPage({ viewport: { width, height: 640 } });
+                await page.goto(`http://127.0.0.1:${port}/${testPage}`, { waitUntil: 'load' });
+
+                // Apply 1.3x text scaling (simulating user font preference)
+                await page.evaluate(() => {
+                    document.documentElement.style.fontSize = '130%';
+                });
+
+                // Open the phone menu
+                await page.locator('.nav-menu > summary').click();
+                await page.waitForTimeout(50);
+
+                // Open the phone language menu
+                await page.locator('.phone-lang-menu summary').click();
+                await page.waitForTimeout(50);
+
+                const metrics = await page.evaluate(() => {
+                    const scrollW = document.documentElement.scrollWidth;
+                    const clientW = document.documentElement.clientWidth;
+                    const dropdown = document.querySelector('.phone-lang-menu .lang-dropdown');
+                    return {
+                        scrollW,
+                        clientW,
+                        hasOverflowX: scrollW > clientW,
+                        dropdownScrollH: dropdown ? dropdown.scrollHeight : 0,
+                        dropdownClientH: dropdown ? dropdown.clientHeight : 0,
+                        dropdownOverflowY: dropdown ? window.getComputedStyle(dropdown).overflowY : ''
+                    };
+                });
+
+                assert.ok(!metrics.hasOverflowX, `${testPage} at ${width}px 1.3x text has scrollWidth (${metrics.scrollW}) <= clientWidth (${metrics.clientW})`);
+                assert.ok(metrics.dropdownScrollH >= metrics.dropdownClientH, `${testPage} phone lang dropdown scrollHeight >= clientHeight`);
+                assert.equal(metrics.dropdownOverflowY, 'auto', `${testPage} phone lang dropdown has overflow-y: auto`);
+
+                await page.close();
+            }
+        }
+    } finally {
+        if (browser) await browser.close();
+        server.close();
+    }
+});
+
+test('RTL desktop top language menu mirrors without horizontal overflow at 1280px in headless Chromium', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    let browser;
+
+    try {
+        browser = await chromium.launch({ headless: true });
+        const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+        await page.goto(`http://127.0.0.1:${port}/ar/index.html`, { waitUntil: 'load' });
+
+        // Open desktop language menu
+        await page.locator('.desktop-lang-menu summary').click();
+        await page.waitForTimeout(50);
+
+        const bounds = await page.evaluate(() => {
+            const dropdown = document.querySelector('.desktop-lang-menu .lang-dropdown');
+            const rect = dropdown.getBoundingClientRect();
+            return {
+                x: rect.x,
+                right: rect.right,
+                width: rect.width,
+                viewportWidth: window.innerWidth,
+                scrollWidth: document.documentElement.scrollWidth
+            };
+        });
+
+        assert.ok(bounds.x >= 0, `dropdown x (${bounds.x}) >= 0`);
+        assert.ok(bounds.right <= bounds.viewportWidth, `dropdown right (${bounds.right}) <= viewportWidth (${bounds.viewportWidth})`);
+        assert.ok(bounds.scrollWidth <= bounds.viewportWidth, `page scrollWidth (${bounds.scrollWidth}) <= viewportWidth`);
+    } finally {
+        if (browser) await browser.close();
+        server.close();
+    }
+});
+
+test('mobile width (320px) desktop-lang-menu on pages without phone menu stays within viewport for LTR and RTL', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    let browser;
+
+    try {
+        browser = await chromium.launch({ headless: true });
+        for (const testPage of ['privacy.html', 'ar/status.html']) {
+            const page = await browser.newPage({ viewport: { width: 320, height: 640 } });
+            await page.goto(`http://127.0.0.1:${port}/${testPage}`, { waitUntil: 'load' });
+
+            await page.locator('.desktop-lang-menu summary').click();
+            await page.waitForTimeout(50);
+
+            const bounds = await page.evaluate(() => {
+                const dropdown = document.querySelector('.desktop-lang-menu .lang-dropdown');
+                const rect = dropdown.getBoundingClientRect();
+                return {
+                    x: rect.x,
+                    right: rect.right,
+                    width: rect.width,
+                    viewportWidth: window.innerWidth,
+                    scrollWidth: document.documentElement.scrollWidth
+                };
+            });
+
+            assert.ok(bounds.x >= 0, `${testPage} dropdown x (${bounds.x}) >= 0`);
+            assert.ok(bounds.right <= bounds.viewportWidth, `${testPage} dropdown right (${bounds.right}) <= viewportWidth (${bounds.viewportWidth})`);
+            assert.ok(bounds.scrollWidth <= bounds.viewportWidth, `${testPage} scrollWidth (${bounds.scrollWidth}) <= viewportWidth`);
+            await page.close();
+        }
+    } finally {
+        if (browser) await browser.close();
+        server.close();
+    }
+});
+
+test('nav-cta is never clipped and does not wrap where main did not, ☰ panel links are reachable with and without banner, phone header is unchanged, and no-menu controls are >=44px with >=16px padding', { timeout: 240_000 }, async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    let browser;
+
+    try {
+        browser = await chromium.launch({ headless: true });
+        const allPages = [];
+        for (const pageName of ALL_PAGES) {
+            allPages.push({ url: pageName, lang: 'en', rtl: false });
+        }
+        for (const lang of GUIDE_LANGS) {
+            for (const pageName of TRANSLATED_PAGES) {
+                allPages.push({ url: `${lang}/${pageName}`, lang, rtl: RTL_LANGS.includes(lang) });
+            }
+        }
+
+        const WIDTHS = [320, 346, 360, 390, 430, 481, 540, 768, 769, 900, 1024, 1280, 1366, 1440];
+        const MAIN_WRAPPED_LANGS = new Set(['pt', 'ru', 'uk', 'de']);
+
+        const runWorker = async (items) => {
+            const ctx100 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            const ctx130 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            const ctxWide = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            await ctx100.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            });
+            await ctx130.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+                const el = document.documentElement;
+                if (el) el.style.fontSize = '130%';
+                const observer = new MutationObserver(() => {
+                    if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
+                        document.documentElement.style.fontSize = '130%';
+                    }
+                });
+                observer.observe(document, { childList: true, subtree: true });
+            });
+            await ctxWide.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; } #navbar .nav-inner * { letter-spacing: 0.08em !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            });
+
+            const p100 = await ctx100.newPage();
+            const p130 = await ctx130.newPage();
+            const pWide = await ctxWide.newPage();
+
+            const clipped = [];
+            const wrapped = [];
+            const phoneHeaderBad = [];
+            const unreachable = [];
+            const wideClipped = [];
+            const wideGlobeClipped = [];
+            const wideSizeBad = [];
+
+            for (const item of items) {
+                // Wide script pass for desktop ☰ row (1024, 1080, 1200, 1280 px, 100% text)
+                await pWide.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
+                const hasMenu = await pWide.evaluate(() => !!document.querySelector('.nav-inner.has-menu'));
+                if (hasMenu) {
+                    for (const width of [1024, 1080, 1200, 1280]) {
+                        await pWide.setViewportSize({ width, height: 800 });
+                        const res = await pWide.evaluate(({ isRtl }) => {
+                            const cta = document.querySelector('.nav-cta');
+                            const globe = document.querySelector('.desktop-lang-menu summary') || document.querySelector('.lang-menu summary');
+                            if (!cta || !globe) return null;
+                            const ctaR = cta.getBoundingClientRect();
+                            const globeR = globe.getBoundingClientRect();
+                            const ctaOff = isRtl
+                                ? (ctaR.left < -0.5 || ctaR.right > window.innerWidth + 0.5)
+                                : (ctaR.left < -0.5 || ctaR.right > window.innerWidth + 0.5);
+                            const globeOff = isRtl
+                                ? (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5)
+                                : (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5);
+                            return {
+                                ctaOff,
+                                globeOff,
+                                ctaRight: ctaR.right,
+                                ctaLeft: ctaR.left,
+                                ctaHeight: ctaR.height,
+                                globeRight: globeR.right,
+                                globeLeft: globeR.left,
+                                globeHeight: globeR.height
+                            };
+                        }, { isRtl: item.rtl });
+
+                        if (res) {
+                            if (res.ctaOff) {
+                                wideClipped.push({ page: item.url, width, right: res.ctaRight, left: res.ctaLeft });
+                            }
+                            if (res.globeOff) {
+                                wideGlobeClipped.push({ page: item.url, width, right: res.globeRight, left: res.globeLeft });
+                            }
+                            if (width >= 1280 && res.ctaHeight < 43.5) {
+                                wideSizeBad.push({ page: item.url, width, target: 'cta', h: res.ctaHeight });
+                            }
+                        }
+                    }
+                }
+
+                for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
+                    await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
+
+                    for (const width of WIDTHS) {
+                        await page.setViewportSize({ width, height: 800 });
+                        const res = await page.evaluate(({ isRtl, sc }) => {
+                            const cta = document.querySelector('.nav-cta');
+                            if (!cta) return null;
+                            const rect = cta.getBoundingClientRect();
+                            const range = document.createRange();
+                            range.selectNodeContents(cta);
+                            const rects = range.getClientRects();
+                            const isClipped = isRtl
+                                ? (rect.left < -0.5 || rect.right > window.innerWidth + 0.5)
+                                : (rect.right > window.innerWidth + 0.5);
+                            const isWrapped = rects.length > 1 || (sc === 1.3 ? rect.height > 75 : rect.height > 50);
+                            return {
+                                isClipped,
+                                isWrapped,
+                                left: rect.left,
+                                right: rect.right,
+                                height: rect.height,
+                                lineCount: rects.length
+                            };
+                        }, { isRtl: item.rtl, sc: scale });
+
+                        if (res) {
+                            if (res.isClipped && (scale === 1.0 || width <= 480)) {
+                                clipped.push({ page: item.url, width, scale, right: res.right, left: res.left });
+                            }
+                            const isNewWrap = width > 480 ? res.isWrapped : (scale === 1.0 && !MAIN_WRAPPED_LANGS.has(item.lang) && res.isWrapped);
+                            if (isNewWrap) {
+                                wrapped.push({ page: item.url, width, scale, height: res.height, lineCount: res.lineCount });
+                            }
+                        }
+
+                        // Check phone header at <= 1023px
+                        if (width <= 1023) {
+                            const hCheck = await page.evaluate((sc) => {
+                                const nav = document.querySelector('.nav-inner.has-menu');
+                                const img = document.querySelector('.nav-inner.has-menu .logo img');
+                                if (!nav || !img) return null;
+                                const navStyle = window.getComputedStyle(nav);
+                                const imgStyle = window.getComputedStyle(img);
+                                const padL = parseFloat(navStyle.paddingLeft);
+                                const padR = parseFloat(navStyle.paddingRight);
+                                const beanW = parseFloat(imgStyle.width);
+                                const expectedPad = sc === 1.3 ? 20.8 : 16.0;
+                                const expectedBean = 40.0;
+                                if (Math.abs(padL - expectedPad) > 0.5 || Math.abs(padR - expectedPad) > 0.5 || Math.abs(beanW - expectedBean) > 0.5) {
+                                    return { padL, padR, expectedPad, beanW, expectedBean };
+                                }
+                                return null;
+                            }, scale);
+                            if (hCheck) phoneHeaderBad.push({ page: item.url, width, scale, ...hCheck });
+                        }
+                    }
+
+                    // Reachability at 320x568 and 360x640 (locale en-US, no banner)
+                    for (const vp of [{ width: 320, height: 568 }, { width: 360, height: 640 }]) {
+                        await page.setViewportSize(vp);
+                        const hasNavMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
+                        if (hasNavMenu) {
+                            const summary = page.locator('.nav-menu > summary');
+                            await summary.click();
+                            await page.waitForTimeout(10);
+                            const unreach = await page.evaluate(() => {
+                                const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
+                                const bad = [];
+                                for (const link of links) {
+                                    link.scrollIntoView();
+                                    const r = link.getBoundingClientRect();
+                                    if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                        bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                                    }
+                                }
+                                return bad;
+                            });
+                            if (unreach.length > 0) unreachable.push({ page: item.url, viewport: `${vp.width}x${vp.height}`, scale, banner: false, badLinks: unreach });
+                            await summary.click();
+                        }
+                    }
+                }
+            }
+
+            await ctx100.close();
+            await ctx130.close();
+            await ctxWide.close();
+            return { clipped, wrapped, phoneHeaderBad, unreachable, wideClipped, wideGlobeClipped, wideSizeBad };
+        };
+
+        const NUM_WORKERS = 6;
+        const chunks = Array.from({ length: NUM_WORKERS }, () => []);
+        allPages.forEach((p, i) => chunks[i % NUM_WORKERS].push(p));
+
+        const results = await Promise.all(chunks.map(runWorker));
+        const allClipped = results.flatMap(r => r.clipped);
+        const allWrapped = results.flatMap(r => r.wrapped);
+        const allPhoneHeaderBad = results.flatMap(r => r.phoneHeaderBad);
+        const allUnreachable = results.flatMap(r => r.unreachable);
+        const allWideClipped = results.flatMap(r => r.wideClipped);
+        const allWideGlobeClipped = results.flatMap(r => r.wideGlobeClipped);
+        const allWideSizeBad = results.flatMap(r => r.wideSizeBad);
+
+        // Banner reachability check with pt-BR locale
+        const bannerUnreachable = [];
+        for (const scale of [1.0, 1.3]) {
+            const ctxPt = await browser.newContext({ viewport: { width: 360, height: 640 }, locale: 'pt-BR' });
+            await ctxPt.addInitScript((s) => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+                if (s === 1.3) {
+                    const el = document.documentElement;
+                    if (el) el.style.fontSize = '130%';
+                    const observer = new MutationObserver(() => {
+                        if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
+                            document.documentElement.style.fontSize = '130%';
+                        }
+                    });
+                    observer.observe(document, { childList: true, subtree: true });
+                }
+            }, scale);
+
+            const page = await ctxPt.newPage();
+            for (const enPage of ['index.html', 'help.html', 'rules.html', 'safety.html']) {
+                await page.goto(`http://127.0.0.1:${port}/${enPage}`, { waitUntil: 'load' });
+                for (const vp of [{ width: 360, height: 640 }, { width: 320, height: 568 }]) {
+                    await page.setViewportSize(vp);
+                    await page.waitForTimeout(20);
+                    const hasMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
+                    if (hasMenu) {
+                        await page.locator('.nav-menu > summary').click();
+                        await page.waitForTimeout(20);
+                        // 1. check with lang menu closed
+                        let unreach = await page.evaluate(() => {
+                            const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
+                            const bad = [];
+                            for (const link of links) {
+                                link.scrollIntoView();
+                                const r = link.getBoundingClientRect();
+                                if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                    bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                                }
+                            }
+                            return bad;
+                        });
+                        if (unreach.length > 0) {
+                            bannerUnreachable.push({ page: enPage, viewport: `${vp.width}x${vp.height}`, scale, langMenuOpen: false, badLinks: unreach });
+                        }
+
+                        // 2. check with lang menu open
+                        const hasPhoneLang = await page.evaluate(() => !!document.querySelector('.phone-lang-menu > summary'));
+                        if (hasPhoneLang) {
+                            await page.locator('.phone-lang-menu > summary').click();
+                            await page.waitForTimeout(20);
+                            unreach = await page.evaluate(() => {
+                                const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
+                                const bad = [];
+                                for (const link of links) {
+                                    link.scrollIntoView();
+                                    const r = link.getBoundingClientRect();
+                                    if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                        bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                                    }
+                                }
+                                return bad;
+                            });
+                            if (unreach.length > 0) {
+                                bannerUnreachable.push({ page: enPage, viewport: `${vp.width}x${vp.height}`, scale, langMenuOpen: true, badLinks: unreach });
+                            }
+                            await page.locator('.phone-lang-menu > summary').click();
+                        }
+                        await page.locator('.nav-menu > summary').click();
+                    }
+                }
+            }
+            await ctxPt.close();
+        }
+
+        // Check pages without ☰ at 320, 360, 412, 480, 600, 768, 1024 px across 100% and 130% text (en, pt, ta, ar)
+        const NO_MENU_CHECK_PAGES = [
+            { url: 'privacy.html', lang: 'en', rtl: false },
+            { url: 'data-deletion.html', lang: 'en', rtl: false },
+            { url: 'global.html', lang: 'en', rtl: false },
+            { url: 'status.html', lang: 'en', rtl: false },
+            { url: 'pt/global.html', lang: 'pt', rtl: false },
+            { url: 'pt/status.html', lang: 'pt', rtl: false },
+            { url: 'ta/global.html', lang: 'ta', rtl: false },
+            { url: 'ta/status.html', lang: 'ta', rtl: false },
+            { url: 'ar/global.html', lang: 'ar', rtl: true },
+            { url: 'ar/status.html', lang: 'ar', rtl: true }
+        ];
+        const NO_MENU_WIDTHS = [320, 360, 412, 480, 600, 768, 800, 1024, 1080];
+        const noMenuLinkGapBad = [];
+        const noMenuCtaSizeBad = [];
+        const noMenuGlobeSizeBad = [];
+        const noMenuPaddingBad = [];
+        const noMenuClipped = [];
+        const noMenuWrapped = [];
+
+        {
+            const ctx100NoMenu = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            const ctx130NoMenu = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            await ctx100NoMenu.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            });
+            await ctx130NoMenu.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+                const el = document.documentElement;
+                if (el) el.style.fontSize = '130%';
+                const observer = new MutationObserver(() => {
+                    if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
+                        document.documentElement.style.fontSize = '130%';
+                    }
+                });
+                observer.observe(document, { childList: true, subtree: true });
+            });
+
+            const p100 = await ctx100NoMenu.newPage();
+            const p130 = await ctx130NoMenu.newPage();
+
+            for (const item of NO_MENU_CHECK_PAGES) {
+                for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
+                    await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
+                    for (const width of NO_MENU_WIDTHS) {
+                        await page.setViewportSize({ width, height: 800 });
+                        const res = await page.evaluate(({ isRtl, sc }) => {
+                            const cta = document.querySelector('.nav-cta');
+                            const globe = document.querySelector('.desktop-lang-menu summary') || document.querySelector('.lang-menu summary');
+                            const nav = document.querySelector('#navbar .nav-inner') || document.querySelector('.nav-inner');
+                            if (!cta || !globe || !nav) return null;
+
+                            const ctaRect = cta.getBoundingClientRect();
+                            const globeRect = globe.getBoundingClientRect();
+                            const navStyle = window.getComputedStyle(nav);
+
+                            const range = document.createRange();
+                            range.selectNodeContents(cta);
+                            const rects = range.getClientRects();
+
+                            const isClipped = isRtl
+                                ? (ctaRect.left < -0.5 || ctaRect.right > window.innerWidth + 0.5)
+                                : (ctaRect.right > window.innerWidth + 0.5);
+                            const isWrapped = rects.length > 1 || (sc === 1.3 ? ctaRect.height > 75 : ctaRect.height > 50);
+
+                            // the narrowest space between two text links that show (they must read as separate links)
+                            const links = [...document.querySelectorAll('.nav-links > a, .nav-links > li > a')]
+                                .map((a) => a.getBoundingClientRect())
+                                .filter((r) => r.width > 0 && r.height > 0)
+                                .sort((a, b) => a.left - b.left);
+                            let minLinkGap = Infinity;
+                            for (let i = 1; i < links.length; i++) minLinkGap = Math.min(minLinkGap, links[i].left - links[i - 1].right);
+
+                            return {
+                                minLinkGap,
+                                ctaW: ctaRect.width,
+                                ctaH: ctaRect.height,
+                                globeW: globeRect.width,
+                                globeH: globeRect.height,
+                                padL: parseFloat(navStyle.paddingLeft),
+                                padR: parseFloat(navStyle.paddingRight),
+                                isClipped,
+                                isWrapped
+                            };
+                        }, { isRtl: item.rtl, sc: scale });
+
+                        if (!res) continue;
+
+                        if (res.ctaW < 43.5 || res.ctaH < 43.5) {
+                            noMenuCtaSizeBad.push({ page: item.url, width, scale, w: res.ctaW, h: res.ctaH });
+                        }
+                        if (res.globeW < 43.5 || res.globeH < 43.5) {
+                            noMenuGlobeSizeBad.push({ page: item.url, width, scale, w: res.globeW, h: res.globeH });
+                        }
+                        if (res.padL < 15.5 || res.padR < 15.5) {
+                            noMenuPaddingBad.push({ page: item.url, width, scale, padL: res.padL, padR: res.padR });
+                        }
+                        if (res.isClipped) {
+                            noMenuClipped.push({ page: item.url, width, scale });
+                        }
+                        if (res.isWrapped) {
+                            noMenuWrapped.push({ page: item.url, width, scale });
+                        }
+                        if (res.minLinkGap < 12) {
+                            noMenuLinkGapBad.push({ page: item.url, width, scale, gap: res.minLinkGap });
+                        }
+                    }
+                }
+            }
+
+            await ctx100NoMenu.close();
+            await ctx130NoMenu.close();
+        }
+
+        const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length
+            + noMenuCtaSizeBad.length + noMenuGlobeSizeBad.length + noMenuPaddingBad.length + noMenuClipped.length + noMenuWrapped.length
+            + noMenuLinkGapBad.length + allWideClipped.length + allWideGlobeClipped.length + allWideSizeBad.length;
+        assert.equal(totalFailures, 0,
+            `Failing counts:\n` +
+            `  - Clipped CTAs: ${allClipped.length}\n` +
+            `  - Wrapped CTAs: ${allWrapped.length}\n` +
+            `  - Wide-text desktop ☰ clipped CTAs: ${allWideClipped.length}\n` +
+            `  - Wide-text desktop ☰ clipped 🌐 buttons: ${allWideGlobeClipped.length}\n` +
+            `  - Wide-text desktop ☰ controls < 44px: ${allWideSizeBad.length}\n` +
+            `  - Phone header mismatches: ${allPhoneHeaderBad.length}\n` +
+            `  - Unreachable panel links without banner: ${allUnreachable.length}\n` +
+            `  - Unreachable panel links with banner: ${bannerUnreachable.length}\n` +
+            `  - No-menu CTA size (<44px): ${noMenuCtaSizeBad.length}\n` +
+            `  - No-menu 🌐 size (<44px): ${noMenuGlobeSizeBad.length}\n` +
+            `  - No-menu side padding (<16px): ${noMenuPaddingBad.length}\n` +
+            `  - No-menu clipped CTAs: ${noMenuClipped.length}\n` +
+            `  - No-menu wrapped CTAs: ${noMenuWrapped.length}\n` +
+            `  - No-menu text links closer than 12px: ${noMenuLinkGapBad.length}` +
+            (noMenuLinkGapBad.length ? ` (e.g. ${noMenuLinkGapBad.slice(0, 3).map(g => `${g.page} @ ${g.width}px ${g.scale * 100}%: ${g.gap.toFixed(1)}px`).join('; ')})` : '') + `\n\n` +
+            (allWideClipped.length ? `Wide-text desktop ☰ clipped CTA samples:\n  ` + allWideClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (right: ${c.right.toFixed(1)}, left: ${c.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
+            (allWideGlobeClipped.length ? `Wide-text desktop ☰ clipped 🌐 samples:\n  ` + allWideGlobeClipped.slice(0, 10).map(g => `${g.page} @ ${g.width}px (right: ${g.right.toFixed(1)}, left: ${g.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
+            (allWideSizeBad.length ? `Wide-text desktop ☰ size bad samples:\n  ` + allWideSizeBad.slice(0, 5).map(s => `${s.page} @ ${s.width}px: ${s.target} height ${s.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+            (noMenuCtaSizeBad.length ? `No-menu CTA size bad samples:\n  ` + noMenuCtaSizeBad.slice(0, 5).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text): ${c.w.toFixed(1)}x${c.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+            (noMenuGlobeSizeBad.length ? `No-menu 🌐 size bad samples:\n  ` + noMenuGlobeSizeBad.slice(0, 5).map(g => `${g.page} @ ${g.width}px (${g.scale * 100}% text): ${g.w.toFixed(1)}x${g.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+            (noMenuPaddingBad.length ? `No-menu padding bad samples:\n  ` + noMenuPaddingBad.slice(0, 5).map(p => `${p.page} @ ${p.width}px (${p.scale * 100}% text): L=${p.padL.toFixed(1)}px R=${p.padR.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+            (allClipped.length ? `Clipped samples:\n  ` + allClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text, right: ${c.right})`).join('\n  ') + '\n\n' : '') +
+            (allWrapped.length ? `Wrapped samples:\n  ` + allWrapped.slice(0, 10).map(w => `${w.page} @ ${w.width}px (${w.scale * 100}% text)`).join('\n  ') + '\n\n' : '') +
+            (allPhoneHeaderBad.length ? `Phone header samples:\n  ` + allPhoneHeaderBad.slice(0, 5).map(h => `${h.page} @ ${h.width}px (${h.scale * 100}%): pad=${h.padL}px (exp ${h.expectedPad}px), bean=${h.beanW}px (exp ${h.expectedBean}px)`).join('\n  ') + '\n\n' : '') +
+            (bannerUnreachable.length ? `Banner unreachable samples:\n  ` + bannerUnreachable.slice(0, 5).map(b => `${b.page} @ ${b.viewport} (${b.scale * 100}%, open:${b.langMenuOpen}): ${b.badLinks.map(l => l.text).join(', ')}`).join('\n  ') : '')
+        );
+    } finally {
+        if (browser) await browser.close();
+        server.close();
     }
 });

@@ -676,6 +676,18 @@ function normaliseBrowserLang(tag) {
 function initLanguageBanner() {
     if (pageLang() !== 'en') return;
     if (typeof document === 'undefined' || typeof navigator === 'undefined') return;
+
+    let isDismissed = false;
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            isDismissed = window.localStorage.getItem('beanpool_lang_banner_dismissed') === 'true' ||
+                          window.localStorage.getItem('beanpool_lang') !== null;
+        }
+    } catch (_) {
+        // works without storage
+    }
+    if (isDismissed) return;
+
     if (document.cookie && /(?:^|;\s*)beanpool_lang=/.test(document.cookie)) return;
 
     let navLangs = [];
@@ -717,6 +729,14 @@ function initLanguageBanner() {
     link.addEventListener('click', () => {
         const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';
         document.cookie = `beanpool_lang=${matched};path=/;max-age=31536000;SameSite=Lax${secure}`;
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem('beanpool_lang_banner_dismissed', 'true');
+                window.localStorage.setItem('beanpool_lang', matched);
+            }
+        } catch (_) {
+            // works without storage
+        }
     });
 
     const updateBannerHeight = () => {
@@ -735,6 +755,14 @@ function initLanguageBanner() {
     closeBtn.addEventListener('click', () => {
         const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';
         document.cookie = `beanpool_lang=en;path=/;max-age=31536000;SameSite=Lax${secure}`;
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem('beanpool_lang_banner_dismissed', 'true');
+                window.localStorage.setItem('beanpool_lang', 'en');
+            }
+        } catch (_) {
+            // works without storage
+        }
         if (typeof window !== 'undefined') {
             window.removeEventListener('resize', updateBannerHeight);
         }
@@ -775,6 +803,39 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 document.querySelectorAll('.nav-menu a').forEach(a => {
     a.addEventListener('click', () => {
         const menu = a.closest('details');
+        if (menu) menu.open = false;
+    });
+});
+
+// ======================== LANGUAGE SELECTOR ========================
+// Keyboard accessibility: Escape closes open language menus and returns focus to the button if focused within.
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const openMenus = document.querySelectorAll('.lang-menu[open]');
+        openMenus.forEach(menu => {
+            const hadFocus = menu.contains(document.activeElement);
+            menu.open = false;
+            if (hadFocus) {
+                const summary = menu.querySelector('summary');
+                if (summary) summary.focus();
+            }
+        });
+    }
+});
+
+// Click outside closes open language menus.
+document.addEventListener('click', (e) => {
+    document.querySelectorAll('.lang-menu[open]').forEach(menu => {
+        if (!menu.contains(e.target)) {
+            menu.open = false;
+        }
+    });
+});
+
+// Close language menu when a link inside it is clicked.
+document.querySelectorAll('.lang-dropdown a').forEach(a => {
+    a.addEventListener('click', () => {
+        const menu = a.closest('.lang-menu');
         if (menu) menu.open = false;
     });
 });

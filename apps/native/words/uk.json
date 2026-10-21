@@ -6485,5 +6485,13 @@
   "Look around first, then join with this account": "Спершу огляньтеся, потім приєднайтеся з цим обліковим записом",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Знайомтеся з людьми звідусіль і знаходьте спільноти поблизу. Спершу огляньтеся як гість, потім торкніться «Приєднатися» вгорі, щоб приєднатися від імені акаунта на цьому телефоні: ваш ключ і 12 слів залишаються незмінними, а в інших ваших спільнотах нічого не зміниться.",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Після підтвердження їхній ліміт зростає щонайбільше на {amount}: відомий мінімум вашої спільноти, поки в них є розміщена пропозиція.",
-  "Uses the key and 12 words already on this phone. No new account is made.": "Використовує ключ і 12 слів, які вже є на цьому телефоні. Новий обліковий запис не створюється."
+  "Uses the key and 12 words already on this phone. No new account is made.": "Використовує ключ і 12 слів, які вже є на цьому телефоні. Новий обліковий запис не створюється.",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "Доглядач вимкнув копію цього інструмента на сервері, тому він зберігається лише на цьому телефоні. Ви можете знову увімкнути її в Налаштуваннях.",
+  "Asked to join": "Запит на приєднання",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Не вдалося зв'язатися з сервером вашої спільноти, тому нічого не змінилося. Спробуйте знову, коли будете в мережі.",
+  "One phone at a time: the copy you changed last is the one kept.": "Один телефон за раз: зберігається та копія, яку ви змінили останньою.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "Видаляє ваші дані для цього інструмента з цього телефону та його копію на сервері вашої спільноти. Інший телефон, підключений під вашим обліковим записом, зберігає те, що має, і більше його не надсилає. Той самий інструмент в іншій спільноті зберігає власні дані. Цю дію не можна скасувати.",
+  "You can edit a message for 15 minutes after sending it.": "Ви можете редагувати повідомлення протягом 15 хвилин після надсилання.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "Сервер вашої спільноти більше не зберігає копію цього інструмента, тому він зберігається лише на цьому телефоні. Ви можете знову увімкнути копію в Налаштуваннях.",
+  "{name}, asked to join": "{name}, запит на приєднання"
 }

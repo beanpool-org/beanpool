@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "es",
-  "hash": "9c64dc56a58b3428f23f2faaa978b56f86b8dc7b620e197b76a5d0507c9afd88",
+  "hash": "0198999b5c0b12aae189eeb464d9295dffd3c4736950e38709392eede6fef115",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "Cómo funciona BeanPool",
       "summary": "Frijoles, intercambios, ofertas y necesidades, y crédito, en palabras sencillas.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -268,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Tu confianza se muestra como una insignia. Las insignias son Recién llegado, Residente, Cuidador y Anciano. La confianza detrás de tu insignia suma tres cosas: el inicio que te dio un aval, la confianza que ganaste comerciando y cualquier confianza que te haya otorgado un administrador. Un administrador puede darle a un miembro una insignia directamente, sin tratos. En una comunidad que confirma a sus miembros, la línea de crédito que obtiene un miembro confirmado también cuenta."
+          "text": "Tu confianza se muestra como una insignia. Las insignias son Recién llegado, Residente, Cuidador y Anciano. La confianza detrás de tu insignia suma tres cosas: el inicio que te dio un aval, la confianza que ganaste comerciando y cualquier confianza que te haya otorgado un administrador. Un administrador puede darle a un miembro una insignia directamente, sin tratos. En una comunidad que confirma a sus miembros, un miembro confirmado obtiene un límite de crédito más alto, no una insignia más alta: su insignia solo cuenta lo que ha hecho."
         },
         {
           "type": "ul",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Tu línea de crédito",
       "summary": "Hasta cuánto puedes tener saldo negativo y cómo se incrementa.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Algunas comunidades tienen administradores que conocen a cada miembro por su nombre. Si la tuya ha activado **el límite mínimo conocido**, un miembro confirmado por un administrador obtiene una línea de crédito de inmediato: 1,000 frijoles, a menos que tu comunidad haya elegido otra cantidad. Eso equivale a unas 25 horas de trabajo por las que la comunidad confía en ti."
+          "text": "Algunas comunidades tienen administradores que conocen a cada miembro por su nombre. Si la tuya ha activado **el límite mínimo conocido**, un miembro confirmado por un administrador obtiene una línea de crédito de inmediato: 1,000 frijoles, a menos que tu comunidad haya elegido otra cantidad. Eso equivale a unas 25 horas de trabajo por las que la comunidad confía en ti. Aumenta tu límite, no tu nivel: tu insignia de confianza sigue contando solo lo que has hecho."
         },
         {
           "type": "ul",
@@ -5973,6 +5973,14 @@
             "Un administrador puede establecer un límite menor para ti, por ejemplo mientras eres nuevo. Eso nunca te quita frijoles: si ya estás por debajo de él, los gastos se pausan hasta que vuelvas a estar por encima.",
             "Si estás saldando una deuda de una cuenta anterior, los frijoles que recibas por encima de 0 van a los Bienes comunes hasta que se pague. Tu Registro indica cuánto queda. También puedes pagar parte o la totalidad tú mismo en **Registro → Pagar a Bienes comunes**: tu código de reembolso ya está completado allí (o introduce el que te dé un administrador). Lo que pagues con el código se descuenta de la deuda de inmediato, y cuando no queda nada la deuda está saldada: no se descuenta nada más, ni mediante un pago ni de lo que recibas. Un pago sin el código va a los Bienes comunes pero no se descuenta de tu deuda, y la app lo indica: para que cuente, pídele a un administrador que lo aplique a tu deuda con su referencia. Hasta que lo haga, la deuda aún se sigue saldando: la próxima vez que recibas frijoles, lo que quede se tomará de lo que tengas por encima de 0. El monto en el mensaje del administrador es lo que quedaba cuando lo compartió: si ahora queda menos, tu servidor rechaza un pago mayor e indica cuánto queda, y no se paga nada. Si la app indica que un pago puede haberse procesado, toca **Reintentar** en la misma pantalla: el mismo pago nunca se cobra dos veces. Si saliste de esa pantalla, revisa tu Registro antes de volver a pagar."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Una comunidad mixta"
+        },
+        {
+          "type": "p",
+          "text": "En algunas comunidades cualquier miembro puede invitar a personas, por lo que los administradores no conocen a todos. Si la tuya ha activado **el límite mínimo conocido**, los administradores pueden confirmar a los miembros que sí conocen, y esos miembros comienzan con un límite más alto. Todos los demás comienzan en cero, y el límite de todos crece de la misma manera a partir de ahí a medida que intercambian y generan confianza."
         },
         {
           "type": "h2",
@@ -5991,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Tu nivel no cambia: es el que te otorga tu línea de crédito cuando no está congelada, incluso si los administradores hubieran fijado tu línea por debajo o por encima de la de la comunidad, tanto en tu perfil como en tus publicaciones. Para preguntar por qué, o para que se vuelva a abrir, consulta a uno de los administradores."
+          "text": "Tu nivel no cambia, tanto en tu perfil como en tus publicaciones: cuenta lo que has hecho (un aval, tus intercambios y cualquier confianza que te haya otorgado un administrador), nunca la parte de tu línea que proviene de estar confirmado ni cualquier monto que los administradores hayan fijado para ella. Para preguntar por qué, o para que se vuelva a abrir, consulta a uno de los administradores."
         },
         {
           "type": "h2",
@@ -6072,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Insignias",
       "summary": "Recién llegado, Residente, Cuidador y Anciano. Qué significan y por qué no desbloquean nada.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6105,7 +6113,7 @@
         },
         {
           "type": "p",
-          "text": "La confianza proviene de un aval al unirte, de intercambios completados y de la confianza que un administrador haya otorgado. En una comunidad que confirma a sus miembros, la línea de crédito que obtiene un miembro confirmado también cuenta."
+          "text": "La confianza proviene de un aval al unirte, de intercambios completados y de la confianza que un administrador haya otorgado. En una comunidad que confirma a sus miembros, estar confirmado te otorga un límite de crédito más alto, no una insignia más alta: tu insignia solo cuenta lo que has hecho, por lo que nunca muestra que estés confirmado."
         },
         {
           "type": "h2",

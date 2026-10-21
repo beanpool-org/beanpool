@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "vi",
-  "hash": "65c87e110fc2615171223639c37fd2d72a0534bc16c10d4aeafb42c83ec859cf",
+  "hash": "0b544c1477f14bb36123197a82443cd3b672c7663d8aa5b46a3dd25c5f1a3b93",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "Cách BeanPool hoạt động",
       "summary": "Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -268,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Mức uy tín của bạn hiển thị dưới dạng huy hiệu. Các huy hiệu gồm Người mới, Cư dân, Quản lý và Trưởng bối. Uy tín đằng sau huy hiệu của bạn là tổng của ba điều: mức khởi đầu do người bảo lãnh trao cho bạn, uy tín bạn kiếm được từ giao dịch, và uy tín do quản trị viên cấp cho bạn. Quản trị viên có thể trao huy hiệu trực tiếp cho thành viên mà không cần giao dịch. Trong một cộng đồng có xác nhận thành viên, hạn mức tín dụng mà thành viên đã xác nhận nhận được cũng được tính."
+          "text": "Mức uy tín của bạn hiển thị dưới dạng huy hiệu. Các huy hiệu gồm Người mới, Cư dân, Quản lý và Trưởng bối. Uy tín đằng sau huy hiệu của bạn là tổng của ba điều: mức khởi đầu do người bảo lãnh trao cho bạn, uy tín bạn kiếm được từ giao dịch, và uy tín do quản trị viên cấp cho bạn. Quản trị viên có thể trao huy hiệu trực tiếp cho thành viên mà không cần giao dịch. Trong một cộng đồng có xác nhận thành viên, thành viên đã xác nhận nhận được hạn mức tín dụng cao hơn chứ không phải huy hiệu cao hơn: huy hiệu của họ chỉ tính những gì họ đã làm."
         },
         {
           "type": "ul",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Hạn mức tín dụng",
       "summary": "Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn."
+          "text": "Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn. Điều này giúp nâng hạn mức của bạn, không phải cấp độ của bạn: huy hiệu tin cậy của bạn vẫn chỉ tính những gì bạn đã làm."
         },
         {
           "type": "ul",
@@ -5973,6 +5973,14 @@
             "Quản trị viên có thể đặt giới hạn nhỏ hơn cho bạn, ví dụ khi bạn là người mới. Điều đó không bao giờ lấy đi Đậu của bạn: nếu bạn đã ở dưới mức đó, việc chi tiêu sẽ tạm dừng cho đến khi số dư của bạn trở lại phía trên mức đó.",
             "Nếu bạn đang trả nợ từ một tài khoản trước đó, số Đậu bạn nhận được trên mức 0 sẽ chuyển vào Commons cho đến khi trả hết nợ. Sổ cái của bạn sẽ cho biết còn lại bao nhiêu. Bạn cũng có thể tự mình trả một phần hoặc toàn bộ số nợ trong mục **Sổ cái → Trả cho Commons**: mã hoàn trả của bạn đã được điền sẵn ở đó (hoặc nhập mã do quản trị viên cung cấp cho bạn). Những gì bạn thanh toán kèm theo mã sẽ trừ ngay vào khoản nợ, và khi không còn nợ thì khoản nợ được giải quyết xong: không bị trừ thêm gì nữa, qua thanh toán hay từ số đậu bạn nhận được. Khoản thanh toán không kèm mã sẽ chuyển vào Commons nhưng không trừ vào khoản nợ của bạn, và ứng dụng sẽ thông báo điều đó: để được tính nợ, hãy nhờ quản trị viên ghi nhận khoản đó vào nợ của bạn cùng với mã tham chiếu. Cho đến khi họ thực hiện, khoản nợ vẫn tiếp tục được trả dần: lần tiếp theo bạn nhận được Đậu, phần còn lại sẽ được trích từ số đậu bạn nắm giữ trên mức 0. Số tiền trong tin nhắn của quản trị viên là số nợ còn lại tại thời điểm họ chia sẻ: nếu hiện tại số nợ còn ít hơn, máy chủ của bạn sẽ từ chối khoản thanh toán lớn hơn và thông báo số tiền còn lại, và không có gì bị trừ. Nếu ứng dụng báo một khoản thanh toán có thể đã được xử lý, hãy nhấn **Thử lại** trên cùng màn hình đó: một khoản thanh toán không bao giờ bị trừ hai lần. Nếu bạn đã rời khỏi màn hình đó, hãy kiểm tra Sổ cái trước khi thanh toán lại."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Cộng đồng kết hợp"
+        },
+        {
+          "type": "p",
+          "text": "Trong một số cộng đồng, bất kỳ thành viên nào cũng có thể mời người khác, nên quản trị viên không biết tất cả mọi người. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, quản trị viên có thể xác nhận những thành viên mà họ biết, và những thành viên đó sẽ bắt đầu với hạn mức cao hơn. Mọi người khác bắt đầu từ số 0, và sau đó hạn mức của mọi người đều tăng theo cùng một cách khi họ giao dịch và xây dựng lòng tin cậy."
         },
         {
           "type": "h2",
@@ -5991,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Cấp độ của bạn không thay đổi: đó là cấp độ mà hạn mức tín dụng mang lại cho bạn khi không bị đóng băng, ngay cả khi các quản trị viên đã đặt hạn mức của bạn thấp hơn hoặc cao hơn mức chung của cộng đồng, trên hồ sơ cũng như trên các tin đăng của bạn. Để hỏi lý do hoặc đề nghị mở lại hạn mức, hãy liên hệ với một trong các quản trị viên."
+          "text": "Cấp độ của bạn không thay đổi, trên hồ sơ cũng như trên các tin đăng của bạn: cấp độ này tính những gì bạn đã làm (lời bảo lãnh, các giao dịch của bạn và điểm tin cậy do quản trị viên cấp cho bạn), không bao giờ tính phần hạn mức đến từ việc được xác nhận, hay bất kỳ số tiền nào mà quản trị viên đặt cho phần đó. Để hỏi lý do hoặc đề nghị mở lại hạn mức, hãy liên hệ với một trong các quản trị viên."
         },
         {
           "type": "h2",
@@ -6072,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Huy hiệu tin cậy",
       "summary": "Người mới, Cư dân, Quản lý và Trưởng bối. Ý nghĩa của chúng và lý do chúng không mở khóa quyền hạn nào.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6105,7 +6113,7 @@
         },
         {
           "type": "p",
-          "text": "Điểm tin cậy đến từ sự bảo lãnh khi bạn tham gia, từ các giao dịch đã hoàn tất, và từ sự tin cậy do quản trị viên cấp. Trong cộng đồng có xác nhận thành viên, hạn mức tín dụng mà một thành viên được xác nhận nhận được cũng được tính vào."
+          "text": "Điểm tin cậy đến từ sự bảo lãnh khi bạn tham gia, từ các giao dịch đã hoàn tất, và từ sự tin cậy do quản trị viên cấp. Trong một cộng đồng có xác nhận thành viên, việc được xác nhận mang lại cho bạn hạn mức tín dụng cao hơn chứ không phải huy hiệu cao hơn: huy hiệu của bạn chỉ tính những gì bạn đã làm, vì vậy nó không bao giờ hiển thị rằng bạn đã được xác nhận."
         },
         {
           "type": "h2",

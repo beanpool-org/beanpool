@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "de",
-  "hash": "c9cb7d243bb8b7d9d37f46b062263f8dfba6173c6afae5b1e42d5ed8f88aea1b",
+  "hash": "9ed9ba1df28de61dae0545f0bf1a7ec810e7ce54234aaafa95420058d3808945",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "So funktioniert BeanPool",
       "summary": "Bohnen, Handel, Angebote und Gesuche sowie Kredit, in einfachen Worten.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -268,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Dein Vertrauen wird als Abzeichen angezeigt. Die Abzeichen sind Neuling, Bewohner, Verwalter und Ältester. Das Vertrauen hinter deinem Abzeichen setzt sich aus drei Dingen zusammen: Dem Start, den dir eine Bürgschaft gegeben hat, dem Vertrauen, das du durch Handeln erworben hast, und jeglichem Vertrauen, das dir ein Admin gewährt hat. Ein Admin kann einem Mitglied direkt ein Abzeichen verleihen, ohne Handelsgeschäfte. In einer Community, die ihre Mitglieder bestätigt, zählt auch der Kreditrahmen, den ein bestätigtes Mitglied erhält."
+          "text": "Dein Vertrauen wird als Abzeichen angezeigt. Die Abzeichen sind Neuling, Bewohner, Verwalter und Ältester. Das Vertrauen hinter deinem Abzeichen setzt sich aus drei Dingen zusammen: Dem Start, den dir eine Bürgschaft gegeben hat, dem Vertrauen, das du durch Handeln erworben hast, und jeglichem Vertrauen, das dir ein Admin gewährt hat. Ein Admin kann einem Mitglied direkt ein Abzeichen verleihen, ohne Handelsgeschäfte. In einer Community, die ihre Mitglieder bestätigt, erhält ein bestätigtes Mitglied ein höheres Kreditlimit, kein höheres Abzeichen: Das Abzeichen zählt nur, was getan wurde."
         },
         {
           "type": "ul",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Dein Kreditrahmen",
       "summary": "Wie weit du ins Minus gehen kannst und wie dieser Rahmen wächst.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Hat deine Community **den bekannten Kreditrahmen** aktiviert, erhält ein von einem Admin bestätigtes Mitglied sofort einen Kreditrahmen: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut."
+          "text": "Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Hat deine Community **den bekannten Kreditrahmen** aktiviert, erhält ein von einem Admin bestätigtes Mitglied sofort einen Kreditrahmen: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut. Es erhöht dein Limit, nicht deine Stufe: Dein Vertrauensabzeichen zählt weiterhin nur das, was du selbst getan hast."
         },
         {
           "type": "ul",
@@ -5991,7 +5991,7 @@
         },
         {
           "type": "p",
-          "text": "Deine Stufe ändert sich nicht: Sie entspricht derjenigen, die dein Kreditrahmen dir verleiht, wenn er nicht eingefroren ist, selbst wenn die Admins deinen Rahmen niedriger oder höher als den der Community angesetzt hatten, auf deinem Profil und deinen Einträgen gleichermaßen. Um nach dem Grund zu fragen oder ihn wieder öffnen zu lassen, wende dich an einen der Admins."
+          "text": "Deine Stufe ändert sich nicht, auf deinem Profil und deinen Einträgen gleichermaßen: Sie zählt, was du getan hast (eine Bürgschaft, deine Handelsgeschäfte und jegliches Vertrauen, das dir ein Admin gewährt hat), niemals den Teil deines Rahmens, der aus der Bestätigung stammt, oder einen Betrag, den die Admins dafür festgelegt haben. Um nach dem Grund zu fragen oder ihn wieder öffnen zu lassen, wende dich an einen der Admins."
         },
         {
           "type": "h2",
@@ -6072,8 +6072,8 @@
       "slug": "trust-badges",
       "title": "Vertrauensstufen",
       "summary": "Neuling, Bewohner, Verwalter und Ältester. Was sie bedeuten und warum sie nichts freischalten.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6105,7 +6105,7 @@
         },
         {
           "type": "p",
-          "text": "Vertrauen entsteht durch eine Bürgschaft beim Beitritt, durch abgeschlossene Handelsgeschäfte und durch Vertrauen, das ein Admin gewährt hat. In einer Community, die ihre Mitglieder bestätigt, zählt auch der Kreditrahmen, den ein bestätigtes Mitglied erhält."
+          "text": "Vertrauen entsteht durch eine Bürgschaft beim Beitritt, durch abgeschlossene Handelsgeschäfte und durch Vertrauen, das ein Admin gewährt hat. In einer Community, die ihre Mitglieder bestätigt, bringt die Bestätigung ein höheres Kreditlimit, kein höheres Abzeichen: Dein Abzeichen zählt nur, was du getan hast, sodass es nie zeigt, dass du bestätigt bist."
         },
         {
           "type": "h2",

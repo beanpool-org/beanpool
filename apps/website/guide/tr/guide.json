@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "tr",
-  "hash": "aa8542b037cae3e33a46f495c8ba6fe201adf0f0eac15d0ed1e32d5a31734017",
+  "hash": "12d44f38b007b309bc76b5593f796de165d52d69b1c22216e5a9ee5919c622fe",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "BeanPool nasıl çalışır",
       "summary": "Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -268,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Güveniniz bir rozet olarak görünür. Rozetler Yeni Gelen, Sakin, Temsilci ve Büyük'tür. Rozetinizin arkasındaki güven üç şeyi toplar: bir kefaletin size sağladığı başlangıç, takas yaparak kazandığınız güven ve bir yöneticinin size tanıdığı her türlü güven. Bir yönetici bir üyeye takas olmadan doğrudan bir rozet verebilir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üyenin aldığı kredi limiti de sayılır."
+          "text": "Güveniniz bir rozet olarak görünür. Rozetler Yeni Gelen, Sakin, Temsilci ve Büyük'tür. Rozetinizin arkasındaki güven üç şeyi toplar: bir kefaletin size sağladığı başlangıç, takas yaparak kazandığınız güven ve bir yöneticinin size tanıdığı her türlü güven. Bir yönetici bir üyeye takas olmadan doğrudan bir rozet verebilir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üye daha yüksek bir kredi limiti alır, daha yüksek bir rozet değil: rozetleri yalnızca yaptıklarını sayar."
         },
         {
           "type": "ul",
@@ -280,7 +280,7 @@
         },
         {
           "type": "p",
-          "text": "Rozet bir takdirdir, daha fazlası değildir. Hiçbir özelliğe erişim şartı koymaz. Rozeti ne olursa olsun herkes takas yapabilir, davet edebilir ve oy kullanabilir."
+          "text": "Rozet bir takdirdir, daha fazlası değildir. Hiçbir özelliğin kilidini açmaz. Rozeti ne olursa olsun herkes takas yapabilir, davet edebilir ve oy kullanabilir."
         },
         {
           "type": "h2",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Kredi limitiniz",
       "summary": "Sıfırın ne kadar altına inebileceğiniz ve bu limitin nasıl büyüdüğü.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5947,10 +5947,10 @@
           "items": [
             "Teklif yoksa: hiçbiri;",
             "1 Teklif: −200'e kadar;",
-            "2 Teklif: −500;",
-            "3 Teklif: −1.000;",
-            "4 Teklif: −1.500;",
-            "5 Teklif: −2.000."
+            "2: −500;",
+            "3: −1.000;",
+            "4: −1.500;",
+            "5: −2.000."
           ]
         },
         {
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Sizinki **bilinen taban**ı açtıysa, bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır."
+          "text": "Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Sizinki **bilinen taban**ı açtıysa, bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır. Limitinizi yükseltir, seviyenizi değil: güven rozetiniz yalnızca yaptıklarınızı saymaya devam eder."
         },
         {
           "type": "ul",
@@ -5973,6 +5973,14 @@
             "Bir yönetici sizin için örneğin yeni olduğunuz dönemde daha küçük bir limit belirleyebilir. Bu sizden asla Fasulye almaz: zaten bu sınırın altındaysanız, tekrar üzerine çıkana kadar harcama duraklatılır.",
             "Daha önceki bir hesaptan kalan bir borcu ödüyorsanız, sıfırın üzerinde aldığınız Fasulyeler borç ödenene kadar Ortak Alana gider. Defteriniz ne kadar kaldığını belirtir. Ayrıca **Defter → Ortak'a Öde** bölümünden kendiniz de bir kısmını veya tamamını ödeyebilirsiniz: geri ödeme kodunuz orada doldurulmuştur (veya bir yöneticinin size verdiğini girin). Kodla ödediğiniz miktar doğrudan borçtan düşülür ve geriye hiçbir şey kalmadığında borç kapatılmış olur: bir ödemeyle veya aldığınız miktardan başka bir şey kesilmez. Kod olmadan yapılan bir ödeme Ortak Alana gider ancak borcunuzdan düşülmez ve uygulama bunu belirtir: sayılması için bir yöneticiden referansıyla birlikte bunu borcunuza saymasını isteyin. Bunu yapana kadar borç ödenmeye devam eder: bir dahaki sefere Fasulye aldığınızda, kalan miktar sıfırın üzerinde tuttuğunuz miktardan alınır. Yöneticinin mesajındaki miktar paylaştıkları anda kalan miktardır: şu anda daha az kaldıysa sunucunuz daha büyük bir ödemeyi reddeder, ne kadar kaldığını söyler ve hiçbir şey ödenmez. Uygulama bir ödemenin gerçekleşmiş olabileceğini söylerse aynı ekranda **Tekrar dene** seçeneğine dokunun: aynı ödeme asla iki kez ödenmez. O ekrandan ayrıldıysanız tekrar ödeme yapmadan önce Defterinizi kontrol edin."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Karma bir topluluk"
+        },
+        {
+          "type": "p",
+          "text": "Bazı topluluklarda herhangi bir üye insanları davet edebilir, bu nedenle yöneticiler herkesi tanımaz. Sizinki **bilinen taban**ı açtıysa, yöneticiler tanıdıkları üyeleri teyit edebilir ve bu üyeler daha yüksek bir limitle başlar. Geri kalan herkes sıfırdan başlar ve sonrasında herkesin limiti takas yaptıkça ve güven inşa ettikçe aynı şekilde büyür."
         },
         {
           "type": "h2",
@@ -5991,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Seviyeniz değişmez: yöneticiler limitinizi topluluğunkinden daha düşük veya daha yüksek belirlemiş olsa bile, dondurulmadığında kredi limitinizin size verdiği seviyedir; profilinizde de ilanlarınızda da aynıdır. Nedenini sormak veya tekrar açtırmak için yöneticilerden birine danışın."
+          "text": "Seviyeniz değişmez; profilinizde de ilanlarınızda da aynı kalır: yaptıklarınızı sayar (bir kefalet, takaslarınız ve bir yöneticinin size tanıdığı herhangi bir güven), asla teyit edilmekten gelen limitinizi veya yöneticilerin bunun için belirlediği herhangi bir miktarı saymaz. Nedenini sormak veya tekrar açtırmak için yöneticilerden birine danışın."
         },
         {
           "type": "h2",
@@ -6072,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Güven rozetleri",
       "summary": "Yeni Gelen, Sakin, Temsilci ve Büyük. Anlamları ve neden ayrıcalık kilidi açmadıkları.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6105,7 +6113,7 @@
         },
         {
           "type": "p",
-          "text": "Güven; katıldığınızdaki bir kefaletten, tamamlanan takaslardan ve bir yöneticinin verdiği güvenden gelir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üyenin aldığı kredi limiti de sayılır."
+          "text": "Güven; katıldığınızdaki bir kefaletten, tamamlanan takaslardan ve bir yöneticinin verdiği güvenden gelir. Üyelerini teyit eden bir toplulukta teyit edilmiş olmak size daha yüksek bir kredi limiti verir, daha yüksek bir rozet değil: rozetiniz yalnızca yaptıklarınızı sayar, bu nedenle teyit edilmiş olduğunuzu asla göstermez."
         },
         {
           "type": "h2",
@@ -6121,13 +6129,13 @@
         },
         {
           "type": "h2",
-          "text": "Nerede görünür"
+          "text": "Nerede görünürler"
         },
         {
           "type": "ul",
           "items": [
-            "**Defter**, ardından **Seviyeler:** rozetiniz, ne kadar güveniniz olduğu ve bir sonrakine ne kadar kaldığı. **TÜM SEVİYELER** her rozeti gösterir. Henüz ulaşmadığınız bir seviye, ne kadar güven gerektirdiğiyle birlikte **Sonraki seviye** veya **İleride** der: içine doğru büyüyeceğiniz bir şeydir, sizden saklanan bir şey asla değildir.",
-            "**GÜVENİNİZİ NE OLUŞTURUR:** ne kadar takas yaptığınız, kaç kişiyle yaptığınız ve değerlendirmeniz.",
+            "**Defter**, ardından **Seviyeler:** rozetiniz, ne kadar güveniniz olduğu ve bir sonrakine ne kadar kaldığı. **Tüm seviyeler** her rozeti gösterir. Henüz ulaşmadığınız bir seviye, ne kadar güven gerektirdiğiyle birlikte **Sonraki seviye** veya **İleride** der: içine doğru büyüyeceğiniz bir şeydir, sizden saklanan bir şey asla değildir.",
+            "**Güveninizi ne oluşturur:** ne kadar takas yaptığınız, kaç kişiyle yaptığınız ve değerlendirmeniz.",
             "Gönderilerde ve profillerde her üyenin adının yanında."
           ]
         },

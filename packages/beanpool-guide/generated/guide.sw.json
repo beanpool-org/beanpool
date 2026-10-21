@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "sw",
-  "hash": "a1a5f22866a537d9f1c574961198840b209981e53867cf0a05c9a4cba97077dd",
+  "hash": "f79adfaab5fc49ce17984e3fd6436ec8c153a8ac1acf8157980cab1148b2522c",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "Kazi ya BeanPool",
       "summary": "Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -268,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Uaminifu wako huonyeshwa kama beji. Beji hizo ni Mgeni, Mkazi, Msimamizi na Mzee. Uaminifu ulio nyuma ya beji yako unajumuisha mambo matatu: mwanzo ambao udhamini ulikupa, uaminifu uliopata kwa kufanya biashara, na uaminifu wowote ambao msimamizi alikupa. Msimamizi anaweza kumpa mwanachama beji moja kwa moja, bila kufanya biashara. Katika jumuiya inayowathibitisha wanachama wake, kikomo cha mkopo ambacho mwanachama aliyethibitishwa hupata huhesabiwa pia."
+          "text": "Uaminifu wako huonyeshwa kama beji. Beji hizo ni Mgeni, Mkazi, Msimamizi na Mzee. Uaminifu ulio nyuma ya beji yako unajumuisha mambo matatu: mwanzo ambao udhamini ulikupa, uaminifu uliopata kwa kufanya biashara, na uaminifu wowote ambao msimamizi alikupa. Msimamizi anaweza kumpa mwanachama beji moja kwa moja, bila kufanya biashara. Katika jumuiya inayowathibitisha wanachama wake, mwanachama aliyethibitishwa hupata kikomo cha juu zaidi cha mkopo, si beji ya juu zaidi: beji yake huhesabu tu kile alichofanya."
         },
         {
           "type": "ul",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Kikomo chako cha mkopo",
       "summary": "Jinsi unavyoweza kwenda chini ya sifuri, na jinsi inavyoongezeka.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo."
+          "text": "Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo. Kinainua kikomo chako, si kiwango chako: beji yako ya uaminifu bado inahesabu tu kile ulichofanya."
         },
         {
           "type": "ul",
@@ -5973,6 +5973,14 @@
             "Msimamizi anaweza kukuwekea kikomo kidogo zaidi, kwa mfano ukiwa bado mpya. Hiyo haichukui Maharagwe kutoka kwako kamwe: ikiwa tayari uko chini yake, matumizi husitishwa hadi utakaporudi juu yake tena.",
             "Ikiwa unalipa deni kutoka kwenye akaunti ya awali, Maharagwe unayopokea zaidi ya 0 huenda kwenye Mali za Pamoja hadi litakapolipwa. Leja yako husema kiasi gani kimebaki. Unaweza pia kulipa sehemu au lote mwenyewe katika **Leja → Lipa Hazina ya Pamoja**: msimbo wako wa kulipa deni umejazwa hapo (au weka ule ambao msimamizi anakupa). Kile unacholipa kwa msimbo huo kinapunguzwa kwenye deni mara moja, na kukiwa hakuna kilichosalia deni linamalizika: hakuna kingine kinachochukuliwa, kwa malipo au kutoka kwa unachopokea. Malipo bila msimbo huenda kwenye Mali za Pamoja lakini hayatoki kwenye deni lako, na programu inasema hivyo: ili lihesabiwe, mwombe msimamizi alihesabu kwenye deni lako kwa kumbukumbu yake. Hadi wafanye hivyo, deni bado linaendelea kulipwa: wakati ujao utakapopokea Maharagwe, yaliyosalia yanachukuliwa kutoka kwa yale unayoshikilia zaidi ya 0. Kiasi kilicho katika ujumbe wa msimamizi ndicho kilichokuwa kimesalia walipokishiriki: ikiwa kimesalia kidogo sasa, seva yako inakataa malipo makubwa zaidi na kusema ni kiasi gani kilichobaki, na hakuna kinacholipwa. Programu ikisema kuwa malipo yanaweza kuwa yamepita, gusa **Jaribu tena** kwenye skrini hiyohiyo: malipo yaleyale hayalipwi mara mbili kamwe. Ikiwa uliondoka kwenye skrini hiyo, kagua Leja yako kabla ya kulipa tena."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Jumuiya mchanganyiko"
+        },
+        {
+          "type": "p",
+          "text": "Katika baadhi ya jumuiya mwanachama yeyote anaweza kualika watu, kwa hivyo wasimamizi hawamjui kila mtu. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, wasimamizi wanaweza kuwathibitisha wanachama wanaowajua, na wanachama hao huanza na kikomo cha juu zaidi. Kila mtu mwingine huanzia sifuri, na kikomo cha kila mtu hukua kwa njia ileile baada ya hapo wanapofanya biashara na kujenga uaminifu."
         },
         {
           "type": "h2",
@@ -5991,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Kiwango chako hakibadiliki: ni kile ambacho kikomo chako cha mkopo kinakupa wakati hakijasimamishwa, hata kama wasimamizi walikuwa wameweka kikomo chako kuwa cha chini au cha juu kuliko cha jumuiya, kwenye wasifu wako na kwenye orodha zako pia. Ili kuuliza kwa nini, au kukifanya kifunguliwe tena, muulize mmoja wa wasimamizi."
+          "text": "Kiwango chako hakibadiliki, kwenye wasifu wako na kwenye orodha zako pia: kinahesabu kile ulichofanya (udhamini, biashara zako na uaminifu wowote ambao msimamizi alikupa), kamwe si sehemu ya kikomo chako inayotokana na kuthibitishwa, au kiasi chochote ambacho wasimamizi waliweka kwa ajili yake. Ili kuuliza kwa nini, au kukifanya kifunguliwe tena, muulize mmoja wa wasimamizi."
         },
         {
           "type": "h2",
@@ -6072,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Beji za uaminifu",
       "summary": "Mgeni, Mkazi, Msimamizi na Mzee. Maana yake, na kwa nini hazifungui kitu chochote.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6105,7 +6113,7 @@
         },
         {
           "type": "p",
-          "text": "Uaminifu hutoka kwa dhamana unapojiunga, kutokana na biashara zilizokamilika, na kutokana na uaminifu ambao msimamizi amekupa. Katika jumuiya inayowathibitisha wanachama wake, kikomo cha mkopo ambacho mwanachama aliyethibitishwa anapata kinahesabiwa pia."
+          "text": "Uaminifu hutoka kwa dhamana unapojiunga, kutokana na biashara zilizokamilika, na kutokana na uaminifu ambao msimamizi amekupa. Katika jumuiya inayowathibitisha wanachama wake, kuthibitishwa kunakupa kikomo cha juu zaidi cha mkopo, si beji ya juu zaidi: beji yako huhesabu tu kile ulichofanya, kwa hivyo haionyeshi kamwe kuwa umethibitishwa."
         },
         {
           "type": "h2",

@@ -113,6 +113,7 @@ export const SUITES = [
     'test-derived-enterprise-floor',
     'test-known-floor-http',
     'test-known-floor-default',
+    'test-enterprise-known-backing-hidden',
     'test-known-pledge-counted-once',
     'test-boot-drift-count-moves-nothing',
     'test-badge-earned-only-http',

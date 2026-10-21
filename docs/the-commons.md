@@ -409,6 +409,21 @@ available_to_back(keeper) = earnedCredit(keeper) − Σ backing already pledged 
   If the shed is at −80, that 80 stays until inventory sells or another keeper pledges cover.
 - Total capacity traceable to one member is therefore capped at `2 × earnedCredit` — their own floor
   plus their pledged backing — no matter how many enterprises they join.
+- **A pledge from a keeper's known grant is visible as one total, never by name** (Marty, 2026-10-21:
+  "Hide the names"). Only a member the admins confirmed has a known grant, and a confirmation stays
+  private, so members read every known pledge to an enterprise folded into one line with no keeper;
+  each keeper's backing beside it is their named pledges only. The node's owner and admins, who decided
+  the confirmations, read whose each one is. A keeper's join pledge is read the same way: the other
+  keepers, in the objection window and after, and the lead once the request has closed, see only its
+  named part. The lead or sole keeper deciding an open request sees it whole, because they decide on it.
+  What folding cannot hide: the one total moves by a keeper's known part at the moment that keeper
+  appears in the keepers list (or leaves it), so anyone who read the enterprise just before can tell
+  that keeper's known part; so can the lead who read their open request. An enterprise with one keeper
+  shows that keeper's known part as its whole folded total. Nor can it hide a keeper's own pledge that
+  is part earned, part known: a top-up past their earned credit adds a named row, dated now, as the
+  total rises by the rest, and only a confirmed keeper can pledge past their earned credit. A release
+  past their known part pledges their named rest again, dated now, as the total drops. A release
+  inside their known part moves the total alone: their named pledges keep their ids and dates.
 
 **Rule 4 — the enterprise fails, not the keeper's household.** If an enterprise defaults, its own
 credit freezes (floor → 0; it can still *receive*, so it can trade its way back). Its keepers are

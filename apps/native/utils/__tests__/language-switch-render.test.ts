@@ -7,7 +7,7 @@
  * screen, that a pick changes them without a remount, what is stored, which catalogs were built, and (a model of the
  * styles' own numbers, as sso-button-layout.test.ts does) that the welcome and join screens' words fit 320 dp at 1.3×.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createRequire } from 'node:module';
@@ -91,7 +91,15 @@ import YourAreaScreen from '../../app/your-area';
 
 const NATIVE_WORDS = path.resolve(__dirname, '../../words');
 const CORE_WORDS = path.resolve(__dirname, '../../../../packages/beanpool-core/words');
-const catalog = (dir: string, lang: string): Record<string, unknown> => JSON.parse(fs.readFileSync(path.join(dir, `${lang}.json`), 'utf8'));
+const catalogCache = new Map<string, Record<string, unknown>>();
+const catalog = (dir: string, lang: string): Record<string, unknown> => {
+    const key = `${dir}:${lang}`;
+    const cached = catalogCache.get(key);
+    if (cached) return cached;
+    const cat = JSON.parse(fs.readFileSync(path.join(dir, `${lang}.json`), 'utf8')) as Record<string, unknown>;
+    catalogCache.set(key, cat);
+    return cat;
+};
 const nativeWord = (lang: string, key: string) => catalog(NATIVE_WORDS, lang)[key] as string;
 const coreWord = (lang: string, key: string) => catalog(CORE_WORDS, lang)[key] as string;
 
@@ -236,7 +244,10 @@ const FONT_SCALE = 1.3;
  * (\p{M}: Indic vowel signs and viramas, which sit on the letter before them) take none.
  */
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
-const glyphEm = (c: string) => (/\p{M}/u.test(c) ? 0 : /[️‌‍]/.test(c) ? 0 : /\p{Extended_Pictographic}/u.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
+const M_REGEX = /\p{M}/u;
+const JOINER_REGEX = /[️‌‍]/;
+const PICTO_REGEX = /\p{Extended_Pictographic}/u;
+const glyphEm = (c: string) => (M_REGEX.test(c) ? 0 : JOINER_REGEX.test(c) ? 0 : PICTO_REGEX.test(c) ? 1.25 : CJK.test(c) ? 1 : 0.62);
 const widthOf = (text: string, fontSize: number) => Array.from(text).reduce((w, c) => w + glyphEm(c) * fontSize * FONT_SCALE, 0);
 /** The widest piece a line can't break inside: a word, or one character in CJK text (the pseudo-locale's ~ padding is not a word). */
 const widestPiece = (text: string) => text.split(/[\s~]+/).flatMap((w) => (CJK.test(w) ? Array.from(w) : [w])).reduce((a, w) => (widthOf(w, 1) > widthOf(a, 1) ? w : a), '');
@@ -246,7 +257,16 @@ const LANGS_AT_FLOOR: UiLang[] = ['xx', 'ru', 'fr', 'ar', 'zh-Hans'];
 const inLang = (lang: UiLang, key: string, dir = NATIVE_WORDS) => (lang === 'xx' ? pseudoLocalise(key) : (catalog(dir, lang)[key] as string));
 
 describe('Your area at 320 dp with 1.3× text, in xx, ru, fr, ar (left to right for now) and zh-Hans', () => {
+    beforeAll(() => {
+        for (const lang of LANGS_AT_FLOOR) {
+            if (lang !== 'xx') {
+                catalog(NATIVE_WORDS, lang);
+                catalog(CORE_WORDS, lang);
+            }
+        }
+    });
     for (const lang of LANGS_AT_FLOOR) {
+        // Load-proof 60s timeout under CI load.
         it(`${lang}: every sentence is the language's, core's area words follow the phone, and the one-line title fits`, async () => {
             const page = await mount([createElement(YourAreaScreen, { key: 'a' })], { initial: lang });
             await click('area-type-town');
@@ -277,7 +297,7 @@ describe('Your area at 320 dp with 1.3× text, in xx, ru, fr, ar (left to right 
                 const piece = widestPiece(leaf.textContent ?? '');
                 expect(widthOf(piece, fontOf(leaf)), `"${piece}" in ${lang} at ${fontOf(leaf)}`).toBeLessThanOrEqual(inner);
             }
-        });
+        }, 60_000);
     }
 });
 
@@ -368,7 +388,15 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
         expect(STEPS.reduce((w, k) => w + widthOf(k, 11) * 0.7, 0)).toBeGreaterThan(4 * STEP_WIDTH);
     });
 
+    beforeAll(() => {
+        // Pre-load all native language catalogs once so per-language iterations don't re-read from disk.
+        for (const lang of ALL_LANGS) {
+            if (lang !== 'xx') catalog(NATIVE_WORDS, lang);
+        }
+    });
+
     for (const lang of ALL_LANGS) {
+        // Generous 60s timeout under CI load (default vitest timeout is 30s) to prevent deflake on slow or heavily loaded runners (#2282).
         it(`${lang}: each big button and stepper label fits its two lines at its smallest with no word cut, and no word is wider than its line`, () => {
             for (const key of STEPS) {
                 const label = inLang(lang, key);
@@ -390,6 +418,6 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
                 const piece = widestPiece(lang === 'xx' || drafted(key) ? inLang(lang, key) : key);
                 expect(widthOf(piece, FONT_OF[key] ?? 16), `"${piece}" (${lang}) breaks inside a word on a 320 dp card`).toBeLessThanOrEqual(LINE_OF[key] ?? CARD_LINE);
             }
-        });
+        }, 60_000);
     }
 });

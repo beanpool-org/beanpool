@@ -413,7 +413,13 @@ available_to_back(keeper) = earnedCredit(keeper) − Σ backing already pledged 
   "Hide the names"). Only a member the admins confirmed has a known grant, and a confirmation stays
   private, so members read every known pledge to an enterprise folded into one line with no keeper;
   each keeper's backing beside it is their named pledges only. The node's owner and admins, who decided
-  the confirmations, read whose each one is.
+  the confirmations, read whose each one is. A keeper's join pledge is read the same way: the other
+  keepers, in the objection window and after, and the lead once the request has closed, see only its
+  named part. The lead or sole keeper deciding an open request sees it whole, because they decide on it.
+  What folding cannot hide: the one total moves by a keeper's known part at the moment that keeper
+  appears in the keepers list (or leaves it), so anyone who read the enterprise just before can tell
+  that keeper's known part; so can the lead who read their open request. An enterprise with one keeper
+  shows that keeper's known part as its whole folded total.
 
 **Rule 4 — the enterprise fails, not the keeper's household.** If an enterprise defaults, its own
 credit freezes (floor → 0; it can still *receive*, so it can trade its way back). Its keepers are

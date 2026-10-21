@@ -187,15 +187,18 @@ export async function request<T>(method: string, path: string, body?: any, signa
 /**
  * A signed request as `request` makes it, with the node's answer handed back as it came, refusals included: for a caller
  * that reads a refusal's own fields (a 409's `current` and `roster`), the group chat keyring (lib/group-chat-keys.ts).
+ * `signal` lets the caller give up on it (the tool copy's, at its answer limit); without one, nothing changes.
  */
-export async function signedFetch(method: string, path: string, body?: unknown): Promise<Response> {
+export async function signedFetch(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
     const bodyString = body === undefined ? '' : JSON.stringify(body);
     const headers: Record<string, string> = { 'Content-Type': 'application/json', ...languageHeaders(getNodeApiUrl()) };
     const identity = await loadIdentity();
     if (identity && identity.privateKey) {
         Object.assign(headers, await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
     }
-    return fetch(`${getNodeApiUrl()}${path}`, { method, cache: 'no-cache', headers, ...(body === undefined ? {} : { body: bodyString }) });
+    return fetch(`${getNodeApiUrl()}${path}`, {
+        method, cache: 'no-cache', headers, ...(body === undefined ? {} : { body: bodyString }), ...(signal ? { signal } : {}),
+    });
 }
 
 /** How the group chat keyring reaches this node: signed as this browser's member. */

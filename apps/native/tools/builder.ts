@@ -13,10 +13,7 @@ import {
 import { getPost, pausePost, resumePost } from '../utils/db';
 import { keepPicked, openNeedComposer } from './doors';
 import { removeToolPhoto, toolPhotoUri } from './photos';
-import { NODE_COPY_BUILT } from './store';
 import { communityKey } from './community';
-
-export { NODE_COPY_BUILT };
 
 /** What the route knows when it builds a tool's host. */
 export interface PhoneHostContext<D> {
@@ -28,6 +25,8 @@ export interface PhoneHostContext<D> {
     now(): number;
     /** The List sheet, opened with the tool's draft (the route draws it). */
     openListSheet(draft: ToolOfferDraft): void;
+    /** Whether the private copy on the node is on for this tool here (its setting, on a server that keeps copies). */
+    nodeCopy?: boolean;
 }
 
 /**
@@ -63,7 +62,7 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
             resume: async (id) => { await mustBeOwnOffer(owner, id); await resumePost(id); },
             status: async (id) => postStatus(await ownOffer(owner, id)),
         },
-        nodeCopy: { on: NODE_COPY_BUILT },
+        nodeCopy: { on: ctx.nodeCopy ?? false },
     };
 }
 

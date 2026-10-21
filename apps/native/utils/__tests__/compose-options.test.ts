@@ -5,8 +5,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
     NEW_POST_TYPES,
+    TOOL_DRAFT_FRESH_MS,
     clearDraftToolMarker,
     composeCarriesPin,
     composeOptionA11yLabel,
@@ -152,21 +155,47 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
         savedAt: 123456789,
     };
 
-    it('a tool draft opens with no question and keeps its prefill', () => {
-        // Recognition as a tool draft
+    /**
+     * map.tsx's own restoreDraft (read from the file, never edited), run on a draft as it comes back from storage, with
+     * its setters recording what the composer is given.
+     */
+    function restoredByMap(stored: string): Record<string, unknown> {
+        const map = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/map.tsx'), 'utf8');
+        const start = map.indexOf('const restoreDraft = (d: any) => {');
+        expect(start).toBeGreaterThan(-1);
+        const source = map.slice(start, map.indexOf('\n    };', start) + '\n    };'.length).replace('(d: any)', '(d)').replace(/^const restoreDraft = /, '');
+        const setters = [...new Set(source.match(/\bset[A-Z]\w*/g) ?? [])];
+        const state: Record<string, unknown> = {};
+        const restore = new Function(...setters, `return ${source.replace(/;\s*$/, '')}`)(...setters.map((s) => (v: unknown) => { state[s.slice(3)] = v; }));
+        restore(JSON.parse(stored));
+        return state;
+    }
+
+    it('a tool draft opens with no question, and the composer is given its prefill', () => {
         expect(isToolDraft(toolDraft)).toBe(true);
+        // As openComposer reads it: from storage, just after the door wrote it.
+        const stored = JSON.stringify(toolDraft);
+        expect(decideDraftOpen(JSON.parse(stored), ANCHOR, toolDraft.savedAt + 2_000)).toBe('open-tool');
+        expect(restoredByMap(stored)).toEqual({
+            PostType: 'offer', PostCategory: 'tools', PostTitle: 'Lawnmower for loan', PostDescription: 'Available all weekend, sharp blade.',
+            PostCredits: '5', PostPriceType: 'daily', PostRepeatable: false, PostCashAlsoNeeded: false, PostPhotos: ['data:image/jpeg;base64,abc'],
+            PostLat: null, PostLng: null, PostReach: 'local', PostReachPeers: [],
+        });
+    });
 
-        // openComposer decision: opens straight away
-        const decision = decideDraftOpen(toolDraft, ANCHOR);
-        expect(decision).toBe('open-tool');
-
-        // All prefilled fields are intact
-        expect(toolDraft.postTitle).toBe('Lawnmower for loan');
-        expect(toolDraft.postDescription).toBe('Available all weekend, sharp blade.');
-        expect(toolDraft.postCredits).toBe('5');
-        expect(toolDraft.postPriceType).toBe('daily');
-        expect(toolDraft.postPhotos).toEqual(['data:image/jpeg;base64,abc']);
-        expect(toolDraft.postCategory).toBe('tools');
+    it("a tool draft its door didn't open (the open stopped at the profile check) asks on a later +, as any unfinished post", () => {
+        // The door writes the draft immediately before it opens the composer's route: the composer reads it within seconds.
+        expect(decideDraftOpen(toolDraft, ANCHOR, toolDraft.savedAt)).toBe('open-tool');
+        expect(decideDraftOpen(toolDraft, ANCHOR, toolDraft.savedAt + TOOL_DRAFT_FRESH_MS)).toBe('open-tool');
+        // Later: the member went to set up their profile and came back to the +, or tapped it the next day.
+        expect(decideDraftOpen(toolDraft, ANCHOR, toolDraft.savedAt + TOOL_DRAFT_FRESH_MS + 1)).toBe('ask-unfinished');
+        expect(decideDraftOpen(toolDraft, ANCHOR, toolDraft.savedAt + 86_400_000)).toBe('ask-unfinished');
+        // A time that isn't one, or one ahead of this phone's clock (the clock moved back): asked, never opened unasked.
+        expect(decideDraftOpen({ ...toolDraft, savedAt: undefined }, ANCHOR, toolDraft.savedAt)).toBe('ask-unfinished');
+        expect(decideDraftOpen({ ...toolDraft, savedAt: 'soon' }, ANCHOR, toolDraft.savedAt)).toBe('ask-unfinished');
+        expect(decideDraftOpen(toolDraft, ANCHOR, toolDraft.savedAt - 1)).toBe('ask-unfinished');
+        // Within two minutes, as the window is said to be.
+        expect(TOOL_DRAFT_FRESH_MS).toBeLessThanOrEqual(120_000);
     });
 
     it('a member’s own unfinished draft still asks', () => {
@@ -215,7 +244,6 @@ describe('saved draft decisions for openComposer (tool-draft-composer)', () => {
 
     it('isToolDraft strictly requires source: "tool" and a non-empty tool id', () => {
         expect(isToolDraft({ source: 'tool', tool: 'my-tool' })).toBe(true);
-        expect(isToolDraft({ source: 'tool', toolId: 'my-tool' })).toBe(true);
         expect(isToolDraft({ source: 'other', tool: 'my-tool' })).toBe(false);
         expect(isToolDraft({ source: 'tool', tool: '' })).toBe(false);
         expect(isToolDraft({ source: 'tool' })).toBe(false);

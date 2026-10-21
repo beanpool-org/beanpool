@@ -1,7 +1,8 @@
 /**
  * The tool's one document (docs/tools-template.md step 3): its shape, its empty value and `read`, the one migration
- * function. Plain JSON with `v` at the top, at most 64 KB, kept on the phone with a private copy on the node. Photos are
- * refs to files on the phone, never bytes in here. When the shape changes: raise SCAFFOLD_DOC_VERSION, teach read() the
+ * function. Plain JSON with `v` at the top, at most 64 KB, kept on the phone, and with a private copy on the node once the
+ * manifest's permissions include 'node-copy' (a copy taken from the node is read through read() too). Photos are refs to
+ * files on the phone, never bytes in here. When the shape changes: raise SCAFFOLD_DOC_VERSION, teach read() the
  * old one, and add a stored value of the new version to fixtures.ts (keep every old one).
  */
 

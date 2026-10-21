@@ -3,14 +3,15 @@
  * one row of `tool_docs` (tools/schema.ts) in the community's SQLite file, and its photos, files under the app's own
  * document directory at `tools/<community>/<owner>/<tool>/<ref>.jpg` (800 px, the Offer form's downsize), never inside the document
  * and never on the node. Beside them, the host's own settings for each tool (the backup toggle, which reminders are on,
- * which door the member took, whether the Home card was offered) in app storage under `beanpool_tool:`.
+ * which door the member took, whether the Home card was offered) in app storage under `beanpool_tool:`. The row's
+ * `synced_at` and the backup toggle are the node copy's (tools/node-copy.ts, slice T0.4).
  *
  * All data is kept per community, owner and tool (PR #2267 findings 2 + 3). "Remove my data" in one community removes only
  * that community's document, photos, reminders and settings. Leaving or deleting at a community removes all its documents, photos,
  * reminders and settings. An account leaving the phone takes all of it (wipeToolDataOnThisPhone).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TOOL_LIMITS, toolDocBytes, type ToolManifest } from '@beanpool/core';
+import { TOOL_LIMITS, toolDocBytes, type ToolLocalCopy, type ToolManifest } from '@beanpool/core';
 import { getDb } from '../utils/db';
 import { cancelToolReminders, type ToolNotifications } from './reminders';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from './schema';
@@ -18,12 +19,13 @@ import { communityKey } from './community';
 
 export { TOOL_SETTINGS_PREFIX, communityKey };
 
-/** The node copy (member_tool_state) is switched on in slice T0.4: until then a tool's document is on this phone only. */
-export const NODE_COPY_BUILT = false;
-
 /** The host's own settings for one tool, for one owner. Absent fields are the defaults. */
 export interface ToolSettings {
-    /** "Keep a private copy on your community's server": on by default everywhere (Marty, 19 Oct). Used from T0.4. */
+    /**
+     * "Keep a private copy on your community's server": on by default everywhere (Marty, 19 Oct), for a tool that asks
+     * for `node-copy`. The member's choice is the node's; this is the phone's copy of it, written only once the node has
+     * answered (tools/node-copy.ts), never by a whole-settings save.
+     */
     nodeCopy?: boolean;
     /** Each reminder's switch, by its id; absent is the manifest's `defaultOn`. */
     reminders?: Record<string, boolean>;
@@ -59,6 +61,13 @@ export async function writeToolSettings(owner: string, tool: string, next: ToolS
     const anchorUrl = url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
     const community = communityKey(anchorUrl);
     await AsyncStorage.setItem(settingsKey(community, owner, tool), JSON.stringify(next));
+}
+
+/** The settings with `patch` over what is stored now: two writers (the screen's, the node copy's) never undo each other. */
+export async function patchToolSettings(owner: string, tool: string, patch: ToolSettings, url?: string | null): Promise<ToolSettings> {
+    const next = { ...await readToolSettings(owner, tool, url), ...patch };
+    await writeToolSettings(owner, tool, next, url);
+    return next;
 }
 
 /** Whether a reminder is on: the member's switch, else the manifest's default. */
@@ -101,6 +110,14 @@ export async function readToolDoc<D>(owner: string, manifest: ToolManifest<D>): 
         raw = null;
     }
     return { doc: manifest.doc.read(raw), stored: true };
+}
+
+/** The row as the node copy reconciles it (tools/node-copy.ts): its body as kept, its write time and its last sync. */
+export async function readToolCopy(owner: string, tool: string): Promise<ToolLocalCopy | null> {
+    const db = await getDb();
+    const row = await db.getFirstAsync<{ body: string; updated_at: string; synced_at: string | null }>(
+        'SELECT body, updated_at, synced_at FROM tool_docs WHERE owner = ? AND tool = ?', [owner, tool]);
+    return row ? { body: row.body, updatedAt: row.updated_at, syncedAt: row.synced_at ?? null } : null;
 }
 
 /**

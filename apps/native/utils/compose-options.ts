@@ -101,8 +101,22 @@ export function parseNewPostParam(value: string | undefined | null): 'chooser' |
 export function isToolDraft(draft: unknown): boolean {
     if (!draft || typeof draft !== 'object') return false;
     const d = draft as Record<string, unknown>;
-    const tool = d.tool ?? d.toolId;
-    return d.source === 'tool' && typeof tool === 'string' && tool.trim().length > 0;
+    return d.source === 'tool' && typeof d.tool === 'string' && d.tool.trim().length > 0;
+}
+
+/**
+ * How long after a tool door wrote its draft the composer opens it without asking. The door writes it immediately
+ * before it opens the composer's route, and the composer reads it as that route opens: phone storage only, no network,
+ * so seconds even when the map tab mounts cold on an old Android. A minute covers that with room to spare. A tool draft
+ * older than that was not opened by its door (the open stopped at the profile check, and the member came back to the +
+ * later), so it is the member's unfinished post, and is asked about as one.
+ */
+export const TOOL_DRAFT_FRESH_MS = 60_000;
+
+/** A tool draft its door has only just written (its `savedAt` this phone's time, at most a minute ago). */
+function freshToolDraft(draft: Record<string, unknown>, now: number): boolean {
+    const at = draft.savedAt;
+    return typeof at === 'number' && Number.isFinite(at) && now >= at && now - at <= TOOL_DRAFT_FRESH_MS;
 }
 
 /**
@@ -113,7 +127,6 @@ export function clearDraftToolMarker<T extends Record<string, unknown>>(draft: T
     const next = { ...draft };
     delete next.source;
     delete next.tool;
-    delete next.toolId;
     return next;
 }
 
@@ -134,13 +147,14 @@ export type DraftOpenDecision = 'open-tool' | 'ask-unfinished' | 'start-fresh';
 
 /**
  * What `openComposer` in map.tsx should do with a saved draft:
- * - `open-tool` — the draft came from a tool door, open it immediately without asking
- * - `ask-unfinished` — the draft is a member's unfinished post, ask whether to continue or start fresh
+ * - `open-tool` — a tool door has just written the draft and opened the composer: open it without asking
+ * - `ask-unfinished` — the draft is a member's unfinished post (or a tool's its door didn't open, {@link TOOL_DRAFT_FRESH_MS}),
+ *   ask whether to continue or start fresh
  * - `start-fresh` — no restorable draft for this community, start a fresh composer
  */
-export function decideDraftOpen(draft: unknown, anchorUrl: string | null): DraftOpenDecision {
+export function decideDraftOpen(draft: unknown, anchorUrl: string | null, now: number = Date.now()): DraftOpenDecision {
     if (!isRestorableDraft(draft, anchorUrl)) return 'start-fresh';
-    if (isToolDraft(draft)) return 'open-tool';
+    if (isToolDraft(draft) && freshToolDraft(draft as Record<string, unknown>, now)) return 'open-tool';
     return 'ask-unfinished';
 }
 

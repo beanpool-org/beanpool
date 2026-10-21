@@ -34,12 +34,14 @@ interface Props {
     existing: ReadonlySet<string>;
     /** Already invited to the group: shown with clock icon and disabled (damo-1021). */
     invited?: ReadonlySet<string>;
+    /** Asked to join the group (pending approval): shown disabled. */
+    pending?: ReadonlySet<string>;
     myPubkey?: string | null;
     onClose: () => void;
     onInvited?: (count: number) => void;
 }
 
-export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invited, myPubkey, onClose, onInvited }: Props) {
+export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invited, pending, myPubkey, onClose, onInvited }: Props) {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8, 0.92);
@@ -130,6 +132,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
     }));
 
     const toggle = (pk: string) => {
+        if (existing.has(pk) || invited?.has(pk) || pending?.has(pk)) return;
         hapticTick();
         setPicked(prev => {
             const next = new Set(prev);
@@ -205,20 +208,23 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
                         renderItem={({ item }) => {
                             const already = existing.has(item.publicKey);
                             const isInvited = !!invited?.has(item.publicKey);
-                            const disabled = already || isInvited;
-                            const on = already || picked.has(item.publicKey);
+                            const isPending = !!pending?.has(item.publicKey);
+                            const disabled = already || isInvited || isPending;
+                            const on = already || (!isInvited && !isPending && picked.has(item.publicKey));
                             return (
                                 <Pressable
                                     style={styles.row}
                                     disabled={disabled}
                                     onPress={() => toggle(item.publicKey)}
                                     accessibilityRole="checkbox"
-                                    accessibilityState={{ checked: already ? true : isInvited ? false : on, disabled }}
+                                    accessibilityState={{ checked: already ? true : isInvited || isPending ? false : on, disabled }}
                                     accessibilityLabel={
                                         already
                                             ? t('{name}, already in the group', { name: item.callsign })
                                             : isInvited
                                             ? t('{name}, already invited', { name: item.callsign })
+                                            : isPending
+                                            ? t('{name}, asked to join', { name: item.callsign })
                                             : item.callsign
                                     }
                                 >
@@ -226,6 +232,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
                                     <Text style={styles.name} numberOfLines={1}>{item.callsign}</Text>
                                     {already && <Text style={styles.already}>{t('In the group')}</Text>}
                                     {isInvited && <Text style={styles.already}>{t('Invited')}</Text>}
+                                    {isPending && <Text style={styles.already}>{t('Asked to join')}</Text>}
                                     <MaterialCommunityIcons
                                         name={
                                             already
@@ -237,7 +244,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
                                                 : 'checkbox-blank-circle-outline'
                                         }
                                         size={26}
-                                        color={already || isInvited ? colors.text.muted : on ? colors.brand.primary : colors.border.strong}
+                                        color={disabled ? colors.text.muted : on ? colors.brand.primary : colors.border.strong}
                                     />
                                 </Pressable>
                             );

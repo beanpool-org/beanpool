@@ -419,7 +419,11 @@ available_to_back(keeper) = earnedCredit(keeper) − Σ backing already pledged 
   What folding cannot hide: the one total moves by a keeper's known part at the moment that keeper
   appears in the keepers list (or leaves it), so anyone who read the enterprise just before can tell
   that keeper's known part; so can the lead who read their open request. An enterprise with one keeper
-  shows that keeper's known part as its whole folded total.
+  shows that keeper's known part as its whole folded total. Nor can it hide a keeper's own pledge that
+  is part earned, part known: a top-up past their earned credit adds a named row, dated now, as the
+  total rises by the rest, and only a confirmed keeper can pledge past their earned credit. A release
+  past their known part pledges their named rest again, dated now, as the total drops. A release
+  inside their known part moves the total alone: their named pledges keep their ids and dates.
 
 **Rule 4 — the enterprise fails, not the keeper's household.** If an enterprise defaults, its own
 credit freezes (floor → 0; it can still *receive*, so it can trade its way back). Its keepers are

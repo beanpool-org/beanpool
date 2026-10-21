@@ -827,7 +827,6 @@ async function main(): Promise<void> {
                 }
                 const res = await call(m, fill(p) + q, h, body);
                 if (p === '/api/local/admin/2fa/disable') {
-                    console.log(`measure 2fa/disable: who="${who}", status=${res.status}, body=${JSON.stringify(res.json)}`);
                     if (who === 'an owner key session (phone, just unlocked)') {
                         assert(res.status === 200, `5. 2fa/disable with owner phone session must return 200 (got ${res.status} ${res.text})`);
                     }

@@ -281,6 +281,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [editingMessage, setEditingMessage] = useState<ApiMessage | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const [activeEditNoticeId, setActiveEditNoticeId] = useState<string | null>(null);
+    // Set by the expired Edit button, read once by the notice: focus moves to it on that press only, never on a later render
+    const focusEditNoticeRef = useRef(false);
     const [reportTarget, setReportTarget] = useState<{ pubkey: string; name: string } | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
@@ -2246,8 +2248,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     role="status"
                                                     tabIndex={-1}
                                                     ref={(el) => {
-                                                        // Only focus if focus dropped to body when the button unmounted
-                                                        if (el && document.activeElement === document.body) {
+                                                        if (el && focusEditNoticeRef.current) {
+                                                            focusEditNoticeRef.current = false;
                                                             el.focus();
                                                         }
                                                     }}
@@ -2267,6 +2269,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     type="button"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
+                                                        focusEditNoticeRef.current = activeEditNoticeId !== msg.id;
                                                         setActiveEditNoticeId(activeEditNoticeId === msg.id ? null : msg.id);
                                                     }}
                                                     style={{

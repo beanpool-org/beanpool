@@ -1380,6 +1380,13 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
             expect(document.activeElement).toBe(textarea);
             fireEvent.change(textarea, { target: { value: 'drafting next message' } });
             expect(document.activeElement).toBe(textarea);
+
+            // Focus falling to <body> later (the composer is disabled while a message sends) must not pull it back to the notice
+            textarea.blur();
+            expect(document.activeElement).toBe(document.body);
+            fireEvent.change(textarea, { target: { value: 'a re-render while focus is on body' } });
+            expect(sentence).toBeInTheDocument();
+            expect(document.activeElement).toBe(document.body);
         });
     });
 });

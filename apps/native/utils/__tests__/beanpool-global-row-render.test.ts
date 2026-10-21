@@ -41,6 +41,8 @@ vi.mock('react-native', () => {
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityState?.selected) attrs['aria-selected'] = 'true';
+        if (accessibilityState?.disabled !== undefined) attrs['aria-disabled'] = String(accessibilityState.disabled);
+        if (accessibilityState?.busy !== undefined) attrs['aria-busy'] = String(accessibilityState.busy);
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         const style = typeof props.style === 'function' ? props.style({ pressed: false }) : props.style;
         const flat = Object.assign({}, ...[style].flat(3).filter((x) => x && typeof x === 'object'));
@@ -759,6 +761,8 @@ describe('guest view first: what a visit asks, writes and never touches (utils/g
         await tap();
         expect(line()).toBe('Checking…');
         expect(row().getAttribute('data-disabled')).toBe('true');
+        expect(row().getAttribute('aria-disabled')).toBe('true');
+        expect(row().getAttribute('aria-busy')).toBe('true');
         expect(moved.to).toEqual([]);
         expect(nav.pushed).toEqual([]);
     });

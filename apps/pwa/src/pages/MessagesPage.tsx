@@ -281,6 +281,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [editingMessage, setEditingMessage] = useState<ApiMessage | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
     const [activeEditNoticeId, setActiveEditNoticeId] = useState<string | null>(null);
+    // Set by the expired Edit button, read once by the notice: focus moves to it on that press only, never on a later render
+    const focusEditNoticeRef = useRef(false);
     const [reportTarget, setReportTarget] = useState<{ pubkey: string; name: string } | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
@@ -2243,12 +2245,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         {editClosed && (
                                             activeEditNoticeId === msg.id ? (
                                                 <span
+                                                    role="status"
+                                                    tabIndex={-1}
+                                                    ref={(el) => {
+                                                        if (el && focusEditNoticeRef.current) {
+                                                            focusEditNoticeRef.current = false;
+                                                            el.focus();
+                                                        }
+                                                    }}
                                                     style={{
                                                         fontSize: '0.75rem',
                                                         lineHeight: 1.3,
                                                         padding: '4px 6px',
                                                         color: isMe ? 'var(--bp-accent-on)' : 'var(--text-muted)',
                                                         whiteSpace: 'normal',
+                                                        outline: 'none',
                                                     }}
                                                 >
                                                     {t('You can edit a message for 15 minutes after sending it.')}
@@ -2258,6 +2269,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                     type="button"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
+                                                        focusEditNoticeRef.current = activeEditNoticeId !== msg.id;
                                                         setActiveEditNoticeId(activeEditNoticeId === msg.id ? null : msg.id);
                                                     }}
                                                     style={{

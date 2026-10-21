@@ -34,7 +34,7 @@ vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert', switch: 'switch', checkbox: 'checkbox' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
     const el = (tag: string) => function Host(props: Record<string, any>) {
-        const { children, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, testID, placeholder, numberOfLines, adjustsFontSizeToFit, minimumFontScale, onLayout, value, onChangeText, disabled } = props;
+        const { children, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, testID, placeholder, numberOfLines, adjustsFontSizeToFit, minimumFontScale, onLayout, value, onChangeText, disabled, accessibilityState } = props;
         useEffect(() => { onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 288, height: 40 } } }); }, []);
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
@@ -43,6 +43,8 @@ vi.mock('react-native', () => {
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityHint) attrs['data-hint'] = accessibilityHint;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
+        if (accessibilityState?.disabled !== undefined) attrs['aria-disabled'] = String(accessibilityState.disabled);
+        if (accessibilityState?.busy !== undefined) attrs['aria-busy'] = String(accessibilityState.busy);
         if (placeholder) attrs.placeholder = placeholder;
         if (numberOfLines) attrs['data-lines'] = String(numberOfLines);
         if (adjustsFontSizeToFit) attrs['data-shrinks'] = 'true';
@@ -254,9 +256,9 @@ vi.mock('../../services/pillar-sync', () => ({
 }));
 vi.mock('../use-global-entry', () => ({ useGlobalEntry: () => 'join' }));
 // The guest visit (utils/use-global-guest-visit.ts): what Saved communities' global button starts, recorded.
-const visits = vi.hoisted(() => ({ n: 0, pushed: [] as unknown[] }));
+const visits = vi.hoisted(() => ({ n: 0, pushed: [] as unknown[], visiting: false }));
 vi.mock('../use-global-guest-visit', () => ({
-    useGlobalGuestVisit: () => ({ visit: async () => { visits.n++; return { kind: 'guest' }; }, visiting: false }),
+    useGlobalGuestVisit: () => ({ visit: async () => { visits.n++; return { kind: 'guest' }; }, get visiting() { return visits.visiting; } }),
 }));
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
@@ -289,6 +291,7 @@ beforeEach(() => {
     alerts.buttons.length = 0;
     visits.n = 0;
     visits.pushed.length = 0;
+    visits.visiting = false;
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: { beans: true, escrow: true, nearbyListings: { radiusKm: 10, max: 500 } }, checkedAt: new Date().toISOString() } }));
@@ -715,5 +718,17 @@ describe('Saved communities: the global community, guest view first (Marty, 21 O
         await click(row('🌍 Join the global community', 'en'), 'Join the global community');
         expect(visits.pushed).toEqual(['/join-global']);
         expect(visits.n).toBe(0);
+    });
+
+    it('while visiting: has an accessible name, busy and disabled in accessibilityState', async () => {
+        visits.visiting = true;
+        await renderIn('en');
+        await click(row('Saved communities', 'en'), 'Saved communities');
+        await settle();
+        const button = host.querySelector('[data-testid="settings-global-visit"]');
+        expect(button).not.toBeNull();
+        expect(button?.getAttribute('aria-label')).toBe('Loading');
+        expect(button?.getAttribute('aria-busy')).toBe('true');
+        expect(button?.getAttribute('aria-disabled')).toBe('true');
     });
 });

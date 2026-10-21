@@ -280,6 +280,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     const [replyToMessage, setReplyToMessage] = useState<ApiMessage | null>(null);
     const [editingMessage, setEditingMessage] = useState<ApiMessage | null>(null);
     const [activeEmojiPickerId, setActiveEmojiPickerId] = useState<string | null>(null);
+    const [activeEditNoticeId, setActiveEditNoticeId] = useState<string | null>(null);
     const [reportTarget, setReportTarget] = useState<{ pubkey: string; name: string } | null>(null);
     const [blocklistVersion, setBlocklistVersion] = useState(0);
     const draftRef = useRef<HTMLTextAreaElement>(null);
@@ -393,7 +394,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     }, [draft]);
 
     useEffect(() => {
-        const handleGlobalClick = () => setActiveEmojiPickerId(null);
+        const handleGlobalClick = () => {
+            setActiveEmojiPickerId(null);
+            setActiveEditNoticeId(null);
+        };
         window.addEventListener('click', handleGlobalClick);
         return () => window.removeEventListener('click', handleGlobalClick);
     }, []);
@@ -1167,6 +1171,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         setChatRefusal(null);
         setDragActive(false);
         dragDepthRef.current = 0;
+        setActiveEditNoticeId(null);
     }, [activeConv?.id]);
 
     // What decryptMessage() puts in place of a body it could not read. A photo's
@@ -1943,12 +1948,6 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const readByPeer = isMe && isDm && !!activeConv?.peerLastReadAt &&
                             new Date(msg.timestamp).getTime() <= new Date(activeConv.peerLastReadAt).getTime();
                         const isEdited = !!msg.editedAt;
-                        const canEdit = isMe && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
-                            (!isGroupChat || openGroup?.answer?.canPost !== false) &&
-                            (Date.now() - new Date(msg.timestamp).getTime() <= MESSAGE_EDIT_WINDOW_MS);
-                        const editClosed = isMe && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
-                            (!isGroupChat || openGroup?.answer?.canPost !== false) &&
-                            (Date.now() - new Date(msg.timestamp).getTime() > MESSAGE_EDIT_WINDOW_MS);
 
                         let metaObj: any = null;
                         try {
@@ -1959,6 +1958,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 }
                             }
                         } catch {}
+
+                        const isTombstone = msg.type === 'removed' || metaObj?.removed === true;
+                        const isTextEditable = isMe && !isTombstone && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
+                            (!isGroupChat || openGroup?.answer?.canPost !== false);
+                        const elapsedMs = isTextEditable ? Date.now() - new Date(msg.timestamp).getTime() : 0;
+                        const canEdit = isTextEditable && elapsedMs <= MESSAGE_EDIT_WINDOW_MS;
+                        const editClosed = isTextEditable && elapsedMs > MESSAGE_EDIT_WINDOW_MS;
 
                         const reactions: { emoji: string; author: string }[] = Array.isArray(metaObj?.reactions)
                             ? metaObj.reactions.filter((r: any) => r && typeof r === 'object' && typeof r.emoji === 'string')
@@ -2235,17 +2241,46 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             </button>
                                         )}
                                         {editClosed && (
-                                            <span
-                                                style={{
-                                                    fontSize: '0.75rem',
-                                                    lineHeight: 1.3,
-                                                    padding: '4px 6px',
-                                                    color: isMe ? 'rgba(255, 255, 255, 0.75)' : 'var(--text-muted)',
-                                                    whiteSpace: 'normal',
-                                                }}
-                                            >
-                                                {t('You can edit a message for 15 minutes after sending it.')}
-                                            </span>
+                                            activeEditNoticeId === msg.id ? (
+                                                <span
+                                                    style={{
+                                                        fontSize: '0.75rem',
+                                                        lineHeight: 1.3,
+                                                        padding: '4px 6px',
+                                                        color: isMe ? 'var(--bp-accent-on)' : 'var(--text-muted)',
+                                                        whiteSpace: 'normal',
+                                                    }}
+                                                >
+                                                    {t('You can edit a message for 15 minutes after sending it.')}
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setActiveEditNoticeId(activeEditNoticeId === msg.id ? null : msg.id);
+                                                    }}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        font: 'inherit',
+                                                        fontSize: '0.75rem',
+                                                        lineHeight: 1,
+                                                        padding: '4px 6px',
+                                                        minHeight: '24px',
+                                                        cursor: 'pointer',
+                                                        color: isMe ? '#ffffff' : 'var(--accent)',
+                                                        fontWeight: 600,
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        textDecoration: 'underline',
+                                                        textUnderlineOffset: '2px',
+                                                    }}
+                                                    aria-label={t('Edit message')}
+                                                >
+                                                    {t('Edit', undefined, 'button: edit a message')}
+                                                </button>
+                                            )
                                         )}
                                     </span>
                                 </div>

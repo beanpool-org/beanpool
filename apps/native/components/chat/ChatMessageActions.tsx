@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { CHAT_REACTION_EMOJIS, type MessageActions } from '../../utils/chat-actions';
@@ -51,11 +51,6 @@ export function ChatMessageActions({
                 <Pressable accessibilityRole="button" accessibilityLabel={t('Edit message')} style={styles.circleActionButton} onPress={onEdit}>
                     <MaterialCommunityIcons name="pencil" size={15} color={colors.text.inverse} />
                 </Pressable>
-            )}
-            {actions.editClosed && (
-                <Text style={[styles.editClosedText, { color: colors.text.muted }]}>
-                    {t('You can edit a message for 15 minutes after sending it.')}
-                </Text>
             )}
             {actions.delete && (
                 <Pressable accessibilityRole="button" accessibilityLabel={t('Delete message')} style={styles.circleActionButton} onPress={onDelete}>

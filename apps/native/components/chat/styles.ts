@@ -66,7 +66,8 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
         fontSize: 11,
         lineHeight: 14,
         color: colors.text.muted,
-        flexShrink: 1,
+        maxWidth: '85%',
+        marginTop: 4,
     },
 
     reactionPickerContainer: {

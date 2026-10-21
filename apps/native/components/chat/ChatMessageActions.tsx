@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../app/ThemeContext';
 import { CHAT_REACTION_EMOJIS, type MessageActions } from '../../utils/chat-actions';

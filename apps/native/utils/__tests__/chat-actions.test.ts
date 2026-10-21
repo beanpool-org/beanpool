@@ -16,7 +16,7 @@ import {
     canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator,
     isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary,
     shouldFollowNewMessages, shouldShowChatLoadError, showsAuthorName, threadMessageDisplayText, tombstoneText,
-    type ChatMessage, type ChatViewer,
+    type ChatMessage, type ChatViewer, type MessageActions,
 } from '../chat-actions';
 // The wording the event chat has always shown, so the two cannot drift apart unnoticed.
 import { EVENT_CHAT_REMOVED_TEXT } from '../events';

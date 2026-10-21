@@ -878,13 +878,30 @@ async function main(): Promise<void> {
         const refusedOther = (r: any) => r.answer?.status === 409 && r.answer.otherCommunity === true && r.answer.livedIn === true
             && r.answer.error === OTHER_WORDS && r.answer.command === 'beanpool restore FILE' && r.answer.fileCommunityId === made.community
             && typeof r.answer.thisCommunityId === 'string' && r.answer.thisCommunityId !== made.community;
+        const diffMoved = (r: any): string => {
+            if (!r?.before) return 'no before snapshot';
+            if (!r?.after) return 'no after snapshot';
+            const diffs: string[] = [];
+            const keys = Array.from(new Set([...Object.keys(r.before), ...Object.keys(r.after)]));
+            for (const k of keys) {
+                const b = JSON.stringify(r.before[k]);
+                const a = JSON.stringify(r.after[k]);
+                if (b !== a) {
+                    diffs.push(`${k}: before=${String(b).slice(0, 200)} after=${String(a).slice(0, 200)}`);
+                } else if (k === 'roles' && typeof r.before[k] === 'string' && r.before[k].startsWith('unreadable')) {
+                    diffs.push(`roles unreadable in both: before=${String(b).slice(0, 200)} after=${String(a).slice(0, 200)}`);
+                }
+            }
+            if (diffs.length > 0) return diffs.join(', ');
+            return `${JSON.stringify(r.after?.points)} ${JSON.stringify(r.after?.leftovers)}`;
+        };
         const nothingMoved = (r: any) => !!r.before && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after.points.length === 0 && r.after.leftovers.length === 0;
         const said = (r: any) => `${r.answer?.status} ${String(r.answer?.error ?? (r.answer?.success ? 'restored' : '')).slice(0, 110)}`;
 
         for (const who of ['the password with an earlier 2FA session', 'a password session', "the owner's computer session", 'a fresh phone hand-off', 'the password with a current code']) {
             const r = row('lived-in', `a:${who}`);
             assert(r.signIn === 200 && refusedOther(r), `S2b-a. a lived-in server, ${who}, the other community's file and its own right code: 409 otherCommunity (${said(r)})`);
-            assert(nothingMoved(r), `S2b-a. …node_roles, libp2p_key, genesis.json and local-config.json as they were; no point, nothing left (${JSON.stringify(r.after?.points)} ${JSON.stringify(r.after?.leftovers)})`);
+            assert(nothingMoved(r), `S2b-a. …node_roles, libp2p_key, genesis.json and local-config.json as they were; no point, nothing left (${diffMoved(r)})`);
         }
         const b = row('lived-in', 'b');
         assert(refusedOther(b) && nothingMoved(b), `S2b-b. the same file with no take-over bundle inside: 409, nothing moved (${said(b)})`);
@@ -908,7 +925,7 @@ async function main(): Promise<void> {
             assert(h.answer?.status === 409 && h.answer.ownRecordUnreadable === true && h.answer.error === UNREADABLE_WORDS && h.answer.thisCommunityId === null
                 && h.answer.command === 'beanpool restore FILE',
                 `S2b-h. genesis.json cannot be read, ${which === 'h-own' ? "the server's own backup" : "the other community's"}: 409 in its own words (${said(h)})`);
-            assert(nothingMoved(h), `S2b-h. …nothing moved (${JSON.stringify(h.after?.points)})`);
+            assert(nothingMoved(h), `S2b-h. …nothing moved (${diffMoved(h)})`);
         }
         const g = row('lived-in', 'a:the password with an earlier 2FA session', { NODE_PROFILE: 'global' });
         assert(refusedOther(g) && nothingMoved(g), `S2b-i. the global profile, lived-in: the other community's file is 409, nothing moved (${said(g)})`);

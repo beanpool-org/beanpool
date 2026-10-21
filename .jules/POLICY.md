@@ -939,3 +939,33 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** DELIBERATE DECISION
 - **Claim:** `useLocalSearchParams` can return `string[]`, so take `[0]` in `claim-community.tsx` and `find-community.tsx`.
 - **Why not to re-file:** a link that repeats node/code/id is ambiguous and refused on purpose (see #2118). Re-file only with a real link that produces the array AND Marty's decision.
+
+### 2026-10-22 — Vault: credentials on bulk post delete (#2334) — CLOSED, PHANTOM
+- **Category:** CLAIM FALSE
+- **Claim:** `apps/manager/src/lib/bulk-delete-posts.ts` must set `credentials: 'same-origin'` on its fetch.
+- **Why not to re-file:** `fetch` already defaults to `credentials: 'same-origin'`, and the bulk-delete route authenticates by the `X-Admin-Password` header built in `PeopleSafetySection.tsx` (`buildAdminHeaders`), not by cookies. The PR's test only asserted the key it added. No behaviour change.
+
+### 2026-10-22 — Forge: timingSafeEqual length mismatch in confirmPairingTransfer (#2338) — CLOSED, PHANTOM
+- **Category:** CLAIM FALSE
+- **Claim:** `apps/server/src/pairing-relay.ts` can throw in `crypto.timingSafeEqual` on codes of different length.
+- **Why not to re-file:** the call is guarded by `CONFIRM_CODE.test(typed) &&` (`^\d{N}$`, ASCII digits only), and `session.confirmCode` is `padStart(N, '0')`: both are exactly N bytes before `timingSafeEqual` runs, so the throw is unreachable. `test-pairing-relay.ts` already feeds a short code and gets "wrong". Forge: do not add length checks behind a fixed-length regex.
+
+### 2026-10-22 — Sentinel: bound DM conversation participants (#2340) — CLOSED, PHANTOM
+- **Category:** CLAIM FALSE
+- **Claim:** `POST /api/messages/conversation` needs a cap on the participants array.
+- **Why not to re-file:** the route already caps each key at 128 characters, refuses any type but `dm`, and requires exactly 2 distinct participants before any database work; request bodies are size-capped in `readBody`. The PR's test (15 copies of one key) already returns 400 on main.
+
+### 2026-10-22 — Expo: first of a repeated `link` param in rekey-code.tsx, fifth filing (#2343) — CLOSED, DECIDED (#1753, #2073, #2118, #2174)
+- **Category:** DELIBERATE DECISION
+- **Claim:** `useLocalSearchParams` can return `string[]`, so take `link[0]` on the re-key code screen.
+- **Why not to re-file:** this is not a typing-only change: it parses a repeated `link` param on an identity screen where main ignores it. A link that repeats a parameter is ambiguous and refused on purpose (see #2118, #2174). Expo: this applies to EVERY screen; re-file only with a real link that produces the array AND Marty's decision.
+
+### 2026-10-22 — Flow: spinner on the SignOutEverywhere busy button (#2335) — CLOSED, LOW VALUE
+- **Category:** NO-OP UX
+- **Claim:** the Sign out everywhere button needs a spinner while busy.
+- **Why not to re-file:** the button already switches to "Signing out…" and is disabled while busy; a spinner on a sub-second call adds nothing. Flow: no spinners where the label and disabled state already say busy.
+
+### 2026-10-22 — Bolt: index lookup for the 2 DM participants in MessagesPage (#2341) — CLOSED, NO MEASURABLE WIN
+- **Category:** CLAIM FALSE (see the Bolt `.find()` → `Map` rule above)
+- **Claim:** replacing `.find()` over a DM's `participants` with index checks makes the recent-DMs list "O(1)".
+- **Why not to re-file:** a DM has exactly 2 participants; `.find()` there is already O(2) and clearer. Bolt: do not micro-optimise fixed-size arrays.

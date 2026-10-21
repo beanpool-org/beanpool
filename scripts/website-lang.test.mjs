@@ -1058,3 +1058,118 @@ test('mobile width (320px) desktop-lang-menu on pages without phone menu stays w
         server.close();
     }
 });
+
+test('nav-cta is never clipped and does not wrap where main did not, and ☰ panel links are reachable at 320x568', { timeout: 180_000 }, async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    let browser;
+
+    try {
+        browser = await chromium.launch({ headless: true });
+        const allPages = [];
+        for (const pageName of ALL_PAGES) {
+            allPages.push({ url: pageName, lang: 'en', rtl: false });
+        }
+        for (const lang of GUIDE_LANGS) {
+            for (const pageName of TRANSLATED_PAGES) {
+                allPages.push({ url: `${lang}/${pageName}`, lang, rtl: RTL_LANGS.includes(lang) });
+            }
+        }
+
+        const WIDTHS = [320, 346, 360, 390, 430, 768, 1024, 1280, 1366, 1440];
+        const MAIN_WRAPPED_LANGS = new Set(['pt', 'ru', 'uk', 'de']);
+
+        const runWorker = async (items) => {
+            const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+            const clipped = [];
+            const wrapped = [];
+            const unreachable = [];
+
+            for (const item of items) {
+                await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
+                for (const width of WIDTHS) {
+                    await page.setViewportSize({ width, height: 800 });
+                    const res = await page.evaluate((isRtl) => {
+                        const cta = document.querySelector('.nav-cta');
+                        if (!cta) return null;
+                        const rect = cta.getBoundingClientRect();
+                        const range = document.createRange();
+                        range.selectNodeContents(cta);
+                        const rects = range.getClientRects();
+                        const isClipped = isRtl
+                            ? (rect.left < -0.5 || rect.right > window.innerWidth + 0.5)
+                            : (rect.right > window.innerWidth + 0.5);
+                        const isWrapped = rects.length > 1 || rect.height > 50;
+                        return {
+                            isClipped,
+                            isWrapped,
+                            left: rect.left,
+                            right: rect.right,
+                            height: rect.height,
+                            lineCount: rects.length
+                        };
+                    }, item.rtl);
+
+                    if (res) {
+                        if (res.isClipped) clipped.push({ page: item.url, width, right: res.right, left: res.left });
+                        if (res.isWrapped && !MAIN_WRAPPED_LANGS.has(item.lang)) wrapped.push({ page: item.url, width, height: res.height, lineCount: res.lineCount });
+                    }
+                }
+
+                // Reachability at 320x568 for pages with .nav-menu
+                await page.setViewportSize({ width: 320, height: 568 });
+                const hasNavMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
+                if (hasNavMenu) {
+                    const summary = page.locator('.nav-menu > summary');
+                    await summary.click();
+                    await page.waitForTimeout(20);
+                    const unreach = await page.evaluate(() => {
+                        const links = Array.from(document.querySelectorAll('.nav-menu-panel a'));
+                        const bad = [];
+                        for (const link of links) {
+                            link.scrollIntoView();
+                            const r = link.getBoundingClientRect();
+                            if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                            }
+                        }
+                        return bad;
+                    });
+                    if (unreach.length > 0) unreachable.push({ page: item.url, badLinks: unreach });
+                    await summary.click();
+                }
+            }
+            await page.close();
+            return { clipped, wrapped, unreachable };
+        };
+
+        const NUM_WORKERS = 4;
+        const chunks = Array.from({ length: NUM_WORKERS }, () => []);
+        allPages.forEach((p, i) => chunks[i % NUM_WORKERS].push(p));
+
+        const results = await Promise.all(chunks.map(runWorker));
+        const allClipped = results.flatMap(r => r.clipped);
+        const allWrapped = results.flatMap(r => r.wrapped);
+        const allUnreachable = results.flatMap(r => r.unreachable);
+
+        assert.equal(allClipped.length, 0, `Found ${allClipped.length} clipped CTAs across pages and widths:\n  ` +
+            allClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (right: ${c.right})`).join('\n  '));
+        assert.equal(allWrapped.length, 0, `Found ${allWrapped.length} wrapped CTAs where main did not wrap:\n  ` +
+            allWrapped.slice(0, 10).map(w => `${w.page} @ ${w.width}px`).join('\n  '));
+        assert.equal(allUnreachable.length, 0, `Found ${allUnreachable.length} pages with unreachable ☰ panel links at 320x568:\n  ` +
+            allUnreachable.slice(0, 10).map(u => `${u.page}: ${u.badLinks.map(b => b.text).join(', ')}`).join('\n  '));
+    } finally {
+        if (browser) await browser.close();
+        server.close();
+    }
+});

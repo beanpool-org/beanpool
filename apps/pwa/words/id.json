@@ -3378,5 +3378,14 @@
   },
   "{name}, already in the group": "{name}, sudah berada di grup",
   "{name}, already invited": "{name}, sudah diundang",
-  "{name}, asked to join": "{name}, meminta bergabung"
+  "{name}, asked to join": "{name}, meminta bergabung",
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Seorang pengurus mematikan salinan server dari alat ini, jadi hanya disimpan di browser ini. Kamu bisa mengaktifkannya lagi di Pengaturan.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Tidak dapat menjangkau server komunitasmu, jadi tidak ada yang berubah. Coba lagi saat kamu online.",
+  "Keep a private copy on your community's server": "Simpan salinan pribadi di server komunitasmu",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Disimpan di browser ini, dengan salinan pribadi di server komunitasmu yang hanya dapat kamu baca melalui aplikasi. Seperti semua hal di server tersebut, operatornya dapat membacanya.",
+  "One device at a time: the copy you changed last is the one kept.": "Satu perangkat dalam satu waktu: salinan yang terakhir kamu ubah adalah yang disimpan.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Menghapus data komunitas ini untuk {tool} dari browser ini, dan salinannya di server komunitasmu. Perangkat lain yang masuk sebagai dirimu tetap menyimpan apa yang dimilikinya dan berhenti mengirimkannya. Alat yang sama di komunitas lain tetap menyimpan datanya sendiri. Tindakan ini tidak dapat dibatalkan.",
+  "You can edit a message for 15 minutes after sending it.": "Kamu bisa mengedit pesan selama 15 menit setelah mengirimkannya.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Server komunitasmu belum dapat menyimpan salinan, jadi untuk saat ini data hanya tersimpan di browser ini.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Server komunitasmu tidak lagi menyimpan salinan alat ini, jadi hanya disimpan di browser ini. Kamu bisa mengaktifkan salinannya lagi di Pengaturan."
 }

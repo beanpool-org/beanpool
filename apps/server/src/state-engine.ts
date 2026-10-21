@@ -3307,19 +3307,22 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
 }
 
 /**
- * The enterprises whose spend floor came down when it stopped reading treasury_operators.backing: their active, unfrozen
- * keepers' joining figures add up to more than those keepers' earned pledges standing now (a release since, or a known
- * part, which the floor counts once among the known pledges), as getEnterpriseUnderlyingFloor took the larger of the two.
- * `frozen`: how many of them now owe more than that floor lets them, so they are spend-frozen until they earn it back,
- * as when a keeper's pledge is released. Nothing is rewritten and no Bean moves: the figure stays what each keeper
- * pledged as they joined. Counts only, never who (reportBackingFigureDriftAtBoot).
+ * The enterprises getEnterpriseUnderlyingFloor read higher before it stopped reading treasury_operators.backing (unless a
+ * legacy line or the cap held them anyway): open, unfrozen ones whose active, unfrozen keepers' joining figures add up to
+ * more than those keepers' earned pledges standing now (a release since, or a known part, which the floor counts once
+ * among the known pledges), as it took the larger of the two. `frozen`: how many of them now owe more than their floor
+ * lets them, so they are spend-frozen until they earn it back, as when a keeper's pledge is released. Nothing is
+ * rewritten and no Bean moves: the figure stays what each keeper pledged as they joined. Counts only, never who
+ * (reportBackingFigureDriftAtBoot).
  */
 export function backingFigureDrift(): { enterprises: number; frozen: number } {
     const rows = db.prepare(`
         SELECT o.treasury_pubkey AS pk
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
+        JOIN members e ON e.public_key = o.treasury_pubkey
         WHERE m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+          AND e.status != 'completed' AND COALESCE(e.credit_frozen, 0) = 0
         GROUP BY o.treasury_pubkey
         HAVING COALESCE(SUM(o.backing), 0) > (
             SELECT COALESCE(SUM(p.amount), 0) FROM enterprise_pledges p
@@ -3588,8 +3591,9 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
     db.transaction(() => {
         // A binding with no backing: a keeper backs an enterprise only by a pledge (pledgeEnterpriseBacking), the rows
         // every floor reads. Assigning someone already bound leaves their binding, and the figure they joined with, as it is.
-        const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
-                    VALUES (?, ?, 'keeper', ?)`).run(treasuryPubkey, memberPubkey, grantedBy);
+        const bound = db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
+                    VALUES (?, ?, 'keeper', ?)
+                    ON CONFLICT(treasury_pubkey, member_pubkey) DO NOTHING`).run(treasuryPubkey, memberPubkey, grantedBy);
         // Only a new binding changes who reads its listings as they are.
         if (bound.changes > 0) engine.keepersChanged(db, treasuryPubkey);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);

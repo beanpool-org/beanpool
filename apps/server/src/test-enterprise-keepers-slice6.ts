@@ -136,10 +136,10 @@ async function main() {
 
     const { publicKey: ent1 } = createTreasury('EnterpriseAlpha', 'avatar1', 0);
     // Bind lead1 as lead keeper
-    adminAssignTreasuryOperator(ent1, lead1.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(ent1, lead1.pubKeyHex, 'admin');
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(ent1, lead1.pubKeyHex);
     // Bind keeper2 as ordinary keeper
-    adminAssignTreasuryOperator(ent1, keeper2.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(ent1, keeper2.pubKeyHex, 'admin');
 
     assert(isLeadOrSoleKeeperOrAdmin(ent1, lead1.pubKeyHex) === true, 'Lead keeper passes authority predicate');
     assert(isLeadOrSoleKeeperOrAdmin(ent1, admin.pubKeyHex) === true, 'Admin passes authority predicate');
@@ -148,7 +148,7 @@ async function main() {
 
     // 1.1 Completed enterprise accepts no requests
     const { publicKey: woundUpEnt } = createTreasury('WoundUpEnterprise', 'avatar2', 0);
-    adminAssignTreasuryOperator(woundUpEnt, lead1.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(woundUpEnt, lead1.pubKeyHex, 'admin');
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(woundUpEnt, lead1.pubKeyHex);
     initiateWindUp(woundUpEnt, lead1.pubKeyHex);
     // Fast forward 8 days to finalise
@@ -253,7 +253,7 @@ async function main() {
 
     // Now applicant2 pledges 30 to another enterprise, so available_to_back drops to 10
     const { publicKey: entOther } = createTreasury('EnterpriseOther', 'avatar3', 0);
-    adminAssignTreasuryOperator(entOther, applicant2.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(entOther, applicant2.pubKeyHex, 'admin');
     // Directly insert pledge for applicant2 in entOther
     db.prepare(`
         INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
@@ -278,7 +278,7 @@ async function main() {
     // 1.8 Sole keeper can approve
     const { publicKey: soleEnt } = createTreasury('SoleEnterprise', 'avatar4', 0);
     const soleKeeper = makeIdentity('SoleKeeper', 50);
-    adminAssignTreasuryOperator(soleEnt, soleKeeper.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(soleEnt, soleKeeper.pubKeyHex, 'admin');
     // role is 'keeper' by default, but opCount is 1 -> sole keeper!
     assert(isLeadOrSoleKeeperOrAdmin(soleEnt, soleKeeper.pubKeyHex) === true, 'Sole keeper is recognized as lead authority');
 
@@ -328,13 +328,13 @@ async function main() {
     // can neither ask to join nor be approved, and a lead's approval never switches them back on.
     const { publicKey: b3HomeEnt } = createTreasury('B3HomeEnterprise', 'avatarB3', 0);
     const opSuspended = makeIdentity('OpSuspended', 50);
-    adminAssignTreasuryOperator(b3HomeEnt, opSuspended.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(b3HomeEnt, opSuspended.pubKeyHex, 'admin');
     adminSetOperator(opSuspended.pubKeyHex, false);
     expectThrow(() => requestToJoinEnterprise(ent1, opSuspended.pubKeyHex, 0),
         'operator access is switched off', 'B3: admin-suspended keeper cannot ask to join another enterprise');
 
     const opLaterSuspended = makeIdentity('OpLaterSuspended', 50);
-    adminAssignTreasuryOperator(b3HomeEnt, opLaterSuspended.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(b3HomeEnt, opLaterSuspended.pubKeyHex, 'admin');
     const b3Req = requestToJoinEnterprise(ent1, opLaterSuspended.pubKeyHex, 10);
     adminSetOperator(opLaterSuspended.pubKeyHex, false);
     expectThrow(() => approveKeeperRequest(b3Req.id, lead1.pubKeyHex),
@@ -371,9 +371,9 @@ async function main() {
         const { publicKey: ent } = createTreasury(`B1${label}Enterprise`, 'avatarB1', 0);
         const lead = makeIdentity(`B1${label}Lead`, 30);
         const other = makeIdentity(`B1${label}Other`, 30);
-        adminAssignTreasuryOperator(ent, lead.pubKeyHex, 'admin', 0);
+        adminAssignTreasuryOperator(ent, lead.pubKeyHex, 'admin');
         db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(ent, lead.pubKeyHex);
-        adminAssignTreasuryOperator(ent, other.pubKeyHex, 'admin', 0);
+        adminAssignTreasuryOperator(ent, other.pubKeyHex, 'admin');
         const applicant = makeIdentity(`B1${label}Applicant`, 10);
         const pendingReq = requestToJoinEnterprise(ent, applicant.pubKeyHex, 0);
 
@@ -436,8 +436,9 @@ async function main() {
 
     const { publicKey: succEnt } = createTreasury('SuccessionEnterprise', 'avatar5', 0);
     const oldLead = makeIdentity('OldLead', 100);
-    adminAssignTreasuryOperator(succEnt, oldLead.pubKeyHex, 'admin', 30);
-    db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(succEnt, oldLead.pubKeyHex);
+    adminAssignTreasuryOperator(succEnt, oldLead.pubKeyHex, 'admin');
+    // The figure they joined with (bindApprovedKeeper writes it beside the pledge rows), as when they joined pledging 30.
+    db.prepare("UPDATE treasury_operators SET role = 'lead', backing = 30 WHERE treasury_pubkey = ? AND member_pubkey = ?").run(succEnt, oldLead.pubKeyHex);
     // Add backing pledge for oldLead
     db.prepare(`
         INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
@@ -445,13 +446,13 @@ async function main() {
     `).run(crypto.randomUUID(), oldLead.pubKeyHex, succEnt, new Date().toISOString());
 
     const candKeeper = makeIdentity('CandKeeper', 60);
-    adminAssignTreasuryOperator(succEnt, candKeeper.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(succEnt, candKeeper.pubKeyHex, 'admin');
 
     const voterKeeper1 = makeIdentity('VoterKeeper1', 60);
-    adminAssignTreasuryOperator(succEnt, voterKeeper1.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(succEnt, voterKeeper1.pubKeyHex, 'admin');
 
     const voterKeeper2 = makeIdentity('VoterKeeper2', 60);
-    adminAssignTreasuryOperator(succEnt, voterKeeper2.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(succEnt, voterKeeper2.pubKeyHex, 'admin');
 
     // Keepers: oldLead (lead), candKeeper, voterKeeper1, voterKeeper2 (total 3 other keepers: N = 3)
     // 2.1 No proposal before 30 days of inactivity
@@ -508,14 +509,14 @@ async function main() {
     // Required: Math.floor(2/2) + 1 = 2. 1 vote is 50% (tie between yes and no).
     const { publicKey: tieEnt } = createTreasury('TieEnterprise', 'avatarTie', 0);
     const tieLead = makeIdentity('TieLead', 100);
-    adminAssignTreasuryOperator(tieEnt, tieLead.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(tieEnt, tieLead.pubKeyHex, 'admin');
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(tieEnt, tieLead.pubKeyHex);
     db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(thirtyOneDaysAgo, tieLead.pubKeyHex);
 
     const tieK1 = makeIdentity('TieK1', 50);
     const tieK2 = makeIdentity('TieK2', 50);
-    adminAssignTreasuryOperator(tieEnt, tieK1.pubKeyHex, 'admin', 0);
-    adminAssignTreasuryOperator(tieEnt, tieK2.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(tieEnt, tieK1.pubKeyHex, 'admin');
+    adminAssignTreasuryOperator(tieEnt, tieK2.pubKeyHex, 'admin');
 
     // N = 2 other keepers. tieK1 proposes: 1 vote out of 2.
     const tieProp = proposeLeadSuccession(tieEnt, tieK1.pubKeyHex, tieK1.pubKeyHex);
@@ -550,14 +551,14 @@ async function main() {
     // If the lead becomes active again before the vote completes, the proposal is cancelled
     const { publicKey: returnEnt } = createTreasury('ReturnEnterprise', 'avatarReturn', 0);
     const returningLead = makeIdentity('ReturningLead', 100);
-    adminAssignTreasuryOperator(returnEnt, returningLead.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(returnEnt, returningLead.pubKeyHex, 'admin');
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(returnEnt, returningLead.pubKeyHex);
     db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(thirtyOneDaysAgo, returningLead.pubKeyHex);
 
     const retK1 = makeIdentity('RetK1', 50);
     const retK2 = makeIdentity('RetK2', 50);
-    adminAssignTreasuryOperator(returnEnt, retK1.pubKeyHex, 'admin', 0);
-    adminAssignTreasuryOperator(returnEnt, retK2.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(returnEnt, retK1.pubKeyHex, 'admin');
+    adminAssignTreasuryOperator(returnEnt, retK2.pubKeyHex, 'admin');
 
     const retProp = proposeLeadSuccession(returnEnt, retK1.pubKeyHex, retK1.pubKeyHex);
     assert(retProp.proposal.status === 'active', 'Proposal is active');
@@ -584,15 +585,15 @@ async function main() {
     // 2.6 Candidate invalidated before passing vote cancels proposal
     const { publicKey: candRevokeEnt } = createTreasury('CandRevokeEnterprise', 'avatarRevoke', 0);
     const crLead = makeIdentity('CRLead', 50);
-    adminAssignTreasuryOperator(candRevokeEnt, crLead.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(candRevokeEnt, crLead.pubKeyHex, 'admin');
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(candRevokeEnt, crLead.pubKeyHex);
     db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(thirtyOneDaysAgo, crLead.pubKeyHex);
     const crK1 = makeIdentity('CRK1', 50);
     const crK2 = makeIdentity('CRK2', 50);
     const crCand = makeIdentity('CRCand', 50);
-    adminAssignTreasuryOperator(candRevokeEnt, crK1.pubKeyHex, 'admin', 0);
-    adminAssignTreasuryOperator(candRevokeEnt, crK2.pubKeyHex, 'admin', 0);
-    adminAssignTreasuryOperator(candRevokeEnt, crCand.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(candRevokeEnt, crK1.pubKeyHex, 'admin');
+    adminAssignTreasuryOperator(candRevokeEnt, crK2.pubKeyHex, 'admin');
+    adminAssignTreasuryOperator(candRevokeEnt, crCand.pubKeyHex, 'admin');
     const crProp = proposeLeadSuccession(candRevokeEnt, crK1.pubKeyHex, crCand.pubKeyHex);
     assert(crProp.proposal.status === 'active', 'Candidate proposal active');
     // Now candidate is suspended
@@ -613,9 +614,9 @@ async function main() {
     const { publicKey: backfillEnt } = createTreasury('BackfillEnterprise', 'avatarBackfill', 0);
     const backfillLead = makeIdentity('BackfillLead', 20);
     const backfillKeeper = makeIdentity('BackfillKeeper', 20);
-    adminAssignTreasuryOperator(backfillEnt, backfillLead.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(backfillEnt, backfillLead.pubKeyHex, 'admin');
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(backfillEnt, backfillLead.pubKeyHex);
-    adminAssignTreasuryOperator(backfillEnt, backfillKeeper.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(backfillEnt, backfillKeeper.pubKeyHex, 'admin');
     const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
     db.prepare("UPDATE members SET joined_at = ?, last_active_at = NULL WHERE public_key = ?").run(yearAgo, backfillLead.pubKeyHex);
     db.prepare("DELETE FROM node_config WHERE key = 'migration_backfill_last_active_at_v1'").run();
@@ -646,7 +647,7 @@ async function main() {
     const httpStranger = makeIdentity('HTTPStranger', 20);
 
     const { publicKey: httpEnt } = createTreasury('HttpEnterprise', 'avatarHttp', 0);
-    adminAssignTreasuryOperator(httpEnt, httpLead.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(httpEnt, httpLead.pubKeyHex, 'admin');
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(httpEnt, httpLead.pubKeyHex);
 
     // 1. Submit join request via HTTP
@@ -715,10 +716,10 @@ async function main() {
     const actLead = makeIdentity('ActLead', 20);
     const actK1 = makeIdentity('ActK1', 20);
     const actK2 = makeIdentity('ActK2', 20);
-    adminAssignTreasuryOperator(actEnt, actLead.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(actEnt, actLead.pubKeyHex, 'admin');
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(actEnt, actLead.pubKeyHex);
-    adminAssignTreasuryOperator(actEnt, actK1.pubKeyHex, 'admin', 0);
-    adminAssignTreasuryOperator(actEnt, actK2.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(actEnt, actK1.pubKeyHex, 'admin');
+    adminAssignTreasuryOperator(actEnt, actK2.pubKeyHex, 'admin');
     db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(thirtyFiveDaysAgo, actLead.pubKeyHex);
     const actProp = proposeLeadSuccession(actEnt, actK1.pubKeyHex, actK1.pubKeyHex);
     assert(actProp.proposal.status === 'active', 'B2: succession proposal active (1 of 2 votes)');
@@ -746,7 +747,7 @@ async function main() {
     //    used to run an unconditional `can_operate = 1`, which switched every enterprise they already keep back on.
     const suspOwnEnt = createTreasury('SuspendedHomeEnterprise', 'avatarSusp', 0).publicKey;
     const suspKeeper = makeIdentity('SuspKeeper', 50);
-    adminAssignTreasuryOperator(suspOwnEnt, suspKeeper.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(suspOwnEnt, suspKeeper.pubKeyHex, 'admin');
     adminSetOperator(suspKeeper.pubKeyHex, false);
     const switchOf = (pk: string) => (db.prepare("SELECT can_operate FROM members WHERE public_key = ?").get(pk) as any).can_operate;
     const bindingsOf = (pk: string) => (db.prepare("SELECT COUNT(*) AS c FROM treasury_operators WHERE member_pubkey = ?").get(pk) as any).c;
@@ -783,7 +784,7 @@ async function main() {
 
     // An ordinary, unsuspended keeper still creates enterprises and projects, and becomes their lead.
     const okKeeper = makeIdentity('OkKeeper', 50);
-    adminAssignTreasuryOperator(suspOwnEnt, okKeeper.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(suspOwnEnt, okKeeper.pubKeyHex, 'admin');
     const okEntRes = await signedFetch('POST', '/api/enterprise', okKeeper, { name: 'Ok Keeper Enterprise', purpose: 'bread' });
     assert(okEntRes.status === 200 && !!okEntRes.body?.publicKey, `Unsuspended keeper creates an enterprise (got ${okEntRes.status} ${okEntRes.error})`);
     assert((db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(okEntRes.body?.publicKey, okKeeper.pubKeyHex) as any)?.role === 'lead',

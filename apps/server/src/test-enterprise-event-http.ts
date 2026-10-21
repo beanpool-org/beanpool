@@ -96,7 +96,7 @@ async function main(): Promise<void> {
     const stranger = makeIdentity('StrangerSam');
 
     const { publicKey: enterprise } = createTreasury('Bindarrabi Hall', AVATAR, 0, { leadKeeperPubkey: keeper.pubKeyHex });
-    adminAssignTreasuryOperator(enterprise, keeper.pubKeyHex, 'admin', 0);
+    adminAssignTreasuryOperator(enterprise, keeper.pubKeyHex, 'admin');
 
     const eventPath = `/api/treasury/${enterprise}/event`;
     const event = (extra: Record<string, unknown> = {}) => ({

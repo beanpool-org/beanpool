@@ -87,7 +87,7 @@ function makeEnterprise(name: string, lead: Id, others: Id[]): string {
     const { publicKey: ent } = createTreasury(`${name}${++seq}`, 'avatar', 0);
     const all = [lead, ...others];
     all.forEach((k, i) => {
-        adminAssignTreasuryOperator(ent, k.pubKeyHex, 'admin', 0);
+        adminAssignTreasuryOperator(ent, k.pubKeyHex, 'admin');
         db.prepare("UPDATE treasury_operators SET granted_at = ? WHERE treasury_pubkey = ? AND member_pubkey = ?")
             .run(new Date(Date.now() - (100 - i) * 86400000).toISOString(), ent, k.pubKeyHex);
     });
@@ -216,7 +216,7 @@ async function main() {
         // One keeper: at once.
         const solo = makeIdentity('ASolo', 10);
         const { publicKey: soloEnt } = createTreasury(`ASoloEnt${++seq}`, 'avatar', 0);
-        adminAssignTreasuryOperator(soloEnt, solo.pubKeyHex, 'admin', 0);
+        adminAssignTreasuryOperator(soloEnt, solo.pubKeyHex, 'admin');
         const app5 = makeIdentity('AApp5', 10);
         const res5 = approveKeeperRequest(requestToJoinEnterprise(soloEnt, app5.pubKeyHex, 0).id, solo.pubKeyHex);
         assert(res5.applied === true && role(soloEnt, app5.pubKeyHex) === 'keeper', 'A: a one-keeper enterprise adds at once');
@@ -331,7 +331,7 @@ async function main() {
         // No other keeper: pause.
         const lone = makeIdentity('GLone');
         const { publicKey: ent2 } = createTreasury(`GLoneEnt${++seq}`, 'avatar', 0);
-        adminAssignTreasuryOperator(ent2, lone.pubKeyHex, 'admin', 0);
+        adminAssignTreasuryOperator(ent2, lone.pubKeyHex, 'admin');
         db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ?").run(ent2);
         const dec2 = createDecision({
             authorPubkey: admin.pubKeyHex, title: 'Remove the only lead', description: 'G', touches: 'member',
@@ -457,7 +457,7 @@ async function main() {
 
         db.prepare("UPDATE members SET last_active_at = ? WHERE public_key = ?").run(new Date(Date.now() - 40 * 86400000).toISOString(), lead.pubKeyHex);
         const k4 = makeIdentity('HK4', 5), k5 = makeIdentity('HK5', 5);
-        for (const k of [k4, k5]) adminAssignTreasuryOperator(ent, k.pubKeyHex, 'admin', 0);
+        for (const k of [k4, k5]) adminAssignTreasuryOperator(ent, k.pubKeyHex, 'admin');
         const prop = await signedFetch('POST', `/api/enterprise/${ent}/succession/propose`, k2, { candidatePubkey: k2.pubKeyHex });
         assert(prop.status === 200 && !!prop.body?.proposal?.deadlineAt, 'HTTP: succession proposal carries its deadline');
         const no = await signedFetch('POST', `/api/enterprise/${ent}/succession/${prop.body.proposal.id}/vote`, k4, { choice: 'no' });

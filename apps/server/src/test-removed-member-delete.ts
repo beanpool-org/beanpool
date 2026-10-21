@@ -180,7 +180,7 @@ let enterprises = 0;
 function makeEnterprise(lead: Id, others: Id[]): string {
     const { publicKey: ent } = createTreasury(`EnterpriseRD${++enterprises}`, 'avatar', 0);
     [lead, ...others].forEach((k, i) => {
-        adminAssignTreasuryOperator(ent, k.pk, 'admin', 0);
+        adminAssignTreasuryOperator(ent, k.pk, 'admin');
         db.prepare('UPDATE treasury_operators SET granted_at = ? WHERE treasury_pubkey = ? AND member_pubkey = ?')
             .run(new Date(Date.now() - (100 - i) * 86400000).toISOString(), ent, k.pk);
     });

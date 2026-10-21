@@ -1047,6 +1047,26 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         expect(disk.db.count('SELECT COUNT(*) AS n FROM tool_docs')).toBe(0);
     });
 
+    it("the copy's marks (tools/node-copy.ts) are never written back by a settings save, and stay through Remove my data", async () => {
+        await keptAndSynced(KIT_FIXTURES.docs.small);
+        // The screen reads a PUT still out as it opens; it is heard, and its mark goes, behind the screen's back.
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { nodeCopyMarks: { unsure: 'out' } });
+        await drawTool('fixture-kit', {}, 'xx');
+        await writeToolSettings(ME.publicKey, 'fixture-kit', {});
+        await openSettings();
+        await click(byTestId('tool-settings-reminder-weekly'), "a reminder's switch");
+        expect(stored()).toEqual({ reminders: { weekly: true } });
+        await click(byTestId('tool-settings-done'), 'Done');
+        // A PUT the phone never heard the end of: Remove my data keeps its mark beside the setting off.
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { ...stored(), nodeCopyMarks: { unsure: 'check' } });
+        await click(byTestId('tool-menu'), 'the "…"');
+        await click(byTestId('tool-menu-remove'), 'Remove my data');
+        await act(async () => { alerts.buttons.find((b) => b.text === pseudoLocalise('Remove'))!.onPress!(); });
+        await settle();
+        expect(server.rows.has('fixture-kit')).toBe(false);
+        expect(stored()).toEqual({ nodeCopy: false, nodeCopyMarks: { unsure: 'check' } });
+    });
+
     it("a write through the tool's host: one sync five seconds after the last, not one a write", async () => {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
         try {

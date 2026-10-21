@@ -79,9 +79,10 @@ function spend(from: Id, beans: number): boolean {
     return !!transfer(from.pk, `escrow_${crypto.randomUUID()}`, beans, 'a purchase', 'escrow', true);
 }
 
+// The dial is on with no row (Marty, 21 Oct: "Yes, on by default"); the owner switching it off writes 'off'.
 function setDial(on: boolean): void {
-    if (on) db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('confirmation', 'on')").run();
-    else db.prepare("DELETE FROM node_config WHERE key = 'confirmation'").run();
+    if (on) db.prepare("DELETE FROM node_config WHERE key = 'confirmation'").run();
+    else db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES ('confirmation', 'off')").run();
 }
 
 async function call(method: string, id: Id | null, path: string): Promise<Res> {

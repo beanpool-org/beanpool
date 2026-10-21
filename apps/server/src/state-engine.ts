@@ -699,6 +699,9 @@ export function initStateEngine(): void {
     // accounts, where the node has probation (the global profile; engine/probation.ts pollVotesFromNewOrWords; never on
     // an open vote, nor while a poll is open: @beanpool/engine pollOriginsMayShow). Read with the poll, never stored.
     installPollVoteOriginsAtBoot();
+    // The known floor's confirmation dial is on by default, and never where Beans are off (the global profile): the engine
+    // asks this when it reads the dial (engine known-floor.ts confirmationDialOn).
+    engine.configureKnownFloorBeans(() => getProfileSwitches().beans);
     // Where listings sync by area, each member's area in memory for the listing pushes (listingReach).
     if (getProfileSwitches().nearbyListings) loadMemberAreas();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):

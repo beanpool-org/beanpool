@@ -4,7 +4,7 @@ title: Rejoindre BeanPool
 summary: Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 help: Rejoignez une communauté sur invitation d'un membre, ou la communauté globale avec 12 mots secrets ou un compte.
-source-hash: f78397c8a8d66d56
+source-hash: 5a1feb7390e4c3fb
 ---
 
 ## Deux façons d'entrer

@@ -3,7 +3,7 @@ slug: communities
 title: Plusieurs communautés
 summary: Appartenir à plusieurs communautés avec un seul compte, basculer entre elles, suivre votre communauté vers une nouvelle adresse et voir ce que montre la communauté globale.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar
-source-hash: b123b0f66fb01c9d
+source-hash: fe1d603a6bf1c424
 ---
 
 ## Un compte, plusieurs communautés
@@ -23,14 +23,15 @@ Votre clé, vos 12 mots et votre nom vous accompagnent. Vos annonces, discussion
 
 La communauté globale ne nécessite aucune invitation, et vous la rejoignez avec le compte que vous possédez déjà : la même clé et les mêmes 12 mots. L'application vous le propose lorsque la communauté globale est ouverte et n'a pas indiqué à l'application que ce compte y est déjà membre.
 
-Sous **Vos communautés**, il y a toujours une ligne pour la **Communauté mondiale**. Sa deuxième ligne indique votre situation : son adresse lorsque vous êtes membre (touchez-la pour basculer dessus), **Rejoindre avec ce compte : 12 mots ou une connexion** (**Rejoindre avec ce compte : une connexion** là où la communauté n'accepte pas les 12 mots) quand vous pouvez la rejoindre, ou pourquoi vous ne le pouvez pas pour le moment : **Vérification…**, **Impossible de la joindre pour le moment** (avec **Touchez pour réessayer.** tant que ce téléphone n'a pas enregistré la communauté globale), **N'accepte pas de nouveaux membres pour le moment.**, **Cette communauté est en avant-première privée. Demandez une invitation à son propriétaire.**, ou **L'accès de votre compte y a été fermé.** Lorsque la communauté globale est inaccessible et que vous êtes connecté à une communauté dont vous êtes membre, une ligne en dessous indique **Votre propre communauté n'est pas touchée.** Rien d'autre sur le téléphone n'en dépend.
+Sous **Vos communautés**, il y a toujours une ligne pour la **Communauté mondiale**. Sa deuxième ligne indique votre situation : son adresse lorsque vous êtes membre (touchez-la pour basculer dessus), **Explorez d'abord, puis rejoignez avec ce compte** quand vous pouvez la rejoindre (pendant que vous la visitez en tant qu'invité : **Rejoindre avec ce compte : 12 mots ou une connexion**, ou **Rejoindre avec ce compte : une connexion** là où la communauté n'accepte pas les 12 mots), ou pourquoi vous ne le pouvez pas pour le moment : **Vérification…**, **Impossible de la joindre pour le moment** (avec **Touchez pour réessayer.** tant que ce téléphone n'a pas enregistré la communauté globale), **N'accepte pas de nouveaux membres pour le moment.**, **Cette communauté est en avant-première privée. Demandez une invitation à son propriétaire.**, ou **L'accès de votre compte y a été fermé.** Lorsque la communauté globale est inaccessible et que vous êtes connecté à une communauté dont vous êtes membre, une ligne en dessous indique **Votre propre communauté n'est pas touchée.** Rien d'autre sur le téléphone n'en dépend.
 
-- Touchez le haricot en haut à gauche. Dans le volet **BeanPool**, sous **Vos communautés**, touchez **Communauté mondiale** (sa deuxième ligne indique **Rejoindre avec ce compte**). C'est également accessible dans les **Paramètres**, sous **Avancé / Sous-système**. Si vous visitez la communauté globale en tant qu'invité, touchez **Rejoindre** en haut, à côté du **?**, puis **Rejoindre avec 12 mots ou une connexion** (**Rejoindre avec une connexion** là où une communauté n'accepte que les connexions). Si l'application affiche **Vous n'êtes pas encore membre ici** pour la communauté globale, touchez **Rejoindre avec ce compte**.
-- Choisissez comment rejoindre : **Créer un compte avec 12 mots secrets**, qui utilise les 12 mots que votre compte possède déjà (pas de connexion, donc pas de verrouillage du téléphone), ou **Ou se connecter** une fois avec Google, Apple (sur un iPhone) ou Facebook. Pour une connexion, l'application demande d'abord le verrouillage de votre téléphone, car cette connexion devient également un moyen de récupération pour votre compte.
+- Touchez le haricot en haut à gauche. Dans le volet **BeanPool**, sous **Vos communautés**, touchez **Communauté mondiale** (sa deuxième ligne indique **Explorez d'abord, puis rejoignez avec ce compte**). L'application ouvre la communauté globale en tant qu'invité, comme le fait le site web : vous commencez par explorer, et le point sur le haricot indique que vous êtes un invité. C'est également dans les **Paramètres**, sous **Communautés enregistrées** : **Explorer la communauté globale**. Le fait d'explorer ne vous fait rejoindre aucune communauté et ne crée aucun compte.
+- Lorsque vous êtes prêt, touchez **Rejoindre** en haut, à côté du **?**, puis **Rejoindre avec 12 mots ou une connexion** (**Rejoindre avec une connexion** là où une communauté n'accepte que les connexions). Si l'application affiche **Vous n'êtes pas encore membre ici** pour la communauté globale, touchez **Rejoindre avec ce compte**.
+- Choisissez comment rejoindre : **Rejoindre avec ce compte**, qui utilise la clé et les 12 mots déjà présents sur ce téléphone (pas de connexion, donc pas de verrouillage du téléphone), ou, sous **Ajouter aussi une connexion**, connectez-vous une fois avec Google, Apple (sur un iPhone) ou Facebook. Pour une connexion, l'application demande d'abord le verrouillage de votre téléphone, car cette connexion devient également un moyen de récupération pour votre compte.
 - Vérifiez le nom que les personnes verront là-bas, et touchez **Rejoindre**. Si quelqu'un porte déjà ce nom, l'application en suggère d'autres.
-- Choisissez ensuite votre photo pour la communauté globale, comme pour toute nouvelle communauté, puis approximativement où vous vous situez (**Où vous situez-vous environ ?** ; vous pouvez toucher **Ignorer pour l'instant**) : la communauté globale vous montre les annonces proches de ce lieu. Voir « Rejoindre BeanPool ».
+- Choisissez ensuite votre photo pour la communauté globale, comme pour toute nouvelle communauté, puis approximativement où vous vous situez (**Où êtes-vous à peu près ?** ; vous pouvez toucher **Ignorer pour l'instant**) : la communauté globale vous montre les annonces proches de ce lieu. Voir « Rejoindre BeanPool ».
 
-Rien ne change dans vos autres communautés, et vos 12 mots restent les mêmes. Une connexion devient également un moyen de retour vers ce même compte : une copie verrouillée de celui-ci est conservée pour cette connexion, de sorte que si vous perdez votre téléphone, elle restaure ce compte, et non un nouveau. Voir « Récupérer votre compte ». Une connexion que vous aviez associée à votre compte auparavant continue de fonctionner. Si vous rejoignez avec 12 mots et qu'aucune connexion ne conserve de copie de votre compte, l'application affiche la carte **Votre compte a un seul moyen de récupération**, comme pour toute personne qui rejoint avec 12 mots (voir « Rejoindre BeanPool »).
+Rien ne change dans vos autres communautés, et vos 12 mots restent les mêmes. Une connexion devient également un moyen de récupération pour ce même compte : une copie verrouillée de celui-ci est conservée pour cette connexion, de sorte que si vous perdez votre téléphone, elle restaure ce compte, et non un nouveau. Voir « Récupérer votre compte ». Une connexion que vous aviez associée à votre compte auparavant continue de fonctionner. Si vous rejoignez avec 12 mots et qu'aucune connexion ne conserve de copie de votre compte, l'application affiche la carte **Votre compte a un seul moyen de récupération**, comme pour toute personne qui rejoint avec 12 mots (voir « Rejoindre BeanPool »).
 
 Si l'application indique **Cette connexion a déjà rejoint la communauté globale avec un autre compte BeanPool**, cette connexion possède son propre compte là-bas. Utilisez un mode de connexion différent : un compte de connexion crée un seul compte dans la communauté globale.
 
@@ -51,7 +52,7 @@ Rien d'éloigné n'est hors de portée :
 - **Une annonce que vous ouvrez** depuis un message, un lien ou l'Accueil est récupérée auprès de la communauté, où qu'elle se trouve. Si la communauté ne la possède plus, elle indique **Annonce introuvable**.
 - **La Carte** ne montre que ce que votre téléphone conserve, elle n'a donc que peu ou pas de repères loin de votre zone. Recherchez dans le Marché pour y trouver des éléments.
 
-Sans zone définie, votre téléphone conserve plutôt les 100 annonces les plus récentes du monde entier, et une ligne au-dessus du Marché indique : **Vous voyez les annonces les plus récentes du monde entier. Définissez votre zone pour voir ce qui est près de chez vous.** Touchez-la pour en définir une. Vous pouvez toujours publier, envoyer des messages et rechercher comme avant.
+Sans zone définie, votre téléphone conserve plutôt les 100 annonces les plus récentes du monde entier, et une ligne au-dessus du Marché indique **Vous voyez les annonces les plus récentes du monde entier. Définissez votre zone pour voir ce qui est près de chez vous.** Touchez-la pour en définir une. Vous pouvez toujours publier, envoyer des messages et rechercher comme avant.
 
 Un sondage n'a pas de lieu propre, il est donc affiché à la zone du membre qui l'a créé : les sondages que vous voyez sont pour la plupart créés près de chez vous.
 
@@ -64,7 +65,7 @@ Vos autres communautés fonctionnent comme avant.
 - Touchez le haricot en haut à gauche. Le volet **BeanPool** s'ouvre, avec **Vos communautés** vers le haut.
 - Touchez celle de votre choix.
 
-Vous pouvez également basculer dans les **Paramètres**, sous **SYSTÈME**, puis **Avancé / Sous-système**. Vos communautés y sont listées. Celle que vous utilisez est marquée comme active. Touchez **Passer à la ville** sur une autre pour y basculer.
+Vous pouvez également basculer dans les **Paramètres**, sous **Système**, puis **Communautés enregistrées**. Vos communautés y sont listées. Celle que vous utilisez est marquée comme active. Touchez **Basculer vers cette communauté** sur une autre pour y basculer.
 
 ## Lorsque votre communauté déménage vers une nouvelle adresse
 
@@ -77,7 +78,7 @@ Une communauté peut déménager vers une nouvelle adresse : par exemple, depuis
 
 ## Oublier une communauté sur ce téléphone
 
-- Dans **Avancé / Sous-système**, touchez **Oublier** sur une communauté que vous n'utilisez pas actuellement. Cela retire la communauté et ses données enregistrées de ce téléphone.
+- Dans **Communautés enregistrées**, touchez **Oublier** sur une communauté que vous n'utilisez pas actuellement. Cela retire la communauté et ses données enregistrées de ce téléphone.
 - Dans le volet **BeanPool**, sous **Vos communautés**, appuyer longuement sur une communauté et toucher **Retirer** la retire seulement de la liste. Ses données restent sur le téléphone.
 
 Aucune de ces actions ne supprime votre compte là-bas, et vos autres communautés ne sont pas affectées.

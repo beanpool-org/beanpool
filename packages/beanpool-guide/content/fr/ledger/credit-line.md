@@ -3,7 +3,7 @@ slug: credit-line
 title: Votre ligne de crédit
 summary: Jusqu'où descendre sous zéro et comment elle augmente.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Ce que c'est
@@ -46,7 +46,7 @@ La ligne sous la barre vous indique la marche à suivre, par exemple « Publiez 
 
 ## Dans une communauté avec identités confirmées
 
-Certaines communautés ont des administrateurs qui connaissent chaque membre par son nom. Si la vôtre a activé **le plancher de confiance connu**, un membre confirmé par un administrateur bénéficie immédiatement d'une ligne de crédit : 1 000 haricots, sauf si votre communauté a choisi un autre montant. Cela représente environ 25 heures de travail pour lesquelles la communauté vous accorde sa confiance. Cela augmente votre limite, pas votre niveau : votre badge de confiance ne compte toujours que ce que vous avez accompli.
+Certaines communautés ont des administrateurs qui connaissent chaque membre par son nom. Un membre confirmé par un administrateur bénéficie immédiatement d'une ligne de crédit, **le plancher connu** : 1 000 haricots, sauf si votre communauté a choisi un autre montant. Cela représente environ 25 heures de travail pour lesquelles la communauté vous accorde sa confiance. Cela augmente votre limite, pas votre niveau : votre badge de confiance ne compte toujours que ce que vous avez accompli. Le plancher connu est activé dans chaque communauté avec des haricots, à moins que son propriétaire ne l'ait désactivé.
 
 - Une Offre active vous permet de l'utiliser en entier. Sans aucune Offre, vous ne pouvez pas l'utiliser.
 - La confiance que vous gagnez en échangeant s'y ajoute, jusqu'au plafond de votre communauté (2 000 haricots à moins qu'elle n'ait choisi davantage, jusqu'à 5 000).
@@ -55,7 +55,7 @@ Certaines communautés ont des administrateurs qui connaissent chaque membre par
 
 ## Une communauté mixte
 
-Dans certaines communautés, chaque membre peut inviter des personnes, les administrateurs ne connaissent donc pas tout le monde. Si la vôtre a activé **le plancher de confiance connu**, les administrateurs peuvent confirmer les membres qu'ils connaissent, et ces membres débutent avec une limite plus élevée. Tous les autres commencent à zéro, et la limite de chacun augmente ensuite de la même manière au fil des échanges et de la confiance bâtie.
+Dans certaines communautés, chaque membre peut inviter des personnes, les administrateurs ne connaissent donc pas tout le monde. Les administrateurs peuvent confirmer les membres qu'ils connaissent, et ces membres débutent avec une limite plus élevée, **le plancher connu**, à moins que le propriétaire de votre communauté ne l'ait désactivé. Tous les autres commencent à zéro, et la limite de chacun augmente ensuite de la même manière au fil des échanges et de la confiance bâtie.
 
 ## Suspension par les administrateurs
 

@@ -205,14 +205,15 @@ beforeEach(() => {
     };
     globalThis.fetch = vi.fn(async () => new Response('not json', { status: 500 })) as typeof fetch;
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => { vi.useRealTimers(); act(() => root.unmount()); host.remove(); setLanguage('en'); });
 
 /** The phone's copy of the node's profile, heard just now, so the screen knows its mode without asking. */
 function rememberProfile(profile: 'global' | 'local', features: Record<string, boolean>) {
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile, features, checkedAt: new Date().toISOString() } }));
 }
 
-const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
+const realSetTimeout = setTimeout;
+const settle = async (n = 8) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => realSetTimeout(r, 0)); }); };
 async function renderIn(lang: UiLang, screen: ReactElement = createElement(LedgerScreen)) {
     await act(async () => { root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: lang }, screen) as any); });
     await settle();
@@ -738,5 +739,45 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
         await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Confirm Transfer'), 'Confirm Transfer');
         expect(text()).toContain('Enter a valid amount');
         expect(cents.sent).toEqual([]);
+    });
+
+    it('unmounting within 1.5 s of send clears the success timer and fires no state updates (#ledger-send-timer)', async () => {
+        const consoleErrors: unknown[][] = [];
+        const spy = vi.spyOn(console, 'error').mockImplementation((...args) => { consoleErrors.push(args); });
+        try {
+            await sendIn('en', '5', false);
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Confirm Transfer'), 'Confirm Transfer');
+            expect(text()).toContain('✓ Sent!');
+            expect(vi.getTimerCount()).toBe(1);
+
+            act(() => { root.unmount(); });
+            expect(vi.getTimerCount()).toBe(0);
+
+            await act(async () => { vi.advanceTimersByTime(2000); });
+            expect(consoleErrors).toEqual([]);
+        } finally {
+            spy.mockRestore();
+            vi.useRealTimers();
+        }
+    });
+
+    it('starting a second send clears any pending timer from the earlier send (#ledger-send-timer)', async () => {
+        try {
+            await sendIn('en', '5', false);
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Confirm Transfer'), 'Confirm Transfer');
+            expect(text()).toContain('✓ Sent!');
+            expect(vi.getTimerCount()).toBe(1);
+
+            await click(Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Select recipient...')), 'Select recipient');
+            await click(Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').startsWith('Mia')), 'Mia');
+            await type(byLabel('Amount to send'), '3');
+            await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Confirm Transfer'), 'Confirm Transfer');
+            expect(text()).toContain('✓ Sent!');
+            expect(vi.getTimerCount()).toBe(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

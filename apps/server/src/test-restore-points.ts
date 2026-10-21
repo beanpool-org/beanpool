@@ -814,6 +814,7 @@ async function main(): Promise<void> {
         let rolledBack = 0;
         const changedAfter: string[] = [];
         const pinChangedAfter: string[] = [];
+        let passwordRowRefused = 0;
         for (const [who, headers] of credentials) {
             for (const [m, p] of routes) {
                 // The roll-back with a proof that passes is the one route meant to add a point (row 3 runs it, in a child).
@@ -830,7 +831,11 @@ async function main(): Promise<void> {
                     if (who === 'an owner key session (phone, just unlocked)') {
                         assert(res.status === 200, `5. 2fa/disable with owner phone session must return 200 (got ${res.status} ${res.text})`);
                     }
+                    // A proven 2fa/disable turns 2FA off: on again at once, so the routes after it, and the password-with-a-code
+                    // row, run with 2FA on, as on main.
+                    if (res.status === 200) tfa = turnOn2faForTests(MAIN_PW);
                 }
+                if (who.includes('password with a code') && res.status === 403 && String(res.text).includes('password_needs_2fa')) passwordRowRefused++;
                 sent++;
                 const now = JSON.stringify(treeOf(pointsDir));
                 if (now !== JSON.stringify(before) && changedAfter.length < 5) changedAfter.push(`${who}: ${m} ${p}`);
@@ -844,10 +849,11 @@ async function main(): Promise<void> {
             `the sweep sent ${sent} requests (${routes.length} routes × ${credentials.length} credentials, the proven roll-back skipped twice)`);
         assert(JSON.stringify(treeOf(pointsDir)) === JSON.stringify(before) && changedAfter.length === 0,
             `5. the restore point is byte for byte as it was (${changedAfter.join(' | ') || 'no request changed it'})`);
+        assert(passwordRowRefused === 0, `5. the owner password with a code reaches every route: 2FA stays on through the sweep (${passwordRowRefused} refused as 'password_needs_2fa')`);
         assert(pinChangedAfter.length === 0, `5. (case 19 g) data/standby-main.json is byte for byte as it was after every request: no route writes or removes it (${pinChangedAfter.join(' | ') || 'none changed it'})`);
         unpinMainServerForTests(dataDir!);
-        // Section 5's proven sweep of 2fa/disable turned 2FA off on the live server.
-        // Re-enable 2FA and refresh the 2FA session so sections 6 and 8 run with 2FA on as designed.
+        // 2FA is back on after each proven 2fa/disable (above); turn it on once more and sign in again, so sections 6 and 8
+        // start with 2FA on and section 8's earlier2fa reads a fresh session.
         tfa = turnOn2faForTests(MAIN_PW);
         pruneAuthAttempts(Date.now() + 61_000);
         const reSignIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });

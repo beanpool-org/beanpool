@@ -15,6 +15,12 @@
  *      member does; the keeper reads their own row as before
  *   6. a confirmed keeper pledges more, and releases it: the socket event every member hears names the enterprise only, so
  *      the folded total a member re-reads moves with no one to tie it to (state-engine.ts broadcastPledgesChanged)
+ *   7. a confirmed member joins by request into an enterprise with two keepers (keeperPledgeForReader): the other keeper
+ *      reads the change in its objection window with her named part only; the lead who decides it reads the open request
+ *      and the change whole; once it lands, the lead's own requests list gives her named part only; an admin and she
+ *      herself read the whole
+ *   8. a confirmed member's join the other keeper objects to: the objection's answer and the declined request the lead
+ *      reads carry her named part (none), never the whole; an admin reads it whole
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-enterprise-known-backing-hidden.ts
  */
@@ -28,7 +34,7 @@ process.env.ADMIN_PASSWORD = 'KnownBacking123!';
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, pledgeEnterpriseBacking, requestToJoinEnterprise, approveKeeperRequest } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, pledgeEnterpriseBacking, requestToJoinEnterprise, approveKeeperRequest, getMemberTrustProfile } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -88,6 +94,22 @@ function earnedPledge(enterprise: string, keeper: Id, amount: number): void {
     db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, ?, ?)')
         .run(crypto.randomUUID(), keeper.pk, enterprise, amount, ago(DAY));
     clearEnterpriseFloorCache(db);
+}
+
+/** Completed trades enough to earn about `target` of earned credit (test-enterprise-keeper-answers.ts giveEarnedCredit). */
+function giveEarnedCredit(member: Id, target: number): number {
+    let valueNeeded = Math.ceil((5000 * target) / (1920 - target));
+    for (let i = 0; valueNeeded > 0; i++) {
+        const amount = Math.min(valueNeeded, 400);
+        const peer = `peer-${member.pk.slice(0, 8)}-${i}`;
+        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peer, `Peer ${i}`, ago(30 * DAY));
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peer);
+        const post = `post-${crypto.randomUUID()}`;
+        db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'goods', ?, ?, 'completed')`).run(post, amount, peer);
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, ?, 'completed')`).run(`mtx-${crypto.randomUUID()}`, post, member.pk, peer, amount);
+        valueNeeded -= amount;
+    }
+    return getMemberTrustProfile(member.pk).earnedCredit;
 }
 
 function confirm(member: Id, by: Id): void {
@@ -331,6 +353,82 @@ async function main(): Promise<void> {
         && !JSON.stringify(released.heard).includes(lia.pk) && !JSON.stringify(released.heard).includes('Lia'),
         `the release's event names no keeper either, and nothing heard around it names Lia (${show(released.heard)})`);
     unaSock.ws.close();
+
+    // ── 7. a join by request, in the other keepers' objection window and after it ────────────────────────
+    console.log('── 7. a confirmed member\'s join, as the keepers, the admin and she read it ──');
+    // Shed: Lee leads it and Mo keeps it. Zoe, confirmed, with about 100 of earned credit, asks to join with 400: that much
+    // of it named, the rest from her known grant. Lee approves, which opens Mo's 3-day window to object.
+    const shed = makeEnterprise('Shed', [{ id: lee, backing: 0 }, { id: mo, backing: 0 }]);
+    db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(shed, lee.pk);
+    const zoe = makeMember('Zoe');
+    const zoeEarned = giveEarnedCredit(zoe, 100);
+    const zoeKnown = 400 - zoeEarned;
+    confirm(zoe, ada);
+    assert(zoeEarned > 0 && zoeEarned < 400, `Zoe has earned ${zoeEarned} of credit by trading, less than the 400 she will pledge`);
+    const zoeAsks = await call('POST', zoe, `/api/enterprise/${shed}/keepers/request`, { pledgedBacking: 400 });
+    const zoeApproved = await call('POST', lee, `/api/enterprise/${shed}/keepers/requests/${zoeAsks.body?.request?.id}/approve`, {});
+    assert(zoeAsks.status === 200 && zoeApproved.status === 200 && zoeApproved.body?.applied === false && zoeApproved.body?.change?.pledgedBacking === 400,
+        `Lee, Shed's lead, approves Zoe's 400: the window opens, and the answer gives Lee, who decides it, the whole 400 (${zoeAsks.status} ${show(zoeApproved.body)})`);
+    const changeFor = (who: Id, answer: any) => (answer?.keeperChanges ?? []).find((c: any) => c.memberPubkey === who.pk);
+    const pageAs = async (who: Id, enterprise: string) => (await call('GET', who, `/api/enterprise/${enterprise}`)).body;
+    const moWindow = await pageAs(mo, shed);
+    assert(changeFor(zoe, moWindow)?.pledgedBacking === zoeEarned && changeFor(zoe, moWindow)?.namedBackingOnly === true
+        && !JSON.stringify(changeFor(zoe, moWindow)).includes(':400') && (moWindow.keeperRequests ?? []).length === 0,
+        `Mo, Shed's other keeper, reads Zoe's change with her named ${zoeEarned} only, never 400 (pledgedBacking ${changeFor(zoe, moWindow)?.pledgedBacking})`);
+    const leeWindow = await pageAs(lee, shed);
+    const leeOpen = (leeWindow.keeperRequests ?? []).find((r: any) => r.memberPubkey === zoe.pk);
+    assert(leeOpen?.pledgedBacking === 400 && leeOpen?.pendingChange?.pledgedBacking === 400 && changeFor(zoe, leeWindow)?.pledgedBacking === 400
+        && changeFor(zoe, leeWindow)?.namedBackingOnly !== true,
+        `Lee, who decides it, reads the open request and its change whole, 400 on each (${show([leeOpen?.pledgedBacking, changeFor(zoe, leeWindow)])})`);
+    const adaWindow = await pageAs(ada, shed);
+    assert(changeFor(zoe, adaWindow)?.pledgedBacking === 400, `Ada (admin) reads Zoe's change whole, 400 (${show(changeFor(zoe, adaWindow))})`);
+    const zoeWindow = await pageAs(zoe, shed);
+    assert(zoeWindow.myPendingRequest?.pledgedBacking === 400 && zoeWindow.myPendingRequest?.pendingChange?.pledgedBacking === 400,
+        `Zoe reads her own request and its change whole, 400 (${show(zoeWindow.myPendingRequest?.pendingChange)})`);
+
+    // The window ends; Mo's next read applies it, and the one after reads it applied.
+    db.prepare('UPDATE enterprise_keeper_changes SET applies_at = ? WHERE enterprise_pubkey = ? AND member_pubkey = ?').run(ago(60_000), shed, zoe.pk);
+    await pageAs(mo, shed);
+    const moAfter = await pageAs(mo, shed);
+    const zoeSplit = db.prepare("SELECT id LIKE 'known:%' AS known, SUM(amount) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL GROUP BY 1 ORDER BY 1")
+        .all(shed, zoe.pk) as { known: number; s: number }[];
+    assert(!!keeperOf(moAfter.keepers, zoe) && show(zoeSplit) === show([{ known: 0, s: zoeEarned }, { known: 1, s: zoeKnown }]),
+        `the window ends: Zoe keeps Shed, with ${zoeEarned} named and ${zoeKnown} known (${show(zoeSplit)})`);
+    for (const query of ['?status=approved', '']) {
+        const listed = await call('GET', lee, `/api/enterprise/${shed}/keepers/requests${query}`);
+        const row = (listed.body?.requests ?? []).find((r: any) => r.memberPubkey === zoe.pk);
+        const named = (moAfter.pledges as Pledge[]).filter(p => p.keeper === zoe.pk).reduce((s, p) => s + p.amount, 0);
+        assert(listed.status === 200 && row?.status === 'approved' && row.pledgedBacking === zoeEarned && row.namedBackingOnly === true && row.pledgedBacking - named === 0,
+            `Lee's requests (${query || 'all'}): Zoe's approved request reads her named ${zoeEarned}, never 400; less her named pledges, 0 (pledgedBacking ${row?.pledgedBacking}, named ${named})`);
+    }
+    const adaListed = await call('GET', ada, `/api/enterprise/${shed}/keepers/requests?status=approved`);
+    const adaRow = (adaListed.body?.requests ?? []).find((r: any) => r.memberPubkey === zoe.pk);
+    assert(adaListed.status === 200 && adaRow?.pledgedBacking === 400 && adaRow?.namedBackingOnly !== true,
+        `Ada (admin) reads Zoe's approved request whole, 400 (${show(adaRow)})`);
+    const zoeAfter = await pageAs(zoe, shed);
+    assert(keeperOf(zoeAfter.keepers, zoe)?.backing === 400 && keeperOf(moAfter.keepers, zoe)?.backing === zoeEarned,
+        `Zoe reads her own keeper row whole, 400; Mo reads it as her named ${zoeEarned} (${keeperOf(zoeAfter.keepers, zoe)?.backing}, ${keeperOf(moAfter.keepers, zoe)?.backing})`);
+    assertFolded('Mo, Shed after Zoe joins', moAfter, zoeKnown, [zoe]);
+
+    // ── 8. a join the other keeper objects to ────────────────────────────────────────────────────────
+    console.log('── 8. a confirmed member\'s join that a keeper objects to ──');
+    // Ivy, confirmed, with no earned credit, asks to join with 200, all of it from her known grant. Lee approves; Mo objects.
+    const ivy = makeMember('Ivy');
+    confirm(ivy, ada);
+    const ivyAsks = await call('POST', ivy, `/api/enterprise/${shed}/keepers/request`, { pledgedBacking: 200 });
+    const ivyApproved = await call('POST', lee, `/api/enterprise/${shed}/keepers/requests/${ivyAsks.body?.request?.id}/approve`, {});
+    const moIvy = changeFor(ivy, await pageAs(mo, shed));
+    assert(ivyApproved.body?.applied === false && moIvy?.pledgedBacking === 0 && moIvy?.namedBackingOnly === true,
+        `Lee approves Ivy's 200; Mo reads her change with no named backing, never 200 (${show(moIvy)})`);
+    const objected = await call('POST', mo, `/api/enterprise/${shed}/keepers/changes/${moIvy?.id}/object`, {});
+    assert(objected.status === 200 && objected.body?.change?.status === 'objected' && objected.body?.change?.pledgedBacking === 0
+        && objected.body?.change?.namedBackingOnly === true,
+        `Mo objects: the answer gives him the closed change with no named backing, never 200 (${objected.status} ${show(objected.body?.change)})`);
+    const leeDeclined = (await call('GET', lee, `/api/enterprise/${shed}/keepers/requests?status=declined`)).body?.requests?.find((r: any) => r.memberPubkey === ivy.pk);
+    assert(leeDeclined?.status === 'declined' && leeDeclined.pledgedBacking === 0 && leeDeclined.namedBackingOnly === true,
+        `Lee reads Ivy's declined request with nothing named, never 200 (${show(leeDeclined)})`);
+    const adaDeclined = (await call('GET', ada, `/api/enterprise/${shed}/keepers/requests?status=declined`)).body?.requests?.find((r: any) => r.memberPubkey === ivy.pk);
+    assert(adaDeclined?.pledgedBacking === 200, `Ada (admin) reads Ivy's declined request whole, 200 (${show(adaDeclined)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

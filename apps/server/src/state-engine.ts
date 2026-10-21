@@ -4101,7 +4101,10 @@ export interface KeeperJoinRequest {
     memberPubkey: string;
     callsign?: string;
     avatarUrl?: string | null;
+    /** What they pledge as they join, earned and known together; who else reads it whole, keeperPledgeForReader. */
     pledgedBacking: number;
+    /** Set by keeperRequestForReader: true when pledgedBacking is the pledge's named part only. */
+    namedBackingOnly?: boolean;
     status: 'pending' | 'approved' | 'declined' | 'cancelled';
     createdAt: string;
     decidedAt?: string | null;
@@ -4490,7 +4493,10 @@ export interface KeeperChangeInfo {
     memberPubkey: string;
     memberCallsign: string;
     requestId: string | null;
+    /** An addition's pledge, earned and known together, as for a request (keeperPledgeForReader); 0 on a removal. */
     pledgedBacking: number;
+    /** Set by keeperChangeForReader: true when pledgedBacking is the pledge's named part only. */
+    namedBackingOnly?: boolean;
     proposedBy: string;
     proposedByCallsign: string | null;
     status: 'pending' | 'applied' | 'objected' | 'failed';
@@ -4545,6 +4551,67 @@ export function getKeeperChanges(enterprisePubkey: string, status?: KeeperChange
         ? db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? AND c.status = ? ORDER BY c.created_at DESC`).all(enterprisePubkey, status)
         : db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? ORDER BY c.created_at DESC`).all(enterprisePubkey);
     return (rows as any[]).map(toKeeperChangeInfo);
+}
+
+/**
+ * The earned part of the pledge a keeper's join bound, released since or not: bindApprovedKeeper writes it as plain-id
+ * rows beside any known row, all under one pledged_at no earlier than the moment the join was approved (`boundFrom`).
+ */
+function boundNamedPledge(enterprisePubkey: string, memberPubkey: string, boundFrom: string | null, pledged: number): number {
+    if (!boundFrom || pledged <= 0) return 0;
+    const first = db.prepare('SELECT MIN(pledged_at) AS at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at >= ?')
+        .get(enterprisePubkey, memberPubkey, boundFrom) as { at: string | null } | undefined;
+    if (!first?.at) return 0;
+    const row = db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at = ? AND id NOT LIKE 'known:%'")
+        .get(enterprisePubkey, memberPubkey, first.at) as { total: number };
+    return Math.min(pledged, Number(row.total));
+}
+
+/**
+ * The part of a keeper's join pledge `reader` may read (Marty, 2026-10-21: hide it). Its known part is drawn from a known
+ * grant, which says the admins confirmed them, and a confirmation stays private: the whole figure beside the named pledges
+ * the enterprise lists would give it by subtracting. So it goes whole to an owner or admin of the node, to the member
+ * themselves, and, while the join is open, to the lead or sole keeper who decides it. Anyone else, the other keepers in
+ * the objection window and the lead once it has closed, reads its named part: on an open join what their earned credit
+ * covers now (splitNewPledge's earned-first split), once bound what the binding pledged by name, and 0 for one closed
+ * unbound.
+ */
+function keeperPledgeForReader(
+    j: { enterprisePubkey: string; memberPubkey: string; pledged: number; open: boolean; boundFrom: string | null },
+    reader: BackingReader,
+): { pledgedBacking: number; namedBackingOnly: boolean } {
+    if (reader.nodeAdmin || reader.pubkey === j.memberPubkey
+        || (j.open && !!reader.pubkey && isLeadOrSoleKeeperOrAdmin(j.enterprisePubkey, reader.pubkey))) {
+        return { pledgedBacking: j.pledged, namedBackingOnly: false };
+    }
+    const named = j.open
+        ? Math.min(j.pledged, earnedPledgeRoom(j.memberPubkey))
+        : boundNamedPledge(j.enterprisePubkey, j.memberPubkey, j.boundFrom, j.pledged);
+    return { pledgedBacking: Math.round(named * 100) / 100, namedBackingOnly: true };
+}
+
+/** A keeper change as `reader` may read it: an addition's pledge by keeperPledgeForReader. */
+export function keeperChangeForReader(c: KeeperChangeInfo, reader: BackingReader): KeeperChangeInfo {
+    if (c.kind !== 'add') return { ...c, namedBackingOnly: false };
+    return {
+        ...c,
+        ...keeperPledgeForReader({
+            enterprisePubkey: c.enterprisePubkey, memberPubkey: c.memberPubkey, pledged: c.pledgedBacking,
+            open: c.status === 'pending', boundFrom: c.status === 'applied' ? c.resolvedAt : null,
+        }, reader),
+    };
+}
+
+/** A keeper request as `reader` may read it: its pledge by keeperPledgeForReader, and its pending change likewise. */
+export function keeperRequestForReader(r: KeeperJoinRequest, reader: BackingReader): KeeperJoinRequest {
+    return {
+        ...r,
+        ...keeperPledgeForReader({
+            enterprisePubkey: r.enterprisePubkey, memberPubkey: r.memberPubkey, pledged: r.pledgedBacking,
+            open: r.status === 'pending', boundFrom: r.status === 'approved' ? r.decidedAt ?? null : null,
+        }, reader),
+        pendingChange: r.pendingChange ? keeperChangeForReader(r.pendingChange, reader) : r.pendingChange,
+    };
 }
 
 /**

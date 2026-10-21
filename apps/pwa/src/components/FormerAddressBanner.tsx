@@ -37,7 +37,7 @@ export function FormerAddressBanner({ signedIn = false }: { signedIn?: boolean }
         >
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <p className="m-0 flex-1 min-w-0 basis-48 leading-snug [overflow-wrap:anywhere]">
-                    {t('This community has moved to')} <strong className="font-bold">{notice.primaryAddress}</strong>.
+                    {t('This community has moved to {address}.', { address: notice.primaryAddress })}
                 </p>
                 {' '}
                 <a

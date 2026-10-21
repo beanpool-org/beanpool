@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Makikita ng mga admin
 summary: Sa komunidad na ang mga admin ay nagtatabi ng listahan ng mga pangalan: ano ang hawak nito tungkol sa iyo, sino ang makakabasa nito, ano ang itinatago ng server ng iyong komunidad, at ano ang ibig sabihin ng pagiging kumpirmado.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## Ang listahan ng mga pangalan
@@ -27,7 +27,7 @@ Maaaring gumawa ang isang admin ng PDF na kopya ng listahan sa kanilang telepono
 Maaari kang **kumpirmahin** ng isang admin: sinasabi nila na ang iyong account ay ang tao sa iyong entry. Ang isang taong nakakakilala lamang sa iyo ang dapat gumawa niyon, at sa ilang komunidad ay dapat magkasundo ang dalawang admin.
 
 - Ang isang kumpirmasyon ay walang dalang pangalan. Itinatala ng server kung aling account, aling entry, at aling admin, hindi kailanman kung sino ka.
-- Hindi ito isang badge ng tiwala, at sa ngayon ay wala itong binabago sa app.
+- Hindi ito isang trust badge. Nagbibigay din ito sa iyo ng credit line kaagad, ang kilalang floor, maliban kung ini-off ito ng may-ari ng komunidad mo: tingnan ang "Iyong credit line".
 - Kung inimbita ka ng isang admin ayon sa pangalan, ang pagsali gamit ang kanilang imbitasyon ay nagkumpirma sa iyo laban sa iyong entry, ng admin na iyon. Ang ibig sabihin ng "Kumpirmado" ay sinasabi lamang ng isang admin na ang account na ito ay ang tao sa entry na iyon.
 - Kung papalitan mo ang isang nawalang telepono at lumipat ang iyong account sa isang bagong susi, lilipat din ang iyong kumpirmasyon kasama nito.
 - Kung aalis ka o buburahin mo ang iyong account, magtatapos ang iyong kumpirmasyon. Mananatili ang iyong entry sa listahan ng mga admin hanggang sa burahin ito ng isang admin: hilingin sa kanila na gawin ito.

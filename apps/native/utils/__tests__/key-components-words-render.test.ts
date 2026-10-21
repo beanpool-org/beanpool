@@ -233,6 +233,29 @@ describe('the 2FA code, the 12 boxes, the door\'s two ways in, Safety Backup\'s 
         expect(unfit(host, 320 - 32 - 34)).toEqual([]);
     });
 
+    it('the global door for an existing account: both ways in through t(), fitting at 320 dp', async () => {
+        await renderIn('xx', createElement('div', null,
+            createElement(DoorChoices, { account: 'existing', onWords() {}, onSignIn() {}, signInNote: pseudoLocalise('A note the screen hands it.') }),
+            createElement(DoorWorkProgress, { state: null })));
+        expect(host.textContent).toContain(pseudoLocalise(DOOR_CHOICE_TEXT.wordsExisting));
+        expect(host.textContent).toContain(pseudoLocalise(DOOR_CHOICE_TEXT.wordsLineExisting));
+        expect(host.textContent).toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInHeadingExisting));
+        expect(host.textContent).toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInLineExisting));
+        expect(host.textContent).not.toContain(pseudoLocalise(DOOR_CHOICE_TEXT.words));
+        expect(host.textContent).not.toContain(pseudoLocalise(DOOR_CHOICE_TEXT.signInHeading));
+        expect(bypassing(host, WRITTEN)).toEqual([]);
+        expect(unfit(host, 320 - 32 - 34)).toEqual([]);
+    });
+
+    it('welcome.tsx\'s door (DoorChoices default mode) still shows "Create an account with 12 secret words"', async () => {
+        await renderIn('en', createElement(DoorChoices, { onWords() {}, onSignIn() {} }));
+        expect(host.textContent).toContain('Create an account with 12 secret words');
+        expect(host.textContent).toContain('No Google, Apple or Facebook needed. Your 12 words are the only way back in.');
+        expect(host.textContent).toContain('Or sign in');
+        expect(host.textContent).not.toContain('Join with this account');
+        expect(host.textContent).not.toContain('Also add a sign-in');
+    });
+
     it('App Lock\'s screen', async () => {
         await renderIn('xx', createElement(AppLockScreenView, { screen: 'lock' }));
         expect(host.textContent).toContain(pseudoLocalise('Unlock App'));

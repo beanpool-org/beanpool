@@ -83,12 +83,6 @@ vi.mock('../../components/SsoButton', () => ({
     AppleButton: ({ title }: { title: string }) => createElement('button', null, title),
     FacebookButton: ({ title }: { title: string }) => createElement('button', null, title),
 }));
-vi.mock('../../components/WordsDoor', () => ({
-    DoorChoices: ({ onWords, signInNote }: { onWords: () => void; signInNote: string }) => createElement('div', null,
-        createElement('button', { onClick: onWords }, 'Create an account with 12 secret words'),
-        createElement('span', null, signInNote)),
-    DoorWorkProgress: () => null,
-}));
 const KEY = { publicKey: 'ab'.repeat(32), privateKey: 'not-used', callsign: 'Wren' };
 vi.mock('../global-join-existing', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../global-join-existing')>()),
@@ -175,12 +169,14 @@ describe("a self-hoster's open community's door (?node=)", () => {
         globalThis.fetch = network({ [SELF]: OPEN });
         await render();
         const heads = Array.from(host.querySelectorAll('[role="heading"]')).map(h => h.textContent);
-        expect(heads).toEqual(['Riverbend Open', 'Join Riverbend Open']);
+        expect(heads).toEqual(['Riverbend Open', 'Join Riverbend Open', 'Also add a sign-in']);
         // One line in the header at 320 dp: a long name is cut, never wrapped over Back.
         expect(header()!.getAttribute('data-lines')).toBe('1');
         expect(text()).toContain('open.riverbend.example');
         expect(text()).toContain('Riverbend Open lets anyone join. Join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.');
-        expect(text()).toContain('Create an account with 12 secret words');
+        expect(text()).toContain('Join with this account');
+        expect(text()).toContain('Also add a sign-in');
+        expect(text()).not.toContain('Create an account');
         expect(text()).not.toMatch(/global community/i);
         expect(new Set(asked.map(u => new URL(u).origin))).toEqual(new Set([SELF]));
         expect(work.started).toEqual([{ url: SELF, key: KEY.publicKey, door: 'words' }]);
@@ -227,9 +223,10 @@ describe("a self-hoster's open community's door (?node=)", () => {
         globalThis.fetch = network({ [SELF]: OPEN });
         await render(screen);
         expect(header()!.textContent).toBe('Riverbend Open');
-        expect(text()).toContain('Create an account with 12 secret words');
+        expect(text()).toContain('Join with this account');
+        expect(text()).not.toContain('Create an account');
         expect(work.started).toEqual([]);
-        await act(async () => { Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Create an account with 12 secret words')!.click(); });
+        await act(async () => { Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Join with this account'))!.click(); });
         expect(work.started).toEqual([{ url: SELF, key: KEY.publicKey, door: 'words' }]);
     });
 
@@ -237,9 +234,10 @@ describe("a self-hoster's open community's door (?node=)", () => {
         route.params = { node: SELF, from: 'link' };
         globalThis.fetch = network({ [SELF]: OPEN });
         await render();
-        expect(text()).toContain('Create an account with 12 secret words');
+        expect(text()).toContain('Join with this account');
+        expect(text()).not.toContain('Create an account');
         expect(work.started).toEqual([]);
-        await act(async () => { Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Create an account with 12 secret words')!.click(); });
+        await act(async () => { Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Join with this account'))!.click(); });
         expect(work.started).toEqual([{ url: SELF, key: KEY.publicKey, door: 'words' }]);
     });
 });
@@ -262,8 +260,11 @@ describe("the global community's door (no node, and its old name)", () => {
         globalThis.fetch = network({ [GLOBAL]: OPEN });
         await render(screen);
         const heads = Array.from(host.querySelectorAll('[role="heading"]')).map(h => h.textContent);
-        expect(heads).toEqual(['Global community', '🌍 Join the global community']);
+        expect(heads).toEqual(['Global community', '🌍 Join the global community', 'Also add a sign-in']);
         expect(text()).toContain('Meet people from everywhere and find communities near you, as the account on this phone.');
+        expect(text()).toContain('Join with this account');
+        expect(text()).not.toContain('Create an account');
+        expect(text()).toContain('Also add a sign-in');
         expect(text()).not.toContain('global.beanpool.org');
         expect(new Set(asked.map(u => new URL(u).origin))).toEqual(new Set([GLOBAL]));
         expect(work.started).toEqual([{ url: GLOBAL, key: KEY.publicKey, door: 'words' }]);

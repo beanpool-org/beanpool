@@ -3501,5 +3501,14 @@
   },
   "{name}, already in the group": "{name}, ஏற்கனவே குழுவில் உள்ளார்",
   "{name}, already invited": "{name}, ஏற்கனவே அழைக்கப்பட்டுள்ளார்",
-  "{name}, asked to join": "{name}, இணையக் கோரியுள்ளார்"
+  "{name}, asked to join": "{name}, இணையக் கோரியுள்ளார்",
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "ஒரு பொறுப்பாளர் இந்தக் கருவியின் சர்வர் நகலை அணைத்துவிட்டார், எனவே இது இந்த உலாவியில் மட்டுமே வைக்கப்பட்டுள்ளது. அமைப்புகளில் நீங்கள் அதை மீண்டும் இயக்கலாம்.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "உங்கள் சமூகத்தின் சர்வரைத் தொடர்பு கொள்ள முடியவில்லை, எனவே எதுவும் மாறவில்லை. ஆன்லைனில் இருக்கும்போது மீண்டும் முயற்சிக்கவும்.",
+  "Keep a private copy on your community's server": "உங்கள் சமூகத்தின் சர்வரில் ஒரு தனிப்பட்ட நகலை வைத்திருங்கள்",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "இந்த உலாவியில் வைக்கப்படுகிறது, மேலும் உங்கள் சமூகத்தின் சர்வரில் ஒரு தனிப்பட்ட நகல் வைக்கப்படும், அதை நீங்கள் மட்டுமே பயன்பாட்டின் மூலம் படிக்க முடியும். அந்த சர்வரில் உள்ள எல்லாவற்றையும் போலவே, அதை இயக்குபவரும் படிக்க முடியும்.",
+  "One device at a time: the copy you changed last is the one kept.": "ஒரு நேரத்தில் ஒரு சாதனம்: கடைசியாக நீங்கள் மாற்றிய நகலே வைக்கப்படும்.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "இந்த உலாவியிலிருந்து {tool}-க்கான இந்தச் சமூகத்தின் தரவையும், உங்கள் சமூகத்தின் சர்வரில் உள்ள அதன் நகலையும் நீக்குகிறது. உங்கள் பெயரில் உள்நுழைந்த மற்றொரு சாதனம் தன்னிடம் உள்ளதை வைத்திருக்கும், மேலும் அதை அனுப்புவதை நிறுத்திவிடும். மற்றொரு சமூகத்தில் உள்ள அதே கருவி அதன் சொந்தத் தரவை வைத்திருக்கும். இதைச் செயல்தவிர்க்க முடியாது.",
+  "You can edit a message for 15 minutes after sending it.": "செய்தியை அனுப்பிய பிறகு 15 நிமிடங்கள் வரை அதைத் திருத்தலாம்.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "உங்கள் சமூகத்தின் சர்வரால் இன்னும் நகலை வைத்திருக்க முடியவில்லை, எனவே இப்போதைக்கு இது இந்த உலாவியில் மட்டுமே இருக்கும்.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "உங்கள் சமூகத்தின் சர்வரில் இனி இந்தக் கருவியின் நகல் வைக்கப்படுவதில்லை, எனவே இது இந்த உலாவியில் மட்டுமே வைக்கப்பட்டுள்ளது. அமைப்புகளில் நீங்கள் நகலை மீண்டும் இயக்கலாம்."
 }

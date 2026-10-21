@@ -149,7 +149,7 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
                 </p>
                 {!line.exception && (
                     <p className="m-0 text-nature-300 leading-relaxed break-words">
-                        {t('Confirm them on the names list, in the app, and they start with a limit of {knownFloor} Beans: your community’s known floor.', { knownFloor: line.knownFloor.toLocaleString('en') })}
+                        {t('Confirm them on the names list, in the app, and their limit grows by up to {knownFloor} Beans: your community’s known floor.', { knownFloor: line.knownFloor.toLocaleString('en') })}
                     </p>
                 )}
             </div>

@@ -66,7 +66,7 @@ The app reads and writes nothing whenever it can't check what the server says, a
 ## Adding a name and confirming a member
 
 - **Add a name**: the person's real name, and a note if it helps. A name and a short note only. Don't write an address, a date of birth or an ID number: the less the list holds, the less there is to lose.
-- **Confirm a member**: open an entry, tap **Confirm a member**, and pick their account. One person, one entry: an entry can have one member confirmed against it, and a member can be confirmed against one entry. Confirm only someone you know is that person. Unless your owner switched the known floor off, they start with a limit of the known floor while they keep an offer listed, and the app says how much before you pick.
+- **Confirm a member**: open an entry, tap **Confirm a member**, and pick their account. One person, one entry: an entry can have one member confirmed against it, and a member can be confirmed against one entry. Confirm only someone you know is that person. Unless your owner switched the known floor off, their limit grows by up to the known floor (on top of any credit they have earned) while they keep an offer listed, and the app says how much before you pick.
 - An admin can't confirm themselves while the community has another admin. Ask another admin.
 - **Revoke** takes a confirmation away. You can confirm them again later.
 - **Two admins confirm each member**: an owner's setting at the bottom of the list, off to start with. When it is on, a confirmation waits until a second admin confirms it too: not the admin who made it, and not the member. Where nobody else could (an admin, in a community of two admins), one admin is enough.

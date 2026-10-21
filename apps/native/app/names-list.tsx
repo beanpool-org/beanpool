@@ -697,7 +697,7 @@ export default function NamesListScreen() {
                         : t('Which member is this person? Confirm only someone you know is them.')}
                 </Text>
                 {mode.workOff ? <Text style={styles.hint}>{t('They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.', { amount: beansWords(leftOf(mode.workOff)) })}</Text> : null}
-                {givesLimit !== null ? <Text style={styles.hint}>{t('Once confirmed, they start with a limit of {amount}: your community’s known floor, while they keep an offer listed.', { amount: beansWords(givesLimit) })}</Text> : null}
+                {givesLimit !== null ? <Text style={styles.hint}>{t('Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.', { amount: beansWords(givesLimit) })}</Text> : null}
                 <TextInput
                     style={styles.search} value={memberQuery} onChangeText={setMemberQuery} placeholder={t('Find a member')}
                     placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel={t('Find a member by name')}

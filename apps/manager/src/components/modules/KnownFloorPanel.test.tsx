@@ -69,9 +69,9 @@ describe('KnownFloorPanel', () => {
         render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
         const dial = await screen.findByLabelText(/Confirmed members get the known floor/);
         expect(dial).toBeChecked();
-        expect(screen.getByTestId('known-floor-panel')).toHaveTextContent('On in every community unless an owner switches it off.');
+        expect(screen.getByTestId('known-floor-panel')).toHaveTextContent('On in every community with Beans unless an owner switches it off.');
         expect(screen.getByTestId('known-floor-panel')).toHaveTextContent(
-            'confirm a member on the names list, in the app, and they start with a limit of 1,000 Beans, your community’s known floor.');
+            'confirm a member on the names list, in the app, and their limit grows by up to 1,000 Beans, your community’s known floor.');
         fireEvent.click(dial);
         fireEvent.click(screen.getByRole('button', { name: 'Save the known floor' }));
         await screen.findByText('Saved.');

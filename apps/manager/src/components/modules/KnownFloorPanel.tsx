@@ -151,7 +151,7 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
                 <span className="min-w-0 text-sm text-white break-words">
                     Confirmed members get the known floor
                     <span className="block text-xs text-nature-300 mt-0.5 leading-relaxed">
-                        {t('On in every community unless an owner switches it off. Nobody’s limit changes until an admin confirms them: confirm a member on the names list, in the app, and they start with a limit of {knownFloor} Beans, your community’s known floor. Switched off, nobody loses Beans they hold.', { knownFloor: saved.knownFloor.toLocaleString('en') })}
+                        {t('On in every community with Beans unless an owner switches it off. Nobody’s limit changes until an admin confirms them: confirm a member on the names list, in the app, and their limit grows by up to {knownFloor} Beans, your community’s known floor. Switched off, nobody loses Beans they hold.', { knownFloor: saved.knownFloor.toLocaleString('en') })}
                     </span>
                 </span>
             </label>

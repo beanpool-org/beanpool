@@ -737,7 +737,6 @@ export function initStateEngine(): void {
     if (accounts.length > 0) {
         ledger.loadState(accounts);
     }
-    reportBackingFigureDriftAtBoot();
 
     // A2-1: register the balance-mutation hook so any raw-SQL balance change in
     // db.ts (crowdfund pledge/refund) re-syncs the in-memory ledger from the DB,
@@ -862,6 +861,10 @@ export function initStateEngine(): void {
     // say) by a door before this version is logged, with what the operator should do. Nothing is merged or deleted: it
     // is a person's data. On a standby too, which holds the same rows. Never throws.
     reportMisspeltMemberKeys();
+    // How many enterprises' spend floors now read their pledges alone, counts only. It reads stored rows and never the
+    // in-memory ledger, and it sits after the Commons restore and the exemptions above all the same: a balance read before
+    // them charged a treasury demurrage it is exempt from, and the restore then wrote over the pot's half (#2313).
+    reportBackingFigureDriftAtBoot();
 
     // Daily ledger conservation audit (also once shortly after boot)
     setTimeout(() => {
@@ -3314,23 +3317,30 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
  * lets them, so they are spend-frozen until they earn it back, as when a keeper's pledge is released. Nothing is
  * rewritten and no Bean moves: the figure stays what each keeper pledged as they joined. Counts only, never who
  * (reportBackingFigureDriftAtBoot).
+ *
+ * Read-only on money: the balance is the stored row, against the usable floor (SQL reads only), never getBalance or
+ * ledger.getAccount. Those charge demurrage as they read, and at boot they ran before the Commons restore and the
+ * treasuries' exemptions: an exempt treasury was charged and the pot's half lost (#2313). An enterprise is a treasury,
+ * exempt, so its stored row is its balance (getBalance's, to the cent).
  */
 export function backingFigureDrift(): { enterprises: number; frozen: number } {
     const rows = db.prepare(`
-        SELECT o.treasury_pubkey AS pk
+        SELECT o.treasury_pubkey AS pk,
+               COALESCE((SELECT a.balance FROM accounts a WHERE a.public_key = o.treasury_pubkey), 0) AS balance
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         JOIN members e ON e.public_key = o.treasury_pubkey
         WHERE m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
-          AND e.status != 'completed' AND COALESCE(e.credit_frozen, 0) = 0
+          AND e.is_treasury = 1 AND e.status != 'completed' AND COALESCE(e.credit_frozen, 0) = 0
         GROUP BY o.treasury_pubkey
         HAVING COALESCE(SUM(o.backing), 0) > (
             SELECT COALESCE(SUM(p.amount), 0) FROM enterprise_pledges p
             JOIN members k ON k.public_key = p.keeper
             WHERE p.enterprise = o.treasury_pubkey AND p.released_at IS NULL AND p.id NOT LIKE 'known:%'
               AND k.status = 'active' AND COALESCE(k.credit_frozen, 0) = 0)
-    `).all() as { pk: string }[];
-    return { enterprises: rows.length, frozen: rows.filter(r => getBalance(r.pk).frozen).length };
+    `).all() as { pk: string; balance: number }[];
+    const frozen = rows.filter(r => Math.round(Number(r.balance) * 100) / 100 < usableFloor(r.pk)).length;
+    return { enterprises: rows.length, frozen };
 }
 
 /** Says at boot how many enterprises' spend floors now read their pledges alone (backingFigureDrift). Never throws. */

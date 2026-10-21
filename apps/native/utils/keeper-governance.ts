@@ -31,6 +31,8 @@ export interface KeeperChangeLite {
     proposedBy: string;
     proposedByCallsign?: string | null;
     pledgedBacking?: number;
+    /** The node sent the pledge's named part only: a keeper other than the lead reads no known part (keeperChangeForReader). */
+    namedBackingOnly?: boolean;
     appliesAt: string;
     status?: string;
 }
@@ -69,6 +71,12 @@ export function keeperChangeTitle(c: KeeperChangeLite, w: KeeperWords = ENTERPRI
     const project = isProject(w);
     if (c.kind === 'remove') return project ? t('Removing {name} as a collaborator', { name }) : t('Removing {name} as a keeper', { name });
     const backing = Number(c.pledgedBacking || 0);
+    // Never "backing N" for a part: the rest, from a known grant, still backs the enterprise, unnamed.
+    if (backing > 0 && c.namedBackingOnly) {
+        return project
+            ? tn(backing, 'Adding {name} as a collaborator, with {n} beans of named backing', 'Adding {name} as a collaborator, with {n} beans of named backing', { name })
+            : tn(backing, 'Adding {name} as a keeper, with {n} beans of named backing', 'Adding {name} as a keeper, with {n} beans of named backing', { name });
+    }
     if (backing > 0) {
         return project
             ? tn(backing, 'Adding {name} as a collaborator, backing {n} beans', 'Adding {name} as a collaborator, backing {n} beans', { name })

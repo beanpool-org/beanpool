@@ -6467,5 +6467,23 @@
     "many": "від {n} довіри",
     "other": "від {n} довіри"
   },
-  "{name}, already invited": "{name}, вже запрошено"
+  "{name}, already invited": "{name}, вже запрошено",
+  "A way back in if you lose this phone. It's linked to this same account.": "Спосіб відновити доступ у разі втрати цього телефону. Він прив'язаний до цього самого облікового запису.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Додавання {name} співавтором, із {n} бобом іменної підтримки",
+    "few": "Додавання {name} співавтором, із {n} бобами іменної підтримки",
+    "many": "Додавання {name} співавтором, із {n} бобами іменної підтримки",
+    "other": "Додавання {name} співавтором, із {n} бобами іменної підтримки"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Додавання {name} доглядачем, із {n} бобом іменної підтримки",
+    "few": "Додавання {name} доглядачем, із {n} бобами іменної підтримки",
+    "many": "Додавання {name} доглядачем, із {n} бобами іменної підтримки",
+    "other": "Додавання {name} доглядачем, із {n} бобами іменної підтримки"
+  },
+  "Also add a sign-in": "Також додати вхід",
+  "Look around first, then join with this account": "Спершу огляньтеся, потім приєднайтеся з цим обліковим записом",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Знайомтеся з людьми звідусіль і знаходьте спільноти поблизу. Спершу огляньтеся як гість, потім торкніться «Приєднатися» вгорі, щоб приєднатися від імені акаунта на цьому телефоні: ваш ключ і 12 слів залишаються незмінними, а в інших ваших спільнотах нічого не зміниться.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Після підтвердження їхній ліміт зростає щонайбільше на {amount}: відомий мінімум вашої спільноти, поки в них є розміщена пропозиція.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Використовує ключ і 12 слів, які вже є на цьому телефоні. Новий обліковий запис не створюється."
 }

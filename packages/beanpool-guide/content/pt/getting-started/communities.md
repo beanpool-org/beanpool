@@ -3,7 +3,7 @@ slug: communities
 title: Mais de uma comunidade
 summary: Participe de várias comunidades com uma só conta, alterne entre elas, acompanhe sua comunidade para um novo endereço e veja o que a comunidade global mostra.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar
-source-hash: b123b0f66fb01c9d
+source-hash: fe1d603a6bf1c424
 ---
 
 ## Uma conta, várias comunidades
@@ -23,20 +23,21 @@ Sua chave, suas 12 palavras e seu nome acompanham você. Suas publicações, con
 
 A comunidade global não precisa de convite, e você entra nela com a conta que já possui: a mesma chave e as mesmas 12 palavras. O aplicativo oferece essa opção quando a comunidade global está aberta e não informou ao aplicativo que esta conta já é membro lá.
 
-Sob **SUAS COMUNIDADES**, há sempre uma linha para a **Comunidade global**. Sua segunda linha informa a sua situação: o endereço dela quando você for membro (toque nela para alternar para ela), **Entrar com esta conta: 12 palavras ou um login** (**Entrar com esta conta: um login** onde a comunidade não aceita as 12 palavras) quando você puder entrar, ou o motivo pelo qual não pode agora: **Verificando…**, **Não é possível alcançar agora** (com **Toque para tentar de novo.** enquanto este celular não tiver salvo a comunidade global), **Não está aceitando novos membros agora.**, **Esta comunidade está em uma prévia privada. Peça um convite ao dono dela.** ou **Sua conta lá foi encerrada.** Quando a comunidade global não puder ser alcançada e você estiver conectado a uma comunidade da qual é membro, uma linha abaixo avisa: **Sua própria comunidade não é afetada.** Nada mais no celular depende dela.
+Sob **Suas comunidades**, há sempre uma linha para a **Comunidade global**. Sua segunda linha informa a sua situação: o endereço dela quando você for membro (toque nela para alternar para ela), **Explore primeiro, depois entre com esta conta** quando você puder entrar (enquanto a visita como convidado: **Entrar com esta conta: 12 palavras ou um login**, ou **Entrar com esta conta: um login** onde a comunidade não aceita as 12 palavras), ou o motivo pelo qual não pode agora: **Verificando…**, **Não é possível alcançar agora** (com **Toque para tentar de novo.** enquanto este celular não tiver salvo a comunidade global), **Não está aceitando novos membros agora.**, **Esta comunidade está em uma prévia privada. Peça um convite ao dono dela.** ou **Sua conta lá foi encerrada.** Quando a comunidade global não puder ser alcançada e você estiver conectado a uma comunidade da qual é membro, uma linha abaixo avisa: **Sua própria comunidade não é afetada.** Nada mais no celular depende dela.
 
-- Toque no feijão no canto superior esquerdo. Na aba do **BeanPool**, sob **SUAS COMUNIDADES**, toque em **Comunidade global** (sua segunda linha diz **Entrar com esta conta**). Essa opção também está nas **Configurações**, sob **Avançado / Subsistema**. Se você estiver visitando a comunidade global como convidado, toque em **Entrar** no topo, ao lado do **?**, e depois em **Entrar com 12 palavras ou um login** (**Entrar com um login** onde a comunidade aceita apenas logins). Se o aplicativo mostrar **Você ainda não é membro aqui** para a comunidade global, toque em **Entrar com esta conta**.
-- Escolha como entrar: **Criar conta com 12 palavras secretas**, que usa as 12 palavras que sua conta já tem (sem login, portanto sem bloqueio do celular), ou **Ou faça login** uma vez com Google, Apple (em um iPhone) ou Facebook. Para um login, o aplicativo pede o bloqueio do seu celular primeiro, porque esse login também se torna uma forma de voltar à sua conta.
+- Toque no feijão no canto superior esquerdo. Na aba do **BeanPool**, sob **Suas comunidades**, toque em **Comunidade global** (sua segunda linha diz **Explore primeiro, depois entre com esta conta**). O aplicativo abre a comunidade global como convidado, assim como o site faz: você explora primeiro, e o ponto no feijão mostra que você é um convidado. Essa opção também está nas **Configurações**, sob **Comunidades salvas**: **Explorar a comunidade global**. Nenhuma entrada é feita e nenhuma conta é criada ao apenas olhar.
+- Quando estiver tudo pronto, toque em **Entrar** no topo, ao lado do **?**, e depois em **Entrar com 12 palavras ou um login** (**Entrar com um login** onde a comunidade aceita apenas logins). Se o aplicativo mostrar **Você ainda não é membro aqui** para a comunidade global, toque em **Entrar com esta conta**.
+- Escolha como entrar: **Entrar com esta conta**, que usa a chave e as 12 palavras já neste celular (sem login, portanto sem bloqueio do celular), ou, sob **Adicionar também um login**, faça login uma vez com Google, Apple (em um iPhone) ou Facebook. Para um login, o aplicativo pede o bloqueio do seu celular primeiro, porque esse login também se torna uma forma de voltar à sua conta.
 - Confira o nome que as pessoas verão por lá e toque em **Entrar**. Se alguém já tiver esse nome, o aplicativo sugere outros.
 - Depois, escolha sua foto para a comunidade global, como em qualquer nova comunidade, e em seguida indique aproximadamente onde você está (**Mais ou menos onde você está?**; você pode tocar em **Pular por enquanto**): a comunidade global mostra os anúncios próximos a ela. Consulte "Entrar no BeanPool".
 
 Nada muda nas suas outras comunidades, e suas 12 palavras permanecem as mesmas. Um login também se torna uma forma de voltar para a mesma conta: uma cópia protegida dela é guardada para esse login, de modo que, se você perder o celular, ele recuperará esta conta, não uma nova. Consulte "Recuperar sua conta". Um login que você vinculou à sua conta anteriormente continua funcionando. Se você entrar com 12 palavras e nenhum login mantiver uma cópia da sua conta, o aplicativo exibirá o cartão **Sua conta tem uma única forma de recuperação**, como para qualquer pessoa que entra com 12 palavras (consulte "Entrar no BeanPool").
 
-Se o aplicativo disser **Este login já entrou na comunidade global com outra conta do BeanPool**, esse login já tem uma conta própria lá. Use outro login: uma conta de login cria uma conta na comunidade global.
+Se o aplicativo disser **Este login já entrou na comunidade global com outra conta do BeanPool**, esse login tem uma conta própria por lá. Use outro login: cada conta de login cria uma conta na comunidade global.
 
-Em um celular novo, sem nenhuma conta ainda, use **Explorar o BeanPool no mundo todo** na primeira tela. Consulte "Entrar no BeanPool".
+Em um celular novo, ainda sem nenhuma conta, use **Explorar o BeanPool no mundo todo** na primeira tela. Consulte "Entrar no BeanPool".
 
-## O que a comunidade global mostra para você
+## O que a comunidade global mostra
 
 A comunidade global possui anúncios de todos os lugares, muito mais do que um celular precisa guardar. Por isso, seu celular mantém os que estão perto de você:
 
@@ -61,10 +62,10 @@ Suas outras comunidades funcionam como antes.
 
 ## Como alternar
 
-- Toque no feijão no canto superior esquerdo. A aba do **BeanPool** se abre, com **SUAS COMUNIDADES** perto do topo.
+- Toque no feijão no canto superior esquerdo. A aba do **BeanPool** se abre, com **Suas comunidades** perto do topo.
 - Toque na que você deseja.
 
-Você também pode alternar nas **Configurações**, sob **SISTEMA**, depois em **Avançado / Subsistema**. Suas comunidades estão listadas ali. A que você está usando está marcada como ativa. Toque em **Alternar para a cidade** em outra comunidade para ir até ela.
+Você também pode alternar nas **Configurações**, sob **Sistema**, depois em **Comunidades salvas**. Suas comunidades estão listadas ali. A que você está usando está marcada como ativa. Toque em **Alternar para esta comunidade** em outra para ir até ela.
 
 ## Quando sua comunidade muda para um novo endereço
 
@@ -77,8 +78,8 @@ Uma comunidade pode mudar para um novo endereço: por exemplo, do número do ser
 
 ## Esquecer uma comunidade neste celular
 
-- Em **Avançado / Subsistema**, toque em **Esquecer** em uma comunidade que você não esteja usando no momento. Isso remove a comunidade e seus dados salvos deste celular.
-- Na aba do **BeanPool**, sob **SUAS COMUNIDADES**, manter uma comunidade pressionada e tocar em **Remover** apenas a tira da lista. Os dados dela continuam no celular.
+- Em **Comunidades salvas**, toque em **Esquecer** em uma comunidade que você não esteja usando no momento. Isso remove a comunidade e seus dados salvos deste celular.
+- Na aba do **BeanPool**, sob **Suas comunidades**, manter uma comunidade pressionada e tocar em **Remover** apenas a tira da lista. Os dados dela continuam no celular.
 
 Nenhuma dessas opções exclui sua conta de lá, e suas outras comunidades não são afetadas.
 

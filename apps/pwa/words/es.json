@@ -3502,5 +3502,14 @@
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "one": "Añadiendo a {name} como custodio, con {n} frijol de respaldo nominal",
     "other": "Añadiendo a {name} como custodio, con {n} frijoles de respaldo nominal"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Un custodio desactivó la copia de esta herramienta en el servidor, por lo que solo se guarda en este navegador. Puedes volver a activarla en Ajustes.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "No se pudo conectar con el servidor de tu comunidad, por lo que nada cambió. Inténtalo de nuevo cuando tengas conexión.",
+  "Keep a private copy on your community's server": "Guardar una copia privada en el servidor de tu comunidad",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Se guarda en este navegador, con una copia privada en el servidor de tu comunidad que solo tú puedes leer a través de la aplicación. Como con todo en ese servidor, su operador podría.",
+  "One device at a time: the copy you changed last is the one kept.": "Un dispositivo a la vez: la copia que modificaste por última vez es la que se conserva.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Elimina los datos de esta comunidad para {tool} de este navegador y su copia en el servidor de tu comunidad. Otro dispositivo con tu sesión iniciada conserva lo que tiene y deja de enviarlo. La misma herramienta en otra comunidad conserva los suyos. No se puede deshacer.",
+  "You can edit a message for 15 minutes after sending it.": "Puedes editar un mensaje durante 15 minutos después de enviarlo.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "El servidor de tu comunidad aún no puede guardar una copia, así que por ahora solo se queda en este navegador.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "El servidor de tu comunidad ya no guarda una copia de esta herramienta, por lo que solo se guarda en este navegador. Puedes volver a activar la copia en Ajustes."
 }

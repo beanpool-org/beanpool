@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server status — BeanPool</title>
-    <meta name="description" content="Whether BeanPool's own servers answer: the global community, the test community and the registrar, checked from outside every 5 minutes.">
+    <title>Trạng thái máy chủ — BeanPool</title>
+    <meta name="description" content="Tình trạng phản hồi của các máy chủ BeanPool: cộng đồng toàn cầu, cộng đồng thử nghiệm và công cụ đăng ký, được kiểm tra từ bên ngoài mỗi 5 phút.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.8">
@@ -77,22 +77,22 @@
 <body>
     <nav id="navbar">
         <div class="nav-inner">
-            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Biểu tượng BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
-                <a href="index.html#how-it-works">How It Works</a>
-                <a href="help.html">Help</a>
-                <a href="getting-started.html" class="nav-cta">Get Started</a>
+                <a href="index.html#how-it-works">Cách hoạt động</a>
+                <a href="help.html">Trợ giúp</a>
+                <a href="getting-started.html" class="nav-cta">Bắt đầu</a>
             </div>
         </div>
     </nav>
 
     <main class="status-page glass-panel">
-        <h1>Server status</h1>
-        <p class="lede">Whether BeanPool's own servers answer, checked from outside every 5 minutes. Local communities run on their own servers and are not on this page: when ours are down, they carry on.</p>
-        <p class="status-note" id="status-note" role="status">Reading the status…</p>
+        <h1>Trạng thái máy chủ</h1>
+        <p class="lede">Tình trạng phản hồi của các máy chủ thuộc BeanPool, được kiểm tra từ bên ngoài mỗi 5 phút một lần. Các cộng đồng địa phương hoạt động trên máy chủ riêng của họ và không hiển thị trên trang này: khi máy chủ của chúng tôi gặp sự cố, các cộng đồng đó vẫn tiếp tục hoạt động bình thường.</p>
+        <p class="status-note" id="status-note" role="status">Đang đọc trạng thái…</p>
         <ul class="status-list" id="status-list" hidden></ul>
         <p class="status-foot" id="status-foot" hidden></p>
-        <noscript><p class="status-note">This page needs JavaScript to read the status. The figures themselves: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
+        <noscript><p class="status-note">Trang này cần JavaScript để đọc trạng thái. Dữ liệu số liệu: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
     </main>
 
     <script>
@@ -102,16 +102,16 @@
         var URL_ = '/api/registrar/status.json';
         var LATE_S = 15 * 60;   // three ticks without a new status: the registrar's checks are late
         var SERVERS = {
-            global: { label: 'The global community', host: 'global.beanpool.org' },
-            test: { label: 'The test community', host: 'test.beanpool.org' },
-            vault: { label: 'The key vault', host: 'vault.beanpool.org' },
-            registrar: { label: 'Community addresses', host: 'beanpool.org: gives communities their name.beanpool.org addresses. When it is down, those addresses keep working; new ones and beanpool.org/i/ links wait.' },
+            global: { label: 'Cộng đồng toàn cầu', host: 'global.beanpool.org' },
+            test: { label: 'Cộng đồng thử nghiệm', host: 'test.beanpool.org' },
+            vault: { label: 'Kho khóa bảo mật', host: 'vault.beanpool.org' },
+            registrar: { label: 'Địa chỉ cộng đồng', host: 'beanpool.org: cấp cho các cộng đồng địa chỉ name.beanpool.org của họ. Khi dịch vụ ngừng hoạt động, các địa chỉ này vẫn tiếp tục hoạt động; việc tạo địa chỉ mới và liên kết beanpool.org/i/ sẽ phải chờ.' },
         };
         var WHY = {
-            'timed-out': 'it did not answer in time',
-            'unreachable': 'it could not be reached',
-            'not-ours': 'something else answered at its address',
-            'checks-missed': 'the checks did not run',
+            'timed-out': 'không phản hồi kịp thời',
+            'unreachable': 'không thể tiếp cận',
+            'not-ours': 'có dịch vụ khác phản hồi tại địa chỉ này',
+            'checks-missed': 'quá trình kiểm tra không chạy',
         };
         var list = document.getElementById('status-list');
         var note = document.getElementById('status-note');
@@ -131,16 +131,16 @@
         function day(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d) ? dayFmt.format(new Date(d + 'T00:00:00Z')) : null; }
         function lasted(s) {
             var m = Math.max(1, Math.round(s / 60));
-            if (m < 60) return m + (m === 1 ? ' minute' : ' minutes');
+            if (m < 60) return m + ' phút';
             var h = Math.floor(m / 60), r = m % 60;
-            if (h >= 48) return Math.round(h / 24) + ' days';
-            return h + (h === 1 ? ' hour' : ' hours') + (r ? ' ' + r + (r === 1 ? ' minute' : ' minutes') : '');
+            if (h >= 48) return Math.round(h / 24) + ' ngày';
+            return h + ' giờ' + (r ? ' ' + r + ' phút' : '');
         }
         function why(code) {
-            if (typeof code !== 'string') return 'it did not answer';
+            if (typeof code !== 'string') return 'không phản hồi';
             var http = code.match(/^http-(\d{3})$/);
-            if (http) return 'it answered with an error (HTTP ' + http[1] + ')';
-            return WHY[code] || 'it did not answer';
+            if (http) return 'phản hồi có lỗi (HTTP ' + http[1] + ')';
+            return WHY[code] || 'không phản hồi';
         }
 
         function row(s, late) {
@@ -148,11 +148,11 @@
             var inc = s.incident && num(s.incident.began_at) ? s.incident : null;
             var open = inc && inc.ended_at === null;
             var state, words;
-            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Its checks are late'; }
-            else if (open) { state = 'down'; words = 'Down'; }
-            else if (s.up === true) { state = 'up'; words = 'Answering'; }
-            else if (s.up === false) { state = 'missed'; words = 'Missed its last check'; }
-            else { state = 'unknown'; words = 'Not checked yet'; }
+            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Kiểm tra bị chậm'; }
+            else if (open) { state = 'down'; words = 'Ngừng hoạt động'; }
+            else if (s.up === true) { state = 'up'; words = 'Đang hoạt động'; }
+            else if (s.up === false) { state = 'missed'; words = 'Bỏ lỡ lần kiểm tra gần nhất'; }
+            else { state = 'unknown'; words = 'Chưa được kiểm tra'; }
 
             var li = el('li', 'status-row');
             li.setAttribute('data-state', state);
@@ -169,19 +169,19 @@
             var share = el('p', 'status-share');
             var pct = num(s.percent);
             var since = day(s.since);
-            if (pct === null) share.textContent = 'No checks counted yet.';
+            if (pct === null) share.textContent = 'Chưa có lượt kiểm tra nào được tính.';
             else {
                 share.appendChild(el('strong', null, pct + '%'));
-                var of = s.name === 'registrar' ? ' of its 5-minute checks ran' : ' of checks answered';
-                share.appendChild(document.createTextNode(of + (since ? ' since ' + since : ' over the last 90 days') + '.'));
+                var of = s.name === 'registrar' ? ' số lần kiểm tra 5 phút đã chạy' : ' số lần kiểm tra đã phản hồi';
+                share.appendChild(document.createTextNode(of + (since ? ' kể từ ' + since : ' trong 90 ngày qua') + '.'));
             }
             li.appendChild(share);
 
             var last = el('p', 'status-incident');
-            if (!inc) last.textContent = since ? 'No incident since ' + since + '.' : 'No incident recorded.';
-            else if (open) last.textContent = 'Down since ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
-            else if (num(inc.ended_at)) last.textContent = 'Last incident: ' + when(inc.began_at) + ' for ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
-            else last.textContent = 'Last incident: ' + when(inc.began_at) + '.';
+            if (!inc) last.textContent = since ? 'Không có sự cố nào kể từ ' + since + '.' : 'Chưa ghi nhận sự cố nào.';
+            else if (open) last.textContent = 'Ngừng hoạt động từ ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
+            else if (num(inc.ended_at)) last.textContent = 'Sự cố gần nhất: ' + when(inc.began_at) + ' kéo dài trong ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
+            else last.textContent = 'Sự cố gần nhất: ' + when(inc.began_at) + '.';
             li.appendChild(last);
             return li;
         }
@@ -191,14 +191,14 @@
             var servers = doc && doc.v === 1 && Array.isArray(doc.servers) ? doc.servers.filter(function (s) {
                 return s && typeof s.name === 'string' && /^[a-z0-9-]{1,32}$/.test(s.name);
             }).slice(0, 6) : [];
-            if (!at || !servers.length) { say('The status could not be read: it is not in a form this page knows.'); return; }
+            if (!at || !servers.length) { say('Không thể đọc trạng thái: định dạng không tương thích với trang này.'); return; }
             var late = Date.now() / 1000 - at > LATE_S;
             list.textContent = '';
             servers.forEach(function (s) { list.appendChild(row(s, late)); });
             list.hidden = false;
-            if (late) { note.textContent = 'These are from ' + zoneFmt.format(new Date(at * 1000)) + ': the checks have not run since. What a server says now may differ.'; note.setAttribute('data-tone', 'late'); }
-            else { note.textContent = 'Checked ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
-            foot.textContent = 'A check is one look from outside, 5 minutes apart. Two failed looks in a row are an incident; the share counts every look. Times are your own time zone’s.';
+            if (late) { note.textContent = 'Dữ liệu từ ' + zoneFmt.format(new Date(at * 1000)) + ': các lượt kiểm tra chưa chạy lại kể từ lúc đó. Trạng thái máy chủ hiện tại có thể khác.'; note.setAttribute('data-tone', 'late'); }
+            else { note.textContent = 'Đã kiểm tra lúc ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
+            foot.textContent = 'Mỗi lần kiểm tra là một lượt truy vấn từ bên ngoài, cách nhau 5 phút. Hai lần truy vấn thất bại liên tiếp được tính là một sự cố; tỷ lệ phần trăm tính trên mọi lượt truy vấn. Thời gian hiển thị theo múi giờ của bạn.';
             foot.hidden = false;
         }
         function say(text) {
@@ -212,11 +212,11 @@
         function read() {
             lastRead = Date.now();
             fetch(URL_, { headers: { accept: 'application/json' } }).then(function (res) {
-                if (res.status === 404) { say('No status is published here yet.'); return null; }
+                if (res.status === 404) { say('Chưa có trạng thái nào được công bố tại đây.'); return null; }
                 if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json().then(draw, function () { say('The status could not be read: it is not in a form this page knows.'); });
+                return res.json().then(draw, function () { say('Không thể đọc trạng thái: định dạng không tương thích với trang này.'); });
             }).catch(function () {
-                say('The status could not be read just now: the registrar that keeps it may be down. Local communities are not affected. Try again in a few minutes.');
+                say('Hiện chưa thể đọc trạng thái: công cụ đăng ký lưu trữ có thể đang gặp sự cố. Các cộng đồng địa phương không bị ảnh hưởng. Hãy thử lại sau vài phút.');
             });
         }
         read();

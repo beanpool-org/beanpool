@@ -6,18 +6,23 @@
  * through the app's own helper (lib/api.ts signedFetch) to the community this page is on, whatever its address.
  *
  * Only for a tool whose manifest asks for `node-copy` ({@link keepsNodeCopy}). Every step for one community, owner and
- * tool runs in one queue, and none once the page has moved to another community or its account has changed
- * (lib/account-epoch.ts), not even the rest of one already under way ({@link heldTo}).
+ * tool runs in one queue, and the next starts only once each request of the one before has settled; each is let go at
+ * TOOL_COPY_ANSWER_MS (core withinAnswerTime). Another tab has a queue of its own, so where the browser has Web Locks
+ * each step also holds the key's lock ({@link oneTabAtATime}); without them, a PUT that ends while the copy goes off in
+ * another tab marks itself beside the setting (core ToolCopyMarks), and the next open checks the server's copy is gone.
+ * None runs once the page has moved to another community or its account has changed (lib/account-epoch.ts), not even
+ * the rest of one already under way ({@link heldTo}).
  *
  * Only the host (pages/ToolsPage.tsx, tools/builder.ts) calls this: the eslint fence refuses a tool any import of it.
  */
 import {
-    createToolCopyQueue, removeToolCopy, syncToolCopy, toolCopyPath, turnToolCopyOff, turnToolCopyOn,
+    TOOL_COPY_PUSH_MS, createToolCopyQueue, keptMarks, removeToolCopy, syncToolCopy, toolCopyMarksOf, toolCopyPath, turnToolCopyOff,
+    turnToolCopyOn, withinAnswerTime,
     type ToolCopyDevice, type ToolCopyNode, type ToolCopyOutcome, type ToolCopyOwner, type ToolManifest, type ToolNodeAnswer,
 } from '@beanpool/core';
 import { accountEpoch, accountEpochHolds } from '../lib/account-epoch';
 import { getNodeApiUrl, signedFetch } from '../lib/api';
-import { patchToolSettings, readToolRecord, readToolSettings, takeToolRecord, toolRecordSent } from './store';
+import { changeToolSettings, patchToolSettings, readToolRecord, readToolSettings, takeToolRecord, toolRecordSent } from './store';
 
 /** Whether a tool keeps a private copy on the node at all: only one whose manifest asks for it. */
 export const keepsNodeCopy = (manifest: Pick<ToolManifest, 'permissions'>): boolean => manifest.permissions.includes('node-copy');
@@ -32,13 +37,18 @@ export interface WebToolCopy {
 /** The community this page is on now. */
 export const pageNode = (): string => getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 
-/** The node's routes for this owner's copy, signed as the member; a refusal comes back as answered, no answer as null. */
+/**
+ * The node's routes for this owner's copy, signed as the member; a refusal comes back as answered, no answer as null.
+ * Each is let go at the answer limit, its reading of the answer too, so one the network never answers settles then.
+ */
 export function webToolNode(owner: ToolCopyOwner, tool: string): ToolCopyNode {
     const path = toolCopyPath(owner, tool);
     const ask = async (method: string, body?: unknown): Promise<ToolNodeAnswer | null> => {
         try {
-            const res = await signedFetch(method, path, body);
-            return { status: res.status, json: await res.json().catch(() => null) };
+            return await withinAnswerTime(async (signal) => {
+                const res = await signedFetch(method, path, body, signal);
+                return { status: res.status, json: await res.json().catch(() => null) };
+            });
         } catch {
             return null;
         }
@@ -46,7 +56,10 @@ export function webToolNode(owner: ToolCopyOwner, tool: string): ToolCopyNode {
     return { get: () => ask('GET'), put: (doc) => ask('PUT', { doc }), delete: () => ask('DELETE') };
 }
 
-/** The browser's side of one tool's copy: its record and its setting, the one writer of `nodeCopy`. */
+/**
+ * The browser's side of one tool's copy: its record, and its setting with the marks beside it, the one writer of
+ * `nodeCopy` and `nodeCopyMarks`. The marks change in one transaction, so another tab's change between is never lost.
+ */
 export function webToolDevice(owner: string, tool: string): ToolCopyDevice {
     return {
         read: () => readToolRecord(owner, tool),
@@ -55,18 +68,36 @@ export function webToolDevice(owner: string, tool: string): ToolCopyDevice {
         setting: async () => (await readToolSettings(owner, tool)).nodeCopy,
         // A browser that keeps nothing (no IndexedDB) asks the server again on each open, and its answer corrects it.
         setSetting: async (on) => { await patchToolSettings(owner, tool, { nodeCopy: on }); },
+        marks: async () => toolCopyMarksOf((await readToolSettings(owner, tool)).nodeCopyMarks),
+        mark: async (change) => {
+            await changeToolSettings(owner, tool, ({ nodeCopyMarks, ...rest }) => {
+                const kept = keptMarks(change(toolCopyMarksOf(nodeCopyMarks), rest.nodeCopy));
+                return kept ? { ...rest, nodeCopyMarks: kept } : rest;
+            });
+        },
     };
 }
 
-const queue = createToolCopyQueue();
-const keyOf = (c: WebToolCopy) => `${c.node}|${c.owner.publicKey}|${c.manifest.id}`;
+/**
+ * One tab at a time on a key, where the browser has Web Locks: another tab's off or Remove my data waits until this
+ * tab's PUT has settled, as this tab's own queue does. Without them, the marks cover the gap.
+ */
+function oneTabAtATime(key: string, turn: () => Promise<void>): Promise<unknown> {
+    const locks = typeof navigator === 'undefined' ? undefined : (navigator as Navigator & { locks?: LockManager }).locks;
+    return locks && typeof locks.request === 'function' ? locks.request(key, turn) : turn();
+}
+
+const queue = createToolCopyQueue(TOOL_COPY_PUSH_MS, oneTabAtATime);
+/** The key, and the name of its lock across tabs. */
+const keyOf = (c: WebToolCopy) => `tool-copy:${c.node}:${c.owner.publicKey}:${c.manifest.id}`;
 
 /**
  * `device` and `node` held to what the page was on at `epoch` (lib/account-epoch.ts accountEpoch): the community the tool
  * was opened in, and the account, with no sign-out or clear since (here or in another tab). Checked before each request
  * and each write, so a step after a GET that waited (up to TOOL_COPY_ANSWER_MS) never goes to another community's server
  * or record, nor signed as the next account (signedFetch signs as whoever this browser holds then). A request held back
- * is no answer, a write held back none: tried again on the next open.
+ * is no answer, a write held back none: tried again on the next open. The node is the queue's held one: the job after
+ * this one starts only once each of its requests has settled.
  */
 function heldTo(c: WebToolCopy, epoch: number) {
     const holds = () => pageNode() === c.node && accountEpochHolds(epoch);
@@ -79,12 +110,13 @@ function heldTo(c: WebToolCopy, epoch: number) {
             take: async (body, at, was) => holds() && device.take(body, at, was),
             sent: async (was, body, at) => { if (holds()) await device.sent(was, body, at); },
             setSetting: async (on) => { if (holds()) await device.setSetting(on); },
+            mark: async (change) => { if (holds()) await device.mark(change); },
         } satisfies ToolCopyDevice,
-        node: {
+        node: queue.held(keyOf(c), {
             get: async () => (holds() ? node.get() : null),
             put: async (doc) => (holds() ? node.put(doc) : null),
             delete: async () => (holds() ? node.delete() : null),
-        } satisfies ToolCopyNode,
+        }),
     };
 }
 

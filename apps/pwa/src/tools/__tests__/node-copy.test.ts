@@ -9,7 +9,7 @@
  * The page's words and order (Remove my data, the toggle's failure line, the line once) are in tools-template.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { word, type ToolManifest } from '@beanpool/core';
+import { TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, word, type ToolManifest } from '@beanpool/core';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../../lib/memory-indexeddb';
 import { beginAccountEpoch, endAccountEpoch, resetAccountEpochForTest } from '../../lib/account-epoch';
 import { keepToolDoc, patchToolSettings, readToolRecord, readToolSettings, resetToolStoreForTest } from '../store';
@@ -509,5 +509,162 @@ describe('the delete rule: what the node is told and when', () => {
         expect(await switchToolCopy(member(A), false)).toBe('failed');
         expect(await removeToolCopyFirst(member(A))).toBe(false);
         expect(node.log).toEqual([]);
+    });
+});
+
+describe('off means gone, even when a slow PUT is on its way (PR #2297, the deciding review at d4fcc070)', () => {
+    const KEY = `tool-copy:${NODE}:${ME}:kit`;
+    const methods = () => node.log.map((r) => r.method);
+    const marks = async (b: Browser) => { use(b); return (await readToolSettings(b.signer, KIT.id)).nodeCopyMarks; };
+    afterEach(() => { Reflect.deleteProperty(navigator, 'locks'); });
+
+    /**
+     * The next PUT on a slow line: its body reaches the node when `arrive()` is called. Let go before then (the page's
+     * signal), fetch throws as a browser's does; `landsAnyway`: the body was on its way, and the node takes it on arrival.
+     */
+    function slowNextPut(landsAnyway = false) {
+        let arrive!: () => void;
+        const arrived = new Promise<'arrived'>((r) => { arrive = () => r('arrived'); });
+        let signal: AbortSignal | undefined;
+        const answers = globalThis.fetch;
+        vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+            if (init?.method !== 'PUT') return answers(url, init);
+            vi.stubGlobal('fetch', answers);
+            signal = init.signal ?? undefined;
+            const letGo = new Promise<'let go'>((r) => signal?.addEventListener('abort', () => r('let go')));
+            if (await Promise.race([arrived, letGo]) === 'let go') {
+                if (landsAnyway) void arrived.then(() => answers(url, init));
+                throw new DOMException('The operation was aborted.', 'AbortError');
+            }
+            return answers(url, init);
+        });
+        return { arrive, signal: () => signal };
+    }
+    /** A minimal LockManager: each name's callbacks one at a time, in the order asked (the exclusive lock the page asks for). */
+    function fakeLocks() {
+        const held = new Map<string, Promise<unknown>>();
+        const asked: string[] = [];
+        const locks = {
+            request: (name: string, callback: () => Promise<unknown>) => {
+                asked.push(name);
+                const run = (held.get(name) ?? Promise.resolve()).then(() => callback());
+                held.set(name, run.catch(() => undefined));
+                return run;
+            },
+        };
+        Object.defineProperty(navigator, 'locks', { value: locks, configurable: true });
+        return asked;
+    }
+    /** Another tab of the same browser: the same IndexedDB and server, its own node-copy queue. */
+    async function otherTab() {
+        vi.resetModules();
+        return import('../node-copy');
+    }
+
+    it('each request gets a signal; a PUT slower than the limit is let go then, and only then does the off send its DELETE', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+        await write(A, doc('Ladder'));
+        const line = slowNextPut();
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_PUSH_MS);
+        await vi.waitFor(() => expect(line.signal()).toBeInstanceOf(AbortSignal));
+        use(A);
+        const off = switchToolCopy(member(A), false);
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS - 1_000);
+        expect(line.signal()!.aborted).toBe(false);
+        expect(methods()).toEqual(['GET']);
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(await off).toBe('off');
+        expect(line.signal()!.aborted).toBe(true);
+        expect(methods()).toEqual(['GET', 'DELETE']);
+        expect(await setting(A)).toBe(false);
+        // Let go is not proof the server never got it: the next open asks once, even off, and the mark goes on its answer.
+        expect(await marks(A)).toEqual({ unsure: 'check' });
+        line.arrive();
+        node.log.length = 0;
+        expect(await open(A)).toBe('off');
+        expect(methods()).toEqual(['GET']);
+        expect(await marks(A)).toBeUndefined();
+        expect(await open(A)).toBe('off');
+        expect(methods()).toEqual(['GET']);
+    });
+
+    it("a PUT let go at the limit that the server takes anyway, after the DELETE (the review's order): the next open DELETEs it again", async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+        await write(A, doc('Ladder'));
+        const line = slowNextPut(true);
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_PUSH_MS);
+        await vi.waitFor(() => expect(line.signal()).toBeInstanceOf(AbortSignal));
+        use(A);
+        const off = switchToolCopy(member(A), false);
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS);
+        expect(await off).toBe('off');
+        line.arrive();
+        await vi.waitFor(() => expect(methods()).toEqual(['GET', 'DELETE', 'PUT']));
+        expect(node.doc(ME, 'kit')).toEqual(doc('Ladder'));
+        node.log.length = 0;
+        expect(await open(A)).toBe('off');
+        expect(methods()).toEqual(['GET', 'DELETE']);
+        expect(node.rows.size).toBe(0);
+        expect(await marks(A)).toBeUndefined();
+    });
+
+    it("two tabs on one key, with Web Locks: the other tab's off waits for this tab's PUT, one job at a time; no copy, no mark", async () => {
+        const asked = fakeLocks();
+        use(A);
+        await keepToolDoc(ME, KIT.id, JSON.stringify(doc('Ladder')), iso(t0));
+        const tab2 = await otherTab();
+        const line = slowNextPut();
+        const put = openToolCopy(member(A));
+        await vi.waitFor(() => expect(line.signal()).toBeInstanceOf(AbortSignal));
+        const off = tab2.switchToolCopy(member(A), false);
+        await new Promise((r) => setTimeout(r, 50));
+        expect(methods()).toEqual(['GET']);
+        line.arrive();
+        expect([await put, await off]).toEqual(['put', 'off']);
+        expect(methods()).toEqual(['GET', 'PUT', 'DELETE']);
+        expect(node.rows.size).toBe(0);
+        expect(await marks(A)).toBeUndefined();
+        expect(asked).toEqual([KEY, KEY]);
+    });
+
+    it('two tabs on one key, with no Web Locks: the DELETE lands first and the PUT after it, and the mark is what corrects it', async () => {
+        use(A);
+        await keepToolDoc(ME, KIT.id, JSON.stringify(doc('Ladder')), iso(t0));
+        const tab2 = await otherTab();
+        const line = slowNextPut();
+        const put = openToolCopy(member(A));
+        await vi.waitFor(() => expect(line.signal()).toBeInstanceOf(AbortSignal));
+        expect(await tab2.switchToolCopy(member(A), false)).toBe('off');
+        line.arrive();
+        expect(await put).toBe('put');
+        expect(methods()).toEqual(['GET', 'DELETE', 'PUT']);
+        expect(node.doc(ME, 'kit')).toEqual(doc('Ladder'));
+        expect(await marks(A)).toEqual({ unsure: 'check' });
+        // The next open, in either tab, with the setting off: one GET, the DELETE again, and the mark goes.
+        node.log.length = 0;
+        expect(await tab2.openToolCopy(member(A))).toBe('off');
+        expect(methods()).toEqual(['GET', 'DELETE']);
+        expect(node.rows.size).toBe(0);
+        expect(await marks(A)).toBeUndefined();
+    });
+
+    it('Remove my data with a PUT out: the DELETE goes once the PUT has settled; refused, nothing may go', async () => {
+        use(A);
+        await keepToolDoc(ME, KIT.id, JSON.stringify(doc('Ladder')), iso(t0));
+        const line = slowNextPut();
+        void openToolCopy(member(A));
+        await vi.waitFor(() => expect(line.signal()).toBeInstanceOf(AbortSignal));
+        node.mode = 'refusing';
+        const refused = removeToolCopyFirst(member(A));
+        await new Promise((r) => setTimeout(r, 50));
+        expect(methods()).toEqual(['GET']);
+        line.arrive();
+        expect(await refused).toBe(false);
+        expect(methods()).toEqual(['GET', 'PUT', 'DELETE']);
+        expect(await setting(A)).toBeUndefined();
+        node.mode = 'up';
+        expect(await removeToolCopyFirst(member(A))).toBe(true);
+        expect(node.rows.size).toBe(0);
+        expect(await setting(A)).toBe(false);
     });
 });

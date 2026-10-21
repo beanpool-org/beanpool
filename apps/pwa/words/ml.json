@@ -3493,5 +3493,13 @@
   },
   "{name}, already in the group": "{name}, ഇതിനകം ഗ്രൂപ്പിലുണ്ട്",
   "{name}, already invited": "{name}, ഇതിനകം ക്ഷണിച്ചു",
-  "{name}, asked to join": "{name}, ചേരാൻ അഭ്യർത്ഥിച്ചു"
+  "{name}, asked to join": "{name}, ചേരാൻ അഭ്യർത്ഥിച്ചു",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "പേര് ചേർത്ത {n} പയർ പിന്തുണയോടെ {name}-നെ സഹകാരിയായി ചേർക്കുന്നു",
+    "other": "പേര് ചേർത്ത {n} പയർ പിന്തുണയോടെ {name}-നെ സഹകാരിയായി ചേർക്കുന്നു"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "പേര് ചേർത്ത {n} പയർ പിന്തുണയോടെ {name}-നെ സൂക്ഷിപ്പുകാരനായി ചേർക്കുന്നു",
+    "other": "പേര് ചേർത്ത {n} പയർ പിന്തുണയോടെ {name}-നെ സൂക്ഷിപ്പുകാരനായി ചേർക്കുന്നു"
+  }
 }

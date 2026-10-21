@@ -7,7 +7,8 @@
  *
  * Only for a tool whose manifest asks for `node-copy` ({@link keepsNodeCopy}). Every step for one community, owner and
  * tool runs in one queue, so a sync after a write never lands after the DELETE that follows it; and none runs once the
- * phone has moved to another community, whose file and server are another's.
+ * phone has moved to another community, whose file and server are another's, or its account has changed: not even the
+ * rest of one already under way (each request and write first asks whether the job still holds: {@link parts}).
  *
  * Only the host route (app/tool/[id].tsx) calls this: the eslint fence refuses a tool any import of it.
  */
@@ -31,10 +32,17 @@ export interface PhoneToolCopy {
     url: string | null;
 }
 
-/** The node's routes for this owner's copy, signed as the member; a refusal comes back as answered, no answer as null. */
-export function phoneToolNode(owner: ToolCopyOwner, tool: string): ToolCopyNode {
+/** Whether the job a device or node is for may still go on (see {@link parts}). */
+type Holds = () => Promise<boolean>;
+
+/**
+ * The node's routes for this owner's copy, signed as the member; a refusal comes back as answered, no answer as null, and
+ * a request the job may no longer send (`holds`) as no answer, unsent.
+ */
+export function phoneToolNode(owner: ToolCopyOwner, tool: string, holds: Holds): ToolCopyNode {
     const path = toolCopyPath(owner, tool);
     const write = async (method: 'PUT' | 'DELETE', payload?: unknown): Promise<ToolNodeAnswer | null> => {
+        if (!await holds()) return null;
         try {
             return { status: 200, json: await signedRequestWithMethod(method, path, payload, { withStatus: true }) };
         } catch (e) {
@@ -44,6 +52,7 @@ export function phoneToolNode(owner: ToolCopyOwner, tool: string): ToolCopyNode 
     };
     return {
         get: async () => {
+            if (!await holds()) return null;
             try {
                 const res = await signedGet(path);
                 return { status: res.status, json: await res.json().catch(() => null) };
@@ -58,13 +67,15 @@ export function phoneToolNode(owner: ToolCopyOwner, tool: string): ToolCopyNode 
 
 /**
  * The phone's side of one tool's copy: its row (a take or a sent copy changes it only if no write landed meanwhile) and
- * its setting, the one writer of `nodeCopy`.
+ * its setting, the one writer of `nodeCopy`. Nothing is written once the job may no longer go on (`holds`), asked after
+ * the file is opened, so the file written is the community's that was asked about.
  */
-export function phoneToolDevice(owner: string, tool: string, url: string | null): ToolCopyDevice {
+export function phoneToolDevice(owner: string, tool: string, url: string | null, holds: Holds): ToolCopyDevice {
     return {
         read: () => readToolCopy(owner, tool),
         take: async (body, at, was) => {
             const db = await getDb();
+            if (!await holds()) return false;
             const r = was
                 ? await db.runAsync('UPDATE tool_docs SET body = ?, updated_at = ?, synced_at = ? WHERE owner = ? AND tool = ? AND body = ? AND updated_at = ?',
                     [body, at, at, owner, tool, was.body, was.updatedAt])
@@ -76,6 +87,7 @@ export function phoneToolDevice(owner: string, tool: string, url: string | null)
         },
         sent: async (was, body, at) => {
             const db = await getDb();
+            if (!await holds()) return;
             if (was) {
                 await db.runAsync('UPDATE tool_docs SET synced_at = ?, updated_at = CASE WHEN body = ? AND updated_at = ? THEN ? ELSE updated_at END WHERE owner = ? AND tool = ?',
                     [at, was.body, was.updatedAt, at, owner, tool]);
@@ -87,7 +99,7 @@ export function phoneToolDevice(owner: string, tool: string, url: string | null)
             }
         },
         setting: async () => (await readToolSettings(owner, tool, url)).nodeCopy,
-        setSetting: async (on) => { await patchToolSettings(owner, tool, { nodeCopy: on }, url); },
+        setSetting: async (on) => { if (await holds()) await patchToolSettings(owner, tool, { nodeCopy: on }, url); },
     };
 }
 
@@ -113,34 +125,44 @@ async function stillHere(url: string | null): Promise<boolean> {
     return communityKey(now) === communityKey(url);
 }
 
-function parts(c: PhoneToolCopy) {
-    return { device: phoneToolDevice(c.owner.publicKey, c.manifest.id, c.url), node: phoneToolNode(c.owner, c.manifest.id) };
+/**
+ * One job's device and node, held to what the phone was on as the job was made (`turn`, {@link accountTurn}): the
+ * community the tool was opened in, and the same account. Asked before each request and each write, so a step after a
+ * GET that waited (up to TOOL_COPY_ANSWER_MS) never lands in another community's file or on its server (getDb and the
+ * signed helpers follow the community the phone is on then), nor goes signed as the next account. A request held back
+ * is no answer, a write held back none: tried again on the next open.
+ */
+function parts(c: PhoneToolCopy, turn: number) {
+    const holds = async () => turn === accountTurn && await stillHere(c.url);
+    return { holds, device: phoneToolDevice(c.owner.publicKey, c.manifest.id, c.url, holds), node: phoneToolNode(c.owner, c.manifest.id, holds) };
 }
 
-async function sync(c: PhoneToolCopy): Promise<ToolCopyOutcome> {
-    if (!keepsNodeCopy(c.manifest) || !await stillHere(c.url)) return 'later';
-    const { device, node } = parts(c);
+async function sync(c: PhoneToolCopy, turn: number): Promise<ToolCopyOutcome> {
+    const { holds, device, node } = parts(c, turn);
+    if (!keepsNodeCopy(c.manifest) || !await holds()) return 'later';
     return syncToolCopy(c.manifest, device, node);
 }
 
 /** On a tool's open: the GET and the step, unless the setting is off. */
 export function openToolCopy(c: PhoneToolCopy): Promise<ToolCopyOutcome> {
-    return queue.run(keyOf(c), () => sync(c));
+    const turn = accountTurn;
+    return queue.run(keyOf(c), () => sync(c, turn));
 }
 
 /** After a write: one sync five seconds after the last (an open's rule, so an off made elsewhere is heard first). */
 export function toolCopyAfterWrite(c: PhoneToolCopy, then: (outcome: ToolCopyOutcome) => void): void {
     if (!keepsNodeCopy(c.manifest)) return;
     const turn = accountTurn;
-    queue.later(keyOf(c), async () => then(turn === accountTurn ? await sync(c) : 'later'));
+    queue.later(keyOf(c), async () => then(await sync(c, turn)));
 }
 
 /** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */
 export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'failed'> {
     if (!on) queue.cancel(keyOf(c));
+    const turn = accountTurn;
     return queue.run(keyOf(c), async () => {
-        if (!await stillHere(c.url)) return 'failed';
-        const { device, node } = parts(c);
+        const { holds, device, node } = parts(c, turn);
+        if (!await holds()) return 'failed';
         return on ? turnToolCopyOn(c.manifest, device, node) : turnToolCopyOff(device, node);
     });
 }
@@ -149,9 +171,10 @@ export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'o
 export function removeToolCopyFirst(c: PhoneToolCopy): Promise<boolean> {
     if (!keepsNodeCopy(c.manifest)) return Promise.resolve(true);
     queue.cancel(keyOf(c));
+    const turn = accountTurn;
     return queue.run(keyOf(c), async () => {
-        if (!await stillHere(c.url)) return false;
-        const { device, node } = parts(c);
+        const { holds, device, node } = parts(c, turn);
+        if (!await holds()) return false;
         return removeToolCopy(device, node);
     });
 }

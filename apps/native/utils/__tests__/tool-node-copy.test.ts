@@ -25,12 +25,23 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         multiRemove: async (keys: string[]) => { keys.forEach((k) => storage.map.delete(k)); },
     },
 }));
-const net = vi.hoisted(() => ({ node: null as null | { answer(method: string, path: string, body: unknown, signer: string): { status: number; json: unknown } | null }, signer: '' }));
+const net = vi.hoisted(() => ({
+    node: null as null | { answer(method: string, path: string, body: unknown, signer: string): { status: number; json: unknown } | null },
+    signer: '',
+    /** The next GET waits for this (holdNextGet), so the phone can move or its account change while it is out. */
+    hold: null as null | { asked: () => void; gate: Promise<void> },
+}));
 const disk = vi.hoisted(() => ({ db: null as any }));
 vi.mock('../db', () => ({
     getDb: async () => disk.db,
     // The app's own helpers, as the phone calls them: the answer as a Response, or as utils/db.ts's throw.
     signedGet: async (path: string) => {
+        const hold = net.hold;
+        if (hold) {
+            net.hold = null;
+            hold.asked();
+            await hold.gate;
+        }
         const a = net.node!.answer('GET', path, undefined, net.signer);
         if (!a) throw new TypeError('Network request failed');
         return { status: a.status, ok: a.status >= 200 && a.status < 300, json: async () => a.json };
@@ -175,6 +186,15 @@ async function row(p: Phone) { use(p); return readToolCopy(p.signer, KIT.id); }
 async function setting(p: Phone) { use(p); return (await readToolSettings(p.signer, KIT.id, URL_A)).nodeCopy; }
 /** The sync a write waits five seconds for, run now: what the next open does too. */
 async function syncNow(p: Phone) { return open(p); }
+/** The next GET held until `release()`. */
+function holdNextGet() {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let asked!: () => void;
+    const arrived = new Promise<void>((r) => { asked = r; });
+    net.hold = { asked, gate };
+    return { asked: arrived, release };
+}
 
 describe('two phones, one server: the open rule', () => {
     it('only a tool that asks for node-copy keeps a copy at all', () => {
@@ -285,6 +305,45 @@ describe('two phones, one server: the open rule', () => {
         await vi.advanceTimersByTimeAsync(10_000);
         expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
         expect(node.doc(ME, 'kit')).toEqual(doc('Ladder', 'Tent'));
+    });
+
+    it("a GET still out when the phone moves to another community or its account changes: nothing after it is sent or kept", async () => {
+        await write(A, doc('Ladder'));
+        // Moved while the GET was out (getDb opens that community's file, the helpers sign to its server): A's copy is not PUT.
+        const elsewhere = phone('elsewhere');
+        let gate = holdNextGet();
+        const put = open(A);
+        await gate.asked;
+        A.map.set('beanpool_anchor_url', 'https://elsewhere.example');
+        disk.db = elsewhere.db;
+        gate.release();
+        expect(await put).toBe('later');
+        expect(node.log.map((r) => r.method)).toEqual(['GET']);
+        // Nor is the server's copy kept in the other community's file.
+        A.map.set('beanpool_anchor_url', URL_A);
+        node.rows.set(`${ME}|kit`, { doc: doc('From the server'), updatedAt: '2026-12-01T00:00:00.000Z' });
+        gate = holdNextGet();
+        const take = open(A);
+        await gate.asked;
+        A.map.set('beanpool_anchor_url', 'https://elsewhere.example');
+        disk.db = elsewhere.db;
+        gate.release();
+        expect(await take).toBe('later');
+        expect(elsewhere.db.rows()).toBe(0);
+        A.map.set('beanpool_anchor_url', URL_A);
+        expect(await held(A)).toEqual(doc('Ladder'));
+        // Signed out, and another account signed in, while the GET was out: nothing goes signed as them.
+        node.rows.clear();
+        gate = holdNextGet();
+        const after = open(A);
+        await gate.asked;
+        announceAccountOnPhone(null);
+        announceAccountOnPhone('someone-else');
+        net.signer = 'someone-else';
+        gate.release();
+        expect(await after).toBe('later');
+        expect(node.count('PUT')).toBe(0);
+        expect(node.doc('someone-else', 'kit')).toBeNull();
     });
 
     it("take runs the tool's reader: an older version is upgraded; a copy that can't be read never replaces the phone's", async () => {

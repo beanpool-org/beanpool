@@ -3,7 +3,7 @@ slug: credit-line
 title: Dein Kreditrahmen
 summary: Wie weit du ins Minus gehen kannst und wie dieser Rahmen wächst.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 64ce3e39f9617713
+source-hash: 30c343cb535ac79a
 ---
 
 ## Was es ist
@@ -46,7 +46,7 @@ Die Zeile unter der Leiste informiert dich darüber, zum Beispiel „Veröffentl
 
 ## In einer bekannten Community
 
-Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Hat deine Community **den bekannten Kreditrahmen** aktiviert, erhält ein von einem Admin bestätigtes Mitglied sofort einen Kreditrahmen: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut.
+Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Hat deine Community **den bekannten Kreditrahmen** aktiviert, erhält ein von einem Admin bestätigtes Mitglied sofort einen Kreditrahmen: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut. Es erhöht dein Limit, nicht deine Stufe: Dein Vertrauensabzeichen zählt weiterhin nur das, was du selbst getan hast.
 
 - Ein aktives Angebot ermöglicht es dir, den gesamten Betrag zu nutzen. Ohne Angebote kannst du ihn nicht nutzen.
 - Vertrauen, das du dir durch Handeln erarbeitest, kommt hinzu, bis zur Obergrenze deiner Community (2.000 Bohnen, sofern sie nicht mehr gewählt hat, bis zu 5.000).
@@ -60,7 +60,7 @@ Die Admins deiner Community können den Kreditrahmen eines Mitglieds einfrieren:
 - Frieren sie den gesamten Rahmen ein oder besteht dein gesamter Rahmen nur aus dem bestätigten Teil, steht im Buch **Dein Kreditrahmen ist eingefroren**: Du kannst während dieser Zeit nicht ins Minus ausgeben, aber du kannst weiterhin Bohnen verkaufen und empfangen sowie das ausgeben, was du über null hältst. Warst du im Minus, als sie ihn eingefroren haben, nennt das Buch auch die Anzahl der Bohnen, mit denen du im Minus bist: Das Verkaufen oder Empfangen von Bohnen bringt dich wieder ins Plus, und sobald du über null bist, kannst du dein Guthaben ausgeben.
 - Frieren sie den bestätigten Teil ein und du hast auch Kredit durch eine Bürgschaft, durch Handeln oder durch einen Zuschuss, bleibt die Leiste erhalten, mit einem Hinweis darunter, dass der bestätigte Teil eingefroren ist und der Rest wie gewohnt funktioniert. Liegst du unter dem, was verbleibt, meldet das Buch ebenfalls **Ausgaben pausiert** (unten).
 
-Deine Stufe ändert sich nicht: Sie entspricht derjenigen, die dein Kreditrahmen dir verleiht, wenn er nicht eingefroren ist, selbst wenn die Admins deinen Rahmen niedriger oder höher als den der Community angesetzt hatten, auf deinem Profil und deinen Einträgen gleichermaßen. Um nach dem Grund zu fragen oder ihn wieder öffnen zu lassen, wende dich an einen der Admins.
+Deine Stufe ändert sich nicht, auf deinem Profil und deinen Einträgen gleichermaßen: Sie zählt, was du getan hast (eine Bürgschaft, deine Handelsgeschäfte und jegliches Vertrauen, das dir ein Admin gewährt hat), niemals den Teil deines Rahmens, der aus der Bestätigung stammt, oder einen Betrag, den die Admins dafür festgelegt haben. Um nach dem Grund zu fragen oder ihn wieder öffnen zu lassen, wende dich an einen der Admins.
 
 ## Ausgaben pausiert
 

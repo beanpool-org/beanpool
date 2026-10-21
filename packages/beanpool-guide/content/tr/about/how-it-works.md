@@ -3,7 +3,7 @@ slug: how-it-works
 title: BeanPool nasıl çalışır
 summary: Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Fasulye
@@ -70,13 +70,13 @@ Bazı topluluklar üyelerinin kim olduğunu teyit eder. Orada, teyit edilmiş bi
 
 ## Güven rozetleri
 
-Güveniniz bir rozet olarak görünür. Rozetler Yeni Gelen, Sakin, Temsilci ve Büyük'tür. Rozetinizin arkasındaki güven üç şeyi toplar: bir kefaletin size sağladığı başlangıç, takas yaparak kazandığınız güven ve bir yöneticinin size tanıdığı her türlü güven. Bir yönetici bir üyeye takas olmadan doğrudan bir rozet verebilir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üyenin aldığı kredi limiti de sayılır.
+Güveniniz bir rozet olarak görünür. Rozetler Yeni Gelen, Sakin, Temsilci ve Büyük'tür. Rozetinizin arkasındaki güven üç şeyi toplar: bir kefaletin size sağladığı başlangıç, takas yaparak kazandığınız güven ve bir yöneticinin size tanıdığı her türlü güven. Bir yönetici bir üyeye takas olmadan doğrudan bir rozet verebilir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üye daha yüksek bir kredi limiti alır, daha yüksek bir rozet değil: rozetleri yalnızca yaptıklarını sayar.
 
 - 200 güvenden itibaren Sakin.
 - 600 güvenden itibaren Temsilci.
 - 1.400 güvenden itibaren Büyük.
 
-Rozet bir takdirdir, daha fazlası değildir. Hiçbir özelliğe erişim şartı koymaz. Rozeti ne olursa olsun herkes takas yapabilir, davet edebilir ve oy kullanabilir.
+Rozet bir takdirdir, daha fazlası değildir. Hiçbir özelliğin kilidini açmaz. Rozeti ne olursa olsun herkes takas yapabilir, davet edebilir ve oy kullanabilir.
 
 ## Ücretler ve Ortak Alan
 

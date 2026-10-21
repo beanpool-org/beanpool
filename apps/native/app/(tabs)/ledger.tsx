@@ -185,6 +185,12 @@ export default function LedgerScreen() {
     const [sending, setSending] = useState(false);
     const [sendError, setSendError] = useState<string | null>(null);
     const [sendSuccess, setSendSuccess] = useState(false);
+    const sendSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    React.useEffect(() => {
+        return () => {
+            if (sendSuccessTimerRef.current) clearTimeout(sendSuccessTimerRef.current);
+        };
+    }, []);
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
 
@@ -478,7 +484,8 @@ export default function LedgerScreen() {
             setSendSuccess(true);
             setSendTo(''); setSendAmount(''); setSendMemo(''); setMemberSearch('');
             loadData();
-            setTimeout(() => { setSendSuccess(false); setShowSend(false); }, 1500);
+            if (sendSuccessTimerRef.current) clearTimeout(sendSuccessTimerRef.current);
+            sendSuccessTimerRef.current = setTimeout(() => { setSendSuccess(false); setShowSend(false); }, 1500);
         } catch (e: any) {
             hapticWarning();
             setSendError(e.message || t('Transfer failed'));

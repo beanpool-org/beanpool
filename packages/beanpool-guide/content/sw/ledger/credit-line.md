@@ -3,7 +3,7 @@ slug: credit-line
 title: Kikomo chako cha mkopo
 summary: Jinsi unavyoweza kwenda chini ya sifuri, na jinsi inavyoongezeka.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Ni nini
@@ -46,7 +46,7 @@ Mstari ulio chini ya upau hukuambia, kwa mfano "Weka ofa ili kufungua mstari wak
 
 ## Katika jumuiya inayojulikana
 
-Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo. Kinainua kikomo chako, si kiwango chako: beji yako ya uaminifu bado inahesabu tu kile ulichofanya.
+Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja, **kima cha chini kinachojulikana**: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo. Kinainua kikomo chako, si kiwango chako: beji yako ya uaminifu bado inahesabu tu kile ulichofanya. Kima cha chini kinachojulikana kimewashwa katika kila jumuiya yenye Maharagwe isipokuwa mmiliki wake awe amekizima.
 
 - Ofa moja inayotumika inakuruhusu kutumia chote. Bila Ofa zozote, huwezi kukitumia.
 - Uaminifu unaouchuma kwa kufanya biashara huongezwa juu yake, hadi kufikia kiwango cha juu cha jumuiya yako (Maharagwe 2,000 isipokuwa iwe ilichagua zaidi, hadi 5,000).
@@ -55,7 +55,7 @@ Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Ikiwa jumu
 
 ## Jumuiya mchanganyiko
 
-Katika baadhi ya jumuiya mwanachama yeyote anaweza kualika watu, kwa hivyo wasimamizi hawamjui kila mtu. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, wasimamizi wanaweza kuwathibitisha wanachama wanaowajua, na wanachama hao huanza na kikomo cha juu zaidi. Kila mtu mwingine huanzia sifuri, na kikomo cha kila mtu hukua kwa njia ileile baada ya hapo wanapofanya biashara na kujenga uaminifu.
+Katika baadhi ya jumuiya mwanachama yeyote anaweza kualika watu, kwa hivyo wasimamizi hawamjui kila mtu. Wasimamizi wanaweza kuwathibitisha wanachama wanaowajua, na wanachama hao huanza na kikomo cha juu zaidi, **kima cha chini kinachojulikana**, isipokuwa kama mmiliki wa jumuiya yako amekizima. Kila mtu mwingine huanzia sifuri, na kikomo cha kila mtu hukua kwa njia ileile baada ya hapo wanapofanya biashara na kujenga uaminifu.
 
 ## Kusitishwa na wasimamizi
 

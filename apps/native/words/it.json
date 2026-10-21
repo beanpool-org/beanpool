@@ -5997,5 +5997,19 @@
     "one": "da {n} di fiducia",
     "other": "da {n} di fiducia"
   },
-  "{name}, already invited": "{name}, già invitato"
+  "{name}, already invited": "{name}, già invitato",
+  "A way back in if you lose this phone. It's linked to this same account.": "Una via di recupero se perdi questo telefono. È collegato a questo stesso account.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Aggiunta di {name} come collaboratore, con {n} fagiolo di sostegno nominativo",
+    "other": "Aggiunta di {name} come collaboratore, con {n} fagioli di sostegno nominativo"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Aggiunta di {name} come custode, con {n} fagiolo di sostegno nominativo",
+    "other": "Aggiunta di {name} come custode, con {n} fagioli di sostegno nominativo"
+  },
+  "Also add a sign-in": "Aggiungi anche un accesso",
+  "Look around first, then join with this account": "Esplora prima, poi unisciti con questo account",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Incontra persone da ogni luogo e trova comunità vicino a te. Esplora prima come ospite, poi tocca Partecipa in alto per unirti con l'account presente su questo telefono: la tua chiave e le tue 12 parole rimangono le stesse, e nulla cambia nelle altre tue comunità.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Dopo la conferma, finché mantengono un'offerta pubblicata, il loro limite cresce di un massimo di {amount}: la soglia nota della tua comunità.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Usa la chiave e le 12 parole già presenti su questo telefono. Non viene creato alcun nuovo account."
 }

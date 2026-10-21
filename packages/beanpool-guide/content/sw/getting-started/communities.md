@@ -3,7 +3,7 @@ slug: communities
 title: Zaidi ya jumuiya moja
 summary: Kuwa wa jumuiya kadhaa kwa akaunti moja, kubadili kati yao, kufuata jumuiya yako kwenye anwani mpya, na kuona kile jumuiya ya kimataifa inakuonyesha.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar
-source-hash: b123b0f66fb01c9d
+source-hash: fe1d603a6bf1c424
 ---
 
 ## Akaunti moja, jumuiya kadhaa
@@ -14,7 +14,7 @@ Simu yako inashikilia akaunti moja: jina moja, ufunguo mmoja, seti moja ya manen
 
 - Jumuiya inakuruhusu kuingia kwa mwaliko kutoka kwa mmoja wa wanachama wake. Huna mwaliko? Kutoka kwa jumuiya ya kimataifa unaweza kuiomba jumuiya iliyo karibu nawe ikuruhusu kuingia: tazama "Kupata jumuiya iliyo karibu nawe".
 - Gusa aikoni ya mwaliko (mtu mwenye alama ya jumlisha) juu kulia mwa skrini ili kufungua **Mialiko**.
-- Chini ya **Join Another Community**, bandika kiungo au msimbo wa mwaliko. Ikiwa una msimbo pekee, jaza pia anwani ya jumuiya.
+- Chini ya **Jiunge na Jumuiya Nyingine**, bandika kiungo au msimbo wa mwaliko. Ikiwa una msimbo pekee, jaza pia anwani ya jumuiya.
 - Gusa **Jiunge na Jumuiya**.
 
 Ufunguo wako, maneno yako 12 na jina lako vinakuja nawe. Machapisho yako, mazungumzo na biashara hubaki katika kila jumuiya. Kisha unakagua jina na picha yako kwa ajili ya jumuiya mpya. Kuingia kunakolinda akaunti yako huwekwa na kila jumuiya, kwa hivyo programu inakuomba uilinde akaunti yako katika jumuiya mpya pia: gusa **Iilinde**, au **Baadaye**.
@@ -23,14 +23,15 @@ Ufunguo wako, maneno yako 12 na jina lako vinakuja nawe. Machapisho yako, mazung
 
 Jumuiya ya kimataifa haihitaji mwaliko, na unajiunga nayo kwa akaunti uliyo nayo tayari: ufunguo uleule na maneno 12 yaleyale. Programu huitoa wakati jumuiya ya kimataifa iko wazi na haijaambia programu kuwa akaunti hii tayari ni mwanachama huko.
 
-Chini ya **Your communities** daima kuna safu ya **Jumuiya ya kimataifa**. Mstari wake wa pili husema hadhi yako: anwani yake ukiwa mwanachama (iguse ili kubadili kuelekea huko), **Jiunge na akaunti hii: maneno 12 au njia ya kuingia** (**Jiunge na akaunti hii: njia ya kuingia** mahali ambapo jumuiya haikubali maneno 12) unapoweza kujiunga nayo, au kwa nini huwezi sasa hivi: **Inakagua…**, **Haiwezi kufikiwa sasa hivi** (ikiwa na **Gusa ili kujaribu tena.** wakati simu hii haijahifadhi jumuiya ya kimataifa), **Haipokei wanachama wapya sasa hivi.**, **Jumuiya hii iko katika onyesho la faragha. Muombe mmiliki wake mwaliko.**, au **Akaunti yako huko ilifungwa.** Wakati jumuiya ya kimataifa haiwezi kufikiwa na umeunganishwa na jumuiya ambayo wewe ni mwanachama wake, mstari ulio chini yake unasema **Jumuiya yako mwenyewe haiathiriwi.** Hakuna kingine kwenye simu kinachoitegemea.
+Chini ya **Your communities** daima kuna safu ya **Global community**. Mstari wake wa pili husema hadhi yako: anwani yake ukiwa mwanachama (iguse ili kubadili kuelekea huko), **Angalia kwanza, kisha jiunge kwa akaunti hii** unapoweza kujiunga nayo (unapoitembelea kama mgeni: **Jiunge kwa akaunti hii: maneno 12 au kuingia**, au **Jiunge kwa akaunti hii: kuingia** mahali ambapo jumuiya haikubali maneno 12), au kwa nini huwezi sasa hivi: **Inakagua…**, **Haiwezi kufikiwa sasa hivi** (ikiwa na **Gusa ili kujaribu tena.** wakati simu hii haijahifadhi jumuiya ya kimataifa), **Haipokei wanachama wapya sasa hivi.**, **Jumuiya hii iko katika onyesho la faragha. Muombe mmiliki wake mwaliko.**, au **Akaunti yako huko ilifungwa.** Wakati jumuiya ya kimataifa haiwezi kufikiwa na umeunganishwa na jumuiya ambayo wewe ni mwanachama wake, mstari ulio chini yake unasema **Jumuiya yako mwenyewe haiathiriwi.** Hakuna kingine kwenye simu kinachoitegemea.
 
-- Gusa haragwe lililo juu kushoto. Kwenye ukurasa wa **BeanPool**, chini ya **Your communities**, gusa **Jumuiya ya kimataifa** (mstari wake wa pili unasema **Jiunge na akaunti hii**). Inapatikana pia katika **Mipangilio**, chini ya **Kina / Mfumo Mdogo**. Ikiwa unatembelea jumuiya ya kimataifa kama mgeni, gusa **Jiunge** juu, kando ya **?**, kisha **Jiunge kwa maneno 12 au njia ya kuingia** (**Jiunge kwa njia ya kuingia** mahali ambapo jumuiya inakubali njia za kuingia pekee). Ikiwa programu inaonyesha **Bado wewe si mwanachama hapa** kwa ajili ya jumuiya ya kimataifa, gusa **Jiunge na akaunti hii**.
-- Chagua jinsi ya kujiunga: **Fungua akaunti yenye maneno 12 ya siri**, ambayo hutumia maneno 12 ambayo akaunti yako tayari inayo (hakuna kuingia, kwa hivyo hakuna kufunga kwa simu), au **Au ingia** mara moja kwa Google, Apple (kwenye iPhone) au Facebook. Kwa ajili ya kuingia, programu huomba kufunga kwa simu yako kwanza, kwa sababu kuingia huku pia kunakuwa njia ya kurudi kwenye akaunti yako.
+- Gusa haragwe lililo juu kushoto. Kwenye kidirisha cha **BeanPool**, chini ya **Your communities**, gusa **Global community** (mstari wake wa pili unasema **Angalia kwanza, kisha jiunge kwa akaunti hii**). Programu hufungua jumuiya ya kimataifa kama mgeni, kama vile tovuti inavyofanya: unaangalia kwanza, na nukta kwenye haragwe huonyesha kuwa wewe ni mgeni. Inapatikana pia katika **Mipangilio**, chini ya **Jumuiya zilizohifadhiwa**: **Angalia jumuiya ya kimataifa**. Hakuna unachojiunga nacho na hakuna akaunti inayoundwa kwa kuangalia tu.
+- Ukiwa tayari, gusa **Jiunge** hapo juu, kando ya **?**, kisha **Jiunge kwa maneno 12 au kuingia** (**Jiunge kwa kuingia** mahali ambapo jumuiya inakubali njia za kuingia pekee). Ikiwa programu inaonyesha **Bado wewe si mwanachama hapa** kwa ajili ya jumuiya ya kimataifa, gusa **Jiunge na akaunti hii**.
+- Chagua jinsi ya kujiunga: **Jiunge na akaunti hii**, ambayo hutumia ufunguo na maneno 12 yaliyo tayari kwenye simu hii (hakuna kuingia, kwa hivyo hakuna kufunga kwa simu), au, chini ya **Pia ongeza njia ya kuingia**, ingia mara moja kwa Google, Apple (kwenye iPhone) au Facebook. Kwa ajili ya kuingia, programu huomba kufunga kwa simu yako kwanza, kwa sababu kuingia huku pia kunakuwa njia ya kurudi kwenye akaunti yako.
 - Kagua jina ambalo watu wa huko wataliona, na uguse **Jiunge**. Ikiwa mtu tayari anatumia jina hilo, programu inapendekeza mengine.
-- Kisha chagua picha yako kwa ajili ya jumuiya ya kimataifa, kama ilivyo kwa jumuiya yoyote mpya, na kisha takriban mahali ulipo (**Uko wapi kwa makadirio?**; unaweza kugusa **Ruka kwa sasa**): jumuiya ya kimataifa inakuonyesha matangazo yaliyo karibu nayo. Tazama "Kujiunga na BeanPool".
+- Kisha chagua picha yako kwa ajili ya jumuiya ya kimataifa, kama ilivyo kwa jumuiya yoyote mpya, na kisha takriban mahali ulipo (**Uko takriban wapi?**; unaweza kugusa **Ruka kwa sasa**): jumuiya ya kimataifa inakuonyesha matangazo yaliyo karibu nayo. Tazama "Kujiunga na BeanPool".
 
-Hakuna kinachobadilika katika jumuiya zako nyingine, na maneno yako 12 yanabaki yaleyale. Kuingia pia kunakuwa njia ya kurudi kwenye akaunti ileile: nakala iliyofungwa yake huwekwa kwa ajili ya kuingia huko, kwa hivyo ukipoteza simu yako, huirejesha akaunti hii, si mpya. Tazama "Kurejesha akaunti yako". Kuingia uliyounganisha na akaunti yako kabla kunaendelea kufanya kazi. Ukijiunga kwa maneno 12 na hakuna kuingia kunakoweka nakala ya akaunti yako, programu huonyesha kadi ya **Akaunti yako ina njia moja ya kurudi**, kama ilivyo kwa mtu yeyote anayejiunga kwa maneno 12 (tazama "Kujiunga na BeanPool").
+Hakuna kinachobadilika katika jumuiya zako nyingine, na maneno yako 12 yanabaki yaleyale. Kuingia pia kunakuwa njia ya kurudi kwenye akaunti ileile: nakala iliyofungwa yake huwekwa kwa ajili ya kuingia huko, kwa hivyo ukipoteza simu yako, huirejesha akaunti hii, si mpya. Tazama "Kurejesha akaunti yako". Kuingia uliyounganisha na akaunti yako kabla kunaendelea kufanya kazi. Ukijiunga kwa maneno 12 na hakuna kuingia kunakoweka nakala ya akaunti yako, programu huonyesha kadi ya **Akaunti yako ina njia moja tu ya kurudi**, kama ilivyo kwa mtu yeyote anayejiunga kwa maneno 12 (tazama "Kujiunga na BeanPool").
 
 Ikiwa programu inasema **Kuingia huku tayari kulijiunga na jumuiya ya kimataifa na akaunti tofauti ya BeanPool**, kuingia huko kuna akaunti yake yenyewe huko. Tumia njia tofauti ya kuingia: akaunti moja ya kuingia hutengeneza akaunti moja katika jumuiya ya kimataifa.
 
@@ -64,7 +65,7 @@ Jumuiya zako nyingine hufanya kazi kama hapo awali.
 - Gusa haragwe lililo juu kushoto. Ukurasa wa **BeanPool** unafunguka, ukiwa na **Your communities** karibu na juu.
 - Gusa ile unayoitaka.
 
-Unaweza pia kubadili katika **Mipangilio**, chini ya **Mfumo**, kisha **Kina / Mfumo Mdogo**. Jumuiya zako zimeorodheshwa huko. Ile unayoitumia imewekwa alama kama amilifu. Gusa **Badilisha hadi Mji** kwenye nyingine ili kuhamia huko.
+Unaweza pia kubadili katika **Mipangilio**, chini ya **Mfumo**, kisha **Jumuiya zilizohifadhiwa**. Jumuiya zako zimeorodheshwa huko. Ile unayoitumia imewekwa alama kama amilifu. Gusa **Badilisha hadi jumuiya hii** kwenye nyingine ili kuhamia huko.
 
 ## Jumuiya yako inapohamia anwani mpya
 
@@ -77,8 +78,8 @@ Jumuiya inaweza kuhamia anwani mpya: kwa mfano, kutoka kwa nambari ya seva yake 
 
 ## Kusahau jumuiya kwenye simu hii
 
-- Katika **Kina / Mfumo Mdogo**, gusa **Sahau** kwenye jumuiya ambayo huitumii hivi sasa. Hii huiondoa yenyewe na data yake iliyohifadhiwa kutoka kwenye simu hii.
-- Kwenye ukurasa wa **BeanPool**, chini ya **Your communities**, kubonyeza na kushikilia jumuiya na kugusa **Ondoa** huiondoa tu kwenye orodha. Data yake inabaki kwenye simu.
+- Katika **Jumuiya zilizohifadhiwa**, gusa **Sahau** kwenye jumuiya ambayo huitumii hivi sasa. Hii huiondoa yenyewe na data yake iliyohifadhiwa kutoka kwenye simu hii.
+- Kwenye kidirisha cha **BeanPool**, chini ya **Your communities**, kubonyeza na kushikilia jumuiya na kugusa **Ondoa** huiondoa tu kwenye orodha. Data yake inabaki kwenye simu.
 
 Hakuna kati ya hayo inayofuta akaunti yako huko, na jumuiya zako nyingine haziathiriwi.
 

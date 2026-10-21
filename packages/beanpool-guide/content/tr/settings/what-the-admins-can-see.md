@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Yöneticilerin görebildikleri
 summary: Yöneticilerin isim listesi tuttuğu bir toplulukta: sizin hakkınızda neleri içerdiği, kimlerin okuyabileceği, sunucunun neleri tuttuğu ve onaylanmanın anlamı.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## İsim listesi
@@ -27,7 +27,7 @@ Bir yönetici, güvenli bir şekilde saklamak için telefonunda listenin bir PDF
 Bir yönetici sizi **onaylayabilir**: hesabınızın kaydınızdaki kişi olduğunu belirtir. Bunu yalnızca sizi tanıyan biri yapmalıdır ve bazı topluluklarda iki yöneticinin anlaşması gerekir.
 
 - Bir onay hiçbir isim taşımaz. Sunucu hangi hesabı, hangi kaydı ve hangi yöneticiyi kaydeder; asla kim olduğunuzu kaydetmez.
-- Bu bir güven rozeti değildir ve şimdilik uygulamada başka hiçbir şeyi değiştirmez.
+- Bu bir güven rozeti değildir. Ayrıca topluluğunuzun sahibi kapatmadıkça size doğrudan bir kredi limiti, bilinen tabanı verir: "Kredi limitiniz" bölümüne bakın.
 - Bir yönetici sizi adınızla davet ettiyse, onun davetiyle katılmak o yönetici tarafından kaydınıza karşı sizi onaylamıştır. "Onaylandı" yalnızca bir yöneticinin bu hesabın o kayıttaki kişi olduğunu söylediği anlamına gelir.
 - Kayıp bir telefonu değiştirirseniz ve hesabınız yeni bir anahtara taşınırsa onayınız da onunla birlikte taşınır.
 - Ayrılırsanız veya hesabınızı silerseniz onayınız sona erer. Bir yönetici silene kadar kaydınız yöneticilerin listesinde kalır: silmelerini isteyin.

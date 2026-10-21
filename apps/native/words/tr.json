@@ -2,10 +2,10 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, native tools top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, native tools top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-22",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "fasulye",
@@ -56,6 +56,7 @@
   "Not taking new members right now.": "Şu anda yeni üye almıyor.",
   "This community is in a private preview. Ask its owner for an invite.": "Bu topluluk özel önizlemede. Sahibinden bir davet iste.",
   "Global community": "Küresel topluluk",
+  "Look around first, then join with this account": "Önce etrafa göz at, sonra bu hesapla katıl",
   "Join with this account: 12 words or a sign-in": "Bu hesapla katıl: 12 sözcük veya oturum açma",
   "Join with this account: a sign-in": "Bu hesapla katıl: oturum açma",
   "Can't reach it right now. Tap to try again.": "Şu anda ulaşılamıyor. Yeniden denemek için dokun.",
@@ -2145,6 +2146,7 @@
   "Deletes the local database for this community and redownloads everything": "Bu topluluğun yerel veritabanını siler ve her şeyi yeniden indirir",
   "Join the global community": "Küresel topluluğa katılın",
   "Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.": "Bu telefondaki hesap olarak dünyanın her yerinden insanlarla tanışın ve yakınınızdaki toplulukları bulun. Bir kez giriş yapın: anahtarınız ve 12 kelimeniz aynı kalır, diğer topluluklarınızda hiçbir şey değişmez.",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Dünyanın her yerinden insanlarla tanışın ve yakınınızdaki toplulukları bulun. Önce misafir olarak etrafa göz atın, ardından bu telefondaki hesap olarak katılmak için üstteki Katıl'a dokunun: anahtarınız ve 12 kelimeniz aynı kalır, diğer topluluklarınızda hiçbir şey değişmez.",
   "e.g. My Secret Base": "örn. Gizli Üssüm",
   "e.g. {address}": "örn. {address}",
   "Add & Connect": "Ekle ve Bağlan",
@@ -4262,6 +4264,14 @@
     "one": "{name} {n} fasulye güvenceyle sorumlu olarak ekleniyor",
     "other": "{name} {n} fasulye güvenceyle sorumlu olarak ekleniyor"
   },
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "{name} {n} fasulye adlandırılmış güvenceyle iş birlikçi olarak ekleniyor",
+    "other": "{name} {n} fasulye adlandırılmış güvenceyle iş birlikçi olarak ekleniyor"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "{name} {n} fasulye adlandırılmış güvenceyle sorumlu olarak ekleniyor",
+    "other": "{name} {n} fasulye adlandırılmış güvenceyle sorumlu olarak ekleniyor"
+  },
   "Adding {name} as a collaborator": "{name} iş birlikçi olarak ekleniyor",
   "Adding {name} as a keeper": "{name} sorumlu olarak ekleniyor",
   "{name} made this change. Any other collaborator can object before it takes effect, and one objection cancels it.": "Bu değişikliği {name} yaptı. Yürürlüğe girmeden önce diğer herhangi bir iş birlikçi itiraz edebilir ve tek bir itiraz bunu iptal eder.",
@@ -4414,6 +4424,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "Hangi üye {name}? Yalnızca o kişi olduğunu bildiğiniz birini onaylayın.",
   "Which member is this person? Confirm only someone you know is them.": "Hangi üye bu kişi? Yalnızca o kişi olduğunu bildiğiniz birini onaylayın.",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "{amount} borcu çalışarak öderler: bilinen taban 0'dır ve 0'ın üzerinde aldıkları her fasulye borç temizlenene kadar Ortak'a gider.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Onaylandığında, bir teklifi yayında tuttukları sürece limitleri en fazla {amount} artar: topluluğunuzun bilinen tabanı.",
   "Find a member": "Bir üye bul",
   "Find a member by name": "İsme göre üye bul",
   "Nobody here is waiting to be confirmed.": "Burada onay bekleyen kimse yok.",
@@ -4655,6 +4666,9 @@
   "No Google, Apple or Facebook needed. Your 12 words are the only way back in.": "Google, Apple veya Facebook'a gerek yok. 12 kelimeniz geri dönmenin tek yoludur.",
   "Or sign in": "Veya giriş yapın",
   "Also a way back if you lose your phone.": "Telefonunuzu kaybederseniz de geri dönmenin bir yolu.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Bu telefonda zaten bulunan anahtarı ve 12 kelimeyi kullanır. Yeni bir hesap oluşturulmaz.",
+  "Also add a sign-in": "Ayrıca bir giriş ekleyin",
+  "A way back in if you lose this phone. It's linked to this same account.": "Bu telefonu kaybederseniz geri dönmenin bir yolu. Bu aynı hesaba bağlıdır.",
   "Setting up your account…": "Hesabınız kuruluyor…",
   "🔑 These 12 words ARE your account.": "🔑 Bu 12 kelime hesabınızın KENDİSİDİR.",
   "Nobody can reset them: not us, not this community. If you lose them and this phone, the account is gone for good.": "Bunları kimse sıfırlayamaz: ne biz ne de bu topluluk. Onları ve bu telefonu kaybederseniz hesap temelli gider.",

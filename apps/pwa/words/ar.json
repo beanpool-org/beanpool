@@ -3977,5 +3977,21 @@
   },
   "{name}, already in the group": "{name}، موجود بالفعل في المجموعة",
   "{name}, already invited": "{name}، تمت دعوته بالفعل",
-  "{name}, asked to join": "{name}، طلب الانضمام"
+  "{name}, asked to join": "{name}، طلب الانضمام",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "zero": "إضافة {name} كمشارك، بدعم مسمى قدره {n} فاصوليا",
+    "one": "إضافة {name} كمشارك، بدعم مسمى قدره فاصوليا واحدة ({n})",
+    "two": "إضافة {name} كمشارك، بدعم مسمى قدره فاصوليتين ({n})",
+    "few": "إضافة {name} كمشارك، بدعم مسمى قدره {n} فاصوليا",
+    "many": "إضافة {name} كمشارك، بدعم مسمى قدره {n} فاصوليا",
+    "other": "إضافة {name} كمشارك، بدعم مسمى قدره {n} فاصوليا"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "zero": "إضافة {name} كمسؤول، بدعم مسمى قدره {n} فاصوليا",
+    "one": "إضافة {name} كمسؤول، بدعم مسمى قدره فاصوليا واحدة ({n})",
+    "two": "إضافة {name} كمسؤول، بدعم مسمى قدره فاصوليتين ({n})",
+    "few": "إضافة {name} كمسؤول، بدعم مسمى قدره {n} فاصوليا",
+    "many": "إضافة {name} كمسؤول، بدعم مسمى قدره {n} فاصوليا",
+    "other": "إضافة {name} كمسؤول، بدعم مسمى قدره {n} فاصوليا"
+  }
 }

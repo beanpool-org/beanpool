@@ -5997,5 +5997,19 @@
     "one": "dès {n} de confiance",
     "other": "dès {n} de confiance"
   },
-  "{name}, already invited": "{name}, déjà invité"
+  "{name}, already invited": "{name}, déjà invité",
+  "A way back in if you lose this phone. It's linked to this same account.": "Un moyen d'accès si vous perdez ce téléphone. Il est lié à ce même compte.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Ajout de {name} comme collaborateur, avec {n} haricot de soutien nominatif",
+    "other": "Ajout de {name} comme collaborateur, avec {n} haricots de soutien nominatif"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Ajout de {name} comme gestionnaire, avec {n} haricot de soutien nominatif",
+    "other": "Ajout de {name} comme gestionnaire, avec {n} haricots de soutien nominatif"
+  },
+  "Also add a sign-in": "Ajouter aussi une connexion",
+  "Look around first, then join with this account": "Explorez d'abord, puis rejoignez avec ce compte",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Rencontrez des personnes du monde entier et trouvez des communautés proches. Explorez d'abord en tant qu'invité, puis touchez Rejoindre en haut pour rejoindre avec le compte de ce téléphone : votre clé et vos 12 mots restent identiques, et rien ne change dans vos autres communautés.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Après confirmation, sa limite augmente jusqu'à {amount} : le plancher connu de votre communauté, tant qu'une offre reste publiée.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Utilise la clé et les 12 mots déjà présents sur ce téléphone. Aucun nouveau compte n'est créé."
 }

@@ -3,7 +3,7 @@ slug: credit-line
 title: Kredi limitiniz
 summary: Sıfırın ne kadar altına inebileceğiniz ve bu limitin nasıl büyüdüğü.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Nedir
@@ -46,7 +46,7 @@ Kredi limitinizin yalnızca yayındaki Tekliflerinizin izin verdiği kadarını 
 
 ## Bilinen bir toplulukta
 
-Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Sizinki **bilinen taban**ı açtıysa, bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır. Limitinizi yükseltir, seviyenizi değil: güven rozetiniz yalnızca yaptıklarınızı saymaya devam eder.
+Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır, **bilinen taban**: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır. Limitinizi yükseltir, seviyenizi değil: güven rozetiniz yalnızca yaptıklarınızı saymaya devam eder. Bilinen taban, sahibi kapatmadıkça Fasulyesi olan her toplulukta açıktır.
 
 - Yayındaki tek bir Teklif bunun tamamını kullanmanızı sağlar. Teklif yoksa kullanamazsınız.
 - Takas yaparak kazandığınız güven, topluluğunuzun üst sınırına kadar buna eklenir (daha fazlasını seçmedikçe 2.000 Fasulye, 5.000'e kadar).
@@ -55,7 +55,7 @@ Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Sizinki **
 
 ## Karma bir topluluk
 
-Bazı topluluklarda herhangi bir üye insanları davet edebilir, bu nedenle yöneticiler herkesi tanımaz. Sizinki **bilinen taban**ı açtıysa, yöneticiler tanıdıkları üyeleri teyit edebilir ve bu üyeler daha yüksek bir limitle başlar. Geri kalan herkes sıfırdan başlar ve sonrasında herkesin limiti takas yaptıkça ve güven inşa ettikçe aynı şekilde büyür.
+Bazı topluluklarda herhangi bir üye insanları davet edebilir, bu nedenle yöneticiler herkesi tanımaz. Yöneticiler tanıdıkları üyeleri teyit edebilir ve bu üyeler, topluluğunuzun sahibi kapatmadıkça daha yüksek bir limitle, **bilinen taban**la başlar. Geri kalan herkes sıfırdan başlar ve sonrasında herkesin limiti takas yaptıkça ve güven inşa ettikçe aynı şekilde büyür.
 
 ## Yöneticiler tarafından dondurulduğunda
 

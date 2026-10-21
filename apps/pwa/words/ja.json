@@ -3372,5 +3372,11 @@
   },
   "{name}, already in the group": "{name}（既に参加中）",
   "{name}, already invited": "{name}（招待済み）",
-  "{name}, asked to join": "{name}（参加申請中）"
+  "{name}, asked to join": "{name}（参加申請中）",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "other": "{name}を協力者として追加（記名裏付け{n}豆）"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "other": "{name}を運営者として追加（記名裏付け{n}豆）"
+  }
 }

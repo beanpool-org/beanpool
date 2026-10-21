@@ -5997,5 +5997,19 @@
     "one": "a partir de {n} de confiança",
     "other": "a partir de {n} de confiança"
   },
-  "{name}, already invited": "{name}, já tem convite"
+  "{name}, already invited": "{name}, já tem convite",
+  "A way back in if you lose this phone. It's linked to this same account.": "Uma forma de recuperar o acesso se perder este celular. Está vinculado a esta mesma conta.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Adicionando {name} como colaborador, com {n} feijão de apoio nominal",
+    "other": "Adicionando {name} como colaborador, com {n} feijões de apoio nominal"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Adicionando {name} como custódio, com {n} feijão de apoio nominal",
+    "other": "Adicionando {name} como custódio, com {n} feijões de apoio nominal"
+  },
+  "Also add a sign-in": "Adicionar também um login",
+  "Look around first, then join with this account": "Explore primeiro, depois entre com esta conta",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Conheça pessoas de todos os lugares e encontre comunidades perto de você. Explore primeiro como convidado e depois toque em Entrar no topo para entrar com a conta deste celular: sua chave e suas 12 palavras continuam as mesmas, e nada muda nas suas outras comunidades.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Após a confirmação, enquanto mantiver uma oferta publicada, o limite dessa pessoa aumenta em até {amount}: o piso conhecido da sua comunidade.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Usa a chave e as 12 palavras que já estão neste celular. Nenhuma nova conta é criada."
 }

@@ -3,7 +3,7 @@ slug: communities
 title: Más de una comunidad
 summary: Pertenecer a varias comunidades con una sola cuenta, cambiar entre ellas, seguir a tu comunidad a una nueva dirección y ver qué te muestra la comunidad global.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar
-source-hash: b123b0f66fb01c9d
+source-hash: fe1d603a6bf1c424
 ---
 
 ## Una cuenta, varias comunidades
@@ -23,14 +23,15 @@ Tu clave, tus 12 palabras y tu nombre van contigo. Tus publicaciones, chats e in
 
 La comunidad global no necesita invitación y te unes a ella con la cuenta que ya tienes: la misma clave y las mismas 12 palabras. La app la ofrece cuando la comunidad global está abierta y no ha indicado a la app que esta cuenta ya es miembro allí.
 
-Bajo **Tus comunidades** siempre hay una fila para la **Comunidad global**. Su segunda línea indica tu situación: su dirección cuando eres miembro (tócala para cambiar a ella), **Unirme con esta cuenta: 12 palabras o un inicio de sesión** (**Unirme con esta cuenta: un inicio de sesión** donde la comunidad no admite las 12 palabras) cuando puedes unirte a ella, o por qué no puedes en este momento: **Comprobando…**, **No se puede conectar ahora** (con **Toca para reintentar.** mientras este teléfono no haya guardado la comunidad global), **No acepta miembros nuevos ahora.**, **Esta comunidad está en una vista previa privada. Pide una invitación a su propietario.** o **Tu cuenta allí fue cerrada.** Cuando la comunidad global no se puede conectar y estás conectado a una comunidad de la que eres miembro, una línea debajo dice **Tu propia comunidad no se ve afectada.** Nada más en el teléfono depende de ella.
+Bajo **Tus comunidades** siempre hay una fila para la **Comunidad global**. Su segunda línea indica tu situación: su dirección cuando eres miembro (tócala para cambiar a ella), **Explora primero, luego únete con esta cuenta** cuando puedes unirte a ella (mientras la visitas como invitado: **Unirme con esta cuenta: 12 palabras o un inicio de sesión**, o **Unirme con esta cuenta: un inicio de sesión** donde la comunidad no admite las 12 palabras), o por qué no puedes en este momento: **Comprobando…**, **No se puede conectar ahora** (con **Toca para reintentar.** mientras este teléfono no haya guardado la comunidad global), **No acepta miembros nuevos ahora.**, **Esta comunidad está en una vista previa privada. Pide una invitación a su propietario.** o **Tu cuenta allí fue cerrada.** Cuando la comunidad global no se puede conectar y estás conectado a una comunidad de la que eres miembro, una línea debajo dice **Tu propia comunidad no se ve afectada.** Nada más en el teléfono depende de ella.
 
-- Toca el frijol en la parte superior izquierda. En el panel de **BeanPool**, bajo **Tus comunidades**, toca **Comunidad global** (su segunda línea dice **Unirse con esta cuenta**). También está en **Ajustes**, bajo **Avanzado / Subsistema**. Si estás visitando la comunidad global como invitado, toca **Unirse** en la parte superior, al lado del **?**, luego **Unirme con 12 palabras o un inicio de sesión** (**Unirme con un inicio de sesión** donde una comunidad solo admite inicios de sesión). Si la app muestra **Aún no eres miembro aquí** para la comunidad global, toca **Unirse con esta cuenta**.
-- Elige cómo unirte: **Crear una cuenta con 12 palabras secretas**, que usa las 12 palabras que tu cuenta ya tiene (sin inicio de sesión, por lo que no requiere bloqueo de teléfono), o bien **O inicia sesión** una vez con Google, Apple (en un iPhone) o Facebook. Para un inicio de sesión, la app pide primero el bloqueo de tu teléfono, porque este inicio de sesión también se convierte en una forma de recuperar tu cuenta.
+- Toca el frijol en la parte superior izquierda. En el panel de **BeanPool**, bajo **Tus comunidades**, toca **Comunidad global** (su segunda línea dice **Explora primero, luego únete con esta cuenta**). La app abre la comunidad global como invitado, tal como lo hace el sitio web: exploras primero y el punto en el frijol muestra que eres un invitado. También está en **Ajustes**, bajo **Comunidades guardadas**: **Explora la comunidad global**. No te unes a nada ni se crea ninguna cuenta al explorar.
+- Cuando estés a punto, toca **Unirse** en la parte superior, al lado del **?**, luego **Unirme con 12 palabras o un inicio de sesión** (**Unirme con un inicio de sesión** donde una comunidad solo admite inicios de sesión). Si la app muestra **Aún no eres miembro aquí** para la comunidad global, toca **Unirse con esta cuenta**.
+- Elige cómo unirte: **Unirse con esta cuenta**, que usa la clave y las 12 palabras que ya están en este teléfono (sin inicio de sesión, por lo que no requiere bloqueo del teléfono), o bien, bajo **También añadir un inicio de sesión**, inicia sesión una vez con Google, Apple (en un iPhone) o Facebook. Para un inicio de sesión, la app pide primero el bloqueo de tu teléfono, porque este inicio de sesión también se convierte en una forma de volver a entrar a tu cuenta.
 - Revisa el nombre que verán las personas allí y toca **Unirse**. Si alguien ya tiene ese nombre, la app sugiere otros.
-- Luego elige tu foto para la comunidad global, como para cualquier comunidad nueva, y después aproximadamente dónde estás (**¿Aproximadamente dónde estás?**; puedes tocar **Omitir por ahora**): la comunidad global te muestra las publicaciones cercanas a ella. Consulta "Unirse a BeanPool".
+- Luego elige tu foto para la comunidad global, como para cualquier comunidad nueva, y después más o menos dónde estás (**¿Más o menos dónde estás?**; puedes tocar **Omitir por ahora**): la comunidad global te muestra los anuncios cercanos a ella. Consulta "Unirse a BeanPool".
 
-Nada cambia en tus otras comunidades y tus 12 palabras siguen siendo las mismas. Un inicio de sesión también se convierte en una vía de acceso a la misma cuenta: se guarda una copia cifrada de ella para ese inicio de sesión, de modo que si pierdes tu teléfono, recupera esta cuenta y no una nueva. Consulta "Recuperar tu cuenta". Un inicio de sesión que hayas vinculado a tu cuenta anteriormente sigue funcionando. Si te unes con 12 palabras y ningún inicio de sesión conserva una copia de tu cuenta, la app muestra la tarjeta **Tu cuenta tiene una sola forma de volver**, como para cualquiera que se una con 12 palabras (consulta "Unirse a BeanPool").
+Nada cambia en tus otras comunidades y tus 12 palabras siguen siendo las mismas. Un inicio de sesión también se convierte en una vía de acceso a la misma cuenta: se guarda una copia bloqueada de ella para ese inicio de sesión, de modo que si pierdes tu teléfono, recupera esta cuenta y no una nueva. Consulta "Recuperar tu cuenta". Un inicio de sesión que hayas vinculado a tu cuenta anteriormente sigue funcionando. Si te unes con 12 palabras y ningún inicio de sesión conserva una copia de tu cuenta, la app muestra la tarjeta **Tu cuenta tiene una sola forma de volver**, como para cualquiera que se una con 12 palabras (consulta "Unirse a BeanPool").
 
 Si la app dice **Este inicio de sesión ya se unió a la comunidad global con una cuenta de BeanPool diferente**, ese inicio de sesión tiene su propia cuenta allí. Usa otro inicio de sesión: una cuenta de inicio de sesión crea una sola cuenta en la comunidad global.
 
@@ -64,7 +65,7 @@ Tus otras comunidades funcionan como antes.
 - Toca el frijol en la parte superior izquierda. Se abre el panel de **BeanPool**, con **Tus comunidades** cerca de la parte superior.
 - Toca la que desees.
 
-También puedes cambiar en **Ajustes**, bajo **Sistema**, luego **Avanzado / Subsistema**. Tus comunidades están listadas allí. La que estás usando está marcada como activa. Toca **Cambiar a localidad** en otra para pasar a ella.
+También puedes cambiar en **Ajustes**, bajo **Sistema**, luego **Comunidades guardadas**. Tus comunidades están listadas allí. La que estás usando está marcada como activa. Toca **Cambiar a esta comunidad** en otra para pasar a ella.
 
 ## Cuando tu comunidad se muda a una nueva dirección
 
@@ -77,7 +78,7 @@ Una comunidad puede mudarse a una nueva dirección: por ejemplo, del número de 
 
 ## Olvidar una comunidad en este teléfono
 
-- En **Avanzado / Subsistema**, toca **Olvidar** en una comunidad que no estés usando en este momento. Esto la elimina a ella y a sus datos guardados de este teléfono.
+- En **Comunidades guardadas**, toca **Olvidar** en una comunidad que no estés usando en este momento. Esto la elimina a ella y a sus datos guardados de este teléfono.
 - En el panel de **BeanPool**, bajo **Tus comunidades**, mantener presionada una comunidad y tocar **Quitar** solo la quita de la lista. Sus datos permanecen en el teléfono.
 
 Ninguna de las dos elimina tu cuenta allí, y tus otras comunidades no se ven afectadas.

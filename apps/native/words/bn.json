@@ -2,10 +2,10 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-22",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "শিম",
@@ -5997,5 +5997,19 @@
     "one": "{n} আস্থা থেকে",
     "other": "{n} আস্থা থেকে"
   },
-  "{name}, already invited": "{name}, ইতোমধ্যে আমন্ত্রিত"
+  "{name}, already invited": "{name}, ইতোমধ্যে আমন্ত্রিত",
+  "A way back in if you lose this phone. It's linked to this same account.": "এই ফোন হারিয়ে ফেললে ফিরে আসার একটি উপায়। এটি এই একই অ্যাকাউন্টের সাথে যুক্ত।",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "সহযোগী হিসেবে {name}-কে যোগ করা হচ্ছে, {n} শিমের নামযুক্ত সমর্থন সহ",
+    "other": "সহযোগী হিসেবে {name}-কে যোগ করা হচ্ছে, {n} শিমের নামযুক্ত সমর্থন সহ"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "কিপার হিসেবে {name}-কে যোগ করা হচ্ছে, {n} শিমের নামযুক্ত সমর্থন সহ",
+    "other": "কিপার হিসেবে {name}-কে যোগ করা হচ্ছে, {n} শিমের নামযুক্ত সমর্থন সহ"
+  },
+  "Also add a sign-in": "একটি সাইন-ইনও যোগ করুন",
+  "Look around first, then join with this account": "প্রথমে ঘুরে দেখুন, তারপর এই অ্যাকাউন্ট দিয়ে যোগ দিন",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "সব জায়গার মানুষের সাথে পরিচিত হন এবং আপনার কাছের কমিউনিটিগুলো খুঁজুন। প্রথমে অতিথি হিসেবে ঘুরে দেখুন, তারপর এই ফোনের অ্যাকাউন্ট হিসেবে যোগ দিতে উপরে 'যোগ দিন'-এ ট্যাপ করুন: আপনার কি এবং আপনার ১২টি শব্দ একই থাকবে, এবং আপনার অন্যান্য কমিউনিটিতে কোনো পরিবর্তন হবে না।",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "একবার নিশ্চিত করা হলে, তাদের সীমা সর্বোচ্চ {amount} বৃদ্ধি পায়: আপনার কমিউনিটির পরিচিত সীমা, যতক্ষণ তারা একটি প্রস্তাব তালিকাভুক্ত রাখে।",
+  "Uses the key and 12 words already on this phone. No new account is made.": "এই ফোনে ইতিমধ্যে থাকা কি এবং ১২টি শব্দ ব্যবহার করে। কোনো নতুন অ্যাকাউন্ট তৈরি করা হয় না।"
 }

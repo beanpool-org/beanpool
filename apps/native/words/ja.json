@@ -5762,5 +5762,17 @@
   "from {n} trust|from {n} trust": {
     "other": "信用{n}から"
   },
-  "{name}, already invited": "{name}（招待済み）"
+  "{name}, already invited": "{name}（招待済み）",
+  "A way back in if you lose this phone. It's linked to this same account.": "この端末を紛失した際の復元手段になります。この同じアカウントに連携されます。",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "other": "{name}を協力者として追加（記名裏付け{n}豆）"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "other": "{name}を運営者として追加（記名裏付け{n}豆）"
+  },
+  "Also add a sign-in": "サインインも追加",
+  "Look around first, then join with this account": "まずは見学して、このアカウントで参加",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "世界中の人々と出会い、近くのコミュニティを見つけましょう。まずはゲストとして見学し、上部の「参加」をタップしてこの端末のアカウントで参加できます：鍵と12個の単語はそのまま保持され、他のコミュニティには何の影響もありません。",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "確認されると、提供を公開している間、相手の限度額は最大{amount}分まで拡大します：コミュニティの既知の下限です。",
+  "Uses the key and 12 words already on this phone. No new account is made.": "この端末にすでにある鍵と12個の単語を使用します。新しいアカウントは作成されません。"
 }

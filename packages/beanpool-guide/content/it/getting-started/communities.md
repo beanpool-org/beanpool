@@ -3,7 +3,7 @@ slug: communities
 title: Più di una comunità
 summary: Fai parte di diverse comunità con un solo account, passa da una all'altra, segui la tua comunità a un nuovo indirizzo e scopri cosa mostra la comunità globale.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar
-source-hash: b123b0f66fb01c9d
+source-hash: fe1d603a6bf1c424
 ---
 
 ## Un solo account, diverse comunità
@@ -17,22 +17,23 @@ Il tuo telefono conserva un solo account: un nome, una chiave, un unico insieme 
 - Sotto **Unisciti a un'altra comunità**, incolla il link o il codice di invito. Se hai solo un codice, inserisci anche l'indirizzo della comunità.
 - Tocca **Unisciti alla comunità**.
 
-La tua chiave, le tue 12 parole e il tuo nome vengono con te. I tuoi post, le tue chat e i tuoi scambi rimangono in ciascuna comunità. Successivamente verifichi il tuo nome e la tua foto per la nuova comunità. Un account di accesso che protegge il tuo account viene conservato da ciascuna comunità, quindi l'app ti chiede di proteggere il tuo account anche nella nuova comunità: tocca **Proteggilo**, oppure **Più tardi**.
+La tua chiave, le tue 12 parole e il tuo nome vengono con te. I tuoi post, le tue chat e i tuoi scambi rimangono in ciascuna comunità. Successivamente verifichi il tuo nome e la tua foto per la nuova comunità. Un account di accesso che protegge il tuo account viene conservato da ciascuna comunità, quindi l'app ti chiede di proteggere il tuo account anche nella nuova: tocca **Proteggilo**, oppure **Più tardi**.
 
 ## Entrare nella comunità globale dal tuo account
 
 La comunità globale non richiede alcun invito, e vi puoi accedere con l'account che già possiedi: la stessa chiave e le stesse 12 parole. L'app lo propone quando la comunità globale è aperta e non ha ancora segnalato all'app che questo account ne è già membro.
 
-Sotto **LE TUE COMUNITÀ** è sempre presente una riga per la **Comunità globale**. La sua seconda riga indica la tua situazione: il suo indirizzo quando ne sei membro (toccandolo puoi passare ad essa), **Unisciti con questo account: 12 parole o un accesso** (**Unisciti con questo account: un accesso** dove la comunità non accetta le 12 parole) quando puoi unirti, o il motivo per cui non puoi farlo al momento: **Controllo in corso…**, **Non raggiungibile in questo momento** (con **Tocca per riprovare.** mentre questo telefono non ha ancora salvato la comunità globale), **Al momento non accetta nuovi membri.**, **Questa comunità è in anteprima privata. Chiedi un invito al suo proprietario.**, oppure **Il tuo account lì è stato chiuso.** Quando la comunità globale non è raggiungibile e sei connesso a una comunità di cui sei membro, una riga sotto indica **La tua comunità non ne risente.** Nient'altro sul telefono dipende da essa.
+Sotto **Le tue comunità** è sempre presente una riga per la **Comunità globale**. La sua seconda riga indica la tua situazione: il suo indirizzo quando ne sei membro (toccandolo puoi passare ad essa), **Esplora prima, poi unisciti con questo account** quando puoi unirti (mentre la visiti come ospite: **Unisciti con questo account: 12 parole o un accesso**, oppure **Unisciti con questo account: un accesso** dove la comunità non accetta le 12 parole), o il motivo per cui non puoi farlo al momento: **Controllo in corso…**, **Non raggiungibile in questo momento** (con **Tocca per riprovare.** mentre questo telefono non ha ancora salvato la comunità globale), **Al momento non accetta nuovi membri.**, **Questa comunità è in anteprima privata. Chiedi un invito al suo proprietario.**, oppure **Il tuo account lì è stato chiuso.** Quando la comunità globale non è raggiungibile e sei connesso a una comunità di cui sei membro, una riga sotto indica **La tua comunità non ne risente.** Nient'altro sul telefono dipende da essa.
 
-- Tocca il fagiolo in alto a sinistra. Nel pannello **BeanPool**, sotto **LE TUE COMUNITÀ**, tocca **Comunità globale** (la sua seconda riga dice **Unisciti con questo account**). Si trova anche in **Impostazioni**, sotto **Avanzate / Sottosistema**. Se stai visitando la comunità globale come ospite, tocca **Partecipa** in alto, accanto a **?**, poi **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi). Se l'app mostra **Non sei ancora membro qui** per la comunità globale, tocca **Unisciti con questo account**.
-- Scegli come entrare: **Crea un account con 12 parole segrete**, che usa le 12 parole che il tuo account già possiede (nessun accesso esterno, quindi nessun blocco del telefono richiesto), oppure **Oppure accedi** una volta con Google, Apple (su un iPhone) o Facebook. Per un accesso esterno, l'app richiede prima lo sblocco del telefono, perché questo accesso diventa anche una via per rientrare nel tuo account.
+- Tocca il fagiolo in alto a sinistra. Nel pannello **BeanPool**, sotto **Le tue comunità**, tocca **Comunità globale** (la sua seconda riga dice **Esplora prima, poi unisciti con questo account**). L'app apre la comunità globale come ospite, esattamente come fa il sito web: prima esplori, e il puntino sul fagiolo mostra che sei un ospite. Si trova anche in **Impostazioni**, sotto **Comunità salvate**: **Esplora la comunità globale**. Guardando in giro non ci si unisce a nulla e non viene creato alcun account.
+- Quando sei pronto, tocca **Partecipa** in alto, accanto a **?**, poi **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi). Se l'app mostra **Non sei ancora membro qui** per la comunità globale, tocca **Unisciti con questo account**.
+- Scegli come entrare: **Unisciti con questo account**, che usa la chiave e le 12 parole già presenti su questo telefono (nessun accesso, quindi nessun blocco del telefono richiesto), oppure, sotto **Aggiungi anche un accesso**, accedi una volta con Google, Apple (su un iPhone) o Facebook. Per un accesso, l'app richiede prima lo sblocco del telefono, perché questo accesso diventa anche una via di recupero per il tuo account.
 - Controlla il nome che le persone vedranno lì e tocca **Partecipa**. Se qualcuno ha già quel nome, l'app ne suggerisce altri.
 - Poi scegli la tua foto per la comunità globale, come per qualsiasi nuova comunità, e quindi più o meno dove ti trovi (**Più o meno dove sei?**; puoi toccare **Salta per ora**): la comunità globale ti mostra gli annunci vicino a te. Vedi "Entrare in BeanPool".
 
-Nulla cambia nelle altre tue comunità e le tue 12 parole rimangono le stesse. Un accesso esterno diventa anche una via di ritorno nello stesso account: viene conservata una copia protetta per quell'accesso, quindi se perdi il telefono, ripristina questo account e non uno nuovo. Vedi "Recuperare il tuo account". Un accesso che avevi collegato al tuo account in precedenza continua a funzionare. Se entri con 12 parole e nessun accesso conserva una copia del tuo account, l'app mostra la scheda **Il tuo account ha una sola via di ritorno**, come per chiunque si unisca con 12 parole (vedi "Entrare in BeanPool").
+Nulla cambia nelle altre tue comunità e le tue 12 parole rimangono le stesse. Un accesso diventa anche una via di recupero nello stesso account: ne viene conservata una copia protetta per quell'accesso, quindi se perdi il telefono, ripristina questo account e non uno nuovo. Vedi "Recuperare il tuo account". Un accesso collegato al tuo account in precedenza continua a funzionare. Se entri con 12 parole e nessun accesso conserva una copia del tuo account, l'app mostra la scheda **Il tuo account ha una sola via di ritorno**, come per chiunque si unisca con 12 parole (vedi "Entrare in BeanPool").
 
-Se l'app indica che questo accesso si è già unito alla comunità globale con un diverso account BeanPool, quell'accesso possiede già un suo account lì. Usa un accesso diverso: un account di accesso esterno crea un solo account nella comunità globale.
+Se l'app indica **Questo account di accesso si è già unito alla comunità globale con un account BeanPool diverso**, quell'accesso possiede già un suo account lì. Usa un accesso diverso: un account di accesso crea un solo account nella comunità globale.
 
 Su un nuovo telefono che non possiede ancora un account, usa invece **Esplora BeanPool nel mondo** nella prima schermata. Vedi "Entrare in BeanPool".
 
@@ -47,11 +48,11 @@ L'elenco del Mercato e la Mappa sul tuo telefono mostrano ciò che il telefono c
 
 Nulla di ciò che è lontano è irraggiungibile:
 
-- La **Cerca** nel Mercato interroga la comunità, quindi trova annunci da ogni luogo, non solo vicino a te. Senza connessione, cerca tra ciò che è già presente sul tuo telefono.
+- La funzione **Cerca** nel Mercato interroga la comunità, quindi trova annunci da ogni luogo, non solo vicino a te. Senza connessione, cerca tra ciò che è già presente sul tuo telefono.
 - **Un annuncio che apri** da un messaggio, da un link o dalla Home viene scaricato dalla comunità, ovunque si trovi. Se la comunità non lo possiede più, indica **Annuncio non trovato**.
 - **La Mappa** mostra solo ciò che il telefono conserva, quindi lontano dalla tua zona ha pochi segnaposto o nessuno. Cerca nel Mercato per trovare annunci lì.
 
-Senza una zona impostata, il telefono conserva invece i 100 annunci più recenti da ogni parte del mondo, e una riga sopra il Mercato dice che stai vedendo gli annunci più recenti a livello mondiale, invitando a impostare la tua zona per vedere cosa c'è vicino a te. Toccala per impostarne una. Puoi comunque pubblicare, inviare messaggi e cercare come prima.
+Senza una zona impostata, il telefono conserva invece i 100 annunci più recenti da ogni parte del mondo, e una riga sopra il Mercato dice **Stai visualizzando gli annunci più recenti in tutto il mondo. Imposta la tua zona per vedere cosa c'è vicino a te.** Toccala per impostarne una. Puoi comunque pubblicare, inviare messaggi e cercare come prima.
 
 Un sondaggio non ha una propria posizione geografica, quindi viene mostrato nella zona del membro che lo ha creato: i sondaggi che vedi sono per lo più quelli creati vicino a te.
 
@@ -61,10 +62,10 @@ Le altre tue comunità funzionano come prima.
 
 ## Cambiare comunità
 
-- Tocca il fagiolo in alto a sinistra. Si apre il pannello **BeanPool**, con **LE TUE COMUNITÀ** vicino alla cima.
+- Tocca il fagiolo in alto a sinistra. Si apre il pannello **BeanPool**, con **Le tue comunità** vicino alla cima.
 - Tocca quella che desideri.
 
-Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Avanzate / Sottosistema**. Le tue comunità sono elencate lì. Quella che stai usando è contrassegnata come attiva. Tocca **Passa a Città** su un'altra comunità per spostarti su di essa.
+Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Comunità salvate**. Le tue comunità sono elencate lì. Quella che stai usando è contrassegnata come attiva. Tocca **Passa a questa comunità** su un'altra per spostarti su di essa.
 
 ## Quando la tua comunità si sposta a un nuovo indirizzo
 
@@ -77,8 +78,8 @@ Una comunità può trasferirsi a un nuovo indirizzo: ad esempio, dall'indirizzo 
 
 ## Dimenticare una comunità su questo telefono
 
-- In **Avanzate / Sottosistema**, tocca **Dimentica** su una comunità che non stai usando in questo momento. Questo rimuove la comunità e i suoi dati salvati da questo telefono.
-- Nel pannello **BeanPool**, sotto **LE TUE COMUNITÀ**, tenere premuta una comunità e toccare **Rimuovi** la toglie soltanto dall'elenco. I suoi dati rimangono sul telefono.
+- In **Comunità salvate**, tocca **Dimentica** su una comunità che non stai usando in questo momento. Questo rimuove la comunità e i suoi dati salvati da questo telefono.
+- Nel pannello **BeanPool**, sotto **Le tue comunità**, tenere premuta una comunità e toccare **Rimuovi** la toglie soltanto dall'elenco. I suoi dati rimangono sul telefono.
 
 Nessuna delle due opzioni elimina il tuo account lì, e le tue altre comunità non ne risentono.
 

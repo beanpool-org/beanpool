@@ -2,10 +2,10 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-22",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "Bohnen",
@@ -58,6 +58,7 @@
   "Global community": "Globale Gemeinschaft",
   "Join with this account: 12 words or a sign-in": "Mit diesem Konto beitreten: 12 Wörter oder eine Anmeldung",
   "Join with this account: a sign-in": "Mit diesem Konto beitreten: eine Anmeldung",
+  "Look around first, then join with this account": "Zuerst umsehen, dann mit diesem Konto beitreten",
   "Can't reach it right now. Tap to try again.": "Gerade nicht erreichbar. Tippe, um es noch einmal zu versuchen.",
   "Can't reach it right now": "Gerade nicht erreichbar",
   "Your account there was closed.": "Dein Konto dort wurde geschlossen.",
@@ -2145,6 +2146,7 @@
   "Deletes the local database for this community and redownloads everything": "Löscht die lokale Datenbank für diese Community und lädt alles erneut herunter",
   "Join the global community": "Der weltweiten Community beitreten",
   "Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.": "Lerne Menschen von überall kennen und finde Communities in deiner Nähe mit dem Konto auf diesem Telefon. Einmal anmelden: Dein Schlüssel und deine 12 Wörter bleiben gleich, und in deinen anderen Communities ändert sich nichts.",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Lerne Menschen von überall kennen und finde Communities in deiner Nähe. Sieh dich zuerst als Gast um und tippe dann oben auf Teilnehmen, um mit dem Konto auf diesem Telefon beizutreten: Dein Schlüssel und deine 12 Wörter bleiben gleich, und in deinen anderen Communities ändert sich nichts.",
   "e.g. My Secret Base": "z. B. Meine geheime Basis",
   "e.g. {address}": "z. B. {address}",
   "Add & Connect": "Hinzufügen & verbinden",
@@ -3871,6 +3873,14 @@
     "one": "{name} als Verwalter hinzufügen mit {n} Bohne Deckung",
     "other": "{name} als Verwalter hinzufügen mit {n} Bohnen Deckung"
   },
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "{name} als Mitwirkenden hinzufügen mit {n} Bohne namentlicher Deckung",
+    "other": "{name} als Mitwirkenden hinzufügen mit {n} Bohnen namentlicher Deckung"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "{name} als Verwalter hinzufügen mit {n} Bohne namentlicher Deckung",
+    "other": "{name} als Verwalter hinzufügen mit {n} Bohnen namentlicher Deckung"
+  },
   "Adding {name} as a collaborator": "{name} als Mitwirkenden hinzufügen",
   "Adding {name} as a keeper": "{name} als Verwalter hinzufügen",
   "{name} made this change. Any other collaborator can object before it takes effect, and one objection cancels it.": "{name} hat diese Änderung vorgenommen. Jeder andere Mitwirkende kann widersprechen, bevor sie wirksam wird; ein einzelner Einspruch bricht sie ab.",
@@ -4414,6 +4424,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "Welches Mitglied ist {name}? Bestätige nur jemanden, von dem du sicher weißt, dass er es ist.",
   "Which member is this person? Confirm only someone you know is them.": "Welches Mitglied ist diese Person? Bestätige nur jemanden, von dem du sicher weißt, dass er es ist.",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "Sie arbeiten {amount} ab: ein bekannter Kreditrahmen von 0, und jede Bohne, die sie über 0 hinaus erhalten, geht an das Gemeingut, bis sie beglichen ist.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Sobald bestätigt, erhöht sich ihr Limit um bis zu {amount}: der bekannte Kreditrahmen deiner Community, solange sie ein Angebot gelistet haben.",
   "Find a member": "Ein Mitglied suchen",
   "Find a member by name": "Ein Mitglied nach Namen suchen",
   "Nobody here is waiting to be confirmed.": "Niemand hier wartet auf eine Bestätigung.",
@@ -4655,6 +4666,9 @@
   "No Google, Apple or Facebook needed. Your 12 words are the only way back in.": "Weder Google, Apple noch Facebook nötig. Deine 12 Wörter sind der einzige Weg zurück.",
   "Or sign in": "Oder anmelden",
   "Also a way back if you lose your phone.": "Auch ein Weg zurück, wenn du dein Telefon verlierst.",
+  "Also add a sign-in": "Auch eine Anmeldung hinzufügen",
+  "A way back in if you lose this phone. It's linked to this same account.": "Ein Weg zurück, wenn du dieses Telefon verlierst. Es ist mit demselben Konto verknüpft.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Verwendet den Schlüssel und die 12 Wörter, die sich bereits auf diesem Telefon befinden. Es wird kein neues Konto erstellt.",
   "Setting up your account…": "Dein Konto wird eingerichtet…",
   "🔑 These 12 words ARE your account.": "🔑 Diese 12 Wörter SIND dein Konto.",
   "Nobody can reset them: not us, not this community. If you lose them and this phone, the account is gone for good.": "Niemand kann sie zurücksetzen: weder wir noch diese Community. Wenn du sie und dieses Telefon verlierst, ist das Konto für immer verloren.",

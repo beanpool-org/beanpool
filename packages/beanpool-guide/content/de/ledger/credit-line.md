@@ -3,7 +3,7 @@ slug: credit-line
 title: Dein Kreditrahmen
 summary: Wie weit du ins Minus gehen kannst und wie dieser Rahmen wächst.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Was es ist
@@ -46,12 +46,16 @@ Die Zeile unter der Leiste informiert dich darüber, zum Beispiel „Veröffentl
 
 ## In einer bekannten Community
 
-Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Hat deine Community **den bekannten Kreditrahmen** aktiviert, erhält ein von einem Admin bestätigtes Mitglied sofort einen Kreditrahmen: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut. Es erhöht dein Limit, nicht deine Stufe: Dein Vertrauensabzeichen zählt weiterhin nur das, was du selbst getan hast.
+Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Ein Mitglied, das ein Admin bestätigt hat, erhält sofort einen Kreditrahmen, **den bekannten Kreditrahmen**: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut. Es erhöht dein Limit, nicht deine Stufe: Dein Vertrauensabzeichen zählt weiterhin nur das, was du selbst getan hast. Der bekannte Kreditrahmen ist in jeder Community mit Bohnen aktiviert, es sei denn, ihr Eigentümer hat ihn abgeschaltet.
 
 - Ein aktives Angebot ermöglicht es dir, den gesamten Betrag zu nutzen. Ohne Angebote kannst du ihn nicht nutzen.
 - Vertrauen, das du dir durch Handeln erarbeitest, kommt hinzu, bis zur Obergrenze deiner Community (2.000 Bohnen, sofern sie nicht mehr gewählt hat, bis zu 5.000).
 - Ein Admin kann ein geringeres Limit für dich festlegen, beispielsweise solange du neu bist. Das zieht dir niemals Bohnen ab: Wenn du bereits darunter liegst, pausieren Ausgaben, bis du wieder darüber bist.
 - Wenn du Schulden aus einem früheren Konto abarbeitest, gehen die Bohnen, die du über 0 hinaus erhältst, an das Gemeingut, bis sie beglichen sind. Dein Buch zeigt an, wie viel noch übrig ist. Du kannst auch einen Teil oder die gesamten Schulden selbst unter **Buch → An das Gemeingut zahlen** begleichen: Dein Rückzahlungscode ist dort bereits eingetragen (oder gib den ein, den ein Admin dir mitteilt). Was du mit dem Code bezahlst, wird sofort von den Schulden abgezogen, und wenn nichts mehr offen ist, sind die Schulden beglichen: Weder durch eine Zahlung noch von dem, was du erhältst, wird mehr einbehalten. Eine Zahlung ohne den Code geht an das Gemeingut, wird jedoch nicht von deinen Schulden abgezogen, und die App weist darauf hin: Damit sie angerechnet wird, bitte einen Admin unter Angabe der Referenz, sie auf deine Schulden anzurechnen. Bis dies geschieht, werden die Schulden weiterhin abgearbeitet: Wenn du das nächste Mal Bohnen erhältst, wird der verbleibende Betrag von dem einbehalten, was du über 0 hältst. Der Betrag in der Nachricht des Admins war der Betrag, der beim Teilen offen war: Ist jetzt weniger offen, verweigert dein Server eine höhere Zahlung, nennt den offenen Betrag und es wird nichts gezahlt. Wenn die App meldet, dass eine Zahlung möglicherweise durchgegangen ist, tippe auf demselben Bildschirm auf **Erneut versuchen**: Dieselbe Zahlung wird niemals doppelt ausgeführt. Wenn du diesen Bildschirm verlassen hast, prüfe dein Buch, bevor du erneut zahlst.
+
+## Eine gemischte Community
+
+In manchen Communitys kann jedes Mitglied Personen einladen, sodass die Admins nicht jeden kennen. Die Admins können die Mitglieder bestätigen, die sie kennen, und diese Mitglieder starten mit einem höheren Limit, **dem bekannten Kreditrahmen**, es sei denn, der Eigentümer deiner Community hat ihn abgeschaltet. Alle anderen starten bei null, und das Limit jedes Mitglieds wächst danach auf dieselbe Weise, wenn sie handeln und Vertrauen aufbauen.
 
 ## Von den Admins eingefroren
 

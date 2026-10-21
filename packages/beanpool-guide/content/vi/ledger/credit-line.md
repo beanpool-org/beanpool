@@ -3,7 +3,7 @@ slug: credit-line
 title: Hạn mức tín dụng
 summary: Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Hạn mức tín dụng là gì
@@ -46,7 +46,7 @@ Dòng chữ bên dưới thanh trượt sẽ cho bạn biết điều này, ví 
 
 ## Trong cộng đồng quy định
 
-Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn. Điều này giúp nâng hạn mức của bạn, không phải cấp độ của bạn: huy hiệu tin cậy của bạn vẫn chỉ tính những gì bạn đã làm.
+Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức, **mức sàn quy định**: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn. Điều này giúp nâng hạn mức của bạn, không phải cấp độ của bạn: huy hiệu tin cậy của bạn vẫn chỉ tính những gì bạn đã làm. Mức sàn quy định được bật trong mọi cộng đồng có Đậu trừ khi chủ sở hữu cộng đồng tắt nó.
 
 - Một Lời đề nghị đang mở cho phép bạn sử dụng toàn bộ hạn mức đó. Nếu không có Lời đề nghị nào, bạn không thể sử dụng.
 - Mức độ tin cậy bạn tích lũy qua giao dịch sẽ cộng thêm vào hạn mức, lên đến mức trần của cộng đồng bạn (2.000 Đậu trừ khi cộng đồng chọn mức cao hơn, lên đến 5.000).
@@ -55,7 +55,7 @@ Một số cộng đồng có quản trị viên biết rõ từng thành viên 
 
 ## Cộng đồng kết hợp
 
-Trong một số cộng đồng, bất kỳ thành viên nào cũng có thể mời người khác, nên quản trị viên không biết tất cả mọi người. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, quản trị viên có thể xác nhận những thành viên mà họ biết, và những thành viên đó sẽ bắt đầu với hạn mức cao hơn. Mọi người khác bắt đầu từ số 0, và sau đó hạn mức của mọi người đều tăng theo cùng một cách khi họ giao dịch và xây dựng lòng tin cậy.
+Trong một số cộng đồng, bất kỳ thành viên nào cũng có thể mời người khác, nên quản trị viên không biết tất cả mọi người. Quản trị viên có thể xác nhận những thành viên mà họ biết, và những thành viên đó sẽ bắt đầu với hạn mức cao hơn, **mức sàn quy định**, trừ khi chủ sở hữu cộng đồng của bạn đã tắt tính năng này. Mọi người khác bắt đầu từ số 0, và sau đó hạn mức của mọi người đều tăng theo cùng một cách khi họ giao dịch và xây dựng lòng tin cậy.
 
 ## Bị quản trị viên đóng băng
 

@@ -5997,5 +5997,19 @@
     "one": "{n} വിശ്വാസ്യത മുതൽ",
     "other": "{n} വിശ്വാസ്യത മുതൽ"
   },
-  "{name}, already invited": "{name}, ഇതിനകം ക്ഷണിച്ചു"
+  "{name}, already invited": "{name}, ഇതിനകം ക്ഷണിച്ചു",
+  "A way back in if you lose this phone. It's linked to this same account.": "ഈ ഫോൺ നഷ്ടപ്പെട്ടാൽ തിരികെ പ്രവേശിക്കാനുള്ള ഒരു വഴി. ഇത് ഇതേ അക്കൗണ്ടിലേക്ക് ലിങ്ക് ചെയ്‌തിരിക്കുന്നു.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "പേര് ചേർത്ത {n} പയർ പിന്തുണയോടെ {name}-നെ സഹകാരിയായി ചേർക്കുന്നു",
+    "other": "പേര് ചേർത്ത {n} പയർ പിന്തുണയോടെ {name}-നെ സഹകാരിയായി ചേർക്കുന്നു"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "പേര് ചേർത്ത {n} പയർ പിന്തുണയോടെ {name}-നെ സൂക്ഷിപ്പുകാരനായി ചേർക്കുന്നു",
+    "other": "പേര് ചേർത്ത {n} പയർ പിന്തുണയോടെ {name}-നെ സൂക്ഷിപ്പുകാരനായി ചേർക്കുന്നു"
+  },
+  "Also add a sign-in": "ഒരു സൈൻ-ഇൻ കൂടി ചേർക്കുക",
+  "Look around first, then join with this account": "ആദ്യം കണ്ടുനോക്കുക, തുടർന്ന് ഈ അക്കൗണ്ട് ഉപയോഗിച്ച് ചേരുക",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "എല്ലായിടത്തു നിന്നുമുള്ള ആളുകളെ കണ്ടുമുട്ടുകയും അടുത്തുള്ള കമ്മ്യൂണിറ്റികൾ കണ്ടെത്തുകയും ചെയ്യുക. ആദ്യം ഒരു അതിഥിയായി കണ്ടുനോക്കുക, തുടർന്ന് ഈ ഫോണിലെ അക്കൗണ്ടായി ചേരുന്നതിന് മുകളിലുള്ള ചേരുക എന്നത് ടാപ്പ് ചെയ്യുക: നിങ്ങളുടെ കീയും 12 വാക്കുകളും മാറ്റമില്ലാതെ തുടരും, മറ്റ് കമ്മ്യൂണിറ്റികളിൽ ഒന്നും മാറില്ല.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "സ്ഥിരീകരിച്ചുകഴിഞ്ഞാൽ, അവർ ഒരു ഓഫർ ലിസ്റ്റ് ചെയ്ത് നിലനിർത്തുന്നിടത്തോളം, അവരുടെ പരിധി പരമാവധി {amount} വർദ്ധിക്കുന്നു: നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ അറിയപ്പെടുന്ന ഫ്ലോർ.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "ഈ ഫോണിലുള്ള കീയും 12 വാക്കുകളുമാണ് ഉപയോഗിക്കുന്നത്. പുതിയ അക്കൗണ്ട് ഉണ്ടാക്കുന്നില്ല."
 }

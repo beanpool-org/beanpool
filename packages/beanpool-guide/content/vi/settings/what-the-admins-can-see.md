@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Quản trị viên có thể thấy gì
 summary: Trong cộng đồng có danh sách tên: thông tin về bạn, ai có thể đọc, máy chủ lưu những gì và ý nghĩa của việc được xác nhận.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## Danh sách tên
@@ -27,7 +27,7 @@ Một quản trị viên có thể tạo một bản sao PDF của danh sách tr
 Một quản trị viên có thể **xác nhận** bạn: họ xác nhận tài khoản của bạn chính là người trong mục nhập của bạn. Chỉ người quen biết bạn mới nên làm điều đó, và ở một số cộng đồng, hai quản trị viên phải cùng đồng ý.
 
 - Một xác nhận không mang theo tên. Máy chủ chỉ ghi lại tài khoản nào, mục nhập nào và quản trị viên nào, không bao giờ ghi bạn là ai.
-- Đây không phải là một huy hiệu tin cậy, và hiện tại việc này không làm thay đổi điều gì khác trong ứng dụng.
+- Đây không phải là một huy hiệu tin cậy. Việc này cũng mang lại cho bạn một hạn mức tín dụng ngay lập tức, mức sàn quy định, trừ khi chủ sở hữu cộng đồng của bạn đã tắt tính năng này: xem "Hạn mức tín dụng".
 - Nếu một quản trị viên đã mời bạn bằng tên thật, việc tham gia bằng lời mời của họ đã xác nhận bạn đối chiếu với mục nhập của bạn, bởi chính quản trị viên đó. "Được xác nhận" chỉ có nghĩa là một quản trị viên xác nhận tài khoản này chính là người trong mục nhập đó.
 - Nếu bạn thay thế một chiếc điện thoại bị mất và tài khoản của bạn chuyển sang một khóa mới, xác nhận của bạn sẽ chuyển đi cùng với nó.
 - Nếu bạn rời khỏi hoặc xóa tài khoản của mình, xác nhận của bạn sẽ kết thúc. Mục nhập của bạn vẫn ở lại trong danh sách của các quản trị viên cho đến khi một quản trị viên xóa nó: hãy yêu cầu họ xóa.

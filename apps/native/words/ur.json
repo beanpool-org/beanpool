@@ -5997,5 +5997,19 @@
     "one": "{n} اعتماد سے",
     "other": "{n} اعتماد سے"
   },
-  "{name}, already invited": "{name}، پہلے ہی مدعو ہیں"
+  "{name}, already invited": "{name}، پہلے ہی مدعو ہیں",
+  "A way back in if you lose this phone. It's linked to this same account.": "اگر آپ کا یہ فون گم ہو جائے تو واپسی کا ایک راستہ۔ یہ اسی اکاؤنٹ سے منسلک ہے۔",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "{name} کو بطور معاون شامل کیا جا رہا ہے، {n} پھلی کی نامزد ضمانت کے ساتھ",
+    "other": "{name} کو بطور معاون شامل کیا جا رہا ہے، {n} پھلیوں کی نامزد ضمانت کے ساتھ"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "{name} کو بطور نگران شامل کیا جا رہا ہے، {n} پھلی کی نامزد ضمانت کے ساتھ",
+    "other": "{name} کو بطور نگران شامل کیا جا رہا ہے، {n} پھلیوں کی نامزد ضمانت کے ساتھ"
+  },
+  "Also add a sign-in": "ایک سائن ان بھی شامل کریں",
+  "Look around first, then join with this account": "پہلے جائزہ لیں، پھر اس اکاؤنٹ سے شامل ہوں",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "ہر جگہ کے لوگوں سے ملیں اور اپنے قریب کی کمیونٹیز تلاش کریں۔ پہلے بطور مہمان جائزہ لیں، پھر اس فون کے اکاؤنٹ کی حیثیت سے شامل ہونے کے لیے اوپر 'شامل ہوں' پر ٹیپ کریں: آپ کی کلید اور آپ کے 12 الفاظ وہی رہیں گے، اور آپ کی دوسری کمیونٹیز میں کچھ نہیں بدلے گا۔",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "ایک بار تصدیق ہو جانے پر، ان کی حد میں {amount} تک کا اضافہ ہوتا ہے: آپ کی کمیونٹی کی معلوم حد، جب تک وہ کوئی پیشکش درج رکھتے ہیں۔",
+  "Uses the key and 12 words already on this phone. No new account is made.": "اس فون پر پہلے سے موجود کلید اور 12 الفاظ استعمال ہوتے ہیں۔ کوئی نیا اکاؤنٹ نہیں بنایا جاتا۔"
 }

@@ -6467,5 +6467,23 @@
     "many": "от {n} доверия",
     "other": "от {n} доверия"
   },
-  "{name}, already invited": "{name}, приглашение уже отправлено"
+  "{name}, already invited": "{name}, приглашение уже отправлено",
+  "A way back in if you lose this phone. It's linked to this same account.": "Способ вернуться, если вы потеряете этот телефон. Он привязан к этому же аккаунту.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Добавление {name} сотрудником с именной поддержкой в {n} боб",
+    "few": "Добавление {name} сотрудником с именной поддержкой в {n} боба",
+    "many": "Добавление {name} сотрудником с именной поддержкой в {n} бобов",
+    "other": "Добавление {name} сотрудником с именной поддержкой в {n} боба"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Добавление {name} хранителем с именной поддержкой в {n} боб",
+    "few": "Добавление {name} хранителем с именной поддержкой в {n} боба",
+    "many": "Добавление {name} хранителем с именной поддержкой в {n} бобов",
+    "other": "Добавление {name} хранителем с именной поддержкой в {n} боба"
+  },
+  "Also add a sign-in": "Также добавить вход",
+  "Look around first, then join with this account": "Сначала осмотритесь, затем вступите с этим аккаунтом",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Знакомьтесь с людьми отовсюду и находите сообщества рядом с вами. Сначала осмотритесь как гость, затем нажмите «Присоединиться» вверху, чтобы присоединиться с аккаунтом на этом телефоне: ваш ключ и ваши 12 слов останутся прежними, и ничего не изменится в других ваших сообществах.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "После подтверждения их лимит увеличивается максимум на {amount}: базовый лимит вашего сообщества, пока у них опубликовано предложение.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Использует ключ и 12 слов, которые уже есть на этом телефоне. Новый аккаунт не создаётся."
 }

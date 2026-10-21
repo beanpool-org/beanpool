@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-22",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "பயறு",
@@ -58,6 +58,7 @@
   "Global community": "உலகளாவிய சமூகம்",
   "Join with this account: 12 words or a sign-in": "இந்தக் கணக்குடன் சேருங்கள்: 12 சொற்கள் அல்லது உள்நுழைவு",
   "Join with this account: a sign-in": "இந்தக் கணக்குடன் சேருங்கள்: உள்நுழைவு",
+  "Look around first, then join with this account": "முதலில் பார்வையிடுங்கள், பிறகு இந்தக் கணக்குடன் இணையுங்கள்",
   "Can't reach it right now. Tap to try again.": "இப்போது அடைய முடியவில்லை. மீண்டும் முயல தட்டுங்கள்.",
   "Can't reach it right now": "இப்போது அடைய முடியவில்லை",
   "Your account there was closed.": "அங்குள்ள உங்கள் கணக்கு மூடப்பட்டது.",
@@ -891,6 +892,7 @@
   "This community's listings are for its members": "இந்த சமூகத்தின் பதிவுகள் அதன் உறுப்பினர்களுக்கானவை",
   "To join, ask a member for an invite. Anyone can look around the global community, and ask a community near them to let them in from there.": "இணைய, ஒரு உறுப்பினரிடம் அழைப்பைக் கேட்கவும். எவரும் உலகளாவிய சமூகத்தைப் பார்வையிடலாம், தங்களுக்கு அருகிலுள்ள சமூகத்தில் இணையக் கேட்கலாம்.",
   "🌍 Look around the global community": "🌍 உலகளாவிய சமூகத்தைப் பார்வையிடுக",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "எங்கிருந்தும் உள்ள மக்களைச் சந்தியுங்கள், உங்களுக்கு அருகிலுள்ள சமூகங்களைக் கண்டறியுங்கள். முதலில் விருந்தினராகப் பார்வையிடுங்கள், பிறகு இந்த போனில் உள்ள கணக்காக இணைய மேலே உள்ள 'இணையவும்' என்பதைத் தட்டுங்கள்: உங்கள் சாவியும் உங்கள் 12 சொற்களும் மாறாமல் இருக்கும், உங்கள் பிற சமூகங்களில் எதுவும் மாறாது.",
   "Loading the marketplace…": "சந்தை ஏற்றப்படுகிறது…",
   "Syncing with your community": "உங்கள் சமூகத்துடன் ஒத்திசைக்கிறது",
   "Having trouble connecting": "இணைப்பதில் சிக்கல் உள்ளது",
@@ -4262,6 +4264,14 @@
     "one": "{name}-ஐப் பொறுப்பாளராகச் சேர்க்கிறது, {n} பயறு ஆதரவளிக்கிறது",
     "other": "{name}-ஐப் பொறுப்பாளராகச் சேர்க்கிறது, {n} பயறுகள் ஆதரவளிக்கிறது"
   },
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "{name}-ஐப் பங்களிப்பாளராகச் சேர்க்கிறது, பெயரிடப்பட்ட {n} பயறு ஆதரவுடன்",
+    "other": "{name}-ஐப் பங்களிப்பாளராகச் சேர்க்கிறது, பெயரிடப்பட்ட {n} பயறுகள் ஆதரவுடன்"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "{name}-ஐப் பொறுப்பாளராகச் சேர்க்கிறது, பெயரிடப்பட்ட {n} பயறு ஆதரவுடன்",
+    "other": "{name}-ஐப் பொறுப்பாளராகச் சேர்க்கிறது, பெயரிடப்பட்ட {n} பயறுகள் ஆதரவுடன்"
+  },
   "Adding {name} as a collaborator": "{name}-ஐப் பங்களிப்பாளராகச் சேர்க்கிறது",
   "Adding {name} as a keeper": "{name}-ஐப் பொறுப்பாளராகச் சேர்க்கிறது",
   "{name} made this change. Any other collaborator can object before it takes effect, and one objection cancels it.": "{name} இந்த மாற்றத்தைச் செய்தார். இது நடைமுறைக்கு வருவதற்கு முன் வேறு எந்தப் பங்களிப்பாளரும் ஆட்சேபிக்கலாம்; ஓர் ஆட்சேபனை இதை ரத்து செய்யும்.",
@@ -4414,6 +4424,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "{name} என்பவர் எந்த உறுப்பினர்? அவர் இவர்தான் என்று உங்களுக்குத் தெரிந்தவரை மட்டுமே உறுதிப்படுத்தவும்.",
   "Which member is this person? Confirm only someone you know is them.": "இந்த நபர் எந்த உறுப்பினர்? அவர் இவர்தான் என்று உங்களுக்குத் தெரிந்தவரை மட்டுமே உறுதிப்படுத்தவும்.",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "அவர்கள் {amount}-ஐ உழைத்துத் தீர்க்கிறார்கள்: குறைந்தபட்ச வரம்பு 0, மற்றும் 0-க்கு மேல் அவர்கள் பெறும் ஒவ்வொரு பயறும் அது தீரும் வரை பொதுக் கணக்கிற்குச் செல்லும்.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "உறுதிப்படுத்தப்பட்டதும், அவர்கள் ஒரு சலுகையைப் பட்டியலிட்டிருக்கும் வரை, அவர்களின் வரம்பு அதிகபட்சம் {amount} அளவு உயரும்: உங்கள் சமூகத்தின் அறியப்பட்ட தளம்.",
   "Find a member": "உறுப்பினரைக் கண்டறியவும்",
   "Find a member by name": "பெயர் மூலம் உறுப்பினரைக் கண்டறியவும்",
   "Nobody here is waiting to be confirmed.": "இங்கே யாரும் உறுதிப்படுத்தலுக்காகக் காத்திருக்கவில்லை.",
@@ -4655,6 +4666,9 @@
   "No Google, Apple or Facebook needed. Your 12 words are the only way back in.": "Google, Apple அல்லது Facebook தேவையில்லை. மீண்டும் உள்ளே வர உங்கள் 12 சொற்களே ஒரே வழி.",
   "Or sign in": "அல்லது உள்நுழையவும்",
   "Also a way back if you lose your phone.": "தொலைபேசியை இழந்தால் மீண்டும் உள்ளே வருவதற்கான மற்றொரு வழியும் கூட.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "ஏற்கெனவே இந்தத் தொலைபேசியில் உள்ள சாவி மற்றும் 12 சொற்களைப் பயன்படுத்துகிறது. புதிய கணக்கு எதுவும் உருவாக்கப்படாது.",
+  "Also add a sign-in": "உள்நுழைவையும் சேர்க்கவும்",
+  "A way back in if you lose this phone. It's linked to this same account.": "இந்தத் தொலைபேசியை நீங்கள் இழந்தால் மீண்டும் உள்ளே வருவதற்கான ஒரு வழி. இது இதே கணக்குடன் இணைக்கப்பட்டுள்ளது.",
   "Setting up your account…": "உங்கள் கணக்கு அமைக்கப்படுகிறது…",
   "🔑 These 12 words ARE your account.": "🔑 இந்த 12 சொற்களே உங்கள் கணக்கு.",
   "Nobody can reset them: not us, not this community. If you lose them and this phone, the account is gone for good.": "யாரும் இவற்றை மீட்டமைக்க முடியாது: நாங்களும் முடியாது, இந்தச் சமூகமும் முடியாது. இவற்றையும் இந்தத் தொலைபேசியையும் நீங்கள் இழந்தால், கணக்கு நிரந்தரமாகப் போய்விடும்.",

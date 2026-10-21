@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Wanachoweza kuona wasimamizi
 summary: Katika jumuiya ambayo wasimamizi wana orodha ya majina: inachoshikilia kukuhusu, nani anaweza kusoma, seva inachoweka, na maana ya kuthibitishwa.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## Orodha ya majina
@@ -27,7 +27,7 @@ Msimamizi anaweza kutengeneza nakala ya PDF ya orodha hiyo kwenye simu yake, kwa
 Msimamizi anaweza **kukuthibitisha**: anasema akaunti yako ndiye mtu aliye kwenye ingizo lako. Ni mtu anayekujua pekee anayepaswa kufanya hivyo, na katika baadhi ya jumuiya wasimamizi wawili lazima wakubaliane.
 
 - Uthibitisho haubebi jina lolote. Seva hurekodi akaunti gani, ingizo gani na msimamizi gani, kamwe hairekodi wewe ni nani.
-- Si beji ya uaminifu, na kwa sasa haibadilishi kitu kingine chochote kwenye programu.
+- Si beji ya uaminifu. Pia inakupa kikomo cha mkopo mara moja, kima cha chini kinachojulikana, isipokuwa kama mmiliki wa jumuiya yako amekizima: tazama "Kikomo chako cha mkopo".
 - Ikiwa msimamizi alikualika kwa jina, kujiunga kwa mwaliko wao kulikuthibitisha kulingana na ingizo lako, na msimamizi huyo. "Kuthibitishwa" kunamaanisha tu kwamba msimamizi anasema akaunti hii ndiye mtu aliye kwenye ingizo hilo.
 - Ukibadilisha simu iliyopotea na akaunti yako ikahamia kwenye ufunguo mpya, uthibitisho wako huhamia nayo.
 - Ukiondoka au kufuta akaunti yako, uthibitisho wako unakoma. Ingizo lako linabaki kwenye orodha ya wasimamizi hadi msimamizi alifute: waombe wafanye hivyo.

@@ -3735,5 +3735,17 @@
   },
   "{name}, already in the group": "{name}, уже в группе",
   "{name}, already invited": "{name}, приглашение уже отправлено",
-  "{name}, asked to join": "{name}, запрос на вступление"
+  "{name}, asked to join": "{name}, запрос на вступление",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Добавление {name} сотрудником с именной поддержкой в {n} боб",
+    "few": "Добавление {name} сотрудником с именной поддержкой в {n} боба",
+    "many": "Добавление {name} сотрудником с именной поддержкой в {n} бобов",
+    "other": "Добавление {name} сотрудником с именной поддержкой в {n} боба"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Добавление {name} хранителем с именной поддержкой в {n} боб",
+    "few": "Добавление {name} хранителем с именной поддержкой в {n} боба",
+    "many": "Добавление {name} хранителем с именной поддержкой в {n} бобов",
+    "other": "Добавление {name} хранителем с именной поддержкой в {n} боба"
+  }
 }

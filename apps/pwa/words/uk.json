@@ -3735,5 +3735,17 @@
   },
   "{name}, already in the group": "{name}, вже в групі",
   "{name}, already invited": "{name}, вже запрошено",
-  "{name}, asked to join": "{name}, запит на приєднання"
+  "{name}, asked to join": "{name}, запит на приєднання",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Додавання {name} співавтором, із {n} бобом іменної підтримки",
+    "few": "Додавання {name} співавтором, із {n} бобами іменної підтримки",
+    "many": "Додавання {name} співавтором, із {n} бобами іменної підтримки",
+    "other": "Додавання {name} співавтором, із {n} бобами іменної підтримки"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Додавання {name} доглядачем, із {n} бобом іменної підтримки",
+    "few": "Додавання {name} доглядачем, із {n} бобами іменної підтримки",
+    "many": "Додавання {name} доглядачем, із {n} бобами іменної підтримки",
+    "other": "Додавання {name} доглядачем, із {n} бобами іменної підтримки"
+  }
 }

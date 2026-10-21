@@ -3372,5 +3372,11 @@
   },
   "{name}, already in the group": "{name}，已在群组中",
   "{name}, already invited": "{name}，已邀请",
-  "{name}, asked to join": "{name}，已申请加入"
+  "{name}, asked to join": "{name}，已申请加入",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "other": "正在添加 {name} 为协作者，记名支持额度为 {n} 豆子"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "other": "正在添加 {name} 为管理者，记名支持额度为 {n} 豆子"
+  }
 }

@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Cosa possono vedere gli admin
 summary: In una comunità i cui admin tengono una lista nomi: cosa contiene su di te, chi può leggerla, cosa conserva il server e cosa significa essere confermati.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## La lista nomi
@@ -27,11 +27,11 @@ Un amministratore può creare una copia PDF della lista sul proprio telefono, pe
 Un amministratore può **confermarti**: attesta che il tuo account corrisponde alla persona indicata nella voce. Solo chi ti conosce dovrebbe farlo, e in alcune comunità devono concordare due amministratori.
 
 - Una conferma non riporta alcun nome. Il server registra quale account, quale voce e quale amministratore, mai chi sei.
-- Non è un badge di affidabilità e, per ora, non cambia nient'altro nell'app.
+- Non è uno stemma di fiducia. Ti dà anche subito una linea di credito, la soglia nota, a meno che il proprietario della tua comunità non l'abbia disattivata: vedi "Linea di credito".
 - Se un amministratore ti ha invitato per nome, unirti con il suo invito ti ha confermato a fronte della tua voce, da parte di quell'amministratore. "Confermato" significa solo che un amministratore attesta che questo account è la persona indicata in quella voce.
 - Se sostituisci un telefono smarrito e il tuo account passa a una nuova chiave, la tua conferma si trasferisce con esso.
 - Se lasci o elimini il tuo account, la conferma termina. La tua voce rimane nell'elenco degli amministratori finché un amministratore non la cancella: chiedi loro di farlo.
-- Se sei confermato e lasci, vieni rimosso o elimini il tuo account mentre sei a debito di Bean, i Beni Comuni coprono il debito come sempre. L'elenco degli amministratori conserva anche una nota sulla tua voce che indica quanto dovevi, perché e quando, per 3 anni, e gli amministratori la vedono accanto al tuo nome sui propri telefoni. Nessuno può essere confermato a fronte di quella voce finché il debito non viene rimborsato, compensato con lavoro o condonato.
+- Se sei confermato e lasci, vieni rimosso o elimini il tuo account mentre sei a debito di fagioli, i Beni comuni coprono il debito come sempre. L'elenco degli amministratori conserva anche una nota sulla tua voce che indica quanto dovevi, perché e quando, per 3 anni, e gli amministratori la vedono accanto al tuo nome sui propri telefoni. Nessuno può essere confermato a fronte di quella voce finché il debito non viene rimborsato, compensato con lavoro o condonato.
 
 ## Cosa la lista nomi non mostra agli amministratori
 

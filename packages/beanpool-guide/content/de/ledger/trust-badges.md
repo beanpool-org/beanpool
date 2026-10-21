@@ -3,7 +3,7 @@ slug: trust-badges
 title: Vertrauensstufen
 summary: Neuling, Bewohner, Verwalter und Ältester. Was sie bedeuten und warum sie nichts freischalten.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: d954cfcd237a4685
+source-hash: a6cc3bb74fc395bb
 ---
 
 ## Was sie sind
@@ -17,7 +17,7 @@ Dein Vertrauensabzeichen zeigt, wie viel Vertrauen du aufgebaut hast:
 
 Ein Mitglied, das noch nicht gehandelt hat, zeigt **GRÜNDER** auf seinen Beiträgen.
 
-Vertrauen entsteht durch eine Bürgschaft beim Beitritt, durch abgeschlossene Handelsgeschäfte und durch Vertrauen, das ein Admin gewährt hat. In einer Community, die ihre Mitglieder bestätigt, zählt auch der Kreditrahmen, den ein bestätigtes Mitglied erhält.
+Vertrauen entsteht durch eine Bürgschaft beim Beitritt, durch abgeschlossene Handelsgeschäfte und durch Vertrauen, das ein Admin gewährt hat. In einer Community, die ihre Mitglieder bestätigt, bringt die Bestätigung ein höheres Kreditlimit, kein höheres Abzeichen: Dein Abzeichen zählt nur, was du getan hast, sodass es nie zeigt, dass du bestätigt bist.
 
 ## Sie schalten nichts frei
 

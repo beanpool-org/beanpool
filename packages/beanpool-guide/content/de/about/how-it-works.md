@@ -3,7 +3,7 @@ slug: how-it-works
 title: So funktioniert BeanPool
 summary: Bohnen, Handel, Angebote und Gesuche sowie Kredit, in einfachen Worten.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Bohnen
@@ -70,7 +70,7 @@ Manche Communitys bestätigen, wer ihre Mitglieder sind. Dort erhält ein bestä
 
 ## Vertrauensabzeichen
 
-Dein Vertrauen wird als Abzeichen angezeigt. Die Abzeichen sind Neuling, Bewohner, Verwalter und Ältester. Das Vertrauen hinter deinem Abzeichen setzt sich aus drei Dingen zusammen: Dem Start, den dir eine Bürgschaft gegeben hat, dem Vertrauen, das du durch Handeln erworben hast, und jeglichem Vertrauen, das dir ein Admin gewährt hat. Ein Admin kann einem Mitglied direkt ein Abzeichen verleihen, ohne Handelsgeschäfte. In einer Community, die ihre Mitglieder bestätigt, zählt auch der Kreditrahmen, den ein bestätigtes Mitglied erhält.
+Dein Vertrauen wird als Abzeichen angezeigt. Die Abzeichen sind Neuling, Bewohner, Verwalter und Ältester. Das Vertrauen hinter deinem Abzeichen setzt sich aus drei Dingen zusammen: Dem Start, den dir eine Bürgschaft gegeben hat, dem Vertrauen, das du durch Handeln erworben hast, und jeglichem Vertrauen, das dir ein Admin gewährt hat. Ein Admin kann einem Mitglied direkt ein Abzeichen verleihen, ohne Handelsgeschäfte. In einer Community, die ihre Mitglieder bestätigt, erhält ein bestätigtes Mitglied ein höheres Kreditlimit, kein höheres Abzeichen: Das Abzeichen zählt nur, was getan wurde.
 
 - Bewohner ab 200 Vertrauen.
 - Verwalter ab 600 Vertrauen.

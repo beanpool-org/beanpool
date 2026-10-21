@@ -3483,5 +3483,15 @@
     "one": "{n} linggo",
     "other": "{n} linggo"
   },
-  "📦 Ask to borrow": "📦 Humiling na humiram"
+  "📦 Ask to borrow": "📦 Humiling na humiram",
+  "Asked to join": "Humiling na sumali",
+  "Invited": "Naimbita",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Maligayang pagdating. Mula sa unang araw maaari kang mag-browse, makipagkalakalan, tumanggap ng kredito at mag-imbita ng iba — at bukas na ang iyong credit line.",
+  "from {n} trust|from {n} trust": {
+    "one": "mula sa {n} tiwala",
+    "other": "mula sa {n} tiwala"
+  },
+  "{name}, already in the group": "{name}, nasa grupo na",
+  "{name}, already invited": "{name}, naimbita na",
+  "{name}, asked to join": "{name}, humiling na sumali"
 }

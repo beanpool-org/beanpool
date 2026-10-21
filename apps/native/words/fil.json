@@ -5975,5 +5975,27 @@
     "one": "{n} linggo",
     "other": "{n} linggo"
   },
-  "📦 Ask to borrow": "📦 Humiling na humiram"
+  "📦 Ask to borrow": "📦 Humiling na humiram",
+  "Add a community by address": "Magdagdag ng komunidad gamit ang address",
+  "COMMUNITY ADDRESS": "ADDRESS NG KOMUNIDAD",
+  "COMMUNITY NAME (OPTIONAL)": "PANGALAN NG KOMUNIDAD (OPSYONAL)",
+  "Clear this phone's copy and download again": "Burahin ang kopya ng teleponong ito at i-download muli",
+  "Community name (optional)": "Pangalan ng komunidad (opsyonal)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Kumonekta sa isang komunidad sa pamamagitan ng pag-type ng address nito. Ise-save ito ng iyong telepono sa listahang ito at lilipat dito.",
+  "Have an invite code for this community?": "May code ng imbitasyon para sa komunidad na ito?",
+  "Invited": "Naimbita",
+  "Reached at **{trust}** trust": "Naabot sa **{trust}** na tiwala",
+  "Reached at **{trust}** trust (up to {upTo})": "Naabot sa **{trust}** na tiwala (hanggang {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Nagpapatakbo ng komunidad na ito? Nakikita ng mga may-ari at admin ang hilerang Pamahalaan sa itaas ng Mga Setting.",
+  "Saved communities": "Mga naka-save na komunidad",
+  "Switch to this community": "Lumipat sa komunidad na ito",
+  "Switch, forget or refresh the communities on this phone": "Lumipat, kalimutan o i-refresh ang mga komunidad sa teleponong ito",
+  "Switching...": "Lumilipat...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Ang mga komunidad na sinalihan ng teleponong ito. Pareho ang iyong susi at 12 salita sa bawat isa; lumipat sa isa para magamit ito.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Maligayang pagdating. Mula sa unang araw maaari kang mag-browse, makipagkalakalan, tumanggap ng kredito at mag-imbita ng iba — at bukas na ang iyong credit line.",
+  "from {n} trust|from {n} trust": {
+    "one": "mula sa {n} tiwala",
+    "other": "mula sa {n} tiwala"
+  },
+  "{name}, already invited": "{name}, naimbita na"
 }

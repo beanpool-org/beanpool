@@ -3,7 +3,7 @@ slug: how-it-works
 title: Paggana ng BeanPool
 summary: Munggo, kalakalan, mga alok at kahilingan, at kredito, sa simpleng salita.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Munggo
@@ -70,13 +70,13 @@ Ang ilang komunidad ay nagpapatunay kung sino ang kanilang mga miyembro. Doon, a
 
 ## Mga trust badge
 
-Ipinapakita ang iyong tiwala bilang isang badge. Ang mga badge ay Baguhan, Residente, Katiwala at Pinuno. Ang tiwala sa likod ng iyong badge ay nagdaragdag ng tatlong bagay: ang panimulang ibinigay sa iyo ng vouch, ang tiwalang kinita mo sa pakikipagkalakalan, at anumang tiwala na ipinagkaloob sa iyo ng isang admin. Maaaring magbigay ang isang admin sa isang miyembro ng badge nang direkta, nang walang mga kalakalan. Sa isang komunidad na nagpapatunay sa mga miyembro nito, binibilang din ang linya ng kredito na nakukuha ng isang kumpirmadong miyembro.
+Ipinapakita ang iyong tiwala bilang isang badge. Ang mga badge ay Baguhan, Residente, Katiwala at Pinuno. Ang tiwala sa likod ng iyong badge ay nagdaragdag ng tatlong bagay: ang panimulang ibinigay sa iyo ng vouch, ang tiwalang kinita mo sa pakikipagkalakalan, at anumang tiwala na ipinagkaloob sa iyo ng isang admin. Maaaring magbigay ang isang admin sa isang miyembro ng badge nang direkta, nang walang mga kalakalan. Sa isang komunidad na nagpapatunay sa mga miyembro nito, ang isang kumpirmadong miyembro ay nakakakuha ng mas mataas na limitasyon sa kredito, hindi mas mataas na badge: binibilang lamang ng kanilang badge kung ano ang kanilang nagawa na.
 
 - Residente mula sa 200 tiwala.
 - Katiwala mula sa 600 tiwala.
 - Pinuno mula sa 1,400 tiwala.
 
-Ang badge ay pagkilala lamang, wala nang iba pa. Hindi ito nagbubukas o nagkakandado ng anuman. Lahat ay maaaring makipagkalakalan, mag-imbita at bumoto, anuman ang kanilang badge.
+Ang badge ay pagkilala, wala nang iba pa. Hindi ito nagbubukas ng anuman. Lahat ay maaaring makipagkalakalan, mag-imbita at bumoto, anuman ang kanilang badge.
 
 ## Mga bayad at ang Komun
 

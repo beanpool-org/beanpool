@@ -905,8 +905,8 @@ async function main(): Promise<void> {
             if (diffs.length > 0) return diffs.join(', ');
             return `${JSON.stringify(r.after?.points)} ${JSON.stringify(r.after?.leftovers)}`;
         };
-        const nothingMoved = (r: any) => !!r.before && !unreadable(r.before) && !unreadable(r.after)
-            && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after.points.length === 0 && r.after.leftovers.length === 0;
+        const nothingMoved = (r: any) => !!r?.before && !!r?.after && !unreadable(r.before) && !unreadable(r.after)
+            && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after?.points?.length === 0 && r.after?.leftovers?.length === 0;
         const said = (r: any) => `${r.answer?.status} ${String(r.answer?.error ?? (r.answer?.success ? 'restored' : '')).slice(0, 110)}`;
 
         for (const who of ['the password with an earlier 2FA session', 'a password session', "the owner's computer session", 'a fresh phone hand-off', 'the password with a current code']) {

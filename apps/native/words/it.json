@@ -5975,5 +5975,27 @@
     "one": "{n} settimana",
     "other": "{n} settimane"
   },
-  "📦 Ask to borrow": "📦 Chiedi in prestito"
+  "📦 Ask to borrow": "📦 Chiedi in prestito",
+  "Add a community by address": "Aggiungi una comunità tramite indirizzo",
+  "COMMUNITY ADDRESS": "INDIRIZZO DELLA COMUNITÀ",
+  "COMMUNITY NAME (OPTIONAL)": "NOME DELLA COMUNITÀ (FACOLTATIVO)",
+  "Clear this phone's copy and download again": "Cancella la copia su questo telefono e scarica di nuovo",
+  "Community name (optional)": "Nome della comunità (facoltativo)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Connettiti a una comunità inserendo il suo indirizzo. Il tuo telefono la salverà in questo elenco e passerà a questa comunità.",
+  "Have an invite code for this community?": "Hai un codice d'invito per questa comunità?",
+  "Invited": "Invitato",
+  "Reached at **{trust}** trust": "Raggiunto a **{trust}** di fiducia",
+  "Reached at **{trust}** trust (up to {upTo})": "Raggiunto a **{trust}** di fiducia (fino a {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Gestisci questa comunità? Proprietari e amministratori vedono una riga Gestisci in cima a Impostazioni.",
+  "Saved communities": "Comunità salvate",
+  "Switch to this community": "Passa a questa comunità",
+  "Switch, forget or refresh the communities on this phone": "Cambia, dimentica o aggiorna le comunità su questo telefono",
+  "Switching...": "Passaggio in corso...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Le comunità a cui questo telefono si è unito. La tua chiave e le tue 12 parole sono le stesse in ciascuna; passa a una di esse per usarla.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Ti diamo il benvenuto. Fin dal primo giorno puoi esplorare, scambiare, ricevere crediti e invitare altri — e la tua linea di credito è già aperta.",
+  "from {n} trust|from {n} trust": {
+    "one": "da {n} di fiducia",
+    "other": "da {n} di fiducia"
+  },
+  "{name}, already invited": "{name}, già invitato"
 }

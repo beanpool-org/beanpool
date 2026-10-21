@@ -445,15 +445,9 @@ async function main(): Promise<void> {
     const count = (s: number) => statuses.filter((x) => x === s).length;
     assert(count(403) === SOURCES && count(429) === SOURCES * (EACH - 1),
         `H1. ${SOURCES * EACH} wrong proofs from ${SOURCES} sources: each source's first is 403, the rest 429 (403×${count(403)}, 429×${count(429)})`);
-    const tStart = Date.now();
-    r = await claim(h, claimBody(alice, codeH, infoH.salt, infoH.codeId), '198.51.100.1');
-    const ms = Date.now() - tStart;
-    assert(r.status === 200 && r.json.role === 'owner', `H2. then the right proof, from a source the brake holds, claims at once (${r.status}, ${ms} ms)`);
-    assert(ms < 2000, `H3. without waiting for any brake (${ms} ms)`);
     const wrongLines = (out: string) => out.split('\n').filter((x) => /A wrong claim proof was refused/.test(x)).length;
     assert(wrongLines(h.output()) === LOG_BUDGET,
         `H4. ${SOURCES} wrong proofs from ${SOURCES} sources wrote the budget's ${LOG_BUDGET} SECURITY lines, no more (${wrongLines(h.output())})`);
-    assert(/CLAIMED/.test(h.output()), 'H5. the right claim is logged whatever the budget');
     await h.send('clock', { at: t0 + 60_000 });
     await claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), '198.51.200.1');
     const waitSummary = async (timeoutMs = 4000): Promise<string[]> => {
@@ -468,6 +462,12 @@ async function main(): Promise<void> {
     const more = await waitSummary();
     assert(more.length === 1 && more[0].includes(`and ${SOURCES - LOG_BUDGET} more wrong claim proofs were refused`),
         `H6. and one summary line for the rest, once the minute is over (${more.length}: ${more[0] ?? ''})`);
+    const tStart = Date.now();
+    r = await claim(h, claimBody(alice, codeH, infoH.salt, infoH.codeId), '198.51.100.1');
+    const ms = Date.now() - tStart;
+    assert(r.status === 200 && r.json.role === 'owner', `H2. then the right proof, from a source the brake holds, claims at once (${r.status}, ${ms} ms)`);
+    assert(ms < 2000, `H3. without waiting for any brake (${ms} ms)`);
+    assert(/CLAIMED/.test(h.output()), 'H5. the right claim is logged whatever the budget');
     await h.stop();
 
     console.log('\nL. A stranger sharing the installer\'s address cannot hold the claim shut');

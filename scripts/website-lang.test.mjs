@@ -41,7 +41,8 @@ import {
     draftLanguage,
     extractSourceHash,
     buildAll,
-    markCurrent
+    markCurrent,
+    injectBanner
 } from './website-build.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -206,6 +207,9 @@ test('legal pages banner mechanism works, and no legal translations are shipped 
     assert.ok(renderedEsPrivacy.includes('website-legal-banner'), 'rendered translated legal page includes legal banner');
     assert.ok(renderedEsPrivacy.includes(legalDate), 'legal banner mentions the English version date');
     assert.ok(renderedEsPrivacy.includes('href="../privacy.html"'), 'legal banner links to English version');
+    const legalContentIdx = renderedEsPrivacy.indexOf('<section class="legal-content');
+    const legalBannerIdx = renderedEsPrivacy.indexOf('website-legal-banner');
+    assert.ok(legalBannerIdx > legalContentIdx, 'legal banner is inside legal-content container, not before it');
 
     // 3. Verify hreflang tags on legal pages only include en and x-default (no dead links, extensionless absolute URLs)
     const privacyHreflang = buildHreflangTags('privacy.html');
@@ -229,6 +233,18 @@ test('outdated translation displays "This page is newer in English." banner link
     const rendered = renderTranslatedPage('es', 'rules.html', sampleStaleContent, sampleEnglishRules);
     assert.ok(rendered.includes('website-stale-banner'), 'stale translation includes website-stale-banner');
     assert.ok(rendered.includes('href="../rules.html"'), 'stale banner links to English rules.html');
+    const rulesContentIdx = rendered.indexOf('<section class="legal-content');
+    const rulesBannerIdx = rendered.indexOf('website-stale-banner');
+    assert.ok(rulesBannerIdx > rulesContentIdx, 'stale banner is inside legal-content container, not before it');
+
+    // Also test hero-container on index.html
+    const sampleEnglishIndex = fs.readFileSync(path.join(WEBSITE_DIR, 'index.html'), 'utf8');
+    const sampleStaleIndex = `<!-- source-hash: ${staleHash} -->\n${sampleEnglishIndex}`;
+    const renderedIndex = renderTranslatedPage('es', 'index.html', sampleStaleIndex, sampleEnglishIndex);
+    assert.ok(renderedIndex.includes('website-stale-banner'), 'stale index includes website-stale-banner');
+    const heroContainerIdx = renderedIndex.indexOf('hero-container');
+    const indexBannerIdx = renderedIndex.indexOf('website-stale-banner');
+    assert.ok(indexBannerIdx > heroContainerIdx, 'stale banner is inside hero-container, not before it');
 });
 
 test('pageContentHash ignores asset queries and script injections, but changes on text edits', () => {
@@ -609,6 +625,57 @@ test('language banner on mobile (320px) does not overlap fixed navbar in headles
         assert.equal(afterDismiss.bannerPresent, false, 'banner removed on dismiss');
         assert.equal(afterDismiss.computedTop, '0px', 'navbar computed top returns to 0px after banner dismiss');
         assert.equal(afterDismiss.customProp, '', 'custom property cleared on dismiss');
+    } finally {
+        await browser.close();
+        server.close();
+    }
+});
+
+test('stale banner renders inside legal-content and is not obscured by fixed navbar in headless Chromium', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const sampleEnglishRules = fs.readFileSync(path.join(WEBSITE_DIR, 'rules.html'), 'utf8');
+    const staleHash = '0000000000000000';
+    const sampleStaleContent = `<!-- source-hash: ${staleHash} -->\n${sampleEnglishRules}`;
+    const renderedStaleRules = renderTranslatedPage('es', 'rules.html', sampleStaleContent, sampleEnglishRules);
+
+    const server = http.createServer((req, res) => {
+        const urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+        if (urlPath === '/stale-rules.html') {
+            res.writeHead(200, { 'content-type': 'text/html' });
+            res.end(renderedStaleRules);
+            return;
+        }
+        let p = path.join(WEBSITE_DIR, urlPath);
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const browser = await chromium.launch({ headless: true });
+
+    try {
+        const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+        await page.goto(`http://127.0.0.1:${port}/stale-rules.html`, { waitUntil: 'load' });
+
+        const layout = await page.evaluate(() => {
+            const banner = document.querySelector('.website-stale-banner');
+            const nav = document.getElementById('navbar');
+            if (!banner || !nav) return null;
+            const bRect = banner.getBoundingClientRect();
+            const nRect = nav.getBoundingClientRect();
+            return {
+                bannerTop: bRect.top,
+                bannerBottom: bRect.bottom,
+                navBottom: nRect.bottom
+            };
+        });
+
+        assert.ok(layout, 'stale banner and navbar are present in Chromium');
+        assert.ok(layout.bannerTop >= layout.navBottom, `stale banner top (${layout.bannerTop}) must be at or below navbar bottom (${layout.navBottom}) with zero overlap`);
     } finally {
         await browser.close();
         server.close();

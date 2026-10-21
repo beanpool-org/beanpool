@@ -269,6 +269,21 @@ export function formatEnglishPage(page, html) {
     return out;
 }
 
+/** Injects a banner into the page's primary content container so it is not obscured by the fixed navbar. */
+export function injectBanner(out, banner) {
+    if (out.includes('<main')) {
+        return out.replace(/(<main\b[^>]*>)/i, `$1\n${banner}`);
+    } else if (out.includes('class="legal-content')) {
+        return out.replace(/(<section\b[^>]*class="[^"]*legal-content[^"]*"[^>]*>)/i, `$1\n${banner}`);
+    } else if (out.includes('hero-container')) {
+        return out.replace(/(<div\b[^>]*class="[^"]*hero-container[^"]*"[^>]*>)/i, `$1\n${banner}`);
+    } else if (out.includes('</nav>')) {
+        return out.replace(/(<\/nav>)/i, `$1\n${banner}`);
+    } else {
+        return out.replace(/(<body\b[^>]*>)/i, `$1\n${banner}`);
+    }
+}
+
 /**
  * Builds a translated page HTML from its content/ source, comparing against English.
  */
@@ -345,25 +360,13 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
     if (isBehind) {
         const words = STALE_WORDS[lang] || STALE_WORDS.en;
         const banner = `    <div class="website-stale-banner"><p>${words.note} <a href="${enHref}">${words.link}</a></p></div>`;
-        if (out.includes('<main')) {
-            out = out.replace(/(<main\b[^>]*>)/i, `$1\n${banner}`);
-        } else if (out.includes('</nav>')) {
-            out = out.replace(/(<\/nav>)/i, `$1\n${banner}`);
-        } else {
-            out = out.replace(/(<body\b[^>]*>)/i, `$1\n${banner}`);
-        }
+        out = injectBanner(out, banner);
     } else if (isLegal) {
         const date = extractLegalDate(englishHtml);
         const bannerFn = LEGAL_BANNER_WORDS[lang] || LEGAL_BANNER_WORDS.en;
         const bannerText = bannerFn(date);
         const banner = `    <div class="website-legal-banner"><p>${bannerText} <a href="${enHref}">English (${date})</a></p></div>`;
-        if (out.includes('<main')) {
-            out = out.replace(/(<main\b[^>]*>)/i, `$1\n${banner}`);
-        } else if (out.includes('</nav>')) {
-            out = out.replace(/(<\/nav>)/i, `$1\n${banner}`);
-        } else {
-            out = out.replace(/(<body\b[^>]*>)/i, `$1\n${banner}`);
-        }
+        out = injectBanner(out, banner);
     }
 
     // 8. Ensure main.js is loaded on pages with navigation (except global.html and status.html)

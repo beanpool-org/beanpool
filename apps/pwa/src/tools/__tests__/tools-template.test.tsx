@@ -22,7 +22,7 @@ import { TOOLS, TOOL_PERMISSIONS, type AnyToolScreenProps, type ToolApp, type To
 import { ToolsPage, type ToolsPageProps } from '../../pages/ToolsPage';
 import { TOOL_APPS } from '../index';
 import { ToolHomeCard } from '../home-card';
-import { writeToolRecord, readToolRecord, readToolSettings, resetToolStoreForTest } from '../store';
+import { patchToolSettings, writeToolRecord, readToolRecord, readToolSettings, resetToolStoreForTest, type ToolSettings } from '../store';
 import type { ComposerDraft } from '../builder';
 import { memoryIndexedDB } from '../../lib/memory-indexeddb';
 import { resetAccountEpochForTest } from '../../lib/account-epoch';
@@ -524,24 +524,32 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
     const FAILED = "Couldn't reach your community's server, so nothing changed. Try again when you're online.";
     const ONE_DEVICE = 'One device at a time: the copy you changed last is the one kept.';
     const SYNCED_AT = '2026-10-21T07:00:00.000Z';
-    /** The community's server: the member's own copies, as engine/tool-state.ts keeps them; today's node unless `sendsDeletedAt`. */
+    /**
+     * The community's server: the member's own copies, as engine/tool-state.ts keeps them; today's node unless
+     * `sendsDeletedAt` (S2.1) or `refusesOff` (S2.2: a DELETE leaves a tombstone with no copy too, and an ordinary PUT
+     * over a removed copy is 410, nothing written). `before` runs as a request arrives, before the server reads it.
+     */
     const server = {
         rows: new Map<string, { doc: unknown; updatedAt: string }>(),
         tombs: new Map<string, string>(),
         log: [] as Array<{ method: string; path: string; body?: unknown; kept?: boolean }>,
         mode: 'up' as 'up' | 'down' | 'older',
         sendsDeletedAt: false,
+        refusesOff: false,
+        before: null as null | ((method: string) => void),
         clock: Date.parse('2026-10-21T08:00:00.000Z'),
     };
     let kept: Case;
     beforeEach(() => {
         server.rows.clear(); server.tombs.clear(); server.log.length = 0; server.mode = 'up'; server.sendsDeletedAt = false;
+        server.refusesOff = false; server.before = null;
         localStorage.setItem('bp_node_url', 'https://mullum.example');
         kept = { manifest: { ...scaffold.manifest, id: 'kept', permissions: ['node-copy'] }, fixtures: scaffold.fixtures, loader: scaffold.loader };
         vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
             const method = init?.method ?? 'GET';
             const path = new URL(url).pathname;
             const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+            server.before?.(method);
             server.log.push({ method, path, body, kept: !!(await readToolRecord(OWNER, 'kept')) });
             if (server.mode === 'down') throw new TypeError('Failed to fetch');
             const m = /^\/api\/tools\/([a-z0-9-]+)$/.exec(path);
@@ -550,13 +558,16 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
             const row = server.rows.get(tool);
             const now = (server.clock += 1000);
             let json: unknown;
-            if (method === 'GET') json = { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, ...(server.sendsDeletedAt ? { deletedAt: row ? null : server.tombs.get(tool) ?? null } : {}) };
-            else if (method === 'PUT') {
+            if (method === 'GET') json = { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, ...(server.sendsDeletedAt || server.refusesOff ? { deletedAt: row ? null : server.tombs.get(tool) ?? null } : {}) };
+            else if (method === 'PUT' && server.refusesOff && body.turnOn !== true && !row && server.tombs.has(tool)) {
+                const deletedAt = server.tombs.get(tool);
+                return new Response(JSON.stringify({ error: "This tool's copy was switched off, so nothing was kept. Switch it on again in Settings to keep one.", code: 'tool_copy_off', deletedAt }), { status: 410 });
+            } else if (method === 'PUT') {
                 const updatedAt = new Date(now).toISOString();
                 server.rows.set(tool, { doc: body.doc, updatedAt });
                 json = { success: true, tool, updatedAt };
             } else {
-                if (row) { server.rows.delete(tool); server.tombs.set(tool, new Date(now).toISOString()); }
+                if (row || server.refusesOff) { server.rows.delete(tool); server.tombs.set(tool, new Date(now).toISOString()); }
                 json = { success: true, tool, removed: !!row };
             }
             return new Response(JSON.stringify(json), { status: 200 });
@@ -672,7 +683,8 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
         await act(async () => { fireEvent.click(toggle); });
         await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
         expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
-        expect(server.log[1].body).toEqual({ doc: scaffold.fixtures.docs.small });
+        // The member's switch-on, and only it, says so (an ordinary PUT never writes over a removed copy: S2.2).
+        expect(server.log[1].body).toEqual({ doc: scaffold.fixtures.docs.small, turnOn: true });
         expect(view.getByTestId('tool-kept-line')).toHaveTextContent(xx(PRIVATE));
         expect(await readToolSettings(OWNER, 'kept')).toEqual({ nodeCopy: true });
     });
@@ -726,9 +738,75 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
             expect(server.log).toEqual([]);
             await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
             await waitFor(() => expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']));
+            // A sync after a write is no switch-on: its body is the document alone.
+            expect(Object.keys(server.log[1].body as object)).toEqual(['doc']);
             expect((server.rows.get('kept')!.doc as { items: Array<{ name: string }> }).items.map((i) => i.name)).toEqual(['Ladder', 'Tent', 'Thing 1', 'Thing 2', 'Thing 3', 'Thing 4']);
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    it("a write's PUT refused 410 (switched off on another device after this browser's GET): the line once, in xx at 320 px × 1.3, axe clean; the setting off; the write kept here", async () => {
+        await showIn('xx');
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+        try {
+            server.refusesOff = true;
+            const Writes = ({ host }: AnyToolScreenProps) => {
+                const h = host as unknown as { doc: { get(): { v: number; items: unknown[] }; set(d: unknown): Promise<void> } };
+                return <button type="button" className="break-words" onClick={() => { const d = h.doc.get(); void h.doc.set({ ...d, items: [...d.items, { id: 'rake', name: 'Rake', addedAt: '2026-10-21T09:00:00.000Z' }] }); }}>add</button>;
+            };
+            const app: WebApp = { id: 'kept', screens: () => ({ main: Writes }) };
+            await keptAndSynced(scaffold.fixtures.docs.small);
+            const view = draw({ manifest: kept.manifest, loader: async () => ({ default: app }) }, { id: 'kept', screen: 'main', key: null });
+            const add = await view.findByRole('button', { name: 'add' });
+            await settled();
+            server.log.length = 0;
+            // The other device's off reaches the server between this browser's GET and its PUT.
+            server.before = (method) => {
+                if (method !== 'PUT') return;
+                server.before = null;
+                server.rows.delete('kept');
+                server.tombs.set('kept', '2026-10-21T09:00:00.000Z');
+            };
+            await act(async () => { fireEvent.click(add); });
+            await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+            await waitFor(() => expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']));
+            const page = view.getByTestId('tools-page');
+            expect(await view.findByTestId('tool-copy-removed')).toHaveTextContent(xx(REMOVED));
+            expect(bypassing(page, { others: ['add'] })).toEqual([]);
+            expect(layoutProblems(page)).toEqual([]);
+            expect(await axeProblems(page)).toEqual([]);
+            expect(server.rows.has('kept')).toBe(false);
+            expect(await readToolSettings(OWNER, 'kept')).toEqual({ nodeCopy: false });
+            expect((JSON.parse((await readToolRecord(OWNER, 'kept'))!.body) as { items: Array<{ name: string }> }).items.map((i) => i.name)).toEqual(['Ladder', 'Tent', 'Rake']);
+            view.unmount();
+        } finally {
+            vi.useRealTimers();
+        }
+        // Once: the next open asks nothing and says this browser only.
+        const again = draw(kept, { id: 'kept', screen: 'main', key: null });
+        await again.findByText(/Ladder/);
+        expect(again.queryByTestId('tool-copy-removed')).toBeNull();
+        await settings(again);
+        expect(again.getByTestId('tool-kept-line')).toHaveTextContent(xx(BROWSER_ONLY));
+        expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
+    });
+
+    it('a settings record that still holds the old marks (nodeCopyMarks, before fix round 3) opens without error and is left alone; Remove my data leaves { nodeCopy: false } only', async () => {
+        await keptAndSynced(scaffold.fixtures.docs.small);
+        const OLD = { unsure: 'check', digests: ['0123456789abcdef'] };
+        expect(await patchToolSettings(OWNER, 'kept', { nodeCopyMarks: OLD } as unknown as ToolSettings)).toBe(true);
+        const view = draw(kept, { id: 'kept', screen: 'main', key: null });
+        await view.findByText('Ladder');
+        await settled();
+        expect(server.log.map((r) => r.method)).toEqual(['GET']);
+        expect(await readToolSettings(OWNER, 'kept')).toEqual({ nodeCopyMarks: OLD });
+        fireEvent.click(view.getByTestId('tool-menu'));
+        fireEvent.click(view.getByTestId('tool-menu-remove'));
+        fireEvent.click(view.getByTestId('tool-remove'));
+        await act(async () => { fireEvent.click(view.getByTestId('tool-remove-yes')); });
+        expect(await view.findByText('Removed from this browser.')).toBeInTheDocument();
+        expect(server.log.map((r) => r.method)).toEqual(['GET', 'DELETE']);
+        expect(await readToolSettings(OWNER, 'kept')).toEqual({ nodeCopy: false });
     });
 });

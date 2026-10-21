@@ -1081,7 +1081,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         try {
             server.refusesOff = true;
             const Writes = (p: KitProps) => createElement(ToolButton, {
-                text: 'Add', testID: 'add', onPress: () => { const d = p.host.doc.get(); void p.host.doc.set({ ...d, items: [...d.items, { id: 'i1', name: 'Rake', at: NOW }] }); },
+                text: 'Add', testID: 'add', onPress: () => { const d = p.host.doc.get(); void p.host.doc.set({ ...d, items: [...d.items, { id: 'rake', name: 'Rake', at: NOW }] }); },
             } as any);
             reg.extra = [{ manifest: KIT, app: { ...kitApp, screens: () => ({ ...kitScreens, main: Writes }) } }];
             OTHERS = ['Ladder', 'Tent', 'Add'];
@@ -1099,7 +1099,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
             await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
             await settle();
             expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
-            expect(server.log[1].body).toEqual({ doc: { ...KIT_FIXTURES.docs.small, items: [...KIT_FIXTURES.docs.small.items, { id: 'i1', name: 'Rake', at: NOW }] } });
+            expect(server.log[1].body).toEqual({ doc: { ...KIT_FIXTURES.docs.small, items: [...KIT_FIXTURES.docs.small.items, { id: 'rake', name: 'Rake', at: NOW }] } });
             expect(server.rows.has('fixture-kit')).toBe(false);
             expect(byTestId('tool-backup-line')?.textContent).toBe(pseudoLocalise(REMOVED));
             expect(bypassing(true)).toEqual([]);

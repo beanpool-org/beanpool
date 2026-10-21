@@ -2,8 +2,8 @@
  * The one store of every tool on the web (scratch/tools/DESIGN-tool-template-fable.md §1.6, slice T0.3): IndexedDB, one
  * object store `tool_docs`, one record per community, owner and tool, the document whole as JSON with the browser's write
  * time and its last sync with the node's private copy (tools/node-copy.ts, slice T0.4). Beside each record, under the same
- * key and `|settings`, the host's settings for that tool (the node copy's toggle and its marks). The phone keeps the
- * same rows in its community's SQLite file (T0.2).
+ * key and `|settings`, the host's settings for that tool (the node copy's toggle). The phone keeps the same rows in its
+ * community's SQLite file (T0.2).
  *
  * The documents are the member's own (their things, their garden), so they go wherever this browser's account storage
  * goes: {@link clearToolStore} is part of lib/device-prefs.ts `clearAccountStorage`, which every sign-out and delete runs,
@@ -15,7 +15,6 @@
  *
  * Only the host (tools/host.ts) reads and writes this file: a tool's folder is fenced off from it (eslint.config.mjs).
  */
-import type { ToolCopyMarks } from '@beanpool/core';
 import { getNodeApiUrl } from '../lib/api';
 import { accountEpochHolds } from '../lib/account-epoch';
 
@@ -207,8 +206,6 @@ export async function toolRecordSent(owner: string, tool: string, was: ToolRecor
 export interface ToolSettings {
     /** "Keep a private copy on your community's server": the node's answer, kept here (tools/node-copy.ts). */
     nodeCopy?: boolean;
-    /** The node copy's own marks (core ToolCopyMarks: a PUT that may yet land after the copy went off), its alone. */
-    nodeCopyMarks?: ToolCopyMarks;
 }
 
 const settingsKeyOf = (owner: string, tool: string) => `${toolRecordKey(owner, tool)}|settings`;
@@ -235,12 +232,9 @@ export function patchToolSettings(owner: string, tool: string, patch: ToolSettin
     return update(settingsKeyOf(owner, tool), (v) => ({ ...(v && typeof v === 'object' && !Array.isArray(v) ? v : {}), ...patch }));
 }
 
-/**
- * The settings `change` makes of what is kept now, read and written in one transaction: another tab's write between is
- * never lost (the node copy's marks). False when it couldn't be kept.
- */
-export function changeToolSettings(owner: string, tool: string, change: (now: ToolSettings) => ToolSettings): Promise<boolean> {
-    return update(settingsKeyOf(owner, tool), (v) => change(v && typeof v === 'object' && !Array.isArray(v) ? v as ToolSettings : {}));
+/** The settings, whole: whatever was kept before goes (Remove my data keeps the copy's setting alone). */
+export function writeToolSettings(owner: string, tool: string, next: ToolSettings): Promise<boolean> {
+    return update(settingsKeyOf(owner, tool), () => ({ ...next }));
 }
 
 /** Remove my data from this browser: the document of `tool` for `owner`, gone. True once it is. */

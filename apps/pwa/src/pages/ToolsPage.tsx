@@ -27,7 +27,7 @@ import { useCommunityInfo } from '../lib/features';
 import { getNodeApiUrl } from '../lib/api';
 import { TOOL_APPS, type WebToolApp } from '../tools';
 import { isEmptyDoc, readDoc, useToolDoc, type ComposerDraft, type WebHostContext, webHostFor } from '../tools/builder';
-import { patchToolSettings, readToolRecord, readToolSettings } from '../tools/store';
+import { readToolRecord, readToolSettings, writeToolSettings } from '../tools/store';
 import { keepsNodeCopy, openToolCopy, pageNode, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type WebToolCopy } from '../tools/node-copy';
 import type { OpenTool } from '../tools/route';
 import { ToolButton, ToolEmpty, ToolRow, ToolSection } from '../tools/ui';
@@ -266,7 +266,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         const gone = await store.remove();
         if (!gone) return 'not-kept';
         if (copyOf) {
-            await patchToolSettings(owner, copyOf.manifest.id, { nodeCopy: false });
+            await writeToolSettings(owner, copyOf.manifest.id, { nodeCopy: false });
             setCopy({ setting: false, note: null, busy: false, failed: null });
         }
         setPastDoors(false);

@@ -275,6 +275,12 @@ async function child(): Promise<void> {
             const { getStandbyHealthBanner } = await import('./services/standby-health.js');
             return getStandbyHealthBanner();
         },
+        /** This server's own flush of demurrage and the Commons pot, as its 5-minute timer and ledger audit run it. */
+        persist: async () => {
+            const { persistDecayAndCommons } = await import('./state-engine.js');
+            persistDecayAndCommons();
+            return true;
+        },
         checkpoint: async () => {
             const { db } = await import('./db/db.js');
             db.pragma('wal_checkpoint(TRUNCATE)');
@@ -749,6 +755,11 @@ async function main(): Promise<void> {
         await sleep(RETRY_MS + 300);
         const land11 = await pullAndSwap({});
         const s11e: Snap = await standby.send('snapshot', { tables: HASHED });
+        // A main persist between the standby's landing and M's snapshot advances COMMONS_POOL's
+        // last_updated_at; the copies still match because the refusal suite compares the Commons
+        // pool's balance, not its flush stamp (#2303).
+        await sleep(20);
+        await main.send('persist');
         const m11: Snap = await main.send('snapshot', { tables: HASHED });
         const r11 = await standby.send('record');
         assert(land11.ok === true && land11.mode === 'resync' && r11.lastWhole?.exact === true && s11e.format !== null && s11e.tables.accounts.hash === m11.tables.accounts.hash,

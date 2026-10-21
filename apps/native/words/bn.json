@@ -6011,5 +6011,13 @@
   "Look around first, then join with this account": "প্রথমে ঘুরে দেখুন, তারপর এই অ্যাকাউন্ট দিয়ে যোগ দিন",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "সব জায়গার মানুষের সাথে পরিচিত হন এবং আপনার কাছের কমিউনিটিগুলো খুঁজুন। প্রথমে অতিথি হিসেবে ঘুরে দেখুন, তারপর এই ফোনের অ্যাকাউন্ট হিসেবে যোগ দিতে উপরে 'যোগ দিন'-এ ট্যাপ করুন: আপনার কি এবং আপনার ১২টি শব্দ একই থাকবে, এবং আপনার অন্যান্য কমিউনিটিতে কোনো পরিবর্তন হবে না।",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "একবার নিশ্চিত করা হলে, তাদের সীমা সর্বোচ্চ {amount} বৃদ্ধি পায়: আপনার কমিউনিটির পরিচিত সীমা, যতক্ষণ তারা একটি প্রস্তাব তালিকাভুক্ত রাখে।",
-  "Uses the key and 12 words already on this phone. No new account is made.": "এই ফোনে ইতিমধ্যে থাকা কি এবং ১২টি শব্দ ব্যবহার করে। কোনো নতুন অ্যাকাউন্ট তৈরি করা হয় না।"
+  "Uses the key and 12 words already on this phone. No new account is made.": "এই ফোনে ইতিমধ্যে থাকা কি এবং ১২টি শব্দ ব্যবহার করে। কোনো নতুন অ্যাকাউন্ট তৈরি করা হয় না।",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "একজন কিপার এই সরঞ্জামের সার্ভার অনুলিপি বন্ধ করে দিয়েছেন, তাই এটি শুধুমাত্র এই ফোনেই সংরক্ষিত। আপনি সেটিংসে এটি আবার চালু করতে পারবেন।",
+  "Asked to join": "যোগ দেওয়ার অনুরোধ করেছেন",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "আপনার কমিউনিটির সার্ভারে পৌঁছানো যায়নি, তাই কিছুই পরিবর্তন হয়নি। অনলাইনে এলে আবার চেষ্টা করুন।",
+  "One phone at a time: the copy you changed last is the one kept.": "একবারে একটি ফোন: আপনি সবশেষে যে অনুলিপিটি পরিবর্তন করেছেন সেটিই রাখা হয়।",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "এই ফোন থেকে এই সরঞ্জামের জন্য আপনার ডেটা এবং আপনার কমিউনিটির সার্ভারে থাকা এর অনুলিপি সরিয়ে ফেলে। আপনার হিসেবে সাইন ইন করা অন্য একটি ফোন তার কাছে যা আছে তা রেখে দেয় এবং তা পাঠানো বন্ধ করে। অন্য কমিউনিটিতে থাকা একই সরঞ্জাম তার নিজস্ব ডেটা রাখে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যাবে না।",
+  "You can edit a message for 15 minutes after sending it.": "বার্তা পাঠানোর পর 15 মিনিট পর্যন্ত আপনি তা সম্পাদনা করতে পারবেন।",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "আপনার কমিউনিটির সার্ভার আর এই সরঞ্জামের অনুলিপি রাখে না, তাই এটি শুধুমাত্র এই ফোনেই সংরক্ষিত। আপনি সেটিংসে অনুলিপিটি আবার চালু করতে পারবেন।",
+  "{name}, asked to join": "{name}, যোগ দেওয়ার অনুরোধ করেছেন"
 }

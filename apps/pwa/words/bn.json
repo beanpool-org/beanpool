@@ -3501,5 +3501,14 @@
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "one": "কিপার হিসেবে {name}-কে যোগ করা হচ্ছে, {n} শিমের নামযুক্ত সমর্থন সহ",
     "other": "কিপার হিসেবে {name}-কে যোগ করা হচ্ছে, {n} শিমের নামযুক্ত সমর্থন সহ"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "একজন কিপার এই সরঞ্জামের সার্ভার অনুলিপি বন্ধ করে দিয়েছেন, তাই এটি শুধুমাত্র এই ব্রাউজারেই সংরক্ষিত। আপনি সেটিংসে এটি আবার চালু করতে পারবেন।",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "আপনার কমিউনিটির সার্ভারে পৌঁছানো যায়নি, তাই কিছুই পরিবর্তন হয়নি। অনলাইনে এলে আবার চেষ্টা করুন।",
+  "Keep a private copy on your community's server": "আপনার কমিউনিটির সার্ভারে একটি ব্যক্তিগত অনুলিপি রাখুন",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "এই ব্রাউজারে সংরক্ষিত, আপনার কমিউনিটির সার্ভারে একটি ব্যক্তিগত অনুলিপি সহ যা অ্যাপের মাধ্যমে শুধুমাত্র আপনি পড়তে পারেন। সেই সার্ভারের সবকিছুর মতো, এর অপারেটরও তা পড়তে পারেন।",
+  "One device at a time: the copy you changed last is the one kept.": "একবারে একটি ডিভাইস: আপনি সবশেষে যে অনুলিপিটি পরিবর্তন করেছেন সেটিই রাখা হয়।",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "এই ব্রাউজার থেকে {tool}-এর জন্য এই কমিউনিটির ডেটা এবং আপনার কমিউনিটির সার্ভারে থাকা এর অনুলিপি সরিয়ে ফেলে। আপনার হিসেবে সাইন ইন করা অন্য একটি ডিভাইস তার কাছে যা আছে তা রেখে দেয় এবং তা পাঠানো বন্ধ করে। অন্য কমিউনিটিতে থাকা একই সরঞ্জাম তার নিজস্ব ডেটা রাখে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যাবে না।",
+  "You can edit a message for 15 minutes after sending it.": "বার্তা পাঠানোর পর 15 মিনিট পর্যন্ত আপনি তা সম্পাদনা করতে পারবেন।",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "আপনার কমিউনিটির সার্ভার এখনও অনুলিপি রাখতে পারছে না, তাই আপাতত এটি শুধুমাত্র এই ব্রাউজারেই থাকবে।",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "আপনার কমিউনিটির সার্ভার আর এই সরঞ্জামের অনুলিপি রাখে না, তাই এটি শুধুমাত্র এই ব্রাউজারেই সংরক্ষিত। আপনি সেটিংসে অনুলিপিটি আবার চালু করতে পারবেন।"
 }

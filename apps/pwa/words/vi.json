@@ -3363,5 +3363,14 @@
   "{n} week|{n} weeks": {
     "other": "{n} tuần"
   },
-  "📦 Ask to borrow": "📦 Yêu cầu mượn"
+  "📦 Ask to borrow": "📦 Yêu cầu mượn",
+  "Asked to join": "Đã yêu cầu tham gia",
+  "Invited": "Đã mời",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Chào mừng bạn. Ngay từ ngày đầu tiên, bạn có thể khám phá, giao dịch, nhận tín dụng và mời người khác — và hạn mức tín dụng của bạn đã được mở.",
+  "from {n} trust|from {n} trust": {
+    "other": "từ {n} điểm tin cậy"
+  },
+  "{name}, already in the group": "{name}, đã ở trong nhóm",
+  "{name}, already invited": "{name}, đã được mời",
+  "{name}, asked to join": "{name}, đã yêu cầu tham gia"
 }

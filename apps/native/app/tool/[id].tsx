@@ -163,10 +163,9 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         settingsRef.current = next;
         setSettings(next);
         tellOpenScreens(shareKey, hear, { settings: next });
-        // Everything but the node copy's setting, which only the server's answer moves, and its marks (tools/node-copy.ts).
+        // Everything but the node copy's setting, which only the server's answer moves (tools/node-copy.ts).
         const rest: ToolSettings = { ...next };
         delete rest.nodeCopy;
-        delete rest.nodeCopyMarks;
         await patchToolSettings(owner, manifest.id, rest, url).catch(() => {});
         reschedule(docRef.current, next);
     }, [owner, manifest.id, reschedule, shareKey, hear, url]);
@@ -264,11 +263,9 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                             Alert.alert(t('Remove my data from this phone'), copyFailedLine());
                             return;
                         }
-                        const marks = keepsNodeCopy(manifest) ? (await readToolSettings(owner, manifest.id, url)).nodeCopyMarks : undefined;
                         await removeToolDataHere(owner, manifest.id, url);
-                        // The one setting kept: the copy off, so Settings says what is true; with its marks, so a PUT
-                        // that may still land on the server is asked after on the next open (tools/node-copy.ts).
-                        const left: ToolSettings = keepsNodeCopy(manifest) ? { nodeCopy: false, ...(marks ? { nodeCopyMarks: marks } : {}) } : {};
+                        // The one setting kept: the copy off, so Settings says what is true.
+                        const left: ToolSettings = keepsNodeCopy(manifest) ? { nodeCopy: false } : {};
                         if (keepsNodeCopy(manifest)) await writeToolSettings(owner, manifest.id, left, url);
                         const empty = manifest.doc.empty();
                         docRef.current = empty;

@@ -112,8 +112,10 @@ const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
 const posts = vi.hoisted(() => ({ rows: new Map<string, Record<string, unknown>>(), paused: [] as string[], resumed: [] as string[] }));
 /**
  * The community's server, for a tool that asks for node-copy (slice T0.4): its tool store as engine/tool-state.ts keeps
- * it, the member's own copies only (the signer is ME). Today's node (S2) unless `sendsDeletedAt`; 404 when `older`, no
- * answer when `down`. `seen` is what the phone holds as each request arrives.
+ * it, the member's own copies only (the signer is ME). Today's node (S2) unless `sendsDeletedAt` (S2.1) or `refusesOff`
+ * (S2.2: a DELETE leaves a tombstone with no copy too, and an ordinary PUT over a removed copy is 410, nothing written);
+ * 404 when `older`, no answer when `down`. `seen` is what the phone holds as each request arrives; `before` runs as
+ * a request arrives, before the server reads it (another phone's landing first).
  */
 const server = vi.hoisted(() => {
     const iso = (ms: number) => new Date(ms).toISOString();
@@ -123,13 +125,16 @@ const server = vi.hoisted(() => {
         log: [] as Array<{ method: string; path: string; body?: unknown; held?: number }>,
         mode: 'up' as 'up' | 'down' | 'older',
         sendsDeletedAt: false,
+        refusesOff: false,
         clock: Date.parse('2026-10-21T08:00:00.000Z'),
         seen: null as null | (() => number),
+        before: null as null | ((method: string) => void),
         reset() {
-            s.rows.clear(); s.tombs.clear(); s.log.length = 0; s.mode = 'up'; s.sendsDeletedAt = false; s.seen = null;
+            s.rows.clear(); s.tombs.clear(); s.log.length = 0; s.mode = 'up'; s.sendsDeletedAt = false; s.refusesOff = false; s.seen = null; s.before = null;
             s.clock = Date.parse('2026-10-21T08:00:00.000Z');
         },
         answer(method: string, path: string, body?: unknown): { status: number; json: unknown } | null {
+            s.before?.(method);
             s.log.push({ method, path, body, held: s.seen?.() });
             if (s.mode === 'down') return null;
             const m = /^\/api\/tools\/([a-z0-9-]+)$/.exec(path);
@@ -137,13 +142,16 @@ const server = vi.hoisted(() => {
             const tool = m[1];
             const row = s.rows.get(tool);
             const now = (s.clock += 1000);
-            if (method === 'GET') return { status: 200, json: { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, ...(s.sendsDeletedAt ? { deletedAt: row ? null : s.tombs.get(tool) ?? null } : {}) } };
+            if (method === 'GET') return { status: 200, json: { tool, doc: row?.doc ?? null, updatedAt: row?.updatedAt ?? null, ...(s.sendsDeletedAt || s.refusesOff ? { deletedAt: row ? null : s.tombs.get(tool) ?? null } : {}) } };
             if (method === 'PUT') {
+                if (s.refusesOff && (body as { turnOn?: unknown }).turnOn !== true && !row && s.tombs.has(tool)) {
+                    return { status: 410, json: { error: "This tool's copy was switched off, so nothing was kept. Switch it on again in Settings to keep one.", code: 'tool_copy_off', deletedAt: s.tombs.get(tool) } };
+                }
                 const updatedAt = iso(Math.max(now, ...[row?.updatedAt, s.tombs.get(tool)].filter(Boolean).map((t) => Date.parse(t as string) + 1)));
                 s.rows.set(tool, { doc: (body as { doc: unknown }).doc, updatedAt });
                 return { status: 200, json: { success: true, tool, updatedAt } };
             }
-            if (row) { s.rows.delete(tool); s.tombs.set(tool, iso(now)); }
+            if (row || s.refusesOff) { s.rows.delete(tool); s.tombs.set(tool, iso(now)); }
             return { status: 200, json: { success: true, tool, removed: !!row } };
         },
     };
@@ -203,7 +211,7 @@ import { TOOL_APPS, phoneTools, type PhoneTool } from '../../tools/index';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from '../../tools/schema';
 import {
     readToolDoc, wipeToolDataOnThisPhone, writeToolDoc, writeToolSettings, ToolDocTooBigError,
-    removeToolDataHere, removeCommunityToolData, readToolSettings, reminderOn, settingsKey,
+    removeToolDataHere, removeCommunityToolData, readToolSettings, reminderOn, settingsKey, type ToolSettings,
 } from '../../tools/store';
 import { communityKey } from '../../tools/community';
 import { keepToolPhoto, toolPhotoUri } from '../../tools/photos';
@@ -989,7 +997,8 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         server.log.length = 0;
         await click(byTestId('tool-settings-node-copy'), 'the toggle, on');
         expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
-        expect(server.log[1].body).toEqual({ doc: KIT_FIXTURES.docs.small });
+        // The member's switch-on, and only it, says so (an ordinary PUT never writes over a removed copy: S2.2).
+        expect(server.log[1].body).toEqual({ doc: KIT_FIXTURES.docs.small, turnOn: true });
         expect(stored()).toMatchObject({ nodeCopy: true });
         expect(byTestId('tool-backup-line')?.textContent).toBe(pseudoLocalise(PRIVATE));
         // A whole-settings save (a reminder's switch) never writes the copy's setting back over the server's answer.
@@ -1047,24 +1056,63 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         expect(disk.db.count('SELECT COUNT(*) AS n FROM tool_docs')).toBe(0);
     });
 
-    it("the copy's marks (tools/node-copy.ts) are never written back by a settings save, and stay through Remove my data", async () => {
+    it("a settings record that still holds the old marks (nodeCopyMarks, before fix round 3) opens without error and is left alone; Remove my data leaves { nodeCopy: false } only", async () => {
         await keptAndSynced(KIT_FIXTURES.docs.small);
-        // The screen reads a PUT still out as it opens; it is heard, and its mark goes, behind the screen's back.
-        await writeToolSettings(ME.publicKey, 'fixture-kit', { nodeCopyMarks: { unsure: 'out' } });
+        const OLD = { unsure: 'check', digests: ['0123456789abcdef'] };
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { nodeCopyMarks: OLD } as unknown as ToolSettings);
         await drawTool('fixture-kit', {}, 'xx');
-        await writeToolSettings(ME.publicKey, 'fixture-kit', {});
+        expect(host.textContent).toContain('Tent');
+        expect(server.log.map((r) => r.method)).toEqual(['GET']);
         await openSettings();
         await click(byTestId('tool-settings-reminder-weekly'), "a reminder's switch");
-        expect(stored()).toEqual({ reminders: { weekly: true } });
+        expect(stored()).toEqual({ nodeCopyMarks: OLD, reminders: { weekly: true } });
         await click(byTestId('tool-settings-done'), 'Done');
-        // A PUT the phone never heard the end of: Remove my data keeps its mark, with its body's digest, beside the setting off.
-        await writeToolSettings(ME.publicKey, 'fixture-kit', { ...stored(), nodeCopyMarks: { unsure: 'check', digests: ['0123456789abcdef'] } });
         await click(byTestId('tool-menu'), 'the "…"');
         await click(byTestId('tool-menu-remove'), 'Remove my data');
         await act(async () => { alerts.buttons.find((b) => b.text === pseudoLocalise('Remove'))!.onPress!(); });
         await settle();
+        expect(server.log.map((r) => r.method)).toEqual(['GET', 'DELETE']);
         expect(server.rows.has('fixture-kit')).toBe(false);
-        expect(stored()).toEqual({ nodeCopy: false, nodeCopyMarks: { unsure: 'check', digests: ['0123456789abcdef'] } });
+        expect(stored()).toEqual({ nodeCopy: false });
+    });
+
+    it("a write's PUT refused 410 (switched off on another phone after this phone's GET): the line once, in xx at 320 dp × 1.3; the setting off; the write kept here", async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+        try {
+            server.refusesOff = true;
+            const Writes = (p: KitProps) => createElement(ToolButton, {
+                text: 'Add', testID: 'add', onPress: () => { const d = p.host.doc.get(); void p.host.doc.set({ ...d, items: [...d.items, { id: 'i1', name: 'Rake', at: NOW }] }); },
+            } as any);
+            reg.extra = [{ manifest: KIT, app: { ...kitApp, screens: () => ({ ...kitScreens, main: Writes }) } }];
+            OTHERS = ['Ladder', 'Tent', 'Add'];
+            await keptAndSynced(KIT_FIXTURES.docs.small);
+            await drawTool('fixture-kit', {}, 'xx');
+            server.log.length = 0;
+            // The other phone's off reaches the server between this phone's GET and its PUT.
+            server.before = (method) => {
+                if (method !== 'PUT') return;
+                server.before = null;
+                server.rows.delete('fixture-kit');
+                server.tombs.set('fixture-kit', '2026-10-21T09:00:00.000Z');
+            };
+            await click(byTestId('add'), 'a write');
+            await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+            await settle();
+            expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
+            expect(server.log[1].body).toEqual({ doc: { ...KIT_FIXTURES.docs.small, items: [...KIT_FIXTURES.docs.small.items, { id: 'i1', name: 'Rake', at: NOW }] } });
+            expect(server.rows.has('fixture-kit')).toBe(false);
+            expect(byTestId('tool-backup-line')?.textContent).toBe(pseudoLocalise(REMOVED));
+            expect(bypassing(true)).toEqual([]);
+            expect(tooWide()).toEqual([]);
+            expect(stored()).toMatchObject({ nodeCopy: false });
+            expect((await readToolDoc(ME.publicKey, KIT)).doc.items.map((i) => i.name)).toEqual(['Ladder', 'Tent', 'Rake']);
+        } finally {
+            vi.useRealTimers();
+        }
+        // Once: the next open asks the server nothing and says this phone only.
+        await reopen();
+        expect(byTestId('tool-backup-line')?.textContent).toBe(PHONE_ONLY);
+        expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
     });
 
     it("a write through the tool's host: one sync five seconds after the last, not one a write", async () => {
@@ -1083,6 +1131,8 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
             await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
             await settle();
             expect(server.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
+            // A sync after a write is no switch-on: its body is the document alone.
+            expect(Object.keys(server.log[1].body as object)).toEqual(['doc']);
             expect((server.rows.get('fixture-kit')!.doc as KitDoc).items.map((i) => i.name)).toEqual(['Ladder', 'Tent', 'Thing 1', 'Thing 2', 'Thing 3', 'Thing 4']);
         } finally {
             vi.useRealTimers();

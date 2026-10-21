@@ -7,23 +7,22 @@
  *
  * Only for a tool whose manifest asks for `node-copy` ({@link keepsNodeCopy}). Every step for one community, owner and
  * tool runs in one queue, and the next starts only once each request of the one before has settled; each is let go at
- * TOOL_COPY_ANSWER_MS (core withinAnswerTime), so a sync after a write never lands after the DELETE that follows it, and
- * one let go that the node may take anyway is marked beside the setting (core ToolCopyMarks). None runs once the phone
- * has moved to another community, whose file and server are another's, or its account has changed: not even the rest of
- * one already under way (each request and write first asks whether the job still holds: {@link parts}). The phone is
- * one process: no other queue sends for the same copy.
+ * TOOL_COPY_ANSWER_MS (core withinAnswerTime), so a sync after a write never lands after the DELETE that follows it; one
+ * let go that the node takes anyway is refused there (an ordinary PUT over a removed copy, 410), and only the toggle's
+ * PUT says `turnOn`. None runs once the phone has moved to another community, whose file and server are another's, or
+ * its account has changed: not even the rest of one already under way (each request and write first asks whether the job
+ * still holds: {@link parts}). The phone is one process: no other queue sends for the same copy.
  *
  * Only the host route (app/tool/[id].tsx) calls this: the eslint fence refuses a tool any import of it.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    createToolCopyQueue, keptMarks, removeToolCopy, syncToolCopy, toolCopyMarksOf, toolCopyPath, turnToolCopyOff, turnToolCopyOn,
-    withinAnswerTime,
+    createToolCopyQueue, removeToolCopy, syncToolCopy, toolCopyPath, turnToolCopyOff, turnToolCopyOn, withinAnswerTime,
     type ToolCopyDevice, type ToolCopyNode, type ToolCopyOutcome, type ToolCopyOwner, type ToolManifest, type ToolNodeAnswer,
 } from '@beanpool/core';
 import { getDb, signedGet, signedRequestWithMethod } from '../utils/db';
 import { onAccountOnPhone } from '../utils/account-on-phone';
-import { notifyToolStore, patchToolSettings, readToolCopy, readToolSettings, writeToolSettings } from './store';
+import { notifyToolStore, patchToolSettings, readToolCopy, readToolSettings } from './store';
 import { communityKey } from './community';
 
 /** Whether a tool keeps a private copy on the node at all: only one whose manifest asks for it. */
@@ -42,7 +41,8 @@ type Holds = () => Promise<boolean>;
 /**
  * The node's routes for this owner's copy, signed as the member; a refusal comes back as answered, no answer as null, and
  * a request the job may no longer send (`holds`) as no answer, unsent. Each is let go at the answer limit, its reading
- * of the answer too, so one the network never answers settles then.
+ * of the answer too, so one the network never answers settles then. A PUT's body is `{ doc, turnOn: true }` from the
+ * toggle and `{ doc }` from every other (a 410 comes back as answered, its status kept).
  */
 export function phoneToolNode(owner: ToolCopyOwner, tool: string, holds: Holds): ToolCopyNode {
     const path = toolCopyPath(owner, tool);
@@ -67,16 +67,15 @@ export function phoneToolNode(owner: ToolCopyOwner, tool: string, holds: Holds):
                 return null;
             }
         },
-        put: (doc) => write('PUT', { doc }),
+        put: (doc, turnOn) => write('PUT', turnOn ? { doc, turnOn: true } : { doc }),
         delete: () => write('DELETE'),
     };
 }
 
 /**
  * The phone's side of one tool's copy: its row (a take or a sent copy changes it only if no write landed meanwhile) and
- * its setting with the marks beside it, the one writer of `nodeCopy` and `nodeCopyMarks`. Nothing is written once the job
- * may no longer go on (`holds`), asked after the file is opened, so the file written is the community's that was asked
- * about. The settings are read and written by this one process only, one job of a key at a time.
+ * its setting, the one writer of `nodeCopy`. Nothing is written once the job may no longer go on (`holds`), asked after
+ * the file is opened, so the file written is the community's that was asked about.
  */
 export function phoneToolDevice(owner: string, tool: string, url: string | null, holds: Holds): ToolCopyDevice {
     return {
@@ -108,13 +107,6 @@ export function phoneToolDevice(owner: string, tool: string, url: string | null,
         },
         setting: async () => (await readToolSettings(owner, tool, url)).nodeCopy,
         setSetting: async (on) => { if (await holds()) await patchToolSettings(owner, tool, { nodeCopy: on }, url); },
-        marks: async () => toolCopyMarksOf((await readToolSettings(owner, tool, url)).nodeCopyMarks),
-        mark: async (change) => {
-            if (!await holds()) return;
-            const { nodeCopyMarks, ...rest } = await readToolSettings(owner, tool, url);
-            const kept = keptMarks(change(toolCopyMarksOf(nodeCopyMarks), rest.nodeCopy));
-            await writeToolSettings(owner, tool, kept ? { ...rest, nodeCopyMarks: kept } : rest, url);
-        },
     };
 }
 

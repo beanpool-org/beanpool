@@ -7934,9 +7934,10 @@ export interface GroupMemberItem {
 /**
  * Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE). `withStatus`: the thrown error also
  * carries the answer's `status`, and `unsaid` when the node gave no words of its own, so a screen can tell a refusal
- * (403, said in the node's words) from a blip. Opt-in: other callers' errors stay exactly as they were.
+ * (403, said in the node's words) from a blip. Opt-in: other callers' errors stay exactly as they were. `signal` lets the
+ * caller give up on the request (the tool copy's, at its answer limit); without one, nothing changes.
  */
-export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any, opts?: { withStatus?: boolean }) {
+export async function signedRequestWithMethod(method: string, endpoint: string, payload?: any, opts?: { withStatus?: boolean; signal?: AbortSignal }) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
 
@@ -7955,6 +7956,7 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
             ...languageHeader(),
         },
         body: payload !== undefined ? bodyString : undefined,
+        ...(opts?.signal ? { signal: opts.signal } : {}),
     });
 
     if (!res.ok) {

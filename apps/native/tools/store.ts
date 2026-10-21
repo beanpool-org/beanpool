@@ -4,14 +4,14 @@
  * document directory at `tools/<community>/<owner>/<tool>/<ref>.jpg` (800 px, the Offer form's downsize), never inside the document
  * and never on the node. Beside them, the host's own settings for each tool (the backup toggle, which reminders are on,
  * which door the member took, whether the Home card was offered) in app storage under `beanpool_tool:`. The row's
- * `synced_at` and the backup toggle are the node copy's (tools/node-copy.ts, slice T0.4).
+ * `synced_at`, the backup toggle and its marks are the node copy's (tools/node-copy.ts, slice T0.4).
  *
  * All data is kept per community, owner and tool (PR #2267 findings 2 + 3). "Remove my data" in one community removes only
  * that community's document, photos, reminders and settings. Leaving or deleting at a community removes all its documents, photos,
  * reminders and settings. An account leaving the phone takes all of it (wipeToolDataOnThisPhone).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TOOL_LIMITS, toolDocBytes, type ToolLocalCopy, type ToolManifest } from '@beanpool/core';
+import { TOOL_LIMITS, toolDocBytes, type ToolCopyMarks, type ToolLocalCopy, type ToolManifest } from '@beanpool/core';
 import { getDb } from '../utils/db';
 import { cancelToolReminders, type ToolNotifications } from './reminders';
 import { TOOL_DOCS_TABLE, TOOL_SETTINGS_PREFIX } from './schema';
@@ -27,6 +27,11 @@ export interface ToolSettings {
      * answered (tools/node-copy.ts), never by a whole-settings save.
      */
     nodeCopy?: boolean;
+    /**
+     * The node copy's own marks (core ToolCopyMarks: a PUT that may yet land after the copy went off), written only by
+     * tools/node-copy.ts, and kept through Remove my data with the setting.
+     */
+    nodeCopyMarks?: ToolCopyMarks;
     /** Each reminder's switch, by its id; absent is the manifest's `defaultOn`. */
     reminders?: Record<string, boolean>;
     /** Which of the empty state's two doors the member took. */

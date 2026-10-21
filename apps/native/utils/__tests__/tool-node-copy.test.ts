@@ -30,12 +30,20 @@ const net = vi.hoisted(() => ({
     signer: '',
     /** The next GET waits for this (holdNextGet), so the phone can move or its account change while it is out. */
     hold: null as null | { asked: () => void; gate: Promise<void> },
+    /** Each request's method and the signal the phone handed the helper. */
+    signals: [] as Array<[string, AbortSignal | undefined]>,
+    /**
+     * The next PUT's body reaches the node `arrives` ms after it is sent (slowNextPut). Let go before then, the helper
+     * throws as fetch does; `landsAnyway`: the body was on its way, and the node takes it all the same when it arrives.
+     */
+    slowPut: null as null | { arrives: number; landsAnyway: boolean },
 }));
 const disk = vi.hoisted(() => ({ db: null as any }));
 vi.mock('../db', () => ({
     getDb: async () => disk.db,
     // The app's own helpers, as the phone calls them: the answer as a Response, or as utils/db.ts's throw.
-    signedGet: async (path: string) => {
+    signedGet: async (path: string, options?: { signal?: AbortSignal }) => {
+        net.signals.push(['GET', options?.signal]);
         const hold = net.hold;
         if (hold) {
             net.hold = null;
@@ -46,7 +54,19 @@ vi.mock('../db', () => ({
         if (!a) throw new TypeError('Network request failed');
         return { status: a.status, ok: a.status >= 200 && a.status < 300, json: async () => a.json };
     },
-    signedRequestWithMethod: async (method: string, path: string, payload: unknown, opts?: { withStatus?: boolean }) => {
+    signedRequestWithMethod: async (method: string, path: string, payload: unknown, opts?: { withStatus?: boolean; signal?: AbortSignal }) => {
+        net.signals.push([method, opts?.signal]);
+        const slow = method === 'PUT' ? net.slowPut : null;
+        if (slow) {
+            net.slowPut = null;
+            const signer = net.signer;
+            const arrived = new Promise<'arrived'>((resolve) => setTimeout(() => resolve('arrived'), slow.arrives));
+            const letGo = new Promise<'let go'>((resolve) => opts?.signal?.addEventListener('abort', () => resolve('let go')));
+            if (await Promise.race([arrived, letGo]) === 'let go') {
+                if (slow.landsAnyway) void arrived.then(() => net.node!.answer(method, path, JSON.parse(JSON.stringify(payload)), signer));
+                throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+            }
+        }
         const a = net.node!.answer(method, path, payload === undefined ? undefined : JSON.parse(JSON.stringify(payload)), net.signer);
         if (!a) throw new TypeError('Network request failed');
         if (a.status < 200 || a.status >= 300) throw Object.assign(new Error((a.json as { error?: string } | null)?.error ?? `Request failed: ${a.status}`), opts?.withStatus ? { status: a.status } : {});
@@ -54,7 +74,7 @@ vi.mock('../db', () => ({
     },
 }));
 
-import { word, type ToolManifest } from '@beanpool/core';
+import { TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, word, type ToolManifest } from '@beanpool/core';
 import { TOOL_DOCS_TABLE } from '../../tools/schema';
 import { readToolCopy, readToolDoc, readToolSettings, writeToolDoc, writeToolSettings } from '../../tools/store';
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
@@ -168,6 +188,8 @@ let t0: number;
 beforeEach(() => {
     node = new FakeNode();
     net.node = node;
+    net.signals = [];
+    net.slowPut = null;
     A = phone('A');
     B = phone('B');
     t0 = Date.parse('2026-10-21T09:00:00.000Z');
@@ -642,5 +664,87 @@ describe('the delete rule: what the node is told and when', () => {
         expect(await switchToolCopy(member(A), false)).toBe('failed');
         expect(await removeToolCopyFirst(member(A))).toBe(false);
         expect(node.log).toEqual([]);
+    });
+});
+
+describe('off means gone, even when a slow PUT is on its way (PR #2297, the deciding review at d4fcc070)', () => {
+    const marks = async (p: Phone) => { use(p); return (await readToolSettings(p.signer, KIT.id, URL_A)).nodeCopyMarks; };
+    /** A write's sync, its PUT on a slow line (`arrives` ms), and the member switching the copy off while it is out. */
+    async function offWhilePutIsOut(arrives: number, landsAnyway: boolean) {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        await write(A, doc('Ladder'));
+        net.slowPut = { arrives, landsAnyway };
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_PUSH_MS);
+        expect(net.signals.map(([m]) => m)).toEqual(['GET', 'PUT']);
+        return { off: switchToolCopy(member(A), false) };
+    }
+
+    it('each request gets a signal; a PUT slower than the limit is let go then, and only then does the off send its DELETE', async () => {
+        const { off } = await offWhilePutIsOut(45_000, false);
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS - 1);
+        const put = net.signals[1][1]!;
+        expect(put.aborted).toBe(false);
+        expect(node.log.map((r) => r.method)).toEqual(['GET']);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await off).toBe('off');
+        expect(put.aborted).toBe(true);
+        expect(net.signals.map(([m, s]) => [m, s instanceof AbortSignal])).toEqual([['GET', true], ['PUT', true], ['DELETE', true]]);
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'DELETE']);
+        expect(await setting(A)).toBe(false);
+        // Let go is not proof the node never got it: the next open asks once, even off, and the mark goes on its answer.
+        expect(await marks(A)).toEqual({ unsure: 'check' });
+        await vi.advanceTimersByTimeAsync(60_000);
+        node.log.length = 0;
+        expect(await open(A)).toBe('off');
+        expect(node.log.map((r) => r.method)).toEqual(['GET']);
+        expect(await marks(A)).toBeUndefined();
+        expect(await open(A)).toBe('off');
+        expect(node.log.map((r) => r.method)).toEqual(['GET']);
+    });
+
+    it("a PUT let go at the limit that the node takes anyway, after the DELETE (the review's order): the next open DELETEs it again", async () => {
+        const { off } = await offWhilePutIsOut(45_000, true);
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS);
+        expect(await off).toBe('off');
+        await vi.advanceTimersByTimeAsync(45_000);
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'DELETE', 'PUT']);
+        expect(node.doc(ME, 'kit')).toEqual(doc('Ladder'));
+        node.log.length = 0;
+        expect(await open(A)).toBe('off');
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'DELETE']);
+        expect(node.rows.size).toBe(0);
+        expect(await marks(A)).toBeUndefined();
+    });
+
+    it('a PUT that lands before the limit: the off waits for its answer, and nothing is marked', async () => {
+        const { off } = await offWhilePutIsOut(10_000, false);
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(node.log.map((r) => r.method)).toEqual(['GET']);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await off).toBe('off');
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT', 'DELETE']);
+        expect(node.rows.size).toBe(0);
+        expect(await readToolSettings(ME, KIT.id, URL_A)).toEqual({ nodeCopy: false });
+        node.log.length = 0;
+        expect(await open(A)).toBe('off');
+        expect(node.log).toEqual([]);
+    });
+
+    it('Remove my data with a PUT out: the DELETE goes once the PUT has settled; refused, nothing may go', async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        await write(A, doc('Ladder'));
+        net.slowPut = { arrives: 10_000, landsAnyway: false };
+        await vi.advanceTimersByTimeAsync(TOOL_COPY_PUSH_MS);
+        node.mode = 'refusing';
+        const refused = removeToolCopyFirst(member(A));
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(await refused).toBe(false);
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT', 'DELETE']);
+        expect(await setting(A)).toBeUndefined();
+        node.mode = 'up';
+        expect(await removeToolCopyFirst(member(A))).toBe(true);
+        expect(node.rows.size).toBe(0);
+        // Refused with a 500, the PUT may have been taken all the same: marked, and asked after once the copy is off.
+        expect(await marks(A)).toEqual({ unsure: 'check' });
     });
 });

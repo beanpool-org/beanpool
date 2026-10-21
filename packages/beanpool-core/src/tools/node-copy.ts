@@ -92,6 +92,17 @@ export interface ToolCopyMarks {
     deleting?: boolean;
 }
 
+/** The marks as a host keeps them in its settings record: only those set, and no field at all (undefined) once none is. */
+export function keptMarks(marks: ToolCopyMarks): ToolCopyMarks | undefined {
+    const kept: ToolCopyMarks = {};
+    if (marks.unsure === 'out' || marks.unsure === 'check') kept.unsure = marks.unsure;
+    if (marks.deleting === true) kept.deleting = true;
+    return kept.unsure || kept.deleting ? kept : undefined;
+}
+
+/** The marks a host's settings record holds, whatever was stored there (anything else is none). */
+export const toolCopyMarksOf = (raw: unknown): ToolCopyMarks => (raw && typeof raw === 'object' ? keptMarks(raw as ToolCopyMarks) ?? {} : {});
+
 /**
  * How long the node has to answer one request: past it, no answer (offline), so a request that never comes back (a
  * browser's fetch waits minutes) never holds the tool's queue. Long enough for a 64 KB copy on a slow mobile line.

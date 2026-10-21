@@ -2227,6 +2227,10 @@ footer {
         box-sizing: border-box;
     }
 }
+/* Where the text links show (769-1080px), they keep a 1rem gap so they read as separate links */
+@media (min-width: 769px) and (max-width: 1080px) {
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .nav-links { gap: 1rem; }
+}
 /* Below 768px, ensure logo bean matches main phone header (40px) */
 @media (max-width: 768px) {
     #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo img {

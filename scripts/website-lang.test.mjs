@@ -1309,7 +1309,8 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
             { url: 'ar/global.html', lang: 'ar', rtl: true },
             { url: 'ar/status.html', lang: 'ar', rtl: true }
         ];
-        const NO_MENU_WIDTHS = [320, 360, 412, 480, 600, 768, 1024];
+        const NO_MENU_WIDTHS = [320, 360, 412, 480, 600, 768, 800, 1024, 1080];
+        const noMenuLinkGapBad = [];
         const noMenuCtaSizeBad = [];
         const noMenuGlobeSizeBad = [];
         const noMenuPaddingBad = [];
@@ -1365,7 +1366,16 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                                 : (ctaRect.right > window.innerWidth + 0.5);
                             const isWrapped = rects.length > 1 || (sc === 1.3 ? ctaRect.height > 75 : ctaRect.height > 50);
 
+                            // the narrowest space between two text links that show (they must read as separate links)
+                            const links = [...document.querySelectorAll('.nav-links > a, .nav-links > li > a')]
+                                .map((a) => a.getBoundingClientRect())
+                                .filter((r) => r.width > 0 && r.height > 0)
+                                .sort((a, b) => a.left - b.left);
+                            let minLinkGap = Infinity;
+                            for (let i = 1; i < links.length; i++) minLinkGap = Math.min(minLinkGap, links[i].left - links[i - 1].right);
+
                             return {
+                                minLinkGap,
                                 ctaW: ctaRect.width,
                                 ctaH: ctaRect.height,
                                 globeW: globeRect.width,
@@ -1394,6 +1404,9 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                         if (res.isWrapped) {
                             noMenuWrapped.push({ page: item.url, width, scale });
                         }
+                        if (res.minLinkGap < 12) {
+                            noMenuLinkGapBad.push({ page: item.url, width, scale, gap: res.minLinkGap });
+                        }
                     }
                 }
             }
@@ -1403,7 +1416,8 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
         }
 
         const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length
-            + noMenuCtaSizeBad.length + noMenuGlobeSizeBad.length + noMenuPaddingBad.length + noMenuClipped.length + noMenuWrapped.length;
+            + noMenuCtaSizeBad.length + noMenuGlobeSizeBad.length + noMenuPaddingBad.length + noMenuClipped.length + noMenuWrapped.length
+            + noMenuLinkGapBad.length;
         assert.equal(totalFailures, 0,
             `Failing counts:\n` +
             `  - Clipped CTAs: ${allClipped.length}\n` +
@@ -1415,7 +1429,9 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
             `  - No-menu 🌐 size (<44px): ${noMenuGlobeSizeBad.length}\n` +
             `  - No-menu side padding (<16px): ${noMenuPaddingBad.length}\n` +
             `  - No-menu clipped CTAs: ${noMenuClipped.length}\n` +
-            `  - No-menu wrapped CTAs: ${noMenuWrapped.length}\n\n` +
+            `  - No-menu wrapped CTAs: ${noMenuWrapped.length}\n` +
+            `  - No-menu text links closer than 12px: ${noMenuLinkGapBad.length}` +
+            (noMenuLinkGapBad.length ? ` (e.g. ${noMenuLinkGapBad.slice(0, 3).map(g => `${g.page} @ ${g.width}px ${g.scale * 100}%: ${g.gap.toFixed(1)}px`).join('; ')})` : '') + `\n\n` +
             (noMenuCtaSizeBad.length ? `No-menu CTA size bad samples:\n  ` + noMenuCtaSizeBad.slice(0, 5).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text): ${c.w.toFixed(1)}x${c.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
             (noMenuGlobeSizeBad.length ? `No-menu 🌐 size bad samples:\n  ` + noMenuGlobeSizeBad.slice(0, 5).map(g => `${g.page} @ ${g.width}px (${g.scale * 100}% text): ${g.w.toFixed(1)}x${g.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
             (noMenuPaddingBad.length ? `No-menu padding bad samples:\n  ` + noMenuPaddingBad.slice(0, 5).map(p => `${p.page} @ ${p.width}px (${p.scale * 100}% text): L=${p.padL.toFixed(1)}px R=${p.padR.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +

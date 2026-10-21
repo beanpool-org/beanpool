@@ -3,7 +3,7 @@ slug: credit-line
 title: Linea di credito
 summary: Quanto puoi andare sotto zero e come aumenta questa disponibilità.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Che cos'è
@@ -46,7 +46,7 @@ La riga sotto la barra lo indica, ad esempio "Pubblica un'offerta per aprire la 
 
 ## In una comunità con identità note
 
-Alcune comunità hanno amministratori che conoscono ogni membro per nome. Se la tua comunità ha attivato **la soglia nota**, un membro confermato da un amministratore ottiene subito una linea di credito: 1.000 fagioli a meno che la comunità non abbia scelto un altro importo. Corrisponde a circa 25 ore di lavoro per cui la comunità ti accorda fiducia. Aumenta il tuo limite, non il tuo livello: il tuo badge di fiducia conta solo ciò che hai fatto.
+Alcune comunità hanno amministratori che conoscono ogni membro per nome. Un membro confermato da un amministratore ottiene subito una linea di credito, **la soglia nota**: 1.000 fagioli a meno che la tua comunità non abbia scelto un altro importo. Corrisponde a circa 25 ore di lavoro per cui la comunità ti accorda fiducia. Aumenta il tuo limite, non il tuo livello: il tuo stemma di fiducia conta solo ciò che hai fatto. La soglia nota è attiva in ogni comunità con fagioli a meno che il suo proprietario non l'abbia disattivata.
 
 - Una sola Offerta attiva ti consente di utilizzarla per intero. Senza Offerte, non puoi usarla.
 - La fiducia che guadagni scambiando si aggiunge ad essa, fino al limite della comunità (2.000 fagioli a meno che non abbia scelto di più, fino a 5.000).
@@ -55,7 +55,7 @@ Alcune comunità hanno amministratori che conoscono ogni membro per nome. Se la 
 
 ## Una comunità mista
 
-In alcune comunità qualsiasi membro può invitare persone, quindi gli amministratori non conoscono tutti. Se la tua comunità ha attivato **la soglia nota**, gli amministratori possono confermare i membri che conoscono, e quei membri iniziano con un limite più alto. Tutti gli altri iniziano da zero, e dopo l'inizio il limite di ciascuno cresce nello stesso modo con gli scambi e la fiducia costruita.
+In alcune comunità qualsiasi membro può invitare persone, quindi gli amministratori non conoscono tutti. Gli amministratori possono confermare i membri che conoscono, e quei membri iniziano con un limite più alto, **la soglia nota**, a meno che il proprietario della comunità non l'abbia disattivata. Tutti gli altri iniziano da zero, e dopo l'inizio il limite di ciascuno cresce nello stesso modo man mano che scambiano e costruiscono fiducia.
 
 ## Congelamento da parte degli amministratori
 

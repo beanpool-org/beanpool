@@ -3483,5 +3483,15 @@
     "one": "wiki {n}",
     "other": "wiki {n}"
   },
-  "📦 Ask to borrow": "📦 Omba kuazima"
+  "📦 Ask to borrow": "📦 Omba kuazima",
+  "Asked to join": "Ameomba kujiunga",
+  "Invited": "Amealikwa",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Karibu. Kuanzia siku ya kwanza unaweza kuvinjari, kufanya biashara, kupokea mikopo na kualika wengine — na mstari wako wa mkopo tayari umefunguliwa.",
+  "from {n} trust|from {n} trust": {
+    "one": "kutoka uaminifu {n}",
+    "other": "kutoka uaminifu {n}"
+  },
+  "{name}, already in the group": "{name}, tayari yumo kwenye kikundi",
+  "{name}, already invited": "{name}, tayari amealikwa",
+  "{name}, asked to join": "{name}, ameomba kujiunga"
 }

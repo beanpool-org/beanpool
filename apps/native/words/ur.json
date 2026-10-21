@@ -6011,5 +6011,13 @@
   "Look around first, then join with this account": "پہلے جائزہ لیں، پھر اس اکاؤنٹ سے شامل ہوں",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "ہر جگہ کے لوگوں سے ملیں اور اپنے قریب کی کمیونٹیز تلاش کریں۔ پہلے بطور مہمان جائزہ لیں، پھر اس فون کے اکاؤنٹ کی حیثیت سے شامل ہونے کے لیے اوپر 'شامل ہوں' پر ٹیپ کریں: آپ کی کلید اور آپ کے 12 الفاظ وہی رہیں گے، اور آپ کی دوسری کمیونٹیز میں کچھ نہیں بدلے گا۔",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "ایک بار تصدیق ہو جانے پر، ان کی حد میں {amount} تک کا اضافہ ہوتا ہے: آپ کی کمیونٹی کی معلوم حد، جب تک وہ کوئی پیشکش درج رکھتے ہیں۔",
-  "Uses the key and 12 words already on this phone. No new account is made.": "اس فون پر پہلے سے موجود کلید اور 12 الفاظ استعمال ہوتے ہیں۔ کوئی نیا اکاؤنٹ نہیں بنایا جاتا۔"
+  "Uses the key and 12 words already on this phone. No new account is made.": "اس فون پر پہلے سے موجود کلید اور 12 الفاظ استعمال ہوتے ہیں۔ کوئی نیا اکاؤنٹ نہیں بنایا جاتا۔",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "ایک نگران نے اس اوزار کی سرور کاپی بند کر دی ہے، اس لیے یہ صرف اسی فون پر محفوظ ہے۔ آپ سیٹنگز میں اسے دوبارہ آن کر سکتے ہیں۔",
+  "Asked to join": "شامل ہونے کی درخواست کی",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "آپ کی کمیونٹی کے سرور سے رابطہ نہیں ہو سکا، اس لیے کچھ نہیں بدلا۔ آن لائن ہونے پر دوبارہ کوشش کریں۔",
+  "One phone at a time: the copy you changed last is the one kept.": "ایک وقت میں ایک فون: آپ نے آخری بار جس کاپی میں تبدیلی کی تھی، وہی محفوظ رکھی جاتی ہے۔",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "اس فون سے اس اوزار کے لیے آپ کا ڈیٹا، اور آپ کی کمیونٹی کے سرور پر موجود اس کی کاپی ہٹا دیتا ہے۔ آپ کے طور پر سائن اِن کوئی دوسرا فون اپنے پاس موجود ڈیٹا رکھتا ہے اور اسے بھیجنا بند کر دیتا ہے۔ دوسری کمیونٹی میں یہی اوزار اپنا ڈیٹا الگ رکھتا ہے۔ یہ عمل واپس نہیں کیا جا سکتا۔",
+  "You can edit a message for 15 minutes after sending it.": "آپ پیغام بھیجنے کے بعد 15 منٹ تک اس میں ترمیم کر سکتے ہیں۔",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "آپ کی کمیونٹی کا سرور اب اس اوزار کی کاپی نہیں رکھتا، اس لیے یہ صرف اسی فون پر محفوظ ہے۔ آپ سیٹنگز میں کاپی کو دوبارہ آن کر سکتے ہیں۔",
+  "{name}, asked to join": "{name}، شامل ہونے کی درخواست کی ہے"
 }

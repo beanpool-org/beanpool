@@ -186,4 +186,23 @@ describe('MembersModule Component', () => {
         expect(screen.getByText('Alice Smith')).toBeInTheDocument();
         expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument();
     });
+
+    it('preserves explicit viewerRole={null} and restricts role actions in detail modal', () => {
+        render(
+            <MembersModule
+                nodeData={mockNodeData}
+                nodeDataLoading={false}
+                viewerRole={null}
+                onRefresh={vi.fn()}
+            />
+        );
+
+        const inspectButtons = screen.getAllByRole('button', { name: 'Inspect' });
+        fireEvent.click(inspectButtons[0]);
+
+        expect(screen.getByText("Only an owner can change this member's role.")).toBeInTheDocument();
+        expect(screen.queryByText(/Grant Owner/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Admin/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Moderator/i)).not.toBeInTheDocument();
+    });
 });

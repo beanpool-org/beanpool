@@ -10,6 +10,7 @@ import { useTimeout } from '../../lib/use-timeout';
 import { emergencySuspendMember, liftMemberSuspension } from '../../lib/node-client';
 import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
 import { FreshProofBox, useFreshProof } from '../common/FreshProofBox';
+import { t } from '../../lib/fresh-proof';
 
 /** The node demands a reason of at least this many characters; members see it on the vote. */
 export const MIN_SUSPEND_REASON = 10;
@@ -49,6 +50,12 @@ interface MemberDetailModalProps {
     isVoucher?: boolean;
     isOperator?: boolean;
     nodeRole?: MemberNodeRole | null;
+    /** The role of whoever is viewing this member's profile ('owner' | 'admin' | 'moderator' | null). */
+    viewerRole?: MemberNodeRole | null;
+    /** The total count of active owners known on the node. */
+    ownerCount?: number;
+    /** True if this member is the community's only owner. */
+    isSoleOwner?: boolean;
     onToggleFreeze: (pubkey: string) => void;
     onToggleVouch?: (pubkey: string, isCurrentlyVoucher: boolean) => void;
     onToggleOperator?: (pubkey: string, isCurrentlyOperator: boolean) => void;
@@ -82,6 +89,9 @@ export function MemberDetailModal({
     isVoucher,
     isOperator,
     nodeRole,
+    viewerRole,
+    ownerCount,
+    isSoleOwner,
     onToggleFreeze,
     onToggleVouch,
     onToggleOperator,
@@ -189,6 +199,44 @@ export function MemberDetailModal({
     }, [nodeRole, member?.nodeRole]);
 
     const currentRole = localRole;
+    const effectiveViewerRole: MemberNodeRole | null = viewerRole !== undefined ? viewerRole : 'owner';
+
+    // Counts the OTHER owners, and lets this member's live role stand for them: the members list and ownerCount were
+    // loaded before any grant made in this panel, so this member's own row in them can be stale.
+    const effectiveIsSoleOwner = useMemo(() => {
+        if (currentRole !== 'owner') return false;
+        if (typeof isSoleOwner === 'boolean') return isSoleOwner;
+        if (Array.isArray(members) && members.length > 0) {
+            const others = members.filter((m) => m && (m.publicKey || m.pubkey) !== pubkey && (m.nodeRole || m.role) === 'owner').length;
+            return others === 0;
+        }
+        if (typeof ownerCount === 'number') {
+            const listedRole = (nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null;
+            return ownerCount - (listedRole === 'owner' ? 1 : 0) <= 0;
+        }
+        return true;
+    }, [currentRole, isSoleOwner, ownerCount, members, pubkey, nodeRole, member?.nodeRole]);
+
+    const canGrantRole = (role: MemberNodeRole): boolean => {
+        if (effectiveViewerRole === 'owner') return true;
+        if (effectiveViewerRole === 'admin') {
+            return role === 'moderator' && currentRole === null;
+        }
+        return false;
+    };
+
+    const canRevokeRole = (): boolean => {
+        if (!currentRole) return false;
+        if (effectiveViewerRole === 'owner') return true;
+        if (effectiveViewerRole === 'admin') return currentRole === 'moderator';
+        return false;
+    };
+
+    const showGrantOwner = canGrantRole('owner');
+    const showGrantAdmin = canGrantRole('admin');
+    const showGrantModerator = canGrantRole('moderator');
+    const showRevoke = canRevokeRole();
+    const hasAnyAction = showGrantOwner || showGrantAdmin || showGrantModerator || showRevoke;
     const displayName = getMemberDisplayName(member, profiles);
     const initial = displayName.charAt(0).toUpperCase();
 
@@ -424,11 +472,11 @@ export function MemberDetailModal({
                         </span>
                     </div>
 
-                    {currentRole === 'owner' && (
-                        <div className="text-[11px] text-amber-300/90 bg-amber-950/30 border border-amber-800/40 rounded-xl p-2.5 flex items-start gap-2">
-                            <span>🛡️</span>
-                            <span>
-                                <strong>Last-owner guard active:</strong> The node requires at least one active owner. Demoting or revoking the sole owner is blocked by protocol invariant.
+                    {effectiveIsSoleOwner && (
+                        <div className="text-[11px] text-amber-300/90 bg-amber-950/30 border border-amber-800/40 rounded-xl p-2.5 flex items-start gap-2 break-words">
+                            <span className="shrink-0 select-none" aria-hidden="true">🛡️</span>
+                            <span className="min-w-0 flex-1">
+                                {t("This is the community's only owner. Another owner must be added before this one can step down or be removed.")}
                             </span>
                         </div>
                     )}
@@ -448,55 +496,71 @@ export function MemberDetailModal({
                         </div>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <span className="text-[11px] text-nature-400 mr-1">Assign role:</span>
-                        <button
-                            type="button"
-                            disabled={roleLoading || isFrozen || currentRole === 'owner'}
-                            onClick={() => handleGrantRole('owner')}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                currentRole === 'owner'
-                                    ? 'bg-amber-950/50 text-amber-300/50 border-amber-900/40 cursor-default'
-                                    : 'bg-nature-950 text-amber-300 border-amber-600/50 hover:bg-bp-chip-warn-tint hover:text-bp-chip-warn-ink hover:border-amber-500'
-                            }`}
-                        >
-                            👑 Grant Owner
-                        </button>
-                        <button
-                            type="button"
-                            disabled={roleLoading || isFrozen || currentRole === 'admin'}
-                            onClick={() => handleGrantRole('admin')}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                currentRole === 'admin'
-                                    ? 'bg-sky-950/50 text-sky-300/50 border-sky-900/40 cursor-default'
-                                    : 'bg-nature-950 text-sky-300 border-sky-600/50 hover:bg-sky-950 hover:border-sky-500'
-                            }`}
-                        >
-                            ⚡ Grant Admin
-                        </button>
-                        <button
-                            type="button"
-                            disabled={roleLoading || isFrozen || currentRole === 'moderator'}
-                            onClick={() => handleGrantRole('moderator')}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                currentRole === 'moderator'
-                                    ? 'bg-purple-950/50 text-purple-300/50 border-purple-900/40 cursor-default'
-                                    : 'bg-nature-950 text-purple-300 border-purple-600/50 hover:bg-purple-950 hover:border-purple-500'
-                            }`}
-                        >
-                            🛡️ Grant Moderator
-                        </button>
-                        {currentRole && (
-                            <button
-                                type="button"
-                                disabled={roleLoading || isFrozen}
-                                onClick={() => handleRevokeRole()}
-                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-bp-chip-danger-ink bg-bp-chip-danger-tint border border-red-800/80 hover:opacity-90 transition-all ml-auto"
-                            >
-                                {roleLoading ? 'Revoking...' : `Revoke ${currentRole}`}
-                            </button>
-                        )}
-                    </div>
+                    {hasAnyAction ? (
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                            {(showGrantOwner || showGrantAdmin || showGrantModerator) && (
+                                <span className="text-[11px] text-nature-400 mr-1">Assign role:</span>
+                            )}
+                            {showGrantOwner && (
+                                <button
+                                    type="button"
+                                    disabled={roleLoading || isFrozen || currentRole === 'owner'}
+                                    onClick={() => handleGrantRole('owner')}
+                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                        currentRole === 'owner'
+                                            ? 'bg-amber-950/50 text-amber-300/50 border-amber-900/40 cursor-default'
+                                            : 'bg-nature-950 text-amber-300 border-amber-600/50 hover:bg-bp-chip-warn-tint hover:text-bp-chip-warn-ink hover:border-amber-500'
+                                    }`}
+                                >
+                                    👑 Grant Owner
+                                </button>
+                            )}
+                            {showGrantAdmin && (
+                                <button
+                                    type="button"
+                                    disabled={roleLoading || isFrozen || currentRole === 'admin'}
+                                    onClick={() => handleGrantRole('admin')}
+                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                        currentRole === 'admin'
+                                            ? 'bg-sky-950/50 text-sky-300/50 border-sky-900/40 cursor-default'
+                                            : 'bg-nature-950 text-sky-300 border-sky-600/50 hover:bg-sky-950 hover:border-sky-500'
+                                    }`}
+                                >
+                                    ⚡ Grant Admin
+                                </button>
+                            )}
+                            {showGrantModerator && (
+                                <button
+                                    type="button"
+                                    disabled={roleLoading || isFrozen || currentRole === 'moderator'}
+                                    onClick={() => handleGrantRole('moderator')}
+                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                        currentRole === 'moderator'
+                                            ? 'bg-purple-950/50 text-purple-300/50 border-purple-900/40 cursor-default'
+                                            : 'bg-nature-950 text-purple-300 border-purple-600/50 hover:bg-purple-950 hover:border-purple-500'
+                                    }`}
+                                >
+                                    🛡️ Grant Moderator
+                                </button>
+                            )}
+                            {showRevoke && currentRole && (
+                                <button
+                                    type="button"
+                                    disabled={roleLoading || isFrozen}
+                                    onClick={() => handleRevokeRole()}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-bp-chip-danger-ink bg-bp-chip-danger-tint border border-red-800/80 hover:opacity-90 transition-all ml-auto"
+                                >
+                                    {roleLoading ? 'Revoking...' : `Revoke ${currentRole}`}
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="pt-1">
+                            <p className="text-xs text-nature-400 m-0 break-words leading-relaxed">
+                                {t("Only an owner can change this member's role.")}
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Active Threat Flags for this user */}

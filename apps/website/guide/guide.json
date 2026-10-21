@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 149,
-  "hash": "8ae3bf39acf9588b86a6a5632e5e79f33388d823d20a57f8e390a004c60ee8d2",
+  "version": 150,
+  "hash": "2fad99cc67718e48fa9e895db9cf594378a4fef0e5f32e90ea252fd9a676aaad",
   "sections": [
     {
       "id": "about",
@@ -2496,8 +2496,8 @@
         {
           "type": "ul",
           "items": [
-            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Global community** (its second line says **Join with this account**). It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with 12 words or a sign-in** (**Join with a sign-in** where a community takes sign-ins only). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.",
-            "Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
+            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Global community** (its second line says **Join with this account**). It is also in **Settings**, under **Saved communities**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with 12 words or a sign-in** (**Join with a sign-in** where a community takes sign-ins only). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.",
+            "Choose how to join: **Join with this account**, which uses the key and 12 words already on this phone (no sign-in, so no phone lock), or, under **Also add a sign-in**, sign in once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
             "Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.",
             "Then choose your photo for the global community, as for any new community, and then roughly where you are (**Roughly where are you?**; you can tap **Skip for now**): the global community shows you the listings near it. See \"Joining BeanPool\"."
           ]
@@ -2574,7 +2574,7 @@
         },
         {
           "type": "p",
-          "text": "You can also switch in **Settings**, under **System**, then **Advanced / Subsystem**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to Town** on another one to move to it."
+          "text": "You can also switch in **Settings**, under **System**, then **Saved communities**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to this community** on another one to move to it."
         },
         {
           "type": "h2",
@@ -2600,7 +2600,7 @@
         {
           "type": "ul",
           "items": [
-            "In **Advanced / Subsystem**, tap **Forget** on a community you are not using right now. This removes it and its saved data from this phone.",
+            "In **Saved communities**, tap **Forget** on a community you are not using right now. This removes it and its saved data from this phone.",
             "In the **BeanPool** sheet, under **Your communities**, pressing and holding a community and tapping **Remove** only takes it off the list. Its data stays on the phone."
           ]
         },

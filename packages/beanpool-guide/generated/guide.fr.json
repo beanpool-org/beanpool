@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "fr",
-  "hash": "9c64816f60c1afdec067285cb09b4b7d0c78c2dca251a6a8dcfa11b92cfd80f5",
+  "hash": "09fd65b7d9bb2225176389dcd46930afa25cdfeebfa5ed37339d2072721e2805",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "Comment marche BeanPool",
       "summary": "Haricots, échanges, offres et demandes, et crédit, en mots simples.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -166,7 +166,7 @@
         },
         {
           "type": "p",
-          "text": "Une **Offre** est quelque chose que vous pouvez faire ou donner : du pain, un trajet en voiture, une heure de jardinage, une réparation."
+          "text": "Une **Offre** est quelque chose que vous pouvez faire ou donner : du pain, un trajet, une heure de jardinage, une réparation."
         },
         {
           "type": "p",
@@ -268,19 +268,19 @@
         },
         {
           "type": "p",
-          "text": "Votre confiance prend la forme d'un badge. Les badges sont Arrivant, Résident, Pilier et Doyen. La confiance derrière votre badge additionne trois éléments : le point de départ d'un parrainage, la confiance gagnée en échangeant et toute confiance accordée par un administrateur. Un administrateur peut donner un badge directement à un membre, sans échanges. Dans une communauté qui confirme ses membres, la ligne de crédit obtenue par un membre confirmé compte également."
+          "text": "Votre confiance prend la forme d'un badge. Les badges sont Arrivant, Résident, Pilier et Doyen. La confiance derrière votre badge additionne trois éléments : le point de départ d'un parrainage, la confiance gagnée en échangeant et toute confiance accordée par un administrateur. Un administrateur peut donner un badge directement à un membre, sans échanges. Dans une communauté qui confirme ses membres, un membre confirmé bénéficie d'une limite de crédit plus élevée, pas d'un badge plus élevé : son badge ne compte que ce qu'il a accompli."
         },
         {
           "type": "ul",
           "items": [
-            "Résident à partir de 200 de confiance.",
-            "Pilier à partir de 600 de confiance.",
-            "Doyen à partir de 1 400 de confiance."
+            "Résident dès 200 de confiance.",
+            "Pilier dès 600 de confiance.",
+            "Doyen dès 1 400 de confiance."
           ]
         },
         {
           "type": "p",
-          "text": "Un badge est une reconnaissance, rien de plus. Il ne bloque rien. Tout le monde peut échanger, inviter et voter, quel que soit son badge."
+          "text": "Un badge est une reconnaissance, rien de plus. Il ne débloque rien. Tout le monde peut échanger, inviter et voter, quel que soit son badge."
         },
         {
           "type": "h2",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Votre ligne de crédit",
       "summary": "Jusqu'où descendre sous zéro et comment elle augmente.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5931,7 +5931,7 @@
           "items": [
             "**Confiance :** les échanges conclus renforcent la confiance, en particulier lorsqu'ils ont lieu avec de nombreuses personnes différentes. Voir « Limite de 500 haricots ».",
             "**Évaluations :** les étoiles ne peuvent que réduire la confiance que vous gagnez. Une moyenne de 5 étoiles la préserve intégralement ; une moyenne inférieure en retire une partie.",
-            "La ligne de crédit la plus profonde peut atteindre 2 000 haricots. Une communauté qui confirme l'identité de ses membres peut fixer un plafond plus élevé, jusqu'à 5 000 (voir ci-dessous)."
+            "La ligne de crédit la plus profonde peut atteindre 2 000 haricots. Une communauté qui confirme ses membres peut fixer un plafond plus élevé, jusqu'à 5 000 (voir ci-dessous)."
           ]
         },
         {
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Certaines communautés ont des administrateurs qui connaissent chaque membre par son nom. Si la vôtre a activé **le plancher de confiance connu**, un membre confirmé par un administrateur bénéficie immédiatement d'une ligne de crédit : 1 000 haricots, sauf si votre communauté a choisi un autre montant. Cela représente environ 25 heures de travail pour lesquelles la communauté vous accorde sa confiance."
+          "text": "Certaines communautés ont des administrateurs qui connaissent chaque membre par son nom. Si la vôtre a activé **le plancher de confiance connu**, un membre confirmé par un administrateur bénéficie immédiatement d'une ligne de crédit : 1 000 haricots, sauf si votre communauté a choisi un autre montant. Cela représente environ 25 heures de travail pour lesquelles la communauté vous accorde sa confiance. Cela augmente votre limite, pas votre niveau : votre badge de confiance ne compte toujours que ce que vous avez accompli."
         },
         {
           "type": "ul",
@@ -5976,11 +5976,19 @@
         },
         {
           "type": "h2",
+          "text": "Une communauté mixte"
+        },
+        {
+          "type": "p",
+          "text": "Dans certaines communautés, chaque membre peut inviter des personnes, les administrateurs ne connaissent donc pas tout le monde. Si la vôtre a activé **le plancher de confiance connu**, les administrateurs peuvent confirmer les membres qu'ils connaissent, et ces membres débutent avec une limite plus élevée. Tous les autres commencent à zéro, et la limite de chacun augmente ensuite de la même manière au fil des échanges et de la confiance bâtie."
+        },
+        {
+          "type": "h2",
           "text": "Suspension par les administrateurs"
         },
         {
           "type": "p",
-          "text": "Les administrateurs de votre communauté peuvent suspendre la ligne de crédit d'un membre : en totalité, ou, dans une communauté avec membres confirmés, la part issue de la confirmation de membre."
+          "text": "Les administrateurs de votre communauté peuvent suspendre la ligne de crédit d'un membre : en totalité, ou, dans une communauté avec membres connus, la part issue du statut de membre confirmé."
         },
         {
           "type": "ul",
@@ -5991,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Votre niveau ne change pas : c'est celui que vous confère votre ligne de crédit lorsqu'elle n'est pas suspendue, même si les administrateurs avaient fixé votre ligne plus bas ou plus haut que celle de la communauté, aussi bien sur votre profil que sur vos annonces. Pour en demander la raison ou obtenir sa réouverture, adressez-vous à l'un des administrateurs."
+          "text": "Votre niveau ne change pas, aussi bien sur votre profil que sur vos annonces : il ne compte que ce que vous avez accompli (un parrainage, vos échanges et toute confiance accordée par un administrateur), jamais la part de votre ligne issue du statut confirmé, ni aucun montant défini par les administrateurs pour celle-ci. Pour en demander la raison ou obtenir sa réouverture, adressez-vous à l'un des administrateurs."
         },
         {
           "type": "h2",
@@ -6072,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Badges de mérite",
       "summary": "Arrivant, Résident, Pilier et Doyen. Leur signification et pourquoi ils ne débloquent rien.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6094,9 +6102,9 @@
           "type": "ul",
           "items": [
             "**Arrivant :** vos débuts ;",
-            "**Résident :** 200 points de confiance ;",
-            "**Pilier :** 600 points de confiance ;",
-            "**Doyen :** 1 400 points de confiance."
+            "**Résident :** 200 de confiance ;",
+            "**Pilier :** 600 de confiance ;",
+            "**Doyen :** 1 400 de confiance."
           ]
         },
         {
@@ -6105,7 +6113,7 @@
         },
         {
           "type": "p",
-          "text": "La confiance provient d'un parrainage à votre arrivée, des échanges conclus et de la confiance accordée par un administrateur. Dans une communauté qui confirme ses membres, la ligne de crédit attribuée à un membre confirmé compte également."
+          "text": "La confiance provient d'un parrainage à votre arrivée, des échanges conclus et de la confiance accordée par un administrateur. Dans une communauté qui confirme ses membres, être confirmé vous donne une limite de crédit plus élevée, pas un badge plus élevé : votre badge ne compte que ce que vous avez accompli, il n'indique donc jamais que vous êtes confirmé."
         },
         {
           "type": "h2",

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "it",
-  "hash": "34cb57da1a3e973e184c4c8500e9177a683b266deeaafa8a79bf80754a48d708",
+  "hash": "3d5555898f0ab53145f64ee469b1b3e26d8815173f486879cc3e5dbf93bffcfa",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "Come funziona BeanPool",
       "summary": "Fagioli, scambi, offerte e richieste, e credito, in parole semplici.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -268,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "La tua fiducia si mostra come un badge. I badge sono Nuovo arrivato, Residente, Custode e Saggio. La fiducia dietro il tuo badge somma tre elementi: l'avvio fornito da una garanzia, la fiducia guadagnata scambiando e l'eventuale fiducia concessa da un amministratore. Un amministratore può assegnare direttamente un badge a un membro, senza scambi. In una comunità che conferma i propri membri, conta anche la linea di credito che un membro confermato riceve."
+          "text": "La tua fiducia si mostra come un badge. I badge sono Nuovo arrivato, Residente, Custode e Saggio. La fiducia dietro il tuo badge somma tre elementi: l'avvio fornito da una garanzia, la fiducia guadagnata scambiando e l'eventuale fiducia concessa da un amministratore. Un amministratore può assegnare direttamente un badge a un membro, senza scambi. In una comunità che conferma i propri membri, un membro confermato riceve un limite di credito più alto, non un badge più alto: il suo badge conta solo ciò che ha fatto."
         },
         {
           "type": "ul",
@@ -280,7 +280,7 @@
         },
         {
           "type": "p",
-          "text": "Un badge è un riconoscimento, niente di più. Non vincola e non condiziona nulla: tutti possono scambiare, invitare e votare, qualunque sia il loro badge."
+          "text": "Un badge è un riconoscimento, niente di più. Non sblocca nulla. Tutti possono scambiare, invitare e votare, qualunque sia il loro badge."
         },
         {
           "type": "h2",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Linea di credito",
       "summary": "Quanto puoi andare sotto zero e come aumenta questa disponibilità.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Alcune comunità hanno amministratori che conoscono ogni membro per nome. Se la tua comunità ha attivato **la soglia nota**, un membro confermato da un amministratore ottiene subito una linea di credito: 1.000 fagioli a meno che la comunità non abbia scelto un altro importo. Corrisponde a circa 25 ore di lavoro per cui la comunità ti accorda fiducia."
+          "text": "Alcune comunità hanno amministratori che conoscono ogni membro per nome. Se la tua comunità ha attivato **la soglia nota**, un membro confermato da un amministratore ottiene subito una linea di credito: 1.000 fagioli a meno che la comunità non abbia scelto un altro importo. Corrisponde a circa 25 ore di lavoro per cui la comunità ti accorda fiducia. Aumenta il tuo limite, non il tuo livello: il tuo badge di fiducia conta solo ciò che hai fatto."
         },
         {
           "type": "ul",
@@ -5973,6 +5973,14 @@
             "Un amministratore può impostare per te un limite inferiore, ad esempio finché sei nuovo. Questo non ti toglie mai fagioli: se sei già al di sotto di esso, la spesa viene sospesa finché non torni al di sopra.",
             "Se stai estinguendo un debito derivante da un account precedente, i fagioli ricevuti sopra lo 0 vanno ai Beni comuni fino a estinzione del debito. Il tuo Mastro indica quanto resta. Puoi anche pagarne una parte o la totalità in **Mastro → Paga i Beni comuni**: il tuo codice di rimborso è già compilato lì (oppure inserisci quello fornito da un amministratore). Quanto paghi con il codice viene subito detratto dal debito, e quando non resta nulla il debito è saldato: non viene prelevato nient'altro, né tramite pagamento né da quanto ricevi. Un versamento senza codice va ai Beni comuni ma non viene detratto dal tuo debito, e l'app lo segnala: per farlo conteggiare, chiedi a un amministratore di attribuirlo al debito con il relativo riferimento. Fino a quel momento, il debito resta in corso di estinzione: al prossimo accredito di fagioli, quanto dovuto viene prelevato dal saldo sopra lo 0. L'importo nel messaggio dell'amministratore era quello residuo al momento della condivisione: se ora ne resta meno, il server rifiuta un pagamento maggiore indicando quanto resta, e nulla viene versato. Se l'app segnala che un pagamento potrebbe essere andato a buon fine, tocca **Riprova** sulla stessa schermata: lo stesso pagamento non viene mai addebitato due volte. Se hai lasciato quella schermata, controlla il Mastro prima di pagare di nuovo."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Una comunità mista"
+        },
+        {
+          "type": "p",
+          "text": "In alcune comunità qualsiasi membro può invitare persone, quindi gli amministratori non conoscono tutti. Se la tua comunità ha attivato **la soglia nota**, gli amministratori possono confermare i membri che conoscono, e quei membri iniziano con un limite più alto. Tutti gli altri iniziano da zero, e dopo l'inizio il limite di ciascuno cresce nello stesso modo con gli scambi e la fiducia costruita."
         },
         {
           "type": "h2",
@@ -5991,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Il tuo badge di livello non cambia: resta quello fornito dalla linea di credito quando non è congelata, anche se gli amministratori hanno impostato la tua linea più in basso o più in alto rispetto a quella della comunità, sia sul tuo profilo che nelle tue inserzioni. Per chiederne il motivo o farla riaprire, rivolgiti a uno degli amministratori."
+          "text": "Il tuo livello non cambia, sia sul tuo profilo che nelle tue inserzioni: conta ciò che hai fatto (una garanzia, i tuoi scambi e l'eventuale fiducia concessa da un amministratore), mai la quota della tua linea derivante dall'essere confermato, o qualsiasi importo stabilito per essa dagli amministratori. Per chiederne il motivo o farla riaprire, rivolgiti a uno degli amministratori."
         },
         {
           "type": "h2",
@@ -6072,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Badge di fiducia",
       "summary": "Nuovo arrivato, Residente, Custode e Saggio. Cosa significano e perché non sbloccano privilegi.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6105,11 +6113,11 @@
         },
         {
           "type": "p",
-          "text": "La fiducia deriva da una garanzia al momento dell'ingresso, dagli scambi completati e dalla fiducia concessa da un amministratore. In una comunità che conferma i propri membri, conta anche la linea di credito ricevuta da un membro confermato."
+          "text": "La fiducia deriva da una garanzia al momento dell'ingresso, dagli scambi completati e dalla fiducia concessa da un amministratore. In una comunità che conferma i propri membri, essere confermati assegna un limite di credito più alto, non un badge più alto: il tuo badge conta solo ciò che hai fatto, quindi non mostra mai che sei confermato."
         },
         {
           "type": "h2",
-          "text": "Non vincolano nulla"
+          "text": "Non sbloccano nulla"
         },
         {
           "type": "p",
@@ -6126,8 +6134,8 @@
         {
           "type": "ul",
           "items": [
-            "**Mastro**, poi **Livelli:** il tuo badge, quanta fiducia possiedi e quanta ne manca al successivo. **TUTTI I LIVELLI** mostra ogni badge. Uno che non hai ancora raggiunto riporta **Livello successivo** o **Più avanti**, con la quantità di fiducia richiesta: un traguardo a cui arrivare, mai qualcosa che ti viene negato.",
-            "**COSA COSTRUISCE LA TUA FIDUCIA:** quanto hai scambiato, con quante persone e la tua valutazione.",
+            "**Mastro**, poi **Livelli:** il tuo badge, quanta fiducia possiedi e quanta ne manca al successivo. **Tutti i livelli** mostra ogni badge. Uno che non hai ancora raggiunto riporta **Livello successivo** o **Più avanti**, con la quantità di fiducia richiesta: un traguardo a cui arrivare, mai qualcosa che ti viene negato.",
+            "**Cosa costruisce la tua fiducia:** quanto hai scambiato, con quante persone e la tua valutazione.",
             "Sui post e sui profili, accanto al nome di ciascun membro."
           ]
         },

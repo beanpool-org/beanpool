@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "id",
-  "hash": "7e702eadc6a14bfe73602d94bcae4499acb84289cfe64e40df60299d3ec579ab",
+  "hash": "9df58e8e484edd39c603ba03b54c4a56161c39da38d6266b40ace2e78d26dc37",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "Cara kerja BeanPool",
       "summary": "Kacang, perdagangan, penawaran dan permintaan, serta kredit, secara sederhana.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -260,7 +260,7 @@
         },
         {
           "type": "p",
-          "text": "Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat \"Batas kredit\"."
+          "text": "Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat \"Batas kreditmu\"."
         },
         {
           "type": "h2",
@@ -268,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Tingkat kepercayaanmu ditampilkan sebagai lencana. Lencananya adalah Pendatang Baru, Warga, Pengelola, dan Tetua. Kepercayaan di balik lencanamu menjumlahkan tiga hal: awal yang diberikan oleh penjamin, kepercayaan yang kamu peroleh dari bertransaksi, dan kepercayaan apa pun yang diberikan admin kepadamu. Seorang admin dapat memberikan lencana kepada anggota secara langsung, tanpa transaksi. Di komunitas yang mengonfirmasi anggotanya, batas kredit yang didapatkan anggota terkonfirmasi juga dihitung."
+          "text": "Tingkat kepercayaanmu ditampilkan sebagai lencana. Lencananya adalah Pendatang Baru, Warga, Pengelola, dan Tetua. Kepercayaan di balik lencanamu menjumlahkan tiga hal: awal yang diberikan oleh penjamin, kepercayaan yang kamu peroleh dari bertransaksi, dan kepercayaan apa pun yang diberikan admin kepadamu. Seorang admin dapat memberikan lencana kepada anggota secara langsung, tanpa transaksi. Di komunitas yang mengonfirmasi anggotanya, anggota yang terkonfirmasi mendapatkan batas kredit yang lebih tinggi, bukan lencana yang lebih tinggi: lencana mereka hanya menghitung apa yang telah mereka lakukan."
         },
         {
           "type": "ul",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Batas kreditmu",
       "summary": "Seberapa jauh saldomu bisa di bawah nol, dan bagaimana batas ini bertambah.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Beberapa komunitas memiliki admin yang mengenal setiap anggotanya secara langsung. Jika komunitasmu mengaktifkan **batas dasar yang diketahui**, anggota yang telah dikonfirmasi oleh admin langsung mendapatkan batas kredit: 1.000 Kacang kecuali jika komunitasmu memilih jumlah lain. Itu setara dengan sekitar 25 jam kerja yang dipercayakan komunitas kepadamu."
+          "text": "Beberapa komunitas memiliki admin yang mengenal setiap anggotanya secara langsung. Jika komunitasmu mengaktifkan **batas dasar yang diketahui**, anggota yang telah dikonfirmasi oleh admin langsung mendapatkan batas kredit: 1.000 Kacang kecuali jika komunitasmu memilih jumlah lain. Itu setara dengan sekitar 25 jam kerja yang dipercayakan komunitas kepadamu. Hal ini menaikkan batasmu, bukan tingkatmu: lencana percayamu tetap hanya menghitung apa yang telah kamu lakukan."
         },
         {
           "type": "ul",
@@ -5991,7 +5991,7 @@
         },
         {
           "type": "p",
-          "text": "Tingkatmu tidak berubah: tingkatmu adalah yang diberikan oleh batas kreditmu saat tidak dibekukan, bahkan jika admin telah menetapkan batasmu lebih rendah atau lebih tinggi daripada standar komunitas, baik di profilmu maupun di listingmu. Untuk menanyakan alasannya, atau agar dibuka kembali, hubungi salah satu admin."
+          "text": "Tingkatmu tidak berubah, baik di profilmu maupun di listingmu: tingkatmu menghitung apa yang telah kamu lakukan (jaminan, transaksimu, dan kepercayaan apa pun yang diberikan admin kepadamu), tidak pernah bagian dari jalur kreditmu yang berasal dari status anggota terkonfirmasi, atau jumlah berapa pun yang ditetapkan admin untuk itu. Untuk menanyakan alasannya, atau agar dibuka kembali, hubungi salah satu admin."
         },
         {
           "type": "h2",
@@ -6072,8 +6072,8 @@
       "slug": "trust-badges",
       "title": "Lencana percaya",
       "summary": "Pendatang Baru, Warga, Pengelola, dan Tetua. Artinya, dan mengapa lencana tidak membuka hak istimewa.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6105,7 +6105,7 @@
         },
         {
           "type": "p",
-          "text": "Kepercayaan berasal dari jaminan saat kamu bergabung, dari transaksi yang telah selesai, dan dari kepercayaan yang diberikan oleh admin. Di komunitas yang mengonfirmasi anggotanya, batas kredit yang didapatkan anggota terkonfirmasi juga ikut dihitung."
+          "text": "Kepercayaan berasal dari jaminan saat kamu bergabung, dari transaksi yang telah selesai, dan dari kepercayaan yang diberikan oleh admin. Di komunitas yang mengonfirmasi anggotanya, menjadi anggota terkonfirmasi memberimu batas kredit yang lebih tinggi, bukan lencana yang lebih tinggi: lencanamu hanya menghitung apa yang telah kamu lakukan, jadi lencana tersebut tidak pernah menunjukkan bahwa kamu telah dikonfirmasi."
         },
         {
           "type": "h2",

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 3,
+  "version": 4,
   "language": "fil",
-  "hash": "51f804fa2de68e635b5840af445b26f3038b2b434267b3394c0ec0ba6a7deca4",
+  "hash": "8b9b1b47ba7104c66f42b28deea70d475a86aba84f7e1cba96adbbd867543f8c",
   "sections": [
     {
       "id": "about",
@@ -132,8 +132,8 @@
       "slug": "how-it-works",
       "title": "Paggana ng BeanPool",
       "summary": "Munggo, kalakalan, mga alok at kahilingan, at kredito, sa simpleng salita.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -268,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Ipinapakita ang iyong tiwala bilang isang badge. Ang mga badge ay Baguhan, Residente, Katiwala at Pinuno. Ang tiwala sa likod ng iyong badge ay nagdaragdag ng tatlong bagay: ang panimulang ibinigay sa iyo ng vouch, ang tiwalang kinita mo sa pakikipagkalakalan, at anumang tiwala na ipinagkaloob sa iyo ng isang admin. Maaaring magbigay ang isang admin sa isang miyembro ng badge nang direkta, nang walang mga kalakalan. Sa isang komunidad na nagpapatunay sa mga miyembro nito, binibilang din ang linya ng kredito na nakukuha ng isang kumpirmadong miyembro."
+          "text": "Ipinapakita ang iyong tiwala bilang isang badge. Ang mga badge ay Baguhan, Residente, Katiwala at Pinuno. Ang tiwala sa likod ng iyong badge ay nagdaragdag ng tatlong bagay: ang panimulang ibinigay sa iyo ng vouch, ang tiwalang kinita mo sa pakikipagkalakalan, at anumang tiwala na ipinagkaloob sa iyo ng isang admin. Maaaring magbigay ang isang admin sa isang miyembro ng badge nang direkta, nang walang mga kalakalan. Sa isang komunidad na nagpapatunay sa mga miyembro nito, ang isang kumpirmadong miyembro ay nakakakuha ng mas mataas na limitasyon sa kredito, hindi mas mataas na badge: binibilang lamang ng kanilang badge kung ano ang kanilang nagawa na."
         },
         {
           "type": "ul",
@@ -280,7 +280,7 @@
         },
         {
           "type": "p",
-          "text": "Ang badge ay pagkilala lamang, wala nang iba pa. Hindi ito nagbubukas o nagkakandado ng anuman. Lahat ay maaaring makipagkalakalan, mag-imbita at bumoto, anuman ang kanilang badge."
+          "text": "Ang badge ay pagkilala, wala nang iba pa. Hindi ito nagbubukas ng anuman. Lahat ay maaaring makipagkalakalan, mag-imbita at bumoto, anuman ang kanilang badge."
         },
         {
           "type": "h2",
@@ -5875,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Iyong credit line",
       "summary": "Kung gaano kababa sa zero ang puwede mong abutin, at paano ito lumalago.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Kung binuksan ng iyong komunidad ang **kilalang floor**, ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad."
+          "text": "Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Kung binuksan ng iyong komunidad ang **kilalang floor**, ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad. Itinataas nito ang iyong limitasyon, hindi ang iyong antas: binibilang pa rin ng iyong trust badge kung ano lamang ang iyong nagawa na."
         },
         {
           "type": "ul",
@@ -5973,6 +5973,14 @@
             "Maaaring magtakda ang isang admin ng mas maliit na limitasyon para sa iyo, halimbawa habang bago ka pa lamang. Hindi iyon kailanman kumukuha ng Munggo mula sa iyo: kung nasa ilalim ka na nito, hihinto ang paggastos hanggang sa makabalik ka sa itaas nito.",
             "Kung binabayaran mo ang isang utang mula sa naunang account, ang Munggo na natatanggap mo na lampas sa 0 ay napupunta sa Komun hanggang sa mabayaran ito. Sinasabi ng iyong Talaan kung magkano ang natitira. Maaari mo ring bayaran ang ilan o lahat nito nang ikaw mismo sa **Talaan → Magbayad sa Komun**: nakalagay na roon ang iyong pay-back code (o ilagay ang ibinigay sa iyo ng admin). Ang ibinabayad mo gamit ang code ay agad na ibinabawas sa utang, at kapag walang natira ay naisaayos na ang utang: wala nang kukunin pa, sa pamamagitan ng pagbabayad o mula sa iyong matatanggap. Ang isang pagbabayad nang walang code ay mapupunta sa Komun ngunit hindi mababawas sa iyong utang, at sinasabi ito ng app: upang maibilang ito, hilingin sa admin na ibilang ito sa iyong utang gamit ang reference nito. Hanggang sa gawin nila ito, patuloy pa ring binabayaran ang utang: sa susunod na makatanggap ka ng Munggo, ang natitira ay kukunin mula sa iyong hawak na lampas sa 0. Ang halaga sa mensahe ng admin ay ang natitira noong ibinahagi nila ito: kung mas kaunti ang natitira ngayon, tatanggihan ng iyong server ang mas malaking pagbabayad at sasabihin kung magkano ang natitira, at walang babayaran. Kung sabihin ng app na maaaring pumasok ang isang pagbabayad, i-tap ang **Subukan muli** sa parehong screen: ang parehong pagbabayad ay hindi kailanman binabayaran nang dalawang beses. Kung umalis ka sa screen na iyon, suriin ang iyong Talaan bago ka magbayad muli."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Isang magkahalong komunidad"
+        },
+        {
+          "type": "p",
+          "text": "Sa ilang komunidad kahit sinong miyembro ay maaaring mag-imbita ng mga tao, kaya hindi kilala ng mga admin ang lahat. Kung binuksan ng komunidad mo ang **kilalang floor**, maaaring kumpirmahin ng mga admin ang mga miyembrong kilala nila, at ang mga miyembrong iyon ay magsisimula sa mas mataas na limitasyon. Ang lahat ng iba pa ay magsisimula sa zero, at ang limitasyon ng bawat isa ay lalago sa parehong paraan pagkatapos noon habang sila ay nakikipagkalakalan at bumubuo ng tiwala."
         },
         {
           "type": "h2",
@@ -5991,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Hindi nagbabago ang iyong antas: ito ang ibinibigay sa iyo ng iyong credit line kapag hindi ito naka-freeze, kahit na itinakda ng mga admin ang iyong linya na mas mababa o mas mataas kaysa sa komunidad, sa iyong profile at sa iyong mga listing. Upang itanong kung bakit, o upang mabuksan itong muli, magtanong sa isa sa mga admin."
+          "text": "Hindi nagbabago ang iyong antas, sa iyong profile at sa iyong mga listing: binibilang nito kung ano ang iyong nagawa (isang vouch, ang iyong mga kalakalan at anumang tiwala na ipinagkaloob sa iyo ng admin), hindi kailanman ang bahagi ng iyong linya na nagmumula sa pagiging kumpirmado, o anumang halagang itinakda ng mga admin para dito. Upang itanong kung bakit, o upang mabuksan itong muli, magtanong sa isa sa mga admin."
         },
         {
           "type": "h2",
@@ -6072,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Mga trust badge",
       "summary": "Baguhan, Residente, Pangasiwa at Pinuno. Ano ang kahulugan ng mga ito, at bakit wala itong ina-unlock.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -6101,11 +6109,11 @@
         },
         {
           "type": "p",
-          "text": "Ang isang miyembro na hindi pa nakikipagkalakalan ay nagpapakita ng **TAGAPAGTATAG** sa kanilang mga post."
+          "text": "Ang isang miyembro na hindi pa nakikipagkalakalan ay nagpapakita ng **FOUNDING** sa kanilang mga post."
         },
         {
           "type": "p",
-          "text": "Ang tiwala ay nagmumula sa isang vouch kapag sumali ka, mula sa mga nakumpletong kalakalan, at mula sa tiwalang ipinagkaloob ng isang admin. Sa isang komunidad na nagpapatunay sa mga miyembro nito, ang credit line na nakukuha ng isang kumpirmadong miyembro ay ibinibilang din."
+          "text": "Ang tiwala ay nagmumula sa isang vouch kapag sumali ka, mula sa mga nakumpletong kalakalan, at mula sa tiwalang ipinagkaloob ng isang admin. Sa isang komunidad na nagpapatunay sa mga miyembro nito, ang pagiging kumpirmado ay nagbibigay sa iyo ng mas mataas na limitasyon sa kredito, hindi mas mataas na badge: binibilang lamang ng iyong badge kung ano ang nagawa, kaya hindi nito kailanman ipinapakita na ikaw ay kumpirmado."
         },
         {
           "type": "h2",

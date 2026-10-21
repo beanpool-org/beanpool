@@ -3501,5 +3501,14 @@
   },
   "{name}, already in the group": "{name}, nasa grupo na",
   "{name}, already invited": "{name}, naimbita na",
-  "{name}, asked to join": "{name}, humiling na sumali"
+  "{name}, asked to join": "{name}, humiling na sumali",
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Ini-off ng isang tagapangalaga ang kopya sa server ng tool na ito, kaya nananatili lang ito sa browser na ito. Maaari mo itong i-on muli sa Mga Setting.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Hindi maabot ang server ng iyong komunidad, kaya walang nagbago. Subukang muli kapag online ka na.",
+  "Keep a private copy on your community's server": "Magtago ng pribadong kopya sa server ng iyong komunidad",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Nasa browser na ito, na may pribadong kopya sa server ng iyong komunidad na ikaw lang ang makakabasa sa pamamagitan ng app. Tulad ng lahat sa server na iyon, mababasa rin ito ng operator nito.",
+  "One device at a time: the copy you changed last is the one kept.": "Isang device sa bawat pagkakataon: ang kopyang huli mong binago ang siyang itinatago.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Inaalis ang data ng komunidad na ito para sa {tool} sa browser na ito, at ang kopya nito sa server ng iyong komunidad. Ang isa pang device na naka-sign in bilang ikaw ay magpapanatili ng mayroon ito at hihinto sa pagpapadala nito. Ang parehong tool sa ibang komunidad ay magpapanatili ng sarili nito. Hindi na ito mababawi.",
+  "You can edit a message for 15 minutes after sending it.": "Maaari mong i-edit ang isang mensahe sa loob ng 15 minuto pagkatapos itong ipadala.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Hindi pa makapagtago ng kopya ang server ng iyong komunidad, kaya sa ngayon ay nananatili lang ito sa browser na ito.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Hindi na nagtatago ng kopya ng tool na ito ang server ng iyong komunidad, kaya nananatili lang ito sa browser na ito. Maaari mong i-on muli ang kopya sa Mga Setting."
 }

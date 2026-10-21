@@ -3501,5 +3501,14 @@
   },
   "{name}, already in the group": "{name}، از قبل در گروه است",
   "{name}, already invited": "{name}، از قبل دعوت شده است",
-  "{name}, asked to join": "{name}، درخواست پیوستن داده است"
+  "{name}, asked to join": "{name}، درخواست پیوستن داده است",
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "یک مدیر نسخه سرور این ابزار را خاموش کرد، بنابراین فقط در این مرورگر نگهداری می‌شود. می‌توانید آن را دوباره در تنظیمات روشن کنید.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "ارتباط با سرور جامعه‌تان برقرار نشد، بنابراین چیزی تغییر نکرد. وقتی آنلاین شدید دوباره امتحان کنید.",
+  "Keep a private copy on your community's server": "نگهداری یک نسخه خصوصی روی سرور جامعه‌تان",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "در این مرورگر نگهداری می‌شود، همراه با یک نسخه خصوصی روی سرور جامعه‌تان که فقط خودتان می‌توانید از طریق برنامه بخوانید. مانند هر چیز دیگری روی آن سرور، گرداننده آن می‌تواند.",
+  "One device at a time: the copy you changed last is the one kept.": "در هر زمان یک دستگاه: نسخه‌ای که آخرین بار تغییر داده‌اید نگهداری می‌شود.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "داده‌های این جامعه برای {tool} را از این مرورگر، و نسخه آن را از روی سرور جامعه‌تان پاک می‌کند. دستگاه دیگری که با حساب شما وارد شده است، آنچه را دارد نگه می‌دارد و ارسال آن را متوقف می‌کند. همین ابزار در جامعه‌ای دیگر داده‌های خود را حفظ می‌کند. این عمل قابل بازگشت نیست.",
+  "You can edit a message for 15 minutes after sending it.": "می‌توانید تا 15 دقیقه پس از ارسال پیام، آن را ویرایش کنید.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "سرور جامعه‌تان هنوز نمی‌تواند نسخه‌ای نگه دارد، بنابراین فعلاً فقط در این مرورگر می‌ماند.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "سرور جامعه‌تان دیگر نسخه‌ای از این ابزار را نگه نمی‌دارد، بنابراین فقط در این مرورگر نگهداری می‌شود. می‌توانید نسخه را دوباره در تنظیمات روشن کنید."
 }

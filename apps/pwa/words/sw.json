@@ -3501,5 +3501,14 @@
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "one": "Kumwongeza {name} kama msimamizi, akiwa na maharagwe {n} ya dhamana iliyotajwa",
     "other": "Kumwongeza {name} kama msimamizi, akiwa na maharagwe {n} ya dhamana iliyotajwa"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Msimamizi alizima nakala ya seva ya zana hii, kwa hivyo inawekwa kwenye kivinjari hiki pekee. Unaweza kuiwasha tena katika Mipangilio.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Haikuweza kufikia seva ya jumuiya yako, kwa hivyo hakuna kilichobadilika. Jaribu tena ukiwa mtandaoni.",
+  "Keep a private copy on your community's server": "Weka nakala ya faragha kwenye seva ya jumuiya yako",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Imewekwa kwenye kivinjari hiki, ikiwa na nakala ya faragha kwenye seva ya jumuiya yako ambayo wewe tu unaweza kuisoma kupitia programu. Kama kila kitu kwenye seva hiyo, mwendeshaji wake anaweza.",
+  "One device at a time: the copy you changed last is the one kept.": "Kifaa kimoja kwa wakati mmoja: nakala uliyobadilisha mwisho ndiyo inayowekwa.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Huondoa data ya jumuiya hii ya {tool} kwenye kivinjari hiki, na nakala yake kwenye seva ya jumuiya yako. Kifaa kingine kilichoingia kama wewe huweka kile kilicho nacho na huacha kukituma. Zana hiyo hiyo katika jumuiya nyingine huweka zake. Hili haliwezi kutenduliwa.",
+  "You can edit a message for 15 minutes after sending it.": "Unaweza kuhariri ujumbe kwa dakika 15 baada ya kuutuma.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Seva ya jumuiya yako haiwezi kuweka nakala bado, kwa hivyo kwa sasa inabaki kwenye kivinjari hiki pekee.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Seva ya jumuiya yako haiweki tena nakala ya zana hii, kwa hivyo inawekwa kwenye kivinjari hiki pekee. Unaweza kuwasha nakala hiyo tena katika Mipangilio."
 }

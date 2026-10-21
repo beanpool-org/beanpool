@@ -3378,5 +3378,14 @@
   },
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "other": "正在添加 {name} 为管理者，记名支持额度为 {n} 豆子"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "一位管理者关闭了此工具的服务器副本，因此它仅保存在此浏览器中。你可以在“设置”中重新开启。",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "无法连接到你所在社区的服务器，因此未作任何更改。请在联网后重试。",
+  "Keep a private copy on your community's server": "在你所在社区的服务器上保留一份私密副本",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "保存在此浏览器中，同时在你所在社区的服务器上保留一份私密副本，仅你可以通过应用读取。但与该服务器上的所有内容一样，其运营者也可以读取。",
+  "One device at a time: the copy you changed last is the one kept.": "一次仅限一台设备：将保留你最后修改的副本。",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "从此浏览器中清除此社区的 {tool} 数据及其在你所在社区服务器上的副本。另一台以你身份登录的设备将保留其现有内容并停止发送。另一社区中的同一工具将保留其自身数据。此操作无法撤销。",
+  "You can edit a message for 15 minutes after sending it.": "发送消息后 15 分钟内可以编辑。",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "你所在社区的服务器暂时无法保存副本，因此目前仅保留在此浏览器中。",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "你所在社区的服务器不再保留此工具的副本，因此它仅保存在此浏览器中。你可以在“设置”中重新开启该副本。"
 }

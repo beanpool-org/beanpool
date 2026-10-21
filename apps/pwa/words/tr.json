@@ -3501,5 +3501,14 @@
   },
   "{name}, already in the group": "{name}, zaten grupta",
   "{name}, already invited": "{name}, zaten davet edildi",
-  "{name}, asked to join": "{name}, katılma isteğinde bulundu"
+  "{name}, asked to join": "{name}, katılma isteğinde bulundu",
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Bir sorumlu bu aracın sunucu kopyasını kapattı, bu yüzden yalnızca bu tarayıcıda tutulur. Ayarlar'dan tekrar açabilirsin.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Topluluğunun sunucusuna ulaşılamadı, bu yüzden hiçbir şey değişmedi. Çevrimiçi olduğunda tekrar dene.",
+  "Keep a private copy on your community's server": "Topluluğunun sunucusunda gizli bir kopya tut",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Bu tarayıcıda tutulur; topluluğunun sunucusunda yalnızca senin uygulama üzerinden okuyabileceğin gizli bir kopyası bulunur. O sunucudaki her şey gibi, işleticisi de okuyabilir.",
+  "One device at a time: the copy you changed last is the one kept.": "Aynı anda tek bir cihaz: en son değiştirdiğin kopya tutulur.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Bu tarayıcıdan bu topluluğun {tool} verilerini ve topluluğunun sunucusundaki kopyasını siler. Senin adına oturum açmış başka bir cihaz elindekini korur ve göndermeyi durdurur. Aynı aracın başka bir topluluktaki kopyası korunur. Bu işlem geri alınamaz.",
+  "You can edit a message for 15 minutes after sending it.": "Bir mesajı gönderdikten sonra 15 dakika boyunca düzenleyebilirsiniz.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Topluluğunun sunucusu henüz bir kopya tutamıyor, bu yüzden şimdilik yalnızca bu tarayıcıda kalır.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Topluluğunun sunucusu artık bu aracın bir kopyasını tutmuyor, bu yüzden yalnızca bu tarayıcıda tutulur. Kopyayı Ayarlar'dan tekrar açabilirsin."
 }

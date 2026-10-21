@@ -6011,5 +6011,13 @@
     "one": "از {n} اعتماد",
     "other": "از {n} اعتماد"
   },
-  "{name}, already invited": "{name}، از قبل دعوت شده است"
+  "{name}, already invited": "{name}، از قبل دعوت شده است",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "یک مدیر نسخه سرور این ابزار را خاموش کرد، بنابراین فقط روی این تلفن نگهداری می‌شود. می‌توانید آن را دوباره در تنظیمات روشن کنید.",
+  "Asked to join": "درخواست پیوستن داده",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "ارتباط با سرور جامعه‌تان برقرار نشد، بنابراین چیزی تغییر نکرد. وقتی آنلاین شدید دوباره امتحان کنید.",
+  "One phone at a time: the copy you changed last is the one kept.": "در هر زمان یک تلفن: نسخه‌ای که آخرین بار تغییر داده‌اید نگهداری می‌شود.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "داده‌های شما برای این ابزار را از این تلفن و نسخه آن را از روی سرور جامعه‌تان حذف می‌کند. تلفن دیگری که با حساب شما وارد شده است، آنچه را دارد نگه می‌دارد و ارسال آن را متوقف می‌کند. همین ابزار در جامعه‌ای دیگر موارد مربوط به خود را حفظ می‌کند. این عمل قابل بازگشت نیست.",
+  "You can edit a message for 15 minutes after sending it.": "می‌توانید تا 15 دقیقه پس از ارسال پیام، آن را ویرایش کنید.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "سرور جامعه‌تان دیگر نسخه‌ای از این ابزار را نگه نمی‌دارد، بنابراین فقط روی این تلفن نگهداری می‌شود. می‌توانید نسخه را دوباره در تنظیمات روشن کنید.",
+  "{name}, asked to join": "{name}، درخواست پیوستن داده است"
 }

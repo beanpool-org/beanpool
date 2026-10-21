@@ -6011,5 +6011,13 @@
     "one": "ab {n} Vertrauen",
     "other": "ab {n} Vertrauen"
   },
-  "{name}, already invited": "{name}, bereits eingeladen"
+  "{name}, already invited": "{name}, bereits eingeladen",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "Ein Verwalter hat die Serverkopie dieses Werkzeugs ausgeschaltet, daher wird es nur auf diesem Telefon gespeichert. Du kannst sie in den Einstellungen wieder einschalten.",
+  "Asked to join": "Beitritt angefragt",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Der Server deiner Community konnte nicht erreicht werden, daher wurde nichts geändert. Versuche es erneut, wenn du online bist.",
+  "One phone at a time: the copy you changed last is the one kept.": "Immer nur ein Telefon: Die zuletzt geänderte Kopie wird behalten.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "Entfernt deine Daten für dieses Werkzeug von diesem Telefon und die Kopie auf dem Server deiner Community. Ein anderes Telefon, das als du angemeldet ist, behält, was es hat, und sendet es nicht mehr. Dasselbe Werkzeug in einer anderen Community behält seine Daten. Dies kann nicht rückgängig gemacht werden.",
+  "You can edit a message for 15 minutes after sending it.": "Du kannst eine Nachricht nach dem Senden 15 Minuten lang bearbeiten.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "Der Server deiner Community speichert keine Kopie dieses Werkzeugs mehr, daher wird es nur auf diesem Telefon gespeichert. Du kannst die Kopie in den Einstellungen wieder einschalten.",
+  "{name}, asked to join": "{name}, Beitritt angefragt"
 }

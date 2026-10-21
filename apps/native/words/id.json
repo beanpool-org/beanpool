@@ -5774,5 +5774,13 @@
   "from {n} trust|from {n} trust": {
     "other": "dari {n} kepercayaan"
   },
-  "{name}, already invited": "{name}, sudah diundang"
+  "{name}, already invited": "{name}, sudah diundang",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "Seorang pengurus mematikan salinan server dari alat ini, jadi hanya disimpan di ponsel ini. Kamu bisa mengaktifkannya lagi di Pengaturan.",
+  "Asked to join": "Meminta bergabung",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Tidak dapat menjangkau server komunitasmu, jadi tidak ada yang berubah. Coba lagi saat kamu online.",
+  "One phone at a time: the copy you changed last is the one kept.": "Satu ponsel dalam satu waktu: salinan yang terakhir kamu ubah adalah yang disimpan.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "Menghapus datamu untuk alat ini dari ponsel ini, dan salinannya di server komunitasmu. Ponsel lain yang masuk sebagai dirimu tetap menyimpan apa yang dimilikinya dan berhenti mengirimkannya. Alat yang sama di komunitas lain tetap menyimpan datanya sendiri. Tindakan ini tidak dapat diurungkan.",
+  "You can edit a message for 15 minutes after sending it.": "Kamu bisa mengedit pesan selama 15 menit setelah mengirimkannya.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "Server komunitasmu tidak lagi menyimpan salinan alat ini, jadi hanya disimpan di ponsel ini. Kamu bisa mengaktifkan salinannya lagi di Pengaturan.",
+  "{name}, asked to join": "{name}, meminta bergabung"
 }

@@ -6011,5 +6011,13 @@
   "Look around first, then join with this account": "Explora primero, luego únete con esta cuenta",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Conoce a personas de todas partes y encuentra comunidades cerca de ti. Explora primero como invitado, luego toca Unirse en la parte superior para unirte con la cuenta de este teléfono: tu clave y tus 12 palabras siguen siendo las mismas, y nada cambia en tus otras comunidades.",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Al confirmarse, su límite crece hasta en {amount}: el límite mínimo conocido de tu comunidad, mientras mantenga una oferta publicada.",
-  "Uses the key and 12 words already on this phone. No new account is made.": "Usa la clave y las 12 palabras que ya están en este teléfono. No se crea una cuenta nueva."
+  "Uses the key and 12 words already on this phone. No new account is made.": "Usa la clave y las 12 palabras que ya están en este teléfono. No se crea una cuenta nueva.",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "Un custodio desactivó la copia de esta herramienta en el servidor, por lo que solo se guarda en este teléfono. Puedes volver a activarla en Ajustes.",
+  "Asked to join": "Pidió unirse",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "No se pudo conectar con el servidor de tu comunidad, por lo que nada cambió. Inténtalo de nuevo cuando tengas conexión.",
+  "One phone at a time: the copy you changed last is the one kept.": "Un teléfono a la vez: la copia que modificaste por última vez es la que se conserva.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "Elimina tus datos de esta herramienta de este teléfono y su copia en el servidor de tu comunidad. Otro teléfono con tu sesión iniciada conserva lo que tiene y deja de enviarlo. La misma herramienta en otra comunidad conserva los suyos. Esto no se puede deshacer.",
+  "You can edit a message for 15 minutes after sending it.": "Puedes editar un mensaje durante 15 minutos después de enviarlo.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "El servidor de tu comunidad ya no guarda una copia de esta herramienta, por lo que solo se guarda en este teléfono. Puedes volver a activar la copia en Ajustes.",
+  "{name}, asked to join": "{name}, pidió unirse"
 }

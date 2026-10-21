@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Rules — How BeanPool Works</title>
-    <meta name="description" content="The simple rules of BeanPool: how balances, credit, offers, fees, Keynesian federation, community enterprises, and governance work.">
+    <title>ルール — BeanPoolの仕組み</title>
+    <meta name="description" content="BeanPoolのシンプルなルール：残高、信用枠、提供、手数料、ケインズ型連邦、コミュニティ事業体、ガバナンスの仕組みを解説します。">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.5">
@@ -31,162 +31,162 @@
     <!-- Navigation Bar -->
     <nav id="navbar">
         <div class="nav-inner has-menu">
-            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPoolアイコン" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
-                <a href="index.html#how-it-works">How It Works</a>
-                <a href="rules.html">The Rules</a>
-                <a href="index.html#features">Features</a>
-                <a href="help.html">Help</a>
-                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorials</a>
+                <a href="index.html#how-it-works">仕組み</a>
+                <a href="rules.html">ルール</a>
+                <a href="index.html#features">できること</a>
+                <a href="help.html">ヘルプ</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">チュートリアル</a>
                 <div class="nav-social-icons">
-                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Watch Video Tutorials on YouTube (@beanpool)">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTubeでチュートリアル動画を見る（@beanpool）">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
                     </a>
-                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Join Reddit Community (r/beanpool)">
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Redditコミュニティに参加する（r/beanpool）">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
                     </a>
-                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="View on GitHub">
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHubで見る">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
                     </a>
                 </div>
-                <a href="getting-started.html" class="nav-cta">Get Started</a>
+                <a href="getting-started.html" class="nav-cta">使ってみる</a>
             </div>
             <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
             <details class="nav-menu">
-                <summary aria-label="Open menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <summary aria-label="メニューを開く"><span aria-hidden="true">☰</span> メニュー</summary>
                 <div class="nav-menu-panel">
-                    <a href="getting-started.html" class="nav-menu-cta">Get Started</a>
-                    <a href="index.html#how-it-works">How It Works</a>
-                    <a href="rules.html" aria-current="page">The Rules</a>
-                    <a href="index.html#features">Features</a>
-                    <a href="help.html">Help</a>
-                    <a href="guide/index.html">Members' guide</a>
-                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorials on YouTube</a>
-                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool on Reddit</a>
-                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Source on GitHub</a>
+                    <a href="getting-started.html" class="nav-menu-cta">使ってみる</a>
+                    <a href="index.html#how-it-works">仕組み</a>
+                    <a href="rules.html" aria-current="page">ルール</a>
+                    <a href="index.html#features">できること</a>
+                    <a href="help.html">ヘルプ</a>
+                    <a href="guide/index.html">メンバーズガイド</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTubeでチュートリアルを見る</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Redditのr/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHubのソースコード</a>
                 </div>
             </details>
         </div>
     </nav>
 
     <section class="legal-content glass-panel rules-content">
-        <h1>The Rules — How BeanPool Works</h1>
-        <p class="lede">BeanPool is a community exchange where everyone starts at zero. You earn beans by helping others and spend them when others help you. No money changes hands, and there are no corporate middlemen — just these simple rules.</p>
+        <h1>ルール — BeanPoolの仕組み</h1>
+        <p class="lede">BeanPoolは誰もがゼロから始めるコミュニティの相互交換システムです。他の人を助けることで豆を獲得し、助けてもらったときに豆を使います。お金のやり取りはなく、仲介企業も存在しません — あるのは以下のシンプルなルールだけです。</p>
 
-        <div class="callout amber">In short: <strong>earn your credit line by trading, keep an offer or two live to use it, and let beans flow.</strong> Zero is the goal — give about as much as you take.</div>
+        <div class="callout amber">要約：<strong>取引を通じて信用枠を獲得し、1〜2件の提供を公開してそれを活用し、豆を循環させましょう。</strong> 目指すのはゼロ（均衡）です — 受け取った分だけ誰かを助けましょう。</div>
 
-        <h2 id="1"><span class="num">1.</span>Beans &amp; your balance</h2>
-        <p>Beans measure the value you've given and received (roughly, time). <strong style="color:var(--text-primary)">Zero is the goal</strong> — it means you've given about as much as you've taken.</p>
+        <h2 id="1"><span class="num">1.</span>豆と残高</h2>
+        <p>豆はあなたが与えた価値と受け取った価値（おおむね時間）を測る指標です。<strong style="color:var(--text-primary)">目指すのはゼロ</strong>です — これは受け取った分とほぼ同じだけ与えたことを意味します。</p>
         <ul>
-            <li><strong style="color:var(--text-primary)">Positive balance</strong> — you've given more than you've taken. The community owes you.</li>
-            <li><strong style="color:var(--text-primary)">Negative balance</strong> — the community has extended you credit. You owe it back by giving.</li>
-            <li>On most communities the deepest anyone can go is <strong>−2000 beans</strong>. A community that confirms its members by real name can set its own limit, up to −5000, and give confirmed members a starting line.</li>
+            <li><strong style="color:var(--text-primary)">プラスの残高</strong> — 受け取った以上に助けを提供した状態です。コミュニティから感謝（債権）を受けています。</li>
+            <li><strong style="color:var(--text-primary)">マイナスの残高</strong> — コミュニティから信用（クレジット）が与えられた状態です。助けを提供することで返済していきます。</li>
+            <li>多くのコミュニティでは、マイナスの最大限界値（下限）は<strong>−2000豆</strong>です。実名でメンバーを確認するコミュニティでは独自に上限（最大−5000まで）を設定し、確認済みメンバーに初期信用枠を付与できます。</li>
         </ul>
 
-        <h2 id="2"><span class="num">2.</span>Getting started</h2>
-        <p>You join by invitation. From day one you can browse and receive beans. Once you hold beans (by earning them or receiving a gift), you can spend them. To spend on credit, you must post at least one <strong style="color:var(--text-primary)">Offer</strong> (see §4 and §5). New members start with <strong style="color:var(--text-primary)">no credit line</strong> — you can only spend beans you actually have until your line is activated by your first completed trade (or if a voucher or an admin gives you a starting line — see §3 and §9).</p>
+        <h2 id="2"><span class="num">2.</span>スタートにあたって</h2>
+        <p>招待によって参加します。初日から閲覧や豆の受け取りが可能です。豆を保有すると（獲得するかギフトを受け取ることで）、それを使うことができます。信用（マイナス残高）を使って支払うには、少なくとも1件の<strong style="color:var(--text-primary)">提供</strong>を投稿する必要があります（§4および§5を参照）。新規メンバーは<strong style="color:var(--text-primary)">信用枠なし</strong>でスタートします — 最初の取引が完了して信用枠が有効になるまで（あるいは推薦者や管理者が初期枠を付与するまで — §3および§9を参照）、実際に手持ちの豆のみを使うことができます。</p>
         <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
 
-        <h2 id="3"><span class="num">3.</span>Your credit line is earned by trading</h2>
-        <p>Your credit line lets you go a little negative — spending before you've earned it back. It's <strong style="color:var(--text-primary)">earned, not given</strong>:</p>
+        <h2 id="3"><span class="num">3.</span>取引によって獲得する信用枠</h2>
+        <p>信用枠を利用すると、誰かを助けて豆を稼ぐ前であっても、少し残高をマイナスにして支払うことができます。これは<strong style="color:var(--text-primary)">与えられるものではなく、実績で築くもの</strong>です：</p>
         <ul>
-            <li>Trust comes from <strong style="color:var(--text-primary)">completed marketplace trades</strong> — never from gifts. It grows slowly at first: a 100-Bean trade earns about 37 Beans of credit line. An admin or an appointed voucher can also give someone a starting line; an admin's grant shows as their badge.</li>
-            <li>Trading with <strong style="color:var(--text-primary)">many different people</strong> builds trust far faster than repeat trades with one person.</li>
-            <li>Your trust sets your credit <em>limit</em> — how deep your floor could go, from 0 down to −2000 on most communities (see §1).</li>
-            <li>Your floor opens after your <strong style="color:var(--text-primary)">first real trade</strong>, and grows with every trade after it (or a community voucher can give you a starter floor — see §9). No vouch is required.</li>
+            <li>信頼は<strong style="color:var(--text-primary)">マーケットプレイスで完了した取引</strong>から生まれます — ギフトからは生まれません。最初はゆっくり増えます：100豆の取引で約37豆の信用枠を獲得します。管理者や指定された推薦者が初期信用枠を付与することもでき、管理者の付与はバッジとして表示されます。</li>
+            <li><strong style="color:var(--text-primary)">多くの異なる相手</strong>と取引する方が、特定の1人と何度も取引するよりもはるかに早く信頼を築くことができます。</li>
+            <li>信頼度によって信用<em>限度額</em>が決まります — 多くのコミュニティでは0から最大−2000まで下限を広げることができます（§1参照）。</li>
+            <li>下限枠は<strong style="color:var(--text-primary)">最初の実際の取引</strong>の後に開き、その後の取引ごとに拡大します（あるいはコミュニティの推薦者からスターター枠を受け取ることもできます — §9参照）。推薦は必須ではありません。</li>
         </ul>
-        <div class="callout">Trust levels — <strong>Newcomer → Resident → Steward → Elder</strong> — are recognition badges. The badges you earn unlock nothing on their own; a deeper credit line comes from real trading. An admin can also give someone a badge, and with it that badge's starting credit line.</div>
+        <div class="callout">信頼レベル — <strong>新規 → 住民 → 世話人 → 長老</strong> — は実績を認めるバッジです。獲得したバッジ自体が何かを制限したり解除したりするわけではありません。より深い信用枠は実際の取引によって得られます。管理者が誰かにバッジを付与することもでき、そのバッジの初期信用枠も同時に付与されます。</div>
 
-        <h2 id="4"><span class="num">4.</span>Reciprocity: To use credit, you must keep active offers</h2>
-        <p>Earning trust sets your credit <strong style="color:var(--text-primary)">limit</strong> (how deep you can potentially go). But to actually <strong style="color:var(--text-primary)">draw</strong> on that credit, you must keep active Offers posted. This ensures that anyone carrying debt is actively showing the community how they plan to contribute.</p>
+        <h2 id="4"><span class="num">4.</span>相互性：信用枠を利用するには、有効な提供を掲載し続ける必要があります</h2>
+        <p>信頼を得ることで信用<strong style="color:var(--text-primary)">限度額</strong>（潜在的にマイナスにできる深さ）が決まります。しかし実際にその信用枠を<strong style="color:var(--text-primary)">引き出す</strong>には、有効な提供を掲載し続ける必要があります。これにより、借りを抱えているメンバーがコミュニティにどのように貢献するつもりであるかを常に示すことになります。</p>
         
-        <p>The number of active offers you keep posted determines how much credit is <strong style="color:var(--text-primary)">unlocked</strong>:</p>
+        <p>掲載している有効な提供の数によって、利用可能な信用枠が決まります：</p>
         <table>
-            <thead><tr><th>Active offers</th><th>Unlocked credit line</th></tr></thead>
+            <thead><tr><th>有効な提供数</th><th>利用可能な信用枠</th></tr></thead>
             <tbody>
-                <tr><td class="num-col">0</td><td>0 — spend held beans only</td></tr>
-                <tr><td class="num-col">1</td><td>Down to −200 Beans</td></tr>
-                <tr><td class="num-col">2</td><td>Down to −500 Beans</td></tr>
-                <tr><td class="num-col">3</td><td>Down to −1000 Beans</td></tr>
-                <tr><td class="num-col">4</td><td>Down to −1500 Beans</td></tr>
-                <tr><td class="num-col">5</td><td>Down to −2000 Beans <em>(the usual cap)</em></td></tr>
+                <tr><td class="num-col">0</td><td>0 — 保有している豆のみ使用可能</td></tr>
+                <tr><td class="num-col">1</td><td>−200豆まで</td></tr>
+                <tr><td class="num-col">2</td><td>−500豆まで</td></tr>
+                <tr><td class="num-col">3</td><td>−1000豆まで</td></tr>
+                <tr><td class="num-col">4</td><td>−1500豆まで</td></tr>
+                <tr><td class="num-col">5</td><td>−2000豆まで <em>（通常の上限）</em></td></tr>
             </tbody>
         </table>
-        <p>Your actual spending limit is the <strong style="color:var(--text-primary)">smaller</strong> of what you've earned and what your active offers unlock.</p>
-        <p><em>For example: If you have earned a −600 limit through trades, keeping 2 active offers unlocks −500 of it. Keeping a 3rd offer unlocks your full −600 limit (you never need a 4th or 5th offer because your earned limit is already reached).</em></p>
+        <p>実際の利用可能額は、獲得した限度額と有効な提供数による利用可能枠の<strong style="color:var(--text-primary)">小さい方</strong>になります。</p>
+        <p><em>例：取引を通じて−600の限度額を獲得している場合、有効な提供を2件掲載していると−500まで利用できます。3件目を掲載すると限度額いっぱいの−600まで利用可能になります（獲得した限度額にすでに達しているため、4件目や5件目の提供は不要です）。</em></p>
         <div class="callout">
-            <strong>The Spending Pause (Freeze):</strong><br>
-            If you drop below the active offers required for your current debt (e.g., if one of your offers sells and completes, or you pause one), your <strong>ability to spend on credit is paused</strong>. This is a safety net, not a penalty: nothing is taken from you. You can still receive beans, keep selling, and browse. Your credit line un-pauses by itself once your balance is back within what your active offers cover: post another offer, or receive beans.
+            <strong>利用の一時停止（フリーズ）：</strong><br>
+            現在の負債に必要な有効提供数を下回った場合（例：提供していたものが売れて取引が完了した場合や、一時停止した場合）、<strong>信用枠を利用した支払いが一時停止</strong>されます。これはペナルティではなく安全策です。何も没収されることはありません。豆の受け取り、販売、閲覧は引き続き可能です。有効な提供数がカバーする範囲に残高が戻れば（別の提供を掲載するか、豆を受け取ることで）、信用枠の停止は自動的に解除されます。
         </div>
 
-        <h2 id="5"><span class="num">5.</span>Offers (your listings)</h2>
+        <h2 id="5"><span class="num">5.</span>提供（出品リスト）</h2>
         <ul>
-            <li>Keep as many offers as you like — including recurring ones — and switch each one <strong style="color:var(--text-primary)">Active or Paused</strong> whenever you want. Only <em>Active</em> offers count toward your credit line.</li>
-            <li><strong style="color:var(--text-primary)">Give before you take:</strong> in a community with Beans, you must have listed at least one offer before you can post a Need or buy from others. Where there are no Beans, as on the global community, your first post can be a Need.</li>
-            <li>Positive balance? Pause everything if you like — offers are only required to go negative.</li>
+            <li>定期的な提供を含め、いくつでも好きなだけ提供を掲載でき、いつでも<strong style="color:var(--text-primary)">公開中または一時停止</strong>を切り替えることができます。信用枠にカウントされるのは<em>公開中</em>の提供のみです。</li>
+            <li><strong style="color:var(--text-primary)">受け取る前に与える：</strong> 豆を使用するコミュニティでは、他の人から購入したり「求め」を投稿したりする前に、少なくとも1つの提供を掲載する必要があります。グローバルコミュニティのように豆がない場所では、最初の投稿が「求め」であってもかまいません。</li>
+            <li>残高がプラスですか？希望であればすべて一時停止しても問題ありません — 提供が必要なのは残高をマイナスにする場合のみです。</li>
         </ul>
 
-        <h2 id="6"><span class="num">6.</span>Fees &amp; the community pool</h2>
-        <p>Two small charges, and both flow into the <strong style="color:var(--text-primary)">Community Commons</strong> — a shared pool your community votes to spend on local projects. Nothing is lost to a corporation.</p>
-        <p><strong style="color:var(--text-primary)">a) Marketplace fee — 1.5% on completed trades.</strong> When a marketplace sale settles, the seller nets 1.5% less than the price and the difference goes to the commons. <strong style="color:var(--text-primary)">Gifts (direct sends between members) are free</strong> — as are refunds and system moves.</p>
-        <p><strong style="color:var(--text-primary)">b) Circulation fee on positive balances — monthly, and only on the part above 200.</strong> Like progressive brackets, each band is charged only on the slice of your balance inside it:</p>
+        <h2 id="6"><span class="num">6.</span>手数料とコミュニティプール</h2>
+        <p>ごくわずかな2種類の手数料があり、どちらも<strong style="color:var(--text-primary)">コミュニティコモンズ</strong>（コミュニティが投票によって地域プロジェクトのために使う共有プール）に入ります。企業に奪われるものは一切ありません。</p>
+        <p><strong style="color:var(--text-primary)">a) マーケットプレイス手数料 — 完了した取引に対して1.5%。</strong> マーケットプレイスでの販売が決済されると、売り手は価格から1.5%差し引かれた額を受け取り、その差額がコモンズに送られます。<strong style="color:var(--text-primary)">ギフト（メンバー間の直接送付）は無料</strong>です — 返金やシステムによる移動も同様に無料です。</p>
+        <p><strong style="color:var(--text-primary)">b) プラス残高に対する流通手数料 — 月1回、200豆を超える部分にのみ課金。</strong> 累進課税のように、各区分の料率はその枠内にある残高の端数にのみ適用されます：</p>
         <table>
-            <thead><tr><th>Balance band</th><th>Monthly circulation rate</th></tr></thead>
+            <thead><tr><th>残高区分</th><th>月間流通手数料率</th></tr></thead>
             <tbody>
-                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Free</span> green zone</td></tr>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">無料</span> グリーンゾーン</td></tr>
                 <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
                 <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
                 <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
                 <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
             </tbody>
         </table>
-        <p>This gently encourages beans to <strong style="color:var(--text-primary)">circulate rather than pile up</strong>. <strong style="color:var(--text-primary)">Negative balances never incur a circulation fee</strong> — you're already carrying credit for the community. Note the +200 free zone mirrors the first −200 credit band, so the system is symmetric around zero.</p>
+        <p>これにより、豆を<strong style="color:var(--text-primary)">ため込むのではなく循環させる</strong>よう穏やかに促します。<strong style="color:var(--text-primary)">マイナス残高に流通手数料がかかることはありません</strong> — コミュニティのためにすでに信用を背負って活動しているからです。+200の無料ゾーンは最初の−200の信用枠と対になっており、システムはゼロを中心として対称に設計されています。</p>
 
-        <h2 id="7"><span class="num">7.</span>Gifts (sending beans)</h2>
+        <h2 id="7"><span class="num">7.</span>ギフト（豆の送付）</h2>
         <ul>
-            <li>You can <strong style="color:var(--text-primary)">only gift beans you actually hold</strong> — a gift never goes negative and never uses your credit line.</li>
-            <li>You can send once you've completed at least one real trade (this stops brand-new accounts instantly forwarding beans and vanishing).</li>
-            <li>Gifts build no trust for the receiver, and are <strong style="color:var(--text-primary)">free</strong> — no fee (you can only gift beans you already hold).</li>
+            <li><strong style="color:var(--text-primary)">実際に保有している豆のみギフトとして送ることができます</strong> — ギフトによって残高がマイナスになることはなく、信用枠を使うこともできません。</li>
+            <li>実際の取引を少なくとも1回完了すると送付可能になります（作成されたばかりのアカウントが即座に豆を転送して雲隠れするのを防ぐためです）。</li>
+            <li>ギフトは受け取り側の信頼度向上にはならず、手数料は<strong style="color:var(--text-primary)">無料</strong>です（保有している豆のみ送付可能）。</li>
         </ul>
 
-        <h2 id="8"><span class="num">8.</span>How trades settle</h2>
-        <p>Marketplace trades are held safely in <strong style="color:var(--text-primary)">escrow</strong> (held in trust by the system) until the deal is done, then released to the seller (minus the 1.5% fee). If a deal is cancelled, the buyer is refunded in full.</p>
+        <h2 id="8"><span class="num">8.</span>取引の決済方法</h2>
+        <p>マーケットプレイスの取引は、取引が完了するまで<strong style="color:var(--text-primary)">エスクロー</strong>（システムによる安全な預かり保管）で保持され、その後に売り手に送金されます（1.5%の手数料が差し引かれます）。取引がキャンセルされた場合、買い手に全額返金されます。</p>
 
-        <h2 id="9"><span class="num">9.</span>Vouching (an optional head start)</h2>
-        <p>A trusted, community-appointed <strong style="color:var(--text-primary)">voucher</strong> can give a newcomer a <strong style="color:var(--text-primary)">starter floor of 25, 50, or 100 beans</strong> so they can begin using credit before they've earned it. These are typically awarded — entirely at the voucher's discretion — to people whose posts and contributions the voucher finds genuinely engaging and inspiring. It's optional either way: no one needs a vouch to take part, since you also open your credit line simply by trading (§3).</p>
+        <h2 id="9"><span class="num">9.</span>推薦（オプションのスタートダッシュ）</h2>
+        <p>コミュニティから任命された信頼できる<strong style="color:var(--text-primary)">推薦者</strong>は、新規メンバーが取引実績を積む前に信用枠を使い始められるよう、<strong style="color:var(--text-primary)">25豆、50豆、または100豆のスターター下限枠</strong>を付与できます。これは通常、推薦者の裁量により、投稿や貢献が魅力的で心動かされると感じられたメンバーに贈られます。推薦は任意です。取引を行うだけで信用枠を開設できるため（§3）、参加にあたって推薦が必須となる人はいません。</p>
 
-        <h2 id="10"><span class="num">10.</span>Federated Inter-Community Clearing</h2>
-        <p>Communities do not need to exist in isolation. Through <strong style="color:var(--text-primary)">Federated Trade Connectors</strong> (inspired by Keynes’ clearing union), independent community nodes can clear trades with a neighbouring node peer-to-peer, without fiat currency or banking reserves. Beans never leave their home community — each pair of nodes keeps a bridge ledger of what they owe one another in work, and each side sets its own cap on how far that can run. Clearing is between pairs of communities, each operator turns it on deliberately, and it is still early: it is built, with its screens in the web app, and has been tried only between two of our own test communities, never between live ones.</p>
+        <h2 id="10"><span class="num">10.</span>コミュニティ間の連邦清算</h2>
+        <p>コミュニティが孤立して存在する必要はありません。<strong style="color:var(--text-primary)">連邦取引コネクター</strong>（ケインズの清算同盟構想に着想を得たもの）を通じて、独立したコミュニティノード同士が、法定通貨や銀行の準備預金を使わずにP2Pで近隣ノードと取引を清算できます。豆が所属コミュニティの外に出ることはありません — ノードのペア同士が労働の貸し借りを記録するブリッジ台帳を保持し、双方がその上限額を設定します。清算は2つのコミュニティ間で行われ、各運営者が明示的にオンにする必要があります。機能はまだ初期段階であり、Webアプリに画面が構築され、テストコミュニティ間で試行されたのみで、本番環境同士での実績はありません。</p>
 
-        <h2 id="11"><span class="num">11.</span>Cryptographic Identity &amp; Key Custody</h2>
-        <p>Your account is protected by an Ed25519 cryptographic keypair generated on your device. BeanPool offers flexible custody to fit your needs:</p>
+        <h2 id="11"><span class="num">11.</span>暗号化アイデンティティと鍵の保管</h2>
+        <p>アカウントはお使いの端末上で生成されるEd25519暗号鍵ペアによって保護されています。BeanPoolはニーズに合わせた柔軟な保管方法を提供します：</p>
         <ul>
-            <li><strong style="color:var(--text-primary)">Full Self-Sovereignty:</strong> On the phone apps, your private key is held in the device's secure storage (iOS Keychain / Android Keystore); in the web app it is held in the browser's own storage. It leaves the device only as a locked copy for sign-in recovery, or when you copy your account to another device of yours. Keep your 12-word seed backup offline.</li>
-            <li><strong style="color:var(--text-primary)">Recovery:</strong> Your 12-word phrase restores your account on any device. You can also link a Google, Apple or Facebook sign-in. A locked copy of your key is then kept for it: phone apps that use BeanPool's key vault keep it there, on a small server in Iceland; older versions of the phone app keep it on your community's node; the web app on the global community keeps it on that community's server, which we run. Whoever keeps the copy can open it. A restore from the vault waits 24 hours unless one of your own devices approves it. If you lose your device, your 12 words and your sign-in, an admin of your community can move your account to a new phone with a one-time code, in front of you; your history stays. So write the words down.</li>
+            <li><strong style="color:var(--text-primary)">完全な自己主権：</strong> スマートフォンアプリでは、秘密鍵は端末の安全なストレージ（iOS Keychain / Android Keystore）に保管されます。Webアプリではブラウザ自体のストレージに保管されます。鍵が端末から外に出るのは、サインイン復元用の暗号化されたコピーとして、または自分の別の端末にアカウントをコピーするときのみです。12個の単語のシードバックアップはオフラインで大切に保管してください。</li>
+            <li><strong style="color:var(--text-primary)">復元：</strong> 12個の単語（英語）を使えば、任意の端末でアカウントを復元できます。Google、Apple、Facebookのサインインを連携させることも可能です。その場合、そのサインイン用に暗号化された鍵のコピーが保持されます。BeanPoolのキー保管庫（ヴォールト）を使用するスマートフォンアプリは、アイスランドの小さなサーバーに保管します。古いバージョンのスマートフォンアプリはコミュニティのノードに保管し、グローバルコミュニティのWebアプリは私たちが運営するそのサーバーに保管します。コピーを保管している管理者はそれを開くことができます。保管庫からの復元には、自身の別の端末で承認しない限り24時間の待機時間が発生します。端末、12個の単語、サインインのすべてを紛失した場合でも、コミュニティの管理者が対面でワンタイムコードを使って新しいスマートフォンにアカウントを移行できます（履歴は保持されます）。そのため、単語は必ず紙に書き留めてください。</li>
         </ul>
 
-        <h2 id="12"><span class="num">12.</span>Limits &amp; safety</h2>
+        <h2 id="12"><span class="num">12.</span>制限と安全性</h2>
         <ul>
-            <li><strong style="color:var(--text-primary)">Floor cap −2000</strong> on most communities (see §1). There is no daily limit on how many beans you spend — your floor is the bound. There is a limit on how often: 100 payments, 30 people you have never paid before and 100 market requests in any 24 hours.</li>
-            <li>Trust with any single partner is capped, so no one can inflate their standing by trading back and forth with one accomplice.</li>
-            <li><strong style="color:var(--text-primary)">Holiday mode</strong> hides your offers and pauses incoming requests while you're away.</li>
-            <li>Members can report and flag bad actors; community admins can remove them.</li>
+            <li>多くのコミュニティで<strong style="color:var(--text-primary)">下限の上限は−2000</strong>です（§1参照）。1日に使える豆の額に上限はありません — 下限額がその境界となります。頻度には制限があります：任意の24時間内で、支払い100回、これまでに支払ったことのない相手30人、マーケットリクエスト100件までです。</li>
+            <li>特定の1人の相手との信頼獲得には上限が設けられており、結託した相手と取引を繰り返して不正に信望を吊り上げることはできません。</li>
+            <li><strong style="color:var(--text-primary)">お休みモード</strong>にすると、留守中に提供を非表示にし、届くリクエストを一時停止できます。</li>
+            <li>メンバーは悪質な利用者を報告・フラグ付けでき、コミュニティの管理者はそれらを排除できます。</li>
         </ul>
 
-        <h2 id="13"><span class="num">13.</span>Community Enterprises &amp; Governance</h2>
-        <p>Community enterprises (such as a community tool library, an egg flock, or a firewood depot) and bounded projects are shared initiatives under collective stewardship. They operate under clear, code-enforced rules (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">the Commons governance model</a>):</p>
+        <h2 id="13"><span class="num">13.</span>コミュニティ事業体とガバナンス</h2>
+        <p>コミュニティ事業体（道具の共有ライブラリ、共同養鶏、薪ステーションなど）や期限付きプロジェクトは、共同管理のもとで行われる共有の取り組みです。これらはプログラムによって厳格に適用される明確なルール（<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">コモンズのガバナンスモデル</a>）に基づいて運営されます：</p>
         <ul>
-            <li><strong style="color:var(--text-primary)">One object, two lifecycles (§2.1):</strong> An ongoing enterprise persists and trades; a bounded enterprise (a project) has a goal and end date, winding up its account and returning what is left to the Commons when finished.</li>
-            <li><strong style="color:var(--text-primary)">Earned floors &amp; keeper pledges (Rules 1–3):</strong> A new enterprise starts with no unearned overdraft: its credit floor is backed by explicit pledges from its keepers' earned trade standing (straight sum, no synthetic multiplier). Pledging backing never touches or reduces a keeper's personal household credit floor. Older enterprises keep the starting floor they had before pledges.</li>
-            <li><strong style="color:var(--text-primary)">Limited liability (Rule 4):</strong> The enterprise fails, not the keeper's household. If an enterprise defaults, its spending freezes, but its keepers' personal floors are protected.</li>
-            <li><strong style="color:var(--text-primary)">Credit buys inputs, profit pays people (Rule 5):</strong> An enterprise may draw on credit down to its usable floor to buy supplies or services from outside neighbours. It may <em>never</em> draw on credit to pay its own keepers — keepers are paid only while <code>balance − amount ≥ 0</code>.</li>
-            <li><strong style="color:var(--text-primary)">Keeper pay capped by earned surplus (Rule 6):</strong> Payouts to keepers are strictly capped by genuine trading surplus (sales income minus keeper payments). Grants, pledges, and gifts can never be converted into keeper wages.</li>
-            <li><strong style="color:var(--text-primary)">Automatic working-capital sweeps (Rule 7):</strong> An enterprise can set a working-capital ceiling. Earned surplus above it sweeps automatically back to the Community Commons pool to prevent hoarding. Grants and gifts are never swept.</li>
-            <li><strong style="color:var(--text-primary)">Two-person approval rule:</strong> Keepers cannot approve their own payments or personal bids on enterprise needs — another keeper must approve.</li>
-            <li><strong style="color:var(--text-primary)">Polls vs Decisions (§3):</strong> Informal questions are <em>Polls</em> in the market feed: one vote each, counted, binding nothing. Binding governance (pool grants, debt write-offs, role changes, and suspending, freezing or removing a member) runs via <em>Decisions</em> in the Commons tab, with a 7-day voting window. A Decision passes with 60% of the votes (66% to remove a member; more than half to lift a suspension or a freeze, or to bring a member back) once enough members have voted: 30% of those active in the last 30 days, at least 3 (25% for removing a member). Then it carries itself out. Pool grants use quadratic voting on earned trade standing — liquid beans cannot buy votes.</li>
-            <li><strong style="color:var(--text-primary)">Settled vocabulary (§9):</strong> Four levels, four distinct words: node → <em>owner / admin</em> · enterprise → <em>lead keeper / keeper</em> · group → <em>convenor</em> · trust tier → <em>Steward</em>.</li>
+            <li><strong style="color:var(--text-primary)">1つの仕組み、2つのライフサイクル（§2.1）：</strong> 継続的な事業体は永続して取引を行います。期限付き事業体（プロジェクト）には目標と終了期日があり、完了時にアカウントを清算して残った資金をコモンズに返還します。</li>
+            <li><strong style="color:var(--text-primary)">獲得信用による下限と運営者のプレッジ（ルール1〜3）：</strong> 新しい事業体は実績のない当座貸越なしでスタートします。その信用下限は、運営者が獲得した取引信望からの明示的なプレッジ（裏付け）によって支えられます（単純合算、人為的な倍率はなし）。裏付けをプレッジしても、運営者個人の世帯信用枠が減ったり影響を受けたりすることはありません。以前から存在する事業体は、プレッジ導入前の初期下限枠を維持します。</li>
+            <li><strong style="color:var(--text-primary)">有限責任（ルール4）：</strong> 破綻するのは事業体であり、運営者の世帯ではありません。事業体が債務不履行に陥った場合、その事業体の支出は凍結されますが、運営者個人の信用枠は保護されます。</li>
+            <li><strong style="color:var(--text-primary)">信用で仕入れ、利益で人を支払う（ルール5）：</strong> 事業体は地域の近隣から物資やサービスを購入するために、利用可能な下限まで信用枠を使うことができます。しかし、自身の運営者に支払うために信用枠を使うことは<em>決して</em>できません — 運営者への支払いは<code>残高 − 支払額 ≥ 0</code>の範囲内でのみ行われます。</li>
+            <li><strong style="color:var(--text-primary)">獲得剰余金を上限とする運営者報酬（ルール6）：</strong> 運営者への支払いは、純粋な取引剰余金（売上収入から過去の運営者支払いを引いた額）によって厳格に制限されます。助成金、プレッジ、ギフトを運営者の報酬に変えることは絶対にできません。</li>
+            <li><strong style="color:var(--text-primary)">運転資金の自動スイープ（ルール7）：</strong> 事業体は運転資金の上限を設定できます。富の囲い込みを防ぐため、上限を超えた獲得剰余金はコミュニティコモンズプールに自動的に回収（スイープ）されます。助成金やギフトが回収されることはありません。</li>
+            <li><strong style="color:var(--text-primary)">2人承認ルール：</strong> 運営者は自分自身への支払いや、事業体の求めに対する個人としての入札を自ら承認することはできません — 必ず別の運営者が承認する必要があります。</li>
+            <li><strong style="color:var(--text-primary)">投票と決定（§3）：</strong> 形式張らない質問はマーケットフィードの<em>投票</em>で行います。1人1票で集計され、拘束力はありません。拘束力のあるガバナンス（プール助成金、債務免除、役職変更、メンバーの利用停止・凍結・除名）は、コモンズタブの<em>決定</em>を通じて7日間の投票期間で行われます。十分な数のメンバー（直近30日間に活動のあったメンバーの30%以上、かつ最低3人。除名の場合は25%）が投票し、60%の賛成（除名の場合は66%。利用停止や凍結の解除、復帰の場合は過半数）で可決されます。可決されると自動的に実行されます。プール助成金は獲得した取引信望に基づく二次投票（クアドラティック・ヴォーティング）を採用しており、保有する豆で票を買うことはできません。</li>
+            <li><strong style="color:var(--text-primary)">用語の統一（§9）：</strong> 4つのレベルと4つの明確な言葉：ノード → <em>オーナー / 管理者</em> · 事業体 → <em>代表運営者 / 運営者</em> · グループ → <em>まとめ役（招集者）</em> · 信頼階層 → <em>世話人</em>。</li>
         </ul>
-        <div class="callout amber">In short: <strong>earn your credit line by trading, keep an offer or two live to use it, and let beans flow.</strong> Zero is the goal — give about as much as you take.</div>
+        <div class="callout amber">要約：<strong>取引を通じて信用枠を獲得し、1〜2件の提供を公開してそれを活用し、豆を循環させましょう。</strong> 目指すのはゼロ（均衡）です — 受け取った分だけ誰かを助けましょう。</div>
     </section>
 
     <!-- Footer Module -->
@@ -194,24 +194,24 @@
         <div class="container">
             <div class="footer-inner">
                 <div class="footer-brand">
-                    <span class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
-                    <p>Mutual credit for communities, run by communities.</p>
+                    <span class="logo"><img src="bean.png" alt="BeanPoolアイコン" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>コミュニティが運営する、コミュニティのための相互信用（クレジット）。</p>
                 </div>
                 <div class="footer-links">
-                    <a href="help.html">Help Centre</a>
+                    <a href="help.html">ヘルプセンター</a>
                     <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
                     <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
                     <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
-                    <a href="index.html#how-it-works">How It Works</a>
-                    <a href="getting-started.html">Getting Started</a>
-                    <a href="rules.html">The Rules</a>
-                    <a href="safety.html">Child Safety</a>
-                    <a href="privacy.html">Privacy Policy</a>
-                    <a href="terms.html">Terms of Service</a>
+                    <a href="index.html#how-it-works">仕組み</a>
+                    <a href="getting-started.html">スタートガイド</a>
+                    <a href="rules.html">ルール</a>
+                    <a href="safety.html">児童の安全</a>
+                    <a href="privacy.html">プライバシーポリシー</a>
+                    <a href="terms.html">利用規約</a>
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>Open source under MIT license. Made with <img src="bean.png" alt="love" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> by communities, for communities. Time zone boundaries © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).</p>
+                <p>MITライセンスに基づくオープンソース。コミュニティによって、コミュニティのために<img src="bean.png" alt="愛" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />を込めて制作。タイムゾーン境界データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL)。</p>
             </div>
         </div>
     </footer>

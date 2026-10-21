@@ -3378,5 +3378,14 @@
   },
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "other": "Thêm {name} làm người quản lý, với {n} đậu bảo đảm đích danh"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Một người quản lý đã tắt bản sao trên máy chủ của công cụ này, nên dữ liệu chỉ được lưu trong trình duyệt này. Bạn có thể bật lại trong Cài đặt.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Không thể kết nối với máy chủ của cộng đồng bạn, nên không có gì thay đổi. Hãy thử lại khi bạn trực tuyến.",
+  "Keep a private copy on your community's server": "Lưu bản sao riêng tư trên máy chủ của cộng đồng bạn",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Được lưu trong trình duyệt này, kèm một bản sao riêng tư trên máy chủ của cộng đồng bạn mà chỉ bạn mới có thể đọc qua ứng dụng. Giống như mọi thứ trên máy chủ đó, người vận hành máy chủ cũng có thể đọc được.",
+  "One device at a time: the copy you changed last is the one kept.": "Mỗi lần một thiết bị: bản sao bạn chỉnh sửa lần cuối là bản được giữ lại.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Xóa dữ liệu của cộng đồng này đối với {tool} khỏi trình duyệt này và bản sao trên máy chủ của cộng đồng bạn. Một thiết bị khác đăng nhập bằng tài khoản của bạn sẽ giữ những gì đang có và ngừng gửi dữ liệu. Cùng công cụ đó ở cộng đồng khác vẫn giữ dữ liệu riêng. Không thể hoàn tác.",
+  "You can edit a message for 15 minutes after sending it.": "Bạn có thể chỉnh sửa tin nhắn trong 15 phút sau khi gửi.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Máy chủ của cộng đồng bạn chưa thể lưu bản sao, nên lúc này dữ liệu chỉ ở trong trình duyệt này.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Máy chủ của cộng đồng bạn không còn lưu bản sao của công cụ này, nên dữ liệu chỉ được lưu trong trình duyệt này. Bạn có thể bật lại bản sao trong Cài đặt."
 }

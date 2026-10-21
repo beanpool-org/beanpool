@@ -14,6 +14,7 @@
  *  2. A standby S takes its first copy: the binding (figure 500) and the known row of 500. S applies none of the
  *     community's settings while it is a standby (config/community-settings.ts), so no known part counts there, for Kai's
  *     own line or Kai Co's: both 0, where the figure alone made Kai Co -500 on origin/main.
+ *     Booting on the copy, S counts Kai Co among the enterprises whose floor reads its pledges alone (backingFigureDrift).
  *  3. S installs the settings it kept, as a take-over does: Kai Co is -500 there, as on M, never -1,000.
  *  4. On M, Kai releases 200: -300. S's next copy follows: -300, never -800, though the figure still says 500.
  *
@@ -190,6 +191,10 @@ async function main(): Promise<void> {
         assert(j(s2.pledges) === j(['known 500']) && s2.figure === 500, `S holds the binding, figure 500, and the known row of 500 (${j(s2)})`);
         assert(s2.dial === false && s2.kaiOwn === 0 && s2.spend === 0 && s2.engine === 0,
             `S applies none of the community's settings yet: no known part counts there, Kai's own line 0 and Kai Co's 0 alike, never the figure's -500 (${j(s2)})`);
+        // The copy swapped in at a restart, so S booted on it: its boot counts Kai Co (figure 500, no earned pledge), owing nothing.
+        const bootLine = /spend floors read their keepers' pledges only: (\d+) enterprise\(s\) had a joining figure above what is pledged now, (\d+) of them/.exec(standby.output());
+        assert(standby.swaps() >= 1 && bootLine?.[1] === '1' && bootLine?.[2] === '0',
+            `S's boot on the copy counts one enterprise whose floor reads its pledges alone, none spend-frozen (${bootLine?.[0] ?? 'no line'}; ${standby.swaps()} swap(s))`);
 
         // ── 3. S installs the community's settings, as a take-over does ──
         console.log('\n— 3. the standby installs the settings it kept —');

@@ -678,4 +678,8 @@ export const SERIAL = {
     // Steps 17-25 of the suite above, split from it to keep each well inside the runner's 300 s (255 s on CI run
     // 36747148280): the same pair, built the same way.
     'test-standby-swap-at-boot': 'many node processes and stagers; was a scaled 3 s copy idle time',
+    // Asserts p95 read times at 30,570 members (q/keys 5 ms, near 20 ms; x3 when load passes half the cores). In the CI
+    // pool (4 cores, load 12-15) its best of 3 rounds missed the x3 line three times on 21 Oct 2026 (near 61.8, 65.3,
+    // 68.3 ms vs 60; main run 39529892401 near 73-92 ms per round) on PRs that never touch the members query.
+    'test-members-on-demand': 'absolute p95 budgets; missed them in the CI pool',
 };

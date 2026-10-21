@@ -40,32 +40,44 @@ async function main() {
 
     const configs = [
         { lang: 'en', path: 'index.html' },
-        { lang: 'ar', path: 'ar/index.html' },
-        { lang: 'ja', path: 'ja/index.html' }
+        { lang: 'pt', path: 'pt/index.html' },
+        { lang: 'ta', path: 'ta/index.html' },
+        { lang: 'ar', path: 'ar/index.html' }
     ];
 
     try {
         for (const config of configs) {
             for (const theme of ['light', 'dark']) {
-                const context = await browser.newContext({
+                // 360px mobile screenshot
+                const mobileContext = await browser.newContext({
                     viewport: { width: 360, height: 720 },
                     colorScheme: theme
                 });
-                const page = await context.newPage();
-                await page.goto(`http://127.0.0.1:${port}/${config.path}`, { waitUntil: 'load' });
+                const mobilePage = await mobileContext.newPage();
+                await mobilePage.goto(`http://127.0.0.1:${port}/${config.path}`, { waitUntil: 'load' });
 
                 // Open the phone menu
-                await page.locator('.nav-menu > summary').click();
-                await page.waitForTimeout(100);
+                await mobilePage.locator('.nav-menu > summary').click();
+                await mobilePage.waitForTimeout(100);
 
-                // Open the phone language menu
-                await page.locator('.phone-lang-menu > summary').click();
-                await page.waitForTimeout(150);
+                const mobileOutPath = path.join(SCREENSHOT_DIR, `360px-${config.lang}-${theme}.png`);
+                await mobilePage.screenshot({ path: mobileOutPath, fullPage: false });
+                console.log(`Saved screenshot: ${mobileOutPath}`);
+                await mobileContext.close();
 
-                const outPath = path.join(SCREENSHOT_DIR, `360px-${config.lang}-${theme}.png`);
-                await page.screenshot({ path: outPath, fullPage: false });
-                console.log(`Saved screenshot: ${outPath}`);
-                await context.close();
+                // 1280px desktop screenshot
+                const desktopContext = await browser.newContext({
+                    viewport: { width: 1280, height: 800 },
+                    colorScheme: theme
+                });
+                const desktopPage = await desktopContext.newPage();
+                await desktopPage.goto(`http://127.0.0.1:${port}/${config.path}`, { waitUntil: 'load' });
+                await desktopPage.waitForTimeout(100);
+
+                const desktopOutPath = path.join(SCREENSHOT_DIR, `1280px-${config.lang}-${theme}.png`);
+                await desktopPage.screenshot({ path: desktopOutPath, fullPage: false });
+                console.log(`Saved screenshot: ${desktopOutPath}`);
+                await desktopContext.close();
             }
         }
     } finally {

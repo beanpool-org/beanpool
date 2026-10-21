@@ -145,6 +145,26 @@ describe('MemberDetailModal', () => {
         expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'admin');
     });
 
+    it('reactively surfaces sole owner notice after granting owner role when ownerCount is 1', async () => {
+        const handleGrantRole = vi.fn().mockResolvedValue(undefined);
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                nodeRole={null}
+                ownerCount={1}
+                onToggleFreeze={vi.fn()}
+                onGrantNodeRole={handleGrantRole}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
+        await userEvent.click(screen.getByText('👑 Grant Owner'));
+        expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner');
+        expect(await screen.findByText("This is the community's only owner. Another owner must be added before this one can step down or be removed.")).toBeInTheDocument();
+    });
+
     it('surfaces last-owner guard when revoking the last owner fails', async () => {
         const handleRevokeRole = vi.fn().mockRejectedValue(new Error('Cannot remove the last owner'));
         render(

@@ -1058,7 +1058,6 @@ export function MembersModule({
                     nodeRole={selectedMember.nodeRole}
                     viewerRole={effectiveViewerRole}
                     ownerCount={ownerCount}
-                    isSoleOwner={selectedMember.nodeRole === 'owner' && ownerCount <= 1}
                     members={members}
                     accounts={nodeData?.accounts}
                     nodeUrl={activeNodeUrl}

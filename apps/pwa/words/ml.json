@@ -3483,5 +3483,15 @@
     "one": "{n} ആഴ്ച",
     "other": "{n} ആഴ്ച"
   },
-  "📦 Ask to borrow": "📦 കടം ചോദിക്കുക"
+  "📦 Ask to borrow": "📦 കടം ചോദിക്കുക",
+  "Asked to join": "ചേരാൻ അഭ്യർത്ഥിച്ചു",
+  "Invited": "ക്ഷണിച്ചു",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "സ്വാഗതം. ആദ്യ ദിവസം മുതൽ നിങ്ങൾക്ക് ബ്രൗസ് ചെയ്യാനും വ്യാപാരം നടത്താനും ക്രെഡിറ്റുകൾ സ്വീകരിക്കാനും മറ്റുള്ളവരെ ക്ഷണിക്കാനും കഴിയും — കൂടാതെ നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ ഇതിനകം തുറന്നതാണ്.",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} വിശ്വാസ്യത മുതൽ",
+    "other": "{n} വിശ്വാസ്യത മുതൽ"
+  },
+  "{name}, already in the group": "{name}, ഇതിനകം ഗ്രൂപ്പിലുണ്ട്",
+  "{name}, already invited": "{name}, ഇതിനകം ക്ഷണിച്ചു",
+  "{name}, asked to join": "{name}, ചേരാൻ അഭ്യർത്ഥിച്ചു"
 }

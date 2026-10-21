@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server status — BeanPool</title>
-    <meta name="description" content="Whether BeanPool's own servers answer: the global community, the test community and the registrar, checked from outside every 5 minutes.">
+    <title>सर्वर स्थिति — BeanPool</title>
+    <meta name="description" content="क्या BeanPool के अपने सर्वर जवाब दे रहे हैं: वैश्विक समुदाय, परीक्षण समुदाय और रजिस्ट्रार, हर 5 मिनट में बाहर से जाँचे जाते हैं।">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.8">
@@ -52,22 +52,22 @@
 <body>
     <nav id="navbar">
         <div class="nav-inner">
-            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool आइकन" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
-                <a href="index.html#how-it-works">How It Works</a>
-                <a href="help.html">Help</a>
-                <a href="getting-started.html" class="nav-cta">Get Started</a>
+                <a href="index.html#how-it-works">यह कैसे काम करता है</a>
+                <a href="help.html">मदद</a>
+                <a href="getting-started.html" class="nav-cta">शुरुआत करें</a>
             </div>
         </div>
     </nav>
 
     <main class="status-page glass-panel">
-        <h1>Server status</h1>
-        <p class="lede">Whether BeanPool's own servers answer, checked from outside every 5 minutes. Local communities run on their own servers and are not on this page: when ours are down, they carry on.</p>
-        <p class="status-note" id="status-note" role="status">Reading the status…</p>
+        <h1>सर्वर स्थिति</h1>
+        <p class="lede">क्या BeanPool के अपने सर्वर जवाब दे रहे हैं, हर 5 मिनट में बाहर से जाँचा जाता है। स्थानीय समुदाय अपने स्वयं के सर्वर पर चलते हैं और इस पृष्ठ पर नहीं हैं: जब हमारे सर्वर बंद होते हैं, तब भी वे काम करते रहते हैं।</p>
+        <p class="status-note" id="status-note" role="status">स्थिति पढ़ी जा रही है…</p>
         <ul class="status-list" id="status-list" hidden></ul>
         <p class="status-foot" id="status-foot" hidden></p>
-        <noscript><p class="status-note">This page needs JavaScript to read the status. The figures themselves: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
+        <noscript><p class="status-note">स्थिति पढ़ने के लिए इस पृष्ठ को जावास्क्रिप्ट (JavaScript) की आवश्यकता है। आंकड़े स्वयं यहाँ हैं: <a href="/api/registrar/status.json">/api/registrar/status.json</a>।</p></noscript>
     </main>
 
     <script>
@@ -77,16 +77,16 @@
         var URL_ = '/api/registrar/status.json';
         var LATE_S = 15 * 60;   // three ticks without a new status: the registrar's checks are late
         var SERVERS = {
-            global: { label: 'The global community', host: 'global.beanpool.org' },
-            test: { label: 'The test community', host: 'test.beanpool.org' },
-            vault: { label: 'The key vault', host: 'vault.beanpool.org' },
-            registrar: { label: 'Community addresses', host: 'beanpool.org: gives communities their name.beanpool.org addresses. When it is down, those addresses keep working; new ones and beanpool.org/i/ links wait.' },
+            global: { label: 'वैश्विक समुदाय', host: 'global.beanpool.org' },
+            test: { label: 'परीक्षण समुदाय', host: 'test.beanpool.org' },
+            vault: { label: 'चाबी वॉल्ट', host: 'vault.beanpool.org' },
+            registrar: { label: 'समुदाय के पते', host: 'beanpool.org: समुदायों को उनके name.beanpool.org पते देता है। जब यह बंद होता है, तो वे पते काम करते रहते हैं; नए पते और beanpool.org/i/ लिंक प्रतीक्षा करते हैं।' },
         };
         var WHY = {
-            'timed-out': 'it did not answer in time',
-            'unreachable': 'it could not be reached',
-            'not-ours': 'something else answered at its address',
-            'checks-missed': 'the checks did not run',
+            'timed-out': 'समय पर उत्तर नहीं मिला',
+            'unreachable': 'इस तक पहुँचा नहीं जा सका',
+            'not-ours': 'इसके पते पर किसी अन्य चीज़ ने उत्तर दिया',
+            'checks-missed': 'जाँच नहीं चली',
         };
         var list = document.getElementById('status-list');
         var note = document.getElementById('status-note');
@@ -106,16 +106,16 @@
         function day(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d) ? dayFmt.format(new Date(d + 'T00:00:00Z')) : null; }
         function lasted(s) {
             var m = Math.max(1, Math.round(s / 60));
-            if (m < 60) return m + (m === 1 ? ' minute' : ' minutes');
+            if (m < 60) return m + ' मिनट';
             var h = Math.floor(m / 60), r = m % 60;
-            if (h >= 48) return Math.round(h / 24) + ' days';
-            return h + (h === 1 ? ' hour' : ' hours') + (r ? ' ' + r + (r === 1 ? ' minute' : ' minutes') : '');
+            if (h >= 48) return Math.round(h / 24) + ' दिन';
+            return h + ' घंटे' + (r ? ' ' + r + ' मिनट' : '');
         }
         function why(code) {
-            if (typeof code !== 'string') return 'it did not answer';
+            if (typeof code !== 'string') return 'उत्तर नहीं मिला';
             var http = code.match(/^http-(\d{3})$/);
-            if (http) return 'it answered with an error (HTTP ' + http[1] + ')';
-            return WHY[code] || 'it did not answer';
+            if (http) return 'त्रुटि के साथ उत्तर मिला (HTTP ' + http[1] + ')';
+            return WHY[code] || 'उत्तर नहीं मिला';
         }
 
         function row(s, late) {
@@ -123,11 +123,11 @@
             var inc = s.incident && num(s.incident.began_at) ? s.incident : null;
             var open = inc && inc.ended_at === null;
             var state, words;
-            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Its checks are late'; }
-            else if (open) { state = 'down'; words = 'Down'; }
-            else if (s.up === true) { state = 'up'; words = 'Answering'; }
-            else if (s.up === false) { state = 'missed'; words = 'Missed its last check'; }
-            else { state = 'unknown'; words = 'Not checked yet'; }
+            if (s.name === 'registrar' && late) { state = 'missed'; words = 'इसकी जाँच में देरी हुई है'; }
+            else if (open) { state = 'down'; words = 'बंद'; }
+            else if (s.up === true) { state = 'up'; words = 'जवाब दे रहा है'; }
+            else if (s.up === false) { state = 'missed'; words = 'अपनी पिछली जाँच से चूक गया'; }
+            else { state = 'unknown'; words = 'अभी तक जाँचा नहीं गया'; }
 
             var li = el('li', 'status-row');
             li.setAttribute('data-state', state);
@@ -144,19 +144,19 @@
             var share = el('p', 'status-share');
             var pct = num(s.percent);
             var since = day(s.since);
-            if (pct === null) share.textContent = 'No checks counted yet.';
+            if (pct === null) share.textContent = 'अभी तक किसी जाँच की गणना नहीं हुई।';
             else {
                 share.appendChild(el('strong', null, pct + '%'));
-                var of = s.name === 'registrar' ? ' of its 5-minute checks ran' : ' of checks answered';
-                share.appendChild(document.createTextNode(of + (since ? ' since ' + since : ' over the last 90 days') + '.'));
+                var of = s.name === 'registrar' ? ' 5-मिनट की जाँचें चलीं' : ' जाँचों ने उत्तर दिया';
+                share.appendChild(document.createTextNode(of + (since ? ' ' + since + ' से' : ' पिछले 90 दिनों में') + '।'));
             }
             li.appendChild(share);
 
             var last = el('p', 'status-incident');
-            if (!inc) last.textContent = since ? 'No incident since ' + since + '.' : 'No incident recorded.';
-            else if (open) last.textContent = 'Down since ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
-            else if (num(inc.ended_at)) last.textContent = 'Last incident: ' + when(inc.began_at) + ' for ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
-            else last.textContent = 'Last incident: ' + when(inc.began_at) + '.';
+            if (!inc) last.textContent = since ? since + ' से कोई घटना नहीं।' : 'कोई घटना दर्ज नहीं।';
+            else if (open) last.textContent = when(inc.began_at) + ' से बंद: ' + why(inc.why) + '।';
+            else if (num(inc.ended_at)) last.textContent = 'पिछली घटना: ' + when(inc.began_at) + ' (' + lasted(inc.ended_at - inc.began_at) + ' के लिए): ' + why(inc.why) + '।';
+            else last.textContent = 'पिछली घटना: ' + when(inc.began_at) + '।';
             li.appendChild(last);
             return li;
         }
@@ -166,14 +166,14 @@
             var servers = doc && doc.v === 1 && Array.isArray(doc.servers) ? doc.servers.filter(function (s) {
                 return s && typeof s.name === 'string' && /^[a-z0-9-]{1,32}$/.test(s.name);
             }).slice(0, 6) : [];
-            if (!at || !servers.length) { say('The status could not be read: it is not in a form this page knows.'); return; }
+            if (!at || !servers.length) { say('स्थिति पढ़ी नहीं जा सकी: यह इस पृष्ठ के प्रारूप में नहीं है।'); return; }
             var late = Date.now() / 1000 - at > LATE_S;
             list.textContent = '';
             servers.forEach(function (s) { list.appendChild(row(s, late)); });
             list.hidden = false;
-            if (late) { note.textContent = 'These are from ' + zoneFmt.format(new Date(at * 1000)) + ': the checks have not run since. What a server says now may differ.'; note.setAttribute('data-tone', 'late'); }
-            else { note.textContent = 'Checked ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
-            foot.textContent = 'A check is one look from outside, 5 minutes apart. Two failed looks in a row are an incident; the share counts every look. Times are your own time zone’s.';
+            if (late) { note.textContent = 'ये ' + zoneFmt.format(new Date(at * 1000)) + ' के आँकड़े हैं: तब से जाँच नहीं चली है। कोई सर्वर अभी क्या कहता है वह भिन्न हो सकता है।'; note.setAttribute('data-tone', 'late'); }
+            else { note.textContent = zoneFmt.format(new Date(at * 1000)) + ' पर जाँचा गया।'; note.removeAttribute('data-tone'); }
+            foot.textContent = 'एक जाँच 5 मिनट के अंतराल पर बाहर से एक नज़र है। लगातार दो विफल नज़रें एक घटना हैं; प्रतिशत हर नज़र को गिनता है। समय आपके अपने समय क्षेत्र के अनुसार है।';
             foot.hidden = false;
         }
         function say(text) {
@@ -187,11 +187,11 @@
         function read() {
             lastRead = Date.now();
             fetch(URL_, { headers: { accept: 'application/json' } }).then(function (res) {
-                if (res.status === 404) { say('No status is published here yet.'); return null; }
+                if (res.status === 404) { say('यहाँ अभी तक कोई स्थिति प्रकाशित नहीं हुई है।'); return null; }
                 if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json().then(draw, function () { say('The status could not be read: it is not in a form this page knows.'); });
+                return res.json().then(draw, function () { say('स्थिति पढ़ी नहीं जा सकी: यह इस पृष्ठ के प्रारूप में नहीं है।'); });
             }).catch(function () {
-                say('The status could not be read just now: the registrar that keeps it may be down. Local communities are not affected. Try again in a few minutes.');
+                say('अभी स्थिति पढ़ी नहीं जा सकी: इसे रखने वाला रजिस्ट्रार बंद हो सकता है। स्थानीय समुदाय प्रभावित नहीं हैं। कुछ मिनटों में पुनः प्रयास करें।');
             });
         }
         read();

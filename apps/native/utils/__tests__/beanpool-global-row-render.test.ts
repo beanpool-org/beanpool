@@ -55,19 +55,21 @@ vi.mock('react-native', () => {
         Share: { share: async () => ({}) },
         DeviceEventEmitter: { addListener: listener, emit() {} },
         Linking: { openURL: async () => {} },
+        Alert: { alert: (...a: unknown[]) => alerts.push(a) },
         useWindowDimensions: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }),
     };
 });
+const alerts = vi.hoisted(() => [] as unknown[][]);
 vi.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
     SafeAreaView: ({ children }: { children?: unknown }) => createElement('div', null, children as any),
 }));
-const nav = vi.hoisted(() => ({ pushed: [] as unknown[], navigated: [] as unknown[] }));
+const nav = vi.hoisted(() => ({ pushed: [] as unknown[], navigated: [] as unknown[], replaced: [] as unknown[] }));
 vi.mock('expo-router', async () => {
     const { useEffect } = await import('react');
     const router = {
         push: (to: unknown) => nav.pushed.push(to), navigate: (to: unknown) => nav.navigated.push(to),
-        back() {}, replace() {}, canDismiss: () => false, dismissAll() {},
+        back() {}, replace: (to: unknown) => nav.replaced.push(to), canDismiss: () => false, dismissAll() {},
     };
     return { router, useRouter: () => router, useFocusEffect: (cb: () => void | (() => void)) => useEffect(() => cb(), [cb]), ErrorBoundary: () => null };
 });
@@ -98,6 +100,25 @@ vi.mock('../../app/IdentityContext', () => ({
     useIdentity: () => ({ identity: { publicKey: KEY, privateKey: 'd'.repeat(64), callsign: 'Damo' }, setIdentity() {} }),
 }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: async () => ({ 'X-Test-Signed': '1' }) }));
+// Where the phone keeps its key (identity.ts): a guest visit writes nothing there (recorded, so a write would show).
+const secure = vi.hoisted(() => ({ writes: [] as string[] }));
+vi.mock('expo-secure-store', () => ({
+    getItemAsync: async () => null,
+    setItemAsync: async (k: string) => { secure.writes.push(k); },
+    deleteItemAsync: async (k: string) => { secure.writes.push(`delete ${k}`); },
+}));
+// A guest visit's switch (utils/global-guest-visit.ts → reconnect.ts switchPhoneTo): the anchor written, and whether the
+// guest mark was already there when it moved (the root layout must never see the phone on global unmarked).
+const moved = vi.hoisted(() => ({ to: [] as string[], markedFirst: [] as boolean[] }));
+vi.mock('../reconnect', () => ({
+    switchPhoneTo: async (url: string) => {
+        moved.markedFirst.push((JSON.parse(store.map.get('beanpool_guest_nodes') ?? '[]') as string[]).includes(url));
+        moved.to.push(url);
+        store.map.set('beanpool_anchor_url', url);
+        return null;
+    },
+}));
+vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => ({}) }));
 // The phone's mark that global closed this key (global-join-existing.ts), as the hook and askGlobalStanding read it.
 const closedMark = vi.hoisted(() => ({ on: false }));
 vi.mock('../global-join-existing', () => ({
@@ -179,6 +200,11 @@ beforeEach(() => {
     asked.length = 0;
     nav.pushed.length = 0;
     nav.navigated.length = 0;
+    nav.replaced.length = 0;
+    alerts.length = 0;
+    secure.writes.length = 0;
+    moved.to.length = 0;
+    moved.markedFirst.length = 0;
     list.rows = [RIVERSIDE];
     list.active = LOCAL;
     list.switched.length = 0;
@@ -255,24 +281,33 @@ describe('one row for the global community, whatever it answers (the phone does 
         const before = asked.filter((u) => u.endsWith('/api/community/info')).length;
         await tap();
         expect(asked.filter((u) => u.endsWith('/api/community/info')).length).toBe(before + 1);
-        expect(line()).toBe('Join with this account: a sign-in');
+        expect(line()).toBe('Look around first, then join with this account');
         expect(nav.pushed).toEqual([]);
+        expect(moved.to).toEqual([]);
     });
 
-    it('open door, a stranger: Join with this account, naming both ways where the door has the 12 words; a tap opens the door', async () => {
+    it('open door, a stranger: guest view first (Marty, 21 Oct): a tap opens the global community as a guest, never the door (fails on origin/main: the door)', async () => {
         scene.door = 'openWords';
         await open();
-        expect(line()).toBe('Join with this account: 12 words or a sign-in');
-        expect(row().getAttribute('aria-label')).toBe('Global community, Join with this account: 12 words or a sign-in');
+        expect(line()).toBe('Look around first, then join with this account');
+        expect(row().getAttribute('aria-label')).toBe('Global community, Look around first, then join with this account');
         expect(icon()).toBe('earth');
         await tap();
-        expect(nav.pushed).toEqual(['/join-global']);
+        // The phone is on the global community now, marked a guest visit BEFORE it moved, kept in the saved list, and the
+        // app goes through Welcome as every switch does. The door is the header's Join pill's, later.
+        expect(moved.to).toEqual([GLOBAL]);
+        expect(moved.markedFirst).toEqual([true]);
+        expect(JSON.parse(store.map.get('beanpool_guest_nodes') ?? '[]')).toEqual([GLOBAL]);
+        expect((JSON.parse(store.map.get('beanpool_saved_nodes') ?? '[]') as { url: string }[]).map((n) => n.url)).toContain(GLOBAL);
+        expect(nav.replaced).toEqual(['/welcome']);
+        expect(nav.pushed).toEqual([]);
         expect(list.switched).toEqual([]);
+        expect(alerts).toEqual([]);
     });
 
-    it('open door, the sign-in alone where the door has no 12-words way', async () => {
+    it('open door, the sign-in alone where the door has no 12-words way: the same line (the door names its ways when the member gets there)', async () => {
         await open();
-        expect(line()).toBe('Join with this account: a sign-in');
+        expect(line()).toBe('Look around first, then join with this account');
     });
 
     it('a member there (the probe says so), with no saved row: its address, and a tap switches to it', async () => {
@@ -354,7 +389,7 @@ describe('one row for the global community, whatever it answers (the phone does 
         const before = row();
         scene.door = 'open';
         await tap();
-        expect(line()).toBe('Join with this account: a sign-in');
+        expect(line()).toBe('Look around first, then join with this account');
         expect(row()).toBe(before);
     });
 
@@ -466,13 +501,16 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         expect(communityRows()).toHaveLength(3);
     });
 
-    it('in the list but a stranger there (Damo\'s list after a wrong Reconnect): Join, not "member"; the Guest mark stays', async () => {
+    it('in the list but a stranger there (Damo\'s list after a wrong Reconnect): not "member"; the Guest mark stays, and a tap visits it as a guest, marked first (fails on origin/main: the door)', async () => {
         list.rows = [RIVERSIDE, SAVED];
         await open();
-        expect(line()).toBe('Join with this account: a sign-in');
+        expect(line()).toBe('Look around first, then join with this account');
         expect(texts(row())).toContain('Guest');
         await tap();
-        expect(nav.pushed).toEqual(['/join-global']);
+        expect(moved.to).toEqual([GLOBAL]);
+        expect(moved.markedFirst).toEqual([true]);
+        expect(nav.replaced).toEqual(['/welcome']);
+        expect(nav.pushed).toEqual([]);
         expect(list.switched).toEqual([]);
     });
 
@@ -513,7 +551,7 @@ describe('the phone has it saved: the saved row is the global row, never a secon
         await act(async () => { root.render(createElement(BeanPoolSheet, { key: 'again' }) as any); });
         await settle();
         expect(title()).toBe('Global community');
-        expect(line()).toBe('Join with this account: a sign-in');
+        expect(line()).toBe('Look around first, then join with this account');
     });
 
     it('in use as a member: no hint of a switch the tap doesn\'t do, and TalkBack reads the name it shows, its connection and in use', async () => {
@@ -641,6 +679,80 @@ describe('the phone has it saved: the saved row is the global row, never a secon
     });
 });
 
+describe('guest view first: what a visit asks, writes and never touches (utils/global-guest-visit.ts)', () => {
+    /** What the phone keeps under each storage key, as a copy. */
+    const kept = () => new Map(store.map);
+    const written = (before: Map<string, string>) =>
+        [...store.map.keys()].filter((k) => store.map.get(k) !== before.get(k)).sort();
+
+    it('a stranger: writes the guest mark, the saved list, the probe\'s kept answer and the community in use, nothing of the account', async () => {
+        await open();
+        const before = kept();
+        await tap();
+        expect(moved.to).toEqual([GLOBAL]);
+        // And the phone's copy of the community's public profile, which the door check refreshes.
+        expect(written(before)).toEqual(['beanpool_anchor_url', 'beanpool_global_standing', 'beanpool_guest_nodes', 'beanpool_node_profiles', 'beanpool_saved_nodes']);
+        // No key made, replaced or removed: nothing written where the phone keeps it.
+        expect(secure.writes).toEqual([]);
+    });
+
+    it('a member it didn\'t know of (joined on another device since the row was drawn): switched as a member, no guest mark', async () => {
+        store.map.set('beanpool_guest_nodes', JSON.stringify([GLOBAL]));
+        await open();
+        expect(line()).toBe('Look around first, then join with this account');
+        scene.standing = 'member';
+        await tap();
+        expect(moved.to).toEqual([GLOBAL]);
+        expect(JSON.parse(store.map.get('beanpool_guest_nodes') ?? '[]')).toEqual([]);
+        expect(nav.replaced).toEqual(['/welcome']);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('the door shut since the row was drawn: nothing moves, the key is never asked about, and the door\'s page says why', async () => {
+        await open();
+        scene.door = 'shut';
+        const probes = asked.filter((u) => u.includes('/api/community/membership/')).length;
+        const before = kept();
+        await tap();
+        expect(asked.filter((u) => u.includes('/api/community/membership/')).length).toBe(probes);
+        expect(moved.to).toEqual([]);
+        expect(nav.pushed).toEqual(['/join-global']);
+        expect(nav.replaced).toEqual([]);
+        // At most the phone's copy of the node's profile, refreshed by the door check: never the mark, the list or the anchor.
+        expect(written(before).filter((k) => !k.startsWith('beanpool_node_profile'))).toEqual([]);
+    });
+
+    it('no answer about the key this time: nothing moves, and the door screen asks again (it lands a member it didn\'t know of)', async () => {
+        await open();
+        scene.standing = 'silent';
+        const before = kept();
+        await tap();
+        expect(moved.to).toEqual([]);
+        expect(nav.pushed).toEqual(['/join-global']);
+        expect(written(before).filter((k) => !k.startsWith('beanpool_node_profile'))).toEqual([]);
+    });
+
+    it('the global community closed this account since: nothing moves, no door, and it says so', async () => {
+        await open();
+        scene.standing = 'closed';
+        await tap();
+        expect(moved.to).toEqual([]);
+        expect(nav.pushed).toEqual([]);
+        expect(nav.replaced).toEqual([]);
+        expect(alerts).toEqual([['Global community', 'Your account there was closed.']]);
+        expect(store.map.get('beanpool_guest_nodes') ?? null).toBeNull();
+    });
+
+    it('already there as a guest: the row is the door itself, as before (the next step is joining)', async () => {
+        list.rows = [RIVERSIDE, { url: GLOBAL, name: 'BeanPool Global', status: 'guest' }];
+        list.active = GLOBAL;
+        await open();
+        await tap();
+        expect(nav.pushed).toEqual(['/join-global']);
+        expect(moved.to).toEqual([]);
+    });
+});
+
 describe('the row\'s words', () => {
     it('are all through t(): in the pseudo-locale every word on the row is its translation', async () => {
         setLanguage('xx', []);
@@ -715,6 +827,13 @@ describe('the row\'s words', () => {
             return lines;
         };
         for (const key of [...LINES.slice(0, 6), ...LINES.slice(7)]) expect(linesOf(key), key).toBeLessThanOrEqual(2);
+        // Guest view first's line (21 Oct): new, so a catalog drafts it later; until then the English shows, and it fits.
+        const LOOK = 'Look around first, then join with this account';
+        expect(linesOf(LOOK), LOOK).toBeLessThanOrEqual(2);
+        for (const f of fs.readdirSync(dir).filter((x) => /^[A-Za-z-]+\.json$/.test(x))) {
+            const said = (JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as Record<string, string>)[LOOK];
+            if (typeof said === 'string') expect(widthOf(widest(said), sub), `a word of "${said}" (${f})`).toBeLessThanOrEqual(column);
+        }
         expect(linesOf(LINES[6])).toBeGreaterThan(2);
     });
 });

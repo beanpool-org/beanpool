@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl, Linking } from 'react-native';
+import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -12,7 +12,8 @@ import { refusalHere, type Refusal } from '../../utils/members-only-listings';
 import { marketEmptyState, refusalLines } from '../../utils/market-empty-state';
 import { noAreaLineHere } from '../../utils/nearby-area';
 import { NoAreaLine } from '../../components/NoAreaLine';
-import { GLOBAL_NODE_URL, pollsInformal, showcaseMode } from '../../utils/node-profile';
+import { pollsInformal, showcaseMode } from '../../utils/node-profile';
+import { useGlobalGuestVisit } from '../../utils/use-global-guest-visit';
 import { requestSync, isPillarSyncActive, syncLandedOnThisCopy, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
 import { useIdentity } from '../IdentityContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
@@ -115,6 +116,8 @@ export default function MarketScreen() {
     const { width: winW, fontScale } = useWindowDimensions();
     const searchPlaceholder = winW / Math.min(fontScale, 1.3) < 360 ? t('Search') : t('Search marketplace...');
     const { identity } = useIdentity();
+    // The members-only page's way to the global community: in this app, as a guest first (utils/global-guest-visit.ts).
+    const guestVisit = useGlobalGuestVisit();
 
     // What kind of community this is (utils/node-profile.ts): the phone's copy first, then the node's own answer.
     // On the worldwide community (Beans off) the Market shows no price and no "Beans only" filter, and orders listings
@@ -1785,10 +1788,14 @@ export default function MarketScreen() {
                             <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', marginBottom: 18 }}>
                                 {t('To join, ask a member for an invite. Anyone can look around the global community, and ask a community near them to let them in from there.')}
                             </Text>
+                            {/* Opens the global community here, as a guest, as a local community's web page opens its lobby; never
+                                the browser, whose join would make this person a second account (DESIGN-global-entry §D). */}
                             <Pressable
-                                accessibilityRole="link"
-                                style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' }}
-                                onPress={() => { Linking.openURL(GLOBAL_NODE_URL).catch(() => {}); }}
+                                accessibilityRole="button"
+                                style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%', opacity: guestVisit.visiting ? 0.5 : 1 }}
+                                onPress={() => { void guestVisit.visit(); }}
+                                disabled={guestVisit.visiting}
+                                testID="members-only-look-around"
                             >
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14, textAlign: 'center' }}>{t('🌍 Look around the global community')}</Text>
                             </Pressable>

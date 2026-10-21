@@ -17,6 +17,7 @@ import { useGlobalDoor } from '../utils/use-global-door-open';
 import { isGlobalCommunity } from '../utils/global-join-existing';
 import { GLOBAL_NODE_URL } from '../utils/global-node-url';
 import { globalEntryLine } from '../utils/global-entry-line';
+import { useGlobalGuestVisit } from '../utils/use-global-guest-visit';
 import { useIdentity } from './IdentityContext';
 import appConfig from '../app.json';
 import { FEEDBACK_LIVE, t, tn, word, type WordKey } from '@beanpool/core';
@@ -147,16 +148,21 @@ export default function BeanPoolSheet() {
     const globalEntry = useGlobalEntry(!!identity, globalDoor.state, !!globalSaved);
     const globalUrl = globalSaved?.url ?? GLOBAL_NODE_URL;
     const globalHost = globalUrl.replace(/^https?:\/\//, '');
-    const globalLine = globalEntryLine(globalEntry, { host: globalHost, wordsDoor: globalDoor.wordsDoor, saved: !!globalSaved })
+    const globalInUse = !!globalSaved && globalSaved.url === communities.active;
+    const globalLine = globalEntryLine(globalEntry, { host: globalHost, wordsDoor: globalDoor.wordsDoor, saved: !!globalSaved, visit: !globalInUse })
         ?? t('Explore BeanPool worldwide');
-    // A member's row switches to it, and where the door is open the row is Join (what its line says), saved or not. A
+    // A member's row switches to it. Where the door is open, guest view first (Marty, 21 Oct 2026; §A row 16), as the web
+    // opens its lobby: the row opens the global community as a guest (utils/global-guest-visit.ts), where the header's Join
+    // pill leads to the door; already there as a guest, the row is the door itself (what its line says), saved or not. A
     // saved row otherwise keeps what any saved row does (switch to it); an unsaved one opens the door screen's own page for
     // a door that can't be used (it asks again, with Try again), asks again itself when nothing answered, and otherwise
     // waits.
     const switchToGlobal = () => communities.switchTo(globalUrl);
     const openDoor = () => router.push('/join-global');
+    const guestVisit = useGlobalGuestVisit();
+    const visitGlobal = () => { void guestVisit.visit(globalUrl); };
     const globalTap: (() => void) | undefined = globalEntry === 'member' ? switchToGlobal
-        : globalEntry === 'join' ? openDoor
+        : globalEntry === 'join' ? (globalInUse ? openDoor : visitGlobal)
         : globalEntry === 'noAccount' ? () => router.navigate('/welcome')
         : globalSaved ? switchToGlobal
         : globalEntry === 'unreachable' ? globalDoor.retry
@@ -215,7 +221,7 @@ export default function BeanPoolSheet() {
                 onPress={globalTap}
                 onLongPress={saved ? () => communities.remove(saved) : undefined}
                 delayLongPress={500}
-                disabled={!globalTap || communities.switching}
+                disabled={!globalTap || communities.switching || guestVisit.visiting}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isCurrent, disabled: !globalTap }}
                 // The saved row is read as the saved rows beside it: the name it shows, then a member's connection (what the

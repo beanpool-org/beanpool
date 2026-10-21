@@ -77,6 +77,12 @@ const sync = vi.hoisted(() => {
     return state;
 });
 
+// The members-only card's way to the global community (utils/use-global-guest-visit.ts), and any browser it opened.
+const visits = vi.hoisted(() => ({ n: 0, browser: [] as string[] }));
+vi.mock('../use-global-guest-visit', () => ({
+    useGlobalGuestVisit: () => ({ visit: async () => { visits.n++; return { kind: 'guest' }; }, visiting: false }),
+}));
+
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
         const { children, onPress, testID } = props;
@@ -112,7 +118,7 @@ vi.mock('react-native', () => {
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => s },
         Alert: { alert() {} },
-        Linking: { openURL: async () => {} },
+        Linking: { openURL: async (url: string) => { visits.browser.push(url); } },
         DeviceEventEmitter: emitter,
         Keyboard: { addListener: listener, dismiss() {} },
         LayoutAnimation: { configureNext() {}, create: () => ({}), Presets: { easeInEaseOut: {} } },
@@ -258,6 +264,18 @@ describe('the Market of a community that refused this phone its listings', () =>
         await render();
         expect(shown('members-only-listings')).toBe(true);
         expect(shown('refused-private_preview') || shown('refused-account_closed')).toBe(false);
+    });
+
+    it('members only: Look around the global community opens it here, as a guest, never the browser (fails on origin/main: the browser)', async () => {
+        visits.n = 0;
+        visits.browser.length = 0;
+        store.map.set(`beanpool_members_only_${NODE}`, '1');
+        await render();
+        const button = host.querySelector('[data-testid="members-only-look-around"]') as HTMLElement | null;
+        expect(button?.textContent).toBe('🌍 Look around the global community');
+        await act(async () => { button!.click(); });
+        expect(visits.n).toBe(1);
+        expect(visits.browser).toEqual([]);
     });
 });
 

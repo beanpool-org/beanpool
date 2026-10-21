@@ -1,0 +1,291 @@
+<!-- source-hash: 85100d10c15dfef1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>後剝削經濟 —— BeanPool</title>
+    <meta name="description" content="後剝削經濟的意涵，以及 BeanPool 用以建構該經濟體系的具體機制：無息互助信用、促進流通而非囤積、成員投票決定的公共板塊，以及不損耗小型城鎮資源的聯合機制。">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool 圖示" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">運作方式</a>
+                <a href="rules.html">規則</a>
+                <a href="index.html#features">功能特色</a>
+                <a href="help.html">說明</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">教學</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="在 YouTube (@beanpool) 上觀看教學影片">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="加入 Reddit 社群 (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="在 GitHub 上查看">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">開始使用</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="開啟選單"><span aria-hidden="true">☰</span> 選單</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">開始使用</a>
+                    <a href="index.html#how-it-works">運作方式</a>
+                    <a href="rules.html">規則</a>
+                    <a href="index.html#features">功能特色</a>
+                    <a href="help.html">說明</a>
+                    <a href="guide/index.html">成員指南</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube 教學</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit 上的 r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub 原始碼</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>後剝削經濟</h1>
+
+        <p class="lede">社群用於交易的大多數工具在結構上都會從中抽取手續費。這並非出於惡意 — 而是架構使然。一定比例的費用流向支付處理商，利息流向銀行，注意力被賣給廣告商，資料被帶到社群成員從未選擇的地方。<strong>BeanPool 的建構正是為了消除這些外流管道。</strong></p>
+
+        <div class="pe-define">
+            <p><strong>後剝削（Post-extraction）</strong>指的是一種讓社群能夠創造並保留自身生產的價值，而不是被中間商掠奪的基礎設施。這不僅僅是一句展現友善的口號。它是對軟體建構方式的一項嚴格限制 — 任何違背這項原則的程式碼都不會被合併。</p>
+        </div>
+
+        <h2>剝削的實際表現</h2>
+        <p>有必要具體說明，因為「剝削」一詞通常被描述得很模糊。當鄰居透過傳統平台向另一位鄰居付款時，價值會同時透過好幾扇門流出社群：</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ 價值從何處流失</h4>
+                <ul>
+                    <li>付給總部設在他處的支付處理商的<strong>交易手續費</strong>。</li>
+                    <li>向銀行支付的促成該筆交易的信用<strong>利息</strong>。</li>
+                    <li><strong>廣告</strong> — 你的注意力被出賣給出價最高的人。</li>
+                    <li><strong>資料</strong> — 你的社交關係與購買紀錄變成了別人的資產。</li>
+                    <li><strong>平台地租</strong> — 一旦所有人都在該平台上，費用就會上漲，因為離開平台就意味著離開你的鄰里。</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ 我們的替代方案</h4>
+                <ul>
+                    <li>信用是由<strong>交易本身所創造</strong>，因此無需向放貸者支付利息。</li>
+                    <li>所存在的微小費用全部流入<strong>由你社群投票決定支出的公共板塊資金池</strong>。</li>
+                    <li><strong>沒有廣告。</strong>沒有廣告商，因此無需針對你的注意力進行最佳化。</li>
+                    <li><strong>沒有資料收割。</strong>你的私鑰保留在你的裝置上。如果你連結了登入方式以找回金鑰，系統會為其保存一份加密複本：根據所用應用程式不同，保存在 BeanPool 金鑰保險庫或社群伺服器上。誰保存複本，誰就能打開它。私訊與群組聊天均採用端對端加密。</li>
+                    <li><strong>沒有專屬鎖定。</strong>該通訊協定完全開源，你的社群運作自己的節點。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">坦率而言：<strong>BeanPool 並非毫無成本。</strong>系統對大額閒置餘額收取少量流通費，並對交易收取少量費用。差別不在於資金消失不見 — 而是<strong>資金流向了何處</strong>。它流入公共板塊資金池，由社群投票決定如何支出。絕不向任何股東分紅，因為根本就沒有股東。</div>
+
+        <h2>這項批判並非我們的獨創</h2>
+        <p>上述模式已被深耕多年的學者深入研究，並多次被明確命名。我們贊同這些分析；與眾不同之處在於，我們試圖建構出一條出路，而不僅是描述這個陷阱。如果你想閱讀完整論證而非我們的摘要，可以從以下著述開始。</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>平台資本主義（Platform Capitalism） <span>— Nick Srnicek，2016</span></h4>
+                <p>將平台視為一種商業模式而非單純的技術：把自己置於需要相互聯繫的兩方群體之間，進而從每一次連結中抽取份額。因為平台的價值隨著使用者數量的增加而成長，抽成越多，離開反而越難。</p>
+            </div>
+            <div class="pe-book">
+                <h4>監控資本主義時代（The Age of Surveillance Capitalism） <span>— Shoshana Zuboff，2019</span></h4>
+                <p>描述了與第一種剝削相伴隨的第二種剝削。普通人的日常經歷被視為無人認領的原材料，被提煉為對人們下一步行為的預測，並出售給能從中獲利的人。提供資料的人根本不是客戶。</p>
+            </div>
+            <div class="pe-book">
+                <h4>技術封建主義（Technofeudalism） <span>— Yanis Varoufakis，2023</span></h4>
+                <p>最尖銳的論述版本。平台所有者收取的並非生產任何產品所得的利潤 — 而是<em>地租</em>，為進入他們擁有的空間而收取的費用。Varoufakis 的觀點是，這使得這種安排比資本主義更為古老而非更新穎：披著科技公司外衣的地主關係。</p>
+            </div>
+        </div>
+
+        <p>對於這種安排在身處其中時的感受，有一個更直白的詞彙 — <strong>數位佃農（digital sharecropping）</strong>。你在不屬於自己的土地上勞作，地主抽取你所種植的一切產出的一定比例。它同樣精準地描述了司機、賣家、音樂家與外送員的處境，這通常代表這種描述觸及了某些本質真實的事物。</p>
+
+        <p>我們的答案不是一個更仁慈的地主或更低的抽成。而是<strong>根本不應該有可以出租的土地。</strong>兩位鄰居交換一個下午的勞動，不需要經過任何人所擁有的空間。因此社群擁有節點，通訊協定開放給任何人運作或分叉，唯一存在的費用流入社群專屬的公共板塊。沒有任何中間位置可供任何人販售存取權 — 包括我們在內。</p>
+
+        <p class="pe-credit">如果比起閱讀更喜歡觀看影音，這是一個很好的入門途徑：Benn Jordan 的 <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">《You Are Witnessing the Death of American Capitalism》</a>，該影片涵蓋了此領域並提到了上述三本書。</p>
+
+        <h2>具體運作機制</h2>
+        <p>前四項是目前每個社群都在實際運作的部分。第五項（跨社群清算）已建置完成，但僅在我們自有的兩個測試社群之間進行過試驗，尚未在實際運作的社群之間使用。完整機制詳述於<a href="rules.html">規則</a>中。</p>
+
+        <div class="pe-mech">
+            <h3>社群自行創造的貨幣</h3>
+            <p>BeanPool 以<strong>互助信用</strong>運作。當你為鄰居工作三個小時，三個小時的信用就會在當下產生 — 你的正餘額與對方的負餘額，皆由該筆交易共同創造。沒有銀行發行它。沒有人把它借給你。沒有利息，因為根本沒有放貸者。</p>
+            <p>這是整個設計的根基。如果貨幣供應必須透過借貸才能產生，那麼社群外部的人就對社群未來的勞動擁有索取權。如果社群透過交易創造貨幣，則沒有任何外部人員擁有這種權利。</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>目標是歸零，而非龐大的餘額</h3>
+            <p>餘額為<strong>零</strong>意味著你的付出與收到的價值大致相當。這是健康的平衡狀態，也是一個與絕大多數經濟體所設定的目標截然不同的追求。累積豆子沒有任何獎勵，也無法將其轉化為對社群外任何人的索取權。</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>促進流通而非囤積</h3>
+            <p>大額閒置餘額會隨著時間推移按累進費率溫和減少。其作用是讓豆子保持流動 — 與鄰里消費、投入在地專案 — 而不是沉澱不動。交易媒介停止流動的經濟體，就是停止運作的經濟體。</p>
+            <p>至關重要的是，減少的部分並未被銷毀，也沒有被提取為利潤：<strong>它全部轉入公共板塊資金池。</strong>負餘額絕不收費。處於負餘額的人使用了社群向其延展的信用，向已經落後的人收費只會加深赤字黑洞，而無法促進豆子流動 — 這與我們的初衷背道而馳。</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>形成閉環而非無底洞的公共板塊</h3>
+            <p>公共板塊資金池匯集流通費與交易費所收取的資金，其資金流向兩個地方：用於吸收成員在負債狀態下退出或被移除時留下的債務，以及資助成員透過自動執行的<strong>決策</strong>所核准的在地事業與專案 — 共享花園的工具、工作空間的設備，或任何被提出並投票通過的事項。社群自行決定用自己的盈餘建設什麼。</p>
+            <p>從結構上看，它是一個閉環：價值在本地產生，由集體持有，並重新消費回同一個社群。</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>不損耗小型城鎮資源的聯合機制</h3>
+            <p>當社群相互交易時，剝削可能會以更微妙的形式死灰復燃 — 較富裕的城鎮悄無聲息地抽乾較小城鎮的資源。這正是約翰·梅納德·凱因斯在布雷頓森林會議上試圖解決的問題，而 BeanPool 的跨社群清算正是建立在他的答案之上。</p>
+            <p><strong>豆子絕不跨越邊界。</strong>兩個社群之間的交易透過成對的橋接帳本進行結算（每個節點各持一本），記錄彼此在勞動互助上所欠的款項。雙方各自設定限額 — 因此鄰近社群欠你的金額絕不會超過你預先設定的上限。</p>
+            <p>由此帶來兩點重要原則，這也是它不僅僅是單純消費限額的原因。<strong>清償欠款絕不受阻</strong> — 上限僅約束延展信用的方向，絕不限制清算結清的方向。而且擁有盈餘的社群不會把盈餘閒置：<strong>一個城鎮被欠的越多，它能向欠債城鎮委託的工作就越多</strong>，從而將失衡重新轉化為活躍交易，而不是停留在呆帳狀態。</p>
+            <div class="pe-worked">
+                <strong>為何設計必須如此運作。</strong>每一個正數豆子都對應著某個特定成員所持有的負數，該成員透過勞動賺取來結清它。如果某位成員的 +50 直接流向了另一個城鎮，那麼處於 −50 的鄰居就無法再從本地流通中把它賺回來 — 與其債務相對應的流通媒介已經消失。隨著多位訪客重複此舉，較小社群的流通量將永久縮水。這不是因為詐欺，而是透過表面上完全合規的轉移造成的。
+            </div>
+            <p class="pe-edges">坦白而言，界線非常清晰：赤字社群<em>絕不會</em>僅僅因為處於赤字而被收費 — 凱因斯與我們的觀點是，壓力應當只施加給有能力採取行動的一方。剩餘的一項槓桿（對故意閒置的盈餘收費）已被載入規範，並在能通過相同的公平性檢驗之前保持未開發狀態。清算僅在成對的社群之間運作，而非跨越更廣泛的網路，並且由每個社群的營運者自主決定是否開啟。</p>
+        </div>
+
+        <h2>所依託的原則承諾</h2>
+        <p>這些是衡量對 BeanPool 的每一項貢獻的基石價值觀。它們公布在專案的<a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">貢獻者指南</a>中，並具備實際效力：與這些價值觀相衝突的工作將被拒絕，無論程式碼寫得多好。</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>後剝削</h4>
+                <p>我們建構的基礎設施讓社群能夠創造並保留價值，而非被中間商收割。凡是引入剝削機制的貢獻 — 有利於單一控制方的網路效應、專有技術鎖定、基於監控的變現手段 — 均不被接受。</p>
+            </div>
+            <div class="pe-value">
+                <h4>輔助性原則（Subsidiarity）</h4>
+                <p>在地社群應當能夠運作自己的節點、自主進行治理決策並獨立運作。將決策權推向全球中央權威、或使在地運作變得不切實際的貢獻，均背離了協定的目標。</p>
+            </div>
+            <div class="pe-value">
+                <h4>可理解性（Legibility）</h4>
+                <p>該通訊協定應當能夠被其所服務的社群成員所理解 — 而不僅是軟體工程師。規範盡可能採用簡明易懂的語言編寫，技術細節分層置於其下。</p>
+            </div>
+            <div class="pe-value">
+                <h4>知情同意與隱私</h4>
+                <p>任何功能都不應在未經資料歸屬方明確、可撤銷、可稽核的知情同意下轉移資料。侵犯隱私的功能無論技術上多麼優雅，都絕不會被合併。</p>
+            </div>
+            <div class="pe-value">
+                <h4>再生（Regeneration）</h4>
+                <p>我們衡量成功的標準是社群、生態系統與公共資源是否因 BeanPool 而更加健康 — 而非使用者成長指標或代幣價格。</p>
+            </div>
+        </div>
+
+        <h2>如何驗證我們的承諾</h2>
+        <p>任何主張的價值都取決於驗證它的能力，因此：</p>
+        <ul class="pe-check">
+            <li>整個通訊協定<strong>基於 MIT 授權條款開源</strong> — <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">閱讀原始碼</a>，包括本頁面描述的每一項規則。</li>
+            <li>經濟規則在<a href="rules.html">規則</a>中以通俗易懂的語言寫明 — 餘額、信用額度、費用以及每筆款項的去向。</li>
+            <li>你的社群可以<strong>運作自己的節點</strong>。如果我們有一天成為了中間剝削者，你可以隨時離開並帶走屬於你自己的社群。</li>
+            <li>這裡<strong>沒有代幣，也沒有外部投資者</strong>。豆子是用於真實交易的互助信用，絕不在交易所進行買賣。</li>
+        </ul>
+
+        <div class="callout">簡而言之：<strong>當一個社群創造的價值無處外洩時，這種經濟就是後剝削經濟。</strong>這並非因為每個人都品德高尚，而是因為在系統設計中根本沒有留下任何外流之門。</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool 圖示" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>由社群營運的社群互助信用平台。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">說明中心</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">運作方式</a>
+                    <a href="getting-started.html">新手入門</a>
+                    <a href="rules.html">規則</a>
+                    <a href="post-extraction.html">後剝削經濟</a>
+                    <a href="safety.html">兒童安全</a>
+                    <a href="privacy.html">隱私權政策</a>
+                    <a href="terms.html">服務條款</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>以 MIT 授權條款開源發行。由社群用<img src="bean.png" alt="愛心" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />打造，服務於社群。時區邊界資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 貢獻者</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

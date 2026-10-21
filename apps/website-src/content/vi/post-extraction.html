@@ -1,0 +1,291 @@
+<!-- source-hash: 85100d10c15dfef1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nền kinh tế Hậu Trục lợi — BeanPool</title>
+    <meta name="description" content="Ý nghĩa của nền kinh tế hậu trục lợi và các cơ chế cụ thể mà BeanPool sử dụng để xây dựng: tín dụng tương hỗ không lãi suất, lưu thông thay vì tích trữ, Commons do thành viên biểu quyết và liên kết không bòn rút thị trấn nhỏ hơn.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Biểu tượng BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Cách hoạt động</a>
+                <a href="rules.html">Quy tắc</a>
+                <a href="index.html#features">Tính năng</a>
+                <a href="help.html">Trợ giúp</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Hướng dẫn</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Xem video hướng dẫn trên YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Tham gia cộng đồng Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Xem trên GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Bắt đầu</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Mở menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Bắt đầu</a>
+                    <a href="index.html#how-it-works">Cách hoạt động</a>
+                    <a href="rules.html">Quy tắc</a>
+                    <a href="index.html#features">Tính năng</a>
+                    <a href="help.html">Trợ giúp</a>
+                    <a href="guide/index.html">Cẩm nang thành viên</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Hướng dẫn trên YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool trên Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Mã nguồn trên GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>Nền kinh tế Hậu Trục lợi</h1>
+
+        <p class="lede">Hầu hết các công cụ mà cộng đồng sử dụng để trao đổi đều được thiết kế để trích một phần lợi ích. Không phải do ác ý — mà hoàn toàn mang tính cấu trúc. Một tỷ lệ phần trăm chuyển cho đơn vị xử lý thanh toán, tiền lãi chuyển cho ngân hàng, sự chú ý bị bán cho nhà quảng cáo, và dữ liệu đi đến nơi mà không ai trong cộng đồng lựa chọn. <strong>BeanPool được xây dựng để loại bỏ những lối thoát đó.</strong></p>
+
+        <div class="pe-define">
+            <p><strong>Hậu trục lợi</strong> nghĩa là cơ sở hạ tầng cho phép các cộng đồng tạo ra và giữ lại giá trị mà họ sản xuất, thay vì để giá trị đó bị các bên trung gian chiếm đoạt. Đây không phải là một khẩu hiệu đạo đức tốt đẹp. Đây là một ràng buộc nghiêm ngặt trong cách thức phần mềm được xây dựng — và bất kỳ thứ gì vi phạm ràng buộc này sẽ không bao giờ được hợp nhất.</p>
+        </div>
+
+        <h2>Sự trục lợi thực tế diễn ra như thế nào</h2>
+        <p>Cần phải làm rõ một cách cụ thể, vì khái niệm "trục lợi" thường bị hiểu mơ hồ. Khi một người hàng xóm trả tiền cho một người hàng xóm khác qua một nền tảng truyền thống, giá trị rời khỏi cộng đồng qua nhiều cánh cửa cùng một lúc:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ Nơi giá trị thất thoát</h4>
+                <ul>
+                    <li><strong>Phí giao dịch</strong> chuyển cho một đơn vị xử lý đặt trụ sở ở nơi khác.</li>
+                    <li><strong>Lãi suất</strong> đối với khoản tín dụng giúp giao dịch khả thi, được trả cho ngân hàng.</li>
+                    <li><strong>Quảng cáo</strong> — sự chú ý của bạn bị bán cho bên trả giá cao nhất.</li>
+                    <li><strong>Dữ liệu</strong> — các mối quan hệ và giao dịch mua sắm của bạn trở thành tài sản của người khác.</li>
+                    <li><strong>Địa tô nền tảng</strong> — khi mọi người đều đã tham gia, mức giá sẽ tăng lên, bởi vì rời bỏ nền tảng đồng nghĩa với việc rời bỏ những người hàng xóm của bạn.</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ Những gì chúng tôi làm thay vào đó</h4>
+                <ul>
+                    <li>Tín dụng được <strong>tạo ra từ chính giao dịch</strong>, vì vậy không có người cho vay nào để phải trả nợ.</li>
+                    <li>Các khoản phí nhỏ phát sinh sẽ chuyển vào <strong>Quỹ Commons do cộng đồng của bạn biểu quyết chi tiêu</strong>.</li>
+                    <li><strong>Không quảng cáo.</strong> Không có nhà quảng cáo, do đó không có gì cần tối ưu hóa sự chú ý của bạn.</li>
+                    <li><strong>Không thu thập dữ liệu.</strong> Khóa riêng của bạn luôn nằm trên thiết bị của bạn. Nếu bạn liên kết đăng nhập để khôi phục khóa, một bản sao khóa được khóa mã hóa sẽ được lưu giữ: trong kho khóa bảo mật của BeanPool, hoặc trên máy chủ cộng đồng, tùy thuộc vào ứng dụng. Bất kỳ ai giữ bản sao đều có thể mở khóa. Tin nhắn trực tiếp và trò chuyện nhóm đều được mã hóa đầu cuối.</li>
+                    <li><strong>Không trói buộc độc quyền.</strong> Giao thức là mã nguồn mở và cộng đồng của bạn tự vận hành máy chủ riêng.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">Nói một cách thẳng thắn và trung thực: <strong>BeanPool không phải hoàn toàn không có chi phí.</strong> Có một khoản phí lưu thông nhỏ đối với số dư lớn không sử dụng, và một khoản phí nhỏ đối với các giao dịch. Sự khác biệt không phải là số tiền biến mất — mà là <strong>nó đi về đâu</strong>. Số tiền này chuyển vào Quỹ Commons, và cộng đồng biểu quyết cách chi tiêu. Không một đồng nào được chi trả cho cổ đông, bởi vì không hề có cổ đông nào cả.</div>
+
+        <h2>Chúng tôi không tự phát minh ra sự phê phán này</h2>
+        <p>Mô hình trên đã được nghiên cứu kỹ lưỡng và được định danh nhiều lần bởi những người đã dành nhiều năm tìm hiểu. Chúng tôi cho rằng phân tích đó là đúng đắn; điểm khác biệt của chúng tôi là chúng tôi đang nỗ lực xây dựng lối thoát thay vì chỉ mô tả cái bẫy. Nếu bạn muốn tìm hiểu lập luận đầy đủ thay vì bản tóm tắt của chúng tôi, đây là những tài liệu khởi đầu lý tưởng.</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Chủ nghĩa tư bản nền tảng (Platform Capitalism) <span>— Nick Srnicek, 2016</span></h4>
+                <p>Xem nền tảng là một mô hình kinh doanh chứ không chỉ là công nghệ: định vị bản thân ở giữa hai nhóm người có nhu cầu kết nối với nhau, sau đó trích một phần từ mọi lượt kết nối. Bởi vì giá trị của nền tảng tăng theo số lượng người tham gia, nên việc rời đi càng khó khăn hơn khi phần trích chia ngày càng lớn.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Kỷ nguyên chủ nghĩa tư bản giám sát (The Age of Surveillance Capitalism) <span>— Shoshana Zuboff, 2019</span></h4>
+                <p>Mô tả hình thức trục lợi thứ hai diễn ra song hành cùng hình thức thứ nhất. Trải nghiệm bình thường của con người bị coi như nguyên liệu thô chưa ai tuyên bố chủ quyền, được tinh chế thành những dự đoán về hành vi tiếp theo của người dùng và bán cho bất kỳ ai hưởng lợi từ thông tin đó. Người cung cấp dữ liệu không phải là khách hàng.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Chế độ phong kiến công nghệ (Technofeudalism) <span>— Yanis Varoufakis, 2023</span></h4>
+                <p>Phiên bản sắc bén nhất của lập luận này. Những gì chủ sở hữu nền tảng thu được không phải là lợi nhuận từ việc sản xuất bất cứ thứ gì — mà là <em>địa tô</em>, được thu để đổi lấy quyền tiếp cận không gian thuộc sở hữu của họ. Luận điểm của Varoufakis là điều này khiến mô hình này cổ xưa hơn cả chủ nghĩa tư bản chứ không phải mới hơn: một mối quan hệ địa chủ - tá điền khoác lên mình chiếc áo của công ty công nghệ.</p>
+            </div>
+        </div>
+
+        <p>Có một cụm từ mộc mạc hơn để mô tả cảm giác về mô hình đó từ góc nhìn bên dưới — <strong>tá điền kỹ thuật số</strong>. Bạn lao động trên mảnh đất không thuộc về mình, và chủ đất thu một phần của tất cả những gì bạn canh tác được. Khái niệm này mô tả chính xác tài xế, người bán hàng, nhạc sĩ và người giao hàng, và đó thường là dấu hiệu cho thấy một mô tả đã chạm đúng bản chất thực tế.</p>
+
+        <p>Câu trả lời của chúng tôi không phải là một người chủ đất công bằng hơn hay một mức trích chia nhỏ hơn. Mà là <strong>ngay từ đầu không nên có mảnh đất nào để cho thuê.</strong> Hai người hàng xóm trao đổi một buổi chiều làm việc không cần phải đi qua một không gian thuộc sở hữu của bất kỳ ai. Vì vậy, cộng đồng nắm giữ máy chủ, giao thức mở cho bất kỳ ai vận hành hoặc phân nhánh, và khoản phí duy nhất phát sinh đều chuyển vào chính Commons của cộng đồng. Không có vị trí trung gian nào để bất kỳ ai có thể bán quyền truy cập — bao gồm cả chúng tôi.</p>
+
+        <p class="pe-credit">Một cách tiếp cận hữu ích nếu bạn thích xem hơn đọc: video của Benn Jordan <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">“You Are Witnessing the Death of American Capitalism”</a>, bao quát nội dung này và nhắc đến cả ba cuốn sách trên.</p>
+
+        <h2>Các cơ chế</h2>
+        <p>Bốn cơ chế đầu tiên là những phần đang hoạt động của mỗi cộng đồng hiện nay. Cơ chế thứ năm, thanh toán bù trừ giữa các cộng đồng, đã được xây dựng và mới chỉ thử nghiệm giữa hai cộng đồng thử nghiệm của chúng tôi chứ chưa triển khai giữa các cộng đồng thực tế. Tất cả đều được mô tả chi tiết trong <a href="rules.html">Quy tắc</a>.</p>
+
+        <div class="pe-mech">
+            <h3>Tiền tệ do cộng đồng tự tạo ra</h3>
+            <p>BeanPool vận hành dựa trên <strong>tín dụng tương hỗ</strong>. Khi bạn làm việc ba giờ cho một người hàng xóm, ba giờ tín dụng sẽ được tạo ra ngay tại thời điểm đó — số dư dương của bạn và số dư âm của họ được tạo ra đồng thời bởi chính giao dịch. Không ngân hàng nào phát hành khoản tiền đó. Không ai cho bạn vay. Không có lãi suất, bởi vì không có người cho vay.</p>
+            <p>Đây là gốc rễ của toàn bộ thiết kế. Nếu nguồn cung tiền tệ phải vay mượn mới có thể ra đời, một bên ngoài cộng đồng sẽ nắm giữ quyền đòi nợ đối với sức lao động trong tương lai của cộng đồng. Nếu cộng đồng tự tạo ra tiền tệ thông qua giao dịch, không ai có quyền đó.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Mục tiêu là điểm 0, không phải số dư lớn</h3>
+            <p>Số dư bằng <strong>0</strong> có nghĩa là bạn đã cho đi tương đương những gì bạn nhận về. Đó là trạng thái lành mạnh, và là một mục tiêu thực sự khác biệt so với mục tiêu mà hầu hết các nền kinh tế đặt ra. Không có phần thưởng cho việc tích trữ Đậu, và không có cách nào để quy đổi Đậu thành quyền đòi nợ đối với bất kỳ ai bên ngoài cộng đồng.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Lưu thông thay vì tích trữ</h3>
+            <p>Số dư lớn không sử dụng sẽ giảm dần theo thời gian với tỷ lệ lũy tiến. Tác dụng của điều này là giữ cho Đậu luôn luân chuyển — được chi tiêu với hàng xóm, đóng góp vào các dự án địa phương — thay vì đứng yên một chỗ. Một nền kinh tế mà phương tiện trao đổi ngừng luân chuyển là một nền kinh tế đã ngừng hoạt động.</p>
+            <p>Điều quan trọng là phần bị giảm không bị tiêu hủy và không bị chiếm dụng làm lợi nhuận: <strong>nó được chuyển vào Quỹ Commons.</strong> Số dư âm không bao giờ bị tính phí. Người có số dư âm đã sử dụng khoản tín dụng mà cộng đồng cấp cho họ, và việc tính phí một người vốn đang mang số dư âm sẽ làm hố sâu nợ nần trầm trọng hơn thay vì thúc đẩy Đậu luân chuyển — hoàn toàn trái ngược với mục tiêu.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Commons là một vòng lặp tuần hoàn, không phải hố tiêu thoát</h3>
+            <p>Quỹ Commons lưu giữ những gì thu được từ phí lưu thông và phí giao dịch, và số tiền tích lũy được sẽ dùng cho hai mục đích: bù đắp khoản nợ để lại khi một thành viên rời đi hoặc bị loại bỏ trong tình trạng mang số dư âm, và tài trợ cho các doanh nghiệp cùng các dự án mà thành viên phê duyệt thông qua các <strong>Quyết định</strong> tự thực thi — dụng cụ cho khu vườn chung, trang thiết bị cho không gian làm việc chung, hoặc bất kỳ đề xuất nào được biểu quyết thông qua. Cộng đồng tự quyết định phần thặng dư của mình sẽ xây dựng nên những gì.</p>
+            <p>Đây là một vòng lặp khép kín ngay từ cấu trúc thiết kế: giá trị được tạo ra tại địa phương, được nắm giữ tập thể và được chi tiêu trở lại vào chính cộng đồng đó.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Liên kết không bòn rút thị trấn nhỏ hơn</h3>
+            <p>Khi các cộng đồng giao dịch với nhau, sự trục lợi có thể tái xuất hiện dưới hình thức tinh vi hơn — thị trấn giàu có hơn âm thầm bòn rút thị trấn nhỏ hơn. Đây chính là vấn đề mà John Maynard Keynes từng đặt ra để giải quyết tại hội nghị Bretton Woods, và cơ chế thanh toán bù trừ liên cộng đồng của BeanPool được xây dựng dựa trên câu trả lời của ông.</p>
+            <p><strong>Đậu không bao giờ vượt qua biên giới.</strong> Giao dịch giữa hai cộng đồng được quyết toán thông qua một cặp sổ cái kết nối, mỗi máy chủ giữ một sổ cái, ghi nhận những gì mỗi bên nợ bên kia bằng sức lao động. Mỗi bên tự đặt ra hạn mức cho phép — vì vậy một cộng đồng láng giềng chỉ có thể nợ bạn trong phạm vi con số bạn đã ấn định trước.</p>
+            <p>Hai hệ quả tất yếu sau đây chính là lý do khiến cơ chế này không chỉ đơn thuần là một hạn mức chi tiêu. <strong>Việc thanh toán những gì bạn nợ không bao giờ bị chặn</strong> — hạn mức chỉ hạn chế chiều cấp thêm tín dụng chứ không bao giờ hạn chế chiều thanh toán dứt điểm. Và một cộng đồng nắm giữ thặng dư không chỉ đơn giản là giữ khư khư số thặng dư đó: <strong>một thị trấn càng được nợ nhiều, thị trấn đó càng có thể đặt hàng nhiều công việc hơn từ thị trấn đang nợ mình</strong>, biến sự mất cân bằng trở lại thành hoạt động thương mại thay vì để mặc nó thành một khoản nợ tồn đọng.</p>
+            <div class="pe-worked">
+                <strong>Lý do tại sao thiết kế bắt buộc phải hoạt động theo cách này.</strong> Mỗi hạt Đậu dương đều có một hạt Đậu âm tương ứng do một thành viên cụ thể nắm giữ, và người đó thanh toán nợ bằng cách lao động tạo ra giá trị. Nếu khoản +50 của một thành viên đơn giản chuyển sang thị trấn khác, người hàng xóm đang ở mức −50 sẽ không còn cơ hội kiếm lại số Đậu đó từ lưu thông nội bộ địa phương — bên đối ứng cho khoản nợ của họ đã biến mất. Lặp lại điều đó trên nhiều khách vãng lai và quy mô lưu thông của cộng đồng nhỏ hơn sẽ bị thu hẹp vĩnh viễn. Không phải do gian lận; mà do các giao dịch chuyển tiền bề ngoài trông hoàn toàn hợp lệ.
+            </div>
+            <p class="pe-edges">Ranh giới cụ thể được xác định rõ ràng: cộng đồng bị thâm hụt <em>không bao giờ</em> bị phạt vì bị thâm hụt — lập luận của Keynes, cũng như của chúng tôi, là áp lực chỉ nên đặt lên bên có đủ thẩm quyền và khả năng hành động để giải quyết vấn đề. Công cụ đòn bẩy duy nhất còn lại, một khoản phí đối với thặng dư cố tình để không, đã được quy định cụ thể và có chủ đích chưa được xây dựng cho đến khi vượt qua được bài kiểm tra công bằng tương tự. Việc thanh toán bù trừ diễn ra giữa từng cặp cộng đồng thay vì trên toàn mạng lưới rộng lớn, và người vận hành của mỗi cộng đồng tự nguyện bật tính năng này theo lựa chọn của mình.</p>
+        </div>
+
+        <h2>Các cam kết làm nền tảng</h2>
+        <p>Đây là những giá trị nền tảng làm thước đo cho mọi đóng góp cho BeanPool. Chúng được công bố trong <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">hướng dẫn người đóng góp</a> của dự án, và có tính ràng buộc nghiêm ngặt: bất kỳ phần việc nào mâu thuẫn với các giá trị này đều bị từ chối, dù mã nguồn có tốt đến đâu.</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>Hậu trục lợi</h4>
+                <p>Chúng tôi xây dựng cơ sở hạ tầng cho phép các cộng đồng tạo ra và giữ lại giá trị thay vì để các bên trung gian chiếm đoạt. Những đóng góp mang tính chất trục lợi — hiệu ứng mạng chỉ làm lợi cho một bên kiểm soát duy nhất, sự trói buộc độc quyền, việc kiếm tiền dựa trên giám sát — đều không được hoan nghênh.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Tính bổ trợ (Subsidiarity)</h4>
+                <p>Các cộng đồng địa phương phải có khả năng tự vận hành máy chủ riêng, tự đưa ra các quyết định quản trị và hoạt động độc lập. Những đóng góp đẩy quyền ra quyết định lên cấp thẩm quyền toàn cầu, hoặc làm cho việc vận hành tại địa phương trở nên phi thực tế, đều đi ngược lại các mục tiêu của giao thức.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Tính minh bạch, dễ hiểu</h4>
+                <p>Giao thức phải dễ hiểu đối với các cộng đồng mà nó phục vụ — chứ không chỉ dành riêng cho các kỹ sư phần mềm. Các tài liệu kỹ thuật được viết bằng ngôn ngữ giản dị, trong sáng khi có thể, với các chi tiết kỹ thuật được xếp lớp bên dưới.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Sự đồng thuận và quyền riêng tư</h4>
+                <p>Không tính năng nào được phép luân chuyển dữ liệu mà không có sự đồng thuận rõ ràng, có thể thu hồi và có thể kiểm toán của bên sở hữu dữ liệu đó. Các tính năng xâm phạm quyền riêng tư sẽ không bao giờ được hợp nhất, bất kể tính tinh tế về mặt kỹ thuật của chúng.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Tái tạo</h4>
+                <p>Chúng tôi đo lường thành công bằng việc liệu các cộng đồng, hệ sinh thái và tài sản chung có trở nên lành mạnh hơn nhờ BeanPool hay không — chứ không phải bằng các chỉ số tăng trưởng hay giá token.</p>
+            </div>
+        </div>
+
+        <h2>Cách kiểm chứng sự nghiêm túc của chúng tôi</h2>
+        <p>Một tuyên bố như thế này chỉ có giá trị khi nó có thể được kiểm chứng, vì vậy:</p>
+        <ul class="pe-check">
+            <li>Toàn bộ giao thức là <strong>mã nguồn mở theo giấy phép MIT</strong> — <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">hãy đọc mã nguồn</a>, bao gồm mọi quy tắc được mô tả trên trang này.</li>
+            <li>Các quy tắc kinh tế được diễn giải bằng ngôn ngữ giản dị, rõ ràng trong <a href="rules.html">Quy tắc</a> — số dư, tín dụng, các khoản phí và điểm đến của từng khoản.</li>
+            <li>Cộng đồng của bạn có thể <strong>tự vận hành máy chủ riêng</strong>. Nếu chúng tôi biến thành một bên trung gian, bạn có thể rời đi và mang toàn bộ cộng đồng của mình theo.</li>
+            <li><strong>Không có token và không có nhà đầu tư</strong>. Đậu là tín dụng tương hỗ cho giao dịch thực tế, và không bao giờ được mua bán trên sàn giao dịch.</li>
+        </ul>
+
+        <div class="callout">Tóm lại: <strong>một nền kinh tế là hậu trục lợi khi giá trị mà cộng đồng tạo ra không có nơi nào để rò rỉ ra ngoài.</strong> Không phải vì mọi người đều thánh thiện, mà bởi vì trong thiết kế hoàn toàn không có những cánh cửa thoát đó.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Biểu tượng BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Tín dụng tương hỗ cho cộng đồng, do cộng đồng tự vận hành.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Trung tâm trợ giúp</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Cách hoạt động</a>
+                    <a href="getting-started.html">Bắt đầu</a>
+                    <a href="rules.html">Quy tắc</a>
+                    <a href="post-extraction.html">Hậu trục lợi</a>
+                    <a href="safety.html">An toàn cho trẻ em</a>
+                    <a href="privacy.html">Chính sách quyền riêng tư</a>
+                    <a href="terms.html">Điều khoản dịch vụ</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Mã nguồn mở theo giấy phép MIT. Được tạo nên với <img src="bean.png" alt="tình yêu" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> bởi các cộng đồng, vì các cộng đồng. Ranh giới múi giờ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Những người đóng góp cho OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

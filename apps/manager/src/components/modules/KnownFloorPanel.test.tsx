@@ -11,11 +11,17 @@ const OWNER_KEY: RolesViewer = { kind: 'key', memberPubkey: 'o'.repeat(64), role
 const ADMIN_KEY: RolesViewer = { kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' };
 const SETTINGS = { confirmation: false, knownFloor: 1000, creditCap: 2000, knownFloorDefault: 1000, creditCapDefault: 2000, creditCapMax: 5000 };
 
-function mockNode(read: { ok: boolean; status?: number; body: unknown } = { ok: true, body: SETTINGS }) {
+function mockNode(
+    read: { ok: boolean; status?: number; body: unknown } = { ok: true, body: SETTINGS },
+    config: { ok?: boolean; status?: number; body?: unknown } = { ok: true, body: {} }
+) {
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
         if (url.includes('/api/local/admin/known-floor')) {
             if (init?.method === 'POST') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ...SETTINGS, ...JSON.parse(String(init.body)) }) });
             return Promise.resolve({ ok: read.ok, status: read.status ?? 200, json: () => Promise.resolve(read.body) });
+        }
+        if (url.includes('/api/node/config')) {
+            return Promise.resolve({ ok: config.ok ?? true, status: config.status ?? 200, json: () => Promise.resolve(config.body ?? {}) });
         }
         return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
@@ -89,5 +95,31 @@ describe('KnownFloorPanel', () => {
         expect(await screen.findByText('Only an owner of this community can change the known floor or the cap.')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: 'Save the known floor' }));
         expect(f.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toBe(false);
+    });
+
+    describe('mixed community note', () => {
+        it('shows the note when the door is members (invite door)', async () => {
+            mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'members' } });
+            render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
+            expect(await screen.findByTestId('known-floor-mixed-note')).toHaveTextContent(
+                'A mixed community: anyone a member invites can join, and once the known floor is on, members your admins confirm start with a higher limit.'
+            );
+        });
+
+        it('hides the note when the door is open (global profile / no beans)', async () => {
+            mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'open' } });
+            render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
+            await screen.findByTestId('known-floor-panel');
+            expect(screen.queryByTestId('known-floor-mixed-note')).toBeNull();
+            expect(screen.queryByText(/mixed community/i)).toBeNull();
+        });
+
+        it('hides the note when the door is admins (only admins invite)', async () => {
+            mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'admins' } });
+            render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
+            await screen.findByTestId('known-floor-panel');
+            expect(screen.queryByTestId('known-floor-mixed-note')).toBeNull();
+            expect(screen.queryByText(/mixed community/i)).toBeNull();
+        });
     });
 });

@@ -1,0 +1,647 @@
+<!-- source-hash: 5c4a962db9481e5e -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool — Intercambio para comunidades, no bancos comerciales</title>
+    <meta name="description" content="BeanPool es una app gratuita que una comunidad gestiona por sí misma para intercambiar ayuda, bienes y habilidades en Frijoles en lugar de dinero. Encuentra o inicia una comunidad cerca de ti, o únete con una invitación; la comunidad global se abrirá a todos pronto. iPhone, Android y web.">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="style.css?v=2.8">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="#" class="logo"><img src="bean.png" alt="Icono de BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="#how-it-works">Cómo funciona</a>
+                <a href="#features">Qué puedes hacer</a>
+                <a href="rules.html">Las Reglas</a>
+                <a href="#run-a-node">Gestionar una comunidad</a>
+                <a href="help.html" title="Cada regla, guía y manual en un solo lugar">Ayuda</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Mira videotutoriales en YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Únete a la comunidad de Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Ver en GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Comenzar</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Abrir menú"><span aria-hidden="true">☰</span> Menú</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Comenzar</a>
+                    <a href="#how-it-works">Cómo funciona</a>
+                    <a href="#features">Qué puedes hacer</a>
+                    <a href="rules.html">Las Reglas</a>
+                    <a href="#run-a-node">Gestionar una comunidad</a>
+                    <a href="help.html">Ayuda</a>
+                    <a href="guide/index.html">Guía para miembros</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Videos en YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool en Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Código en GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+            <div class="hero-header">
+                <div class="hero-badge">Gratis en teléfono y web</div>
+                <h1>Intercambio para <span class="gradient-text">comunidades</span>,<br>no bancos comerciales</h1>
+                <p class="hero-subtitle">BeanPool es una app gratuita que tu comunidad usa para intercambiar ayuda, bienes y habilidades entre sí. En lugar de dinero, usan Frijoles: ayuda a alguien y recibirás Frijoles; recibe ayuda y van en la otra dirección. Cero es el objetivo &mdash; da casi tanto como recibes.</p>
+            </div>
+
+            <div class="hero-lower-grid">
+                <!-- Left: what BeanPool is not -->
+                <div class="not-card glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">🚫 Manifiesto antiextracción</span>
+                        <h3>Lo que BeanPool <span class="text-rose">no es</span></h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>No es una máquina de anuncios</strong>
+                                <p>Sin seguimiento de audiencias similares, recopilación de datos ni algoritmos de gurús para hacerse rico.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>No es un token cripto especulativo</strong>
+                                <p>Los Frijoles son crédito mutuo para el comercio real — nunca se inflan en plataformas de intercambio.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>No es una máquina tragamonedas de atención</strong>
+                                <p>Sin desplazamientos infinitos adictivos — solo ofertas locales reales y vecinos.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>No es deuda corporativa ni extracción</strong>
+                                <p>Sin intereses, sin bancos, sin intermediarios. Las únicas tarifas son pequeñas y van al propio fondo de Bienes comunes de tu comunidad, nunca a nosotros.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>No es una app cripto</strong>
+                                <p>Sin blockchain, sin monedas, sin billetera que comprar. Tus 12 palabras simplemente dan acceso a tu propia cuenta.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <div class="hero-cta-card glass-panel">
+                    <div class="hero-cta-header">
+                        <span class="hero-cta-tag">Tres formas de entrar</span>
+                        <h3>Comienza donde estás</h3>
+                    </div>
+
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">Pruébalo ahora, en todo el mundo</a>
+                            <p>La comunidad global se abrirá a todos pronto, sin invitación: mira a tu alrededor, publica algo gratis o para trueque, y encuentra una comunidad cerca de ti. Hoy es una vista previa privada. Hasta que se abra, mira las comunidades que ya funcionan abajo, inicia una, o usa la invitación que te dio un miembro.</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">Encuentra o inicia una comunidad</a>
+                            <p>Mira las comunidades que ya funcionan, o inicia una en una computadora libre o un pequeño servidor alquilado. Pedirle a una cerca de ti que te deje entrar llegará pronto, cuando se abra la comunidad global.</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">¿Tienes una invitación?</a>
+                            <p>Instala la app y abre el enlace o escanea el código QR que te dio un miembro; una invitación funciona una vez y dura 30 días.</p>
+                        </div>
+                    </div>
+                    <p class="hero-web-note">Los Frijoles viven en comunidades locales, cada una en su propio servidor. La comunidad global te muestra el entorno y te orienta hacia una. Te muestra cómo funcionan los Frijoles allí, con una comunidad de ejemplo.</p>
+
+                    <div class="hero-logos-group">
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="Descargar en el App Store">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Descárgalo en el</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                        <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                        <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Disponible en Google Play">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">DISPONIBLE EN</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
+                        <p class="hero-web-note">¿Sin tienda de aplicaciones? Tanto la comunidad global como tu propia comunidad se abren en el navegador de tu teléfono; agrégalas a tu pantalla de inicio.</p>
+                    </div>
+                    <!-- Where to find us: small round links, same destinations as the menu -->
+                    <div class="hero-social-row">
+                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" aria-label="BeanPool en YouTube" title="BeanPool en YouTube">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--youtube)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        </a>
+                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" aria-label="BeanPool en Reddit" title="BeanPool en Reddit">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--reddit)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                        </a>
+                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" aria-label="Código fuente de BeanPool en GitHub" title="Código fuente de BeanPool en GitHub">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hero Principles / Trust Banner -->
+            <div class="hero-principles-banner">
+                <div class="principle-item">
+                    <span class="principle-text">100% gratis</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">Sin compras dentro de la app</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">Código abierto</span>
+                </div>
+            </div>
+
+            <!-- How Beans move, below the two cards -->
+            <div class="hero-example-row">
+                <div class="not-card hero-example glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">Cómo se mueven los Frijoles</span>
+                        <h3>Tres vecinos, una semana</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">1</div>
+                            <div class="not-item-content">
+                                <strong>Sam repara la bicicleta de Ana &mdash; 30 Frijoles</strong>
+                                <p>Sam sube a +30. Ana baja a −30.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">2</div>
+                            <div class="not-item-content">
+                                <strong>Ana hornea pan para Lee &mdash; 30 Frijoles</strong>
+                                <p>Ana vuelve a 0. Lee está ahora en −30.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">3</div>
+                            <div class="not-item-content">
+                                <strong>Lee cuida el perro de Sam &mdash; 30 Frijoles</strong>
+                                <p>Todos están cerca de cero nuevamente, y se hicieron tres tareas sin que nadie gastara dinero.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="hero-example-note">El vendedor se queda con el 98.5% de cada precio; el otro 1.5% va al fondo de Bienes comunes de la comunidad, por lo que los números reales quedan un poco por debajo de estos.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>Qué es BeanPool</h2>
+            </div>
+            <p class="what-it-is-lead">Una comunidad gestiona BeanPool en su propio servidor pequeño. Los miembros publican lo que pueden ofrecer y lo que necesitan, y comercian en Frijoles. Un Frijol no es dinero que compras: es un registro de que alguien ayudó a alguien. Todos comienzan en cero. Cuando ayudas, tu saldo sube; cuando te ayudan, baja; en toda la comunidad, los saldos siempre suman cero. Nadie emite Frijoles, nadie los presta con intereses y nadie los cobra en efectivo. Una pequeña tarifa en cada intercambio va al fondo propio de la comunidad, que sus miembros gastan por votación. La app es gratuita y de código abierto; una comunidad elige su propio servidor, y los datos en él son suyos.</p>
+            <ul class="what-it-is-not">
+                <li><strong>No es una criptomoneda.</strong> Sin blockchain, sin tokens, nada que comprar o vender. Tus 12 palabras solo dan acceso a tu propia cuenta.</li>
+                <li><strong>No es un banco.</strong> El crédito proviene de tus propios intercambios, sin intereses: tu línea se abre pequeña después de tu primer intercambio completado y crece a medida que intercambias.</li>
+                <li><strong>No es una empresa intermediaria.</strong> BeanPool no se queda con nada de un intercambio y no muestra anuncios.</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">El crédito mutuo es antiguo: los grupos LETS lo gestionaron en papel durante décadas, y en Suiza un círculo de empresas, WIR, ha comerciado con su propio crédito desde 1934. El papeleo fue lo que desgastó a la mayoría. BeanPool es el papeleo, realizado por la app.</p>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2>Cómo funciona</h2>
+                <p>Desde la primera pantalla hasta tu primer intercambio.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
+                    <div class="step-number" aria-hidden="true">01</div>
+                    <div>
+                        <h3>1. Entra por una de las tres puertas</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>Abre la invitación que te envió un miembro; pronto también podrás probar la comunidad global sin invitación y, desde allí, pedirle a una comunidad cercana que te deje entrar. De cualquier forma, eliges el nombre por el que la gente te conocerá.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🔑</div>
+                    <div class="step-number" aria-hidden="true">02</div>
+                    <div>
+                        <h3>2. Guarda tus 12 palabras</h3>
+                        <p>La app crea tu cuenta en tu teléfono y te muestra 12 palabras. Escríbelas y guárdalas en un lugar seguro: recuperan tu cuenta si pierdes o cambias tu teléfono.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
+                    <div class="step-number" aria-hidden="true">03</div>
+                    <div>
+                        <h3>3. Publica una oferta</h3>
+                        <p>Publica algo que puedas hacer o compartir: un viaje al pueblo, huevos, reparar una bicicleta, una hora de jardinería. En una comunidad con Frijoles, necesitas al menos una oferta publicada antes de poder publicar una necesidad o comprar. En la comunidad global, que no tiene Frijoles, tu primera publicación puede ser una necesidad.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-number" aria-hidden="true">04</div>
+                    <div>
+                        <h3>4. Intercambia</h3>
+                        <p>Acuerden un precio en Frijoles. Los Frijoles se retienen de forma segura hasta que se completa el trabajo, luego van al vendedor. Después se califican mutuamente.</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-more"><a href="getting-started.html">Lee la guía completa para comenzar →</a></p>
+        </div>
+    </section>
+
+    <!-- What you can do: one card per part of the app, in the app's own words -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>Qué puedes hacer</h2>
+                <p>La app se abre en Inicio, un conjunto de tarjetas que tú eliges. Detrás de ella: el Mercado, el Mapa, Charlas (Chat en la app web), Personas, el Pulso, los Bienes comunes y el Registro, donde ves tu saldo y tus intercambios.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧺</div>
+                    <h3>Mercado</h3>
+                    <p>Lo que las personas de tu comunidad ofrecen y lo que necesitan, con encuestas y eventos en el mismo feed. Búscalo, filtra por categoría y toca para intercambiar.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗺️</div>
+                    <h3>Mapa</h3>
+                    <p>Mira lo que se ofrece cerca de ti. Cada pin lo colocas tú: usa tu ubicación en ese momento o coloca el pin a mano. Cuando lo permites, la app también usa tu ubicación para mostrar lo que está más cerca de ti, y nunca en segundo plano. Los pines de eventos y los pines de emprendimientos configurados en la app web se pueden establecer en Aproximado, lo que redondea la ubicación a unos 100&nbsp;m. Los pines son visibles para los miembros de tu comunidad. Cuando la comunidad global se abra a todos, un visitante allí verá las publicaciones y aproximadamente dónde están, pero sin nombres, sin fotos de perfil y sin ubicaciones exactas. Cualquiera puede unirse en un minuto, por lo que sus miembros también ven las publicaciones de los demás a aproximadamente un kilómetro; la ubicación exacta es tuya para compartir cuando acuerden reunirse.</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📅</div>
+                    <h3>Eventos <span class="new-pill">Nuevo</span></h3>
+                    <p>Publica una jornada de trabajo voluntario, un café de reparación o un intercambio de habilidades con fecha, hora y lugar. Las personas tocan Asistiré o Me interesa. Quienes asisten obtienen el chat del evento y la nota privada del anfitrión &mdash; el código de entrada, qué llevar &mdash; y se enteran si la hora o el lugar cambian o si se cancela. Donde cualquiera puede unirse, como en la comunidad global, el anfitrión da acceso a cada persona primero, de forma predeterminada. Los eventos son gratuitos; no se intercambian Frijoles. Encuéntralos en el mapa en Hoy, Este fin de semana o Próximos 7 días, y usa Copiar a otra fecha para organizar uno nuevamente.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">💬</div>
+                    <h3>Charlas (Chat en la app web)</h3>
+                    <p>Envía mensajes a cualquier persona de tu comunidad. Los mensajes directos y los chats grupales están cifrados de extremo a extremo: el nodo de tu comunidad los transmite pero no puede leerlos. En un nodo que aún no se ha actualizado, las personas que lo gestionan aún pueden leer un chat grupal, y el chat así lo indica. Las discusiones de emprendimientos y los chats de eventos pueden ser leídos por las personas que gestionan el nodo de tu comunidad, para que puedan moderarse.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>Los Bienes comunes: emprendimientos <span class="new-pill">Nuevo</span></h3>
+                    <p>Un emprendimiento es algo que tu comunidad gestiona en conjunto: un gallinero comunitario, una biblioteca de herramientas, un depósito de leña o un proyecto con un objetivo y una fecha de finalización. Los custodios lo gestionan y un custodio principal lo lidera; los miembros pueden solicitar unirse como custodios. Tiene sus propios Frijoles, publica ofertas y necesidades en el Mercado como cualquier persona, muestra sus ingresos y gastos, y puede pausarse según la temporada. Ningún custodio puede aprobar un pago para sí mismo: otro custodio tiene que hacerlo.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>Encuestas y Decisiones <span class="new-pill">Nuevo</span></h3>
+                    <p>Cualquiera puede hacerle una pregunta a la comunidad con una encuesta en el Mercado. Las elecciones más importantes son Decisiones, en la pestaña Bienes comunes: un subsidio del fondo de Bienes comunes para un emprendimiento, una ayuda por dificultades económicas, reemplazar a un custodio principal. Una Decisión está abierta durante 7 días y se ejecuta sola si se aprueba. Una vez que hayas completado un intercambio, puedes proponer una.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>Grupos <span class="new-pill">Nuevo</span></h3>
+                    <p>Crea un grupo para tu calle, tu club de jardinería o tu banda, y te conviertes en su coordinador. Publica solo para el grupo y elige si es abierto, si las personas solicitan unirse o si es solo por invitación.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>El Pulso</h3>
+                    <p>Mira lo que la gente local está creando. Los miembros pueden conectar sus propios canales &mdash; TikTok, Instagram, YouTube, SoundCloud o un feed de blog &mdash; y sus publicaciones públicas aparecen en el Pulso de tu comunidad. Conectarlos depende de cada miembro. Cualquier contenido inapropiado se puede reportar y el nodo de tu comunidad puede eliminarlo.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>Crédito que ganas, no que pides prestado</h2>
+                <p>Nadie compra Frijoles y nadie paga intereses.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>Todos comienzan en cero</h3>
+                    <p>Una cuenta nueva tiene 0 Frijoles. Cuando vendes, tu saldo sube; cuando compras, baja. En toda la comunidad, los saldos siempre suman cero.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>Tu primer intercambio abre una línea de crédito</h3>
+                    <p>Una vez que hayas completado un intercambio, puedes comenzar a bajar de cero para recibir ayuda antes de haberla devuelto. Tu línea de crédito comienza pequeña (un intercambio de 100 Frijoles genera unos 37 Frijoles de crédito) y crece a medida que intercambias con más personas. Las ofertas que mantienes activas definen cuánto puedes usar: una oferta hasta 200 Frijoles, cinco ofertas hasta 2000.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>Insignias, no barreras</h3>
+                    <p>Con el tiempo obtienes insignias: Recién llegado, Residente, Cuidador, Anciano. Muestran tu historial en la comunidad. No limitan nada. Un admin también puede otorgar una insignia a alguien y, con ella, la línea de crédito inicial de esa insignia.</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">Lee Las Reglas para conocer cada número →</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">A dónde van las tarifas</span>
+                    <h3>El valor se queda en tu comunidad</h3>
+                </div>
+                <p class="stays-local-lead">Una tarifa del 1.5% en los intercambios completados y una pequeña tarifa mensual sobre la parte de un saldo superior a 200 Frijoles van al fondo de Bienes comunes de tu comunidad &mdash; no a nosotros ni a nadie más. Tu comunidad decide qué paga el fondo, a través de Decisiones.</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Sin anuncios y sin seguimiento</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Sin tokens para comprar o vender &mdash; los Frijoles son solo para intercambiar</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Sin intereses y sin bancos</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">Por qué lo construimos de esta manera: una economía postextracción →</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>Tu cuenta y tu seguridad</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>Tu clave se queda en tu teléfono</h3>
+                    <p>En la app para teléfono, tu clave se guarda en el almacenamiento seguro del teléfono, y puedes agregar Bloqueo de app, que solicita el bloqueo de pantalla del propio teléfono. En la app web se guarda en el almacenamiento de ese navegador. Tus 12 palabras son el respaldo que no depende de nadie.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>Reporta cualquier cosa</h3>
+                    <p>Puedes reportar una publicación, un miembro, un evento o un elemento del Pulso, y bloquear a cualquiera. Los reportes llegan a las personas que gestionan el nodo de tu comunidad &mdash; su propietario y administradores &mdash; quienes pueden eliminar contenido y cuentas. Los miembros también pueden votar en una Decisión para suspender o expulsar a alguien.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>La letra chica</h3>
+                    <p>Qué se almacena, quién puede verlo y cómo eliminar tu cuenta.</p>
+                    <p class="card-links"><a href="privacy.html">Política de privacidad</a>&nbsp;· <a href="safety.html">Seguridad infantil</a>&nbsp;· <a href="terms.html">Términos</a>&nbsp;· <a href="data-deletion.html">Eliminar tus datos</a></p>
+                </div>
+                <div class="feature-card glass-panel feature-wide" id="key-copy">
+                    <h3>Una segunda vía de acceso a tu clave y quién puede abrirla</h3>
+                    <p>También puedes vincular un inicio de sesión de Google, Apple o Facebook como una segunda vía de acceso. Luego se guarda una copia protegida de tu clave para ese inicio de sesión. Las apps de teléfono que usan la bóveda de claves de BeanPool la guardan allí, en un pequeño servidor en Islandia que no hace nada más; las versiones anteriores de la app de teléfono la guardan en el nodo de tu comunidad; la app web en la comunidad global la guarda en el servidor de esa comunidad, que nosotros gestionamos. Quien custodia la copia puede abrirla: BeanPool para la bóveda y la comunidad global, las personas que gestionan tu nodo para una copia guardada allí. La restauración desde la bóveda espera un día a menos que uno de tus propios dispositivos confirme que eres tú. Esa copia, y copiar tu cuenta a otro de tus dispositivos, son las únicas formas en que tu clave sale de tu dispositivo.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <span id="find-or-start"></span>
+        <div class="container">
+            <div class="section-header">
+                <h2>Encuentra tu intercambio local</h2>
+                <p>Las comunidades que utilizan BeanPool y se han registrado en el directorio.</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">Aún no hay una comunidad cerca de ti.</span>
+                    <a id="map-empty-start" href="#run-a-node">Iniciar una comunidad</a>
+                </div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">Comunidades registradas</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">Miembros (según lo reportado)</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
+        <div class="container">
+            <div class="section-header">
+                <span class="audience-tag">Para organizadores comunitarios</span>
+                <h2>Gestiona BeanPool para tu comunidad</h2>
+                <p>Cada comunidad funciona en su propio nodo: un pequeño servidor que aloja a los miembros, las publicaciones y el registro de esa comunidad. Alguien local lo gestiona. Si tu pueblo o valle aún no tiene uno, podrías ser tú.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>De qué te encargas</h3>
+                    <p>Tú y los administradores que nombres son los moderadores de tu comunidad: los reportes llegan a ti. Los datos de tus miembros residen en tu máquina, por lo que tú mantienes las copias de seguridad. Puedes leer las discusiones de emprendimientos y los chats de eventos; no puedes leer los mensajes directos. Invitas a los primeros miembros y ellos invitan al resto.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>La app de ajustes</h3>
+                    <p>Tu nodo incluye su propia app de ajustes en el navegador. Desde allí nombras a tu comunidad, designas un propietario y administradores que inician sesión con sus propias claves, imprimes invitaciones QR, supervisas la salud del disco, eliges una dirección web pública o un túnel, y ayudas a un miembro que haya perdido tanto su teléfono como sus 12 palabras a volver a su propia cuenta en un teléfono nuevo, con un código de un solo uso que confirmas en persona.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Privada desde el primer inicio</h3>
+                    <p>Las publicaciones, el mapa, los mensajes y los saldos de una comunidad son para sus miembros desde el momento en que se inicia su nodo; no hay nada que activar. A quien abra su dirección sin una cuenta se le orienta hacia la comunidad global, que se abrirá a todos pronto.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Conexión con una comunidad vecina</h3>
+                    <p>Dos comunidades pueden acordar conectarse para que sus miembros puedan intercambiar entre sí. Los Frijoles nunca salen de su lugar de origen: cada par lleva un recuento continuo de lo que una comunidad le debe a la otra, y cada lado establece su propio límite. La conexión está desactivada a menos que ambos operadores la activen, y todavía está en fase inicial: está desarrollada, con sus pantallas en la app web, y solo se ha probado entre dos de nuestras propias comunidades de prueba, nunca entre comunidades en vivo.</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>Iniciar una comunidad</h2>
+                <p>Alrededor de media hora, si puedes seguir una receta. Seis cosas que debes saber primero:</p>
+                <ul class="run-node-facts">
+                    <li><strong>Cuánto cuesta.</strong> El software es gratuito. Funciona en una computadora libre que permanece encendida en casa (una Mini PC, un NAS o una Raspberry Pi con sistema de 64 bits), o en un pequeño servidor alquilado por unos pocos dólares al mes (unos US$6).</li>
+                    <li><strong>Quién lo aloja.</strong> Tú, en tu propia máquina o en la que alquiles. Nunca necesita beanpool.org: tu propia dirección web funciona.</li>
+                    <li><strong>De qué te haces cargo.</strong> Los reportes de tus miembros llegan a ti. La carpeta de datos es tuya para hacer copias de seguridad, con un código de recuperación. Mantén dos propietarios. Mantén el servidor encendido y actualizado.</li>
+                    <li><strong>Lo que nunca ves.</strong> Los mensajes directos de tus miembros.</li>
+                    <li><strong>Docker primero.</strong> La máquina necesita tener Docker instalado antes del bloque a continuación; un servidor recién alquilado no lo tiene.</li>
+                    <li><strong>Una dirección accesible para teléfonos.</strong> Los teléfonos acceden a una comunidad en internet únicamente a través de https. En un servidor alquilado con dirección IP pública y los puertos 80 y 443 abiertos, esa dirección IP es suficiente: tu servidor obtiene su propio certificado para ella, sin cuenta de Cloudflare, y lo mismo para un dominio propio. En casa, o sin puertos abiertos, el reclamo te da un nombre gratuito que termina en .beanpool.org, a través de un túnel que ejecuta tu propio servidor. Una dirección http:// simple solo funciona en una red doméstica.</li>
+                </ul>
+                <p>Luego, en esa máquina con Docker instalado, pega este único bloque. Descarga el archivo compose, crea la red que usa el nodo, descarga la imagen publicada (Intel/AMD o ARM64), lo inicia, espera hasta que el servidor haya generado su código de reclamo de un solo uso (hasta cinco minutos, para un primer inicio lento en una Raspberry Pi) y lo reclama. No hay nada que configurar antes de que inicie.</p>
+
+                <!-- macOS Style Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — iniciar una comunidad</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">Un bloque: descargar, red, imagen, iniciar, esperar, reclamar</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="Copiar al portapapeles">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">La última línea: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Tu dirección.</strong> Elígela antes de pegar y modifica la última línea para que coincida. Si ya pegaste, presiona Enter en sus preguntas y luego vuelve a ejecutar la última línea: el código de reclamo espera a un teléfono. <strong>Un servidor alquilado</strong> con una dirección IP pública y los puertos 80 y 443 abiertos: agrega <code>--ip</code> y su dirección IP, como en <code>beanpool claim --ip 203.0.113.7</code>. Tu servidor obtiene su propio certificado para esa dirección de Let's Encrypt a través del puerto 80, y los teléfonos se conectan a él en https://203.0.113.7. <strong>Una computadora en casa, o sin puertos abiertos</strong>: déjala como está. Pide la primera parte de un nombre gratuito (escribe solo <strong>tupueblo</strong> para tupueblo.beanpool.org; Enter omite), al que se accede a través de un túnel que ejecuta tu propio servidor, y espera hasta tres minutos para que esté activo. <strong>Tu propio dominio</strong>: apunta un registro A hacia la dirección IP del servidor, abre los puertos 80 y 443 y agrega <code>--address https://tu.domain</code>. Un nombre sobrevive a un cambio de servidor; un número no: puedes agregar un nombre más adelante en Ajustes, y los miembros que usen la dirección IP seguirán funcionando. Para elegir más adelante en Ajustes, agrega <code>--no-name</code>. Una dirección <code>http://</code> simple solo funciona en una red doméstica: los teléfonos la rechazan en internet y el reclamo te advertirá. Si el servicio de direcciones del proyecto BeanPool está caído, el reclamo aún funciona.</li>
+                    <li><strong>El código y el QR.</strong> Muestra un código de reclamo de un solo uso y un código QR. Escanea el código QR con la cámara de tu teléfono, o abre BeanPool, escribe la dirección del servidor en <strong>Encuentra tu comunidad</strong> y toca <strong>Reclamar</strong>. Ese teléfono se convierte en el propietario.</li>
+                    <li><strong>Ajustes.</strong> Abre tu dirección (o la dirección propia del servidor) seguida de <strong>/settings</strong>. El asistente de configuración nombra a tu comunidad, te pide que agregues un segundo propietario y crea tres invitaciones iniciales. Establece tu ubicación en el mapa en Identidad del nodo para que las personas cercanas puedan encontrarte.</li>
+                </ol>
+                <p class="run-node-note">Si el bloque dice <strong>No claim code after 5 minutes</strong>, o <code>beanpool claim</code> dice <strong>This community has no claim code waiting</strong>, el servidor no ha terminado de iniciar: <code>docker compose logs beanpool-node</code> muestra su estado. Una vez que el registro indique que la comunidad aún no tiene propietario y tiene un código de reclamo, vuelve a ejecutar la última línea. Los pasos completos están en la <a href="guide/operators/first-time-setup.html">configuración inicial</a> del manual del operador.</p>
+
+                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    Ver en GitHub →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section id="newsletter">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="newsletter-content">
+                    <h3><img src="bean.png" alt="Icono" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />Mantente al día</h3>
+                    <p>Recibe un correo electrónico cuando haya una nueva versión o una nueva comunidad.</p>
+                </div>
+                <div class="newsletter-form-container">
+                    <form id="newsletter-form" class="newsletter-form">
+                        <input type="email" id="newsletter-email" placeholder="tu@ejemplo.com" aria-label="Dirección de correo electrónico" required>
+                        <button type="submit" class="btn btn-primary btn-subscribe">Suscribirse</button>
+                    </form>
+                    <div id="newsletter-status" class="newsletter-status"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Icono de BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Una app gratuita para intercambiar con tus vecinos, en Frijoles.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Centro de ayuda</a>
+                    <a href="getting-started.html">Comenzar</a>
+                    <a href="rules.html">Las Reglas</a>
+                    <a href="post-extraction.html">Postextracción</a>
+                    <a href="#run-a-node">Gestionar una comunidad</a>
+                    <a href="guide/index.html">Guía para miembros</a>
+                    <a href="status.html">Estado del servidor</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">Política de privacidad</a>
+                    <a href="terms.html">Términos de servicio</a>
+                    <a href="safety.html">Seguridad infantil</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Código abierto bajo licencia MIT. Hecho con <img src="bean.png" alt="amor" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> por comunidades, para comunidades. Límites de zonas horarias © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="main.js?v=1.10"></script>
+</body>
+</html>

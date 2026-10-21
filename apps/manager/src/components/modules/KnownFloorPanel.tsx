@@ -2,6 +2,8 @@ import React, { useEffect, useId, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { GATED_LOOK, gatedProps, guardGated } from '../../lib/gated-control';
 import { buildAdminHeaders, getTfaSessionToken, resolveNodeApiUrl, passwordField } from '../../lib/node-client';
+import { t } from '../../lib/fresh-proof';
+import { readDoor, type Door } from './DoorSettingPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
 import { t } from '../../lib/fresh-proof';
@@ -42,6 +44,7 @@ export function readKnownFloorSettings(v: unknown): Settings | null {
 
 export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfile; viewer: RolesViewer }) {
     const [saved, setSaved] = useState<Settings | null>(null);
+    const [door, setDoor] = useState<Door | null>(null);
     const [dial, setDial] = useState(false);
     const [floor, setFloor] = useState('');
     const [cap, setCap] = useState('');
@@ -56,6 +59,15 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
         let mounted = true;
         setSaved(null);
         setStatus(null);
+        setDoor(null);
+        (async () => {
+            const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/node/config')).catch(() => null);
+            if (!res || !res.ok) return;
+            const cfg = await res.json().catch(() => ({}));
+            const d = readDoor((cfg as { door?: unknown }).door);
+            if (!mounted || !d) return;
+            setDoor(d);
+        })();
         (async () => {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/known-floor'), {
                 headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
@@ -120,6 +132,11 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
                     Nobody else&apos;s limit changes. Lowering it never takes Beans from anyone: a member below their new limit can still
                     receive, and can spend again once they climb back.
                 </p>
+                {door === 'members' && (
+                    <p data-testid="known-floor-mixed-note" className="text-xs text-nature-300 m-0 mt-2 leading-relaxed break-words">
+                        {t('A mixed community: anyone a member invites can join, and once the known floor is on, members your admins confirm start with a higher limit.')}
+                    </p>
+                )}
             </div>
 
             <label htmlFor={`${ids}-dial`} className={`flex items-start gap-3 rounded-xl border border-nature-800 bg-nature-950 p-3 min-h-[48px] ${blocked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>

@@ -1,0 +1,159 @@
+<!-- source-hash: 4ad64dc454d69949 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新手入门 —— 加入 BeanPool 的三种方式</title>
+    <meta name="description" content="如何在全球社区体验 BeanPool、寻找或建立你身边的社区，或者通过邀请加入；以及你的 12 个助记词和第一笔交易。">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The doors land on these headings (#global, #invite…): below the fixed bar, 74 px tall on a phone, 88 px wide */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content p strong { color: var(--text-primary); }
+        .rules-content p { overflow-wrap: anywhere; }
+        .rules-content .guide-links { font-size: 0.95rem; margin-top: -0.5rem; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool 图标" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">运作方式</a>
+                <a href="rules.html">规则</a>
+                <a href="index.html#features">功能介绍</a>
+                <a href="help.html">帮助</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">教程</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="在 YouTube (@beanpool) 上观看视频教程">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="加入 Reddit 社区 (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="在 GitHub 上查看">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">新手入门</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="打开菜单"><span aria-hidden="true">☰</span> 菜单</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta" aria-current="page">新手入门</a>
+                    <a href="index.html#how-it-works">运作方式</a>
+                    <a href="rules.html">规则</a>
+                    <a href="index.html#features">功能介绍</a>
+                    <a href="help.html">帮助</a>
+                    <a href="guide/index.html">成员指南</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube 教程</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit 上的 r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub 源代码</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>新手入门</h1>
+        <p class="lede">共有三种加入方式。根据你目前的实际情况选择最合适的一种；无论选择哪种方式，你的账户都是相同的，并且可以同时属于多个社区。</p>
+
+        <!-- OPEN-GLOBAL: when global's private preview is off, the heading becomes "Try it now on the global community" and the
+             two paragraphs below become this one:
+             The global community is people from everywhere. You need no invite: open <strong>global.beanpool.org</strong> in a browser and tap <strong>Join</strong>, or install the app and tap <strong>Explore BeanPool worldwide</strong> on the first screen. Create an account with <strong>12 secret words</strong> (no Google, Apple or Facebook account needed), or sign in once with Google, Apple or Facebook; that sign-in also becomes a way back if you lose your phone. Tell it roughly where you are, to about 10 km, or skip that. Then you can see what people near you offer, post something free or for swap, message people, and ask a community near you to let you in. Beans, trades, the Commons and its Decisions are switched off there: they belong to a local community. The app shows you each of them with an example community, so you know what a local community offers before you join or start one. -->
+        <h2 id="global"><span class="num">1.</span>连接全球体验：全球社区</h2>
+        <p>全球社区汇聚了来自各地的成员，未来无需邀请即可加入。它由 BeanPool 运营在我们于美国租用的服务器上。目前它处于内部预览阶段供首批成员体验：只有其所有者或管理员邀请的人才能加入，其他人打开 <strong>global.beanpool.org</strong> 只会看到一句话：“该社区处于内部预览阶段。请向其所有者索取邀请。”它很快将向所有人开放。届时你可以在浏览器或应用中通过 <strong>12 个机密助记词</strong>或 Google、Apple、Facebook 登录方式加入，查看附近成员提供的事物、发布免费或交换的物品、向他人发送消息，并申请加入身边的社区。豆子、交易、公共资金池及其决策属于本地社区的功能；全球社区通过一个示例社区向你展示这些内容，以便你在加入或建立本地社区前了解其能提供什么。</p>
+        <p>在正式开放之前：你可以从 <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> 或 <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> 获取应用，在<a href="index.html#find-or-start">我们的地图</a>上查看正在运行的社区，或者自己建立一个（第 2 部分），或者通过邀请加入社区（第 3 部分）。</p>
+        <p class="guide-links">指南：<a href="guide/joining.html">加入 BeanPool</a>、<a href="guide/web-app.html">在网页浏览器中使用 BeanPool</a>。</p>
+
+        <h2 id="find"><span class="num">2.</span>寻找或建立社区</h2>
+        <!-- OPEN-GLOBAL: when global's private preview is off, the paragraph below goes back to starting:
+             On the global community, <strong>Find your community</strong> on Home lists the communities nearest you. Tap <strong>Ask to join</strong>, write a few words about yourself, and any member of that community can let you in with one tap, and if no answer comes in 30 days you can ask again. Nothing near you? <strong>Tell me when one starts here</strong> watches your area. Or start one: every community … (the rest unchanged) -->
+        <p>目前你可以在<a href="index.html#find-or-start">我们的地图</a>上查看正在运行的社区，并通过成员发出的邀请加入其中（第 3 部分）。待全球社区开放时，很快就可以直接申请加入（第 1 部分）：在首页的<strong>寻找你的社区</strong>中会列出离你最近的社区。点击<strong>申请加入</strong>，写几句自我介绍，该社区的任何成员都可以一键允许你进入；如果 30 天内未收到答复，你可以再次申请。附近没有社区？点击<strong>这里有社区时通知我</strong>来关注你所在的区域。或者自己建立一个社区：每个社区都运行在自己的小型服务器上（一台闲置常开的电脑或每月花费几美元租用的服务器），由本地居民负责维护。应用的<strong>创建社区</strong>界面会引导你完成操作，具体步骤也在我们首页的<a href="index.html#run-a-node">为你的社区运行 BeanPool</a>下列出。</p>
+        <p class="guide-links">指南：<a href="guide/finding-a-community.html">寻找你身边的社区</a>。</p>
+
+        <h2 id="invite"><span class="num">3.</span>收到邀请了？</h2>
+        <p>邀请可以是一个链接、一个二维码或一段以 <strong>INV-</strong> 或 <strong>BP-</strong> 开头的代码。它仅限使用一次，有效期为 30 天。安装应用后，点击<strong>凭邀请加入</strong>（网页版中为<strong>我是新来的</strong>），粘贴链接或代码，并选择其他人将看到的名称（最多 20 个字符）。如果你只有代码，还需要输入社区的名称或地址；邀请你的人可以告诉你。</p>
+        <p class="guide-links">指南：<a href="guide/joining.html">加入 BeanPool</a>。</p>
+
+        <h2 id="words"><span class="num">4.</span>你的 12 个助记词</h2>
+        <p>你的账户是一个保存在手机上或网页版浏览器中的密钥。这里没有密码。应用会在<strong>安全备份</strong>中向你显示 12 个助记词：请将它们抄写下来并妥善保管，因为在新手机上找回账户全靠它们。在手机应用以及全球社区中，你还可以添加 Google、Apple 或 Facebook 登录方式作为第二种找回途径。随后会为其保存一份你密钥的加锁副本：使用 BeanPool 密钥库的手机应用会保存在那里（位于冰岛的一台小型服务器上）；旧版手机应用则保存在你社区的服务器上；全球社区的网页应用则保存在该社区的服务器上（由我们运营）。谁保存该副本，谁就能打开它，并且从密钥库恢复需要等待一天，除非你自己的其中一台设备确认是你本人。如果你希望除了你之外没有任何人能够进入账户，请仅使用你的 12 个助记词。</p>
+        <p class="guide-links">指南：<a href="guide/your-12-words.html">你的 12 个助记词</a>。</p>
+
+        <h2 id="trade"><span class="num">5.</span>你的第一笔交易</h2>
+        <p>在本地社区中，首先发布一项<strong>提供</strong>：顺风车进城、新鲜鸡蛋、一小时园艺劳作。商定豆子价格；豆子会被托管直到事情完成，然后支付给卖家，事后你们互相评价。你的信用额度会在完成第一笔交易后开启；它从较小开始，随着你与更多人交易而成长。你持续发布的提供数量决定了你能使用多少额度：1 个提供最多可达 200 个豆子，5 个提供最多可达 2000 个豆子。徽章（新人、居民、管家、长者）展示你的历程；它们不会带来任何功能限制。</p>
+        <p class="guide-links">指南：<a href="guide/a-deal-step-by-step.html">交易步骤详解</a>、<a href="guide/credit-line.html">你的信用额度</a>、具体数字参见<a href="rules.html#4">规则</a>。</p>
+
+        <h2 id="6"><span class="num">6.</span>帮助</h2>
+        <p>更喜欢观看直观的视频教程，还是在节点起步设置时需要帮助？欢迎联系 BeanPool 社区：</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1.25rem;">
+            <div class="feature-card feature-card-brand brand-youtube glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper youtube-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </div>
+                    <span class="brand-badge youtube-badge">▶ 视频指南</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">YouTube 教程</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">关于如何加入、你的 12 个助记词和进行交易的简短演示。</p>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-youtube" style="margin-top: 0.5rem;">在 YouTube 上观看 →</a>
+            </div>
+            <div class="feature-card feature-card-brand brand-reddit glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper reddit-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </div>
+                    <span class="brand-badge reddit-badge">💬 r/beanpool</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Reddit 社区讨论</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">参与讨论、提出疑问、分享提供，并与其他节点运维人员建立联系。</p>
+                <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-reddit" style="margin-top: 0.5rem;">加入 r/beanpool →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool 图标" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>一款使用豆子与邻居进行互助交易的免费应用。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">帮助中心</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">运作方式</a>
+                    <a href="getting-started.html">新手入门</a>
+                    <a href="rules.html">规则</a>
+                    <a href="safety.html">儿童安全</a>
+                    <a href="privacy.html">隐私政策</a>
+                    <a href="terms.html">服务条款</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>基于 MIT 许可证开源。由社区以<img src="bean.png" alt="爱心" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />打造，服务于社区。时区边界数据 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 贡献者</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -268,6 +268,12 @@ export function resetClaimBrake(): void {
 export const CLAIM_LOG_BUDGET = 20;
 let logWindowStart = 0, logWritten = 0, logUnwritten = 0;
 let logSummaryTimer: ReturnType<typeof setTimeout> | null = null;
+let claimLogClock: () => number = () => Date.now();
+
+/** Test seam: drives the budget's clock deterministically. */
+export function setClaimLogClockForTests(clock: (() => number) | null): void {
+    claimLogClock = clock ?? (() => Date.now());
+}
 
 function claimLogWindowMs(): number {
     const scaled = Number(process.env.CLAIM_LOG_WINDOW_MS);
@@ -288,7 +294,7 @@ function writeClaimLogSummary(): void {
 }
 
 /** Whether a wrong proof's SECURITY line may be written now; false counts it into the minute's summary line. */
-export function claimLogAdmit(now = Date.now()): boolean {
+export function claimLogAdmit(now = claimLogClock()): boolean {
     const windowMs = claimLogWindowMs();
     if (now - logWindowStart >= windowMs) {
         writeClaimLogSummary();

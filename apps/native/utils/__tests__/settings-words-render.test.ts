@@ -472,13 +472,18 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
 
     it('Advanced: saved communities, the global door, Add Manual Node; Database Health with its numbers', async () => {
         await renderIn('xx');
-        await click(row('Advanced / Subsystem'), 'Advanced');
+        await click(row('Saved communities'), 'Saved communities');
         await settle();
-        expect(host.textContent).toContain(pseudoLocalise('Saved Communities'));
+        expect(host.textContent).toContain(pseudoLocalise('Saved communities'));
+        expect(host.textContent).toContain(pseudoLocalise('The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.'));
+        expect(host.textContent).toContain(pseudoLocalise('Have an invite code for this community?'));
+        expect(host.textContent).toContain(pseudoLocalise('Run this community? Owners and admins see a Manage row at the top of Settings.'));
+        expect(host.textContent).toContain(pseudoLocalise('Add a community by address'));
+        expect(host.textContent).toContain(pseudoLocalise('Connect to a community by typing its address. Your phone will save it to this list and switch to it.'));
         expect(host.textContent).toContain(pseudoLocalise('🌍 Join the global community'));
         expect(host.textContent).toContain(pseudoLocalise('Active Node'));
         expect(bypassing(), 'advanced').toEqual([]);
-        await click(row('Clear Cache & Resync'), 'Clear Cache & Resync');
+        await click(row("Clear this phone's copy and download again"), "Clear this phone's copy and download again");
         expect(bypassing(), 'resync question').toEqual([]);
         await click(row('← Back'), 'Back');
         await click(row('Database Health & Stats'), 'Database Health');

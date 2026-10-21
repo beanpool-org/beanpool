@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool — Mabadilishano kwa Ajili ya Jamii, Si Benki za Kibiashara</title>
+    <meta name="description" content="BeanPool ni programu ya bure ambayo jamii hujiendeshea yenyewe ili kubadilishana misaada, bidhaa na ujuzi kwa Maharagwe badala ya pesa. Tafuta au anzisha jamii iliyo karibu nawe, au jiunge kwa mwaliko; jamii ya kimataifa itafunguliwa kwa kila mtu hivi karibuni. iPhone, Android na wavuti.">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../style.css?v=2.8">
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="#" class="logo"><img src="../bean.png" alt="Aikoni ya BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="#how-it-works">Jinsi Inavyofanya Kazi</a>
+                <a href="#features">Unachoweza Kufanya</a>
+                <a href="rules.html">Kanuni</a>
+                <a href="#run-a-node">Endesha Jamii</a>
+                <a href="help.html" title="Kila kanuni, mwongozo na maelekezo mahali pamoja">Msaada</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tazama Mafunzo ya Video kwenye YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Jiunge na Jamii ya Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Tazama kwenye GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Anza Sasa</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Fungua menyu"><span aria-hidden="true">☰</span> Menyu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Anza Sasa</a>
+                    <a href="#how-it-works">Jinsi Inavyofanya Kazi</a>
+                    <a href="#features">Unachoweza Kufanya</a>
+                    <a href="rules.html">Kanuni</a>
+                    <a href="#run-a-node">Endesha Jamii</a>
+                    <a href="help.html">Msaada</a>
+                    <a href="../guide/index.html">Mwongozo wa wanachama</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Video kwenye YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool kwenye Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Msimbo chanzo kwenye GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+            <div class="hero-header">
+                <div class="hero-badge">Bure kwenye simu na wavuti</div>
+                <h1>Mabadilishano kwa Ajili ya <span class="gradient-text">Jamii</span>,<br>Si Benki za Kibiashara</h1>
+                <p class="hero-subtitle">BeanPool ni programu ya bure ambayo jamii yako hutumia kubadilishana misaada, bidhaa na ujuzi wao kwa wao. Badala ya pesa, mnatumia Maharagwe: msaidie mtu na Maharagwe yatakujia; pata msaada nayo huenda upande mwingine. Sifuri ndio lengo &mdash; toa kiasi kinacholingana na unachopokea.</p>
+            </div>
+
+            <div class="hero-lower-grid">
+                <!-- Left: what BeanPool is not -->
+                <div class="not-card glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">🚫 Ilani Dhidi ya Unyonyaji</span>
+                        <h3>Kile Ambacho BeanPool <span class="text-rose">Sicho</span></h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Si Mashine ya Kusambaza Matangazo</strong>
+                                <p>Hakuna ufuatiliaji wa tabia, uvunaji wa data, au kanuni za algoriti za kutajirika haraka.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Si Sarafu ya Kubahatisha ya Kidijitali (Crypto)</strong>
+                                <p>Maharagwe ni mkopo wa pande zote kwa biashara halisi — hayapandishwi thamani kiholela kwenye masoko ya kubadilishia sarafu.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Si Mashine ya Kamari ya Kuteka Usikivu</strong>
+                                <p>Hakuna mtego wa kusogeza skrini bila kikomo wa kupoteza muda — ni ofa halisi za eneo lako na majirani pekee.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Si Deni la Makampuni au Unyonyaji</strong>
+                                <p>Hakuna riba, hakuna benki, hakuna madalali. Ada pekee zilizopo ni ndogo na huenda kwenye mfuko wa Mali za Pamoja wa jamii yako, kamwe si kwetu.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Si Programu ya Sarafu ya Kidijitali (Crypto)</strong>
+                                <p>Hakuna blockchain, hakuna sarafu, hakuna pochi ya kununua. Maneno yako 12 yanafungua tu akaunti yako mwenyewe.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <div class="hero-cta-card glass-panel">
+                    <div class="hero-cta-header">
+                        <span class="hero-cta-tag">Njia tatu za kujiunga</span>
+                        <h3>Anzia pale ulipo</h3>
+                    </div>
+
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">Ijaribu sasa, duniani kote</a>
+                            <p>Jamii ya kimataifa itafunguliwa kwa kila mtu hivi karibuni, bila mwaliko: tazama pembeni, weka kitu cha bure au cha kubadilishana, na upate jamii iliyo karibu nawe. Leo ni onyesho la awali la faragha. Hadi itakapofunguliwa, tazama jamii ambazo tayari zinafanya kazi hapa chini, anzisha moja, au tumia mwaliko uliopewa na mwanachama.</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">Tafuta au anzisha jamii</a>
+                            <p>Tazama jamii ambazo tayari zinafanya kazi, au anzisha moja kwenye kompyuta ya ziada au seva ndogo ya kukodi. Kuomba kujiunga na jamii iliyo karibu nawe kutapatikana hivi karibuni, wakati jamii ya kimataifa itakapofunguliwa.</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">Una mwaliko?</a>
+                            <p>Sakinisha programu na ufungue kiungo au changanua msimbo wa QR uliopewa na mwanachama; mwaliko hufanya kazi mara moja na hudumu kwa siku 30.</p>
+                        </div>
+                    </div>
+                    <p class="hero-web-note">Maharagwe huishi katika jamii za wenyeji, kila moja kwenye seva yake yenyewe. Jamii ya kimataifa inakuelekeza na kukuongoza kwenye mojawapo. Inakuonyesha jinsi Maharagwe yanavyofanya kazi huko, kupitia mfano wa jamii.</p>
+
+                    <div class="hero-logos-group">
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="Pakua kwenye App Store">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Pakua kwenye</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                        <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                        <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Pata kwenye Google Play">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">IPATE KWENYE</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
+                        <p class="hero-web-note">Huna duka la programu? Jamii ya kimataifa na jamii yako mwenyewe zinafunguka katika kivinjari cha simu yako; ziongeze kwenye skrini yako ya mwanzo.</p>
+                    </div>
+                    <!-- Where to find us: small round links, same destinations as the menu -->
+                    <div class="hero-social-row">
+                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" aria-label="BeanPool kwenye YouTube" title="BeanPool kwenye YouTube">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--youtube)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        </a>
+                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" aria-label="BeanPool kwenye Reddit" title="BeanPool kwenye Reddit">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--reddit)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                        </a>
+                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" aria-label="Msimbo chanzo wa BeanPool kwenye GitHub" title="Msimbo chanzo wa BeanPool kwenye GitHub">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hero Principles / Trust Banner -->
+            <div class="hero-principles-banner">
+                <div class="principle-item">
+                    <span class="principle-text">100% Bure</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">Hakuna manunuzi ndani ya programu</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">Msimbo Huria</span>
+                </div>
+            </div>
+
+            <!-- How Beans move, below the two cards -->
+            <div class="hero-example-row">
+                <div class="not-card hero-example glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">Jinsi Maharagwe yanavyozunguka</span>
+                        <h3>Majirani watatu, wiki moja</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">1</div>
+                            <div class="not-item-content">
+                                <strong>Sam anatengeneza baiskeli ya Ana &mdash; Maharagwe 30</strong>
+                                <p>Sam anapanda hadi +30. Ana anashuka hadi −30.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">2</div>
+                            <div class="not-item-content">
+                                <strong>Ana anamuokea Lee mkate &mdash; Maharagwe 30</strong>
+                                <p>Ana anarudi 0. Lee sasa yuko −30.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">3</div>
+                            <div class="not-item-content">
+                                <strong>Lee anamtunzia Sam mbwa wake &mdash; Maharagwe 30</strong>
+                                <p>Kila mtu anarudi karibu na sifuri, na kazi tatu zimekamilika bila mtu yeyote kutumia pesa.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="hero-example-note">Muuzaji anabaki na 98.5% ya kila bei; ile 1.5% nyingine huenda kwenye mfuko wa Mali za Pamoja wa jamii, kwa hivyo nambari halisi huwa chini kidogo ya hizi.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>BeanPool ni nini</h2>
+            </div>
+            <p class="what-it-is-lead">Jamii huendesha BeanPool kwenye seva yake ndogo yenyewe. Wanachama huchapisha wanachoweza kutoa na wanachohitaji, na kufanya mabadilishano kwa Maharagwe. Maharagwe si pesa unazonunua: ni rekodi kwamba mtu alimsaidia mtu mwingine. Kila mtu huanzia sifuri. Unaposaidia, salio lako hupanda; unaposaidiwa, hushuka; katika jamii nzima masalio daima hujumlisha kufikia sifuri. Hakuna anayetoa Maharagwe, hakuna anayeyakopesha kwa riba, na hakuna anayeyatoa kuwa pesa taslimu. Ada ndogo kwenye kila mabadilishano huenda kwenye mfuko wa jamii yenyewe, ambao wanachama wake huutumia kwa kupiga kura. Programu ni ya bure na ya msimbo huria; jamii huchagua seva yake yenyewe, na data iliyomo ni yao.</p>
+            <ul class="what-it-is-not">
+                <li><strong>Si sarafu ya kidijitali (cryptocurrency).</strong> Hakuna blockchain, hakuna sarafu pepe, hakuna cha kununua au kuuza. Maneno yako 12 yanafungua tu akaunti yako mwenyewe.</li>
+                <li><strong>Si benki.</strong> Mkopo unatokana na mabadilishano yako mwenyewe, bila riba: kiwango chako hufunguka kikiwa kidogo baada ya mabadilishano yako ya kwanza kukamilika na hukua kadri unavyofanya mabadilishano.</li>
+                <li><strong>Si kampuni ya katikati.</strong> BeanPool haichukui chochote kutoka kwa mabadilishano, na haionyeshi matangazo.</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">Mikopo ya pande zote ina historia ndefu: vikundi vya LETS viliiendesha kwenye karatasi kwa miongo kadhaa, na nchini Uswisi mzunguko wa biashara, WIR, umefanya biashara kwa mkopo wake wenyewe tangu mwaka 1934. Makaratasi mengi ndiyo yaliyowachosha wengi wao. BeanPool inashughulikia kazi hiyo ya makaratasi, ikifanywa na programu.</p>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2>Jinsi Inavyofanya Kazi</h2>
+                <p>Kuanzia skrini ya kwanza hadi mabadilishano yako ya kwanza.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
+                    <div class="step-number" aria-hidden="true">01</div>
+                    <div>
+                        <h3>1. Ingia kupitia mojawapo ya milango mitatu</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>Fungua mwaliko uliotumiwa na mwanachama; hivi karibuni unaweza pia kujaribu jamii ya kimataifa bila mwaliko na, kutoka hapo, uombe jamii iliyo karibu nawe ikuruhusu kujiunga. Kwa njia yoyote ile, unachagua jina ambalo watu watakufahamu kwalo.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🔑</div>
+                    <div class="step-number" aria-hidden="true">02</div>
+                    <div>
+                        <h3>2. Hifadhi maneno yako 12</h3>
+                        <p>Programu inaunda akaunti yako kwenye simu yako na kukuonyesha maneno 12. Yaandike chini na uyaweke salama: yanarejesha akaunti yako ukipoteza au kubadilisha simu yako.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
+                    <div class="step-number" aria-hidden="true">03</div>
+                    <div>
+                        <h3>3. Chapisha ofa</h3>
+                        <p>Weka kitu unachoweza kufanya au kushiriki: lifti ya kwenda mjini, mayai, kutengeneza baiskeli, saa moja ya kufanya bustani. Katika jamii inayotumia Maharagwe, unahitaji kuwa na angalau ofa moja kabla ya kuweka hitaji au kununua. Kwenye jamii ya kimataifa, ambayo haina Maharagwe, chapisho lako la kwanza linaweza kuwa hitaji.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-number" aria-hidden="true">04</div>
+                    <div>
+                        <h3>4. Fanya mabadilishano</h3>
+                        <p>Kubalianeni bei katika Maharagwe. Maharagwe yanashikiliwa kwa usalama hadi kazi ikamilike, kisha yanaenda kwa muuzaji. Mtapeana tathmini baada ya hapo.</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-more"><a href="getting-started.html">Soma mwongozo kamili wa Kuanza Sasa →</a></p>
+        </div>
+    </section>
+
+    <!-- What you can do: one card per part of the app, in the app's own words -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>Unachoweza Kufanya</h2>
+                <p>Programu inafungukia kwenye Nyumbani, kadi kadhaa unazochagua. Nyuma yake: Soko, Ramani, Gumzo (Chat katika programu ya wavuti), Watu, Mwenendo, Mali za Pamoja na Leja, ambapo unaona salio lako na mabadilishano yako.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧺</div>
+                    <h3>Soko</h3>
+                    <p>Kile ambacho watu katika jamii yako wanatoa na wanachohitaji, pamoja na kura za maoni na matukio kwenye ukurasa huo huo. Tafuta ndani yake, chuja kwa kategoria, na uguse ili kufanya mabadilishano.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗺️</div>
+                    <h3>Ramani</h3>
+                    <p>Ona kinachotolewa karibu nawe. Kila pini ni ile unayoiweka mwenyewe: tumia eneo lako la wakati huo, au weka pini hiyo kwa mkono. Unaporuhusu, programu pia hutumia eneo lako kukuonyesha kilicho karibu nawe zaidi, na kamwe haifanyi hivyo chinichini. Pini za matukio, na pini za biashara zilizowekwa kwenye programu ya wavuti, zinaweza kuwekwa kuwa Takriban, ambapo eneo hurekebishwa kuwa takriban 100&nbsp;m. Pini zinaonekana kwa wanachama wa jamii yako. Wakati jamii ya kimataifa itakapofunguliwa kwa kila mtu, mgeni huko ataona matangazo na takriban mahali yalipo, lakini bila majina, picha za wasifu wala maeneo kamili. Mtu yeyote anaweza kujiunga nayo kwa dakika moja, kwa hivyo wanachama wake huona matangazo ya wenzao ndani ya takriban kilomita moja pia; eneo kamili ni lako kushiriki mnapopanga kukutana.</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📅</div>
+                    <h3>Matukio <span class="new-pill">Mpya</span></h3>
+                    <p>Chapisha kazi ya pamoja, kikundi cha ukarabati au kushiriki ujuzi kukiwa na muda na mahali. Watu hugusa Ninakwenda au Ninavutiwa. Watu wanaokwenda hupata gumzo la tukio na dokezo la faragha la mwenyeji &mdash; msimbo wa lango, vitu vya kuleta &mdash; na hupewa taarifa ikiwa muda au mahali patabadilika au likighairiwa. Ambapo mtu yeyote anaweza kujiunga, kama ilivyo kwenye jamii ya kimataifa, mwenyeji humruhusu kila mtu aingie kwanza, kwa chaguo msingi. Matukio ni ya bure; hakuna Maharagwe yanayohamishwa. Yapate kwenye ramani chini ya Leo, Wikendi hii au Siku 7 zijazo, na utumie Nakili kwenye tarehe mpya ili kuliendesha tena.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">💬</div>
+                    <h3>Gumzo (Chat katika programu ya wavuti)</h3>
+                    <p>Mtumie ujumbe mtu yeyote katika jamii yako. Ujumbe wa moja kwa moja na gumzo za vikundi zimesimbwa kutoka mwisho hadi mwisho: nodi ya jamii yako inazisafirisha lakini haiwezi kuzisoma. Kwenye nodi ambayo haijasasishwa bado, gumzo la kikundi linaweza bado kusomwa na watu wanaoiendesha, na gumzo hilo hueleza hivyo. Mijadala ya biashara na gumzo za matukio zinaweza kusomwa na watu wanaoendesha nodi ya jamii yako, ili ziweze kusimamiwa.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>Mali za Pamoja: biashara <span class="new-pill">Mpya</span></h3>
+                    <p>Biashara ni kitu ambacho jamii yako inakiendesha pamoja: kundi la kuku wa mayai, maktaba ya zana, ghala la kuni, au mradi wenye lengo na tarehe ya mwisho. Wasimamizi huiendesha na msimamizi mkuu huiongoza; wanachama wanaweza kuomba kujiunga kama wasimamizi. Ina Maharagwe yake yenyewe, inachapisha ofa na mahitaji kwenye Soko kama mtu mwingine yeyote, inaonyesha mapato na matumizi yake, na inaweza kusitishwa kwa msimu. Hakuna msimamizi anayeweza kuidhinisha malipo kwake mwenyewe: msimamizi mwingine lazima afanye hivyo.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>Kura za Maoni na Maamuzi <span class="new-pill">Mpya</span></h3>
+                    <p>Mtu yeyote anaweza kuiuliza jamii swali kupitia kura ya maoni katika Soko. Chaguzi kubwa zaidi ni Maamuzi, kwenye kichupo cha Mali za Pamoja: ruzuku kutoka mfuko wa Mali za Pamoja kwenda kwa biashara, ruzuku ya shida, kubadilisha msimamizi mkuu. Uamuzi unakuwa wazi kwa siku 7 na unajitekeleza wenyewe ukipita. Mara tu unapokamilisha mabadilishano, unaweza kupendekeza uamuzi.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>Vikundi <span class="new-pill">Mpya</span></h3>
+                    <p>Anzisha kikundi kwa ajili ya mtaa wako, klabu yako ya bustani au bendi yako, nawe unakuwa mratibu wake. Chapisha kwenye kikundi pekee, na uchague kama kiko wazi, watu waombe kujiunga, au ni kwa mwaliko pekee.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>Mwenendo</h3>
+                    <p>Ona kile ambacho watu wa eneo lako wanatengeneza. Wanachama wanaweza kuunganisha njia zao wenyewe &mdash; TikTok, Instagram, YouTube, SoundCloud au machapisho ya blogu &mdash; na machapisho yao ya umma huonekana katika Mwenendo wa jamii yako. Kuunganisha ni uamuzi wa kila mwanachama. Chochote kisichopaswa kuwepo kinaweza kuripotiwa, na nodi ya jamii yako inaweza kukiondoa.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>Mkopo Unaopata, Si wa Kukopa</h2>
+                <p>Hakuna anayenunua Maharagwe, na hakuna anayelipa riba.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>Kila mtu huanzia sifuri</h3>
+                    <p>Akaunti mpya ina Maharagwe 0. Unapouza, salio lako hupanda; unaponunua, hushuka. Katika jamii nzima masalio daima hujumlisha kufikia sifuri.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>Mabadilishano yako ya kwanza yanafungua kiwango cha mkopo</h3>
+                    <p>Mara tu unapokamilisha mabadilishano, unaweza kuanza kwenda chini ya sifuri ili kupata msaada kabla ya kuurudisha. Kiwango chako cha mkopo huanza kikiwa kidogo (mabadilishano ya Maharagwe 100 yanakupa takriban Maharagwe 37 ya mkopo) na hukua kadri unavyofanya mabadilishano na watu wengi zaidi. Ofa unazoendelea kuwa nazo huamua ni kiasi gani unachoweza kutumia: ofa moja hadi Maharagwe 200, ofa tano hadi 2000.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>Beji, si vizuizi</h3>
+                    <p>Kadri muda unavyopita unapata beji: Mgeni, Mkazi, Msimamizi, Mzee. Zinaonyesha historia yako katika jamii. Hazizuii chochote. Msimamizi pia anaweza kumpa mtu beji, na pamoja nayo kiwango cha kuanzia cha mkopo cha beji hiyo.</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">Soma Kanuni kwa nambari zote →</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">Ada zinakokwenda</span>
+                    <h3>Thamani inabaki katika jamii yako</h3>
+                </div>
+                <p class="stays-local-lead">Ada ya 1.5% kwenye mabadilishano yaliyokamilika, na ada ndogo ya kila mwezi kwenye sehemu ya salio inayozidi Maharagwe 200, huenda kwenye mfuko wa Mali za Pamoja wa jamii yako &mdash; si kwetu wala kwa mtu mwingine yeyote. Jamii yako huamua kile ambacho mfuko unagharamia, kupitia Maamuzi.</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Hakuna matangazo na hakuna ufuatiliaji</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Hakuna sarafu pepe ya kununua au kuuza &mdash; Maharagwe ni kwa ajili ya mabadilishano pekee</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Hakuna riba na hakuna benki</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">Kwa nini tuliiunda kwa njia hii: uchumi baada ya unyonyaji →</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>Akaunti Yako na Usalama Wako</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>Ufunguo wako unabaki kwenye simu yako</h3>
+                    <p>Kwenye programu ya simu ufunguo wako huwekwa katika hifadhi salama ya simu, na unaweza kuongeza Kufunga Programu, ambayo huomba mbinu ya kawaida ya kufunga skrini ya simu yako. Katika programu ya wavuti huwekwa kwenye hifadhi ya kivinjari hicho. Maneno yako 12 ni nakala rudufu isiyomtegemea mtu yeyote.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>Ripoti chochote</h3>
+                    <p>Unaweza kuripoti chapisho, mwanachama, tukio au kipengee cha Mwenendo, na kumzuia mtu yeyote. Ripoti huenda kwa watu wanaoendesha nodi ya jamii yako &mdash; mmiliki na wasimamizi wake &mdash; ambao wanaweza kuondoa maudhui na akaunti. Wanachama wanaweza pia kupiga kura kwenye Uamuzi wa kumsimamisha au kumwondoa mtu.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>Maelezo madogo ya kisheria</h3>
+                    <p>Kile kinachohifadhiwa, nani anayeweza kukiona, na jinsi ya kufuta akaunti yako.</p>
+                    <p class="card-links"><a href="../privacy.html">Sera ya Faragha</a>&nbsp;· <a href="safety.html">Usalama wa Watoto</a>&nbsp;· <a href="../terms.html">Masharti</a>&nbsp;· <a href="../data-deletion.html">Kufuta data yako</a></p>
+                </div>
+                <div class="feature-card glass-panel feature-wide" id="key-copy">
+                    <h3>Njia ya pili ya kupata ufunguo wako, na nani anayeweza kuufungua</h3>
+                    <p>Unaweza pia kuunganisha kuingia kupitia Google, Apple au Facebook kama njia ya pili ya kurejesha. Nakala iliyolindwa ya ufunguo wako huhifadhiwa kwa ajili ya kuingia huko. Programu za simu zinazotumia chumba salama cha funguo za BeanPool huuhifadhi hapo, kwenye seva ndogo nchini Iceland ambayo haifanyi kitu kingine chochote; matoleo ya zamani ya programu ya simu huuhifadhi kwenye nodi ya jamii yako; programu ya wavuti kwenye jamii ya kimataifa huuhifadhi kwenye seva ya jamii hiyo, tunayoiendesha sisi. Yeyote anayehifadhi nakala hiyo anaweza kuifungua: BeanPool kwa chumba salama na jamii ya kimataifa, watu wanaoendesha nodi yako kwa nakala inayohifadhiwa hapo. Urejeshaji kutoka kwenye chumba salama husubiri siku moja isipokuwa kifaa chako kimojawapo kithibitishe kuwa ni wewe. Nakala hiyo, na kunakili akaunti yako kwenye kifaa chako kingine, ndizo njia pekee ambazo ufunguo wako huondoka kwenye kifaa chako.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <span id="find-or-start"></span>
+        <div class="container">
+            <div class="section-header">
+                <h2>Pata Mabadilishano ya Eneo Lako</h2>
+                <p>Jamii zinazoendesha BeanPool ambazo zimejiandikisha kwenye orodha.</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">Bado hakuna jamii karibu nawe.</span>
+                    <a id="map-empty-start" href="#run-a-node">Anzisha jamii</a>
+                </div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">Jamii zilizoorodheshwa</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">Wanachama (kama ilivyoripotiwa)</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
+        <div class="container">
+            <div class="section-header">
+                <span class="audience-tag">Kwa waandaaji wa jamii</span>
+                <h2>Endesha BeanPool kwa Ajili ya Jamii Yako</h2>
+                <p>Kila jamii huendeshwa kwenye nodi yake yenyewe: seva ndogo inayoshikilia wanachama, machapisho na leja ya jamii hiyo. Mtu wa eneo husika huiendesha. Ikiwa mji au bonde lako halina bado, unaweza kuwa wewe.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>Unachosimamia</h3>
+                    <p>Wewe na wasimamizi unaowateua ndio wasimamizi wa jamii yako: ripoti huja kwenu. Data ya wanachama wako inaishi kwenye mashine yako, kwa hivyo unaiwekea nakala rudufu. Unaweza kusoma mijadala ya biashara na gumzo za matukio; huwezi kusoma jumbe za moja kwa moja. Unawaalika wanachama wa kwanza, nao huwaalika wengine.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>Programu ya mipangilio</h3>
+                    <p>Nodi yako inakuja na programu yake ya mipangilio kwenye kivinjari. Kutoka kwayo unaiita jamii yako jina, unateua mmiliki na wasimamizi wanaoingia kwa funguo zao wenyewe, unachapisha mialiko ya QR, unafuatilia afya ya diski, unachagua anwani ya wavuti ya umma au mfereji, na unamsaidia mwanachama aliyepoteza simu yake na maneno yake 12 kurejea kwenye akaunti yake kwenye simu mpya, kwa msimbo wa mara moja unaoutoa ukithibitisha ana kwa ana.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Faragha kuanzia mwanzo kabisa</h3>
+                    <p>Matangazo, ramani, jumbe na masalio ya jamii ni kwa ajili ya wanachama wake kuanzia wakati ambapo nodi yake inapoanza kufanya kazi; hakuna cha kuwasha. Mtu anayefungua anwani yake bila kuwa na akaunti huelekezwa kwenye jamii ya kimataifa, ambayo itafunguliwa kwa kila mtu hivi karibuni.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Kuungana na jamii jirani</h3>
+                    <p>Jamii mbili zinaweza kukubaliana kuungana ili wanachama wao waweze kufanya mabadilishano wao kwa wao. Maharagwe kamwe hayaondoki nyumbani: kila jozi huweka hesabu inayoendelea ya kile ambacho jamii moja inadaiwa na nyingine, na kila upande huweka kikomo chake chenyewe. Kuunganisha kunazimwa isipokuwa waendeshaji wote wawili wakiwasha, na bado ni hatua za awali: kumejengwa, kukiwa na skrini zake katika programu ya wavuti, na kumejaribiwa tu kati ya jamii zetu mbili za majaribio, kamwe si kati ya jamii halisi.</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>Anzisha jamii</h2>
+                <p>Takriban nusu saa, ikiwa unaweza kufuata maelekezo. Mambo sita ya kujua kwanza:</p>
+                <ul class="run-node-facts">
+                    <li><strong>Gharama zake.</strong> Programu ni ya bure. Inaendeshwa kwenye kompyuta ya ziada inayobaki ikiwaka nyumbani (Mini PC, NAS, au Raspberry Pi yenye mfumo wa 64-bit), au kwenye seva ndogo ya kukodi kwa dola chache kwa mwezi (takriban US$6).</li>
+                    <li><strong>Nani anayeihifadhi.</strong> Wewe mwenyewe, kwenye mashine yako mwenyewe au unayoikodi. Kamwe haihitaji beanpool.org: anwani yako ya wavuti inafanya kazi.</li>
+                    <li><strong>Majukumu yako.</strong> Ripoti kutoka kwa wanachama wako huja kwako. Folda ya data ni yako kuiwekea nakala rudufu, kwa msimbo wa kurejesha. Wekeni wamiliki wawili. Weka seva ikiwa inafanya kazi na kusasishwa.</li>
+                    <li><strong>Kile ambacho hutakiona kamwe.</strong> Jumbe za moja kwa moja za wanachama wako.</li>
+                    <li><strong>Docker kwanza.</strong> Mashine inahitaji Docker ikiwa imesakinishwa kabla ya kizuizi cha msimbo hapa chini; seva iliyokodishwa hivi karibuni haina.</li>
+                    <li><strong>Anwani inayofikiwa na simu.</strong> Simu huifikia jamii kwenye intaneti kupitia https pekee. Kwenye seva ya kukodi yenye anwani ya IP ya umma na milango 80 na 443 ikiwa wazi, anwani hiyo ya IP inatosha: seva yako inapata cheti chake yenyewe kwa ajili yake, bila akaunti ya Cloudflare, na vivyo hivyo kwa kikoa chako mwenyewe. Nyumbani, au bila milango iliyo wazi, mchakato wa kudai unakupa jina la bure linaloishia na .beanpool.org, kupitia mfereji ambao seva yako hujiendeshea yenyewe. Anwani ya kawaida ya http:// inafanya kazi kwenye mtandao wa nyumbani pekee.</li>
+                </ul>
+                <p>Kisha, kwenye mashine hiyo ikiwa na Docker iliyosakinishwa, bandika kizuizi hiki kimoja cha msimbo. Kinaleta faili ya compose, kinaunda mtandao ambao nodi inautumia, kinapakua picha iliyochapishwa (Intel/AMD au ARM64), kinaianzisha, kinasubiri hadi seva itengeneze msimbo wake wa mara moja wa kudai (hadi dakika tano, kwa mwanzo wa polepole wa kwanza kwenye Raspberry Pi), na kuikabidhi. Hakuna cha kusanidi kabla ya kuanza.</p>
+
+                <!-- macOS Style Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — anzisha jamii</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">Kizuizi kimoja: leta, mtandao, pakua, anza, subiri, dai</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="Nakili kwenye ubao wa kunakili">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">Mstari wa mwisho: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Anwani yako.</strong> Ichague kabla ya kubandika, na ubadilishe mstari wa mwisho ili ulingane. Ikiwa tayari umebandika, bonyeza Enter kwenye maswali yake, kisha uendeshe mstari wa mwisho tena: msimbo wa kudai unasubiri simu. <strong>Seva iliyokodishwa</strong> yenye anwani ya IP ya umma na milango 80 na 443 ikiwa wazi: ongeza <code>--ip</code> na anwani yake ya IP, kama vile <code>beanpool claim --ip 203.0.113.7</code>. Seva yako inapata cheti chake yenyewe cha anwani hiyo kutoka Let's Encrypt, kupitia mlango wa 80, na simu huifikia katika https://203.0.113.7. <strong>Kompyuta ya nyumbani, au bila milango iliyo wazi</strong>: iache kama ilivyo. Inaomba sehemu ya kwanza ya jina la bure (andika tu <strong>yourtown</strong> kwa ajili ya yourtown.beanpool.org; Enter inaruka), inayofikiwa kupitia mfereji ambao seva yako hujiendeshea yenyewe, na kusubiri hadi dakika tatu ili ianze kufanya kazi. <strong>Kikoa chako mwenyewe</strong>: elekeza rekodi ya A kwa ajili yake kwenye anwani ya IP ya seva, fungua milango 80 na 443, na uongeze <code>--address https://your.domain</code>. Jina hudumu hata seva ikibadilika; nambari haidumu: unaweza kuongeza jina baadaye kwenye Mipangilio, na wanachama wanaotumia anwani ya IP wanaendelea kufanya kazi. Ili kuchagua baadaye kwenye Mipangilio, ongeza <code>--no-name</code>. Anwani ya kawaida ya <code>http://</code> inafanya kazi kwenye mtandao wa nyumbani pekee: simu huikataa kwenye intaneti, na mchakato wa kudai unakuonya. Ikiwa huduma ya anwani ya mradi wa BeanPool haifanyi kazi, mchakato wa kudai bado unafanya kazi.</li>
+                    <li><strong>Msimbo na QR.</strong> Inaonyesha msimbo wa mara moja wa kudai na msimbo wa QR. Changanua msimbo wa QR kwa kamera ya simu yako, au fungua BeanPool, andika anwani ya seva chini ya <strong>Tafuta jamii yako</strong> na uguse <strong>Dai</strong>. Simu hiyo inakuwa mmiliki.</li>
+                    <li><strong>Mipangilio.</strong> Fungua anwani yako (au anwani ya seva yenyewe) ikifuatiwa na <strong>/settings</strong>. Mchawi wa usanidi huipa jamii yako jina, hukuomba uongeze mmiliki wa pili, na kuunda mialiko mitatu ya uanzilishi. Weka eneo lako kwenye ramani chini ya Utambulisho wa Nodi ili watu walio karibu waweze kukupata.</li>
+                </ol>
+                <p class="run-node-note">Ikiwa kizuizi kinasema <strong>Hakuna msimbo wa kudai baada ya dakika 5</strong>, au <code>beanpool claim</code> inasema <strong>Jamii hii haina msimbo wa kudai unaosubiri</strong>, seva haijamaliza kuanza: <code>docker compose logs beanpool-node</code> inaonyesha ilipofikia. Mara tu kumbukumbu inasema jamii haina mmiliki bado na ina msimbo wa kudai, endesha mstari wa mwisho tena. Hatua kamili ziko katika mwongozo wa mwendeshaji kwenye <a href="../guide/operators/first-time-setup.html">usanidi wa mara ya kwanza</a>.</p>
+
+                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    Tazama kwenye GitHub →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section id="newsletter">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="newsletter-content">
+                    <h3><img src="../bean.png" alt="Aikoni" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />Pata Taarifa za Hivi Punde</h3>
+                    <p>Pata barua pepe wakati kuna toleo jipya au jamii mpya.</p>
+                </div>
+                <div class="newsletter-form-container">
+                    <form id="newsletter-form" class="newsletter-form">
+                        <input type="email" id="newsletter-email" placeholder="wewe@mfano.com" aria-label="Barua pepe" required>
+                        <button type="submit" class="btn btn-primary btn-subscribe">Jiandikishe</button>
+                    </form>
+                    <div id="newsletter-status" class="newsletter-status"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Aikoni ya BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Programu ya bure ya kubadilishana na majirani zako, kwa Maharagwe.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Kituo cha Msaada</a>
+                    <a href="getting-started.html">Kuanza Sasa</a>
+                    <a href="rules.html">Kanuni</a>
+                    <a href="post-extraction.html">Baada ya Unyonyaji</a>
+                    <a href="#run-a-node">Endesha Jamii</a>
+                    <a href="../guide/index.html">Mwongozo wa wanachama</a>
+                    <a href="status.html">Hali ya seva</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="../privacy.html">Sera ya Faragha</a>
+                    <a href="../terms.html">Masharti ya Huduma</a>
+                    <a href="safety.html">Usalama wa Watoto</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../index.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/index.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/index.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/index.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/index.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/index.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/index.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/index.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/index.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/index.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/index.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/index.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/index.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="index.html" hreflang="sw" lang="sw" aria-current="page">Kiswahili</a>
+                    <a href="../ml/index.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/index.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/index.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/index.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/index.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/index.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/index.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/index.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/index.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/index.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Msimbo huria chini ya leseni ya MIT. Imetengenezwa kwa <img src="../bean.png" alt="upendo" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> na jamii, kwa ajili ya jamii. Mipaka ya maeneo ya saa © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Wachangiaji wa OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../main.js?v=1.10"></script>
+</body>
+</html>

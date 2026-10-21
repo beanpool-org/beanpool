@@ -1,0 +1,167 @@
+<!-- source-hash: 64da0b917fdb13a9 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Довідковий центр — BeanPool</title>
+    <meta name="description" content="Усі правила, посібники та інструкції BeanPool в одному місці: початок роботи, правила, посібник для учасників, керування спільнотою, безпека, конфіденційність тощо.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.8">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Піктограма BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Як це працює</a>
+                <a href="index.html#features">Що ви можете робити</a>
+                <a href="rules.html">Правила</a>
+                <a href="index.html#run-a-node">Створити спільноту</a>
+                <a href="help.html" aria-current="page" title="Усі правила, посібники та інструкції в одному місці">Довідка</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Дивіться відеоуроки на YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Приєднуйтеся до спільноти в Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Переглянути на GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Початок роботи</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Відкрити меню"><span aria-hidden="true">☰</span> Меню</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Початок роботи</a>
+                    <a href="index.html#how-it-works">Як це працює</a>
+                    <a href="index.html#features">Що ви можете робити</a>
+                    <a href="rules.html">Правила</a>
+                    <a href="index.html#run-a-node">Створити спільноту</a>
+                    <a href="help.html" aria-current="page">Довідка</a>
+                    <a href="guide/index.html">Посібник для учасників</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Відео на YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool у Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Вихідний код на GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <main class="legal-content help-centre">
+        <h1>Довідковий центр</h1>
+        <p class="lede">Усі правила, посібники та інструкції BeanPool в одному місці. Оберіть те, що потрібно саме вам.</p>
+
+        <h2>Посібники та правила</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="getting-started.html">
+                <h3>Початок роботи</h3>
+                <p class="help-who">Для вас, якщо ви новачок у BeanPool.</p>
+                <p>Три шляхи: глобальна спільнота (незабаром відкриється для всіх), пошук або створення спільноти поруч із вами чи приєднання за запрошенням. А також ваші 12 слів і перша угода.</p>
+                <!-- OPEN-GLOBAL: "The three ways in: try the global community, find or start a community near you, or join with an invite. Then your 12 words and your first trade." -->
+            </a>
+            <a class="help-card glass-panel" href="rules.html">
+                <h3>Правила</h3>
+                <p class="help-who">Для вас, якщо вам потрібні всі точні цифри.</p>
+                <p>Боби, кредитні лінії, комісії, подарунки, ліміти та розрахунки за угодами в одному місці.</p>
+            </a>
+            <a class="help-card glass-panel" href="guide/index.html">
+                <h3>Посібник для учасників</h3>
+                <p class="help-who">Для вас, якщо ви вже є учасником спільноти.</p>
+                <p>Як публікувати пропозиції, торгувати, листуватися, голосувати та захищати свій обліковий запис. Цей самий посібник є всередині додатка: торкніться боба у верхньому лівому куті на телефоні або знака <strong>?</strong> у вебдодатку.</p>
+            </a>
+            <a class="help-card glass-panel" href="index.html#run-a-node">
+                <h3>Керування спільнотою</h3>
+                <p class="help-who">Для вас, якщо ви хочете створити спільноту або керувати нею.</p>
+                <p>Що потрібно для роботи власного сервера вашої спільноти та як його налаштувати.</p>
+                <p class="help-note">Посібник оператора розміщено на сервері вашої спільноти: увійдіть у розділ «Налаштування» (адреса вашого сервера з додаванням /settings) і натисніть «Інструкція» на бічній панелі або знак ? поруч із назвою екрана. Лише сторінка першого налаштування розміщена на цьому вебсайті в посібнику.</p>
+            </a>
+        </div>
+
+        <h2>Безпека та ваші дані</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="safety.html">
+                <h3>Безпека</h3>
+                <p class="help-who">Для всіх, хто занепокоєний можливими порушеннями в BeanPool.</p>
+                <p>Як ми захищаємо дітей, як поскаржитися на порушення та як зв'язатися з нами.</p>
+            </a>
+            <a class="help-card glass-panel" href="privacy.html">
+                <h3>Конфіденційність</h3>
+                <p class="help-who">Для всіх, хто хоче знати, які дані зберігаються.</p>
+                <p>Що саме сервер вашої спільноти зберігає про вас і чому.</p>
+            </a>
+            <a class="help-card glass-panel" href="terms.html">
+                <h3>Умови</h3>
+                <p class="help-who">Для кожного користувача BeanPool.</p>
+                <p>Угода, яку ви укладаєте, користуючись додатком.</p>
+            </a>
+            <a class="help-card glass-panel" href="data-deletion.html">
+                <h3>Видалення даних</h3>
+                <p class="help-who">Для вас, якщо ви хочете видалити свої дані.</p>
+                <p>Як видалити прив'язаний обліковий запис або весь обліковий запис BeanPool.</p>
+            </a>
+        </div>
+
+        <h2 id="writing-to-us">Як зв'язатися з нами</h2>
+        <p>Хто читає ваші звернення та як швидко.</p>
+        <p><strong>Скарга в глобальній спільноті.</strong> Ми керуємо глобальною спільнотою, тому скарга, подана вами в додатку там, надходить до нас, і ми розглядаємо її протягом доби.</p>
+        <p><strong>Скарга в місцевій спільноті.</strong> Вона надходить модераторам цієї спільноти, а не нам.</p>
+        <p><strong>Електронний лист.</strong> Напишіть на <a href="mailto:admin@beanpool.org">admin@beanpool.org</a>, і ви отримаєте відповідь протягом двох днів. Ніколи не надсилайте нам ваші 12 слів. Будь-хто, хто має ваші 12 слів, може отримати доступ до вашого облікового запису. Ніхто з команди BeanPool чи вашої спільноти ніколи не запитуватиме їх.</p>
+        <p>Питання щодо безпеки дитини: спершу подайте скаргу в додатку, а потім перегляньте розділ <a href="safety.html">Безпека</a>.</p>
+
+        <h2>В інших джерелах</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">
+                <h3><svg style="color: var(--youtube)" class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>Відео</h3>
+                <p class="help-who">Для вас, якщо ви віддаєте перевагу перегляду, а не читанню.</p>
+                <p>Короткі відео на YouTube про те, як працює BeanPool.</p>
+            </a>
+            <a class="help-card glass-panel" href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">
+                <h3><svg style="color: var(--reddit)" class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>Спільнота</h3>
+                <p class="help-who">Для вас, якщо у вас є запитання чи ідея.</p>
+                <p>Ставте запитання іншим учасникам і розробникам BeanPool на Reddit.</p>
+            </a>
+            <a class="help-card glass-panel" href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">
+                <h3><svg class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>Вихідний код</h3>
+                <p class="help-who">Для вас, якщо ви пишете код.</p>
+                <p>BeanPool має відкритий вихідний код. Читайте код, повідомляйте про помилки чи долучайтеся до розробки на GitHub.</p>
+            </a>
+        </div>
+    </main>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Піктограма BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Безкоштовний додаток для торгівлі з сусідами за боби.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Довідковий центр</a>
+                    <a href="getting-started.html">Початок роботи</a>
+                    <a href="rules.html">Правила</a>
+                    <a href="post-extraction.html">Постекстрактивізм</a>
+                    <a href="index.html#run-a-node">Створити спільноту</a>
+                    <a href="guide/index.html">Посібник для учасників</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">Політика конфіденційності</a>
+                    <a href="terms.html">Умови використання</a>
+                    <a href="safety.html">Безпека дітей</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Відкритий вихідний код під ліцензією MIT. Створено з <img src="bean.png" alt="любов'ю" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> спільнотами для спільнот. Межі часових поясів © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Учасники OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Démarrer — Trois façons d'entrer dans BeanPool</title>
+    <meta name="description" content="Comment essayer BeanPool sur la communauté globale, trouver ou créer une communauté près de chez vous, ou rejoindre sur invitation ; puis vos 12 mots et votre premier échange.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.6">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The doors land on these headings (#global, #invite…): below the fixed bar, 74 px tall on a phone, 88 px wide */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content p strong { color: var(--text-primary); }
+        .rules-content p { overflow-wrap: anywhere; }
+        .rules-content .guide-links { font-size: 0.95rem; margin-top: -0.5rem; }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/getting-started">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/getting-started">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/getting-started">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/getting-started">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/getting-started">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/getting-started">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/getting-started">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/getting-started">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/getting-started">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/getting-started">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/getting-started">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/getting-started">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/getting-started">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/getting-started">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/getting-started">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/getting-started">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/getting-started">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/getting-started">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/getting-started">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/getting-started">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/getting-started">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/getting-started">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/getting-started">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/getting-started">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/getting-started">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/getting-started">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Icône BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Comment ça marche</a>
+                <a href="rules.html">Les règles</a>
+                <a href="index.html#features">Fonctionnalités</a>
+                <a href="help.html">Aide</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriels</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Regarder les tutoriels vidéo sur YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Rejoindre la communauté Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Voir sur GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Démarrer</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Ouvrir le menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta" aria-current="page">Démarrer</a>
+                    <a href="index.html#how-it-works">Comment ça marche</a>
+                    <a href="rules.html">Les règles</a>
+                    <a href="index.html#features">Fonctionnalités</a>
+                    <a href="help.html">Aide</a>
+                    <a href="../guide/index.html">Guide des membres</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriels sur YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool sur Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Code source sur GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Démarrer</h1>
+        <p class="lede">Il existe trois façons d'entrer. Choisissez celle qui correspond à votre situation actuelle ; votre compte est le même quel que soit votre choix, et il peut appartenir à plusieurs communautés.</p>
+
+        <!-- OPEN-GLOBAL: when global's private preview is off, the heading becomes "Try it now on the global community" and the
+             two paragraphs below become this one:
+             The global community is people from everywhere. You need no invite: open <strong>global.beanpool.org</strong> in a browser and tap <strong>Join</strong>, or install the app and tap <strong>Explore BeanPool worldwide</strong> on the first screen. Create an account with <strong>12 secret words</strong> (no Google, Apple or Facebook account needed), or sign in once with Google, Apple or Facebook; that sign-in also becomes a way back if you lose your phone. Tell it roughly where you are, to about 10 km, or skip that. Then you can see what people near you offer, post something free or for swap, message people, and ask a community near you to let you in. Beans, trades, the Commons and its Decisions are switched off there: they belong to a local community. The app shows you each of them with an example community, so you know what a local community offers before you join or start one. -->
+        <h2 id="global"><span class="num">1.</span>Essayer dans le monde entier : la communauté globale</h2>
+        <p>La communauté globale rassemble des personnes de partout, et elle ne nécessitera aucune invitation. BeanPool la fait fonctionner, sur un serveur que nous louons aux États-Unis. C'est aujourd'hui un aperçu privé pendant que ses premiers membres l'essayent : seules les personnes invitées par son propriétaire ou un administrateur peuvent la rejoindre, et quiconque ouvre <strong>global.beanpool.org</strong> voit une seule phrase : « Cette communauté est en aperçu privé. Demandez une invitation à son propriétaire. » Elle ouvrira bientôt à tous. Vous pourrez alors la rejoindre dans un navigateur ou dans l'application avec <strong>12 mots secrets</strong> ou une connexion Google, Apple ou Facebook, voir ce que les personnes près de chez vous proposent, publier une offre gratuite ou de troc, envoyer des messages et demander à une communauté proche de vous accueillir. Les haricots, les échanges, les Communs et leurs Décisions relèvent d'une communauté locale ; la communauté globale vous présente chacun d'eux avec un exemple de communauté, afin que vous sachiez ce qu'offre une communauté locale avant d'en rejoindre ou d'en créer une.</p>
+        <p>En attendant son ouverture : téléchargez l'application sur l'<a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> ou <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a>, découvrez les communautés déjà actives sur <a href="index.html#find-or-start">notre carte</a> ou créez-en une (partie 2), ou rejoignez-en une sur invitation (partie 3).</p>
+        <p class="guide-links">Guide : <a href="../guide/fr/joining.html">Rejoindre BeanPool</a>, <a href="../guide/fr/web-app.html">Utiliser BeanPool dans un navigateur web</a>.</p>
+
+        <h2 id="find"><span class="num">2.</span>Trouver ou créer une communauté</h2>
+        <!-- OPEN-GLOBAL: when global's private preview is off, the paragraph below goes back to starting:
+             On the global community, <strong>Find your community</strong> on Home lists the communities nearest you. Tap <strong>Ask to join</strong>, write a few words about yourself, and any member of that community can let you in with one tap, and if no answer comes in 30 days you can ask again. Nothing near you? <strong>Tell me when one starts here</strong> watches your area. Or start one: every community … (the rest unchanged) -->
+        <p>Aujourd'hui, vous pouvez voir les communautés déjà actives sur <a href="index.html#find-or-start">notre carte</a>, et en rejoindre une grâce à une invitation d'un membre (partie 3). Demander à rejoindre sera bientôt possible, lors de l'ouverture de la communauté globale (partie 1) : là-bas, <strong>Trouvez votre communauté</strong> sur l'Accueil répertorie les communautés les plus proches de vous. Touchez <strong>Demander à rejoindre</strong>, écrivez quelques mots sur vous, et n'importe quel membre de cette communauté peut vous accepter d'un simple geste ; sans réponse sous 30 jours, vous pouvez renouveler votre demande. Rien près de chez vous ? <strong>Me prévenir quand une communauté naît ici</strong> surveille votre secteur. Ou créez-en une : chaque communauté fonctionne sur son propre petit serveur, un ordinateur disponible qui reste allumé ou un serveur loué pour quelques dollars par mois, géré par une personne sur place. L'écran <strong>Créer une communauté</strong> de l'application vous guide pas à pas, et les instructions figurent sur notre page d'accueil sous <a href="index.html#run-a-node">Faites fonctionner BeanPool pour votre communauté</a>.</p>
+        <p class="guide-links">Guide : <a href="../guide/fr/finding-a-community.html">Trouver une communauté près de chez vous</a>.</p>
+
+        <h2 id="invite"><span class="num">3.</span>Vous avez une invitation ?</h2>
+        <p>Une invitation est un lien, un QR code ou un code commençant par <strong>INV-</strong> ou <strong>BP-</strong>. Elle fonctionne une seule fois et reste valable 30 jours. Installez l'application, touchez <strong>Rejoindre avec une invitation</strong> (sur l'application web, <strong>C'est ma première fois</strong>), collez le lien ou le code, et choisissez le nom que les autres verront, jusqu'à 20 caractères. Si vous avez uniquement un code, saisissez également le nom ou l'adresse de la communauté ; la personne qui vous a invité pourra vous renseigner.</p>
+        <p class="guide-links">Guide : <a href="../guide/fr/joining.html">Rejoindre BeanPool</a>.</p>
+
+        <h2 id="words"><span class="num">4.</span>Vos 12 mots</h2>
+        <p>Votre compte est une clé conservée sur votre téléphone, ou dans l'application web dans votre navigateur. Il n'y a pas de mot de passe. L'application vous montre 12 mots sous <strong>Sauvegarde de sécurité</strong> : notez-les et conservez-les précieusement, car ce sont eux qui permettent de récupérer votre compte sur un nouveau téléphone. Sur l'application mobile et sur la communauté globale, vous pouvez ajouter une connexion Google, Apple ou Facebook comme second moyen d'accès. Une copie chiffrée de votre clé est alors conservée pour celle-ci : les applications mobiles qui utilisent le coffre-fort de clés de BeanPool la gardent là-bas, sur un petit serveur en Islande ; les versions plus anciennes de l'application mobile la gardent sur le serveur de votre communauté ; l'application web sur la communauté globale la garde sur le serveur de cette communauté, que nous administrons. L'entité qui conserve la copie peut l'ouvrir, et une restauration depuis le coffre-fort attend un jour, sauf si l'un de vos propres appareils confirme que c'est bien vous. Si vous souhaitez que personne d'autre que vous ne puisse y accéder, utilisez uniquement vos 12 mots.</p>
+        <p class="guide-links">Guide : <a href="../guide/fr/your-12-words.html">Vos 12 mots</a>.</p>
+
+        <h2 id="trade"><span class="num">5.</span>Votre premier échange</h2>
+        <p>Dans une communauté locale, publiez d'abord une <strong>Offre</strong> : un trajet en ville, des œufs, une heure de jardinage. Convenez d'un prix en haricots ; les haricots sont conservés jusqu'à ce que le travail soit fait, puis ils vont au vendeur, et vous vous évaluez mutuellement. Votre ligne de crédit s'ouvre après votre premier échange conclu ; elle commence modestement et augmente à mesure que vous échangez avec davantage de personnes. Les offres que vous maintenez déterminent la part que vous pouvez utiliser : une offre jusqu'à 200 haricots, cinq jusqu'à 2 000. Les badges (Arrivant, Résident, Pilier, Doyen) témoignent de votre parcours ; ils ne restreignent rien.</p>
+        <p class="guide-links">Guide : <a href="../guide/fr/a-deal-step-by-step.html">Un échange, étape par étape</a>, <a href="../guide/fr/credit-line.html">Votre ligne de crédit</a>, les chiffres dans <a href="rules.html#4">Les règles</a>.</p>
+
+        <h2 id="6"><span class="num">6.</span>Aide</h2>
+        <p>Vous préférez regarder un tutoriel visuel ou avez besoin d'aide pour démarrer avec votre serveur ? Rejoignez la communauté BeanPool :</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1.25rem;">
+            <div class="feature-card feature-card-brand brand-youtube glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper youtube-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </div>
+                    <span class="brand-badge youtube-badge">▶ Guides vidéo</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Tutoriels YouTube</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">De courtes présentations pour nous rejoindre, vos 12 mots et un échange.</p>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-youtube" style="margin-top: 0.5rem;">Regarder sur YouTube →</a>
+            </div>
+            <div class="feature-card feature-card-brand brand-reddit glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper reddit-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </div>
+                    <span class="brand-badge reddit-badge">💬 r/beanpool</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Discussions Reddit</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Participez aux échanges, posez des questions, partagez des offres et échangez avec d'autres gestionnaires de serveurs.</p>
+                <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-reddit" style="margin-top: 0.5rem;">Rejoindre r/beanpool →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Icône BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Une application gratuite pour échanger entre voisins, en haricots.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Centre d'aide</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Comment ça marche</a>
+                    <a href="getting-started.html">Démarrer</a>
+                    <a href="rules.html">Les règles</a>
+                    <a href="safety.html">Protection des mineurs</a>
+                    <a href="../privacy.html">Politique de confidentialité</a>
+                    <a href="../terms.html">Conditions d'utilisation</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../getting-started.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/getting-started.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/getting-started.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/getting-started.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/getting-started.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="getting-started.html" hreflang="fr" lang="fr" aria-current="page">Français</a>
+                    <a href="../ar/getting-started.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/getting-started.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/getting-started.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/getting-started.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/getting-started.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/getting-started.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/getting-started.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/getting-started.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/getting-started.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/getting-started.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/getting-started.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/getting-started.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/getting-started.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/getting-started.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/getting-started.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/getting-started.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/getting-started.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/getting-started.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/getting-started.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source sous licence MIT. Fait avec <img src="../bean.png" alt="amour" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> par les communautés, pour les communautés. Limites de fuseaux horaires © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">les contributeurs d'OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

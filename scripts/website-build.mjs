@@ -74,6 +74,35 @@ export const LEGAL_PAGES = Object.freeze([
 
 export const ALL_PAGES = Object.freeze([...TRANSLATED_PAGES, ...LEGAL_PAGES]);
 
+/** Accessible name words for the top menu language selector per language. */
+export const CHOOSE_LANGUAGE_WORDS = Object.freeze({
+    en: 'Choose language',
+    es: 'Elegir idioma',
+    pt: 'Escolher idioma',
+    hi: 'भाषा चुनें',
+    bn: 'ভাষা নির্বাচন করুন',
+    fr: 'Choisir la langue',
+    ar: 'اختر اللغة',
+    id: 'Pilih bahasa',
+    ru: 'Выбрать язык',
+    'zh-Hans': '选择语言',
+    'zh-Hant': '選擇語言',
+    it: 'Scegli la lingua',
+    de: 'Sprache wählen',
+    tr: 'Dil seçin',
+    sw: 'Chagua lugha',
+    ml: 'ഭാഷ തിരഞ്ഞെടുക്കുക',
+    ta: 'மொழியைத் தேர்ந்தெடுக்கவும்',
+    uk: 'Вибрати мову',
+    ur: 'زبان منتخب کریں',
+    fa: 'انتخاب زبان',
+    vi: 'Chọn ngôn ngữ',
+    el: 'Επιλογή γλώσσας',
+    fil: 'Pumili ng wika',
+    ja: '言語を選択',
+    ko: '언어 선택',
+});
+
 /** Stale translation notice words per language. */
 export const STALE_WORDS = Object.freeze({
     en: { note: 'This page is newer in English.', link: 'Read the current English version →' },
@@ -141,6 +170,7 @@ export function pageContentHash(html) {
         .replace(/<link\b[^>]*\/?>/gi, '')
         .replace(/<script\b[^>]*\bsrc=[^>]*\s*(?:\/>|>[\s\S]*?<\/script>)/gi, '')
         .replace(/<div\s+class="footer-languages"[\s\S]*?<\/div>/gi, '')
+        .replace(/<details\s+class="lang-menu[^"]*"[\s\S]*?<\/details>/gi, '')
         .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/\?v=[^"'\s>]+/gi, '')
         .replace(/\r\n/g, '\n')
@@ -185,10 +215,13 @@ export function buildHreflangTags(page) {
     return lines.join('\n');
 }
 
-/** Builds the footer language row with all 25 languages in their own names. */
-export function buildFooterLanguagesRow(page, currentLang) {
+/**
+ * Returns the 25 language links with correct href, hreflang, name and isCurrent flag.
+ * One source of truth for both the footer language row and the top menu language selector.
+ */
+export function getLanguageLinks(page, currentLang) {
     const isLegal = LEGAL_PAGES.includes(page);
-    const links = LANGS.map((lang) => {
+    return LANGS.map((lang) => {
         const isCurrent = lang === currentLang;
         let href;
         if (currentLang === 'en') {
@@ -209,8 +242,20 @@ export function buildFooterLanguagesRow(page, currentLang) {
                 href = `../${lang}/${page}`;
             }
         }
+        return {
+            lang,
+            name: LANGUAGE_NAMES[lang],
+            href,
+            isCurrent
+        };
+    });
+}
+
+/** Builds the footer language row with all 25 languages in their own names. */
+export function buildFooterLanguagesRow(page, currentLang) {
+    const links = getLanguageLinks(page, currentLang).map(({ lang, name, href, isCurrent }) => {
         const currentAttr = isCurrent ? ' aria-current="page"' : '';
-        return `                    <a href="${href}" hreflang="${lang}" lang="${lang}"${currentAttr}>${LANGUAGE_NAMES[lang]}</a>`;
+        return `                    <a href="${href}" hreflang="${lang}" lang="${lang}"${currentAttr}>${name}</a>`;
     });
 
     return [
@@ -218,6 +263,65 @@ export function buildFooterLanguagesRow(page, currentLang) {
         ...links,
         '            </div>'
     ].join('\n');
+}
+
+/** Builds top menu language dropdown (desktop or phone) with all 25 languages. */
+export function buildTopNavLanguageMenu(page, currentLang, isPhone = false) {
+    const label = CHOOSE_LANGUAGE_WORDS[currentLang] || CHOOSE_LANGUAGE_WORDS.en;
+    const links = getLanguageLinks(page, currentLang).map(({ lang, name, href, isCurrent }) => {
+        const currentAttr = isCurrent ? ' aria-current="page"' : '';
+        return `                        <a href="${href}" hreflang="${lang}" lang="${lang}"${currentAttr}>${name}</a>`;
+    });
+
+    if (isPhone) {
+        return [
+            '                    <details class="lang-menu phone-lang-menu">',
+            `                        <summary class="lang-btn" aria-label="${label}" title="${label}"><span aria-hidden="true">🌐</span> <span>${label}</span></summary>`,
+            '                        <div class="lang-dropdown">',
+            ...links,
+            '                        </div>',
+            '                    </details>'
+        ].join('\n');
+    }
+
+    return [
+        '                <details class="lang-menu desktop-lang-menu">',
+        `                    <summary class="lang-btn" aria-label="${label}" title="${label}"><span aria-hidden="true">🌐</span></summary>`,
+        '                    <div class="lang-dropdown">',
+        ...links,
+        '                    </div>',
+        '                </details>'
+    ].join('\n');
+}
+
+/**
+ * Injects desktop and phone top menu language selectors into navbar HTML.
+ */
+export function injectTopNavLanguageMenus(html, page, currentLang) {
+    let out = html;
+    out = out.replace(/\s*<details\s+class="lang-menu\s+desktop-lang-menu"[\s\S]*?<\/details>/gi, '');
+    out = out.replace(/\s*<details\s+class="lang-menu\s+phone-lang-menu"[\s\S]*?<\/details>/gi, '');
+
+    const desktopMenu = buildTopNavLanguageMenu(page, currentLang, false);
+    const phoneMenu = buildTopNavLanguageMenu(page, currentLang, true);
+
+    if (out.includes('class="nav-links"')) {
+        if (/(\s*<a\b[^>]*class="[^"]*nav-cta[^"]*")/i.test(out)) {
+            out = out.replace(/(\s*<a\b[^>]*class="[^"]*nav-cta[^"]*")/i, `\n${desktopMenu}$1`);
+        } else {
+            out = out.replace(/(<\/div>\s*(?:<!--[^\n]*-->\s*)?<details\b[^>]*class="[^"]*nav-menu)/i, `\n${desktopMenu}\n            $1`);
+        }
+    }
+
+    if (out.includes('class="nav-menu-panel"')) {
+        if (/<a\b[^>]*class="[^"]*nav-menu-cta[^"]*"[^>]*>[\s\S]*?<\/a>/i.test(out)) {
+            out = out.replace(/(<a\b[^>]*class="[^"]*nav-menu-cta[^"]*"[^>]*>[\s\S]*?<\/a>)/i, `$1\n${phoneMenu}`);
+        } else {
+            out = out.replace(/(<div\b[^>]*class="[^"]*nav-menu-panel[^"]*"[^>]*>)/i, `$1\n${phoneMenu}`);
+        }
+    }
+
+    return out;
 }
 
 /** Extracts the "Last Updated: <date>" string from a legal page. */
@@ -261,7 +365,10 @@ export function formatEnglishPage(page, html) {
         out = out.replace(/<\/div>\s*<div class="footer-bottom">/i, `</div>\n${footerRow}\n            <div class="footer-bottom">`);
     }
 
-    // 4. Ensure main.js is loaded on pages with navigation (NOT global.html or status.html which have single-script / strict CSP invariants)
+    // 4. Insert or replace top navigation language buttons
+    out = injectTopNavLanguageMenus(out, page, 'en');
+
+    // 5. Ensure main.js is loaded on pages with navigation (NOT global.html or status.html which have single-script / strict CSP invariants)
     if (PAGES_WITH_MAIN_JS.includes(page) && !out.includes('main.js')) {
         out = out.replace(/<\/body>/i, '    <script src="main.js"></script>\n</body>');
     }
@@ -350,6 +457,9 @@ export function renderTranslatedPage(lang, page, sourceContent, englishHtml) {
         const footerRow = buildFooterLanguagesRow(page, lang);
         out = out.replace(/<\/div>\s*<div class="footer-bottom">/i, `</div>\n${footerRow}\n            <div class="footer-bottom">`);
     }
+
+    // 6b. Insert top navigation language buttons
+    out = injectTopNavLanguageMenus(out, page, lang);
 
     // 7. Inject banner if stale ("newer in English") or if legal page
     out = out.replace(/\s*<div\s+class="website-stale-banner"[\s\S]*?<\/div>/gi, '');
@@ -465,6 +575,14 @@ export function checkWebsite() {
         if (current !== expected) {
             errors.push(`apps/website/${page} is out of sync with formatting; run 'node scripts/website-build.mjs'`);
         }
+
+        // Verify top menu language buttons on English pages
+        if (!current.includes('desktop-lang-menu')) {
+            errors.push(`apps/website/${page} missing desktop language button in top menu`);
+        }
+        if (current.includes('class="nav-menu"') && !current.includes('phone-lang-menu')) {
+            errors.push(`apps/website/${page} missing phone language button in top menu`);
+        }
     }
 
     // Verify translation sources are not inside published apps/website/
@@ -526,6 +644,14 @@ export function checkWebsite() {
             // Verify footer languages row (if page has footer)
             if (actualHtml.includes('<footer>') && !actualHtml.includes('class="footer-languages"')) {
                 errors.push(`apps/website/${lang}/${page} missing footer languages row`);
+            }
+
+            // Verify top menu language buttons
+            if (!actualHtml.includes('desktop-lang-menu')) {
+                errors.push(`apps/website/${lang}/${page} missing desktop language button in top menu`);
+            }
+            if (actualHtml.includes('class="nav-menu"') && !actualHtml.includes('phone-lang-menu')) {
+                errors.push(`apps/website/${lang}/${page} missing phone language button in top menu`);
             }
 
             // Verify RTL direction

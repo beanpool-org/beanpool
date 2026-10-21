@@ -39,6 +39,7 @@ const WORDS = {
         somethingWrong: 'Something went wrong. Please try again.',
         subscribe: 'Subscribe',
         readIn: (lang) => `Read this in ${lang} →`,
+        chooseLanguage: 'Choose language',
     },
     es: {
         noneNear: 'Aún no hay una comunidad cerca de ti.',
@@ -52,6 +53,7 @@ const WORDS = {
         somethingWrong: 'Algo salió mal. Por favor, inténtalo de nuevo.',
         subscribe: 'Suscribirse',
         readIn: (lang) => `Leer esto en ${lang} →`,
+        chooseLanguage: 'Elegir idioma',
     },
     pt: {
         noneNear: 'Ainda não há comunidade perto de você.',
@@ -65,6 +67,7 @@ const WORDS = {
         somethingWrong: 'Algo deu errado. Por favor, tente novamente.',
         subscribe: 'Inscrever-se',
         readIn: (lang) => `Ler isto em ${lang} →`,
+        chooseLanguage: 'Escolher idioma',
     },
     fr: {
         noneNear: 'Pas encore de communauté près de chez vous.',
@@ -78,6 +81,7 @@ const WORDS = {
         somethingWrong: 'Un problème est survenu. Veuillez réessayer.',
         subscribe: 'S\'inscrire',
         readIn: (lang) => `Lire en ${lang} →`,
+        chooseLanguage: 'Choisir la langue',
     },
     ru: {
         noneNear: 'Рядом с вами пока нет сообщества.',
@@ -91,6 +95,7 @@ const WORDS = {
         somethingWrong: 'Что-то пошло не так. Пожалуйста, попробуйте еще раз.',
         subscribe: 'Подписаться',
         readIn: (lang) => `Читать на ${lang} →`,
+        chooseLanguage: 'Выбрать язык',
     },
     ar: {
         noneNear: 'لا يوجد مجتمع بالقرب منك بعد.',
@@ -104,6 +109,7 @@ const WORDS = {
         somethingWrong: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.',
         subscribe: 'اشتراك',
         readIn: (lang) => `اقرأ هذا باللغة ${lang} ←`,
+        chooseLanguage: 'اختر اللغة',
     },
     hi: {
         noneNear: 'आपके पास अभी कोई समुदाय नहीं है।',
@@ -117,6 +123,7 @@ const WORDS = {
         somethingWrong: 'कुछ गलत हो गया। कृपया पुन: प्रयास करें।',
         subscribe: 'सब्सक्राइब करें',
         readIn: (lang) => `इसे ${lang} में पढ़ें →`,
+        chooseLanguage: 'भाषा चुनें',
     },
     bn: {
         noneNear: 'আপনার আশেপাশে এখনও কোনো কমিউনিটি নেই।',
@@ -130,6 +137,7 @@ const WORDS = {
         somethingWrong: 'কিছু ভুল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।',
         subscribe: 'সাবস্ক্রাইব করুন',
         readIn: (lang) => `এটি ${lang} এ পড়ুন →`,
+        chooseLanguage: 'ভাষা নির্বাচন করুন',
     },
     id: {
         noneNear: 'Belum ada komunitas di dekat Anda.',
@@ -143,6 +151,7 @@ const WORDS = {
         somethingWrong: 'Terjadi kesalahan. Silakan coba lagi.',
         subscribe: 'Berlangganan',
         readIn: (lang) => `Baca ini dalam ${lang} →`,
+        chooseLanguage: 'Pilih bahasa',
     },
     'zh-Hans': {
         noneNear: '您附近暂无社区。',
@@ -156,6 +165,7 @@ const WORDS = {
         somethingWrong: '出了点问题。请重试。',
         subscribe: '订阅',
         readIn: (lang) => `用${lang}阅读 →`,
+        chooseLanguage: '选择语言',
     },
     'zh-Hant': {
         noneNear: '您附近尚無社群。',
@@ -169,6 +179,7 @@ const WORDS = {
         somethingWrong: '發生問題。請再試一次。',
         subscribe: '訂閱',
         readIn: (lang) => `用${lang}閱讀 →`,
+        chooseLanguage: '選擇語言',
     },
     it: {
         noneNear: 'Nessuna comunità ancora vicino a te.',
@@ -182,6 +193,7 @@ const WORDS = {
         somethingWrong: 'Qualcosa è andato storto. Riprova.',
         subscribe: 'Iscriviti',
         readIn: (lang) => `Leggi in ${lang} →`,
+        chooseLanguage: 'Scegli la lingua',
     },
     de: {
         noneNear: 'Noch keine Community in deiner Nähe.',
@@ -195,6 +207,7 @@ const WORDS = {
         somethingWrong: 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
         subscribe: 'Abonnieren',
         readIn: (lang) => `Dies auf ${lang} lesen →`,
+        chooseLanguage: 'Sprache wählen',
     },
     tr: {
         noneNear: 'Yakınınızda henüz bir topluluk yok.',
@@ -208,6 +221,7 @@ const WORDS = {
         somethingWrong: 'Bir şeyler ters gitti. Lütfen tekrar deneyin.',
         subscribe: 'Abone Ol',
         readIn: (lang) => `Bunu ${lang} dilinde oku →`,
+        chooseLanguage: 'Dil seçin',
     },
     sw: {
         noneNear: 'Bado hakuna jumuiya karibu nawe.',
@@ -221,6 +235,7 @@ const WORDS = {
         somethingWrong: 'Hitilafu imetokea. Tafadhali jaribu tena.',
         subscribe: 'Jiandikishe',
         readIn: (lang) => `Soma hii kwa ${lang} →`,
+        chooseLanguage: 'Chagua lugha',
     },
     ml: {
         noneNear: 'നിങ്ങളുടെ അടുത്ത് ഇതുവരെ കമ്മ്യൂണിറ്റികളൊന്നുമില്ല.',
@@ -234,6 +249,7 @@ const WORDS = {
         somethingWrong: 'എന്തോ കുഴപ്പമുണ്ടായി. വീണ്ടും ശ്രമിക്കുക.',
         subscribe: 'സബ്‌സ്‌ക്രൈബ് ചെയ്യുക',
         readIn: (lang) => `ഇത് ${lang}ൽ വായിക്കുക →`,
+        chooseLanguage: 'ഭാഷ തിരഞ്ഞെടുക്കുക',
     },
     ta: {
         noneNear: 'உங்கள் அருகில் இன்னும் சமூகம் இல்லை.',
@@ -247,6 +263,7 @@ const WORDS = {
         somethingWrong: 'ஏதோ தவறாகிவிட்டது. தயவுசெய்து மீண்டும் முயற்சிக்கவும்.',
         subscribe: 'குழுசேர்',
         readIn: (lang) => `இதை ${lang} இல் படிக்கவும் →`,
+        chooseLanguage: 'மொழியைத் தேர்ந்தெடுக்கவும்',
     },
     uk: {
         noneNear: 'Поблизу вас поки немає спільноти.',
@@ -260,6 +277,7 @@ const WORDS = {
         somethingWrong: 'Щось пішло не так. Будь ласка, спробуйте ще раз.',
         subscribe: 'Підписатися',
         readIn: (lang) => `Читати ${lang} мовою →`,
+        chooseLanguage: 'Вибрати мову',
     },
     ur: {
         noneNear: 'آپ کے قریب ابھی کوئی کمیونٹی نہیں ہے۔',
@@ -273,6 +291,7 @@ const WORDS = {
         somethingWrong: 'کچھ خرابی پیش آگئی۔ براہ کرم دوبارہ کوشش کریں۔',
         subscribe: 'سبسکرائب کریں',
         readIn: (lang) => `اسے ${lang} میں پڑھیں ←`,
+        chooseLanguage: 'زبان منتخب کریں',
     },
     fa: {
         noneNear: 'هنوز جامعه‌ای نزدیک شما وجود ندارد.',
@@ -286,6 +305,7 @@ const WORDS = {
         somethingWrong: 'مشکلی پیش آمد. لطفاً دوباره تلاش کنید.',
         subscribe: 'اشتراک',
         readIn: (lang) => `این را به زبان ${lang} بخوانید ←`,
+        chooseLanguage: 'انتخاب زبان',
     },
     vi: {
         noneNear: 'Chưa có cộng đồng nào gần bạn.',
@@ -299,6 +319,7 @@ const WORDS = {
         somethingWrong: 'Đã xảy ra lỗi. Vui lòng thử lại.',
         subscribe: 'Đăng ký',
         readIn: (lang) => `Đọc bằng ${lang} →`,
+        chooseLanguage: 'Chọn ngôn ngữ',
     },
     el: {
         noneNear: 'Δεν υπάρχει ακόμα κοινότητα κοντά σας.',
@@ -312,6 +333,7 @@ const WORDS = {
         somethingWrong: 'Κάτι πήγε στραβά. Παρακαλώ δοκιμάστε ξανά.',
         subscribe: 'Εγγραφή',
         readIn: (lang) => `Διαβάστε το στα ${lang} →`,
+        chooseLanguage: 'Επιλογή γλώσσας',
     },
     fil: {
         noneNear: 'Wala pang komunidad na malapit sa iyo.',
@@ -325,6 +347,7 @@ const WORDS = {
         somethingWrong: 'May nagkaproblema. Pakisubukan muli.',
         subscribe: 'Mag-subscribe',
         readIn: (lang) => `Basahin ito sa ${lang} →`,
+        chooseLanguage: 'Pumili ng wika',
     },
     ja: {
         noneNear: 'お近くにコミュニティはまだありません。',
@@ -338,6 +361,7 @@ const WORDS = {
         somethingWrong: '問題が発生しました。もう一度お試しください。',
         subscribe: '登録する',
         readIn: (lang) => `${lang}で読む →`,
+        chooseLanguage: '言語を選択',
     },
     ko: {
         noneNear: '주변에 아직 커뮤니티가 없습니다.',
@@ -351,6 +375,7 @@ const WORDS = {
         somethingWrong: '문제가 발생했습니다. 다시 시도해 주세요.',
         subscribe: '구독',
         readIn: (lang) => `${lang}로 읽기 →`,
+        chooseLanguage: '언어 선택',
     }
 };
 
@@ -676,6 +701,18 @@ function normaliseBrowserLang(tag) {
 function initLanguageBanner() {
     if (pageLang() !== 'en') return;
     if (typeof document === 'undefined' || typeof navigator === 'undefined') return;
+
+    let isDismissed = false;
+    try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            isDismissed = window.localStorage.getItem('beanpool_lang_banner_dismissed') === 'true' ||
+                          window.localStorage.getItem('beanpool_lang') !== null;
+        }
+    } catch (_) {
+        // works without storage
+    }
+    if (isDismissed) return;
+
     if (document.cookie && /(?:^|;\s*)beanpool_lang=/.test(document.cookie)) return;
 
     let navLangs = [];
@@ -717,6 +754,14 @@ function initLanguageBanner() {
     link.addEventListener('click', () => {
         const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';
         document.cookie = `beanpool_lang=${matched};path=/;max-age=31536000;SameSite=Lax${secure}`;
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem('beanpool_lang_banner_dismissed', 'true');
+                window.localStorage.setItem('beanpool_lang', matched);
+            }
+        } catch (_) {
+            // works without storage
+        }
     });
 
     const updateBannerHeight = () => {
@@ -735,6 +780,14 @@ function initLanguageBanner() {
     closeBtn.addEventListener('click', () => {
         const secure = (typeof window !== 'undefined' && window.location.protocol === 'https:') ? ';Secure' : '';
         document.cookie = `beanpool_lang=en;path=/;max-age=31536000;SameSite=Lax${secure}`;
+        try {
+            if (typeof window !== 'undefined' && window.localStorage) {
+                window.localStorage.setItem('beanpool_lang_banner_dismissed', 'true');
+                window.localStorage.setItem('beanpool_lang', 'en');
+            }
+        } catch (_) {
+            // works without storage
+        }
         if (typeof window !== 'undefined') {
             window.removeEventListener('resize', updateBannerHeight);
         }
@@ -775,6 +828,36 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
 document.querySelectorAll('.nav-menu a').forEach(a => {
     a.addEventListener('click', () => {
         const menu = a.closest('details');
+        if (menu) menu.open = false;
+    });
+});
+
+// ======================== LANGUAGE SELECTOR ========================
+// Keyboard accessibility: Escape closes open language menus and returns focus to the button.
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const openMenus = document.querySelectorAll('.lang-menu[open]');
+        openMenus.forEach(menu => {
+            menu.open = false;
+            const summary = menu.querySelector('summary');
+            if (summary) summary.focus();
+        });
+    }
+});
+
+// Click outside closes open language menus.
+document.addEventListener('click', (e) => {
+    document.querySelectorAll('.lang-menu[open]').forEach(menu => {
+        if (!menu.contains(e.target)) {
+            menu.open = false;
+        }
+    });
+});
+
+// Close language menu when a link inside it is clicked.
+document.querySelectorAll('.lang-dropdown a').forEach(a => {
+    a.addEventListener('click', () => {
+        const menu = a.closest('.lang-menu');
         if (menu) menu.open = false;
     });
 });

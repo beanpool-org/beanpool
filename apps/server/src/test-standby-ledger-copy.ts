@@ -437,6 +437,11 @@ function ledgerDiff(m: Ledger, s: Ledger): string[] {
         const o = sa.get(k);
         if (!o) { out.push(`account ${k.slice(0, 12)} missing`); continue; }
         for (const c of ['balance', 'last_updated_at', 'last_demurrage_epoch']) {
+            // persistCommonsBalance (audit.ts:62) runs INSERT OR REPLACE INTO accounts, which deletes the row and resets
+            // last_updated_at to schema default (now) on every main flush, even if balance is unchanged. Standbys do not
+            // run this flush; their last_updated_at only updates when a copy imports. When main flushes between pull and
+            // ledger reads, COMMONS_POOL.last_updated_at diverges while balance and epoch stay identical.
+            if (k === 'COMMONS_POOL' && c === 'last_updated_at') continue;
             if (JSON.stringify(r[c]) !== JSON.stringify(o[c])) out.push(`account ${k.slice(0, 12)}.${c}: main ${JSON.stringify(r[c])}, standby ${JSON.stringify(o[c])}`);
         }
     }
@@ -936,6 +941,10 @@ async function main(): Promise<void> {
         require_(busy.ok === false && busy.mode === 'resync', `the first pull is the format re-seed, and the main server refuses it (${JSON.stringify({ ok: busy.ok, mode: busy.mode, error: busy.error })})`);
         const again13 = await reseed.send('pull', {});
         const r13: Ledger = await reseed.send('ledger');
+        // A main persist between the standby's pull and the ledger reads advances COMMONS_POOL's last_updated_at;
+        // the copies still match because ledgerDiff compares the Commons pool's balance, not its flush stamp.
+        await new Promise((r) => setTimeout(r, 1100));
+        await main.send('persist');
         const m13: Ledger = await main.send('ledger');
         assert(again13.ok === true && again13.mode === 'resync' && Number(r13.format) >= 1 && ledgerDiff(m13, r13).length === 0,
             `the next pull asks for it again, it lands, and the format is recorded (${JSON.stringify({ ok: again13.ok, mode: again13.mode, error: again13.error, format: r13.format })}; differences ${first(ledgerDiff(m13, r13))})`);

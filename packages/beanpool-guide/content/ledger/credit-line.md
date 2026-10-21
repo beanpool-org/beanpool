@@ -52,6 +52,10 @@ Some communities have admins who know every member by name. If yours has turned 
 - An admin can set a smaller limit for you, for example while you are new. That never takes Beans from you: if you are already below it, spending pauses until you are back above it.
 - If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid. Your Ledger says how much is left. You can also pay some or all of it yourself in **Ledger → Pay the Commons**: your pay-back code is filled in there (or enter the one an admin gives you). What you pay with the code comes off the debt at once, and when nothing is left the debt is settled: nothing more is taken, by a payment or from what you receive. A payment without the code goes to the Commons but not off your debt, and the app says so: to have it count, ask an admin to count it toward your debt with its reference. Until they do, the debt is still being worked off: the next time you receive Beans, what is left is taken from what you hold above 0. The amount in the admin's message is what was left when they shared it: if less is left now, your server refuses a larger payment and says how much is left, and nothing is paid. If the app says a payment may have gone through, tap **Try again** on the same screen: the same payment is never paid twice. If you left that screen, check your Ledger before you pay again.
 
+## A mixed community
+
+In some communities any member can invite people, so the admins don't know everyone. If yours has turned on **the known floor**, the admins can confirm the members they do know, and those members start with a higher limit. Everyone else starts at zero, and everyone's limit grows the same way after that as they trade and build trust.
+
 ## Frozen by the admins
 
 Your community's admins can freeze a member's credit line: all of it, or, in a known community, the part that comes from being a confirmed member.

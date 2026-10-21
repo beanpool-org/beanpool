@@ -2,10 +2,10 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” এই কমিউনিটিতে আগেই নেওয়া হয়ে গেছে। অন্য একটি নাম বেছে নিন।",
@@ -3483,5 +3483,15 @@
     "one": "{n} সপ্তাহ",
     "other": "{n} সপ্তাহ"
   },
-  "📦 Ask to borrow": "📦 ধার নেওয়ার অনুরোধ করুন"
+  "📦 Ask to borrow": "📦 ধার নেওয়ার অনুরোধ করুন",
+  "Asked to join": "যোগ দেওয়ার অনুরোধ করেছেন",
+  "Invited": "আমন্ত্রিত",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "স্বাগতম। প্রথম দিন থেকেই আপনি ব্রাউজ করতে, বাণিজ্য করতে, ক্রেডিট গ্রহণ করতে এবং অন্যদের আমন্ত্রণ জানাতে পারেন — আর আপনার ক্রেডিট সীমা ইতিমধ্যেই উন্মুক্ত।",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} আস্থা থেকে",
+    "other": "{n} আস্থা থেকে"
+  },
+  "{name}, already in the group": "{name}, ইতোমধ্যে গ্রুপে আছেন",
+  "{name}, already invited": "{name}, ইতোমধ্যে আমন্ত্রিত",
+  "{name}, asked to join": "{name}, যোগ দেওয়ার অনুরোধ করেছেন"
 }

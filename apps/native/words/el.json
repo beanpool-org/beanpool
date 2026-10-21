@@ -5997,5 +5997,19 @@
     "one": "από {n} εμπιστοσύνη",
     "other": "από {n} εμπιστοσύνη"
   },
-  "{name}, already invited": "{name}, έχει ήδη προσκληθεί"
+  "{name}, already invited": "{name}, έχει ήδη προσκληθεί",
+  "A way back in if you lose this phone. It's linked to this same account.": "Ένας τρόπος επιστροφής αν χάσεις αυτό το τηλέφωνο. Συνδέεται με αυτόν τον ίδιο λογαριασμό.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Προσθήκη {name} ως συνεργάτη, με επώνυμη κάλυψη {n} φασολιού",
+    "other": "Προσθήκη {name} ως συνεργάτη, με επώνυμη κάλυψη {n} φασολιών"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Προσθήκη {name} ως υπευθύνου, με επώνυμη κάλυψη {n} φασολιού",
+    "other": "Προσθήκη {name} ως υπευθύνου, με επώνυμη κάλυψη {n} φασολιών"
+  },
+  "Also add a sign-in": "Πρόσθεσε επίσης μια σύνδεση",
+  "Look around first, then join with this account": "Εξερευνήστε πρώτα, μετά συνδεθείτε με αυτόν τον λογαριασμό",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Γνωρίστε ανθρώπους από παντού και βρείτε κοινότητες κοντά σας. Εξερευνήστε πρώτα ως επισκέπτης και μετά πατήστε «Συμμετοχή» στο πάνω μέρος για να συνδεθείτε ως ο λογαριασμός σε αυτό το τηλέφωνο: το κλειδί σας και οι 12 λέξεις σας παραμένουν τα ίδια, και τίποτα δεν αλλάζει στις άλλες κοινότητές σας.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Μόλις επιβεβαιωθούν, το όριό τους αυξάνεται έως και κατά {amount}: το γνωστό ελάχιστο όριο της κοινότητάς σου, όσο διατηρούν καταχωρημένη μια προσφορά.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Χρησιμοποιεί το κλειδί και τις 12 λέξεις που βρίσκονται ήδη σε αυτό το τηλέφωνο. Δεν δημιουργείται νέος λογαριασμός."
 }

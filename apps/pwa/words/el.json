@@ -3493,5 +3493,13 @@
   },
   "{name}, already in the group": "{name}, ήδη στην ομάδα",
   "{name}, already invited": "{name}, έχει ήδη προσκληθεί",
-  "{name}, asked to join": "{name}, ζήτησε συμμετοχή"
+  "{name}, asked to join": "{name}, ζήτησε συμμετοχή",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Προσθήκη {name} ως συνεργάτη, με επώνυμη κάλυψη {n} φασολιού",
+    "other": "Προσθήκη {name} ως συνεργάτη, με επώνυμη κάλυψη {n} φασολιών"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Προσθήκη {name} ως υπευθύνου, με επώνυμη κάλυψη {n} φασολιού",
+    "other": "Προσθήκη {name} ως υπευθύνου, με επώνυμη κάλυψη {n} φασολιών"
+  }
 }

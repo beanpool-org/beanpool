@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "「{name}」はこのコミュニティですでに使われています。別の名前を選んでください。",
@@ -3310,5 +3310,60 @@
   "Recurring listing (stays active after purchase)": "定期出品（購入後も掲載を継続）",
   "Posting…": "投稿中…",
   "Publish Listing": "出品を公開",
-  "Translated by machine: some words may be wrong.": "機械翻訳です。間違っている言葉があるかもしれません。"
+  "Translated by machine: some words may be wrong.": "機械翻訳です。間違っている言葉があるかもしれません。",
+  "About this tool": "このツールについて",
+  "Ask to borrow this?": "これを借りる申請をしますか？",
+  "Asked to borrow": "借りる申請をしました",
+  "Check your connection, then try again.": "通信環境を確認してから、もう一度お試しください。",
+  "For example": "例",
+  "Free to borrow. Nothing is held: the lender says yes first.": "無料で借りられます。何も保留されません。まず貸し手が同意します。",
+  "How it's going": "活動の状況",
+  "How you deal": "取引のやり方",
+  "I already do this": "すでに実践している",
+  "I'm starting out": "これから始める",
+  "It couldn't be removed. Try again.": "削除できませんでした。もう一度お試しください。",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "このブラウザにあなた専用として保存されます。ブラウザの外に送信されることはなく、ここでサインアウトすると削除されます。",
+  "No tools in this version of the app yet.": "このバージョンのアプリにはまだツールがありません。",
+  "Nothing is held until the lender says yes.": "貸し手が同意するまで何も保留されません。",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "貸し手が同意するまで何も保留されません。同意後、利用料は一時的なトラストウォレットに預託され、返却されると貸し手はコモンズプール手数料1.5%{owned}を差し引いた額を受け取ります。",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "貸し手が同意するまで何も保留されません。同意後、{total} Bがトラストウォレットに預託され、返却されると貸し手は{net} B（コモンズプール手数料1.5%{owned}控除後）を受け取ります。",
+  "On your Home": "ホームに配置",
+  "Open {tool}": "{tool}を開く",
+  "Options for {tool}": "{tool}のオプション",
+  "Read in English": "英語で読む",
+  "Read the guide": "ガイドを読む",
+  "Refresh the page to load the newest version your community has.": "ページを更新して、コミュニティが提供している最新バージョンを読み込んでください。",
+  "Remove my data": "データを削除",
+  "Remove my data from this browser": "このブラウザからデータを削除",
+  "Removed from this browser.": "このブラウザから削除されました。",
+  "Show translation": "翻訳を表示",
+  "Start": "開始",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "このブラウザから{tool}に関するこのコミュニティのデータを削除します。他のコミュニティの同じツールにはそれぞれのデータが保持されます。この操作は取り消せません。",
+  "Things you can do on your own, that make your community stronger.": "一人でできて、コミュニティをより強くすること。",
+  "This page is in English for now.": "このページは現在英語のみです。",
+  "This page is newer in English.": "このページの英語版はより新しく更新されています。",
+  "This screen stopped working": "この画面が停止しました",
+  "This tool didn't load": "このツールを読み込めませんでした",
+  "This tool isn't in this version of the app": "このツールはこのバージョンのアプリには含まれていません",
+  "What this tool keeps is safe. Go back and open it again.": "このツールに保存されているデータは安全です。戻って再度開いてください。",
+  "What you have": "持っているもの",
+  "Where it is kept": "保存場所",
+  "Withdraw request": "申請を取り下げる",
+  "Yes, remove it": "はい、削除します",
+  "for {n} day|for {n} days": {
+    "other": "{n}日間"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "{n}週間"
+  },
+  "{n} day|{n} days": {
+    "other": "{n}日"
+  },
+  "{n} month|{n} months": {
+    "other": "{n}か月"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n}週間"
+  },
+  "📦 Ask to borrow": "📦 借りる申請"
 }

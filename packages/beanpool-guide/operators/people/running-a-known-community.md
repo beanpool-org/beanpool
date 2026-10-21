@@ -114,11 +114,11 @@ Every change to the switch, the known floor, the cap and any member's known floo
 
 A community can be a mix of members your admins know and members they do not. To run a mixed community:
 
-- **The door stays open.** On a node with an open door, anyone can join without an invite code.
+- **Any member invites.** In the manager, open **People & Safety → Invites & QR**; under **Who may invite**, keep **Invite** (any member invites). People your members bring in join without your admins needing to know them.
 - **Keep the names list.** In the BeanPool app on an owner's or admin's phone, open **Settings → Community admin → Names list**, tap **Add a name**, and tap **Confirm a member** for each person your admins know.
 - **Turn on the known floor.** In the manager, open **People & Safety → Invites & QR**, find **The known floor**, check **Confirmed members get the known floor**, set your amounts, and tap **Save the known floor**.
 
-Newcomers who join through the open door start at zero, while members your admins have confirmed on the names list get the known floor.
+Members who join through another member's invite start at zero, while members your admins have confirmed on the names list get the known floor.
 
 ## Debts and a second chance
 

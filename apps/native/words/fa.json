@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-22",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "لوبیا",
@@ -58,6 +58,7 @@
   "Global community": "جامعهٔ جهانی",
   "Join with this account: 12 words or a sign-in": "پیوستن با این حساب: 12 کلمه یا ورود",
   "Join with this account: a sign-in": "پیوستن با این حساب: ورود",
+  "Look around first, then join with this account": "ابتدا گشتی بزنید، سپس با این حساب بپیوندید",
   "Can't reach it right now. Tap to try again.": "اکنون در دسترس نیست. برای تلاش دوباره ضربه بزنید.",
   "Can't reach it right now": "اکنون در دسترس نیست",
   "Your account there was closed.": "حساب شما در آنجا بسته شد.",
@@ -2145,6 +2146,7 @@
   "Deletes the local database for this community and redownloads everything": "پایگاه داده محلی این جامعه را پاک کرده و همه چیز را دوباره بارگیری می‌کند",
   "Join the global community": "پیوستن به جامعه جهانی",
   "Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.": "با افراد از همه جا آشنا شوید و جوامع نزدیک خود را با حساب موجود در این تلفن پیدا کنید. یک بار وارد شوید: کلید و ۱۲ کلمه شما بدون تغییر می‌مانند و چیزی در جوامع دیگرتان تغییر نمی‌کند.",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "با افراد از همه‌جا آشنا شوید و جوامع نزدیک خود را پیدا کنید. ابتدا به عنوان مهمان گشتی بزنید، سپس روی «پیوستن» در بالا بزنید تا با حساب موجود در این تلفن ملحق شوید: کلید و ۱۲ کلمه شما بدون تغییر می‌مانند و چیزی در جوامع دیگرتان تغییر نمی‌کند.",
   "e.g. My Secret Base": "مثلاً پایگاه مخفی من",
   "e.g. {address}": "مثلاً {address}",
   "Add & Connect": "افزودن و اتصال",
@@ -3871,6 +3873,14 @@
     "one": "افزودن {name} به عنوان مدیر، با پشتوانه {n} لوبیا",
     "other": "افزودن {name} به عنوان مدیر، با پشتوانه {n} لوبیا"
   },
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "افزودن {name} به عنوان همکار، با {n} لوبیا پشتوانه نام‌برده",
+    "other": "افزودن {name} به عنوان همکار، با {n} لوبیا پشتوانه نام‌برده"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "افزودن {name} به عنوان مدیر، با {n} لوبیا پشتوانه نام‌برده",
+    "other": "افزودن {name} به عنوان مدیر، با {n} لوبیا پشتوانه نام‌برده"
+  },
   "Adding {name} as a collaborator": "افزودن {name} به عنوان همکار",
   "Adding {name} as a keeper": "افزودن {name} به عنوان مدیر",
   "{name} made this change. Any other collaborator can object before it takes effect, and one objection cancels it.": "{name} این تغییر را ایجاد کرد. هر همکار دیگری می‌تواند پیش از اجرایی شدن به آن اعتراض کند و یک اعتراض آن را لغو می‌کند.",
@@ -4414,6 +4424,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "کدام عضو {name} است؟ فقط کسی را تأیید کنید که مطمئنید خودش است.",
   "Which member is this person? Confirm only someone you know is them.": "کدام عضو این شخص است؟ فقط کسی را تأیید کنید که مطمئنید خودش است.",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "آن‌ها در ازای {amount} کار می‌کنند: کف اعتبار مشخص 0، و هر لوبیایی که بالاتر از 0 دریافت کنند به مشاع می‌رود تا زمانی که تسویه شود.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "پس از تأیید، سقف اعتبار آن‌ها تا {amount} افزایش می‌یابد: کف اعتبار مشخص جامعه شما، تا زمانی که پیشنهادی ثبت‌شده داشته باشند.",
   "Find a member": "یافتن یک عضو",
   "Find a member by name": "یافتن یک عضو بر اساس نام",
   "Nobody here is waiting to be confirmed.": "هیچ‌کس اینجا منتظر تأیید نیست.",
@@ -4655,6 +4666,9 @@
   "No Google, Apple or Facebook needed. Your 12 words are the only way back in.": "نیازی به Google، Apple یا Facebook نیست. ۱۲ کلمه شما تنها راه بازگشت هستند.",
   "Or sign in": "یا وارد شوید",
   "Also a way back if you lose your phone.": "همچنین راهی برای بازگشت در صورت گم کردن تلفن.",
+  "Also add a sign-in": "همچنین افزودن ورود",
+  "A way back in if you lose this phone. It's linked to this same account.": "راهی برای بازگشت در صورت گم کردن این تلفن. به همین حساب متصل است.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "از کلید و ۱۲ کلمه‌ای که از قبل روی این تلفن است استفاده می‌کند. حساب جدیدی ساخته نمی‌شود.",
   "Setting up your account…": "در حال راه‌اندازی حساب شما…",
   "🔑 These 12 words ARE your account.": "🔑 این ۱۲ کلمه خودِ حساب شما هستند.",
   "Nobody can reset them: not us, not this community. If you lose them and this phone, the account is gone for good.": "هیچ‌کس نمی‌تواند آن‌ها را بازنشانی کند: نه ما، نه این انجمن. اگر آن‌ها و این تلفن را گم کنید، حساب برای همیشه از دست رفته است.",

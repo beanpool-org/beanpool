@@ -175,3 +175,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `project-detail.tsx` missing an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `project-detail.tsx` so unhandled screen errors on the `/project-detail` route are safely caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-18 - [Refine route parameter typing in rekey-code.tsx]
+**Issue:** `rekey-code.tsx` typed `useLocalSearchParams<{ link?: string }>()` strictly as string, which does not reflect potential array parameters from Expo Router.
+**Learning:** Updated `useLocalSearchParams` type to `{ link?: string | string[] }` and unwrapped scalar string values safely.
+**Pattern:** Ensure `useLocalSearchParams` parameter generic types allow `string | string[]` and unwrap scalar string values before passing to functions expecting string parameters.

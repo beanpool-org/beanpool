@@ -518,7 +518,7 @@ export default function LedgerScreen() {
     // Trust calculations (value-based)
     const earned = balanceState.earnedCredit || 0;   // from the saturating value curve
     // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
-    // its tierCredit, the credit that tier is read from (a freeze keeps the line held unfrozen), so the badge above and the
+    // its tierCredit, the credit that tier is read from (what they did, never the known grant), so the badge above and the
     // Levels card show one level. CREDIT_BASE_FLOOR − floor only from a node that sends no tierCredit.
     const level = memberLevel(balanceState);
     const totalCredit = level.credit;

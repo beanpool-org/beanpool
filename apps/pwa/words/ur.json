@@ -3493,5 +3493,13 @@
   },
   "{name}, already in the group": "{name}، پہلے ہی گروپ میں ہیں",
   "{name}, already invited": "{name}، پہلے ہی مدعو ہیں",
-  "{name}, asked to join": "{name}، شامل ہونے کی درخواست کی ہے"
+  "{name}, asked to join": "{name}، شامل ہونے کی درخواست کی ہے",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "{name} کو بطور معاون شامل کیا جا رہا ہے، {n} پھلی کی نامزد ضمانت کے ساتھ",
+    "other": "{name} کو بطور معاون شامل کیا جا رہا ہے، {n} پھلیوں کی نامزد ضمانت کے ساتھ"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "{name} کو بطور نگران شامل کیا جا رہا ہے، {n} پھلی کی نامزد ضمانت کے ساتھ",
+    "other": "{name} کو بطور نگران شامل کیا جا رہا ہے، {n} پھلیوں کی نامزد ضمانت کے ساتھ"
+  }
 }

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "pt",
-  "hash": "fcb7efda98a6aa66a8bfd36040568b66b77db17c23861eed7f6dc59d6da187b5",
+  "hash": "b6fbe2ba6dd9946852db86660083a9e57634ef22cc40a6e84c84a33100727c05",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "Entrar no BeanPool",
       "summary": "Duas formas de entrar: uma comunidade com convite de membro, ou a comunidade global se estiver aberta, com 12 palavras secretas ou login. Pedir entrada e convidar outros.",
       "help": "Entre em uma comunidade com convite de um membro ou na comunidade global com 12 palavras secretas ou um login.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -1270,70 +1270,57 @@
         },
         {
           "type": "p",
-          "text": "**A partir do site, em um celular.** Em beanpool.org/global, **Abrir no app BeanPool** abre o aplicativo direto nessa forma de entrada: as duas opções acima em um celular que ainda não tem conta, ou **Participe da comunidade global** com a conta que o celular já possui (consulte \"Já tem uma conta?\" abaixo). Se essa conta já for membro lá, ele abre a aba do **BeanPool**, onde **Comunidade global** sob **SUAS COMUNIDADES** alterna para ela. Se a comunidade global encerrou essa conta, o aplicativo simplesmente abre. No Android, se o aplicativo não estiver instalado, o Google Play se abre; após instalar, na primeira vez que você abre o BeanPool ele vai direto para essa opção de entrada. Em um iPhone, a App Store se abre; após instalar, toque em **Explorar o BeanPool no mundo todo**. O link apenas abre uma tela: ninguém entra até que você toque. Quando abre a aba do **BeanPool**, ela verifica, como sempre faz, se a conta deste celular é membro de cada comunidade listada. Um convite vem primeiro: se tiverem enviado um para você, o aplicativo abre o convite e, se você estava no meio do processo de entrada, continua com ele."
+          "text": "**A partir do site, em um celular.** Em beanpool.org/global, **Abrir no app BeanPool** abre o aplicativo direto nessa forma de entrada: as duas opções acima em um celular que ainda não tem conta, ou **Entrar na comunidade global** com a conta que o celular já possui (consulte \"Já tem uma conta?\" abaixo). Se essa conta já for membro lá, ele abre a aba do **BeanPool**, onde **Comunidade global** sob **Suas comunidades** alterna para ela. Se a comunidade global tiver encerrado essa conta, o aplicativo simplesmente abre. No Android, se o aplicativo não estiver instalado, a Google Play se abre; após instalar, na primeira vez que você abrir o BeanPool ele irá direto para essa forma de entrada. Em um iPhone, a App Store se abre; após instalar, toque em **Explorar o BeanPool no mundo todo**. O link apenas abre uma tela: ninguém entra até que você toque. Ao abrir a aba do **BeanPool**, ela verifica, como sempre faz, se a conta deste celular é membro de cada comunidade listada. Um convite tem prioridade: se você recebeu um, o aplicativo abre o convite em vez disso, e se você não tiver uma conta, ele o leva para a entrada por convite."
         },
         {
           "type": "p",
-          "text": "Com 12 palavras, seu celular também faz um instante de trabalho para configurar a conta. Ele começa assim que as duas opções aparecem (quando o link do site as abre, assim que você toca em uma delas), enquanto você lê e digita seu nome, de modo que a maioria das pessoas nem espera por isso. Se você tocar em **Entrar** antes de terminar, o aplicativo exibirá **Configurando sua conta…** com uma barra, e **← Voltar** ainda funciona. Quando muitas pessoas estiverem entrando a partir da sua rede, o aplicativo avisa, informando quanto tempo levará no seu celular, e você pode fazer login para entrar de imediato. A entrada com login só pede esse trabalho em uma rede muito sobrecarregada, e o aplicativo o faz sozinho. **Escolher outra forma** interrompe a espera e leva você de volta às duas opções. Se você fizer login, a configuração das 12 palavras é interrompida para economizar bateria, e **Escolher outra forma** a reinicia."
+          "text": "**Proteção de conta.** Se você entrar com 12 palavras secretas, o aplicativo oferece **Adicionar um login como segunda forma de recuperação**: faça login uma vez com Google, Apple (em um iPhone) ou Facebook. Não há senha. Esse login guarda uma cópia protegida da sua chave em um cofre no servidor da comunidade ou do BeanPool, e a devolve em um novo celular com o mesmo login. Você pode adicioná-lo ou removê-lo a qualquer momento em **Configurações**, sob **Proteção de conta**. Consulte \"Proteger sua conta\"."
         },
         {
           "type": "p",
-          "text": "Se a comunidade pedir para esperar (muitas pessoas entrando a partir da sua rede), o aplicativo informará por quanto tempo. Tocar em **Entrar** antes disso apenas repetirá a mensagem, com o tempo restante; após a espera, ou após um minuto se a espera for maior, **Entrar** tentará novamente. Se a data e a hora do seu celular estiverem incorretas, o aplicativo pedirá para verificar nas configurações do celular (definindo para automático) e tentar novamente. Se a comunidade encerrou sua conta (você a excluiu ou foi removido), o aplicativo dirá **O espaço desta conta na comunidade global foi encerrado, então ela não pode entrar novamente.** e não oferecerá mais essa porta de entrada."
+          "text": "Se você fizer login, a comunidade guarda apenas uma referência cifrada à sua conta de login, e você entra de volta a qualquer momento: o cofre do BeanPool mantém sua chave protegida por esse login e pode devolvê-la em um novo celular."
         },
         {
           "type": "p",
-          "text": "Se a entrada com 12 palavras, no aplicativo para celular ou em um navegador web, disser que a comunidade não pôde aceitá-la porque sua data e hora parecem incorretas, o relógio desse celular ou computador está com uma diferença de mais de alguns minutos. Defina a data e a hora para automático nas configurações do dispositivo e tente novamente. Nada foi salvo e tentar fazer login de novo não ajudará. A mesma mensagem aparece se a adição de um login ou a recuperação da sua conta em um navegador for recusada pelo mesmo motivo."
+          "text": "Se você entrar com 12 palavras, nada sobre você chega à comunidade além da sua chave e do seu nome, e suas 12 palavras são a única forma de voltar: ninguém pode redefini-las, nem o BeanPool e nem a comunidade. **Cópia de segurança** diz isso e oferece **Adicionar um login como segunda forma de recuperação**. Depois de entrar, um cartão no **Início** diz **Sua conta tem uma única forma de recuperação: suas 12 palavras. Verifique se você ainda as tem ou adicione um login.** Toque em **✕** para dispensá-lo: ele volta uma vez após a sua primeira publicação e uma vez após uma semana, e depois permanece em **Configurações**, sob **Proteção da conta**, até que você adicione um login ou toque em **Ainda tenho minhas 12 palavras**. Uma conta criada com 12 palavras também possui limites menores durante os seus primeiros 7 dias e até que 3 das suas publicações permaneçam ativas: 2 publicações, 4 fotos e 3 pessoas novas para enviar mensagens por dia, e uma única denúncia oculta a sua publicação enquanto for recente. Adicionar um login, a qualquer momento, eleva a conta aos limites habituais de uma conta nova. Você pode adicionar um a partir de qualquer celular onde esteja com a sua conta, não apenas naquele em que entrou. Se o cofre de chaves do BeanPool já mantiver uma cópia da sua conta, o cartão não é exibido e as **Configurações** oferecem **Adicionar um login** de forma discreta."
         },
         {
           "type": "p",
-          "text": "Se você fizer login, a comunidade guarda apenas uma referência codificada da sua conta de login, nunca seu e-mail. Esse login também se torna uma forma de voltar à sua conta se você perder o celular, de modo que você não precise fazer login novamente em **Backup de segurança**. Para isso, a comunidade mantém uma cópia protegida da sua conta. Os responsáveis pelo servidor dela podem abrir essa cópia: consulte \"Recuperar sua conta\". Depois de entrar, você não faz login para abrir o aplicativo: sua conta é a chave no seu celular, como qualquer outra."
+          "text": "**Já tem uma conta?** Entre na comunidade global com ela, não com uma segunda conta. Toque no feijão no canto superior esquerdo e, sob **Suas comunidades**, toque em **Comunidade global**: ela está sempre lá, e quando você puder entrar, sua segunda linha diz **Explore primeiro, depois entre com esta conta** (enquanto a visita como convidado: **Entrar com esta conta: 12 palavras ou um login**, ou **…: um login**). Se você estiver visitando a comunidade global como convidado, toque em **Entrar** no topo, ao lado do **?**, e depois em **Entrar com 12 palavras ou um login** (**Entrar com um login** onde a comunidade aceita apenas logins). Se o aplicativo disser **Você ainda não é membro aqui** sobre a comunidade global, toque em **Entrar com esta conta**. No celular, o link beanpool.org/global abre **Entrar na comunidade global** com sua conta também (consulte \"A partir do site, em um celular\", acima). Você entra com suas 12 palavras ou faz login uma vez, confere seu nome e toca em **Entrar**. Sua chave e suas 12 palavras permanecem as mesmas, e nada muda nas suas outras comunidades. Consulte \"Mais de uma comunidade\"."
         },
         {
           "type": "p",
-          "text": "Se você entrar com 12 palavras, nada sobre você chega à comunidade além da sua chave e do seu nome, e suas 12 palavras são sua única forma de recuperação: ninguém pode redefini-las, nem o BeanPool e nem a comunidade. O **Backup de segurança** informa isso e oferece **Adicione um login como segunda forma de voltar**. Após entrar, um cartão no **Início** diz **Sua conta tem uma única forma de recuperação: suas 12 palavras. Verifique se você ainda as tem ou adicione um login.** Toque em **✕** para dispensá-lo: ele volta uma vez após a sua primeira publicação e outra após uma semana, passando a residir nas **Configurações**, sob **Proteção da conta**, até que você adicione um login ou toque em **Ainda tenho minhas 12 palavras**. Uma conta criada com 12 palavras também possui limites menores durante os seus primeiros 7 dias e até que 3 de suas publicações permaneçam ativas: 2 publicações, 4 fotos e 3 novas pessoas para conversar por dia, e uma denúncia oculta sua publicação enquanto ela for recente. Adicionar um login, a qualquer momento, eleva a conta aos limites habituais de contas novas. Você pode adicionar um login a partir de qualquer celular em que estiver conectado na sua conta, não apenas daquele em que entrou. Se o cofre de chaves do BeanPool já mantiver uma cópia da sua conta, o cartão não é exibido e as **Configurações** oferecem **Adicionar um login** discretamente."
-        },
-        {
-          "type": "p",
-          "text": "**Já tem uma conta?** Entre na comunidade global com ela, não com uma segunda conta. Toque no feijão no canto superior esquerdo e, sob **SUAS COMUNIDADES**, toque em **Comunidade global**: ela está sempre lá, e quando você puder entrar, sua segunda linha dirá **Entrar com esta conta: 12 palavras ou um login** (ou **…: um login**). Se você estiver visitando a comunidade global como convidado, toque em **Entrar** no topo, ao lado do **?**, e depois em **Entrar com 12 palavras ou um login** (**Entrar com um login** onde a comunidade aceita apenas logins). Se o aplicativo disser **Você ainda não é membro aqui** sobre a comunidade global, toque em **Entrar com esta conta**. No celular, o link beanpool.org/global abre **Participe da comunidade global** com sua conta também (consulte \"A partir do site, em um celular\", acima). Você entra com suas 12 palavras ou faz login uma vez, confere seu nome e toca em **Entrar**. Sua chave e suas 12 palavras permanecem as mesmas, e nada muda nas suas outras comunidades. Consulte \"Mais de uma comunidade\"."
-        },
-        {
-          "type": "p",
-          "text": "**Já entrou antes, em um navegador web ou em outro celular?** Não entre novamente em um celular que ainda não possui conta: isso cria uma segunda conta, e duas contas nunca podem ser unificadas em uma só. Traga a conta que você já tem: na primeira tela, toque em **Já é membro? Restaurar conta**, depois em **Recuperar com 12 palavras**. Digite suas 12 palavras e, sob **Qual comunidade?**, toque em **Comunidade global**. Se você entrou com um login, **Recuperar com conta social** também funciona. Consulte \"Recuperar sua conta\"."
+          "text": "**Já participou antes, em um navegador web ou em outro celular?** Não entre novamente em um celular que ainda não tem conta: isso cria uma segunda conta, e duas contas nunca podem ser unificadas. Traga a conta que você já possui: na primeira tela, toque em **Já é membro? Restaurar conta**, depois em **Recuperar com 12 palavras**. Digite suas 12 palavras e, sob **Qual comunidade?**, toque em **Comunidade global**. Se você entrou com um login, **Recuperar com login social** também funciona. Consulte \"Recuperar sua conta\"."
         },
         {
           "type": "h2",
-          "text": "As etapas"
+          "text": "Os passos para entrar"
         },
         {
           "type": "p",
-          "text": "A barra superior mostra **Seu nome**, **Sua foto**, **Backup de segurança** e **Como funciona**. Em um navegador web na comunidade global há mais uma, **Sua região**, após **Sua foto**. O primeiro acesso do aplicativo para celular à comunidade global não tem a etapa de região: defina-a nas **Configurações**, sob **Sua área**."
+          "text": "A barra superior mostra **Seu nome**, **Sua foto**, **Cópia de segurança** e **Como funciona**. Em um navegador web na comunidade global há mais um passo, **Sua área**, após **Sua foto**. Ao entrar na comunidade global pela primeira vez no app do celular não há a etapa de área: defina-a nas **Configurações**, sob **Sua área**."
         },
         {
           "type": "ul",
           "items": [
-            "**Sua foto:** escolha uma foto ou uma das imagens prontas, ou pule e adicione uma mais tarde pelo seu perfil. Algumas comunidades pedem uma imagem antes da sua primeira publicação. As pessoas negociam com mais facilidade com um rosto ou uma imagem que reconhecem.",
-            "Após um convite, **← Voltar** em **Sua foto** leva você de volta ao seu nome, para alterá-lo. Ainda é a mesma conta: toque em **Próximo** e você segue para **Sua foto** e **Backup de segurança** com o novo nome. Se alguém já tiver esse nome, o aplicativo sugere outros. Na comunidade global não há **← Voltar** aqui: você já entrou.",
-            "**Sua região** (em um navegador web na comunidade global e no aplicativo para celular quando você entra na comunidade global com uma conta que já possui): **Mais ou menos onde você está?** A comunidade global mostra o que está disponível perto de você: os 500 anúncios mais próximos em um raio de 250 km. Toque em **Usar minha localização** ou **Digite uma cidade ou bairro**. Sua região é mantida em um raio de cerca de 10 km, nunca seu ponto exato: seu celular ou navegador arredonda a posição antes de enviá-la. Outros membros veem a que distância você está, e uma enquete que você criar será exibida na sua região. **Pular por enquanto** não envia nada nem pede nada; você ainda entra e vê os anúncios mais recentes do mundo todo até configurá-la. Você pode alterar ou limpar a qualquer momento nas **Configurações**, sob **Sua área**.",
-            "**Backup de segurança:** o aplicativo mostra suas 12 palavras em inglês. Anote-as no papel e guarde-as em um lugar seguro. A caixa de seleção **Já anotei estas palavras** (em um navegador web, **Anotei estas palavras em um lugar seguro**) serve como um lembrete. Nada impede você de continuar se pular, mas leia \"Suas 12 palavras\" em breve. Se você entrou na comunidade global com um login no aplicativo para celular, esta etapa mostra seu login protegendo sua conta, e suas palavras estão a um toque de distância em **Prefere anotar 12 palavras?**. Se você entrou com 12 palavras, ela diz primeiro que essas 12 palavras são sua conta e oferece **Adicione um login como segunda forma de voltar**: você também pode pular isso.",
+            "**Sua foto:** escolha uma foto ou uma das imagens prontas, ou pule e adicione uma mais tarde a partir do seu perfil. Algumas comunidades pedem uma imagem antes da sua primeira publicação. As pessoas negociam com mais facilidade quando há um rosto ou imagem reconhecível.",
+            "Após um convite, **← Voltar** em **Sua foto** retorna ao seu nome para alterá-lo. Continua sendo a mesma conta: toque em **Próximo** e prossiga para **Sua foto** e **Cópia de segurança** com o novo nome. Se alguém já estiver usando esse nome, o app sugere outros. Na comunidade global não há **← Voltar** aqui: você já entrou.",
+            "**Sua área** (em um navegador web na comunidade global e no app do celular quando você entra na comunidade global com uma conta existente): **Mais ou menos onde você está?** A comunidade global mostra o que está disponível perto de você: os 500 anúncios mais próximos em um raio de 250 km. Toque em **Usar minha localização** ou em **Digite uma cidade ou bairro**. Sua área é mantida com uma precisão aproximada de 10 km, nunca o local exato: seu celular ou navegador arredonda a localização antes do envio. Outros membros veem a que distância você está, e uma votação que você criar será exibida na sua área. **Pular por enquanto** não envia e não solicita nada; você entra mesmo assim e vê os anúncios mais recentes do mundo todo até definir sua área. Você pode alterá-la ou limpá-la a qualquer momento em **Configurações**, sob **Sua área**.",
+            "**Cópia de segurança:** o aplicativo exibe suas 12 palavras. Anote-as no papel e guarde-as em segurança. A caixa de seleção **Salvei estas palavras** (no navegador web, **Anotei estas palavras em um local seguro**) serve como um lembrete. Nada impede você de prosseguir se pular essa etapa, mas leia \"Suas 12 palavras\" em breve. Se você entrou na comunidade global com um login no aplicativo do celular, esta etapa mostrará seu login protegendo sua conta, e suas palavras estarão a um toque de distância em **Prefere anotar 12 palavras?**. Se você entrou com 12 palavras, ela informará primeiro que essas 12 palavras são sua conta e oferecerá **Adicionar um login como segunda forma de recuperação**: você também pode pular essa opção.",
             "**Como funciona:** um breve tour. Toque em **Vamos começar!** para iniciar."
           ]
         },
         {
-          "type": "p",
-          "text": "Se você fechar o aplicativo no meio do caminho, ele continuará a partir da mesma etapa na próxima vez."
-        },
-        {
           "type": "h2",
-          "text": "Se o convite não funcionar"
+          "text": "Se a entrada por convite não funcionar"
         },
         {
           "type": "ul",
           "items": [
-            "**Já utilizado:** cada convite funciona exatamente uma vez. Peça um novo. Se o convite era seu e você já é membro, use **Recuperar uma conta existente** em vez disso.",
-            "**Expirado:** os convites duram 30 dias. Peça um novo.",
-            "**Não reconhecido:** verifique se você copiou o código completo e se o nome ou endereço da comunidade está correto.",
-            "**Criado por um membro, e agora apenas os administradores trazem pessoas:** a comunidade escolheu que apenas os administradores convidam, e um passe que um membro criou sem conexão não funciona mais. Peça um convite atualizado a um administrador.",
-            "**Falha ao registrar identidade** (após você tocar em **Próximo**): geralmente falta de conexão ou falta de resposta a tempo. Verifique sua conexão e toque em **Próximo** novamente. Se a primeira tentativa foi recebida, o aplicativo segue para **Sua foto** e **Backup de segurança** com a mesma conta."
+            "**Convite não encontrado ou já expirado:** o convite expirou (30 dias) ou o código está errado. Peça um novo convite a quem convidou você.",
+            "**Código de convite não reconhecido:** confira cada caractere. Se estiver digitando o endereço da comunidade manualmente, verifique se o nome ou endereço está correto.",
+            "**Criado por um membro, e agora apenas administradores trazem pessoas:** a comunidade escolheu que somente seus administradores podem convidar, e um bilhete criado por um membro sem conexão não funciona mais. Peça um novo convite a um administrador.",
+            "**Falha ao registrar identidade** (após você tocar em **Próximo**): normalmente sem conexão ou sem resposta a tempo. Verifique sua conexão e toque em **Próximo** novamente. Se a primeira tentativa tiver passado, o aplicativo continuará para **Sua foto** e **Cópia de segurança** com a mesma conta."
           ]
         },
         {
@@ -1369,8 +1356,8 @@
             "Toque em **Gerar bilhete**. Sem conexão, o botão diz **Gerar bilhete offline**, e também funciona.",
             "Mostre o código QR para a pessoa ou toque em **Compartilhar convite** para enviar o link e o código.",
             "No aplicativo web, abra **Pessoas**, depois **Convites**, e toque em **Gerar novo convite**. Em seguida, toque em **Copiar** ou **Compartilhar**.",
-            "Convites que ninguém utilizou ainda são listados sob **PENDENTE**, cada um com **Compartilhar** para enviar novamente.",
-            "Você pode criar 20 convites por dia e ter até 50 que ninguém usou ainda. Um convite não utilizado é excluído após seus 30 dias e sai de **PENDENTE**."
+            "Convites que ninguém utilizou ainda são listados sob **Pendente**, cada um com **Compartilhar** para enviar novamente.",
+            "Você pode criar 20 convites por dia e ter até 50 que ninguém usou ainda. Um convite não utilizado é excluído após seus 30 dias e sai de **Pendente**."
           ]
         },
         {
@@ -2474,8 +2461,8 @@
       "slug": "communities",
       "title": "Mais de uma comunidade",
       "summary": "Participe de várias comunidades com uma só conta, alterne entre elas, acompanhe sua comunidade para um novo endereço e veja o que a comunidade global mostra.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2522,13 +2509,14 @@
         },
         {
           "type": "p",
-          "text": "Sob **SUAS COMUNIDADES**, há sempre uma linha para a **Comunidade global**. Sua segunda linha informa a sua situação: o endereço dela quando você for membro (toque nela para alternar para ela), **Entrar com esta conta: 12 palavras ou um login** (**Entrar com esta conta: um login** onde a comunidade não aceita as 12 palavras) quando você puder entrar, ou o motivo pelo qual não pode agora: **Verificando…**, **Não é possível alcançar agora** (com **Toque para tentar de novo.** enquanto este celular não tiver salvo a comunidade global), **Não está aceitando novos membros agora.**, **Esta comunidade está em uma prévia privada. Peça um convite ao dono dela.** ou **Sua conta lá foi encerrada.** Quando a comunidade global não puder ser alcançada e você estiver conectado a uma comunidade da qual é membro, uma linha abaixo avisa: **Sua própria comunidade não é afetada.** Nada mais no celular depende dela."
+          "text": "Sob **Suas comunidades**, há sempre uma linha para a **Comunidade global**. Sua segunda linha informa a sua situação: o endereço dela quando você for membro (toque nela para alternar para ela), **Explore primeiro, depois entre com esta conta** quando você puder entrar (enquanto a visita como convidado: **Entrar com esta conta: 12 palavras ou um login**, ou **Entrar com esta conta: um login** onde a comunidade não aceita as 12 palavras), ou o motivo pelo qual não pode agora: **Verificando…**, **Não é possível alcançar agora** (com **Toque para tentar de novo.** enquanto este celular não tiver salvo a comunidade global), **Não está aceitando novos membros agora.**, **Esta comunidade está em uma prévia privada. Peça um convite ao dono dela.** ou **Sua conta lá foi encerrada.** Quando a comunidade global não puder ser alcançada e você estiver conectado a uma comunidade da qual é membro, uma linha abaixo avisa: **Sua própria comunidade não é afetada.** Nada mais no celular depende dela."
         },
         {
           "type": "ul",
           "items": [
-            "Toque no feijão no canto superior esquerdo. Na aba do **BeanPool**, sob **SUAS COMUNIDADES**, toque em **Comunidade global** (sua segunda linha diz **Entrar com esta conta**). Essa opção também está nas **Configurações**, sob **Avançado / Subsistema**. Se você estiver visitando a comunidade global como convidado, toque em **Entrar** no topo, ao lado do **?**, e depois em **Entrar com 12 palavras ou um login** (**Entrar com um login** onde a comunidade aceita apenas logins). Se o aplicativo mostrar **Você ainda não é membro aqui** para a comunidade global, toque em **Entrar com esta conta**.",
-            "Escolha como entrar: **Criar conta com 12 palavras secretas**, que usa as 12 palavras que sua conta já tem (sem login, portanto sem bloqueio do celular), ou **Ou faça login** uma vez com Google, Apple (em um iPhone) ou Facebook. Para um login, o aplicativo pede o bloqueio do seu celular primeiro, porque esse login também se torna uma forma de voltar à sua conta.",
+            "Toque no feijão no canto superior esquerdo. Na aba do **BeanPool**, sob **Suas comunidades**, toque em **Comunidade global** (sua segunda linha diz **Explore primeiro, depois entre com esta conta**). O aplicativo abre a comunidade global como convidado, assim como o site faz: você explora primeiro, e o ponto no feijão mostra que você é um convidado. Essa opção também está nas **Configurações**, sob **Comunidades salvas**: **Explorar a comunidade global**. Nenhuma entrada é feita e nenhuma conta é criada ao apenas olhar.",
+            "Quando estiver tudo pronto, toque em **Entrar** no topo, ao lado do **?**, e depois em **Entrar com 12 palavras ou um login** (**Entrar com um login** onde a comunidade aceita apenas logins). Se o aplicativo mostrar **Você ainda não é membro aqui** para a comunidade global, toque em **Entrar com esta conta**.",
+            "Escolha como entrar: **Entrar com esta conta**, que usa a chave e as 12 palavras já neste celular (sem login, portanto sem bloqueio do celular), ou, sob **Adicionar também um login**, faça login uma vez com Google, Apple (em um iPhone) ou Facebook. Para um login, o aplicativo pede o bloqueio do seu celular primeiro, porque esse login também se torna uma forma de voltar à sua conta.",
             "Confira o nome que as pessoas verão por lá e toque em **Entrar**. Se alguém já tiver esse nome, o aplicativo sugere outros.",
             "Depois, escolha sua foto para a comunidade global, como em qualquer nova comunidade, e em seguida indique aproximadamente onde você está (**Mais ou menos onde você está?**; você pode tocar em **Pular por enquanto**): a comunidade global mostra os anúncios próximos a ela. Consulte \"Entrar no BeanPool\"."
           ]
@@ -2539,15 +2527,15 @@
         },
         {
           "type": "p",
-          "text": "Se o aplicativo disser **Este login já entrou na comunidade global com outra conta do BeanPool**, esse login já tem uma conta própria lá. Use outro login: uma conta de login cria uma conta na comunidade global."
+          "text": "Se o aplicativo disser **Este login já entrou na comunidade global com outra conta do BeanPool**, esse login tem uma conta própria por lá. Use outro login: cada conta de login cria uma conta na comunidade global."
         },
         {
           "type": "p",
-          "text": "Em um celular novo, sem nenhuma conta ainda, use **Explorar o BeanPool no mundo todo** na primeira tela. Consulte \"Entrar no BeanPool\"."
+          "text": "Em um celular novo, ainda sem nenhuma conta, use **Explorar o BeanPool no mundo todo** na primeira tela. Consulte \"Entrar no BeanPool\"."
         },
         {
           "type": "h2",
-          "text": "O que a comunidade global mostra para você"
+          "text": "O que a comunidade global mostra"
         },
         {
           "type": "p",
@@ -2599,13 +2587,13 @@
         {
           "type": "ul",
           "items": [
-            "Toque no feijão no canto superior esquerdo. A aba do **BeanPool** se abre, com **SUAS COMUNIDADES** perto do topo.",
+            "Toque no feijão no canto superior esquerdo. A aba do **BeanPool** se abre, com **Suas comunidades** perto do topo.",
             "Toque na que você deseja."
           ]
         },
         {
           "type": "p",
-          "text": "Você também pode alternar nas **Configurações**, sob **SISTEMA**, depois em **Avançado / Subsistema**. Suas comunidades estão listadas ali. A que você está usando está marcada como ativa. Toque em **Alternar para a cidade** em outra comunidade para ir até ela."
+          "text": "Você também pode alternar nas **Configurações**, sob **Sistema**, depois em **Comunidades salvas**. Suas comunidades estão listadas ali. A que você está usando está marcada como ativa. Toque em **Alternar para esta comunidade** em outra para ir até ela."
         },
         {
           "type": "h2",
@@ -2631,8 +2619,8 @@
         {
           "type": "ul",
           "items": [
-            "Em **Avançado / Subsistema**, toque em **Esquecer** em uma comunidade que você não esteja usando no momento. Isso remove a comunidade e seus dados salvos deste celular.",
-            "Na aba do **BeanPool**, sob **SUAS COMUNIDADES**, manter uma comunidade pressionada e tocar em **Remover** apenas a tira da lista. Os dados dela continuam no celular."
+            "Em **Comunidades salvas**, toque em **Esquecer** em uma comunidade que você não esteja usando no momento. Isso remove a comunidade e seus dados salvos deste celular.",
+            "Na aba do **BeanPool**, sob **Suas comunidades**, manter uma comunidade pressionada e tocar em **Remover** apenas a tira da lista. Os dados dela continuam no celular."
           ]
         },
         {
@@ -5875,8 +5863,8 @@
       "slug": "credit-line",
       "title": "Sua linha de crédito",
       "summary": "Até quanto você pode ficar abaixo de zero e como esse valor aumenta.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5951,7 @@
         },
         {
           "type": "p",
-          "text": "Algumas comunidades têm administradores que conhecem cada membro pelo nome. Se a sua ativou **o piso conhecido**, um membro confirmado por um administrador recebe uma linha de crédito imediatamente: 1.000 feijões, a menos que a sua comunidade tenha escolhido outro valor. Isso equivale a cerca de 25 horas de trabalho confiadas pela comunidade a você. Isso eleva o seu limite, não o seu nível: seu emblema de confiança continua contando apenas o que você realizou."
+          "text": "Algumas comunidades têm administradores que conhecem cada membro pelo nome. Um membro confirmado por um administrador recebe uma linha de crédito imediatamente, **o piso conhecido**: 1.000 feijões, a menos que a sua comunidade tenha escolhido outro valor. Isso equivale a cerca de 25 horas de trabalho confiadas pela comunidade a você. Isso eleva o seu limite, não o seu nível: seu emblema de confiança continua contando apenas o que você realizou. O piso conhecido está ativado em todas as comunidades com feijões, a menos que o proprietário o tenha desativado."
         },
         {
           "type": "ul",
@@ -5980,7 +5968,7 @@
         },
         {
           "type": "p",
-          "text": "Em algumas comunidades, qualquer membro pode convidar pessoas, portanto os administradores não conhecem todo mundo. Se a sua comunidade tiver ativado **o piso conhecido**, os administradores podem confirmar os membros que conhecem, e esses membros começam com um limite maior. Todos os demais começam no zero, e o limite de todos cresce da mesma forma a partir daí, conforme negociam e constroem confiança."
+          "text": "Em algumas comunidades, qualquer membro pode convidar pessoas, portanto os administradores não conhecem todo mundo. Os administradores podem confirmar os membros que conhecem, e esses membros começam com um limite maior, **o piso conhecido**, a menos que o proprietário da comunidade o tenha desativado. Todos os demais começam no zero, e o limite de todos cresce da mesma forma a partir daí, conforme negociam e constroem confiança."
         },
         {
           "type": "h2",
@@ -6485,8 +6473,8 @@
       "slug": "what-the-admins-can-see",
       "title": "O que administradores veem",
       "summary": "Em comunidades onde administradores mantêm lista de nomes: o que ela tem sobre você, quem lê, o que o servidor guarda e o que significa estar confirmado.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6539,7 +6527,7 @@
           "type": "ul",
           "items": [
             "Uma confirmação não carrega nenhum nome. O servidor registra qual conta, qual entrada e qual administrador, nunca quem você é.",
-            "Não é um selo de confiança e, por enquanto, não altera mais nada no aplicativo.",
+            "Não é um emblema de confiança. Também concede a você uma linha de crédito imediatamente, o piso conhecido, a menos que o proprietário da sua comunidade o tenha desativado: consulte \"Sua linha de crédito\".",
             "Se um administrador convidou você pelo nome, entrar com o convite dele confirmou você no seu registro, por aquele administrador. \"Confirmado\" significa apenas que um administrador atesta que esta conta é a pessoa indicada naquele registro.",
             "Se você substituir um celular perdido e sua conta passar para uma nova chave, sua confirmação passa junto.",
             "Se você sair ou excluir sua conta, sua confirmação termina. Seu registro permanece na lista dos administradores até que um administrador o exclua: peça a ele para fazer isso.",
@@ -6564,7 +6552,7 @@
         },
         {
           "type": "p",
-          "text": "\"Nesta comunidade, os administradores podem ver o seu saldo se ele ultrapassar 50% da sua linha de crédito ou se você permanecer no negativo por 60 dias sem nenhuma venda. É assim que um LETS sempre funcionou. Cada vez que um administrador abre a lista de membros que ultrapassaram esses limites, e cada vez que um administrador olha o seu saldo enquanto remove você, isso é registrado em logs. Em uma votação sobre a sua remoção, todos os que podem votar nela veem o seu saldo e qualquer dívida, apenas nessa votação, e essas visualizações não são registradas em logs. Você pode revogar isso a qualquer momento nas Configurações. Seja qual for a sua escolha, qualquer administrador pode ver algumas das suas trocas: uma troca que ainda não foi concluída ou que um administrador liquidou (com quem foi, o anúncio, o preço e a sua conversa individual com a pessoa, que eles não podem ler se for privada), para que uma negociação travada possa ser resolvida; uma troca cujos feijões ficaram travados quando um membro foi removido em um servidor mais antigo (o status da troca, o anúncio, o preço, as datas, os feijões que ficaram travados, quantos pagamentos passaram por ela e o valor e anotação do último); um alerta de fraude que cita seu nome se você e outro membro comprarem um do outro repetidamente, em valores semelhantes, acima de um limite, com o total de feijões e o equilíbrio entre as partes; um alerta que cita seu nome, com o total de feijões e quantos membros convidados por você negociaram apenas com você, se membros convidados por você enviarem feijões para você acima de um limite em um número definido de dias, ou se você for um desses membros; um alerta que cita seu nome, com a proporção de trocas do grupo entre si, mas sem feijões, se você estiver em um grupo de membros, pelo menos metade deles novos, que negociam quase exclusivamente entre si; e um alerta que cita seu nome se nenhum feijão tiver entrado ou saído da sua conta por um número definido de dias. Cada consulta a uma dessas trocas é registrada em logs, com quem olhou, quando e em quais trocas; a consulta aos alertas que citam você é registrada na primeira vez que cada administrador os abre e novamente no primeiro acesso desse administrador após 24 horas, e os acessos intermediários não adicionam linhas. O proprietário e os administradores podem consultar esse registro. As estatísticas de membros que os administradores veem mostram quantas publicações você tem ativas e quantas mensagens enviou, e em relação a trocas mostram apenas os totais da comunidade inteira, e não os seus. Todos os membros, administradores incluídos, veem seu perfil de confiança: quantas das suas trocas foram concluídas e quantas foram canceladas, e a porcentagem de conclusão, quantos pagamentos em feijões você enviou ou recebeu de membros somados às trocas que concluiu, com quantos membros diferentes você pagou, recebeu ou negociou, quantos pagamentos e trocas você realizou com o membro que está olhando, e seus Pontos de Confiança. Isso não fica registrado em logs, porque todos os membros podem ver. Nada mais das suas trocas. Quem gerencia o servidor desta comunidade detém todo o banco de dados, incluindo seu saldo e trocas, e seus backups, instantâneos e cópias em espera.\""
+          "text": "\"Nesta comunidade, os administradores podem ver o seu saldo se ele ultrapassar 50% da sua linha de crédito ou se você permanecer no negativo por 60 dias sem realizar nenhuma venda. É assim que um LETS sempre funcionou. Cada vez que um administrador abre a lista de membros que ultrapassaram esses limites, e cada vez que um administrador consulta o seu saldo ao remover você, isso é registrado em logs. Em uma votação sobre a sua remoção, todos os que podem votar nela veem o seu saldo e qualquer dívida, apenas nessa votação, e essas consultas não são registradas em logs. Você pode revogar essa permissão a qualquer momento em Configurações. Seja qual for a sua escolha, qualquer administrador pode ver algumas das suas trocas: uma troca que ainda não foi concluída ou que um administrador liquidou (com quem foi feita, o anúncio, o preço e a conversa individual com a pessoa, que eles não podem ler se for privada), para que uma troca travada possa ser resolvida; uma troca cujos feijões ficaram travados quando um membro foi removido em um servidor mais antigo (o status da troca, o anúncio, o preço, suas datas, os feijões travados, quantos pagamentos passaram por ela e o valor e anotação do último pagamento); um alerta de fraude que cita você se você e um membro comprarem um do outro repetidamente, em valores aproximados, acima de um limite, com o total de feijões e o equilíbrio das trocas em cada sentido; um que cita você, com o total de feijões e quantos dos membros convidados por você negociaram exclusivamente com você, se membros convidados por você lhe enviarem feijões acima de um limite em um número definido de dias, ou se você for um desses membros; um que cita você, com a proporção das trocas do grupo entre si, mas sem feijões, se você estiver em um grupo de membros, no qual pelo menos metade é nova na comunidade, que negociam principalmente entre si; e um alerta que cita você se nenhum feijão tiver entrado ou saído da sua conta por um número definido de dias. Cada consulta a uma dessas trocas é registrada em logs, com quem olhou, quando e em quais trocas; a consulta aos alertas que citam você é registrada na primeira vez que cada administrador os abre e novamente na primeira consulta desse administrador após 24 horas, e as consultas intermediárias não acrescentam nenhuma linha. O proprietário e os administradores podem ver esse registro. As estatísticas de membros que os administradores veem mostram quantas publicações você mantém ativas e quantas mensagens enviou, e em relação a trocas apenas os totais de toda a comunidade, não os seus. Todos os membros, administradores incluídos, veem o seu perfil de confiança: quantas das suas trocas foram concluídas e quantas foram canceladas, e a proporção de concluídas, quantos pagamentos em feijões você enviou para membros ou recebeu deles somados às trocas concluídas, com quantos membros distintos você pagou, recebeu ou negociou, quantos pagamentos e trocas realizou com o membro que está consultando, e seus Pontos de Confiança. Isso não é registrado em logs, porque todos os membros podem ver. Nada mais das suas trocas. Quem gerencia o servidor desta comunidade detém todo o banco de dados dela, incluindo seu saldo e trocas, além de backups, instantâneos e cópias em espera.\""
         },
         {
           "type": "p",
@@ -6573,18 +6561,18 @@
         {
           "type": "ul",
           "items": [
-            "Se o seu saldo ultrapassar qualquer um dos dois limites, sua conta aparecerá nos celulares dos administradores com o seu saldo, para que um administrador que conheça você possa conversar com você. Essa lista não mostra mais nada sobre você, e nenhuma das suas trocas.",
-            "Toda vez que um administrador abre essa lista, os outros administradores e o proprietário podem ver quem abriu e quando.",
-            "Se você não tiver concordado, ou ninguém tiver confirmado você, ou a sua comunidade não confirmar membros, essa lista nunca exibirá você."
+            "Se o seu saldo ultrapassar qualquer uma das duas linhas, sua conta aparecerá nos celulares dos administradores com o seu saldo, para que um administrador que conheça você possa conversar a respeito. Essa lista não exibe mais nada sobre você e nenhuma das suas trocas.",
+            "Sempre que um administrador abre essa lista, os outros administradores e o proprietário podem ver quem a abriu e quando.",
+            "Se você não tiver concordado, ou se ninguém tiver confirmado você, ou se a comunidade não confirmar membros, essa lista nunca exibirá você."
           ]
         },
         {
           "type": "p",
-          "text": "Se você entrou antes de a comunidade passar a solicitar isso, o seu aplicativo oferecerá essa opção. Responder que não ou não responder não altera mais nada: você continua sendo membro. Se a comunidade alterar os limites posteriormente, o seu aplicativo perguntará novamente."
+          "text": "Se você entrou antes de a comunidade passar a solicitar isso, seu aplicativo oferece a opção. Dizer não ou não responder não altera mais nada: você continua sendo um membro. Se a comunidade alterar os limites posteriormente, o aplicativo perguntará novamente."
         },
         {
           "type": "p",
-          "text": "Você pode revogar seu consentimento a qualquer momento: abra as **Configurações**, onde o aplicativo mostra com o que você concordou e quando, e toque em **Revogar**. A partir desse instante, você sai da lista. A comunidade mantém um registro de que você concordou e de que revogou, e você pode concordar novamente mais tarde."
+          "text": "Você pode revogar seu consentimento a qualquer momento: abra **Configurações**, onde o aplicativo mostra com o que você concordou e quando, e toque em **Revogar**. A partir desse momento, você sai da lista. A comunidade mantém um registro de que você concordou e de que revogou, e você pode concordar novamente mais tarde."
         },
         {
           "type": "h2",

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "sw",
-  "hash": "f79adfaab5fc49ce17984e3fd6436ec8c153a8ac1acf8157980cab1148b2522c",
+  "hash": "423fa2e10063350858ae152b0d2b6cfd31a223853bf14e5db61de49004496c8c",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "Kujiunga na BeanPool",
       "summary": "Njia mbili za kuingia: jumuiya, kwa mwaliko wa mwanachama, au jumuiya ya kimataifa ikiwa wazi, kwa maneno 12 ya siri au kuingia mara moja. Kuomba kujiunga na kuwaalika wengine.",
       "help": "Jiunge na jumuiya kwa mwaliko wa mwanachama, au jumuiya ya kimataifa kwa maneno 12 ya siri au kuingia mara moja.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -1270,7 +1270,7 @@
         },
         {
           "type": "p",
-          "text": "**Kutoka kwenye tovuti, kwenye simu.** Kwenye beanpool.org/global, **Fungua katika programu ya BeanPool** hufungua programu moja kwa moja kwenye njia hii ya kuingia: njia mbili zilizo hapo juu kwenye simu isiyo na akaunti bado, au **Jiunge na jumuiya ya kimataifa** ukiwa na akaunti ambayo simu tayari inayo (tazama \"Tayari una akaunti?\" hapa chini). Ikiwa akaunti hiyo tayari ni mwanachama huko, hufungua ukurasa wa **BeanPool** badala yake, ambapo **Jumuiya ya kimataifa** chini ya **Your communities** inahamia huko. Ikiwa jumuiya ya kimataifa ilifunga akaunti hiyo, programu inafunguka tu. Kwenye Android, ikiwa programu haijasakinishwa, Google Play inafunguka; baada ya kusakinisha, mara ya kwanza unapofungua BeanPool inakwenda moja kwa moja kwenye njia hii ya kuingia. Kwenye iPhone, App Store inafunguka; baada ya kusakinisha, gusa **Gundua BeanPool duniani kote**. Kiungo hufungua tu skrini: hakuna anayejiunga hadi uguse. Inapofungua ukurasa wa **BeanPool**, ukurasa unakagua, kama inavyofanya kila mara, ikiwa akaunti ya simu hii ni mwanachama wa kila jumuiya inayoorodhesha. Mwaliko huja kwanza: ikiwa ulitumiwa mmoja, programu hufungua mwaliko huo badala yake, na kama ulikuwa katikati ya kujiunga, inaendelea na hilo."
+          "text": "**Kutoka kwenye tovuti, kwenye simu.** Kwenye beanpool.org/global, **Fungua katika programu ya BeanPool** hufungua programu moja kwa moja kwenye njia hii ya kuingia: njia mbili zilizo hapo juu kwenye simu isiyo na akaunti bado, au **Jiunge na jumuiya ya kimataifa** ukiwa na akaunti ambayo simu tayari inayo (tazama \"Tayari una akaunti?\" hapa chini). Ikiwa akaunti hiyo tayari ni mwanachama huko, hufungua ukurasa wa **BeanPool** badala yake, ambapo **Global community** chini ya **Your communities** inahamia huko. Ikiwa jumuiya ya kimataifa ilifunga akaunti hiyo, programu inafunguka tu. Kwenye Android, ikiwa programu haijasakinishwa, Google Play inafunguka; baada ya kusakinisha, mara ya kwanza unapofungua BeanPool inakwenda moja kwa moja kwenye njia hii ya kuingia. Kwenye iPhone, App Store inafunguka; baada ya kusakinisha, gusa **Gundua BeanPool duniani kote**. Kiungo hufungua tu skrini: hakuna anayejiunga hadi uguse. Inapofungua ukurasa wa **BeanPool**, ukurasa unakagua, kama inavyofanya kila mara, ikiwa akaunti ya simu hii ni mwanachama wa kila jumuiya inayoorodhesha. Mwaliko huja kwanza: ikiwa ulitumiwa mmoja, programu hufungua mwaliko huo badala yake, na kama ulikuwa katikati ya kujiunga, inaendelea na hilo."
         },
         {
           "type": "p",
@@ -1290,11 +1290,11 @@
         },
         {
           "type": "p",
-          "text": "Ukijiunga na maneno 12, hakuna chochote kukuhusu kinachofika kwenye jumuiya isipokuwa ufunguo wako na jina lako, na maneno yako 12 ndiyo njia yako pekee ya kurudi: hakuna anayeweza kuyabadilisha au kuyaweka upya, si BeanPool wala jumuiya. **Hifadhi salama** inasema hivyo, na inatoa **Ongeza kuingia kama njia ya pili ya kurudi**. Baada ya kujiunga, kadi kwenye **Nyumbani** inasema **Akaunti yako ina njia moja ya kurudi: maneno yako 12. Hakikisha bado unayo, au ongeza njia ya kuingia.** Gusa **✕** ili kuiondoa: inarudi mara moja baada ya chapisho lako la kwanza na mara moja baada ya wiki moja, kisha inabaki katika **Mipangilio**, chini ya **Ulinzi wa Akaunti**, hadi utakapoongeza njia ya kuingia au kugusa **Bado ninayo maneno yangu 12**. Akaunti iliyotengenezwa kwa maneno 12 pia ina mipaka midogo zaidi kwa siku zake 7 za kwanza, na hadi machapisho yake 3 yawe yamebaki mtandaoni: machapisho 2, picha 4 na watu wapya 3 wa kuwatumia ujumbe kwa siku, na ripoti moja huficha chapisho lake likiwa jipya. Kuongeza njia ya kuingia, wakati wowote, huinua hadi kwenye mipaka ya kawaida ya akaunti mpya. Unaweza kuongeza moja kutoka kwa simu yoyote ambapo uko kwenye akaunti yako, si ile tu uliyojiunga kwayo. Ikiwa chumba cha funguo cha BeanPool tayari kina nakala ya akaunti yako, kadi hiyo haionyeshwi, na **Mipangilio** inatoa **Ongeza njia ya kuingia** kimya kimya."
+          "text": "Ukijiunga na maneno 12, hakuna chochote kukuhusu kinachofika kwenye jumuiya isipokuwa ufunguo wako na jina lako, na maneno yako 12 ndiyo njia yako pekee ya kurudi: hakuna anayeweza kuyabadilisha au kuyaweka upya, si BeanPool wala jumuiya. **Hifadhi salama** inasema hivyo, na inatoa **Ongeza kuingia kama njia ya pili ya kurudi**. Baada ya kujiunga, kadi kwenye **Nyumbani** inasema **Akaunti yako ina njia moja tu ya kurudi: maneno yako 12. Hakikisha bado unayo, au ongeza njia ya kuingia.** Gusa **✕** ili kuiondoa: inarudi mara moja baada ya chapisho lako la kwanza na mara moja baada ya wiki moja, kisha inabaki katika **Mipangilio**, chini ya **Ulinzi wa Akaunti**, hadi utakapoongeza njia ya kuingia au kugusa **Bado ninayo maneno yangu 12**. Akaunti iliyotengenezwa kwa maneno 12 pia ina mipaka midogo zaidi kwa siku zake 7 za kwanza, na hadi machapisho yake 3 yawe yamebaki mtandaoni: machapisho 2, picha 4 na watu wapya 3 wa kuwatumia ujumbe kwa siku, na ripoti moja huficha chapisho lake likiwa jipya. Kuongeza njia ya kuingia, wakati wowote, huinua hadi kwenye mipaka ya kawaida ya akaunti mpya. Unaweza kuongeza moja kutoka kwa simu yoyote ambapo uko kwenye akaunti yako, si ile tu uliyojiunga kwayo. Ikiwa chumba cha funguo cha BeanPool tayari kina nakala ya akaunti yako, kadi hiyo haionyeshwi, na **Mipangilio** inatoa **Ongeza njia ya kuingia** kimya kimya."
         },
         {
           "type": "p",
-          "text": "**Tayari una akaunti?** Jiunge na jumuiya ya kimataifa kwayo, si kwa ya pili. Gusa haragwe lililo juu kushoto na, chini ya **Your communities**, gusa **Jumuiya ya kimataifa**: ipo pale kila wakati, na unapoweza kujiunga nayo mstari wake wa pili unasema **Jiunge na akaunti hii: maneno 12 au njia ya kuingia** (au **…: njia ya kuingia**). Ikiwa unatembelea jumuiya ya kimataifa kama mgeni, gusa **Jiunge** juu, kando ya **?**, kisha **Jiunge kwa maneno 12 au njia ya kuingia** (**Jiunge kwa njia ya kuingia** mahali ambapo jumuiya hupokea njia za kuingia pekee). Ikiwa programu inasema **Bado wewe si mwanachama hapa** kuhusu jumuiya ya kimataifa, gusa **Jiunge na akaunti hii**. Kwenye simu, kiungo beanpool.org/global hufungua **Jiunge na jumuiya ya kimataifa** ukiwa na akaunti yako pia (tazama \"Kutoka kwenye tovuti, kwenye simu\", hapo juu). Unajiunga na maneno yako 12 au unaiingia mara moja, unakagua jina lako na kugusa **Jiunge**. Ufunguo wako na maneno yako 12 yanabaki yaleyale, na hakuna kinachobadilika katika jumuiya zako nyingine. Tazama \"Zaidi ya jumuiya moja\"."
+          "text": "**Tayari una akaunti?** Jiunge na jumuiya ya kimataifa kwayo, si kwa ya pili. Gusa haragwe lililo juu kushoto na, chini ya **Your communities**, gusa **Global community**: ipo pale kila wakati, na unapoweza kujiunga nayo mstari wake wa pili unasema **Angalia kwanza, kisha jiunge kwa akaunti hii**. Programu hufungua jumuiya ya kimataifa kama mgeni kwanza, ili uweze kuangalia kabla ya kujiunga. Kisha, au wakati wowote unapoitembelea kama mgeni, gusa **Jiunge** hapo juu, kando ya **?**, kisha **Jiunge kwa maneno 12 au kuingia** (**Jiunge kwa kuingia** mahali ambapo jumuiya hupokea njia za kuingia pekee). Ikiwa programu inasema **Bado wewe si mwanachama hapa** kuhusu jumuiya ya kimataifa, gusa **Jiunge na akaunti hii**. Kwenye simu, kiungo beanpool.org/global hufungua **Jiunge na jumuiya ya kimataifa** ukiwa na akaunti yako pia (tazama \"Kutoka kwenye tovuti, kwenye simu\", hapo juu). Unajiunga na maneno yako 12 au unaingia mara moja, unakagua jina lako na kugusa **Jiunge**. Ufunguo wako na maneno yako 12 yanabaki yaleyale, na hakuna kinachobadilika katika jumuiya zako nyingine. Tazama \"Zaidi ya jumuiya moja\"."
         },
         {
           "type": "p",
@@ -1370,7 +1370,7 @@
             "Waonyeshe msimbo wa QR, au uguse **Shiriki Mwaliko** ili kutuma kiungo na msimbo.",
             "Kwenye programu ya wavuti, fungua **Watu**, kisha **Mialiko**, na uguse **Tengeneza Mwaliko Mpya**. Kisha **Nakili** au **Shiriki**.",
             "Mialiko ambayo bado hakuna aliyeitumia imeorodheshwa chini ya **Inasubiri**, kila mmoja ukiwa na **Shiriki** ili kuutuma tena.",
-            "Unaweza kutengeneza mialiko 20 kwa siku, na kuwa na 50 ambayo bado hakuna aliyeitumia. Mwaliko ambao hautumiwi na mtu yeyote hufutwa baada ya siku zake 30, na huondoka kwenye **Inasubiri**."
+            "Unaweza kutengeneza mialiko 20 kwa siku, na kuwa na 50 ambazo hakuna mtu aliyezitumia bado. Mwaliko ambao hakuna mtu anayeutumia hufutwa baada ya siku zake 30, na huondoka kwenye **Inasubiri**."
           ]
         },
         {
@@ -2474,8 +2474,8 @@
       "slug": "communities",
       "title": "Zaidi ya jumuiya moja",
       "summary": "Kuwa wa jumuiya kadhaa kwa akaunti moja, kubadili kati yao, kufuata jumuiya yako kwenye anwani mpya, na kuona kile jumuiya ya kimataifa inakuonyesha.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2504,7 +2504,7 @@
           "items": [
             "Jumuiya inakuruhusu kuingia kwa mwaliko kutoka kwa mmoja wa wanachama wake. Huna mwaliko? Kutoka kwa jumuiya ya kimataifa unaweza kuiomba jumuiya iliyo karibu nawe ikuruhusu kuingia: tazama \"Kupata jumuiya iliyo karibu nawe\".",
             "Gusa aikoni ya mwaliko (mtu mwenye alama ya jumlisha) juu kulia mwa skrini ili kufungua **Mialiko**.",
-            "Chini ya **Join Another Community**, bandika kiungo au msimbo wa mwaliko. Ikiwa una msimbo pekee, jaza pia anwani ya jumuiya.",
+            "Chini ya **Jiunge na Jumuiya Nyingine**, bandika kiungo au msimbo wa mwaliko. Ikiwa una msimbo pekee, jaza pia anwani ya jumuiya.",
             "Gusa **Jiunge na Jumuiya**."
           ]
         },
@@ -2522,20 +2522,21 @@
         },
         {
           "type": "p",
-          "text": "Chini ya **Your communities** daima kuna safu ya **Jumuiya ya kimataifa**. Mstari wake wa pili husema hadhi yako: anwani yake ukiwa mwanachama (iguse ili kubadili kuelekea huko), **Jiunge na akaunti hii: maneno 12 au njia ya kuingia** (**Jiunge na akaunti hii: njia ya kuingia** mahali ambapo jumuiya haikubali maneno 12) unapoweza kujiunga nayo, au kwa nini huwezi sasa hivi: **Inakagua…**, **Haiwezi kufikiwa sasa hivi** (ikiwa na **Gusa ili kujaribu tena.** wakati simu hii haijahifadhi jumuiya ya kimataifa), **Haipokei wanachama wapya sasa hivi.**, **Jumuiya hii iko katika onyesho la faragha. Muombe mmiliki wake mwaliko.**, au **Akaunti yako huko ilifungwa.** Wakati jumuiya ya kimataifa haiwezi kufikiwa na umeunganishwa na jumuiya ambayo wewe ni mwanachama wake, mstari ulio chini yake unasema **Jumuiya yako mwenyewe haiathiriwi.** Hakuna kingine kwenye simu kinachoitegemea."
+          "text": "Chini ya **Your communities** daima kuna safu ya **Global community**. Mstari wake wa pili husema hadhi yako: anwani yake ukiwa mwanachama (iguse ili kubadili kuelekea huko), **Angalia kwanza, kisha jiunge kwa akaunti hii** unapoweza kujiunga nayo (unapoitembelea kama mgeni: **Jiunge kwa akaunti hii: maneno 12 au kuingia**, au **Jiunge kwa akaunti hii: kuingia** mahali ambapo jumuiya haikubali maneno 12), au kwa nini huwezi sasa hivi: **Inakagua…**, **Haiwezi kufikiwa sasa hivi** (ikiwa na **Gusa ili kujaribu tena.** wakati simu hii haijahifadhi jumuiya ya kimataifa), **Haipokei wanachama wapya sasa hivi.**, **Jumuiya hii iko katika onyesho la faragha. Muombe mmiliki wake mwaliko.**, au **Akaunti yako huko ilifungwa.** Wakati jumuiya ya kimataifa haiwezi kufikiwa na umeunganishwa na jumuiya ambayo wewe ni mwanachama wake, mstari ulio chini yake unasema **Jumuiya yako mwenyewe haiathiriwi.** Hakuna kingine kwenye simu kinachoitegemea."
         },
         {
           "type": "ul",
           "items": [
-            "Gusa haragwe lililo juu kushoto. Kwenye ukurasa wa **BeanPool**, chini ya **Your communities**, gusa **Jumuiya ya kimataifa** (mstari wake wa pili unasema **Jiunge na akaunti hii**). Inapatikana pia katika **Mipangilio**, chini ya **Kina / Mfumo Mdogo**. Ikiwa unatembelea jumuiya ya kimataifa kama mgeni, gusa **Jiunge** juu, kando ya **?**, kisha **Jiunge kwa maneno 12 au njia ya kuingia** (**Jiunge kwa njia ya kuingia** mahali ambapo jumuiya inakubali njia za kuingia pekee). Ikiwa programu inaonyesha **Bado wewe si mwanachama hapa** kwa ajili ya jumuiya ya kimataifa, gusa **Jiunge na akaunti hii**.",
-            "Chagua jinsi ya kujiunga: **Fungua akaunti yenye maneno 12 ya siri**, ambayo hutumia maneno 12 ambayo akaunti yako tayari inayo (hakuna kuingia, kwa hivyo hakuna kufunga kwa simu), au **Au ingia** mara moja kwa Google, Apple (kwenye iPhone) au Facebook. Kwa ajili ya kuingia, programu huomba kufunga kwa simu yako kwanza, kwa sababu kuingia huku pia kunakuwa njia ya kurudi kwenye akaunti yako.",
+            "Gusa haragwe lililo juu kushoto. Kwenye kidirisha cha **BeanPool**, chini ya **Your communities**, gusa **Global community** (mstari wake wa pili unasema **Angalia kwanza, kisha jiunge kwa akaunti hii**). Programu hufungua jumuiya ya kimataifa kama mgeni, kama vile tovuti inavyofanya: unaangalia kwanza, na nukta kwenye haragwe huonyesha kuwa wewe ni mgeni. Inapatikana pia katika **Mipangilio**, chini ya **Jumuiya zilizohifadhiwa**: **Angalia jumuiya ya kimataifa**. Hakuna unachojiunga nacho na hakuna akaunti inayoundwa kwa kuangalia tu.",
+            "Ukiwa tayari, gusa **Jiunge** hapo juu, kando ya **?**, kisha **Jiunge kwa maneno 12 au kuingia** (**Jiunge kwa kuingia** mahali ambapo jumuiya inakubali njia za kuingia pekee). Ikiwa programu inaonyesha **Bado wewe si mwanachama hapa** kwa ajili ya jumuiya ya kimataifa, gusa **Jiunge na akaunti hii**.",
+            "Chagua jinsi ya kujiunga: **Jiunge na akaunti hii**, ambayo hutumia ufunguo na maneno 12 yaliyo tayari kwenye simu hii (hakuna kuingia, kwa hivyo hakuna kufunga kwa simu), au, chini ya **Pia ongeza njia ya kuingia**, ingia mara moja kwa Google, Apple (kwenye iPhone) au Facebook. Kwa ajili ya kuingia, programu huomba kufunga kwa simu yako kwanza, kwa sababu kuingia huku pia kunakuwa njia ya kurudi kwenye akaunti yako.",
             "Kagua jina ambalo watu wa huko wataliona, na uguse **Jiunge**. Ikiwa mtu tayari anatumia jina hilo, programu inapendekeza mengine.",
-            "Kisha chagua picha yako kwa ajili ya jumuiya ya kimataifa, kama ilivyo kwa jumuiya yoyote mpya, na kisha takriban mahali ulipo (**Uko wapi kwa makadirio?**; unaweza kugusa **Ruka kwa sasa**): jumuiya ya kimataifa inakuonyesha matangazo yaliyo karibu nayo. Tazama \"Kujiunga na BeanPool\"."
+            "Kisha chagua picha yako kwa ajili ya jumuiya ya kimataifa, kama ilivyo kwa jumuiya yoyote mpya, na kisha takriban mahali ulipo (**Uko takriban wapi?**; unaweza kugusa **Ruka kwa sasa**): jumuiya ya kimataifa inakuonyesha matangazo yaliyo karibu nayo. Tazama \"Kujiunga na BeanPool\"."
           ]
         },
         {
           "type": "p",
-          "text": "Hakuna kinachobadilika katika jumuiya zako nyingine, na maneno yako 12 yanabaki yaleyale. Kuingia pia kunakuwa njia ya kurudi kwenye akaunti ileile: nakala iliyofungwa yake huwekwa kwa ajili ya kuingia huko, kwa hivyo ukipoteza simu yako, huirejesha akaunti hii, si mpya. Tazama \"Kurejesha akaunti yako\". Kuingia uliyounganisha na akaunti yako kabla kunaendelea kufanya kazi. Ukijiunga kwa maneno 12 na hakuna kuingia kunakoweka nakala ya akaunti yako, programu huonyesha kadi ya **Akaunti yako ina njia moja ya kurudi**, kama ilivyo kwa mtu yeyote anayejiunga kwa maneno 12 (tazama \"Kujiunga na BeanPool\")."
+          "text": "Hakuna kinachobadilika katika jumuiya zako nyingine, na maneno yako 12 yanabaki yaleyale. Kuingia pia kunakuwa njia ya kurudi kwenye akaunti ileile: nakala iliyofungwa yake huwekwa kwa ajili ya kuingia huko, kwa hivyo ukipoteza simu yako, huirejesha akaunti hii, si mpya. Tazama \"Kurejesha akaunti yako\". Kuingia uliyounganisha na akaunti yako kabla kunaendelea kufanya kazi. Ukijiunga kwa maneno 12 na hakuna kuingia kunakoweka nakala ya akaunti yako, programu huonyesha kadi ya **Akaunti yako ina njia moja tu ya kurudi**, kama ilivyo kwa mtu yeyote anayejiunga kwa maneno 12 (tazama \"Kujiunga na BeanPool\")."
         },
         {
           "type": "p",
@@ -2605,7 +2606,7 @@
         },
         {
           "type": "p",
-          "text": "Unaweza pia kubadili katika **Mipangilio**, chini ya **Mfumo**, kisha **Kina / Mfumo Mdogo**. Jumuiya zako zimeorodheshwa huko. Ile unayoitumia imewekwa alama kama amilifu. Gusa **Badilisha hadi Mji** kwenye nyingine ili kuhamia huko."
+          "text": "Unaweza pia kubadili katika **Mipangilio**, chini ya **Mfumo**, kisha **Jumuiya zilizohifadhiwa**. Jumuiya zako zimeorodheshwa huko. Ile unayoitumia imewekwa alama kama amilifu. Gusa **Badilisha hadi jumuiya hii** kwenye nyingine ili kuhamia huko."
         },
         {
           "type": "h2",
@@ -2631,8 +2632,8 @@
         {
           "type": "ul",
           "items": [
-            "Katika **Kina / Mfumo Mdogo**, gusa **Sahau** kwenye jumuiya ambayo huitumii hivi sasa. Hii huiondoa yenyewe na data yake iliyohifadhiwa kutoka kwenye simu hii.",
-            "Kwenye ukurasa wa **BeanPool**, chini ya **Your communities**, kubonyeza na kushikilia jumuiya na kugusa **Ondoa** huiondoa tu kwenye orodha. Data yake inabaki kwenye simu."
+            "Katika **Jumuiya zilizohifadhiwa**, gusa **Sahau** kwenye jumuiya ambayo huitumii hivi sasa. Hii huiondoa yenyewe na data yake iliyohifadhiwa kutoka kwenye simu hii.",
+            "Kwenye kidirisha cha **BeanPool**, chini ya **Your communities**, kubonyeza na kushikilia jumuiya na kugusa **Ondoa** huiondoa tu kwenye orodha. Data yake inabaki kwenye simu."
           ]
         },
         {
@@ -5875,8 +5876,8 @@
       "slug": "credit-line",
       "title": "Kikomo chako cha mkopo",
       "summary": "Jinsi unavyoweza kwenda chini ya sifuri, na jinsi inavyoongezeka.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5964,7 @@
         },
         {
           "type": "p",
-          "text": "Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo. Kinainua kikomo chako, si kiwango chako: beji yako ya uaminifu bado inahesabu tu kile ulichofanya."
+          "text": "Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja, **kima cha chini kinachojulikana**: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo. Kinainua kikomo chako, si kiwango chako: beji yako ya uaminifu bado inahesabu tu kile ulichofanya. Kima cha chini kinachojulikana kimewashwa katika kila jumuiya yenye Maharagwe isipokuwa mmiliki wake awe amekizima."
         },
         {
           "type": "ul",
@@ -5980,7 +5981,7 @@
         },
         {
           "type": "p",
-          "text": "Katika baadhi ya jumuiya mwanachama yeyote anaweza kualika watu, kwa hivyo wasimamizi hawamjui kila mtu. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, wasimamizi wanaweza kuwathibitisha wanachama wanaowajua, na wanachama hao huanza na kikomo cha juu zaidi. Kila mtu mwingine huanzia sifuri, na kikomo cha kila mtu hukua kwa njia ileile baada ya hapo wanapofanya biashara na kujenga uaminifu."
+          "text": "Katika baadhi ya jumuiya mwanachama yeyote anaweza kualika watu, kwa hivyo wasimamizi hawamjui kila mtu. Wasimamizi wanaweza kuwathibitisha wanachama wanaowajua, na wanachama hao huanza na kikomo cha juu zaidi, **kima cha chini kinachojulikana**, isipokuwa kama mmiliki wa jumuiya yako amekizima. Kila mtu mwingine huanzia sifuri, na kikomo cha kila mtu hukua kwa njia ileile baada ya hapo wanapofanya biashara na kujenga uaminifu."
         },
         {
           "type": "h2",
@@ -6485,8 +6486,8 @@
       "slug": "what-the-admins-can-see",
       "title": "Wanachoweza kuona wasimamizi",
       "summary": "Katika jumuiya ambayo wasimamizi wana orodha ya majina: inachoshikilia kukuhusu, nani anaweza kusoma, seva inachoweka, na maana ya kuthibitishwa.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6539,7 +6540,7 @@
           "type": "ul",
           "items": [
             "Uthibitisho haubebi jina lolote. Seva hurekodi akaunti gani, ingizo gani na msimamizi gani, kamwe hairekodi wewe ni nani.",
-            "Si beji ya uaminifu, na kwa sasa haibadilishi kitu kingine chochote kwenye programu.",
+            "Si beji ya uaminifu. Pia inakupa kikomo cha mkopo mara moja, kima cha chini kinachojulikana, isipokuwa kama mmiliki wa jumuiya yako amekizima: tazama \"Kikomo chako cha mkopo\".",
             "Ikiwa msimamizi alikualika kwa jina, kujiunga kwa mwaliko wao kulikuthibitisha kulingana na ingizo lako, na msimamizi huyo. \"Kuthibitishwa\" kunamaanisha tu kwamba msimamizi anasema akaunti hii ndiye mtu aliye kwenye ingizo hilo.",
             "Ukibadilisha simu iliyopotea na akaunti yako ikahamia kwenye ufunguo mpya, uthibitisho wako huhamia nayo.",
             "Ukiondoka au kufuta akaunti yako, uthibitisho wako unakoma. Ingizo lako linabaki kwenye orodha ya wasimamizi hadi msimamizi alifute: waombe wafanye hivyo.",

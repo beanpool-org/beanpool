@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "id",
-  "hash": "9df58e8e484edd39c603ba03b54c4a56161c39da38d6266b40ace2e78d26dc37",
+  "hash": "40f1a981f859ae7aeca39af720e814f568eb5ff6eb9298081572f45ee5153daa",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "Bergabung ke BeanPool",
       "summary": "Dua cara masuk: komunitas dengan undangan anggota, atau komunitas global saat terbuka dengan 12 kata rahasia atau satu akun masuk. Meminta bergabung ke komunitas, dan mengundang orang lain.",
       "help": "Gabung ke komunitas dengan undangan anggota, atau komunitas global dengan 12 kata rahasia atau akun masuk.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -1264,13 +1264,13 @@
           "items": [
             "Di layar pertama, ketuk **Jelajahi BeanPool di seluruh dunia**, tepat di bawah **Gabung dengan undangan**. Tombol ini selalu ada di sana. Ketika komunitas global tidak dapat menerimamu saat ini, sebuah baris di bawahnya menjelaskan alasannya: **Komunitas global tidak bisa dijangkau sekarang. Coba lagi, atau gabung dengan undangan.**, **Sedang tidak menerima anggota baru.**, atau **Komunitas ini sedang dalam pratinjau pribadi. Minta undangan dari pemiliknya.** Mengetuknya akan meminta lagi.",
             "Pilih salah satu dari dua cara masuk. **Buat akun dengan 12 kata rahasia** adalah yang pertama. Ini tidak memerlukan akun Google, Apple, atau Facebook: 12 kata bahasa Inggrismu adalah satu-satunya cara untuk kembali masuk.",
-            "**Atau masuk** sekali dengan Google, Apple (di iPhone), atau Facebook. Akun masuk itu juga menjadi cara kembali jika kamu kehilangan ponselmu. BeanPool tidak pernah melihat kata sandimu dan tidak pernah memposting apa pun atas namamu.",
+            "**Atau masuk** sekali dengan Google, Apple (di iPhone), atau Facebook. Akun masuk itu juga menjadi cara kembali jika kamu kehilangan ponselmu. BeanPool never sees your password and never posts anything for you.",
             "Pilih nama yang akan dilihat orang lain, hingga 20 karakter, dan ketuk **Gabung**. Jika seseorang sudah memiliki nama itu, aplikasi menyarankan nama lain."
           ]
         },
         {
           "type": "p",
-          "text": "**Dari situs web, di ponsel.** Di beanpool.org/global, **Buka di aplikasi BeanPool** membuka aplikasi tepat pada cara masuk ini: dua cara di atas pada ponsel yang belum memiliki akun, atau **Bergabung dengan komunitas global** dengan akun yang sudah dimiliki ponsel (lihat \"Sudah punya akun?\" di bawah). Jika akun tersebut sudah menjadi anggota di sana, aplikasi akan membuka lembar **BEANPOOL** sebagai gantinya, di mana **Komunitas global** di bawah **KOMUNITASMU** akan beralih ke sana. Jika komunitas global telah menutup akun itu, aplikasi hanya terbuka biasa. Di Android, jika aplikasi belum terpasang, Google Play akan terbuka; setelah memasang, saat pertama kali kamu membuka BeanPool, aplikasi akan langsung menuju ke cara masuk ini. Di iPhone, App Store akan terbuka; setelah memasang, ketuk **Jelajahi BeanPool di seluruh dunia**. Tautan hanya membuka layar: tidak ada yang bergabung sampai kamu mengetuknya. Saat membuka lembar **BEANPOOL**, lembar tersebut akan memeriksa, seperti biasa, apakah akun ponsel ini adalah anggota dari setiap komunitas yang dicantumkannya. Undangan didahulukan: jika kamu dikirimi undangan, aplikasi akan membuka undangan tersebut, dan jika kamu sedang di tengah proses bergabung, aplikasi akan melanjutkannya."
+          "text": "**Dari situs web, di ponsel.** Di beanpool.org/global, **Buka di aplikasi BeanPool** membuka aplikasi tepat pada cara masuk ini: dua cara di atas pada ponsel yang belum memiliki akun, atau **Bergabung dengan komunitas global** dengan akun yang sudah dimiliki ponsel (lihat \"Sudah punya akun?\" di bawah). Jika akun tersebut sudah menjadi anggota di sana, aplikasi akan membuka menu **BeanPool** sebagai gantinya, di mana **Komunitas global** di bawah **Komunitasmu** akan beralih ke sana. Jika komunitas global telah menutup akun itu, aplikasi hanya terbuka biasa. Di Android, jika aplikasi belum terpasang, Google Play akan terbuka; setelah memasang, saat pertama kali kamu membuka BeanPool, aplikasi akan langsung menuju ke cara masuk ini. Di iPhone, App Store akan terbuka; setelah memasang, ketuk **Jelajahi BeanPool di seluruh dunia**. Tautan hanya membuka layar: tidak ada yang bergabung sampai kamu mengetuknya. Saat membuka menu **BeanPool**, menu tersebut akan memeriksa, seperti biasa, apakah akun ponsel ini adalah anggota dari setiap komunitas yang dicantumkannya. Undangan didahulukan: jika kamu dikirimi undangan, aplikasi akan membuka undangan tersebut, dan jika kamu sedang di tengah proses bergabung, aplikasi akan melanjutkannya."
         },
         {
           "type": "p",
@@ -1294,7 +1294,7 @@
         },
         {
           "type": "p",
-          "text": "**Sudah punya akun?** Bergabunglah ke komunitas global dengan akun tersebut, bukan dengan akun kedua. Ketuk ikon kacang di kiri atas dan, di bawah **KOMUNITASMU**, ketuk **Komunitas global**: menu ini selalu ada, dan saat kamu bisa bergabung dengannya, baris keduanya bertuliskan **Gabung dengan akun ini: 12 kata atau login** (atau **…: a sign-in**). Jika kamu mengunjungi komunitas global sebagai tamu, ketuk **Gabung** di bagian atas, di samping **?**, lalu **Join with 12 words or a sign-in** (**Join with a sign-in** jika komunitas hanya menerima akun masuk). Jika aplikasi menampilkan pesan **Anda belum menjadi anggota di sini** tentang komunitas global, ketuk **Gabung dengan akun ini**. Di ponsel, tautan beanpool.org/global juga membuka **Bergabung dengan komunitas global** dengan akunmu (lihat \"Dari situs web, di ponsel\", di atas). Kamu bergabung dengan 12 katamu atau masuk sekali dengan akun, periksa namamu, lalu ketuk **Gabung**. Kunci dan 12 katamu tetap sama, dan tidak ada yang berubah di komunitasmu yang lain. Lihat \"More than one community\"."
+          "text": "**Sudah punya akun?** Bergabunglah ke komunitas global dengan akun tersebut, bukan dengan akun kedua. Ketuk ikon kacang di kiri atas dan, di bawah **Komunitasmu**, ketuk **Komunitas global**: baris ini selalu ada di sana, dan saat kamu bisa bergabung, baris keduanya bertuliskan **Lihat-lihat dulu, lalu gabung dengan akun ini**. Aplikasi membuka komunitas global sebagai tamu terlebih dahulu, sehingga kamu bisa melihat-lihat sebelum bergabung. Kemudian, atau kapan pun kamu berkunjung sebagai tamu, ketuk **Gabung** di bagian atas, di samping tanda **?**, lalu **Gabung dengan 12 kata atau login** (**Gabung dengan login** jika komunitas hanya menerima akun masuk). Jika aplikasi menampilkan **Anda belum menjadi anggota di sini** tentang komunitas global, ketuk **Gabung dengan akun ini**. Di ponsel, tautan beanpool.org/global juga membuka **Bergabung dengan komunitas global** dengan akunmu (lihat \"Dari situs web, di ponsel\", di atas). Kamu bergabung dengan 12 katamu atau masuk sekali dengan akun, periksa namamu, lalu ketuk **Gabung**. Kunci dan 12 katamu tetap sama, dan tidak ada yang berubah di komunitasmu yang lain. Lihat \"More than one community\"."
         },
         {
           "type": "p",
@@ -1313,7 +1313,7 @@
           "items": [
             "**Fotomu:** pilih foto atau salah satu gambar yang sudah disediakan, atau lewati dan tambahkan nanti dari profilmu. Beberapa komunitas meminta gambar sebelum postingan pertamamu. Orang-orang bertransaksi lebih mudah dengan wajah atau gambar yang mereka kenali.",
             "Setelah undangan, **← Kembali** pada **Fotomu** membawamu kembali ke namamu, untuk mengubahnya. Akunnya tetap sama: ketuk **Lanjut** dan kamu melanjutkan ke **Fotomu** dan **Cadangan aman** dengan nama baru. Jika seseorang sudah menggunakannya, aplikasi menyarankan nama lain. Di komunitas global tidak ada **← Kembali** di sini: kamu sudah bergabung.",
-            "**Areamu** (di browser web pada komunitas global, dan di aplikasi ponsel saat kamu bergabung dengan komunitas global menggunakan akun yang sudah kamu miliki): **Kira-kira kamu di mana?** Komunitas global menunjukkan apa yang ditawarkan di dekatmu: 500 iklan terdekat dalam radius 250 km. Ketuk **Gunakan lokasiku**, atau **Ketik nama kota atau daerah**. Areamu disimpan dengan perkiraan sekitar 10 km, tidak pernah lokasi persismu: ponsel atau browsermu membulatkannya sebelum dikirim. Anggota lain melihat seberapa jauh jarakmu, dan jajak pendapat yang kamu buat ditampilkan di areamu. **Lewati untuk sekarang** tidak mengirimkan apa pun dan tidak meminta apa pun; kamu tetap bisa masuk, dan kamu melihat iklan terbaru di seluruh dunia sampai kamu mengaturnya. Kamu dapat mengubah atau menghapusnya kapan saja di **Pengaturan**, di bawah **Wilayahmu**.",
+            "**Areamu** (di browser web pada komunitas global, dan di aplikasi ponsel saat kamu bergabung dengan komunitas global menggunakan akun yang sudah kamu miliki): **Kira-kira kamu di mana?** Komunitas global menunjukkan apa yang ditawarkan di dekatmu: 500 listing terdekat dalam radius 250 km. Ketuk **Pakai lokasiku**, atau **Ketik nama kota atau daerah**. Areamu disimpan dengan perkiraan sekitar 10 km, tidak pernah lokasi persismu: ponsel atau browsermu membulatkannya sebelum dikirim. Anggota lain melihat seberapa jauh jarakmu, dan jajak pendapat yang kamu buat ditampilkan di areamu. **Lewati dulu** tidak mengirimkan apa pun dan tidak meminta apa pun; kamu tetap bisa masuk, dan kamu melihat listing terbaru di seluruh dunia sampai kamu mengaturnya. Kamu dapat mengubah atau menghapusnya kapan saja di **Pengaturan**, di bawah **Wilayahmu**.",
             "**Cadangan aman:** aplikasi menampilkan 12 katamu (dalam bahasa Inggris). Tuliskan di atas kertas dan simpan dengan aman. Kotak centang **Saya sudah menyimpan kata-kata ini** (di browser web, **Saya sudah menuliskan kata-kata ini di tempat yang aman**) ada untuk mengingatkanmu. Tidak ada yang melarangmu jika kamu melewatinya, tetapi segera baca \"12 katamu\". Jika kamu bergabung dengan komunitas global menggunakan akun masuk di aplikasi ponsel, langkah ini menunjukkan akun masukmu yang melindungi akunmu, dan kata-katamu dapat diakses dengan satu ketukan di bawah **Lebih suka mencatat 12 kata?**. Jika kamu bergabung dengannya menggunakan 12 kata, langkah ini pertama-tama menjelaskan bahwa 12 kata ini adalah akunmu, dan menawarkan **Tambahkan akun masuk sebagai cara kedua untuk kembali**: kamu juga bisa melewati ini.",
             "**Cara kerja:** tur singkat. Ketuk **Let's Begin!** untuk memulai."
           ]
@@ -1364,13 +1364,13 @@
         {
           "type": "ul",
           "items": [
-            "Ketuk ikon undangan (orang dengan tanda plus) di kanan atas layar. Ini membuka **Invites**.",
+            "Ketuk ikon undangan (orang dengan tanda plus) di kanan atas layar. Ini membuka **Undangan**.",
             "Jika mau, tuliskan untuk siapa undangan tersebut, hanya untuk catatan pribadimu sendiri.",
             "Ketuk **Generate Ticket**. Tanpa koneksi internet, tombol berbunyi **Generate Offline Ticket**, dan itu juga berfungsi.",
             "Tunjukkan kode QR kepada mereka, atau ketuk **Share Invite** untuk mengirimkan tautan dan kodenya.",
             "Di web app, buka **Orang**, lalu **Invites**, dan ketuk **Generate New Invite**. Lalu **Salin** atau **Bagikan**.",
-            "Undangan yang belum digunakan siapa pun dicantumkan di bawah **MENUNGGU**, masing-masing dengan tombol **Bagikan** untuk mengirimkannya lagi.",
-            "Kamu dapat membuat 20 undangan per hari, dan memiliki 50 undangan yang belum digunakan siapa pun. Undangan yang tidak digunakan siapa pun akan dihapus setelah 30 hari, dan keluar dari **MENUNGGU**."
+            "Undangan yang belum digunakan siapa pun dicantumkan di bawah **Menunggu**, masing-masing dengan tombol **Bagikan** untuk mengirimkannya lagi.",
+            "Kamu dapat membuat 20 undangan per hari, dan memiliki 50 undangan yang belum digunakan siapa pun. Undangan yang tidak digunakan siapa pun akan dihapus setelah 30 hari, dan keluar dari **Menunggu**."
           ]
         },
         {
@@ -1379,7 +1379,7 @@
         },
         {
           "type": "p",
-          "text": "**Jika hanya admin yang mengundang.** Suatu komunitas dapat menetapkan bahwa hanya pemilik dan adminnya yang membawa orang masuk. Di sana, jika kamu bukan salah satu dari mereka, **Invites** menampilkan **Bring someone here** alih-alih **Generate Ticket**, dan memberi tahu untuk meminta kepada admin. Di web app **Tree** tetap ada, begitu juga kode yang kamu buat sebelumnya: kode tersebut tetap berfungsi sampai kedaluwarsa. Pemilik atau admin tanpa sinyal tetap dapat membuat tiket kertas, berdasarkan peran terakhir yang diberikan komunitas kepada mereka. Jika komunitas menerima permintaan untuk bergabung, **Share the link** mengirimkan alamatnya: orang tersebut membukanya di aplikasi BeanPool, meminta bergabung, dan admin akan menjawabnya. Menjadi admin adalah tugas yang diberikan komunitas kepada seseorang, bukan lencana kepercayaan."
+          "text": "**Jika hanya admin yang mengundang.** Suatu komunitas dapat menetapkan bahwa hanya pemilik dan adminnya yang membawa orang masuk. Di sana, jika kamu bukan salah satu dari mereka, **Undangan** menampilkan **Ajak seseorang ke sini** alih-alih **Generate Ticket**, dan memberi tahu untuk meminta kepada admin. Di web app **Tree** tetap ada, begitu juga kode yang kamu buat sebelumnya: kode tersebut tetap berfungsi sampai kedaluwarsa. Pemilik atau admin tanpa sinyal tetap dapat membuat tiket kertas, berdasarkan peran terakhir yang diberikan komunitas kepada mereka. Jika komunitas menerima permintaan untuk bergabung, **Bagikan tautan** mengirimkan alamatnya: orang tersebut membukanya di aplikasi BeanPool, meminta bergabung, dan admin akan menjawabnya. Menjadi admin adalah tugas yang diberikan komunitas kepada seseorang, bukan lencana kepercayaan."
         },
         {
           "type": "ul",
@@ -1390,7 +1390,7 @@
         },
         {
           "type": "p",
-          "text": "Komunitas global tidak memiliki undangan: siapa pun dapat bergabung dengannya di aplikasi BeanPool, dengan 12 kata rahasia atau akun masuk. Di sana, ikon undangan membuka **Bring someone here**, dengan **Share the link** untuk mengirimkan alamat komunitas global. Tidak ada yang perlu dibuat, dan kode undangan yang dibuat untuknya tidak akan berfungsi."
+          "text": "Komunitas global tidak memiliki undangan: siapa pun dapat bergabung dengannya di aplikasi BeanPool, dengan 12 kata rahasia atau akun masuk. Di sana, ikon undangan membuka **Ajak seseorang ke sini**, dengan **Bagikan tautan** untuk mengirimkan alamat komunitas global. Tidak ada yang perlu dibuat, dan kode undangan yang dibuat untuknya tidak akan berfungsi."
         },
         {
           "type": "h2",
@@ -1398,13 +1398,13 @@
         },
         {
           "type": "p",
-          "text": "Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketika ada yang memintanya, **Invites** menampilkan jumlahnya, dan permintaan tersebut dicantumkan di bagian atas di bawah **Wants to join**. Permintaan dijawab di aplikasi ponsel: web app tidak mencantumkannya."
+          "text": "Orang dapat meminta bergabung dengan komunitasmu dari komunitas global. Ketika ada yang memintanya, **Undangan** menampilkan jumlahnya, dan permintaan tersebut dicantumkan di bagian atas di bawah **Ingin bergabung**. Permintaan dijawab di aplikasi ponsel: web app tidak mencantumkannya."
         },
         {
           "type": "ul",
           "items": [
             "**Undang** membuat undangan yang hanya dapat digunakan oleh akun mereka. Aplikasi mereka menemukannya dengan sendirinya, jadi kamu tidak perlu mengirimkan apa pun kepada mereka, dan mereka bergabung dengan satu ketukan.",
-            "**Nanti saja** tidak memberi tahu apa pun kepada mereka selain \"belum ada jawaban\"."
+            "**Jangan sekarang** tidak memberi tahu apa pun kepada mereka selain \"belum ada jawaban\"."
           ]
         },
         {
@@ -2474,8 +2474,8 @@
       "slug": "communities",
       "title": "Lebih dari satu komunitas",
       "summary": "Bergabung di beberapa komunitas dengan satu akun, berpindah antar komunitas, mengikuti komunitas saat pindah alamat, dan melihat apa yang ditampilkan komunitas global.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2503,8 +2503,8 @@
           "type": "ul",
           "items": [
             "Suatu komunitas mengizinkanmu masuk dengan undangan dari salah satu anggotanya. Tidak punya undangan? Dari komunitas global kamu dapat meminta komunitas di dekatmu untuk mengizinkanmu masuk: lihat \"Finding a community near you\".",
-            "Ketuk ikon undangan (orang dengan tanda plus) di kanan atas layar untuk membuka **Invites**.",
-            "Di bawah **Join Another Community**, tempel tautan atau kode undangan. Jika kamu hanya memiliki kode, isi juga alamat komunitasnya.",
+            "Ketuk ikon undangan (orang dengan tanda plus) di kanan atas layar untuk membuka **Undangan**.",
+            "Di bawah **Gabung ke Komunitas Lain**, tempel tautan atau kode undangan. Jika kamu hanya memiliki kode, isi juga alamat komunitasnya.",
             "Ketuk **Gabung ke Komunitas**."
           ]
         },
@@ -2522,24 +2522,25 @@
         },
         {
           "type": "p",
-          "text": "Di bawah **KOMUNITASMU** selalu ada baris untuk **Komunitas global**. Baris keduanya menyatakan statusmu: alamatnya jika kamu sudah menjadi anggota (ketuk untuk beralih ke sana), **Gabung dengan akun ini: 12 kata atau login** (**Gabung dengan akun ini: login** jika komunitas tidak menerima 12 kata) saat kamu bisa bergabung dengannya, atau alasan mengapa kamu belum bisa bergabung saat ini: **Memeriksa…**, **Tidak bisa dijangkau sekarang** (dengan **Tap to try again.** selama ponsel ini belum menyimpan komunitas global), **Sedang tidak menerima anggota baru.**, **Komunitas ini sedang dalam pratinjau pribadi. Minta undangan dari pemiliknya.**, atau **Akunmu di sana sudah ditutup.** Ketika komunitas global tidak dapat dijangkau dan kamu terhubung ke komunitas tempat kamu menjadi anggota, sebuah baris di bawahnya berbunyi **Komunitasmu sendiri tidak terpengaruh.** Hal lain di ponsel sama sekali tidak bergantung padanya."
+          "text": "Di bawah **Komunitasmu** selalu ada baris untuk **Komunitas global**. Baris keduanya menyatakan statusmu: alamatnya jika kamu sudah menjadi anggota (ketuk untuk beralih ke sana), **Lihat-lihat dulu, lalu gabung dengan akun ini** saat kamu bisa bergabung (saat kamu berkunjung sebagai tamu: **Gabung dengan akun ini: 12 kata atau login**, atau **Gabung dengan akun ini: login** jika komunitas tidak menerima 12 kata), atau alasan mengapa kamu belum bisa bergabung saat ini: **Memeriksa…**, **Tidak bisa dijangkau sekarang** (dengan **Ketuk untuk mencoba lagi.** selama ponsel ini belum menyimpan komunitas global), **Sedang tidak menerima anggota baru.**, **Komunitas ini sedang dalam pratinjau pribadi. Minta undangan dari pemiliknya.**, atau **Akunmu di sana sudah ditutup.** Ketika komunitas global tidak dapat dijangkau dan kamu terhubung ke komunitas tempat kamu menjadi anggota, sebuah baris di bawahnya berbunyi **Komunitasmu sendiri tidak terpengaruh.** Hal lain di ponsel sama sekali tidak bergantung padanya."
         },
         {
           "type": "ul",
           "items": [
-            "Ketuk ikon kacang di kiri atas. Di lembar **BEANPOOL**, di bawah **KOMUNITASMU**, ketuk **Komunitas global** (baris keduanya bertuliskan **Gabung dengan akun ini**). Menu ini juga ada di **Pengaturan**, di bawah **Tingkat Lanjut / Subsistem**. Jika kamu mengunjungi komunitas global sebagai tamu, ketuk **Gabung** di bagian atas, di samping **?**, lalu **Join with 12 words or a sign-in** (**Join with a sign-in** jika komunitas hanya menerima akun masuk). Jika aplikasi menampilkan **Anda belum menjadi anggota di sini** untuk komunitas global, ketuk **Gabung dengan akun ini**.",
-            "Pilih cara bergabung: **Buat akun dengan 12 kata rahasia**, yang menggunakan 12 kata yang sudah dimiliki akunmu (tanpa akun masuk, jadi tanpa kunci layar ponsel), atau **Atau masuk** sekali dengan Google, Apple (di iPhone), atau Facebook. Untuk akun masuk, aplikasi meminta kunci layar ponselmu terlebih dahulu, karena akun masuk ini juga menjadi cara kembali ke akunmu.",
+            "Ketuk ikon kacang di kiri atas. Di menu **BeanPool**, di bawah **Komunitasmu**, ketuk **Komunitas global** (baris keduanya bertuliskan **Lihat-lihat dulu, lalu gabung dengan akun ini**). Aplikasi membuka komunitas global sebagai tamu, seperti yang dilakukan situs web: kamu bisa menjelajahinya terlebih dahulu, dan titik pada ikon kacang menunjukkan bahwa kamu adalah tamu. Ini juga ada di **Pengaturan**, di bawah **Komunitas tersimpan**: **Jelajahi komunitas global**. Tidak ada yang diikuti dan tidak ada akun yang dibuat hanya dengan melihat-lihat.",
+            "Saat kamu siap, ketuk **Gabung** di bagian atas, di samping tanda **?**, lalu **Gabung dengan 12 kata atau login** (**Gabung dengan login** jika komunitas hanya menerima akun masuk). Jika aplikasi menampilkan **Anda belum menjadi anggota di sini** untuk komunitas global, ketuk **Gabung dengan akun ini**.",
+            "Pilih cara bergabung: **Gabung dengan akun ini**, yang menggunakan kunci dan 12 kata yang sudah ada di ponsel ini (tanpa akun masuk, jadi tanpa kunci layar ponsel), atau, di bawah **Tambahkan juga akun masuk**, masuk sekali dengan Google, Apple (di iPhone), atau Facebook. Untuk akun masuk, aplikasi meminta kunci layar ponselmu terlebih dahulu, karena akun masuk ini juga menjadi cara kembali ke akunmu.",
             "Periksa nama yang akan dilihat orang-orang di sana, lalu ketuk **Gabung**. Jika seseorang sudah memiliki nama itu, aplikasi menyarankan nama lain.",
-            "Kemudian pilih fotomu untuk komunitas global, seperti untuk komunitas baru mana pun, lalu perkiraan lokasimu (**Kira-kira kamu di mana?**; kamu bisa mengetuk **Lewati untuk sekarang**): komunitas global akan menunjukkan iklan di dekat lokasi tersebut. Lihat \"Joining BeanPool\"."
+            "Kemudian pilih fotomu untuk komunitas global, seperti untuk komunitas baru mana pun, lalu perkiraan lokasimu (**Kira-kira kamu di mana?**; kamu bisa mengetuk **Lewati dulu**): komunitas global akan menunjukkan listing di dekat lokasi tersebut. Lihat \"Joining BeanPool\"."
           ]
         },
         {
           "type": "p",
-          "text": "Tidak ada yang berubah di komunitasmu yang lain, dan 12 katamu tetap sama. Akun masuk juga menjadi cara untuk kembali ke akun yang sama: salinan terkunci disimpan untuk akun masuk tersebut, jadi jika kamu kehilangan ponsel, cara ini memulihkan akun ini, bukan akun baru. Lihat \"Recovery\". Akun masuk yang sebelumnya kamu hubungkan ke akunmu tetap berfungsi. Jika kamu bergabung dengan 12 kata dan tidak ada akun masuk yang menyimpan salinan akunmu, aplikasi menampilkan kartu **Akunmu memiliki satu cara untuk kembali**, sama seperti siapa pun yang bergabung dengan 12 kata (lihat \"Joining BeanPool\")."
+          "text": "Tidak ada yang berubah di komunitasmu yang lain, dan 12 katamu tetap sama. Akun masuk juga menjadi cara untuk kembali ke akun yang sama: salinan terkunci disimpan untuk akun masuk tersebut, jadi jika kamu kehilangan ponsel, cara ini memulihkan akun ini, bukan akun baru. Lihat \"Getting your account back\". Akun masuk yang sebelumnya kamu hubungkan ke akunmu tetap berfungsi. Jika kamu bergabung dengan 12 kata dan tidak ada akun masuk yang menyimpan salinan akunmu, aplikasi menampilkan kartu **Akunmu memiliki satu cara untuk kembali**, sama seperti siapa pun yang bergabung dengan 12 kata (lihat \"Joining BeanPool\")."
         },
         {
           "type": "p",
-          "text": "Jika aplikasi menampilkan **This sign-in already joined the global community with a different BeanPool account**, akun masuk tersebut sudah memiliki akunnya sendiri di sana. Gunakan akun masuk yang berbeda: satu akun masuk membuat satu akun di komunitas global."
+          "text": "Jika aplikasi menampilkan **Akun masuk ini sudah bergabung ke komunitas global dengan akun BeanPool yang berbeda**, akun masuk tersebut sudah memiliki akunnya sendiri di sana. Gunakan akun masuk yang berbeda: satu akun masuk membuat satu akun di komunitas global."
         },
         {
           "type": "p",
@@ -2551,18 +2552,18 @@
         },
         {
           "type": "p",
-          "text": "Komunitas global memiliki iklan dari mana saja, jauh lebih banyak daripada yang perlu disimpan ponsel. Jadi ponselmu hanya menyimpan yang berada di dekatmu:"
+          "text": "Komunitas global memiliki listing dari mana saja, jauh lebih banyak daripada yang perlu disimpan ponsel. Jadi ponselmu hanya menyimpan yang berada di dekatmu:"
         },
         {
           "type": "ul",
           "items": [
-            "500 iklan terdekat dalam radius 250 km dari wilayahmu, lokasi perkiraan yang kamu berikan saat bergabung. Lihat \"Wilayahmu\";",
-            "iklanmu sendiri, dan iklan apa pun yang memiliki kesepakatan yang sedang berlangsung atau percakapan denganmu, di mana pun lokasinya."
+            "500 listing terdekat dalam radius 250 km dari wilayahmu, lokasi perkiraan yang kamu berikan saat bergabung. Lihat \"Wilayahmu\";",
+            "listing-mu sendiri, dan listing apa pun yang memiliki transaksi yang sedang berlangsung atau obrolan denganmu, di mana pun lokasinya."
           ]
         },
         {
           "type": "p",
-          "text": "Daftar di Pasar dan Peta di ponselmu menampilkan apa yang disimpan ponselmu. Iklan baru di dekat wilayahmu akan masuk seiring dipostingnya iklan tersebut. Jika kamu mengubah wilayahmu, ponselmu menukar iklan yang ditampilkan dengan iklan di dekat wilayah yang baru."
+          "text": "Daftar di Pasar dan Peta di ponselmu menampilkan apa yang disimpan ponselmu. Listing baru di dekat wilayahmu akan masuk seiring dipostingnya listing tersebut. Jika kamu mengubah wilayahmu, ponselmu menukar listing yang ditampilkan dengan listing di dekat wilayah yang baru."
         },
         {
           "type": "p",
@@ -2571,14 +2572,14 @@
         {
           "type": "ul",
           "items": [
-            "**Cari** di Pasar menanyakan ke komunitas, sehingga menemukan iklan dari mana saja, tidak hanya di dekatmu. Tanpa koneksi internet, fitur ini mencari apa yang sudah ada di ponselmu.",
-            "**Iklan yang kamu buka** dari pesan, tautan, atau Beranda akan diambil dari komunitas, di mana pun lokasinya. Jika komunitas tidak lagi memilikinya, pesan bertuliskan **Post not found**.",
+            "**Cari** di Pasar menanyakan ke komunitas, sehingga menemukan listing dari mana saja, tidak hanya di dekatmu. Tanpa koneksi internet, fitur ini mencari apa yang sudah ada di ponselmu.",
+            "**Listing yang kamu buka** dari pesan, tautan, atau Beranda akan diambil dari komunitas, di mana pun lokasinya. Jika komunitas tidak lagi memilikinya, pesan bertuliskan **Post not found**.",
             "**Peta** hanya menampilkan apa yang disimpan ponselmu, sehingga jauh dari wilayahmu hanya akan ada sedikit pin atau tidak ada sama sekali. Cari di Pasar untuk menemukan hal-hal di sana."
           ]
         },
         {
           "type": "p",
-          "text": "Tanpa wilayah, ponselmu menyimpan 100 iklan terbaru dari mana saja sebagai gantinya, dan sebuah baris di atas Pasar bertuliskan **You're seeing the newest listings worldwide. Set your area to see what's near you.** Ketuk baris tersebut untuk mengaturnya. Kamu tetap bisa memposting, berkirim pesan, dan mencari seperti sebelumnya."
+          "text": "Tanpa wilayah, ponselmu menyimpan 100 listing terbaru dari mana saja sebagai gantinya, dan sebuah baris di atas Pasar bertuliskan **Anda melihat listing terbaru di seluruh dunia. Tetapkan wilayah Anda untuk melihat apa yang ada di dekat Anda.** Ketuk baris tersebut untuk mengaturnya. Kamu tetap bisa memposting, berkirim pesan, dan mencari seperti sebelumnya."
         },
         {
           "type": "p",
@@ -2586,7 +2587,7 @@
         },
         {
           "type": "p",
-          "text": "Di web app, Pasar dan Peta meminta data ke komunitas setiap saat: untuk iklan di dekat wilayahmu atau di dekat tempat yang kamu pilih, atau iklan terbaru dari mana saja. Lihat \"Di dekat Anda\"."
+          "text": "Di web app, Pasar dan Peta meminta data ke komunitas setiap saat: untuk listing di dekat wilayahmu atau di dekat tempat yang kamu pilih, atau listing terbaru dari mana saja. Lihat \"Menemukan berbagai hal di dekatmu\"."
         },
         {
           "type": "p",
@@ -2599,13 +2600,13 @@
         {
           "type": "ul",
           "items": [
-            "Ketuk ikon kacang di kiri atas. Lembar **BEANPOOL** akan terbuka, dengan **KOMUNITASMU** di dekat bagian atas.",
+            "Ketuk ikon kacang di kiri atas. Lembar **BeanPool** akan terbuka, dengan **Komunitasmu** di dekat bagian atas.",
             "Ketuk komunitas yang kamu inginkan."
           ]
         },
         {
           "type": "p",
-          "text": "Kamu juga dapat berpindah di **Pengaturan**, di bawah **Sistem**, lalu **Tingkat Lanjut / Subsistem**. Komunitasmu dicantumkan di sana. Komunitas yang sedang kamu gunakan ditandai sebagai aktif. Ketuk **Beralih ke Kota** pada komunitas lain untuk berpindah ke sana."
+          "text": "Kamu juga dapat berpindah di **Pengaturan**, di bawah **Sistem**, lalu **Komunitas tersimpan**. Komunitasmu dicantumkan di sana. Komunitas yang sedang kamu gunakan ditandai sebagai aktif. Ketuk **Beralih ke komunitas ini** pada komunitas lain untuk berpindah ke sana."
         },
         {
           "type": "h2",
@@ -2613,13 +2614,13 @@
         },
         {
           "type": "p",
-          "text": "Suatu komunitas dapat berpindah ke alamat baru: misalnya, dari nomor servernya (seperti 203.0.113.5) ke sebuah nama domain. Di ponsel, Beranda kemudian menampilkan kartu di bagian atas: **This community is also at beans.example.org. Use that address from now on?** Kartu ini hanya muncul setelah ponselmu memeriksa dengan server komunitas bahwa alamat baru tersebut adalah komunitas yang sama."
+          "text": "Suatu komunitas dapat berpindah ke alamat baru: misalnya, dari nomor servernya (seperti 203.0.113.5) ke sebuah nama. Di ponsel, Beranda kemudian menampilkan kartu di bagian atas: **Komunitas ini juga berada di beans.example.org. Gunakan alamat itu mulai sekarang?** Kartu ini hanya muncul setelah ponselmu memeriksa dengan server komunitas bahwa alamat baru tersebut adalah komunitas yang sama."
         },
         {
           "type": "ul",
           "items": [
-            "Ketuk **Gunakan alamat baru**. Ponselmu berpindah ke sana bersama data yang disimpannya untuk komunitas tersebut, termasuk pesan-pesanmu, dan membuka komunitas itu kembali, seperti saat kamu berpindah komunitas.",
-            "Ketuk **Nanti saja**, dan kartu akan menanyakannya lagi dalam 7 hari. Ponselmu tidak pernah berpindah sendiri tanpa izin.",
+            "Ketuk **Gunakan alamat baru**. Ponselmu berpindah ke sana bersama apa yang disimpannya untuk komunitas tersebut, termasuk pesan-pesanmu, dan membuka komunitas itu kembali, seperti saat kamu beralih komunitas.",
+            "Ketuk **Jangan sekarang**, dan kartu akan menanyakannya lagi dalam 7 hari. Ponselmu tidak pernah berpindah sendiri tanpa izin.",
             "Jika alamat baru merespons sebagai komunitas yang berbeda, aplikasi bertuliskan **Ponsel ini tetap di posisinya**, dan mempertahankan alamat yang dimilikinya. Jika pemeriksaan tidak dapat dilakukan, aplikasi bertuliskan **Tidak ada yang berubah. Coba lagi sebentar lagi.**",
             "Jika alamat lama berhenti merespons sebelum ponselmu mengetahui alamat yang baru, tidak ada yang dapat memberi tahu ponselmu ke mana komunitas itu berpindah. Tanyakan kepada pemiliknya untuk mendapatkan alamat baru, lalu ketuk ikon kacang, lalu **Tambah komunitas**, dan ketikkan alamatnya di sana."
           ]
@@ -2631,8 +2632,8 @@
         {
           "type": "ul",
           "items": [
-            "Di **Tingkat Lanjut / Subsistem**, ketuk **Lupakan** pada komunitas yang sedang tidak kamu gunakan saat ini. Tindakan ini menghapus komunitas tersebut beserta data tersimpannya dari ponsel ini.",
-            "Di lembar **BEANPOOL**, di bawah **KOMUNITASMU**, menekan dan menahan suatu komunitas lalu mengetuk **Hapus** hanya akan menghapusnya dari daftar. Datanya tetap tersimpan di ponsel."
+            "Di **Komunitas tersimpan**, ketuk **Lupakan** pada komunitas yang sedang tidak kamu gunakan saat ini. Tindakan ini menghapus komunitas tersebut beserta data tersimpannya dari ponsel ini.",
+            "Di lembar **BeanPool**, di bawah **Komunitasmu**, menekan dan menahan suatu komunitas lalu mengetuk **Hapus** hanya akan menghapusnya dari daftar. Datanya tetap tersimpan di ponsel."
           ]
         },
         {
@@ -5875,8 +5876,8 @@
       "slug": "credit-line",
       "title": "Batas kreditmu",
       "summary": "Seberapa jauh saldomu bisa di bawah nol, dan bagaimana batas ini bertambah.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5964,7 @@
         },
         {
           "type": "p",
-          "text": "Beberapa komunitas memiliki admin yang mengenal setiap anggotanya secara langsung. Jika komunitasmu mengaktifkan **batas dasar yang diketahui**, anggota yang telah dikonfirmasi oleh admin langsung mendapatkan batas kredit: 1.000 Kacang kecuali jika komunitasmu memilih jumlah lain. Itu setara dengan sekitar 25 jam kerja yang dipercayakan komunitas kepadamu. Hal ini menaikkan batasmu, bukan tingkatmu: lencana percayamu tetap hanya menghitung apa yang telah kamu lakukan."
+          "text": "Beberapa komunitas memiliki admin yang mengenal setiap anggotanya berdasarkan nama. Anggota yang telah dikonfirmasi oleh admin langsung mendapatkan batas kredit, **batas dasar yang diketahui**: 1.000 Kacang kecuali jika komunitasmu memilih jumlah lain. Itu setara dengan sekitar 25 jam kerja yang dipercayakan komunitas kepadamu. Hal ini menaikkan batasmu, bukan tingkatmu: lencana percayamu tetap hanya menghitung apa yang telah kamu lakukan. Batas dasar yang diketahui aktif di setiap komunitas dengan Kacang kecuali jika pemiliknya menonaktifkannya."
         },
         {
           "type": "ul",
@@ -5973,6 +5974,14 @@
             "Seorang admin dapat menetapkan batas yang lebih kecil untukmu, misalnya saat kamu baru bergabung. Hal itu tidak pernah mengambil Kacang darimu: jika kamu sudah berada di bawahnya, pengeluaran dijeda sampai kamu kembali berada di atasnya.",
             "Jika kamu sedang melunasi utang dari akun sebelumnya, Kacang yang kamu terima di atas 0 akan disalurkan ke Sarana Bersama sampai utang lunas. Buku kasmu menyebutkan berapa sisa utangmu. Kamu juga dapat membayar sebagian atau seluruhnya sendiri di **Buku kas → Bayar ke Sarana Bersama**: kode bayar-kembali milikmu telah terisi di sana (atau masukkan kode yang diberikan admin kepadamu). Apa yang kamu bayar dengan kode tersebut langsung mengurangi utang seketika, dan ketika tidak ada yang tersisa maka utang dianggap lunas: tidak ada lagi yang diambil, baik melalui pembayaran maupun dari apa yang kamu terima. Pembayaran tanpa kode akan masuk ke Sarana Bersama tetapi tidak memotong utangmu, dan aplikasi memberi tahu demikian: agar dihitung, mintalah admin untuk mencatatnya ke utangmu dengan nomor referensinya. Sampai mereka melakukannya, utang masih dipotong: saat berikutnya kamu menerima Kacang, sisanya akan diambil dari apa yang kamu miliki di atas 0. Jumlah dalam pesan admin adalah sisa utang saat mereka membagikannya: jika sekarang sisanya lebih sedikit, servermu menolak pembayaran yang lebih besar dan menyebutkan berapa sisanya, serta tidak ada yang dibayarkan. Jika aplikasi menyatakan bahwa pembayaran mungkin telah berhasil, ketuk **Coba lagi** pada layar yang sama: pembayaran yang sama tidak pernah dibayarkan dua kali. Jika kamu keluar dari layar tersebut, periksa Buku kasmu sebelum membayar lagi."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Komunitas campuran"
+        },
+        {
+          "type": "p",
+          "text": "Di beberapa komunitas, setiap anggota dapat mengundang orang lain, sehingga admin tidak mengenal semua orang. Admin dapat mengonfirmasi anggota yang mereka kenal, dan anggota tersebut memulai dengan batas yang lebih tinggi, **batas dasar yang diketahui**, kecuali jika pemilik komunitasmu menonaktifkannya. Semua orang lainnya memulai dari nol, dan batas setiap orang bertambah dengan cara yang sama setelah itu seiring mereka bertransaksi dan membangun kepercayaan."
         },
         {
           "type": "h2",
@@ -6477,8 +6486,8 @@
       "slug": "what-the-admins-can-see",
       "title": "Yang bisa dilihat admin",
       "summary": "Dalam komunitas yang adminnya menyimpan daftar nama: apa yang tercatat tentangmu, siapa yang bisa membacanya, apa yang disimpan server, dan arti status terkonfirmasi.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6531,7 +6540,7 @@
           "type": "ul",
           "items": [
             "Konfirmasi tidak memuat nama. Server mencatat akun mana, entri mana, dan admin mana, tidak pernah siapa dirimu.",
-            "Ini bukan lencana percaya, dan untuk saat ini tidak mengubah hal lain di dalam aplikasi.",
+            "Ini bukan lencana percaya. Ini juga langsung memberimu batas kredit, batas dasar yang diketahui, kecuali jika pemilik komunitasmu menonaktifkannya: lihat \"Batas kreditmu\".",
             "Jika seorang admin mengundangmu berdasarkan nama, bergabung dengan undangan mereka mengonfirmasimu terhadap entrimu, oleh admin tersebut. \"Terkonfirmasi\" hanya berarti bahwa seorang admin menyatakan akun ini adalah orang yang ada pada entri tersebut.",
             "Jika kamu mengganti ponsel yang hilang dan akunmu berpindah ke kunci baru, konfirmasimu berpindah bersamanya.",
             "Jika kamu keluar atau menghapus akunmu, konfirmasimu berakhir. Entrimu tetap berada di daftar admin sampai seorang admin menghapusnya: mintalah kepada mereka.",

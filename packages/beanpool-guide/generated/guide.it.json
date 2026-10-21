@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "it",
-  "hash": "3d5555898f0ab53145f64ee469b1b3e26d8815173f486879cc3e5dbf93bffcfa",
+  "hash": "e26e2256c54d2aaa3262a441efc4dec5d7cb5c8802784e2d397dbc0b775ea10d",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "Entrare in BeanPool",
       "summary": "Due modi per entrare: una comunità, con l'invito di un membro, o la comunità globale se aperta, con 12 parole segrete o un accesso. Chiedere di entrare e invitare altri.",
       "help": "Unisciti a una comunità con l'invito di un membro o alla comunità globale con 12 parole segrete o un account collegato.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -1248,7 +1248,7 @@
             "Incolla il link o il codice di invito. Se hai solo un codice, digita anche il nome o l'indirizzo della comunità. La persona che ti ha invitato può indicartelo.",
             "Scegli il nome che le persone vedranno. Deve avere almeno 2 caratteri. Mantienilo breve: quando ti iscrivi, i nomi più lunghi di 20 caratteri vengono accorciati.",
             "Tocca **Avanti**. L'app controlla l'invito e il nome. Se qualcuno ha già quel nome, ne suggerisce altri. Finché non ha terminato, **← Torna alla home** e **Ripristina l'identità esistente** non funzionano.",
-            "In alcune comunità la stessa schermata mostra anche **Cosa possono vedere gli amministratori di questa comunità**, con una casella facoltativa **Accetto**. Ti iscrivi in entrambi i casi. Vedi \"Cosa possono vedere gli admin\"."
+            "In alcune comunità la stessa schermata mostra anche **Cosa possono vedere gli amministratori di questa comunità**, con una casella facoltativa **Accetto**. Ti iscrivi in entrambi i casi. Vedi \"Cosa possono vedere gli amministratori\"."
           ]
         },
         {
@@ -1264,13 +1264,13 @@
           "items": [
             "Nella prima schermata, tocca **Esplora BeanPool nel mondo**, proprio sotto **Unisciti con un invito**. Si trova sempre lì. Quando la comunità globale non può accoglierti in quel momento, una riga sotto spiega il motivo: **Non è possibile raggiungere la comunità globale in questo momento. Riprova, oppure unisciti con un invito.**, **Al momento non accetta nuovi membri.**, oppure **Questa comunità è in anteprima privata. Chiedi un invito al suo proprietario.** Toccandola viene effettuata nuovamente la richiesta.",
             "Scegli uno dei due modi per entrare. **Crea un account con 12 parole segrete** è il primo. Non richiede alcun account Google, Apple o Facebook: le tue 12 parole (in inglese) sono l'unico modo per rientrare.",
-            "**Oppure accedi** una volta con Google, Apple (su un iPhone) o Facebook. Tale accesso è anche un modo per rientrare se perdi il telefono. BeanPool non vede mai la tua password e non pubblica mai nulla per te.",
+            "**Oppure accedi** una volta con Google, Apple (su un iPhone) o Facebook. Tale accesso è anche una via di recupero se perdi il telefono. BeanPool non vede mai la tua password e non pubblica mai nulla per te.",
             "Scegli il nome che le persone vedranno, fino a 20 caratteri, e tocca **Partecipa**. Se qualcuno ha già quel nome, l'app ne suggerisce altri."
           ]
         },
         {
           "type": "p",
-          "text": "**Dal sito web, su un telefono.** Su beanpool.org/global, **Apri nell'app BeanPool** apre l'app direttamente su questo punto di accesso: i due modi sopra su un telefono che non ha ancora un account, oppure **Unisciti alla comunità globale** con l'account che il telefono già possiede (vedi \"Hai già un account?\" sotto). Se quell'account è già membro lì, apre invece la scheda **BeanPool**, dove **Comunità globale** sotto **LE TUE COMUNITÀ** permette di passare ad essa. Se la comunità globale ha chiuso quell'account, l'app si apre semplicemente. Su Android, se l'app non è installata, si apre Google Play; dopo l'installazione, la prima volta che apri BeanPool si apre direttamente questo metodo di accesso. Su un iPhone, si apre l'App Store; dopo l'installazione, tocca **Esplora BeanPool nel mondo**. Il link apre solo una schermata: nessuno si iscrive finché non tocchi. Quando apre la scheda **BeanPool**, la scheda verifica, come fa sempre, se l'account di questo telefono è membro di ciascuna comunità che elenca. Un invito ha la precedenza: se te ne è stato inviato uno, l'app apre invece l'invito, e se eri a metà della procedura di iscrizione, prosegue con essa."
+          "text": "**Dal sito web, su un telefono.** Su beanpool.org/global, **Apri nell'app BeanPool** apre l'app direttamente su questo punto di accesso: i due modi sopra su un telefono che non ha ancora un account, oppure **Unisciti alla comunità globale** con l'account che il telefono già possiede (vedi \"Hai già un account?\" sotto). Se quell'account è già membro lì, apre invece la scheda **BeanPool**, dove **Comunità globale** sotto **Le tue comunità** permette di passare ad essa. Se la comunità globale ha chiuso quell'account, l'app si apre semplicemente. Su Android, se l'app non è installata, si apre Google Play; dopo l'installazione, la prima volta che apri BeanPool si apre direttamente questo metodo di accesso. Su un iPhone, si apre l'App Store; dopo l'installazione, tocca **Esplora BeanPool nel mondo**. Il link apre solo una schermata: nessuno si iscrive finché non tocchi. Quando apre la scheda **BeanPool**, la scheda verifica, come fa sempre, se l'account di questo telefono è membro di ciascuna comunità che elenca. Un invito ha la precedenza: se te ne è stato inviato uno, l'app apre invece l'invito, e se eri a metà della procedura di iscrizione, prosegue con essa."
         },
         {
           "type": "p",
@@ -1278,11 +1278,11 @@
         },
         {
           "type": "p",
-          "text": "Se la comunità dice di attendere (troppe persone si stanno iscrivendo dalla tua rete), l'app indica per quanto tempo. Toccando **Partecipa** prima di allora ripete solo il messaggio, con il tempo rimanente; dopo l'attesa, o dopo un minuto se l'attesa è più lunga, **Partecipa** richiede di nuovo. Se la data e l'ora del tuo telefono sono errate, l'app dice di verificarle nelle impostazioni del telefono (impostandole su automatico), poi di riprovare. Se la comunità ha chiuso il tuo account (lo hai eliminato, o sei stato rimosso), l'app dice **Il posto di questo account nella comunità globale è stato chiuso, quindi non può unirsi di nuovo.** e non mostra più l'accesso ad essa."
+          "text": "Se la comunità dice di attendere (troppe persone si stanno iscrivendo dalla tua rete), l'app indica per quanto tempo. Toccando **Partecipa** prima di allora ripete solo il messaggio, con il tempo rimanente; dopo l'attesa, o dopo un minuto se l'attesa è più lunga, **Partecipa** richiede di nuovo. Se la data e l'ora del tuo telefono sono errate, l'app dice **Controllale nelle impostazioni del telefono (impostale su automatiche)**, poi riprova. Se la comunità ha chiuso il tuo account (lo hai eliminato, o sei stato rimosso), l'app dice **Il posto di questo account nella comunità globale è stato chiuso, quindi non può unirsi di nuovo.** e non mostra più l'accesso ad essa."
         },
         {
           "type": "p",
-          "text": "Se un'iscrizione con 12 parole, nell'app per telefono o in un browser web, indica che la comunità non ha potuto accettarla perché data e ora sembrano errate, l'orologio di quel telefono o computer è sfasato di più di qualche minuto. Imposta la data e l'ora su automatico nelle impostazioni del dispositivo, poi riprova. Non è stato salvato nulla, e accedere di nuovo non sarà d'aiuto. Le stesse parole compaiono se l'aggiunta di un accesso o il recupero dell'account in un browser viene rifiutato per lo stesso motivo."
+          "text": "Se un'iscrizione con 12 parole, nell'app per telefono o in un browser web, indica che la comunità non ha potuto accettarla perché **data e ora non sembrano corrette**, l'orologio di quel telefono o computer è sfasato di più di qualche minuto. Imposta la data e l'ora su automatico nelle impostazioni del dispositivo, poi riprova. Non è stato salvato nulla, e accedere di nuovo non sarà d'aiuto. Le stesse parole compaiono se l'aggiunta di un accesso o il recupero dell'account in un browser viene rifiutato per lo stesso motivo."
         },
         {
           "type": "p",
@@ -1290,11 +1290,11 @@
         },
         {
           "type": "p",
-          "text": "Se entri con 12 parole, nulla di te giunge alla comunità se non la tua chiave e il tuo nome, e le tue 12 parole (parole inglesi) sono il tuo unico modo per rientrare: nessuno può reimpostarle, né BeanPool né la comunità. **Backup sicuro** lo dichiara, e offre **Aggiungi un accesso come seconda via di ritorno**. Dopo l'iscrizione, una scheda sulla **Inizio** dice che il tuo account ha una sola via di ritorno: le tue 12 parole, ricordando di verificare di averle ancora o di aggiungere un accesso. Tocca **✕** per chiuderla: ricompare una volta dopo il tuo primo post e una volta dopo una settimana, poi rimane in **Impostazioni**, sotto **Protezione dell'account**, finché non aggiungi un accesso o tocchi **Ho ancora le mie 12 parole**. Un account creato con 12 parole ha anche limiti più ridotti per i suoi primi 7 giorni, e finché 3 dei suoi post non sono rimasti attivi: 2 post, 4 foto e 3 nuove persone a cui inviare messaggi al giorno, e una sola segnalazione nasconde il suo post mentre è nuovo. L'aggiunta di un accesso, in qualsiasi momento, lo porta ai consueti limiti per i nuovi account. Puoi aggiungerne uno da qualsiasi telefono su cui ti trovi nel tuo account, non solo da quello su cui ti sei iscritto. Se la cassaforte delle chiavi di BeanPool conserva già una copia del tuo account, la scheda non viene mostrata e **Impostazioni** propone discretamente di aggiungere un accesso."
+          "text": "Se entri con 12 parole, nulla di te giunge alla comunità se non la tua chiave e il tuo nome, e le tue 12 parole (parole inglesi) sono il tuo unico modo per rientrare: nessuno può reimpostarle, né BeanPool né la comunità. **Backup sicuro** lo dichiara, e offre **Aggiungi un accesso come seconda via di ritorno**. Dopo l'iscrizione, una scheda sulla **Home** dice **Il tuo account ha una sola via di ritorno: le tue 12 parole. Verifica di averle ancora, o aggiungi un accesso.** Tocca **✕** per chiuderla: ricompare una volta dopo il tuo primo post e una volta dopo una settimana, poi rimane in **Impostazioni**, sotto **Protezione dell'account**, finché non aggiungi un accesso o tocchi **Ho ancora le mie 12 parole**. Un account creato con 12 parole ha anche limiti più ridotti per i suoi primi 7 giorni, e finché 3 dei suoi post non sono rimasti attivi: 2 post, 4 foto e 3 nuove persone a cui inviare messaggi al giorno, e una sola segnalazione nasconde il suo post mentre è nuovo. L'aggiunta di un accesso, in qualsiasi momento, lo porta ai consueti limiti per i nuovi account. Puoi aggiungerne uno da qualsiasi telefono su cui ti trovi nel tuo account, non solo da quello su cui ti sei iscritto. Se la cassaforte delle chiavi di BeanPool conserva già una copia del tuo account, la scheda non viene mostrata e **Impostazioni** propone discretamente di aggiungere un accesso."
         },
         {
           "type": "p",
-          "text": "**Hai già un account?** Unisciti alla comunità globale con quello, non con un secondo account. Tocca il fagiolo in alto a sinistra e, sotto **LE TUE COMUNITÀ**, tocca **Comunità globale**: è sempre lì, e quando puoi unirti la sua seconda riga dice **Unisciti con questo account: 12 parole o un accesso** (o **…: un accesso**). Se stai visitando la comunità globale come ospite, tocca **Partecipa** in alto, accanto a **?**, poi **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi). Se l'app dice **Non sei ancora membro qui** riguardo alla comunità globale, tocca **Unisciti con questo account**. Su un telefono, il link beanpool.org/global apre **Unisciti alla comunità globale** anche con il tuo account (vedi \"Dal sito web, su un telefono\", sopra). Ti unisci con le tue 12 parole o accedi una volta, verifichi il tuo nome e tocchi **Partecipa**. La tua chiave e le tue 12 parole rimangono le stesse, e nulla cambia nelle altre tue comunità. Vedi \"Più di una comunità\"."
+          "text": "**Hai già un account?** Unisciti alla comunità globale con quello, non con un secondo account. Tocca il fagiolo in alto a sinistra e, sotto **Le tue comunità**, tocca **Comunità globale**: è sempre lì, e quando puoi unirti la sua seconda riga dice **Esplora prima, poi unisciti con questo account**. L'app apre la comunità globale prima come ospite, così puoi esplorarla prima di unirti. Poi, o ogni volta che la visiti come ospite, tocca **Partecipa** in alto, accanto a **?**, poi **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi). Se l'app dice **Non sei ancora membro qui** riguardo alla comunità globale, tocca **Unisciti con questo account**. Su un telefono, il link beanpool.org/global apre **Unisciti alla comunità globale** anche con il tuo account (vedi \"Dal sito web, su un telefono\", sopra). Ti unisci con le tue 12 parole o accedi una volta, verifichi il tuo nome e tocchi **Partecipa**. La tua chiave e le tue 12 parole rimangono le stesse, e nulla cambia nelle altre tue comunità. Vedi \"Più di una comunità\"."
         },
         {
           "type": "p",
@@ -1329,7 +1329,7 @@
         {
           "type": "ul",
           "items": [
-            "**Già utilizzato:** ogni invito funziona esattamente una sola volta. Chiedine uno nuovo. Se era il tuo e sei già un membro, usa invece **Ripristina l'identità esistente**.",
+            "**Già utilizzato:** ogni invito funziona esattamente una sola volta. Chiedine uno nuovo. Se era il tuo e sei già un membro, usa invece **Recupera un account esistente**.",
             "**Scaduto:** gli inviti durano 30 giorni. Chiedine uno nuovo.",
             "**Non riconosciuto:** controlla di averlo copiato per intero e che il nome o l'indirizzo della comunità sia corretto.",
             "**Creato da un membro, e ora solo gli admin fanno entrare le persone:** la comunità ha stabilito che solo i suoi amministratori possano invitare, e un biglietto generato da un membro senza connessione non è più valido. Chiedi a un amministratore un invito nuovo.",
@@ -1347,7 +1347,7 @@
             "**Impossibile raggiungere la comunità globale:** verifica la connessione e tocca **Riprova**. Puoi comunque unirti a una comunità con un invito.",
             "**La comunità globale non ha risposto in tempo** (dopo aver toccato **Partecipa**): il tuo nome non è stato verificato e non è stato inviato nulla. Controlla la tua connessione e tocca di nuovo **Partecipa**, oppure torna indietro. Mentre l'app verifica il tuo nome, **Scegli un altro modo** e **← Torna alla home** funzionano ancora.",
             "**Questo accesso possiede già un'identità BeanPool:** ti sei unito in precedenza, forse su un altro telefono. Tocca **Ripristina il mio account**, poi usa le tue 12 parole o lo stesso accesso.",
-            "**Questo account di accesso si è già unito alla comunità globale con un diverso account BeanPool** (iscrizione dall'account sul tuo telefono): quell'accesso possiede già un suo account lì. Tocca **Usa un account di accesso diverso**.",
+            "**Questo account di accesso si è già unito alla comunità globale con un account BeanPool diverso** (iscrizione dall'account sul tuo telefono): quell'accesso possiede già un suo account lì. Tocca **Usa un account di accesso diverso**.",
             "**Questa comunità non può verificare gli accessi in questo momento:** la comunità globale si è spostata su un altro server e non è ancora in grado di distinguere un account che ritorna da uno nuovo, quindi per ora non accetta nuovi membri con questo metodo. Non è stato salvato nulla. Riprova più tardi.",
             "**Troppi nuovi account da questa rete:** esiste un limite sui nuovi account provenienti da una stessa connessione Internet. Tutti gli utenti sulla stessa rete vengono conteggiati insieme, quindi in un campus, un ufficio o un incontro potrebbero essere altre persone a iscriversi, non tu. Riprova più tardi.",
             "**Al momento non accetta nuovi membri:** unisciti invece a una comunità con un invito."
@@ -2474,8 +2474,8 @@
       "slug": "communities",
       "title": "Più di una comunità",
       "summary": "Fai parte di diverse comunità con un solo account, passa da una all'altra, segui la tua comunità a un nuovo indirizzo e scopri cosa mostra la comunità globale.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2510,7 +2510,7 @@
         },
         {
           "type": "p",
-          "text": "La tua chiave, le tue 12 parole e il tuo nome vengono con te. I tuoi post, le tue chat e i tuoi scambi rimangono in ciascuna comunità. Successivamente verifichi il tuo nome e la tua foto per la nuova comunità. Un account di accesso che protegge il tuo account viene conservato da ciascuna comunità, quindi l'app ti chiede di proteggere il tuo account anche nella nuova comunità: tocca **Proteggilo**, oppure **Più tardi**."
+          "text": "La tua chiave, le tue 12 parole e il tuo nome vengono con te. I tuoi post, le tue chat e i tuoi scambi rimangono in ciascuna comunità. Successivamente verifichi il tuo nome e la tua foto per la nuova comunità. Un account di accesso che protegge il tuo account viene conservato da ciascuna comunità, quindi l'app ti chiede di proteggere il tuo account anche nella nuova: tocca **Proteggilo**, oppure **Più tardi**."
         },
         {
           "type": "h2",
@@ -2522,24 +2522,25 @@
         },
         {
           "type": "p",
-          "text": "Sotto **LE TUE COMUNITÀ** è sempre presente una riga per la **Comunità globale**. La sua seconda riga indica la tua situazione: il suo indirizzo quando ne sei membro (toccandolo puoi passare ad essa), **Unisciti con questo account: 12 parole o un accesso** (**Unisciti con questo account: un accesso** dove la comunità non accetta le 12 parole) quando puoi unirti, o il motivo per cui non puoi farlo al momento: **Controllo in corso…**, **Non raggiungibile in questo momento** (con **Tocca per riprovare.** mentre questo telefono non ha ancora salvato la comunità globale), **Al momento non accetta nuovi membri.**, **Questa comunità è in anteprima privata. Chiedi un invito al suo proprietario.**, oppure **Il tuo account lì è stato chiuso.** Quando la comunità globale non è raggiungibile e sei connesso a una comunità di cui sei membro, una riga sotto indica **La tua comunità non ne risente.** Nient'altro sul telefono dipende da essa."
+          "text": "Sotto **Le tue comunità** è sempre presente una riga per la **Comunità globale**. La sua seconda riga indica la tua situazione: il suo indirizzo quando ne sei membro (toccandolo puoi passare ad essa), **Esplora prima, poi unisciti con questo account** quando puoi unirti (mentre la visiti come ospite: **Unisciti con questo account: 12 parole o un accesso**, oppure **Unisciti con questo account: un accesso** dove la comunità non accetta le 12 parole), o il motivo per cui non puoi farlo al momento: **Controllo in corso…**, **Non raggiungibile in questo momento** (con **Tocca per riprovare.** mentre questo telefono non ha ancora salvato la comunità globale), **Al momento non accetta nuovi membri.**, **Questa comunità è in anteprima privata. Chiedi un invito al suo proprietario.**, oppure **Il tuo account lì è stato chiuso.** Quando la comunità globale non è raggiungibile e sei connesso a una comunità di cui sei membro, una riga sotto indica **La tua comunità non ne risente.** Nient'altro sul telefono dipende da essa."
         },
         {
           "type": "ul",
           "items": [
-            "Tocca il fagiolo in alto a sinistra. Nel pannello **BeanPool**, sotto **LE TUE COMUNITÀ**, tocca **Comunità globale** (la sua seconda riga dice **Unisciti con questo account**). Si trova anche in **Impostazioni**, sotto **Avanzate / Sottosistema**. Se stai visitando la comunità globale come ospite, tocca **Partecipa** in alto, accanto a **?**, poi **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi). Se l'app mostra **Non sei ancora membro qui** per la comunità globale, tocca **Unisciti con questo account**.",
-            "Scegli come entrare: **Crea un account con 12 parole segrete**, che usa le 12 parole che il tuo account già possiede (nessun accesso esterno, quindi nessun blocco del telefono richiesto), oppure **Oppure accedi** una volta con Google, Apple (su un iPhone) o Facebook. Per un accesso esterno, l'app richiede prima lo sblocco del telefono, perché questo accesso diventa anche una via per rientrare nel tuo account.",
+            "Tocca il fagiolo in alto a sinistra. Nel pannello **BeanPool**, sotto **Le tue comunità**, tocca **Comunità globale** (la sua seconda riga dice **Esplora prima, poi unisciti con questo account**). L'app apre la comunità globale come ospite, esattamente come fa il sito web: prima esplori, e il puntino sul fagiolo mostra che sei un ospite. Si trova anche in **Impostazioni**, sotto **Comunità salvate**: **Esplora la comunità globale**. Guardando in giro non ci si unisce a nulla e non viene creato alcun account.",
+            "Quando sei pronto, tocca **Partecipa** in alto, accanto a **?**, poi **Unisciti con 12 parole o un accesso** (**Unisciti con un accesso** dove una comunità accetta solo accessi). Se l'app mostra **Non sei ancora membro qui** per la comunità globale, tocca **Unisciti con questo account**.",
+            "Scegli come entrare: **Unisciti con questo account**, che usa la chiave e le 12 parole già presenti su questo telefono (nessun accesso, quindi nessun blocco del telefono richiesto), oppure, sotto **Aggiungi anche un accesso**, accedi una volta con Google, Apple (su un iPhone) o Facebook. Per un accesso, l'app richiede prima lo sblocco del telefono, perché questo accesso diventa anche una via di recupero per il tuo account.",
             "Controlla il nome che le persone vedranno lì e tocca **Partecipa**. Se qualcuno ha già quel nome, l'app ne suggerisce altri.",
             "Poi scegli la tua foto per la comunità globale, come per qualsiasi nuova comunità, e quindi più o meno dove ti trovi (**Più o meno dove sei?**; puoi toccare **Salta per ora**): la comunità globale ti mostra gli annunci vicino a te. Vedi \"Entrare in BeanPool\"."
           ]
         },
         {
           "type": "p",
-          "text": "Nulla cambia nelle altre tue comunità e le tue 12 parole rimangono le stesse. Un accesso esterno diventa anche una via di ritorno nello stesso account: viene conservata una copia protetta per quell'accesso, quindi se perdi il telefono, ripristina questo account e non uno nuovo. Vedi \"Recuperare il tuo account\". Un accesso che avevi collegato al tuo account in precedenza continua a funzionare. Se entri con 12 parole e nessun accesso conserva una copia del tuo account, l'app mostra la scheda **Il tuo account ha una sola via di ritorno**, come per chiunque si unisca con 12 parole (vedi \"Entrare in BeanPool\")."
+          "text": "Nulla cambia nelle altre tue comunità e le tue 12 parole rimangono le stesse. Un accesso diventa anche una via di recupero nello stesso account: ne viene conservata una copia protetta per quell'accesso, quindi se perdi il telefono, ripristina questo account e non uno nuovo. Vedi \"Recuperare il tuo account\". Un accesso collegato al tuo account in precedenza continua a funzionare. Se entri con 12 parole e nessun accesso conserva una copia del tuo account, l'app mostra la scheda **Il tuo account ha una sola via di ritorno**, come per chiunque si unisca con 12 parole (vedi \"Entrare in BeanPool\")."
         },
         {
           "type": "p",
-          "text": "Se l'app indica che questo accesso si è già unito alla comunità globale con un diverso account BeanPool, quell'accesso possiede già un suo account lì. Usa un accesso diverso: un account di accesso esterno crea un solo account nella comunità globale."
+          "text": "Se l'app indica **Questo account di accesso si è già unito alla comunità globale con un account BeanPool diverso**, quell'accesso possiede già un suo account lì. Usa un accesso diverso: un account di accesso crea un solo account nella comunità globale."
         },
         {
           "type": "p",
@@ -2571,14 +2572,14 @@
         {
           "type": "ul",
           "items": [
-            "La **Cerca** nel Mercato interroga la comunità, quindi trova annunci da ogni luogo, non solo vicino a te. Senza connessione, cerca tra ciò che è già presente sul tuo telefono.",
+            "La funzione **Cerca** nel Mercato interroga la comunità, quindi trova annunci da ogni luogo, non solo vicino a te. Senza connessione, cerca tra ciò che è già presente sul tuo telefono.",
             "**Un annuncio che apri** da un messaggio, da un link o dalla Home viene scaricato dalla comunità, ovunque si trovi. Se la comunità non lo possiede più, indica **Annuncio non trovato**.",
             "**La Mappa** mostra solo ciò che il telefono conserva, quindi lontano dalla tua zona ha pochi segnaposto o nessuno. Cerca nel Mercato per trovare annunci lì."
           ]
         },
         {
           "type": "p",
-          "text": "Senza una zona impostata, il telefono conserva invece i 100 annunci più recenti da ogni parte del mondo, e una riga sopra il Mercato dice che stai vedendo gli annunci più recenti a livello mondiale, invitando a impostare la tua zona per vedere cosa c'è vicino a te. Toccala per impostarne una. Puoi comunque pubblicare, inviare messaggi e cercare come prima."
+          "text": "Senza una zona impostata, il telefono conserva invece i 100 annunci più recenti da ogni parte del mondo, e una riga sopra il Mercato dice **Stai visualizzando gli annunci più recenti in tutto il mondo. Imposta la tua zona per vedere cosa c'è vicino a te.** Toccala per impostarne una. Puoi comunque pubblicare, inviare messaggi e cercare come prima."
         },
         {
           "type": "p",
@@ -2599,13 +2600,13 @@
         {
           "type": "ul",
           "items": [
-            "Tocca il fagiolo in alto a sinistra. Si apre il pannello **BeanPool**, con **LE TUE COMUNITÀ** vicino alla cima.",
+            "Tocca il fagiolo in alto a sinistra. Si apre il pannello **BeanPool**, con **Le tue comunità** vicino alla cima.",
             "Tocca quella che desideri."
           ]
         },
         {
           "type": "p",
-          "text": "Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Avanzate / Sottosistema**. Le tue comunità sono elencate lì. Quella che stai usando è contrassegnata come attiva. Tocca **Passa a Città** su un'altra comunità per spostarti su di essa."
+          "text": "Puoi anche cambiare comunità in **Impostazioni**, sotto **Sistema**, poi **Comunità salvate**. Le tue comunità sono elencate lì. Quella che stai usando è contrassegnata come attiva. Tocca **Passa a questa comunità** su un'altra per spostarti su di essa."
         },
         {
           "type": "h2",
@@ -2631,8 +2632,8 @@
         {
           "type": "ul",
           "items": [
-            "In **Avanzate / Sottosistema**, tocca **Dimentica** su una comunità che non stai usando in questo momento. Questo rimuove la comunità e i suoi dati salvati da questo telefono.",
-            "Nel pannello **BeanPool**, sotto **LE TUE COMUNITÀ**, tenere premuta una comunità e toccare **Rimuovi** la toglie soltanto dall'elenco. I suoi dati rimangono sul telefono."
+            "In **Comunità salvate**, tocca **Dimentica** su una comunità che non stai usando in questo momento. Questo rimuove la comunità e i suoi dati salvati da questo telefono.",
+            "Nel pannello **BeanPool**, sotto **Le tue comunità**, tenere premuta una comunità e toccare **Rimuovi** la toglie soltanto dall'elenco. I suoi dati rimangono sul telefono."
           ]
         },
         {
@@ -5875,8 +5876,8 @@
       "slug": "credit-line",
       "title": "Linea di credito",
       "summary": "Quanto puoi andare sotto zero e come aumenta questa disponibilità.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5964,7 @@
         },
         {
           "type": "p",
-          "text": "Alcune comunità hanno amministratori che conoscono ogni membro per nome. Se la tua comunità ha attivato **la soglia nota**, un membro confermato da un amministratore ottiene subito una linea di credito: 1.000 fagioli a meno che la comunità non abbia scelto un altro importo. Corrisponde a circa 25 ore di lavoro per cui la comunità ti accorda fiducia. Aumenta il tuo limite, non il tuo livello: il tuo badge di fiducia conta solo ciò che hai fatto."
+          "text": "Alcune comunità hanno amministratori che conoscono ogni membro per nome. Un membro confermato da un amministratore ottiene subito una linea di credito, **la soglia nota**: 1.000 fagioli a meno che la tua comunità non abbia scelto un altro importo. Corrisponde a circa 25 ore di lavoro per cui la comunità ti accorda fiducia. Aumenta il tuo limite, non il tuo livello: il tuo stemma di fiducia conta solo ciò che hai fatto. La soglia nota è attiva in ogni comunità con fagioli a meno che il suo proprietario non l'abbia disattivata."
         },
         {
           "type": "ul",
@@ -5980,7 +5981,7 @@
         },
         {
           "type": "p",
-          "text": "In alcune comunità qualsiasi membro può invitare persone, quindi gli amministratori non conoscono tutti. Se la tua comunità ha attivato **la soglia nota**, gli amministratori possono confermare i membri che conoscono, e quei membri iniziano con un limite più alto. Tutti gli altri iniziano da zero, e dopo l'inizio il limite di ciascuno cresce nello stesso modo con gli scambi e la fiducia costruita."
+          "text": "In alcune comunità qualsiasi membro può invitare persone, quindi gli amministratori non conoscono tutti. Gli amministratori possono confermare i membri che conoscono, e quei membri iniziano con un limite più alto, **la soglia nota**, a meno che il proprietario della comunità non l'abbia disattivata. Tutti gli altri iniziano da zero, e dopo l'inizio il limite di ciascuno cresce nello stesso modo man mano che scambiano e costruiscono fiducia."
         },
         {
           "type": "h2",
@@ -6485,8 +6486,8 @@
       "slug": "what-the-admins-can-see",
       "title": "Cosa possono vedere gli admin",
       "summary": "In una comunità i cui admin tengono una lista nomi: cosa contiene su di te, chi può leggerla, cosa conserva il server e cosa significa essere confermati.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6539,11 +6540,11 @@
           "type": "ul",
           "items": [
             "Una conferma non riporta alcun nome. Il server registra quale account, quale voce e quale amministratore, mai chi sei.",
-            "Non è un badge di affidabilità e, per ora, non cambia nient'altro nell'app.",
+            "Non è uno stemma di fiducia. Ti dà anche subito una linea di credito, la soglia nota, a meno che il proprietario della tua comunità non l'abbia disattivata: vedi \"Linea di credito\".",
             "Se un amministratore ti ha invitato per nome, unirti con il suo invito ti ha confermato a fronte della tua voce, da parte di quell'amministratore. \"Confermato\" significa solo che un amministratore attesta che questo account è la persona indicata in quella voce.",
             "Se sostituisci un telefono smarrito e il tuo account passa a una nuova chiave, la tua conferma si trasferisce con esso.",
             "Se lasci o elimini il tuo account, la conferma termina. La tua voce rimane nell'elenco degli amministratori finché un amministratore non la cancella: chiedi loro di farlo.",
-            "Se sei confermato e lasci, vieni rimosso o elimini il tuo account mentre sei a debito di Bean, i Beni Comuni coprono il debito come sempre. L'elenco degli amministratori conserva anche una nota sulla tua voce che indica quanto dovevi, perché e quando, per 3 anni, e gli amministratori la vedono accanto al tuo nome sui propri telefoni. Nessuno può essere confermato a fronte di quella voce finché il debito non viene rimborsato, compensato con lavoro o condonato."
+            "Se sei confermato e lasci, vieni rimosso o elimini il tuo account mentre sei a debito di fagioli, i Beni comuni coprono il debito come sempre. L'elenco degli amministratori conserva anche una nota sulla tua voce che indica quanto dovevi, perché e quando, per 3 anni, e gli amministratori la vedono accanto al tuo nome sui propri telefoni. Nessuno può essere confermato a fronte di quella voce finché il debito non viene rimborsato, compensato con lavoro o condonato."
           ]
         },
         {

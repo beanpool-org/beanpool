@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "vi",
-  "hash": "0b544c1477f14bb36123197a82443cd3b672c7663d8aa5b46a3dd25c5f1a3b93",
+  "hash": "2945ce00ce08e46f0d7c01b974602525381d7ccb6c7e85204135b6d2b9e613e8",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "Tham gia BeanPool",
       "summary": "Hai cách tham gia: cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu khi mở, bằng 12 từ bí mật hoặc đăng nhập. Xin gia nhập và mời người khác.",
       "help": "Tham gia cộng đồng qua lời mời từ thành viên, hoặc cộng đồng toàn cầu với 12 từ bí mật hay một lần đăng nhập.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -1294,7 +1294,7 @@
         },
         {
           "type": "p",
-          "text": "**Đã có tài khoản?** Hãy tham gia cộng đồng toàn cầu bằng chính tài khoản đó, đừng tạo tài khoản thứ hai. Nhấn vào hạt đậu ở trên cùng bên trái và, dưới mục **Your communities**, nhấn **Cộng đồng toàn cầu**: mục này luôn ở đó, và khi bạn có thể tham gia, dòng thứ hai của nó sẽ ghi **Tham gia bằng tài khoản này: 12 từ hoặc một lần đăng nhập** (hoặc **…: một lần đăng nhập**). Nếu bạn đang ghé thăm cộng đồng toàn cầu với tư cách khách, hãy nhấn **Tham gia** ở trên cùng, bên cạnh dấu **?**, sau đó chọn **Tham gia bằng 12 từ hoặc đăng nhập** (**Tham gia bằng đăng nhập** ở nơi cộng đồng chỉ chấp nhận đăng nhập). Nếu ứng dụng báo **Bạn chưa phải là thành viên ở đây** về cộng đồng toàn cầu, hãy nhấn **Tham gia bằng tài khoản này**. Trên điện thoại, liên kết beanpool.org/global cũng sẽ mở **Tham gia cộng đồng toàn cầu** với tài khoản của bạn (xem \"Từ trang web, trên điện thoại\", ở trên). Bạn tham gia bằng 12 từ của mình hoặc đăng nhập một lần, kiểm tra lại tên và nhấn **Tham gia**. Khóa và 12 từ của bạn vẫn giữ nguyên, và không có gì thay đổi trong các cộng đồng khác của bạn. Xem \"Nhiều hơn một cộng đồng\"."
+          "text": "**Đã có tài khoản?** Hãy tham gia cộng đồng toàn cầu bằng chính tài khoản đó, đừng tạo tài khoản thứ hai. Nhấn vào hạt đậu ở trên cùng bên trái và, dưới mục **Your communities**, nhấn **Cộng đồng toàn cầu**: mục này luôn ở đó, và khi bạn có thể tham gia, dòng thứ hai của nó sẽ ghi **Dạo xem trước, rồi tham gia bằng tài khoản này**. Trước tiên ứng dụng sẽ mở cộng đồng toàn cầu với tư cách khách, để bạn có thể dạo xem trước khi tham gia. Sau đó, hoặc bất cứ khi nào bạn ghé thăm với tư cách khách, hãy nhấn **Tham gia** ở trên cùng, bên cạnh dấu **?**, rồi chọn **Tham gia bằng 12 từ hoặc phương thức đăng nhập** (**Tham gia bằng phương thức đăng nhập** ở nơi cộng đồng chỉ chấp nhận đăng nhập). Nếu ứng dụng báo **Bạn chưa phải là thành viên ở đây** về cộng đồng toàn cầu, hãy nhấn **Tham gia bằng tài khoản này**. Trên điện thoại, liên kết beanpool.org/global cũng sẽ mở **Tham gia cộng đồng toàn cầu** với tài khoản của bạn (xem \"Từ trang web, trên điện thoại\", ở trên). Bạn tham gia bằng 12 từ của mình hoặc đăng nhập một lần, kiểm tra lại tên và nhấn **Tham gia**. Khóa và 12 từ của bạn vẫn giữ nguyên, và không có gì thay đổi trong các cộng đồng khác của bạn. Xem \"Nhiều hơn một cộng đồng\"."
         },
         {
           "type": "p",
@@ -2474,8 +2474,8 @@
       "slug": "communities",
       "title": "Nhiều hơn một cộng đồng",
       "summary": "Thuộc về nhiều cộng đồng với một tài khoản, chuyển đổi qua lại, theo dõi cộng đồng đến địa chỉ mới và xem những gì cộng đồng toàn cầu hiển thị.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2522,13 +2522,14 @@
         },
         {
           "type": "p",
-          "text": "Dưới mục **Your communities** luôn có một hàng cho **Cộng đồng toàn cầu**. Dòng thứ hai của hàng này cho biết tình trạng hiện tại của bạn: địa chỉ của cộng đồng khi bạn đã là thành viên (nhấn vào để chuyển sang cộng đồng đó), **Tham gia bằng tài khoản này: 12 từ hoặc một lần đăng nhập** (**Tham gia bằng tài khoản này: một lần đăng nhập** ở nơi cộng đồng không chấp nhận 12 từ) khi bạn có thể tham gia, hoặc lý do tại sao bạn chưa thể tham gia lúc này: **Đang kiểm tra…**, **Hiện không thể kết nối** (kèm theo **Nhấn để thử lại.** trong khi điện thoại này chưa lưu cộng đồng toàn cầu), **Hiện không nhận thành viên mới.**, **Cộng đồng này đang trong giai đoạn xem trước riêng tư. Hãy xin lời mời từ chủ sở hữu.**, hoặc **Tài khoản của bạn ở đó đã bị đóng.** Khi không thể kết nối với cộng đồng toàn cầu và bạn đang kết nối với một cộng đồng mà bạn là thành viên, một dòng bên dưới sẽ thông báo: **Cộng đồng của riêng bạn không bị ảnh hưởng.** Không có điều gì khác trên điện thoại phụ thuộc vào nó."
+          "text": "Dưới mục **Your communities** luôn có một hàng cho **Cộng đồng toàn cầu**. Dòng thứ hai của hàng này cho biết tình trạng hiện tại của bạn: địa chỉ của cộng đồng khi bạn đã là thành viên (nhấn vào để chuyển sang cộng đồng đó), **Dạo xem trước, rồi tham gia bằng tài khoản này** khi bạn có thể tham gia (trong khi bạn đang truy cập với tư cách khách: **Tham gia bằng tài khoản này: 12 từ hoặc đăng nhập**, hoặc **Tham gia bằng tài khoản này: đăng nhập** ở nơi cộng đồng không chấp nhận 12 từ), hoặc lý do tại sao bạn chưa thể tham gia lúc này: **Đang kiểm tra…**, **Hiện không thể kết nối** (kèm theo **Nhấn để thử lại.** trong khi điện thoại này chưa lưu cộng đồng toàn cầu), **Hiện không nhận thành viên mới.**, **Cộng đồng này đang trong giai đoạn xem trước riêng tư. Hãy xin lời mời từ chủ sở hữu.**, hoặc **Tài khoản của bạn ở đó đã bị đóng.** Khi không thể kết nối với cộng đồng toàn cầu và bạn đang kết nối với một cộng đồng mà bạn là thành viên, một dòng bên dưới sẽ thông báo **Cộng đồng của riêng bạn không bị ảnh hưởng.** Không có điều gì khác trên điện thoại phụ thuộc vào nó."
         },
         {
           "type": "ul",
           "items": [
-            "Nhấn vào hạt đậu ở trên cùng bên trái. Trong bảng **BeanPool**, dưới mục **Your communities**, nhấn **Cộng đồng toàn cầu** (dòng thứ hai của nó ghi **Tham gia bằng tài khoản này**). Mục này cũng có trong **Cài đặt**, dưới mục **Nâng cao / Hệ thống con**. Nếu bạn đang ghé thăm cộng đồng toàn cầu với tư cách khách, hãy nhấn **Tham gia** ở trên cùng, bên cạnh dấu **?**, sau đó chọn **Tham gia bằng 12 từ hoặc đăng nhập** (**Tham gia bằng đăng nhập** ở nơi cộng đồng chỉ chấp nhận đăng nhập). Nếu ứng dụng hiển thị **Bạn chưa phải là thành viên ở đây** cho cộng đồng toàn cầu, hãy nhấn **Tham gia bằng tài khoản này**.",
-            "Chọn cách tham gia: **Tạo tài khoản bằng 12 từ bí mật**, sử dụng 12 từ tiếng Anh mà tài khoản của bạn đã có sẵn (không cần đăng nhập, do đó không cần khóa điện thoại), hoặc **Hoặc đăng nhập** một lần bằng Google, Apple (trên iPhone) hoặc Facebook. Đối với phương thức đăng nhập, trước tiên ứng dụng sẽ yêu cầu mở khóa điện thoại của bạn, vì thông tin đăng nhập này cũng trở thành một cách để vào lại tài khoản của bạn.",
+            "Nhấn vào hạt đậu ở trên cùng bên trái. Trong bảng **BeanPool**, dưới mục **Your communities**, nhấn **Cộng đồng toàn cầu** (dòng thứ hai của nó ghi **Dạo xem trước, rồi tham gia bằng tài khoản này**). Ứng dụng sẽ mở cộng đồng toàn cầu với tư cách khách, giống như trên trang web: bạn dạo xem trước, và dấu chấm trên hạt đậu cho thấy bạn là khách. Mục này cũng có trong **Cài đặt**, dưới mục **Cộng đồng đã lưu**: **Dạo xem cộng đồng toàn cầu**. Việc dạo xem không làm bạn bị tham gia vào cộng đồng và không tạo tài khoản nào.",
+            "Khi bạn đã sẵn sàng, hãy nhấn **Tham gia** ở trên cùng, bên cạnh dấu **?**, sau đó chọn **Tham gia bằng 12 từ hoặc phương thức đăng nhập** (**Tham gia bằng phương thức đăng nhập** ở nơi cộng đồng chỉ chấp nhận đăng nhập). Nếu ứng dụng hiển thị **Bạn chưa phải là thành viên ở đây** cho cộng đồng toàn cầu, hãy nhấn **Tham gia bằng tài khoản này**.",
+            "Chọn cách tham gia: **Tham gia bằng tài khoản này**, sử dụng khóa và 12 từ đã có trên điện thoại này (không cần đăng nhập, do đó không cần khóa điện thoại), hoặc dưới mục **Thêm cả cách đăng nhập**, đăng nhập một lần bằng Google, Apple (trên iPhone) hoặc Facebook. Đối với phương thức đăng nhập, trước tiên ứng dụng sẽ yêu cầu mở khóa điện thoại của bạn, vì thông tin đăng nhập này cũng trở thành một cách để vào lại tài khoản của bạn.",
             "Kiểm tra lại tên mà mọi người ở đó sẽ nhìn thấy, và nhấn **Tham gia**. Nếu ai đó đã sử dụng tên đó, ứng dụng sẽ gợi ý những tên khác.",
             "Sau đó chọn ảnh của bạn cho cộng đồng toàn cầu, giống như đối với bất kỳ cộng đồng mới nào, rồi ước chừng vị trí của bạn (**Ước chừng bạn đang ở đâu?**; bạn có thể nhấn **Để sau**): cộng đồng toàn cầu sẽ hiển thị cho bạn các tin đăng ở gần vị trí đó. Xem \"Tham gia BeanPool\"."
           ]
@@ -5875,8 +5876,8 @@
       "slug": "credit-line",
       "title": "Hạn mức tín dụng",
       "summary": "Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5964,7 @@
         },
         {
           "type": "p",
-          "text": "Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn. Điều này giúp nâng hạn mức của bạn, không phải cấp độ của bạn: huy hiệu tin cậy của bạn vẫn chỉ tính những gì bạn đã làm."
+          "text": "Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức, **mức sàn quy định**: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn. Điều này giúp nâng hạn mức của bạn, không phải cấp độ của bạn: huy hiệu tin cậy của bạn vẫn chỉ tính những gì bạn đã làm. Mức sàn quy định được bật trong mọi cộng đồng có Đậu trừ khi chủ sở hữu cộng đồng tắt nó."
         },
         {
           "type": "ul",
@@ -5980,7 +5981,7 @@
         },
         {
           "type": "p",
-          "text": "Trong một số cộng đồng, bất kỳ thành viên nào cũng có thể mời người khác, nên quản trị viên không biết tất cả mọi người. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, quản trị viên có thể xác nhận những thành viên mà họ biết, và những thành viên đó sẽ bắt đầu với hạn mức cao hơn. Mọi người khác bắt đầu từ số 0, và sau đó hạn mức của mọi người đều tăng theo cùng một cách khi họ giao dịch và xây dựng lòng tin cậy."
+          "text": "Trong một số cộng đồng, bất kỳ thành viên nào cũng có thể mời người khác, nên quản trị viên không biết tất cả mọi người. Quản trị viên có thể xác nhận những thành viên mà họ biết, và những thành viên đó sẽ bắt đầu với hạn mức cao hơn, **mức sàn quy định**, trừ khi chủ sở hữu cộng đồng của bạn đã tắt tính năng này. Mọi người khác bắt đầu từ số 0, và sau đó hạn mức của mọi người đều tăng theo cùng một cách khi họ giao dịch và xây dựng lòng tin cậy."
         },
         {
           "type": "h2",
@@ -6485,8 +6486,8 @@
       "slug": "what-the-admins-can-see",
       "title": "Quản trị viên có thể thấy gì",
       "summary": "Trong cộng đồng có danh sách tên: thông tin về bạn, ai có thể đọc, máy chủ lưu những gì và ý nghĩa của việc được xác nhận.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6539,7 +6540,7 @@
           "type": "ul",
           "items": [
             "Một xác nhận không mang theo tên. Máy chủ chỉ ghi lại tài khoản nào, mục nhập nào và quản trị viên nào, không bao giờ ghi bạn là ai.",
-            "Đây không phải là một huy hiệu tin cậy, và hiện tại việc này không làm thay đổi điều gì khác trong ứng dụng.",
+            "Đây không phải là một huy hiệu tin cậy. Việc này cũng mang lại cho bạn một hạn mức tín dụng ngay lập tức, mức sàn quy định, trừ khi chủ sở hữu cộng đồng của bạn đã tắt tính năng này: xem \"Hạn mức tín dụng\".",
             "Nếu một quản trị viên đã mời bạn bằng tên thật, việc tham gia bằng lời mời của họ đã xác nhận bạn đối chiếu với mục nhập của bạn, bởi chính quản trị viên đó. \"Được xác nhận\" chỉ có nghĩa là một quản trị viên xác nhận tài khoản này chính là người trong mục nhập đó.",
             "Nếu bạn thay thế một chiếc điện thoại bị mất và tài khoản của bạn chuyển sang một khóa mới, xác nhận của bạn sẽ chuyển đi cùng với nó.",
             "Nếu bạn rời khỏi hoặc xóa tài khoản của mình, xác nhận của bạn sẽ kết thúc. Mục nhập của bạn vẫn ở lại trong danh sách của các quản trị viên cho đến khi một quản trị viên xóa nó: hãy yêu cầu họ xóa.",

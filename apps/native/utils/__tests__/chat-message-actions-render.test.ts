@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import React, { createElement } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 
 vi.mock('react-native', () => {
     const el = (tag: string) => function MockHost({ children, onPress, accessibilityLabel, style, ...rest }: any) {
@@ -38,6 +38,10 @@ import { ChatMessageActions } from '../../components/chat/ChatMessageActions';
 import type { MessageActions } from '../chat-actions';
 
 describe('ChatMessageActions render', () => {
+    afterEach(() => {
+        cleanup();
+    });
+
     const dummyStyles: any = {
         actionButtonsContainer: {},
         actionButtonsMe: {},

@@ -1946,6 +1946,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         const canEdit = isMe && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
                             (!isGroupChat || openGroup?.answer?.canPost !== false) &&
                             (Date.now() - new Date(msg.timestamp).getTime() <= MESSAGE_EDIT_WINDOW_MS);
+                        const editClosed = isMe && msg.type !== 'image' && msg.type !== 'system' && !msg.systemType &&
+                            (!isGroupChat || openGroup?.answer?.canPost !== false) &&
+                            (Date.now() - new Date(msg.timestamp).getTime() > MESSAGE_EDIT_WINDOW_MS);
 
                         let metaObj: any = null;
                         try {
@@ -2230,6 +2233,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             >
                                                 {t('Edit', undefined, 'button: edit a message')}
                                             </button>
+                                        )}
+                                        {editClosed && (
+                                            <span
+                                                style={{
+                                                    fontSize: '0.75rem',
+                                                    lineHeight: 1.3,
+                                                    padding: '4px 6px',
+                                                    color: isMe ? 'rgba(255, 255, 255, 0.75)' : 'var(--text-muted)',
+                                                    whiteSpace: 'normal',
+                                                }}
+                                            >
+                                                {t('You can edit a message for 15 minutes after sending it.')}
+                                            </span>
                                         )}
                                     </span>
                                 </div>

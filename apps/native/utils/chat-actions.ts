@@ -146,6 +146,8 @@ export interface MessageActions {
     delete: boolean;
     /** A convenor's or host's removal of somebody else's message. */
     remove: boolean;
+    /** Reported when the author's own message is past the edit window (and would otherwise be editable). */
+    editClosed?: boolean;
 }
 
 const NO_ACTIONS: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: false };
@@ -233,6 +235,22 @@ export function canEditMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     return (viewer.now ?? Date.now()) - sentAt <= MESSAGE_EDIT_WINDOW_MS;
 }
 
+/**
+ * Closed edit reason: the author's own message that would otherwise be editable,
+ * but the edit window has elapsed.
+ */
+export function isEditClosed(m: ChatMessage, viewer: ChatViewer): boolean {
+    if (!authorVerbsAllowed(viewer.kind)) return false;
+    if (!isMine(m, viewer) || !viewer.canPost) return false;
+    if (isSystemLine(m) || isTombstone(m)) return false;
+    if (m.type === 'image') return false;
+    if (inFlight(m)) return false;
+    if (!m.rawTimestamp) return false;
+    const sentAt = new Date(m.rawTimestamp).getTime();
+    if (isNaN(sentAt)) return false;
+    return (viewer.now ?? Date.now()) - sentAt > MESSAGE_EDIT_WINDOW_MS;
+}
+
 /** Delete for everyone: the author, any time, no window — but not a system line, a tombstone or an in-flight send. */
 export function canDeleteMessage(m: ChatMessage, viewer: ChatViewer): boolean {
     if (!authorVerbsAllowed(viewer.kind)) return false;
@@ -272,17 +290,19 @@ export function canReplyToMessage(m: ChatMessage, viewer: ChatViewer): boolean {
 /** Everything tapping this bubble offers. One call so a screen can decide whether to open the bar at all. */
 export function messageActions(m: ChatMessage | null | undefined, viewer: ChatViewer): MessageActions {
     if (!m) return NO_ACTIONS;
+    const closed = isEditClosed(m, viewer);
     return {
         reply: canReplyToMessage(m, viewer),
         react: canReactToMessage(m, viewer),
         edit: canEditMessage(m, viewer),
         delete: canDeleteMessage(m, viewer),
         remove: canRemoveMessage(m, viewer),
+        ...(closed ? { editClosed: true } : {}),
     };
 }
 
 export function hasAnyAction(a: MessageActions): boolean {
-    return a.reply || a.react || a.edit || a.delete || a.remove;
+    return a.reply || a.react || a.edit || a.delete || a.remove || !!a.editClosed;
 }
 
 /** WhatsApp-style day label: Today / Yesterday / "Mon 12 May" (core's date, in the member's language). */

@@ -52,6 +52,11 @@ export function ChatMessageActions({
                     <MaterialCommunityIcons name="pencil" size={15} color={colors.text.inverse} />
                 </Pressable>
             )}
+            {actions.editClosed && (
+                <Text style={[styles.editClosedText, { color: colors.text.muted }]}>
+                    {t('You can edit a message for 15 minutes after sending it.')}
+                </Text>
+            )}
             {actions.delete && (
                 <Pressable accessibilityRole="button" accessibilityLabel={t('Delete message')} style={styles.circleActionButton} onPress={onDelete}>
                     <MaterialCommunityIcons name="delete-outline" size={16} color={colors.text.inverse} />

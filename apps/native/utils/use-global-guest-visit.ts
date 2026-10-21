@@ -3,8 +3,10 @@ import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import { t } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
+import { useNodeStatus } from '../app/NodeStatusContext';
 import { GLOBAL_NODE_URL } from './global-node-url';
 import { visitGlobalAsGuest, type GuestVisit } from './global-guest-visit';
+import { landNextOn } from './member-landing';
 
 /** The global community's door (utils/open-door.ts GLOBAL_DOOR_PATH), named as every screen that opens it names it. */
 const GLOBAL_DOOR = '/join-global';
@@ -16,15 +18,20 @@ const GLOBAL_DOOR = '/join-global';
  *
  * Where the phone moved (a guest, or a member it didn't know of), the app goes where every switch goes
  * (use-communities.ts): back to the bottom of the stack, then through Welcome for the community now in use, which lands on
- * the tabs. Where nothing moved: the door screen for a door that can't be used from here right now (its page says why,
- * with Try again; app/join-open-door.tsx), and for a key the global community closed, that sentence, as the sheet's row
- * says it.
+ * the tabs. First the root layout's recognition is asked again, as the update screen's switch asks it
+ * (components/ForceUpdateBlock.tsx), so the guard reads the global community's answer, not the one of the community left
+ * (a stranger there, as on the Market's members-only page, was held on Welcome). And a guest asks the guard for the tabs
+ * (utils/member-landing.ts guestRedirect): the guard holds every stranger on Welcome, a guest too (PR #2320 review).
+ *
+ * Where nothing moved: the door screen for a door that can't be used from here right now (its page says why, with Try
+ * again; app/join-open-door.tsx), and for a key the global community closed, that sentence, as the sheet's row says it.
  *
  * `visiting` is true while it asks: the screen's button waits rather than start a second visit. A tap never does nothing:
  * with no key to sign with yet, it opens the door, as before.
  */
 export function useGlobalGuestVisit(): { visit: (url?: string) => Promise<GuestVisit | null>; visiting: boolean } {
     const { identity } = useIdentity();
+    const { recheck } = useNodeStatus();
     const [visiting, setVisiting] = useState(false);
     const busy = useRef(false);
     const visit = useCallback(async (url: string = GLOBAL_NODE_URL): Promise<GuestVisit | null> => {
@@ -39,6 +46,8 @@ export function useGlobalGuestVisit(): { visit: (url?: string) => Promise<GuestV
         try {
             const answer = await visitGlobalAsGuest({ publicKey: identity.publicKey, privateKey: identity.privateKey }, url);
             if (answer.kind === 'member' || answer.kind === 'guest') {
+                if (answer.kind === 'guest') landNextOn('/(tabs)', identity.publicKey);
+                await recheck().catch(() => 'unknown');
                 import('../services/pillar-sync').then(({ requestSync }) => requestSync()).catch(() => {});
                 if (router.canDismiss()) router.dismissAll();
                 router.replace('/welcome');
@@ -55,6 +64,6 @@ export function useGlobalGuestVisit(): { visit: (url?: string) => Promise<GuestV
             busy.current = false;
             setVisiting(false);
         }
-    }, [identity?.publicKey, identity?.privateKey]);
+    }, [identity?.publicKey, identity?.privateKey, recheck]);
     return { visit, visiting };
 }

@@ -119,6 +119,13 @@ vi.mock('../reconnect', () => ({
     },
 }));
 vi.mock('../../services/pillar-sync', () => ({ requestSync: async () => ({}) }));
+// The root layout's recognition (app/NodeStatusContext.tsx): asked again before a visit bounces through Welcome. Each ask
+// is recorded with how many replaces were made before it, so the order shows.
+const status = vi.hoisted(() => {
+    const s = { rechecks: [] as number[], recheck: async (): Promise<string> => { s.rechecks.push(nav.replaced.length); return 'stranger'; } };
+    return s;
+});
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recognition: 'stranger', nodeUrl: null, recheck: status.recheck }) }));
 // The phone's mark that global closed this key (global-join-existing.ts), as the hook and askGlobalStanding read it.
 const closedMark = vi.hoisted(() => ({ on: false }));
 vi.mock('../global-join-existing', () => ({
@@ -148,6 +155,7 @@ vi.mock('../use-communities', () => ({
 }));
 
 import BeanPoolSheet from '../../app/beanpool';
+import { guestRedirect, memberRedirect } from '../member-landing';
 import { askGlobalDoorOffer, forgetGlobalDoorOffer } from '../global-door-offer';
 import { forgetSettledGlobalEntry } from '../use-global-entry';
 import { GLOBAL_STANDING_STORE_KEY } from '../global-entry';
@@ -205,6 +213,7 @@ beforeEach(() => {
     secure.writes.length = 0;
     moved.to.length = 0;
     moved.markedFirst.length = 0;
+    status.rechecks.length = 0;
     list.rows = [RIVERSIDE];
     list.active = LOCAL;
     list.switched.length = 0;
@@ -846,5 +855,45 @@ describe('the row\'s words', () => {
             if (typeof said === 'string') expect(widthOf(widest(said), sub), `a word of "${said}" (${f})`).toBeLessThanOrEqual(column);
         }
         expect(linesOf(LINES[6])).toBeGreaterThan(2);
+    });
+});
+
+describe('the bounce through Welcome lands on the tabs, from a community that calls the key a stranger (PR #2320 review)', () => {
+    // A guest on a members-only community (the Market's members-only page offers the visit there): the root layout's
+    // recognition is 'stranger', and its guard holds every stranger on Welcome (mismatch-plan.ts notRecognisedStays), so
+    // the visit's bounce stayed on Welcome. Each test starts with no landing asked for (member-landing.ts keeps one).
+    beforeEach(() => { memberRedirect(['welcome']); });
+
+    it('a guest: the root layout asks again before the bounce, and the tabs are asked for, for this key, once (fails on the PR head: neither)', async () => {
+        await open();
+        await tap();
+        expect(moved.to).toEqual([GLOBAL]);
+        // Asked once, before anything was replaced.
+        expect(status.rechecks).toEqual([0]);
+        expect(nav.replaced).toEqual(['/welcome']);
+        // The root guard, finding this chosen guest on Welcome, lands where the visit asked (app/_layout.tsx).
+        expect(guestRedirect(['welcome'], KEY)).toBe('/(tabs)');
+        expect(guestRedirect(['welcome'], KEY)).toBeNull();
+    });
+
+    it('a member it didn\'t know of: asked again before the bounce; nothing asked for, and the guard lands a member on the tabs as before', async () => {
+        await open();
+        scene.standing = 'member';
+        await tap();
+        expect(moved.to).toEqual([GLOBAL]);
+        expect(status.rechecks).toEqual([0]);
+        expect(nav.replaced).toEqual(['/welcome']);
+        expect(guestRedirect(['welcome'], KEY)).toBeNull();
+        expect(memberRedirect(['welcome'], KEY)).toBe('/(tabs)');
+    });
+
+    it('nothing moved (the door shut since the row was drawn): nothing asked again, nothing asked for', async () => {
+        await open();
+        scene.door = 'shut';
+        await tap();
+        expect(moved.to).toEqual([]);
+        expect(status.rechecks).toEqual([]);
+        expect(nav.replaced).toEqual([]);
+        expect(guestRedirect(['welcome'], KEY)).toBeNull();
     });
 });

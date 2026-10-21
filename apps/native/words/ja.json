@@ -5773,6 +5773,6 @@
   "Also add a sign-in": "サインインも追加",
   "Look around first, then join with this account": "まずは見学して、このアカウントで参加",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "世界中の人々と出会い、近くのコミュニティを見つけましょう。まずはゲストとして見学し、上部の「参加」をタップしてこの端末のアカウントで参加できます：鍵と12個の単語はそのまま保持され、他のコミュニティには何の影響もありません。",
-  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "確認されると、相手の限度額は最大{amount}まで拡大します：提供を公開している間、コミュニティの既知の下限が適用されます。",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "確認されると、提供を公開している間、相手の限度額は最大{amount}分まで拡大します：コミュニティの既知の下限です。",
   "Uses the key and 12 words already on this phone. No new account is made.": "この端末にすでにある鍵と12個の単語を使用します。新しいアカウントは作成されません。"
 }

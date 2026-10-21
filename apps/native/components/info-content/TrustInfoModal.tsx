@@ -4,13 +4,13 @@ import { InfoModal, InfoModalTab } from '../InfoModal';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { palette } from '../../constants/colors';
 import { useStyles, useTheme } from '../../app/ThemeContext';
-import { PROTOCOL_CONSTANTS, TIER_LEVELS, formatNumber, t, tn } from '@beanpool/core';
+import { TIER_LEVELS, formatNumber, t, tn } from '@beanpool/core';
 import { TIER_WORDS } from '../../utils/trust-tier';
 import { richWords } from './rich-words';
 
-// Where each tier starts, as a floor (the node's own table — never a copy).
+// Where each tier starts, in trust (the node's own table — never a copy). Trust, not the credit floor: a confirmed member's
+// floor also holds the known floor, which never counts towards a tier (Marty, 21 Oct: "Badge counts what they did only").
 const [NEWCOMER, RESIDENT, STEWARD, ELDER] = TIER_LEVELS;
-const floorOf = (credit: number) => formatNumber(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit);
 /** What the counterparties' ratings scale the score to: stars → share (the reputation multiplier). */
 const RATING_SHARES: ReadonlyArray<readonly [stars: number, share: number]> = [[5, 100], [4, 90], [3, 80], [1, 60]];
 
@@ -105,8 +105,8 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
     const bold = styles.boldWhiteText;
     /** A tier's heading: its emoji and its name in the member's language. */
     const tierHeading = (tier: typeof NEWCOMER) => t('{emoji} {label}', { emoji: tier.emoji, label: t(TIER_WORDS[tier.name]) });
-    /** "Reached when your credit floor reaches -200B (up to -599B)": where a tier starts, and where the next one does. */
-    const reachedUpTo = (tier: typeof NEWCOMER, next: typeof NEWCOMER) => richWords(t('Reached when your credit floor reaches **{floor}B** (up to {upTo}B)', { floor: floorOf(tier.minCredit), upTo: floorOf(next.minCredit - 1) }), bold);
+    /** "Reached at 200 trust (up to 599)": where a tier starts, and where the next one does. */
+    const reachedUpTo = (tier: typeof NEWCOMER, next: typeof NEWCOMER) => richWords(t('Reached at **{trust}** trust (up to {upTo})', { trust: formatNumber(tier.minCredit), upTo: formatNumber(next.minCredit - 1) }), bold);
 
     const tabs: InfoModalTab[] = [
         {
@@ -189,7 +189,7 @@ export function TrustInfoModal({ isOpen, onClose, initialTab }: Props) {
 
                     <View style={[styles.tierContainer, { borderLeftColor: colors.trust.elder.fg }]}>
                         <Text style={styles.tierTitle}>{tierHeading(ELDER)}</Text>
-                        <ListItem>{richWords(t('Reached when your credit floor reaches **{floor}B** (max **{max}B**)', { floor: floorOf(ELDER.minCredit), max: floorOf(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP) }), bold)}</ListItem>
+                        <ListItem>{richWords(t('Reached at **{trust}** trust', { trust: formatNumber(ELDER.minCredit) }), bold)}</ListItem>
                         <ListItem>{t('Recognised as a long-standing, high-trust member')}</ListItem>
                     </View>
 

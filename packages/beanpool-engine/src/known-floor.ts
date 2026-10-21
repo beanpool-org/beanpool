@@ -144,12 +144,11 @@ export function knownPledgeRoom(db: Db, pubkey: string): number {
 }
 
 /**
- * A member's own known line: their grant less what of it is pledged to enterprises (the bound above). `grant` stands in for
- * their grant now: trust.ts passes the grant they hold unfrozen, so a frozen member's tier is the one their line gives them.
+ * A member's own known line: their grant less what of it is pledged to enterprises (the bound above).
  * `extraPledged`: a known pledge not yet written, counted as if it were (countedKnownPledged).
  */
-export function memberUsableKnownGrant(db: Db, pubkey: string, grant?: number, extraPledged = 0): number {
-    const { grant: g, counted } = countedKnownPledged(db, pubkey, grant, extraPledged);
+export function memberUsableKnownGrant(db: Db, pubkey: string, extraPledged = 0): number {
+    const { grant: g, counted } = countedKnownPledged(db, pubkey, undefined, extraPledged);
     return Math.max(0, g - counted);
 }
 

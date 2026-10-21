@@ -5,8 +5,8 @@
  * The community's admins can freeze a member's line two ways: `creditFrozen`, the whole line (the manager's "Freeze" on
  * a member, adminSetCreditFrozen), and `knownFrozen`, the known floor's part (an exception, apps/server
  * config/known-floor.ts). Rehearsal 5 Oct, b: a frozen member was told "No credit line yet … opens automatically after
- * your first trade", which is untrue for them. The tier is not this card's: the node keeps the one their line would
- * give them (tiers are merit badges), and the Levels tab shows it as before.
+ * your first trade", which is untrue for them. The tier is not this card's: the node computes it from what they did,
+ * never the known grant (tiers are merit badges), and the Levels tab shows it as before.
  *
  * Its sentences are in the member's language: the card's as word() keys (KNOWN_FROZEN, put through t() where the Ledger
  * shows them), the two lines below through t() and tn() here. In English they read exactly as before.

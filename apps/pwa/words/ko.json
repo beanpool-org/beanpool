@@ -2537,8 +2537,6 @@
   "Next level": "다음 등급",
   "Up ahead": "도달 예정",
   "Your current floor": "현재 신용 한도",
-  "Floor from this tier": "이 등급의 기본 한도",
-  "Floor starts at": "기본 한도 시작",
   "Grows deeper as you trade more": "거래가 많아질수록 한도가 늘어납니다",
   "Reach {min} trust ({left} to go) from the real value you trade.": "실제 거래 가치로 신뢰 {min}을 달성해 보세요 ({left} 남음).",
   "🚀 Reach {emoji} {tier}": "🚀 {emoji} {tier} 달성하기",

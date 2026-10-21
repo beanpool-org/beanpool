@@ -2857,8 +2857,6 @@
   "Next level": "次のレベル",
   "Up ahead": "この先のレベル",
   "Your current floor": "現在の信用枠下限",
-  "Floor from this tier": "このランクの下限",
-  "Floor starts at": "下限の開始値",
   "Grows deeper as you trade more": "取引を重ねるほどさらに拡大",
   "Reach {min} trust ({left} to go) from the real value you trade.": "取引した実際の価値から信用{min}を目指しましょう（あと{left}）。",
   "🚀 Reach {emoji} {tier}": "🚀 {emoji} {tier}へ到達",

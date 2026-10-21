@@ -4105,10 +4105,20 @@ export function releaseEnterpriseBacking(
         const knownRemaining = Math.max(0, knownPledge - toRelease);
         const nowIso = new Date().toISOString();
 
-        db.prepare(
-            "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
-        ).run(nowIso, keeperPubkey, enterprisePubkey);
-        insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
+        if (toRelease <= knownPledge) {
+            // Inside the known part, only the known rows are written again: the keeper's named (earned) rows keep their ids
+            // and dates. Re-dated beside a fold that moves, they would tie the move to this keeper, and so say whose known
+            // part it was (getEnterprisePledgesForReader). The sums are the ones the branch below leaves.
+            db.prepare(
+                "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL AND id LIKE 'known:%'"
+            ).run(nowIso, keeperPubkey, enterprisePubkey);
+            insertPledgeRows(keeperPubkey, enterprisePubkey, 0, knownRemaining, nowIso);
+        } else {
+            db.prepare(
+                "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+            ).run(nowIso, keeperPubkey, enterprisePubkey);
+            insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
+        }
 
         // The covenant, on what is pledged after the release (earned pledges + known pledges as the floor counts them);
         // refused, the transaction writes nothing.

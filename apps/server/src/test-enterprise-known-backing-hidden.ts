@@ -21,6 +21,10 @@
  *      herself read the whole
  *   8. a confirmed member's join the other keeper objects to: the objection's answer and the declined request the lead
  *      reads carry her named part (none), never the whole; an admin reads it whole
+ *   9. a confirmed keeper who also has earned credit releases part of his pledge (releaseEnterpriseBacking): inside his
+ *      known part, the named pledges a member re-reads stay byte-identical (id, amount, date) while the fold moves, and
+ *      his earned rows are not written; past it, the known part goes first. After every release the pledge sums, the
+ *      allowance and every floor are what main's release (#2313) leaves for the same release on the same rows
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-enterprise-known-backing-hidden.ts
  */
@@ -34,7 +38,7 @@ process.env.ADMIN_PASSWORD = 'KnownBacking123!';
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, pledgeEnterpriseBacking, requestToJoinEnterprise, approveKeeperRequest, getMemberTrustProfile } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, pledgeEnterpriseBacking, requestToJoinEnterprise, approveKeeperRequest, getMemberTrustProfile, getEnterpriseUnderlyingFloor, usableFloor, enterpriseKnownShareOf } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -198,6 +202,54 @@ function assertFolded(label: string, answer: { pledges: Pledge[] }, sum: number,
         assert(named.every(p => !p.id.startsWith('known:')) && !JSON.stringify(fold).includes(c.pk) && !JSON.stringify(fold).includes(c.name),
             `${label}: ${c.name}'s known pledge is not named (${c.name}'s named pledges: ${show(named)})`);
     }
+}
+
+/**
+ * One keeper's pledges to one enterprise, earned and known, and every figure a pledge moves: the enterprise's allowance,
+ * known share, spend floor and usable floor, the keeper's own floor (their known line less what they pledged of it) and
+ * usable floor.
+ */
+type Figures = { earned: number; known: number; allowance: number; knownShare: number; spendFloor: number; usable: number; keeperFloor: number; keeperUsable: number };
+function figuresOf(enterprise: string, keeper: Id): Figures {
+    const sum = (known: boolean) => Number((db.prepare(`SELECT COALESCE(SUM(amount), 0) AS s FROM enterprise_pledges
+        WHERE enterprise = ? AND keeper = ? AND released_at IS NULL AND id ${known ? '' : 'NOT '}LIKE 'known:%'`).get(enterprise, keeper.pk) as { s: number }).s);
+    clearEnterpriseFloorCache(db);
+    return {
+        earned: sum(false), known: sum(true),
+        allowance: getEnterpriseFloor(db, enterprise).allowance,
+        knownShare: enterpriseKnownShareOf(enterprise),
+        spendFloor: getEnterpriseUnderlyingFloor(enterprise).floor,
+        usable: usableFloor(enterprise),
+        keeperFloor: getMemberTrustProfile(keeper.pk).floor,
+        keeperUsable: usableFloor(keeper.pk),
+    };
+}
+
+/**
+ * What main's release (#2313's releaseEnterpriseBacking) leaves for the same release on the same rows: it released every
+ * row of the keeper's and pledged the remainder again, the known part first. Written and read in a transaction rolled back.
+ */
+function asMainReleases(enterprise: string, keeper: Id, amount: number): Figures {
+    let figures: Figures | undefined;
+    try {
+        db.transaction(() => {
+            const all = Number((db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND released_at IS NULL').get(enterprise, keeper.pk) as { s: number }).s);
+            const known = figuresOf(enterprise, keeper).known;
+            const toRelease = Math.min(amount, all);
+            const knownRemaining = Math.max(0, known - toRelease);
+            const at = new Date().toISOString();
+            db.prepare('UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL').run(at, keeper.pk, enterprise);
+            const insert = db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)');
+            if (all - toRelease - knownRemaining > 0) insert.run(crypto.randomUUID(), keeper.pk, enterprise, all - toRelease - knownRemaining, at);
+            if (knownRemaining > 0) insert.run(`known:${crypto.randomUUID()}`, keeper.pk, enterprise, knownRemaining, at);
+            figures = figuresOf(enterprise, keeper);
+            throw new Error('rolled back');
+        })();
+    } catch (e) {
+        if (!figures) throw e;
+    }
+    clearEnterpriseFloorCache(db);
+    return figures!;
 }
 
 async function main(): Promise<void> {
@@ -429,6 +481,91 @@ async function main(): Promise<void> {
         `Lee reads Ivy's declined request with nothing named, never 200 (${show(leeDeclined)})`);
     const adaDeclined = (await call('GET', ada, `/api/enterprise/${shed}/keepers/requests?status=declined`)).body?.requests?.find((r: any) => r.memberPubkey === ivy.pk);
     assert(adaDeclined?.pledgedBacking === 200, `Ada (admin) reads Ivy's declined request whole, 200 (${show(adaDeclined)})`);
+
+    // ── 9. a confirmed keeper who also has earned credit releases part of his pledge ─────────────────────
+    console.log('── 9. a confirmed keeper with earned credit releases inside his known part, then past it ──');
+    // Barn: Lee backs it with 100 of his own. Zed, confirmed, with about 100 of earned credit, pledges 40 of it, then 260
+    // more: the rest of his earned credit named, the remainder from his known grant.
+    const zed = makeMember('Zed');
+    const zedEarned = giveEarnedCredit(zed, 100);
+    confirm(zed, ada);
+    const barn = makeEnterprise('Barn', [{ id: lee, backing: 100 }, { id: zed, backing: 0 }]);
+    earnedPledge(barn, lee, 100);
+    // Five live offers each, so Barn's and Zed's usable floors read their whole lines, not the offer bands' first steps.
+    for (const author of [barn, zed.pk]) {
+        for (let i = 0; i < 5; i++) {
+            db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active) VALUES (?, 'offer', 'misc', 'goods', 'goods', 10, ?, 'active', 1)`)
+                .run(`post-${crypto.randomUUID()}`, author);
+        }
+    }
+    const zedFirst = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount: 40 });
+    const zedTopUp = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount: 260 });
+    const zedStart = figuresOf(barn, zed);
+    assert(zedFirst.status === 200 && zedTopUp.status === 200 && zedEarned > 40 && zedStart.earned === zedEarned && zedStart.known === 300 - zedEarned,
+        `Zed pledges 40, then 260: ${zedEarned} of it named, ${300 - zedEarned} known (${zedFirst.status} ${zedTopUp.status} ${show(zedStart)})`);
+    // The top-up wrote a named row and a known row in one write: the residual Rule 3 records ("What folding cannot hide").
+    console.log(`  (residual, Rule 3) the 260 wrote a named row beside its known part, at one moment: ${show(db.prepare(
+        "SELECT id LIKE 'known:%' AS known, amount, pledged_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? ORDER BY rowid").all(barn, zed.pk))}`);
+
+    /** Zed's named pledges to Barn as Una reads them on the page and the pledges route, his earned rows as stored, the fold. */
+    const zedAsUnaReads = async () => {
+        const reads = await readAs(una, barn);
+        return {
+            detail: (reads.detail.pledges as Pledge[]).filter(p => p.keeper === zed.pk),
+            pledges: (reads.pledges.pledges as Pledge[]).filter(p => p.keeper === zed.pk),
+            stored: db.prepare("SELECT id, amount, pledged_at, released_at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND id NOT LIKE 'known:%' ORDER BY rowid").all(barn, zed.pk),
+            fold: folded(reads.detail.pledges)[0]?.amount ?? 0,
+        };
+    };
+    /** One release by Zed over HTTPS, and what main's release of the same amount on the same rows leaves (asMainReleases). */
+    const zedReleases = async (amount: number) => {
+        const before = await zedAsUnaReads();
+        const onMain = asMainReleases(barn, zed, amount);
+        const res = await call('POST', zed, `/api/enterprise/${barn}/backing/release`, { amount });
+        return { res, before, after: await zedAsUnaReads(), onMain, figures: figuresOf(barn, zed) };
+    };
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const brief = (rows: any[]) => show(rows.map(p => [p.id.slice(0, 8), p.amount, p.pledgedAt ?? p.pledged_at, p.released_at].filter(v => v !== undefined)));
+    const assertNamedUntouched = (label: string, r: Awaited<ReturnType<typeof zedReleases>>) => {
+        assert(r.after.detail.length > 0 && same(r.after.detail, r.before.detail) && same(r.after.pledges, r.before.pledges),
+            `${label}: the named pledges Una re-reads are byte-identical, same ids, amounts and dates (before ${brief(r.before.detail)}, after ${brief(r.after.detail)})`);
+        assert(same(r.after.stored, r.before.stored),
+            `${label}: Zed's earned rows as stored are untouched, none released or written (before ${brief(r.before.stored)}, after ${brief(r.after.stored)})`);
+    };
+    const assertAsMain = (label: string, r: Awaited<ReturnType<typeof zedReleases>>, earned: number, known: number) => {
+        assert(r.figures.earned === earned && r.figures.known === known && r.figures.allowance === 100 + earned + known,
+            `${label}: ${earned} named and ${known} known stay pledged, Barn's allowance ${100 + earned + known} (${show(r.figures)})`);
+        assert(same(r.figures, r.onMain),
+            `${label}: the sums, the allowance and every floor are main's for the same release (${show(r.onMain)})`);
+    };
+
+    // 9a. 50 of his known part: only the known rows are written again.
+    const inside = await zedReleases(50);
+    assert(inside.res.status === 200 && inside.before.fold === 300 - zedEarned && inside.after.fold === 250 - zedEarned,
+        `9a. Zed releases 50, inside his known part: the fold Una re-reads moves ${inside.before.fold} → ${inside.after.fold} (${inside.res.status} ${show(inside.res.body)})`);
+    assertNamedUntouched('9a', inside);
+    assertAsMain('9a', inside, zedEarned, 250 - zedEarned);
+
+    // 9b. exactly the rest of his known part: the fold goes, his named pledges stay as they were.
+    const exact = await zedReleases(250 - zedEarned);
+    assert(exact.res.status === 200 && exact.after.fold === 0 && exact.figures.known === 0,
+        `9b. Zed releases the rest of his known part, ${250 - zedEarned}: the fold Una re-reads moves ${exact.before.fold} → none (${exact.res.status})`);
+    assertNamedUntouched('9b', exact);
+    assertAsMain('9b', exact, zedEarned, 0);
+
+    // 9c. past his known part: the known part goes first, then the earned rows as before (pledged again under a new id).
+    const zedAgain = await call('POST', zed, `/api/enterprise/${barn}/backing`, { amount: 100 });
+    const again = figuresOf(barn, zed);
+    assert(zedAgain.status === 200 && again.earned === zedEarned && again.known === 100,
+        `9c. Zed pledges 100 again, all of it known (his earned credit is all pledged) (${zedAgain.status} ${show(again)})`);
+    const past = await zedReleases(130);
+    assert(past.res.status === 200 && past.after.fold === 0 && past.res.body?.releasedAmount === 130,
+        `9c. Zed releases 130, past his known 100: the fold moves ${past.before.fold} → none (${past.res.status} ${show(past.res.body)})`);
+    assertAsMain('9c (the known 100 first, then 30 of the earned)', past, zedEarned - 30, 0);
+    const adaBarn = await readAs(ada, barn);
+    assert(knownRows(adaBarn.detail.pledges).filter(p => p.keeper === zed.pk).length === 0
+        && (adaBarn.detail.pledges as Pledge[]).filter(p => p.keeper === zed.pk).reduce((s, p) => s + p.amount, 0) === zedEarned - 30,
+        `9c. Ada (admin) reads none of Zed's known pledges left, and ${zedEarned - 30} of his earned (${show(adaBarn.detail.pledges)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

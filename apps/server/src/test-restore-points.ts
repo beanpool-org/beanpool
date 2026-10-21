@@ -323,10 +323,19 @@ async function child(): Promise<void> {
         // Read from the files, by a handle of its own: a server that took the file has closed its own.
         const state = () => {
             let roles: string;
+            const readRoles = () => {
+                const d = new Database(path.join(dataDir, 'state.db'), { readonly: true, timeout: 5000 });
+                try { return JSON.stringify(d.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all()); } finally { d.close(); }
+            };
             try {
-                const d = new Database(path.join(dataDir, 'state.db'), { readonly: true });
-                try { roles = JSON.stringify(d.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all()); } finally { d.close(); }
-            } catch (e: any) { roles = `unreadable: ${e?.message}`; }
+                roles = readRoles();
+            } catch {
+                try {
+                    roles = readRoles();
+                } catch (e: any) {
+                    roles = `unreadable: ${e?.message}`;
+                }
+            }
             const h = (f: string) => { const b = read(f); return b ? sha(b) : null; };
             return { roles, key: h('libp2p_key'), genesis: h('genesis.json'), config: h('local-config.json'), points: points(), leftovers: leftovers() };
         };
@@ -878,6 +887,7 @@ async function main(): Promise<void> {
         const refusedOther = (r: any) => r.answer?.status === 409 && r.answer.otherCommunity === true && r.answer.livedIn === true
             && r.answer.error === OTHER_WORDS && r.answer.command === 'beanpool restore FILE' && r.answer.fileCommunityId === made.community
             && typeof r.answer.thisCommunityId === 'string' && r.answer.thisCommunityId !== made.community;
+        const unreadable = (s: any) => typeof s?.roles === 'string' && s.roles.startsWith('unreadable');
         const diffMoved = (r: any): string => {
             if (!r?.before) return 'no before snapshot';
             if (!r?.after) return 'no after snapshot';
@@ -895,7 +905,8 @@ async function main(): Promise<void> {
             if (diffs.length > 0) return diffs.join(', ');
             return `${JSON.stringify(r.after?.points)} ${JSON.stringify(r.after?.leftovers)}`;
         };
-        const nothingMoved = (r: any) => !!r.before && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after.points.length === 0 && r.after.leftovers.length === 0;
+        const nothingMoved = (r: any) => !!r.before && !unreadable(r.before) && !unreadable(r.after)
+            && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after.points.length === 0 && r.after.leftovers.length === 0;
         const said = (r: any) => `${r.answer?.status} ${String(r.answer?.error ?? (r.answer?.success ? 'restored' : '')).slice(0, 110)}`;
 
         for (const who of ['the password with an earlier 2FA session', 'a password session', "the owner's computer session", 'a fresh phone hand-off', 'the password with a current code']) {

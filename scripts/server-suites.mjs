@@ -115,6 +115,8 @@ export const SUITES = [
     'test-enterprise-known-backing-hidden',
     'test-known-pledge-counted-once',
     'test-boot-drift-count-moves-nothing',
+    'test-enterprise-limit-bigger-of-two',
+    'test-boot-opening-line-count',
     'test-badge-earned-only-http',
     'test-balance-tier-credit-http',
     'test-names-debts-http',

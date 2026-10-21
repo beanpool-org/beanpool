@@ -74,7 +74,7 @@ vi.mock('../db', () => ({
     },
 }));
 
-import { TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, word, type ToolManifest } from '@beanpool/core';
+import { TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, toolCopyDigest, word, type ToolManifest } from '@beanpool/core';
 import { TOOL_DOCS_TABLE } from '../../tools/schema';
 import { readToolCopy, readToolDoc, readToolSettings, writeToolDoc, writeToolSettings } from '../../tools/store';
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
@@ -669,6 +669,8 @@ describe('the delete rule: what the node is told and when', () => {
 
 describe('off means gone, even when a slow PUT is on its way (PR #2297, the deciding review at d4fcc070)', () => {
     const marks = async (p: Phone) => { use(p); return (await readToolSettings(p.signer, KIT.id, URL_A)).nodeCopyMarks; };
+    /** The mark's digest of a PUT of `d` (core toolCopyDigest): the body the phone keeps and sends. */
+    const sentOf = (d: Doc) => toolCopyDigest(JSON.stringify(d));
     /** A write's sync, its PUT on a slow line (`arrives` ms), and the member switching the copy off while it is out. */
     async function offWhilePutIsOut(arrives: number, landsAnyway: boolean) {
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -692,7 +694,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(node.log.map((r) => r.method)).toEqual(['GET', 'DELETE']);
         expect(await setting(A)).toBe(false);
         // Let go is not proof the node never got it: the next open asks once, even off, and the mark goes on its answer.
-        expect(await marks(A)).toEqual({ unsure: 'check' });
+        expect(await marks(A)).toEqual({ unsure: 'check', digests: [sentOf(doc('Ladder'))] });
         await vi.advanceTimersByTimeAsync(60_000);
         node.log.length = 0;
         expect(await open(A)).toBe('off');
@@ -745,6 +747,66 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(await removeToolCopyFirst(member(A))).toBe(true);
         expect(node.rows.size).toBe(0);
         // Refused with a 500, the PUT may have been taken all the same: marked, and asked after once the copy is off.
-        expect(await marks(A)).toEqual({ unsure: 'check' });
+        expect(await marks(A)).toEqual({ unsure: 'check', digests: [sentOf(doc('Ladder'))] });
+    });
+
+    describe("a mark never removes another device's copy (the deciding review at 8a48f318)", () => {
+        it("12. the enterprise's copy: keeper 1's phone, marked and off, leaves the copy keeper 2 switched on; keeper 2 stays on", async () => {
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            node.keepers.set('ent-key', new Set(['keeper-1', 'keeper-2']));
+            const k1 = { ...phone('K1'), signer: 'keeper-1' };
+            const k2 = { ...phone('K2'), signer: 'keeper-2' };
+            const ent: PhoneToolCopy = { manifest: KIT, owner: { kind: 'enterprise', publicKey: 'ent-key' }, url: URL_A };
+            const entSettings = async (p: Phone) => { use(p); return readToolSettings('ent-key', 'kit', URL_A); };
+            use(k1);
+            await writeToolDoc('ent-key', KIT, doc('Till float'), t0);
+            expect(await openToolCopy(ent)).toBe('put');
+            // Keeper 1's next sync after a write: its PUT let go at the limit, never taken.
+            await writeToolDoc('ent-key', KIT, doc('Till float', 'Keys'), t0 + 60_000);
+            net.slowPut = { arrives: 45_000, landsAnyway: false };
+            const sync = openToolCopy(ent);
+            await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS);
+            expect(await sync).toBe('later');
+            expect(await switchToolCopy(ent, false)).toBe('off');
+            expect(await entSettings(k1)).toEqual({ nodeCopy: false, nodeCopyMarks: { unsure: 'check', digests: [sentOf(doc('Till float', 'Keys'))] } });
+            // Keeper 2 switches it on again, with the enterprise's document as keeper 2's phone holds it.
+            use(k2);
+            await writeToolDoc('ent-key', KIT, doc('Cash tin'), t0 + 120_000);
+            expect(await switchToolCopy(ent, true)).toBe('on');
+            // Keeper 1 merely opens the tool: one GET, keeper 2's copy left alone, and the mark goes.
+            use(k1);
+            node.log.length = 0;
+            expect(await openToolCopy(ent)).toBe('off');
+            expect(node.log.map((r) => [r.method, r.signer])).toEqual([['GET', 'keeper-1']]);
+            expect(node.doc('ent-key', 'kit')).toEqual(doc('Cash tin'));
+            expect(await entSettings(k1)).toEqual({ nodeCopy: false });
+            use(k2);
+            expect(await openToolCopy(ent)).toBe('nothing');
+            expect((await entSettings(k2)).nodeCopy).toBe(true);
+            expect(node.doc('ent-key', 'kit')).toEqual(doc('Cash tin'));
+        });
+
+        it("keeper 1's own late PUT, taken after the off: its next open DELETEs that one", async () => {
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            node.keepers.set('ent-key', new Set(['keeper-1']));
+            const k1 = { ...phone('K1'), signer: 'keeper-1' };
+            const ent: PhoneToolCopy = { manifest: KIT, owner: { kind: 'enterprise', publicKey: 'ent-key' }, url: URL_A };
+            use(k1);
+            await writeToolDoc('ent-key', KIT, doc('Till float'), t0);
+            expect(await openToolCopy(ent)).toBe('put');
+            await writeToolDoc('ent-key', KIT, doc('Till float', 'Keys'), t0 + 60_000);
+            net.slowPut = { arrives: 45_000, landsAnyway: true };
+            const sync = openToolCopy(ent);
+            await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS);
+            expect(await sync).toBe('later');
+            expect(await switchToolCopy(ent, false)).toBe('off');
+            await vi.advanceTimersByTimeAsync(45_000);
+            expect(node.doc('ent-key', 'kit')).toEqual(doc('Till float', 'Keys'));
+            node.log.length = 0;
+            expect(await openToolCopy(ent)).toBe('off');
+            expect(node.log.map((r) => r.method)).toEqual(['GET', 'DELETE']);
+            expect(node.rows.size).toBe(0);
+            expect((await readToolSettings('ent-key', 'kit', URL_A)).nodeCopyMarks).toBeUndefined();
+        });
     });
 });

@@ -9,7 +9,7 @@
  * The page's words and order (Remove my data, the toggle's failure line, the line once) are in tools-template.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, word, type ToolManifest } from '@beanpool/core';
+import { TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, toolCopyDigest, word, type ToolManifest } from '@beanpool/core';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../../lib/memory-indexeddb';
 import { beginAccountEpoch, endAccountEpoch, resetAccountEpochForTest } from '../../lib/account-epoch';
 import { keepToolDoc, patchToolSettings, readToolRecord, readToolSettings, resetToolStoreForTest } from '../store';
@@ -516,6 +516,8 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
     const KEY = `tool-copy:${NODE}:${ME}:kit`;
     const methods = () => node.log.map((r) => r.method);
     const marks = async (b: Browser) => { use(b); return (await readToolSettings(b.signer, KIT.id)).nodeCopyMarks; };
+    /** The mark's digest of a PUT of `d` (core toolCopyDigest): the body the browser keeps and sends. */
+    const sentOf = (d: Doc) => toolCopyDigest(JSON.stringify(d));
     afterEach(() => { Reflect.deleteProperty(navigator, 'locks'); });
 
     /**
@@ -578,7 +580,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(methods()).toEqual(['GET', 'DELETE']);
         expect(await setting(A)).toBe(false);
         // Let go is not proof the server never got it: the next open asks once, even off, and the mark goes on its answer.
-        expect(await marks(A)).toEqual({ unsure: 'check' });
+        expect(await marks(A)).toEqual({ unsure: 'check', digests: [sentOf(doc('Ladder'))] });
         line.arrive();
         node.log.length = 0;
         expect(await open(A)).toBe('off');
@@ -639,7 +641,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(await put).toBe('put');
         expect(methods()).toEqual(['GET', 'DELETE', 'PUT']);
         expect(node.doc(ME, 'kit')).toEqual(doc('Ladder'));
-        expect(await marks(A)).toEqual({ unsure: 'check' });
+        expect(await marks(A)).toEqual({ unsure: 'check', digests: [sentOf(doc('Ladder'))] });
         // The next open, in either tab, with the setting off: one GET, the DELETE again, and the mark goes.
         node.log.length = 0;
         expect(await tab2.openToolCopy(member(A))).toBe('off');
@@ -666,5 +668,62 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(await removeToolCopyFirst(member(A))).toBe(true);
         expect(node.rows.size).toBe(0);
         expect(await setting(A)).toBe(false);
+    });
+
+    describe("a mark never removes another device's copy (the deciding review at 8a48f318)", () => {
+        const ent: WebToolCopy = { manifest: KIT, owner: { kind: 'enterprise', publicKey: 'ent-key' }, node: NODE };
+        const entSettings = async (b: Browser) => { use(b); return readToolSettings('ent-key', 'kit'); };
+        /** Keeper 1's browser: its copy on, then a sync after a write whose PUT is let go at the limit, then off. */
+        async function markedAndOff(k1: Browser, landsAnyway: boolean) {
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+            use(k1);
+            await keepToolDoc('ent-key', KIT.id, JSON.stringify(doc('Till float')), iso(t0));
+            expect(await openToolCopy(ent)).toBe('put');
+            expect(await keepToolDoc('ent-key', KIT.id, JSON.stringify(doc('Till float', 'Keys')), iso(t0 + 60_000))).toBe(true);
+            const line = slowNextPut(landsAnyway);
+            const sync = openToolCopy(ent);
+            await vi.waitFor(() => expect(line.signal()).toBeInstanceOf(AbortSignal));
+            await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS);
+            expect(await sync).toBe('later');
+            expect(await switchToolCopy(ent, false)).toBe('off');
+            expect(await entSettings(k1)).toEqual({ nodeCopy: false, nodeCopyMarks: { unsure: 'check', digests: [sentOf(doc('Till float', 'Keys'))] } });
+            return line;
+        }
+
+        it("12. the enterprise's copy: keeper 1's browser, marked and off, leaves the copy keeper 2 switched on; keeper 2 stays on", async () => {
+            node.keepers.set('ent-key', new Set(['keeper-1', 'keeper-2']));
+            const k1 = browser('K1', 'keeper-1');
+            const k2 = browser('K2', 'keeper-2');
+            await markedAndOff(k1, false);
+            // Keeper 2 switches it on again, with the enterprise's document as keeper 2's browser holds it.
+            use(k2);
+            await keepToolDoc('ent-key', KIT.id, JSON.stringify(doc('Cash tin')), iso(t0 + 120_000));
+            expect(await switchToolCopy(ent, true)).toBe('on');
+            // Keeper 1 merely opens the tool: one GET, keeper 2's copy left alone, and the mark goes.
+            use(k1);
+            node.log.length = 0;
+            expect(await openToolCopy(ent)).toBe('off');
+            expect(node.log.map((r) => [r.method, r.signer])).toEqual([['GET', 'keeper-1']]);
+            expect(node.doc('ent-key', 'kit')).toEqual(doc('Cash tin'));
+            expect(await entSettings(k1)).toEqual({ nodeCopy: false });
+            use(k2);
+            expect(await openToolCopy(ent)).toBe('nothing');
+            expect((await entSettings(k2)).nodeCopy).toBe(true);
+            expect(node.doc('ent-key', 'kit')).toEqual(doc('Cash tin'));
+        });
+
+        it("keeper 1's own late PUT, taken after the off: its next open DELETEs that one", async () => {
+            node.keepers.set('ent-key', new Set(['keeper-1']));
+            const k1 = browser('K1', 'keeper-1');
+            const line = await markedAndOff(k1, true);
+            line.arrive();
+            await vi.waitFor(() => expect(node.doc('ent-key', 'kit')).toEqual(doc('Till float', 'Keys')));
+            node.log.length = 0;
+            use(k1);
+            expect(await openToolCopy(ent)).toBe('off');
+            expect(node.log.map((r) => r.method)).toEqual(['GET', 'DELETE']);
+            expect(node.rows.size).toBe(0);
+            expect(await entSettings(k1)).toEqual({ nodeCopy: false });
+        });
     });
 });

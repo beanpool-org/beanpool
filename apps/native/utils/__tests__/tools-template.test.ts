@@ -1057,14 +1057,14 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         await click(byTestId('tool-settings-reminder-weekly'), "a reminder's switch");
         expect(stored()).toEqual({ reminders: { weekly: true } });
         await click(byTestId('tool-settings-done'), 'Done');
-        // A PUT the phone never heard the end of: Remove my data keeps its mark beside the setting off.
-        await writeToolSettings(ME.publicKey, 'fixture-kit', { ...stored(), nodeCopyMarks: { unsure: 'check' } });
+        // A PUT the phone never heard the end of: Remove my data keeps its mark, with its body's digest, beside the setting off.
+        await writeToolSettings(ME.publicKey, 'fixture-kit', { ...stored(), nodeCopyMarks: { unsure: 'check', digests: ['0123456789abcdef'] } });
         await click(byTestId('tool-menu'), 'the "…"');
         await click(byTestId('tool-menu-remove'), 'Remove my data');
         await act(async () => { alerts.buttons.find((b) => b.text === pseudoLocalise('Remove'))!.onPress!(); });
         await settle();
         expect(server.rows.has('fixture-kit')).toBe(false);
-        expect(stored()).toEqual({ nodeCopy: false, nodeCopyMarks: { unsure: 'check' } });
+        expect(stored()).toEqual({ nodeCopy: false, nodeCopyMarks: { unsure: 'check', digests: ['0123456789abcdef'] } });
     });
 
     it("a write through the tool's host: one sync five seconds after the last, not one a write", async () => {

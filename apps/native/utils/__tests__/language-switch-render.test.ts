@@ -388,15 +388,8 @@ describe('the welcome and join screens\' words at 320 dp with 1.3× text', () =>
         expect(STEPS.reduce((w, k) => w + widthOf(k, 11) * 0.7, 0)).toBeGreaterThan(4 * STEP_WIDTH);
     });
 
-    beforeAll(() => {
-        // Pre-load all native language catalogs once so per-language iterations don't re-read from disk.
-        for (const lang of ALL_LANGS) {
-            if (lang !== 'xx') catalog(NATIVE_WORDS, lang);
-        }
-    });
-
     for (const lang of ALL_LANGS) {
-        // Generous 60s timeout under CI load (default vitest timeout is 30s) to prevent deflake on slow or heavily loaded runners (#2282).
+        // Generous 60s timeout under CI load (default vitest timeout is 30s) so it doesn't flake on slow or heavily loaded runners (#2282).
         it(`${lang}: each big button and stepper label fits its two lines at its smallest with no word cut, and no word is wider than its line`, () => {
             for (const key of STEPS) {
                 const label = inLang(lang, key);

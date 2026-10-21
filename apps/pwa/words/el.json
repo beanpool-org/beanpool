@@ -2,10 +2,10 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "Το «{name}» χρησιμοποιείται ήδη σε αυτή την κοινότητα. Επιλέξτε άλλο όνομα.",
@@ -3423,5 +3423,65 @@
   "Recurring listing (stays active after purchase)": "Επαναλαμβανόμενη αγγελία (παραμένει ενεργή μετά την αγορά)",
   "Posting…": "Δημοσίευση…",
   "Publish Listing": "Δημοσίευση αγγελίας",
-  "Translated by machine: some words may be wrong.": "Μεταφράστηκε αυτόματα: κάποιες λέξεις μπορεί να είναι λάθος."
+  "Translated by machine: some words may be wrong.": "Μεταφράστηκε αυτόματα: κάποιες λέξεις μπορεί να είναι λάθος.",
+  "About this tool": "Σχετικά με αυτό το εργαλείο",
+  "Ask to borrow this?": "Αίτημα δανεισμού γι' αυτό;",
+  "Asked to borrow": "Ζητήθηκε δανεισμός",
+  "Check your connection, then try again.": "Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.",
+  "For example": "Για παράδειγμα",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Δωρεάν για δανεισμό. Δεν δεσμεύεται τίποτα: πρώτα συμφωνεί ο δανειστής.",
+  "How it's going": "Πώς πάει",
+  "How you deal": "Πώς συναλλάσσεστε",
+  "I already do this": "Το κάνω ήδη",
+  "I'm starting out": "Τώρα ξεκινάω",
+  "It couldn't be removed. Try again.": "Δεν ήταν δυνατή η αφαίρεση. Δοκιμάστε ξανά.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Διατηρείται σε αυτό το πρόγραμμα περιήγησης, μόνο για εσάς. Τίποτα από αυτό δεν φεύγει από αυτό το πρόγραμμα περιήγησης και η αποσύνδεση από εδώ το αφαιρεί.",
+  "No tools in this version of the app yet.": "Δεν υπάρχουν εργαλεία σε αυτή την έκδοση της εφαρμογής ακόμα.",
+  "Nothing is held until the lender says yes.": "Δεν δεσμεύεται τίποτα μέχρι να πει το ναι ο δανειστής.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Δεν δεσμεύεται τίποτα μέχρι να πει το ναι ο δανειστής. Στη συνέχεια, η χρέωση μπαίνει σε ένα προσωρινό πορτοφόλι καταπιστεύματος και μόλις επιστραφεί, ο δανειστής τη λαμβάνει καθαρή μετά από τέλος συναλλαγής 1.5% {owned} για τη χρηματοδότηση του Κοινού Ταμείου.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Δεν δεσμεύεται τίποτα μέχρι να πει το ναι ο δανειστής. Στη συνέχεια, {total} B μπαίνουν σε ένα πορτοφόλι καταπιστεύματος και μόλις επιστραφεί, ο δανειστής λαμβάνει {net} B (καθαρά μετά από τέλος συναλλαγής 1.5% {owned} για τη χρηματοδότηση του Κοινού Ταμείου).",
+  "On your Home": "Στην Αρχική σας",
+  "Open {tool}": "Άνοιγμα {tool}",
+  "Options for {tool}": "Επιλογές για: {tool}",
+  "Read in English": "Ανάγνωση στα αγγλικά",
+  "Read the guide": "Διαβάστε τον οδηγό",
+  "Refresh the page to load the newest version your community has.": "Ανανεώστε τη σελίδα για να φορτώσετε τη νεότερη έκδοση που έχει η κοινότητά σας.",
+  "Remove my data": "Αφαίρεση των δεδομένων μου",
+  "Remove my data from this browser": "Αφαίρεση των δεδομένων μου από αυτό το πρόγραμμα περιήγησης",
+  "Removed from this browser.": "Αφαιρέθηκε από αυτό το πρόγραμμα περιήγησης.",
+  "Show translation": "Εμφάνιση μετάφρασης",
+  "Start": "Έναρξη",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Αφαιρεί τα δεδομένα αυτής της κοινότητας για το εργαλείο {tool} από αυτό το πρόγραμμα περιήγησης. Το ίδιο εργαλείο σε άλλη κοινότητα διατηρεί τα δικά του. Δεν μπορεί να αναιρεθεί.",
+  "Things you can do on your own, that make your community stronger.": "Πράγματα που μπορείτε να κάνετε αυτόνομα, που κάνουν την κοινότητά σας πιο δυνατή.",
+  "This page is in English for now.": "Αυτή η σελίδα είναι προς το παρόν στα αγγλικά.",
+  "This page is newer in English.": "Αυτή η σελίδα είναι πιο πρόσφατη στα αγγλικά.",
+  "This screen stopped working": "Αυτή η οθόνη σταμάτησε να λειτουργεί",
+  "This tool didn't load": "Αυτό το εργαλείο δεν φορτώθηκε",
+  "This tool isn't in this version of the app": "Αυτό το εργαλείο δεν υπάρχει σε αυτή την έκδοση της εφαρμογής",
+  "What this tool keeps is safe. Go back and open it again.": "Όσα διατηρεί αυτό το εργαλείο είναι ασφαλή. Πηγαίνετε πίσω και ανοίξτε το ξανά.",
+  "What you have": "Τι έχετε",
+  "Where it is kept": "Πού διατηρείται",
+  "Withdraw request": "Απόσυρση αιτήματος",
+  "Yes, remove it": "Ναι, αφαίρεσέ το",
+  "for {n} day|for {n} days": {
+    "one": "για {n} ημέρα",
+    "other": "για {n} ημέρες"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "για {n} εβδομάδα",
+    "other": "για {n} εβδομάδες"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} ημέρα",
+    "other": "{n} ημέρες"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} μήνας",
+    "other": "{n} μήνες"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} εβδομάδα",
+    "other": "{n} εβδομάδες"
+  },
+  "📦 Ask to borrow": "📦 Αίτημα δανεισμού"
 }

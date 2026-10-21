@@ -2,10 +2,10 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "«{name}» đã được dùng trong cộng đồng này. Hãy chọn tên khác.",
@@ -3308,5 +3308,60 @@
   "Recurring listing (stays active after purchase)": "Tin đăng định kỳ (vẫn hoạt động sau khi có người nhận)",
   "Posting…": "Đang đăng…",
   "Publish Listing": "Đăng tin",
-  "Translated by machine: some words may be wrong.": "Dịch bằng máy: một số từ có thể sai."
+  "Translated by machine: some words may be wrong.": "Dịch bằng máy: một số từ có thể sai.",
+  "About this tool": "Giới thiệu về công cụ này",
+  "Ask to borrow this?": "Yêu cầu mượn món này?",
+  "Asked to borrow": "Đã yêu cầu mượn",
+  "Check your connection, then try again.": "Kiểm tra kết nối của bạn, sau đó thử lại.",
+  "For example": "Ví dụ",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Mượn miễn phí. Không có khoản nào bị giữ: người cho mượn đồng ý trước.",
+  "How it's going": "Tình hình diễn ra",
+  "How you deal": "Cách bạn giao dịch",
+  "I already do this": "Tôi đã làm việc này rồi",
+  "I'm starting out": "Tôi mới bắt đầu",
+  "It couldn't be removed. Try again.": "Không thể xóa. Hãy thử lại.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Được lưu trong trình duyệt này, chỉ dành riêng cho bạn. Không có dữ liệu nào rời khỏi trình duyệt này, và đăng xuất tại đây sẽ xóa dữ liệu đó.",
+  "No tools in this version of the app yet.": "Chưa có công cụ nào trong phiên bản ứng dụng này.",
+  "Nothing is held until the lender says yes.": "Không có khoản nào bị giữ cho đến khi người cho mượn đồng ý.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Không có khoản nào bị giữ cho đến khi người cho mượn đồng ý. Sau đó khoản phí sẽ được chuyển vào Ví uỷ thác tạm thời, và khi món đồ được trả lại, người cho mượn sẽ nhận được số tiền sau khi trừ 1.5% phí giao dịch {owned} để đóng góp vào Quỹ chung.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Không có khoản nào bị giữ cho đến khi người cho mượn đồng ý. Sau đó {total} B sẽ được chuyển vào Ví ủy thác, và khi món đồ được trả lại, người cho mượn sẽ nhận được {net} B (đã trừ 1.5% phí giao dịch {owned} để đóng góp vào Quỹ chung).",
+  "On your Home": "Trên Trang chủ của bạn",
+  "Open {tool}": "Mở {tool}",
+  "Options for {tool}": "Tùy chọn cho {tool}",
+  "Read in English": "Đọc bằng tiếng Anh",
+  "Read the guide": "Đọc hướng dẫn",
+  "Refresh the page to load the newest version your community has.": "Tải lại trang để tải phiên bản mới nhất mà cộng đồng của bạn có.",
+  "Remove my data": "Xóa dữ liệu của tôi",
+  "Remove my data from this browser": "Xóa dữ liệu của tôi khỏi trình duyệt này",
+  "Removed from this browser.": "Đã xóa khỏi trình duyệt này.",
+  "Show translation": "Hiện bản dịch",
+  "Start": "Bắt đầu",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Xóa dữ liệu của cộng đồng này đối với {tool} khỏi trình duyệt này. Cùng công cụ đó ở cộng đồng khác vẫn giữ dữ liệu riêng. Không thể hoàn tác.",
+  "Things you can do on your own, that make your community stronger.": "Những việc bạn có thể tự làm, giúp cộng đồng của bạn vững mạnh hơn.",
+  "This page is in English for now.": "Trang này hiện chỉ có bằng tiếng Anh.",
+  "This page is newer in English.": "Trang này có bản tiếng Anh mới hơn.",
+  "This screen stopped working": "Màn hình này đã ngừng hoạt động",
+  "This tool didn't load": "Công cụ này không tải được",
+  "This tool isn't in this version of the app": "Công cụ này không có trong phiên bản ứng dụng này",
+  "What this tool keeps is safe. Go back and open it again.": "Những gì công cụ này lưu giữ vẫn an toàn. Hãy quay lại và mở lại công cụ.",
+  "What you have": "Những gì bạn có",
+  "Where it is kept": "Nơi lưu trữ",
+  "Withdraw request": "Rút lại yêu cầu",
+  "Yes, remove it": "Có, hãy xóa",
+  "for {n} day|for {n} days": {
+    "other": "trong {n} ngày"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "trong {n} tuần"
+  },
+  "{n} day|{n} days": {
+    "other": "{n} ngày"
+  },
+  "{n} month|{n} months": {
+    "other": "{n} tháng"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n} tuần"
+  },
+  "📦 Ask to borrow": "📦 Yêu cầu mượn"
 }

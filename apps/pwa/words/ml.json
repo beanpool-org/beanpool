@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” ഈ കമ്മ്യൂണിറ്റിയിൽ ഇതിനകം എടുത്തുകഴിഞ്ഞു. മറ്റൊരു പേര് തിരഞ്ഞെടുക്കുക.",
@@ -3423,5 +3423,65 @@
   "Recurring listing (stays active after purchase)": "ആവർത്തിക്കുന്ന ലിസ്റ്റിംഗ് (വാങ്ങിയ ശേഷവും സജീവമായിരിക്കും)",
   "Posting…": "പോസ്റ്റ് ചെയ്യുന്നു…",
   "Publish Listing": "ലിസ്റ്റിംഗ് പ്രസിദ്ധീകരിക്കുക",
-  "Translated by machine: some words may be wrong.": "യന്ത്രം വിവർത്തനം ചെയ്തത്: ചില വാക്കുകൾ തെറ്റായിരിക്കാം."
+  "Translated by machine: some words may be wrong.": "യന്ത്രം വിവർത്തനം ചെയ്തത്: ചില വാക്കുകൾ തെറ്റായിരിക്കാം.",
+  "About this tool": "ഈ ടൂളിനെക്കുറിച്ച്",
+  "Ask to borrow this?": "ഇത് കടം ചോദിക്കണോ?",
+  "Asked to borrow": "കടം ചോദിച്ചു",
+  "Check your connection, then try again.": "നിങ്ങളുടെ കണക്ഷൻ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.",
+  "For example": "ഉദാഹരണത്തിന്",
+  "Free to borrow. Nothing is held: the lender says yes first.": "സൗജന്യമായി കടം വാങ്ങാം. ഒന്നും തടഞ്ഞുവെക്കില്ല: നൽകുന്നയാൾ ആദ്യം സമ്മതിക്കണം.",
+  "How it's going": "കാര്യങ്ങളുടെ പുരോഗതി",
+  "How you deal": "നിങ്ങളുടെ ഇടപാടുകൾ",
+  "I already do this": "ഞാൻ ഇതിനകം ഇത് ചെയ്യുന്നുണ്ട്",
+  "I'm starting out": "ഞാൻ ആരംഭിക്കുകയാണ്",
+  "It couldn't be removed. Try again.": "നീക്കം ചെയ്യാൻ കഴിഞ്ഞില്ല. വീണ്ടും ശ്രമിക്കുക.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "നിങ്ങൾക്കായി മാത്രം ഈ ബ്രൗസറിൽ സൂക്ഷിച്ചിരിക്കുന്നു. ഇതിലുള്ളതൊന്നും ഈ ബ്രൗസർ വിട്ടുപോകില്ല, ഇവിടെ സൈൻ ഔട്ട് ചെയ്യുന്നത് ഇത് നീക്കം ചെയ്യും.",
+  "No tools in this version of the app yet.": "ആപ്പിന്റെ ഈ പതിപ്പിൽ ഇതുവരെ ടൂളുകളൊന്നുമില്ല.",
+  "Nothing is held until the lender says yes.": "നൽകുന്നയാൾ സമ്മതിക്കുന്നത് വരെ ഒന്നും തടഞ്ഞുവെക്കില്ല.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "നൽകുന്നയാൾ സമ്മതിക്കുന്നത് വരെ ഒന്നും തടഞ്ഞുവെക്കില്ല. തുടർന്ന് ഫീസ് ഒരു താൽക്കാലിക ട്രസ്റ്റ് വാലറ്റിലേക്ക് പോകും, അത് തിരികെ ലഭിച്ചുകഴിഞ്ഞാൽ കോമൺസ് പൂളിനായി 1.5% ഇടപാട് ഫീസ് {owned} കുറച്ചുള്ള തുക നൽകുന്നയാൾക്ക് ലഭിക്കും.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "നൽകുന്നയാൾ സമ്മതിക്കുന്നത് വരെ ഒന്നും തടഞ്ഞുവെക്കില്ല. തുടർന്ന് {total} B ഒരു ട്രസ്റ്റ് വാലറ്റിലേക്ക് പോകും, അത് തിരികെ ലഭിച്ചുകഴിഞ്ഞാൽ നൽകുന്നയാൾക്ക് {net} B ലഭിക്കും (കോമൺസ് പൂളിനായി 1.5% ഇടപാട് ഫീസ് {owned} കുറച്ചതിന് ശേഷം).",
+  "On your Home": "നിങ്ങളുടെ ഹോമിൽ",
+  "Open {tool}": "{tool} തുറക്കുക",
+  "Options for {tool}": "{tool}-ന്റെ ഓപ്ഷനുകൾ",
+  "Read in English": "ഇംഗ്ലീഷിൽ വായിക്കുക",
+  "Read the guide": "ഗൈഡ് വായിക്കുക",
+  "Refresh the page to load the newest version your community has.": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ ഏറ്റവും പുതിയ പതിപ്പ് ലോഡ് ചെയ്യാൻ പേജ് പുതുക്കുക.",
+  "Remove my data": "എന്റെ ഡാറ്റ നീക്കം ചെയ്യുക",
+  "Remove my data from this browser": "ഈ ബ്രൗസറിൽ നിന്ന് എന്റെ ഡാറ്റ നീക്കം ചെയ്യുക",
+  "Removed from this browser.": "ഈ ബ്രൗസറിൽ നിന്ന് നീക്കം ചെയ്തു.",
+  "Show translation": "വിവർത്തനം കാണിക്കുക",
+  "Start": "ആരംഭിക്കുക",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "ഈ ബ്രൗസറിൽ നിന്ന് {tool}-നുള്ള ഈ കമ്മ്യൂണിറ്റിയുടെ ഡാറ്റ നീക്കം ചെയ്യുന്നു. മറ്റൊരു കമ്മ്യൂണിറ്റിയിലെ ഇതേ ടൂൾ അതിന്റെ ഡാറ്റ നിലനിർത്തും. ഇത് പഴയപടിയാക്കാൻ കഴിയില്ല.",
+  "Things you can do on your own, that make your community stronger.": "നിങ്ങൾക്ക് സ്വയം ചെയ്യാൻ കഴിയുന്നതും നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയെ കൂടുതൽ ശക്തിപ്പെടുത്തുന്നതുമായ കാര്യങ്ങൾ.",
+  "This page is in English for now.": "ഈ പേജ് ഇപ്പോൾ ഇംഗ്ലീഷിലാണ്.",
+  "This page is newer in English.": "ഈ പേജ് ഇംഗ്ലീഷിൽ കൂടുതൽ പുതിയതാണ്.",
+  "This screen stopped working": "ഈ സ്ക്രീൻ പ്രവർത്തിക്കുന്നത് നിർത്തി",
+  "This tool didn't load": "ഈ ടൂൾ ലോഡായില്ല",
+  "This tool isn't in this version of the app": "ഈ ടൂൾ ആപ്പിന്റെ ഈ പതിപ്പിൽ ലഭ്യമല്ല",
+  "What this tool keeps is safe. Go back and open it again.": "ഈ ടൂൾ സൂക്ഷിക്കുന്ന വിവരങ്ങൾ സുരക്ഷിതമാണ്. തിരികെ പോയി ഇത് വീണ്ടും തുറക്കുക.",
+  "What you have": "നിങ്ങളുടെ കൈവശമുള്ളവ",
+  "Where it is kept": "ഇത് എവിടെ സൂക്ഷിച്ചിരിക്കുന്നു",
+  "Withdraw request": "അഭ്യർത്ഥന പിൻവലിക്കുക",
+  "Yes, remove it": "അതെ, നീക്കം ചെയ്യുക",
+  "for {n} day|for {n} days": {
+    "one": "{n} ദിവസത്തേക്ക്",
+    "other": "{n} ദിവസത്തേക്ക്"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} ആഴ്ചത്തേക്ക്",
+    "other": "{n} ആഴ്ചത്തേക്ക്"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} ദിവസം",
+    "other": "{n} ദിവസം"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} മാസം",
+    "other": "{n} മാസം"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} ആഴ്ച",
+    "other": "{n} ആഴ്ച"
+  },
+  "📦 Ask to borrow": "📦 കടം ചോദിക്കുക"
 }

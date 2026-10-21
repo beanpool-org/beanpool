@@ -254,6 +254,10 @@ describe("MemberGuide in the member's language: the guide's titles, the English 
 
 // The draft line in the member's language: the web catalog's own words (pt), never the English.
 const DRAFT_NOTE_PT = (ptWords as Record<string, unknown>)['Translated by machine: some words may be wrong.'] as string;
+// The newer-in-English and in-English notes, the same way: once pt has them, the member reads them in pt.
+const ptOr = (en: string): string => ((ptWords as Record<string, unknown>)[en] as string | undefined) ?? en;
+const NEWER_NOTE_PT = ptOr('This page is newer in English.');
+const ENGLISH_NOTE_PT = ptOr('This page is in English for now.');
 
 describe("the three page states on web: current, behind with toggle, missing, and offline fallback", () => {
     const { section, page, related } = SAMPLE;
@@ -332,21 +336,21 @@ describe("the three page states on web: current, behind with toggle, missing, an
         await waitFor(() => {
             expect(screen.getByText('Corpo traduzido antigo na web.')).toBeInTheDocument();
         });
-        expect(screen.getByTestId('guide-newer-note')).toHaveTextContent('This page is newer in English.');
+        expect(screen.getByTestId('guide-newer-note')).toHaveTextContent(NEWER_NOTE_PT);
         expect(screen.getByTestId('guide-draft-note')).toHaveTextContent(DRAFT_NOTE_PT);
         const toggle = screen.getByTestId('guide-toggle-english');
-        expect(toggle).toHaveTextContent('Read in English');
+        expect(toggle).toHaveTextContent(ptOr('Read in English'));
 
         // Toggle to English
         fireEvent.click(toggle);
-        expect(toggle).toHaveTextContent('Show translation');
+        expect(toggle).toHaveTextContent(ptOr('Show translation'));
         expect(screen.queryByTestId('guide-draft-note')).toBeNull();
         const englishDiv = document.querySelector('article [lang="en"]');
         expect(englishDiv).not.toBeNull();
 
         // Toggle back to Portuguese
         fireEvent.click(toggle);
-        expect(toggle).toHaveTextContent('Read in English');
+        expect(toggle).toHaveTextContent(ptOr('Read in English'));
         expect(screen.getByText('Corpo traduzido antigo na web.')).toBeInTheDocument();
         expect(screen.getByTestId('guide-draft-note')).toHaveTextContent(DRAFT_NOTE_PT);
     });
@@ -371,7 +375,7 @@ describe("the three page states on web: current, behind with toggle, missing, an
         vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, text: async () => JSON.stringify(ptGuide) })));
         await act(async () => { await showLanguage('pt'); });
         render(<MemberGuide onBack={() => {}} feedbackLive={false} initialPage={related.slug} />);
-        expect(screen.getByTestId('guide-english-note')).toHaveTextContent('This page is in English for now.');
+        expect(screen.getByTestId('guide-english-note')).toHaveTextContent(ENGLISH_NOTE_PT);
         expect(screen.queryByTestId('guide-newer-note')).toBeNull();
         expect(screen.queryByTestId('guide-draft-note')).toBeNull();
         expect(document.querySelector('article [lang="en"]')).not.toBeNull();

@@ -165,7 +165,16 @@ async function child(): Promise<void> {
             const tables: Record<string, { count: number; hash: string }> = {};
             for (const t of a.tables) {
                 const rows = (db.prepare(`SELECT * FROM ${t}`).all() as Record<string, unknown>[])
-                    .map(({ last_active_at: _l, ...rest }) => JSON.stringify(rest)).sort();
+                    .map(({ last_active_at: _l, ...rest }) => {
+                        // persistCommonsBalance (audit.ts:62) runs INSERT OR REPLACE INTO accounts, which deletes the row and resets
+                        // last_updated_at to schema default (now) on every main flush, even if balance is unchanged. Standbys do not
+                        // run this flush; their last_updated_at only updates when a copy imports. When main flushes between landing
+                        // and snapshot reads, COMMONS_POOL.last_updated_at diverges while balance and epoch stay identical (#2303).
+                        if (t === 'accounts' && rest.public_key === 'COMMONS_POOL') {
+                            rest.last_updated_at = null;
+                        }
+                        return JSON.stringify(rest);
+                    }).sort();
                 tables[t] = { count: rows.length, hash: crypto.createHash('sha256').update(rows.join('\n')).digest('hex').slice(0, 16) };
             }
             const cfg = (k: string) => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(k) as { value: string } | undefined)?.value ?? null;

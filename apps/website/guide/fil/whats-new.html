@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/fil by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mga bago — BeanPool members' guide</title>
+    <meta name="description" content="Ang nagbago sa app, sa simpleng pananalita.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Tungkol sa BeanPool</a></p>
+        <h1>Mga bago</h1>
+        <p class="lede">Ang nagbago sa app, sa simpleng pananalita.</p>
+        <h2>Ang pandaigdigang komunidad, malapit sa iyo</h2>
+        <p>Makukuha mo ang mga ito kapag na-update ang server ng pandaigdigang komunidad. Sa telepono, kailangan ng mga ito ng updated na app.</p>
+        <ul>
+            <li><strong>Libre, na may mga limitasyon.</strong> Sa pandaigdigang komunidad, ini-archive ang isang listing 90 araw pagkatapos nitong huling mabago, kasama ang mga larawan nito. Ang muling pag-save nito ay nagpapanatili rito. Nasa iisang pahina ang lahat ng limitasyon. Tingnan ang &quot;Limitasyon ng komunidad sa buong mundo&quot;.</li>
+            <li><strong>Ang mga listing na malapit sa iyo.</strong> Ang pandaigdigang komunidad ay may mga listing mula sa kahit saan. Itinatago na ngayon ng iyong telepono ang pinakamalapit na 500 sa loob ng 250 km ng iyong lugar, at ang sarili mo at anumang listing na mayroon kang kasalukuyang deal o pag-uusap, nasaan man ang mga ito. Nakikita pa rin ng paghahanap sa Merkado ang mga listing mula sa kahit saan. Tingnan ang &quot;Mahigit sa isang komunidad&quot;.</li>
+            <li><strong>Iyong lugar.</strong> Sa web app, ang pagsali sa pandaigdigang komunidad ay may isa pang hakbang pagkatapos ng iyong larawan: <strong>Saan ka humigit-kumulang?</strong> Sa telepono, itinatanong ito kapag sumali ka gamit ang account na mayroon ka na; itinatakda ito ng bagong account sa telepono mamaya sa Mga Setting, sa ilalim ng <strong>Iyong lugar</strong>. Sa hakbang na iyon, i-tap ang <strong>Gamitin ang location ko</strong>, <strong>Mag-type ng bayan o lugar</strong>, o <strong>Laktawan muna</strong>. Itinatago ito sa humigit-kumulang 10 km, hindi kailanman ang eksaktong lokasyon mo. Baguhin o i-clear ito sa Mga Setting, sa ilalim ng <strong>Iyong lugar</strong>. Tingnan ang &quot;Iyong lugar&quot;.</li>
+            <li><strong>Walang lugar, walang problema.</strong> Kung wala nito, makikita mo ang mga pinakabagong listing mula sa kahit saan, at sinasabi ito ng isang linya sa itaas ng Merkado. Sa telepono, i-tap ito upang itakda ang iyong lugar.</li>
+            <li><strong>Mga bagong listing malapit sa iyo.</strong> Dumarating ang mga ito kapag nai-post na. Ang mga malalayo ay hindi na nakakarating sa iyong telepono.</li>
+            <li><strong>Sa web app</strong>, nagsisimula ang Merkado at ang Mapa mula sa iyong lugar, o mula sa lugar na pipiliin mo gamit ang <strong>Distansya</strong>: pinakamalapit muna, bawat listing ay may layo nito. Tingnan ang &quot;Paghahanap ng bagay sa malapit&quot;.</li>
+            <li><strong>Walang sariling lugar ang mga poll</strong>, kaya ipinapakita ang bawat isa sa lugar ng miyembro na gumawa nito.</li>
+            <li><strong>I-type ang iyong bayan.</strong> Sa pandaigdigang komunidad, ang <strong>Hanapin ang iyong komunidad</strong> sa Home ay hindi na nangangailangan ng iyong lokasyon: i-tap ang <strong>o i-type ang iyong bayan</strong> at piliin ang iyong bayan. Isang tinatayang lokasyon lang ang itinatago. Tingnan ang &quot;Paghahanap ng kalapit na komunidad&quot;.</li>
+            <li><strong>Pag-post nang walang presyo.</strong> Sa pandaigdigang komunidad, hindi humihingi ng presyo ang form ng pag-post, dahil ang mga munggo ay nasa mga lokal na komunidad. Sa web app, gumagana na ngayon ang <strong>Mag-post ng Alok</strong> at <strong>Mag-post ng Kahilingan</strong> nang wala nito. Humihingi pa rin ng presyo ang lokal na komunidad.</li>
+        </ul>
+        <h2>Home</h2>
+        <ul>
+            <li><strong>Isang bagong Home tab.</strong> Bubukas na ngayon ang app sa Home: isang dashboard na sumasagot kung ano ang kailangan ka, kung ano ang bago sa paligid mo, at kung ano ang susunod mong magagawa. Ang Merkado ay sarili na nitong tab, at ang Pulse ay isang card sa Home. Ikaw ang pumipili ng iyong mga card: inilalagay ng <strong>Magdagdag ng card</strong> ang isa sa Home, inililipat o inaalis ito ng <strong>…</strong> sa bawat card, at inililista ng <strong>I-edit ang Home</strong> ang lahat ng ito upang ayusin muli o alisin, sa telepono at sa web app.</li>
+            <li><strong>Pagsisimula.</strong> Nagsisimula ang Home ng isang bagong miyembro sa isang card, <strong>Pagsisimula</strong>. I-tap ang <strong>Look around</strong> para sa isang minutong tour, o <strong>Laktawan</strong>, at lalabas ang iyong mga karaniwang card. May <strong>?</strong> ang bawat screen sa itaas kasama ang tulong nito.</li>
+            <li><strong>Isang naka-save na paghahanap sa Home.</strong> Pumili ng mga salita tulad ng &quot;itlog&quot;, at kung gusto mo ng mga alok, kahilingan o pareho, isang kategorya at distansya. Ipinapakita ng card ang unang apat na tumutugmang listing, ang parehong nakikita ng paghahanap sa Merkado, at binubuksan ng <strong>Tingnan ang higit pa</strong> ang Merkado kasama ang iyong mga salita sa paghahanap nito. Kailangan nito ng updated na app at dapat ma-update ang server ng iyong komunidad.</li>
+            <li><strong>Mag-save ng paghahanap mula sa Merkado.</strong> Habang may mga salita sa paghahanap ng Merkado, lalabas ang <strong>I-save ang paghahanap na ito sa Home</strong>, sa telepono at sa web app. Binubuksan nito ang Home kasama ang iyong mga salita, <strong>Mga Alok</strong> o <strong>Mga Kahilingan</strong>, ang kategorya at ang distansyang napunan. I-tap ang <strong>Idagdag sa Home</strong>. Ipinapakita muna ng isang naka-save na paghahanap ang pinakabagong mga tugma nito; sa pandaigdigang komunidad, ang pinakamalapit muna. Ito ay para sa Mga Alok at Mga Kahilingan, kaya hindi ito lumalabas sa ilalim ng Mga Event o Mga Poll.</li>
+            <li><strong>Araw at buwan sa Home.</strong> Ang buwan ngayong gabi at ang pagsikat at paglubog ng araw ngayon, na kinakalkula sa iyong telepono o sa iyong browser para sa lugar ng iyong komunidad o sa iyong lugar, sa sarili mong orasan. Wala itong hinihingi sa server ng iyong komunidad. Kailangan nito ng updated na app; hanggang sa ma-update ang server ng iyong komunidad, ginagamit nito ang iyong lugar.</li>
+        </ul>
+        <h2>Privacy bilang default</h2>
+        <p>Nasa server ng iyong komunidad ang mga pagbabagong ito. Makukuha mo ang mga ito kapag na-update ang server ng iyong komunidad. Ang pagpipilian sa Poll ay nangangailangan ng updated na app.</p>
+        <ul>
+            <li><strong>Iyo ang iyong balanse at mga palitan.</strong> Walang ibang tao sa iyong komunidad ang makakabasa sa iyong balanse o sa iyong kasaysayan. Ipinapakita lamang ng isang palitan ang dalawang tao nito, maging sa aktibidad ng komunidad. Ang boto sa pag-alis ng isang miyembro ay nagpapakita lamang ng balanse ng miyembrong iyon sa mga taong maaaring bumoto rito, at wala nang iba pa.</li>
+            <li><strong>Para sa mga miyembro ang mga listing.</strong> Hindi makikita ng taong hindi sumali ang mga listing ng iyong komunidad o ang kanilang mga larawan. Ipinapakita sa kanila sa halip ang daan patungo sa pandaigdigang komunidad, kung saan maaaring maglibot ang sinuman.</li>
+            <li><strong>Mga anonymous na poll.</strong> Kabuuan lamang ang ipinapakita ng mga poll, maliban na lang kung itinakda ito ng taong nagsimula nito bilang isang <strong>Bukas na boto</strong>.</li>
+            <li><strong>Mga aklat ng negosyo.</strong> Nakikita pa rin ng lahat ang mga halaga ng negosyo. Kung sino ang nagbayad dito, at ang tala, mga tagapangalaga lamang nito at ang miyembrong iyon ang nakakakita.</li>
+            <li><strong>Kung sino ang sumulat ng review.</strong> Mababasa ng lahat sa iyong komunidad ang mga bituin at salita ng isang review. Ang dalawang tao lamang sa palitan ang makakakita kung sino ang sumulat nito at kung aling deal ito.</li>
+            <li><strong>Kaligtasan ng bata.</strong> Bawat report screen, sa telepono at sa web app, ay nag-aalok na ngayon ng <strong>Kaligtasan ng bata</strong> bilang dahilan. Piliin ito kung maaaring nasa panganib ang isang bata: agad na sasabihan ang mga taong nagpapatakbo ng server ng iyong komunidad at una nila itong susuriin. Tingnan ang &quot;Pag-ulat ng problema&quot;.</li>
+        </ul>
+        <h2>Pang-araw-araw na limitasyon</h2>
+        <p>Nasa server ng iyong komunidad ang mga ito. Makukuha mo ang mga ito kapag na-update ang server ng iyong komunidad.</p>
+        <ul>
+            <li><strong>Walang makakapag-flood sa isang komunidad.</strong> Ang isang account ay maaaring gumawa ng hanggang 5,000 pagbabago bawat araw: mga post, mensahe, pag-edit at iba pa. Sa loob nito, hanggang 100 bagong post, 5 bagong grupo, 3 bagong negosyo, 20 imbitasyon at 50 link sa Pulse bawat araw. Walang sinumang karaniwang gumagamit ng BeanPool ang lalapit sa mga ito. Kung maabot mo man ang isa, sinasabi ng app kung alin, at kung kailan ka makakapagpatuloy.</li>
+            <li><strong>Mga Mensahe.</strong> Hanggang 30 bawat minuto sa anumang chat, pati direktang mensahe. Tinatanggihan ang napakahabang mensahe: ipadala ito nang baha-bahagi. Hindi binibilang ang mga larawan.</li>
+            <li><strong>Mga bagong tao.</strong> Maaari kang magsimula ng pag-uusap sa 20 tao mula sa labas ng iyong komunidad bawat araw. Ang pagmemensahe sa mga miyembro, at pagsagot, ay walang limitasyon.</li>
+            <li><strong>Mga Imbitasyon.</strong> Maaari kang magkaroon ng 50 na hindi pa nagagamit ng sinuman. Ang hindi magagamit ng sinuman ay buburahin pagkatapos ng 30 araw nito.</li>
+            <li><strong>Mga Bayad.</strong> Hanggang 100 bayad bawat araw, at hanggang 30 tao na hindi mo pa nababayaran noon. Hanggang 100 deal na hiniling, tinanggap o inaprubahan, at 20 pangakong ginawa o binago. Hindi kailanman nililimitahan ang pagtanggap.</li>
+            <li><strong>Ang mga proyekto at negosyo</strong> ay may sariling mga limitasyon, sampung beses kaysa sa isang miyembro. Ang ginagawa ng isang tagapangalaga para sa isa ay ibinibilang laban dito, hindi laban sa sarili ng tagapangalaga, maliban sa pagpapatakbo nito: mga tagapangalaga, pag-pause, pagtatapos, at pagkumpleto o pagtanggi sa mga deal nito. Kapag naubos na ng isang negosyo ang limitasyon para sa araw na iyon, ang ginagawa ng tagapangalaga nito para rito ay ibinibilang laban sa sarili ng tagapangalaga, kaya walang tagapangalaga ang makakaubos ng araw nito at makakapigil sa iba. Maaaring gawin ng isang tagapangalaga ang katumbas ng isang negosyo bawat araw para sa lahat ng negosyong pinapangalagaan nila nang magkakasama.</li>
+            <li><strong>Mga Kaibigan.</strong> Maaari kang magdagdag ng hanggang 100 tao bilang mga kaibigan bawat araw. Sinasabihan ang isang tao kapag idinagdag mo siya.</li>
+        </ul>
+        <h2>Bersyon 1.2.38</h2>
+        <p>Nasa server ng iyong komunidad ang ilan sa mga pagbabagong ito. Makukuha mo ang mga ito kapag na-update ang server ng iyong komunidad.</p>
+        <h3>Bago</h3>
+        <ul>
+            <li><strong>Itong sheet ng BeanPool.</strong> Mga gabay kung paano gumagana ang BeanPool, ang mga tuntunin, mga karaniwang tanong at kung ano ang bago. Gumagana ang mga ito nang walang koneksyon. Buksan ito mula sa Mga Setting, sa ilalim ng <strong>BeanPool</strong>: <strong>Tulong at kung paano ito gumagana</strong>. Binubuksan ng <strong>?</strong> sa itaas ng anumang screen ang tulong para sa screen na iyon.</li>
+            <li><strong>Maliwanag o madilim.</strong> Nagsisimula ang app nang maliwanag. Para gawin itong madilim, o para sundan nito ang iyong telepono, pumunta sa Mga Setting → Hitsura: Pareho sa telepono, Maliwanag o Madilim.</li>
+            <li><strong>Mga Badge.</strong> Ginagamit na ngayon ng bawat screen ang parehong mga antas ng tiwala gaya ng server ng iyong komunidad: Resident mula 200 tiwala, Steward mula 600, Elder mula 1,400. Maling badge ang dating ipinapakita ng ilang screen. Mas madali nang basahin ang Newcomer badge.</li>
+        </ul>
+        <h3>Pagboto</h3>
+        <ul>
+            <li><strong>Mga lihim na balota.</strong> Hindi na ipinapakita ng app sa sinuman kung paano ka bumoto sa isang Desisyon, kasama ang mga admin. Makikita mo ang sarili mong boto.</li>
+            <li><strong>Sino ang maaaring bumoto.</strong> Mga miyembro lamang na sumali bago binuksan ang isang Desisyon ang maaaring bumoto rito.</li>
+            <li><strong>Turnout.</strong> Binibilang na ngayon ng turnout ang mga miyembro na gumawa ng isang bagay sa app sa nakalipas na 30 araw.</li>
+            <li><strong>Pang-emerhensiyang suspensiyon.</strong> Kapag sinuspinde ng isang admin ang isang tao, magbubukas agad ang 7-araw na botohan: &quot;Panatilihin ang suspensiyong ito?&quot;. Kung hindi ito pumasa, kusang matatanggal ang suspensiyon. Sa pandaigdigang komunidad ay walang botohan: tatagal ang suspensiyon nang 7 araw at saka kusang matatanggal, o mas maaga kung aalisin ito ng isang admin.</li>
+            <li><strong>Voice credits.</strong> Ang mga voice credit na ipinapakita para sa mga boto sa mga munggo ng Komun ang siyang binibilang. Makukuha mo ang mga ito nang buo sa bawat naturang boto.</li>
+            <li><strong>Mas kaunting uri ng Desisyon.</strong> Hindi na mababago ng mga Desisyon ang mga trust badge. Wala na ang mga lumang &quot;round ng botohan&quot;.</li>
+        </ul>
+        <h3>Mga Negosyo</h3>
+        <ul>
+            <li>Kapag nagdagdag o nag-alis ang nangungunang tagapangalaga ng isang tagapangalaga, may 3 araw ang iba pang mga tagapangalaga upang tumutol.</li>
+            <li>Maaaring bumaba ang isang tagapangalaga, maliban na lang kung siya ang nag-iisang tagapangalaga, o habang kailangan pa ang kanyang pangako upang bayaran ang utang ng negosyo.</li>
+            <li>Ang pagpili ng bagong pinuno ay may 14-na-araw na limitasyon na ngayon, at maaaring bumoto ng Hindi ang mga tagapangalaga.</li>
+            <li>Kung aalis ang pinuno, ang pinakamatagal nang tagapangalaga ang agad na hahalili.</li>
+        </ul>
+        <h3>Mga Grupo</h3>
+        <ul>
+            <li><strong>Bawat grupo ay may chat.</strong> May tatlong button na ngayon ang Talk: <strong>Mga Mensahe</strong>, <strong>Mga Grupo</strong> at <strong>Mga Tao</strong>. Inililista ng <strong>Mga Grupo</strong> ang iyong mga grupo, ang mga negosyong pinapangalagaan mo at ang mga event na pupuntahan mo, bawat isa ay may pinakabagong mensahe at bilang ng hindi pa nababasa.</li>
+            <li><strong>Isang paraan upang magsimula ng grupo.</strong> Binubuksan ng <strong>Bagong grupo</strong> sa Talk at <strong>+</strong> sa Commons ang parehong form, na pinili ang <strong>Social Circle</strong> para sa iyo. Pagkatapos mong gawin ito, mapupunta ka sa chat nito, na magtatanong kung sino ang gusto mong imbitahan.</li>
+            <li><strong>Mga Imbitasyon.</strong> Maaaring mag-imbita ang mga convenor mula sa menu ng chat. Ipinapakita ng imbitasyon kung sino ang nagpadala nito, at dadalhin ka ng <strong>Sumali sa grupo</strong> nang direkta sa chat.</li>
+            <li><strong>I-mute ang isang chat</strong>: Sa loob ng 8 oras, Sa loob ng isang linggo o Palagi. Sa isang grupo, nakakalusot pa rin ang mga @pagbanggit.</li>
+            <li><strong>Isang header para sa bawat chat</strong>: ang pangalan ng grupo, negosyo o event sa itaas. I-tap ito upang makita ang grupo, negosyo o event.</li>
+            <li>Inalis na ang mga lumang group chat sa Talk, kasama ang kanilang mga mensahe.</li>
+            <li>Bawat grupo ay mayroon na ngayong <strong>nangungunang convenor</strong> — ang sinumang gumawa nito, sa simula. Ang sinumang convenor ay nag-aalaga pa rin sa mga miyembro at mga post, ngunit ang pinuno lamang ang maaaring mag-alis o magbaba ng antas ng isang convenor, at walang sinuman ang maaaring mag-alis sa pinuno. Maaaring ipasa ng pinuno ang pamumuno sa iba. Kung hindi magparamdam ang pinuno sa loob ng 30 araw, maaaring pumili ang grupo ng bago, sa screen ng grupo sa itaas ng listahan. Tingnan ang &quot;Mga tuntunin at mga desisyon&quot;.</li>
+            <li><strong>Mga boto sa isang grupo.</strong> Maaaring bumoto ang mga miyembro ng grupo sa sariling mga bagay ng grupo, tulad ng bagong convenor o bagong pinuno: buksan ang grupo at tumingin sa ilalim ng <strong>Mga Desisyon</strong>.</li>
+            <li><strong>Pagpili ng bagong pinuno para sa tahimik na grupo.</strong> Ang mga tao lamang na nasa grupo bago naging tahimik ang pinuno nito ang maaaring bumoto. Ang mga taong sumali, o ginawang mga convenor, pagkatapos noon ay walang masasabi, kaya hindi maaaring kunin ng mga bagong account ang isang grupong naging tahimik ang pinuno.</li>
+        </ul>
+        <h3>Kaligtasan</h3>
+        <ul>
+            <li>May-ari lamang ang maaaring magbalik o mag-alis ng tungkulin ng isang may-ari o admin.</li>
+            <li>Hindi maaaring ayusin ng admin ang naipit na palitan kung saan bahagi siya.</li>
+            <li>Nililimitahan ng mga chat sa grupo at event kung gaano kabilis makakapag-post ang isang tao.</li>
+            <li><strong>Laging naka-lock ang mga chat sa pagitan ng dalawang tao.</strong> Dati ay nagpapadala ang app ng mensahe nang walang lock kung hindi nito mahanap ang susi ng kabilang tao. Ngayon ay hindi na nito ito ipinapadala: nananatili ang iyong mga salita sa kahon ng mensahe, at maaari kang magpadala muli sa ilang sandali. Tinatanggihan ng server ng iyong komunidad ang isang mensahe sa pagitan ng dalawang tao na hindi naka-lock.</li>
+        </ul>
+        <h3>Mga Pag-aayos</h3>
+        <ul>
+            <li>May isang locate button na muli ang mapa.</li>
+            <li>Mas madali nang basahin ang feed ng Merkado sa dark mode.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Home</strong><span>Ano ang Home, aling card ang ipinapakita sa telepono at web app, paano magdagdag, maglipat o mag-alis ng mga ito, pagpili ng iyong hilig, at privacy kapag nag-sign out ka.</span></a></li>
+            <li><a href="the-bean.html"><strong>Gabay na ito</strong><span>Saan mahahanap ang gabay na ito, paano ito hahanapin, at paano ito nananatiling bago.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Paggana ng BeanPool</strong><span>Munggo, kalakalan, mga alok at kahilingan, at kredito, sa simpleng salita.</span></a></li>
+            <li><a href="rules.html"><strong>Mga tuntunin at mga desisyon</strong><span>Pagboto, turnout, lihim na balota, sino ang maaaring bumoto, suspensiyon, pag-alis ng miyembro, mga tagapangalaga, at mga tagapag-ugnay at punong tagapag-ugnay.</span></a></li>
+            <li><a href="faq.html"><strong>Mga tanong</strong><span>Maikling sagot sa mga tanong na pinakamadalas itanong ng mga miyembro.</span></a></li>
+            <li><a href="communities.html"><strong>Mahigit sa isang komunidad</strong><span>Maging kabilang sa ilang komunidad gamit ang iisang account, lumipat sa pagitan nila, sundan ang iyong komunidad sa bagong address, at tingnan ang ipinapakita ng pandaigdigang komunidad.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 3.</p>
+    </main>
+</body>
+</html>

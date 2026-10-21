@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yang baru — BeanPool members' guide</title>
+    <meta name="description" content="Apa yang berubah di aplikasi, dengan kata-kata sederhana.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Tentang BeanPool</a></p>
+        <h1>Yang baru</h1>
+        <p class="lede">Apa yang berubah di aplikasi, dengan kata-kata sederhana.</p>
+        <h2>Komunitas global di dekatmu</h2>
+        <p>Kamu mendapatkan pembaruan ini saat server komunitas global diperbarui. Di ponsel, kamu memerlukan aplikasi versi terbaru.</p>
+        <ul>
+            <li><strong>Gratis, dengan batasan.</strong> Di komunitas global, sebuah postingan diarsipkan 90 hari setelah terakhir kali diubah, beserta fotonya. Menyimpannya kembali akan membuatnya tetap aktif. Semua batasan dirangkum dalam satu halaman. Lihat &quot;Batasan komunitas global&quot;.</li>
+            <li><strong>Postingan di dekatmu.</strong> Komunitas global memiliki postingan dari mana saja. Sekarang ponselmu menyimpan 500 postingan terdekat dalam radius 250 km dari wilayahmu, serta postinganmu sendiri dan postingan apa pun yang sedang dalam proses kesepakatan atau obrolan, di mana pun lokasinya. Pencarian di Pasar tetap menemukan postingan dari mana saja. Lihat &quot;Lebih dari satu komunitas&quot;.</li>
+            <li><strong>Wilayahmu.</strong> Di web app, bergabung ke komunitas global memiliki satu langkah tambahan setelah foto: <strong>Kira-kira kamu di mana?</strong> Di ponsel, langkah ini ditanyakan saat kamu bergabung menggunakan akun yang sudah kamu miliki; akun ponsel baru dapat mengaturnya nanti di Pengaturan, di bawah <strong>Wilayahmu</strong>. Pada langkah tersebut, ketuk <strong>Pakai lokasiku</strong>, <strong>Ketik nama kota atau daerah</strong>, atau <strong>Lewati dulu</strong>. Wilayah disimpan dalam radius sekitar 10 km, bukan lokasi tepatmu. Ubah atau hapus ini di Pengaturan, di bawah <strong>Wilayahmu</strong>. Lihat &quot;Wilayahmu&quot;.</li>
+            <li><strong>Tanpa wilayah, tidak masalah.</strong> Tanpa mengatur wilayah, kamu melihat postingan terbaru dari mana saja, dan sebuah baris di atas Pasar menyatakannya. Di ponsel, ketuk baris tersebut untuk mengatur wilayahmu.</li>
+            <li><strong>Postingan baru di dekatmu.</strong> Postingan baru masuk begitu dipasang. Postingan yang jauh tidak lagi dikirim ke ponselmu.</li>
+            <li><strong>Di web app</strong>, Pasar dan Peta dimulai dari wilayahmu, atau dari lokasi yang kamu pilih dengan <strong>Jarak</strong>: yang terdekat muncul pertama, masing-masing dengan jaraknya. Lihat &quot;Menemukan hal di dekatmu&quot;.</li>
+            <li><strong>Jajak pendapat</strong> tidak memiliki lokasi tersendiri, sehingga masing-masing ditampilkan di wilayah anggota yang membuatnya.</li>
+            <li><strong>Ketik nama kotamu.</strong> Di komunitas global, <strong>Cari komunitasmu</strong> di Beranda tidak lagi membutuhkan lokasimu: ketuk <strong>atau ketik nama kotamu</strong> dan pilih kotamu. Hanya titik perkiraan yang disimpan. Lihat &quot;Menemukan komunitas di dekatmu&quot;.</li>
+            <li><strong>Memasang tanpa harga.</strong> Di komunitas global, formulir postingan tidak meminta harga, karena Kacang berada di komunitas lokal. Di web app, <strong>Pasang Penawaran</strong> dan <strong>Pasang Permintaan</strong> kini dapat digunakan tanpa harga. Komunitas lokal tetap meminta harga.</li>
+        </ul>
+        <h2>Beranda</h2>
+        <ul>
+            <li><strong>Tab Beranda baru.</strong> Sekarang aplikasi terbuka di Beranda: sebuah dasbor yang menjawab apa yang membutuhkanmu, apa yang baru di sekitarmu, dan apa yang bisa kamu lakukan selanjutnya. Pasar sekarang menjadi tab tersendiri, dan The Pulse menjadi kartu di Beranda. Kamu yang memilih kartumu: <strong>Tambah kartu</strong> meletakkannya di Beranda, tanda <strong>…</strong> pada setiap kartu memindah atau menghapusnya, dan <strong>Edit beranda</strong> mencantumkan semuanya untuk disusun ulang atau dihapus, di ponsel dan di web app.</li>
+            <li><strong>Memulai.</strong> Beranda anggota baru dimulai dengan satu kartu, <strong>Memulai</strong>. Ketuk <strong>Lihat-lihat</strong> untuk tur satu menit, atau <strong>Lewati</strong>, dan kartu-kartu biasamu akan muncul. Setiap layar memiliki tanda <strong>?</strong> di bagian atas dengan bantuan untuk layar tersebut.</li>
+            <li><strong>Pencarian tersimpan di Beranda.</strong> Pilih kata-kata seperti &quot;telur&quot;, dan tentukan apakah kamu menginginkan penawaran, permintaan, atau keduanya, beserta kategori dan jaraknya. Kartu menampilkan empat postingan pertama yang cocok, sama persis dengan yang ditemukan oleh pencarian Pasar, dan <strong>Lihat lainnya</strong> membuka Pasar dengan kata-katamu di kotak pencariannya. Ini memerlukan aplikasi versi terbaru dan server komunitasmu harus diperbarui.</li>
+            <li><strong>Simpan pencarian dari Pasar.</strong> Saat ada kata-kata di kotak pencarian Pasar, tombol <strong>Simpan pencarian ini ke Beranda</strong> muncul, di ponsel dan di web app. Tombol ini membuka Beranda dengan kata-katamu, <strong>Penawaran</strong> atau <strong>Permintaan</strong>, serta kategori dan jarak yang sudah terisi. Ketuk <strong>Tambah ke Beranda</strong>. Pencarian tersimpan menampilkan hasil yang paling baru terlebih dahulu; di komunitas global, hasil yang terdekat muncul pertama. Ini berlaku untuk Penawaran dan Permintaan, sehingga tidak muncul di bawah Acara atau Jajak Pendapat.</li>
+            <li><strong>Matahari dan bulan di Beranda.</strong> Bulan malam ini serta matahari terbit dan terbenam hari ini, dihitung di ponselmu atau di browsermu berdasarkan lokasi komunitasmu atau wilayahmu, menggunakan jam milikmu sendiri. Ini tidak meminta apa pun dari server komunitasmu. Ini memerlukan aplikasi versi terbaru; sebelum server komunitasmu diperbarui, fitur ini menggunakan wilayahmu.</li>
+        </ul>
+        <h2>Privasi secara bawaan</h2>
+        <p>Perubahan ini diterapkan di server komunitasmu. Kamu mendapatkannya saat server komunitasmu diperbarui. Pilihan Jajak Pendapat memerlukan aplikasi versi terbaru.</p>
+        <ul>
+            <li><strong>Saldo dan transaksimu adalah milikmu.</strong> Tidak ada orang lain di komunitasmu yang dapat membaca saldo atau riwayatmu. Transaksi hanya terlihat oleh kedua belah pihak yang terlibat, termasuk pada aktivitas komunitas. Pemungutan suara untuk mengeluarkan anggota menampilkan saldo anggota tersebut hanya kepada orang yang dapat memilih, dan tidak di tempat lain.</li>
+            <li><strong>Postingan hanya untuk anggota.</strong> Orang yang belum bergabung tidak dapat melihat postingan komunitasmu atau fotonya. Sebagai gantinya, mereka diarahkan ke komunitas global, tempat siapa saja bisa melihat-lihat.</li>
+            <li><strong>Jajak pendapat anonim.</strong> Jajak pendapat hanya menampilkan jumlah total, kecuali pembuatnya menjadikannya <strong>Pemilihan terbuka</strong>.</li>
+            <li><strong>Pembukuan usaha.</strong> Semua orang tetap melihat nominal usaha. Siapa yang membayar dan catatannya hanya dapat dilihat oleh para pengurus usaha dan anggota tersebut.</li>
+            <li><strong>Siapa yang menulis ulasan.</strong> Semua orang di komunitasmu dapat membaca bintang dan ulasan. Hanya kedua pihak dalam transaksi yang dapat melihat siapa yang menulisnya dan mengenai kesepakatan yang mana.</li>
+            <li><strong>Keselamatan anak.</strong> Setiap layar pelaporan, di ponsel dan di web app, kini menyediakan alasan <strong>Keselamatan anak</strong>. Pilih alasan ini jika seorang anak mungkin berada dalam risiko: pengelola server komunitasmu akan diberi tahu seketika dan memeriksanya terlebih dahulu. Lihat &quot;Melaporkan masalah&quot;.</li>
+        </ul>
+        <h2>Batasan harian</h2>
+        <p>Fitur ini diterapkan di server komunitasmu. Kamu mendapatkannya saat server komunitasmu diperbarui.</p>
+        <ul>
+            <li><strong>Tidak ada yang bisa membanjiri komunitas.</strong> Satu akun dapat melakukan hingga 5.000 perubahan sehari: postingan, pesan, suntingan, dan sejenisnya. Dalam batas itu, maksimal 100 postingan baru, 5 grup baru, 3 usaha baru, 20 undangan, dan 50 tautan di The Pulse per hari. Pengguna biasa BeanPool tidak akan pernah mendekati angka-angka ini. Jika kamu mencapai batas tersebut, aplikasi akan memberitahukan batas mana yang tercapai dan kapan kamu dapat melanjutkannya.</li>
+            <li><strong>Pesan.</strong> Hingga 30 pesan per menit di obrolan apa pun, termasuk pesan langsung. Pesan yang sangat panjang akan ditolak: kirimlah secara terpisah. Foto tidak dihitung.</li>
+            <li><strong>Orang baru.</strong> Kamu dapat memulai obrolan dengan hingga 20 orang dari luar komunitasmu per hari. Mengirim pesan ke sesama anggota, dan membalas pesan, tidak dibatasi.</li>
+            <li><strong>Undangan.</strong> Kamu dapat memiliki hingga 50 undangan yang belum digunakan. Undangan yang tidak digunakan akan dihapus setelah 30 hari.</li>
+            <li><strong>Pembayaran.</strong> Hingga 100 pembayaran sehari, dan hingga 30 orang yang belum pernah kamu bayar sebelumnya. Hingga 100 kesepakatan yang diajukan, diterima, atau disetujui, dan 20 komitmen yang dibuat atau diubah. Menerima pembayaran tidak pernah dibatasi.</li>
+            <li><strong>Proyek dan usaha</strong> memiliki batasannya sendiri, sepuluh kali lipat dari batas anggota. Tindakan yang dilakukan pengurus untuk suatu usaha diperhitungkan pada batas usaha tersebut, bukan batas pribadi pengurus, kecuali dalam menjalankan usaha: pengurus, penundaan, penutupan, serta menyelesaikan atau menolak kesepakatannya. Begitu suatu usaha telah menghabiskan batas harian, tindakan pengurus untuk usaha tersebut akan diperhitungkan ke batas pribadi pengurus, sehingga tidak ada pengurus yang bisa menghabiskan batas harian usaha dan menghalangi pengurus lainnya. Seorang pengurus dapat melakukan batas setara satu usaha sehari untuk seluruh usaha yang mereka kelola bersama.</li>
+            <li><strong>Teman.</strong> Kamu dapat menambahkan hingga 100 orang sebagai teman dalam sehari. Menambahkan seseorang akan memberi tahu mereka.</li>
+        </ul>
+        <h2>Versi 1.2.38</h2>
+        <p>Sebagian dari perubahan ini diterapkan di server komunitasmu. Kamu mendapatkannya saat server komunitasmu diperbarui.</p>
+        <h3>Baru</h3>
+        <ul>
+            <li><strong>Lembar BeanPool ini.</strong> Panduan mengenai cara kerja BeanPool, aturan, pertanyaan umum, dan apa yang baru. Panduan ini berfungsi tanpa koneksi internet. Buka dari Pengaturan, di bawah <strong>BeanPool</strong>: <strong>Bantuan &amp; cara kerjanya</strong>. Tanda <strong>?</strong> di bagian atas setiap layar membuka bantuan untuk layar tersebut.</li>
+            <li><strong>Terang atau gelap.</strong> Aplikasi dimulai dengan tema terang. Untuk mengubahnya menjadi gelap, atau mengaturnya agar mengikuti ponselmu, buka Pengaturan → Tampilan: Sama dengan ponsel, Terang, atau Gelap.</li>
+            <li><strong>Lencana.</strong> Setiap layar kini menggunakan level kepercayaan yang sama dengan server komunitasmu: Warga mulai dari 200 kepercayaan, Pengelola mulai dari 600, Tetua mulai dari 1.400. Beberapa layar sebelumnya menampilkan lencana yang salah. Lencana Pendatang Baru kini lebih mudah dibaca.</li>
+        </ul>
+        <h3>Pemilihan</h3>
+        <ul>
+            <li><strong>Pemungutan suara rahasia.</strong> Aplikasi tidak lagi menampilkan pilihan suaramu dalam suatu Keputusan kepada siapa pun, termasuk admin. Kamu bisa melihat suaramu sendiri.</li>
+            <li><strong>Siapa yang berhak memilih.</strong> Hanya anggota yang bergabung sebelum suatu Keputusan dibuka yang dapat memberikan suara.</li>
+            <li><strong>Tingkat partisipasi.</strong> Tingkat partisipasi kini menghitung anggota yang melakukan aktivitas di aplikasi dalam 30 hari terakhir.</li>
+            <li><strong>Penangguhan darurat.</strong> Saat admin menangguhkan seseorang, pemungutan suara selama 7 hari langsung terbuka: &quot;Pertahankan penangguhan ini?&quot;. Jika tidak disetujui, penangguhan akan dicabut dengan sendirinya. Di komunitas global tidak ada pemungutan suara: penangguhan berlangsung selama 7 hari lalu berakhir dengan sendirinya, atau lebih cepat jika dicabut oleh admin.</li>
+            <li><strong>Kredit suara.</strong> Kredit suara yang ditampilkan untuk pemungutan suara pada Kacang Sarana Bersama adalah yang diperhitungkan. Kamu mendapatkannya penuh pada setiap pemungutan suara tersebut.</li>
+            <li><strong>Jenis Keputusan lebih sedikit.</strong> Keputusan tidak dapat lagi mengubah lencana percaya. &quot;Putaran pemilihan&quot; model lama telah ditiadakan.</li>
+        </ul>
+        <h3>Usaha</h3>
+        <ul>
+            <li>Saat ketua pengurus menambah atau menghapus pengurus, pengurus lainnya memiliki waktu 3 hari untuk menyatakan keberatan.</li>
+            <li>Seorang pengurus dapat mengundurkan diri, kecuali jika mereka adalah satu-satunya pengurus, atau selama komitmen mereka masih diperlukan untuk menutupi hutang usaha.</li>
+            <li>Pemilihan ketua baru kini memiliki batas waktu 14 hari, dan para pengurus dapat memilih Tidak.</li>
+            <li>Jika ketua mengundurkan diri, pengurus dengan masa pengabdian terlama langsung mengambil alih kepemimpinan.</li>
+        </ul>
+        <h3>Grup</h3>
+        <ul>
+            <li><strong>Setiap grup memiliki obrolan.</strong> Obrolan kini memiliki tiga tombol: <strong>Pesan</strong>, <strong>Grup</strong>, dan <strong>Orang</strong>. <strong>Grup</strong> mencantumkan grupmu, usaha yang kamu kelola, dan acara yang akan kamu hadiri, masing-masing dengan pesan terbaru dan jumlah yang belum dibaca.</li>
+            <li><strong>Satu cara memulai grup.</strong> <strong>Grup baru</strong> di Obrolan dan <strong>+</strong> di Sarana Bersama membuka formulir yang sama, dengan <strong>Lingkaran Sosial</strong> terpilih untukmu. Setelah kamu membuatnya, kamu masuk ke ruang obrolannya, yang menanyakan siapa yang ingin kamu undang.</li>
+            <li><strong>Undangan.</strong> Penyelenggara dapat mengundang orang dari menu obrolan. Undangan menampilkan siapa pengirimnya, dan <strong>Gabung ke grup</strong> membawamu langsung ke obrolan.</li>
+            <li><strong>Membisukan obrolan</strong>: Selama 8 jam, Selama seminggu, atau Selalu. Di dalam grup, @sebutan tetap dapat masuk.</li>
+            <li><strong>Satu tajuk untuk setiap obrolan</strong>: nama grup, usaha, atau acara di bagian atas. Ketuk tajuk untuk melihat grup, usaha, atau acara tersebut.</li>
+            <li>Obrolan grup lama di tab Obrolan telah dihapus beserta pesannya.</li>
+            <li>Setiap grup kini memiliki <strong>ketua penyelenggara</strong> — yaitu siapa pun yang membuatnya, pada awalnya. Penyelenggara mana pun tetap mengurus anggota dan postingan, tetapi hanya ketua yang dapat menghapus atau menurunkan posisi penyelenggara, dan tidak ada yang dapat menghapus ketua. Ketua dapat mengalihkan kepemimpinan kepada orang lain. Jika ketua tidak aktif selama 30 hari, grup dapat memilih ketua baru, di layar grup di atas daftar anggota. Lihat &quot;Aturan dan cara kerja keputusan&quot;.</li>
+            <li><strong>Pemungutan suara di dalam grup.</strong> Anggota grup dapat memilih urusan internal grup, seperti penyelenggara baru atau ketua baru: buka grup dan lihat di bawah <strong>Keputusan</strong>.</li>
+            <li><strong>Memilih ketua baru untuk grup yang tidak aktif.</strong> Hanya orang yang sudah berada di dalam grup sebelum ketuanya tidak aktif yang dapat memilih. Orang yang bergabung, atau diangkat sebagai penyelenggara setelah itu tidak memiliki hak suara, sehingga akun baru tidak dapat mengambil alih grup yang ketuanya sudah tidak aktif.</li>
+        </ul>
+        <h3>Keamanan</h3>
+        <ul>
+            <li>Hanya pemilik yang dapat memberikan kembali atau mencabut peran pemilik atau admin.</li>
+            <li>Admin tidak dapat menyelesaikan transaksi bermasalah yang melibatkan dirinya sendiri.</li>
+            <li>Obrolan grup dan acara membatasi seberapa cepat seseorang dapat memposting.</li>
+            <li><strong>Obrolan antara dua orang selalu terkunci.</strong> Sebelumnya aplikasi mengirim pesan tanpa kunci jika tidak menemukan kunci lawan bicara. Sekarang aplikasi tidak mengirimkannya: kata-katamu tetap berada di kotak pesan, dan kamu dapat mengirimkannya lagi sesaat kemudian. Server komunitasmu menolak pesan antara dua orang yang tidak terkunci.</li>
+        </ul>
+        <h3>Perbaikan</h3>
+        <ul>
+            <li>Peta memiliki satu tombol pencari lokasi kembali.</li>
+            <li>Feed Pasar lebih mudah dibaca dalam mode gelap.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Beranda</strong><span>Apa itu Beranda, kartu apa saja yang muncul di ponsel dan web app, cara menambah, memindah, atau menghapusnya, memilih minatmu, dan privasi saat keluar.</span></a></li>
+            <li><a href="the-bean.html"><strong>Panduan ini</strong><span>Di mana menemukan panduan ini, cara mencarinya, dan bagaimana panduan selalu diperbarui.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Cara kerja BeanPool</strong><span>Kacang, perdagangan, penawaran dan permintaan, serta kredit, secara sederhana.</span></a></li>
+            <li><a href="rules.html"><strong>Aturan dan cara kerja keputusan</strong><span>Pemungutan suara, partisipasi, suara rahasia, siapa yang berhak memilih, penangguhan, mengeluarkan anggota, pengurus, serta koordinator dan koordinator utama.</span></a></li>
+            <li><a href="faq.html"><strong>Pertanyaan</strong><span>Jawaban singkat untuk pertanyaan yang paling sering diajukan anggota.</span></a></li>
+            <li><a href="communities.html"><strong>Lebih dari satu komunitas</strong><span>Bergabung di beberapa komunitas dengan satu akun, berpindah antar komunitas, mengikuti komunitas saat pindah alamat, dan melihat apa yang ditampilkan komunitas global.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 3.</p>
+    </main>
+</body>
+</html>

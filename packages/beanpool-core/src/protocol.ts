@@ -167,8 +167,9 @@ export function tierIndexForName(name: string | null | undefined): number {
 
 /**
  * One member's level and the trust figure behind it, from the node's balance answer, so every part of a screen
- * shows the same level. The node's tier name wins; its tierCredit (the line its tier is read from, which a freeze
- * keeps) is the figure; CREDIT_BASE_FLOOR − floor only for a node that sends no tierCredit.
+ * shows the same level. The node's tier name wins; its tierCredit (the credit its tier is read from: what the member
+ * did, never the known grant, so it can be less than the limit; a freeze doesn't move it) is the figure;
+ * CREDIT_BASE_FLOOR − floor only for a node that sends no tierCredit.
  */
 export function memberLevel(answer: { tier?: { name?: string | null } | null; tierCredit?: unknown; floor?: unknown } | null | undefined): { index: number; credit: number } {
     const floor = typeof answer?.floor === 'number' && Number.isFinite(answer.floor) ? answer.floor : PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR;

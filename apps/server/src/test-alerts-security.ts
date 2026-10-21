@@ -119,7 +119,7 @@ async function main(): Promise<void> {
     const { mintHandshakeToken, consumeHandshakeToken, enrolAdminOwnerKey, issueBreakGlassCode, retireBreakGlassCode, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
     const { getAdminQueue } = await import('./engine/admin-queue.js');
-    const { burnClaimFromShell, claimLogAdmit, resetClaimBrake } = await import('./claim-code.js');
+    const { burnClaimFromShell, claimLogAdmit, resetClaimBrake, CLAIM_LOG_BUDGET } = await import('./claim-code.js');
     const brake = await import('./password-brake.js');
     const { generateTotpSecret, generateTotpCode } = await import('./totp.js');
     const { readNodeIdentity } = await import('./services/takeover-envelope.js');
@@ -270,10 +270,36 @@ async function main(): Promise<void> {
         `2. the community claimed: high, and how (${lastHistory('sec.claim')?.detail})`);
 
     resetClaimBrake();
-    const t0 = Date.now();
-    for (let i = 0; i < 25; i++) claimLogAdmit(t0);
-    claimLogAdmit(t0 + 2 * MIN); // the next minute writes the summary of the last
+    const t0 = Math.max(Date.now(), 1_700_000_000_000) + 120_000;
+    const origSetTimeout = globalThis.setTimeout;
+    let timerCb: (() => void) | null = null;
+    let timerDelay: number | undefined = undefined;
+    const summaryCount = () => (db.prepare("SELECT COUNT(*) AS c FROM system_logs WHERE category = 'AUTH' AND message LIKE '%more wrong claim proofs were refused%'").get() as { c: number }).c;
+    const summaryBefore = summaryCount();
+
+    try {
+        globalThis.setTimeout = ((fn: (...args: any[]) => void, delay?: number, ...args: any[]) => {
+            timerCb = fn as () => void;
+            timerDelay = delay;
+            return origSetTimeout(fn, delay, ...args);
+        }) as typeof setTimeout;
+
+        for (let i = 0; i < CLAIM_LOG_BUDGET; i++) claimLogAdmit(t0);
+        assert(timerCb === null, '2. summary timer not armed within budget');
+
+        const tBurst = t0 + 10_000;
+        for (let i = CLAIM_LOG_BUDGET; i < 25; i++) claimLogAdmit(tBurst);
+
+        assert(timerDelay === (t0 + 60_000) - tBurst, `2. summary timer armed for windowStart + 60_000 - now (${timerDelay} ms)`);
+        assert(typeof timerCb === 'function', '2. summary timer callback is registered');
+    } finally {
+        globalThis.setTimeout = origSetTimeout;
+    }
+
+    assert(summaryCount() === summaryBefore, '2. no summary line written before timer fires');
+    timerCb!();
     await settle();
+    assert(summaryCount() === summaryBefore + 1, '2. summary timer callback writes one summary line');
     assert(/25 wrong claim proofs were refused in one minute/.test(lastHistory('sec.claim-guess')?.detail ?? ''), `2. wrong claim proofs past the budget, counted (${lastHistory('sec.claim-guess')?.detail})`);
 
     brake.resetPasswordBrake();

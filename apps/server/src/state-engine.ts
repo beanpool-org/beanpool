@@ -2518,8 +2518,9 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         knownFrozen: !isTreasury && knownFrozen,
         creditFrozen: !isTreasury && creditFrozen,
         tier,
-        // tierCredit: the credit `tier` is read from (a freeze keeps the line held unfrozen): the apps' trust figure, so
-        // a frozen member's Levels card reads the same level as its badge (memberLevel in @beanpool/core).
+        // tierCredit: the credit `tier` is read from (vouch + earned + granted, never the known grant, so a confirmed
+        // member's limit is higher than it; a freeze doesn't move it): the apps' trust figure, so the Levels card reads
+        // the same level as the badge (memberLevel in @beanpool/core).
         tierCredit,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,

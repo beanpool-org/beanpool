@@ -9,7 +9,7 @@ related: members-and-invites, roles, what-the-server-sees, backups-and-replicas
 
 Some communities want their admins to know every member by name, the way a LETS committee keeps a membership list. The **names list** is that list, kept in the BeanPool app by your owners and admins. Each entry is a name and a short note ("Damo's neighbour, Left Bank Rd"). An admin can then **confirm** a member: this account is the person on that entry.
 
-A confirmation is a fact about a member, not a trust badge. On its own it changes nothing. If your owner turns on **the known floor** (below), it also gives that member a credit line.
+A confirmation is a fact about a member, not a trust badge. On its own it changes nothing. If your owner turns on **the known floor** (below), it also gives that member a credit line. It never changes their level: the badge other members see counts only what they have done, so it never shows who is confirmed.
 
 The global community keeps no names list. Nobody there is confirmed by name.
 
@@ -98,7 +98,7 @@ In a LETS, a member the committee knows can go into debt by an agreed amount fro
 
 ### One member's known floor
 
-An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level stays the one their line gives them unfrozen (the known floor less what they have pledged to enterprises), on their profile and their listings alike.
+An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level doesn't change, on their profile and their listings alike: the known floor never counts towards a level, frozen, lowered or raised.
 
 It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. Under the controls, **Changes to their known floor** lists every change to this member's line, newest first: which admin made it, from what to what, and when. Every owner and admin who opens the member sees it. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance.
 
@@ -109,6 +109,16 @@ A change needs an owner or admin signed in with their own key, so the log can sa
 ### Everyone sees the changes
 
 Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read one member's lines on that member's **Known floor** panel. A raise above the community's known floor is its own line, so other admins notice.
+
+## Running a mixed community
+
+A community can be a mix of members your admins know and members they do not. To run a mixed community:
+
+- **Any member invites.** In the manager, open **People & Safety → Invites & QR**; under **Who may invite**, keep **Invite** (any member invites). People your members bring in join without your admins needing to know them.
+- **Keep the names list.** In the BeanPool app on an owner's or admin's phone, open **Settings → Community admin → Names list**, tap **Add a name**, and tap **Confirm a member** for each person your admins know.
+- **Turn on the known floor.** In the manager, open **People & Safety → Invites & QR**, find **The known floor**, check **Confirmed members get the known floor**, set your amounts, and tap **Save the known floor**.
+
+Members who join through another member's invite start at zero, while members your admins have confirmed on the names list get the known floor.
 
 ## Debts and a second chance
 

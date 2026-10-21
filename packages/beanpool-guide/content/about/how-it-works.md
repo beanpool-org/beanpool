@@ -69,7 +69,7 @@ Some communities confirm who their members are. There, a confirmed member gets a
 
 ## Trust badges
 
-Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades. In a community that confirms its members, the credit line a confirmed member gets counts too.
+Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades. In a community that confirms its members, a confirmed member gets a higher credit limit, not a higher badge: their badge counts only what they have done.
 
 - Resident from 200 trust.
 - Steward from 600 trust.

@@ -54,7 +54,7 @@ Some communities have admins who know every member by name. A member an admin ha
 
 ## A mixed community
 
-In some communities any member can invite people, so the admins don't know everyone. If yours has turned on **the known floor**, the admins can confirm the members they do know, and those members start with a higher limit. Everyone else starts at zero, and everyone's limit grows the same way after that as they trade and build trust.
+In some communities any member can invite people, so the admins don't know everyone. The admins can confirm the members they do know, and those members start with a higher limit, **the known floor**, unless your community's owner switched it off. Everyone else starts at zero, and everyone's limit grows the same way after that as they trade and build trust.
 
 ## Frozen by the admins
 

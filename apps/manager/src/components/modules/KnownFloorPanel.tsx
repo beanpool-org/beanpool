@@ -6,7 +6,6 @@ import { t } from '../../lib/fresh-proof';
 import { readDoor, type Door } from './DoorSettingPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { nodeCredential } from '../../lib/profiles';
-import { t } from '../../lib/fresh-proof';
 
 /**
  * People & Safety → "The known floor" (community modes slice 4; apps/server config/known-floor.ts).
@@ -134,7 +133,7 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
                 </p>
                 {door === 'members' && (
                     <p data-testid="known-floor-mixed-note" className="text-xs text-nature-300 m-0 mt-2 leading-relaxed break-words">
-                        {t('A mixed community: anyone a member invites can join, and once the known floor is on, members your admins confirm start with a higher limit.')}
+                        {t('A mixed community: anyone a member invites can join, and members your admins confirm start with a higher limit, unless an owner switches the known floor off.')}
                     </p>
                 )}
             </div>

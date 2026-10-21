@@ -116,7 +116,7 @@ A community can be a mix of members your admins know and members they do not. To
 
 - **Any member invites.** In the manager, open **People & Safety → Invites & QR**; under **Who may invite**, keep **Invite** (any member invites). People your members bring in join without your admins needing to know them.
 - **Keep the names list.** In the BeanPool app on an owner's or admin's phone, open **Settings → Community admin → Names list**, tap **Add a name**, and tap **Confirm a member** for each person your admins know.
-- **Turn on the known floor.** In the manager, open **People & Safety → Invites & QR**, find **The known floor**, check **Confirmed members get the known floor**, set your amounts, and tap **Save the known floor**.
+- **The known floor.** It is on in every community, so there is nothing to turn on: **Confirmed members get the known floor** is checked unless an owner unchecks it. To change the amounts, open **People & Safety → Invites & QR** in the manager, find **The known floor**, set them, and tap **Save the known floor**.
 
 Members who join through another member's invite start at zero, while members your admins have confirmed on the names list get the known floor.
 

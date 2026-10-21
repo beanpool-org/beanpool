@@ -2537,9 +2537,7 @@ export default function SettingsScreen() {
                     })}
 
                     <Text style={[styles.infoText, { marginTop: 6, marginBottom: 4 }]}>
-                        {t('Run this community? Owners and admins see Manage {community} at the top of Settings.', {
-                            community: protectionNodeLabel || (anchorUrl ? communityName({ url: anchorUrl }) : '') || t('this community'),
-                        })}
+                        {t('Run this community? Owners and admins see a Manage row at the top of Settings.')}
                     </Text>
 
                     <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 24 }} />

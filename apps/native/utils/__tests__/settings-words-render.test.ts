@@ -477,7 +477,7 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(host.textContent).toContain(pseudoLocalise('Saved communities'));
         expect(host.textContent).toContain(pseudoLocalise('The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.'));
         expect(host.textContent).toContain(pseudoLocalise('Have an invite code for this community?'));
-        expect(host.textContent).toContain(pseudoLocalise('Run this community? Owners and admins see Manage {community} at the top of Settings.').replace('{community}', 'mullum.example'));
+        expect(host.textContent).toContain(pseudoLocalise('Run this community? Owners and admins see a Manage row at the top of Settings.'));
         expect(host.textContent).toContain(pseudoLocalise('Add a community by address'));
         expect(host.textContent).toContain(pseudoLocalise('Connect to a community by typing its address. Your phone will save it to this list and switch to it.'));
         expect(host.textContent).toContain(pseudoLocalise('🌍 Join the global community'));

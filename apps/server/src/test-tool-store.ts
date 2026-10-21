@@ -23,11 +23,15 @@
  *      refuses underneath
  *   6. a closed account: a removal and a self-deletion take the owner's copies, each with a tombstone no earlier than its
  *      row, and the key is refused after; an enterprise closed has no tools to read or change, one wound up keeps them
- *      to read; a re-key moves the copies to the new key, and the old key reads nothing
+ *      to read; a re-key moves the copies to the new key, and the old key reads nothing; a recovery onto a key that
+ *      already holds a copy or a removal of a tool keeps the new key's, and the old key's removal goes, hiding nothing
  *   7. replication: a whole copy carries every row verbatim and a new standby holds them exactly; a delta carries a new
  *      copy and a delete's tombstone, and the standby follows both; a delete and a write again in one millisecond, and a
  *      write then a delete, order on the standby as on the main server; a delete and then a re-key between two pulls,
- *      and the deleted copy comes back under neither key
+ *      and the deleted copy comes back under neither key, its removal on the new key on both; a removal the standby
+ *      already pulled, then a recovery (DESIGN-t04-node-copy-delete-fable.md §5 test 2): the new key reads it removed at
+ *      the same time, the old key nothing, a copy kept as kept, the enterprise's stay put, and the standby, which no delta
+ *      tells, moves its own and answers the same; pruned 30 days + 1 ms after the delete, not the recovery
  *   8. privacy by construction: no code outside the store's own files names the table
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
@@ -52,7 +56,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
-import { db } from './db/db.js';
+import { db, pruneTombstones } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit, gatewayAdmitDayBudget } from './gateway-rate-limit.js';
@@ -152,6 +156,7 @@ async function main(): Promise<void> {
     BASE = `https://localhost:${port}`;
     // Absent on a tree without it: every check that needs it fails, and the rest still run.
     const store: any = await import('./engine/tool-state.js').catch(() => null);
+    assert(typeof store?.toolStateDeletedAt === 'function', 'store exports toolStateDeletedAt');
 
     owner = newId('Olive');
     seedGenesisMember(owner.pk, 'Olive');
@@ -181,8 +186,9 @@ async function main(): Promise<void> {
     console.log('── 1. the owner\'s own copy ──');
     const feedBefore = feedCount();
     const none = await call('GET', ann, own('things'));
-    assert(none.status === 200 && none.body?.tool === 'things' && none.body?.doc === null && none.body?.updatedAt === null && none.body?.max === 65_536,
-        `none kept yet: 200, doc and updatedAt null, and the bound (${show(none)})`);
+    assert(none.status === 200 && none.body?.tool === 'things' && none.body?.doc === null && none.body?.updatedAt === null
+        && none.body?.deletedAt === null && none.body?.max === 65_536,
+        `none kept yet: 200, doc, updatedAt and deletedAt null, and the bound (${show(none)})`);
     const doc1 = { v: 1, things: [{ id: 't1', name: 'Drill', note: 'Lent to Steve since 3 Oct' }], ownerPubkey: bo.pk, unicode: 'ñ 🌱 漢' };
     const w1 = await put(ann, own('things'), doc1);
     const r1 = rowOf(ann.pk, 'things');
@@ -192,8 +198,8 @@ async function main(): Promise<void> {
     assert(!!r1 && r1.public_key === ann.pk && same(JSON.parse(r1.body), doc1),
         "stored under the signer's key, the document whole (a key inside it is the document's, never read as an identity)");
     const g1 = await call('GET', ann, own('things'));
-    assert(g1.status === 200 && same(g1.body?.doc, doc1) && g1.body?.updatedAt === r1?.updated_at && g1.body?.bytes === w1.body?.bytes,
-        `read back whole, with the same stamp (${show(g1)})`);
+    assert(g1.status === 200 && same(g1.body?.doc, doc1) && g1.body?.updatedAt === r1?.updated_at && g1.body?.deletedAt === null && g1.body?.bytes === w1.body?.bytes,
+        `read back whole, with the same stamp and deletedAt null (${show(g1)})`);
     assert(/private/.test(g1.headers.get('cache-control') ?? '') && /no-store/.test(g1.headers.get('cache-control') ?? '')
         && /no-store/.test(w1.headers.get('cache-control') ?? ''), `private and no-store (${g1.headers.get('cache-control')})`);
     const doc2 = { v: 2, things: [] };
@@ -212,7 +218,9 @@ async function main(): Promise<void> {
         `deleted (${show(d1)})`);
     assert(!!t1 && !!before && t1 >= before.updated_at, `with a tombstone no earlier than the row, so a standby deletes it too (${t1} ≥ ${before?.updated_at})`);
     const g2 = await call('GET', ann, own('things'));
-    assert(g2.status === 200 && g2.body?.doc === null && g2.body?.updatedAt === null, `gone: the read says none (${show(g2)})`);
+    assert(g2.status === 200 && g2.body?.doc === null && g2.body?.updatedAt === null && g2.body?.deletedAt === t1
+        && /private/.test(g2.headers.get('cache-control') ?? '') && /no-store/.test(g2.headers.get('cache-control') ?? ''),
+        `gone: the read says none, deletedAt matches tombstone, private and no-store (${show(g2)})`);
     const tombsBefore = tombsOf(ann.pk);
     const d2 = await call('DELETE', ann, own('things'));
     const d3 = await call('DELETE', ann, own('garden'));
@@ -220,13 +228,31 @@ async function main(): Promise<void> {
         `a delete of nothing answers removed: false and writes nothing (${show(d2)}; ${tombsOf(ann.pk)} tombstones)`);
     const w2 = await put(ann, own('things'), doc2);
     assert(w2.status === 200 && (w2.body?.updatedAt ?? '') > (tombOf(ann.pk, 'things') ?? ''), `written again after its delete, stamped after the tombstone (${w2.body?.updatedAt})`);
+    const gWrittenAgain = await call('GET', ann, own('things'));
+    assert(gWrittenAgain.status === 200 && same(gWrittenAgain.body?.doc, doc2) && gWrittenAgain.body?.deletedAt === null,
+        `written again: a copy and deletedAt: null (${show(gWrittenAgain)})`);
+
+    // pruneTombstones at 30 days + 1 ms clears the tombstone, so deletedAt answers null again
+    await put(ann, own('prune-test'), { v: 1 });
+    await call('DELETE', ann, own('prune-test'));
+    const tPrune = tombOf(ann.pk, 'prune-test');
+    const gBeforePrune = await call('GET', ann, own('prune-test'));
+    assert(gBeforePrune.status === 200 && gBeforePrune.body?.doc === null && gBeforePrune.body?.deletedAt === tPrune && typeof tPrune === 'string',
+        `deleted tool has deletedAt equal to tombstone before prune (${gBeforePrune.body?.deletedAt})`);
+    pruneTombstones(Date.now() + 30 * 86_400_000 + 1);
+    const gAfterPrune = await call('GET', ann, own('prune-test'));
+    assert(gAfterPrune.status === 200 && gAfterPrune.body?.doc === null && gAfterPrune.body?.deletedAt === null,
+        `pruneTombstones at 30 days + 1 ms: deletedAt is null (${show(gAfterPrune)})`);
     assert(feedCount() === feedBefore, 'nothing in the activity feed');
 
     // ── 2. nobody else ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. nobody else reads or changes it ──');
     const annRow = rowOf(ann.pk, 'things');
     const boRead = await call('GET', bo, own('things'));
-    assert(boRead.status === 200 && boRead.body?.doc === null, `another member reads their own, which is none (${show(boRead)})`);
+    assert(boRead.status === 200 && boRead.body?.doc === null && boRead.body?.deletedAt === null, `another member reads their own, which is none (${show(boRead)})`);
+    const boNotes = await call('GET', bo, own('notes'));
+    assert(boNotes.status === 200 && boNotes.body?.doc === null && boNotes.body?.deletedAt === null && tombOf(ann.pk, 'notes') !== null,
+        `another member never learns about Ann's deleted tool: deletedAt is null (${show(boNotes)})`);
     const boQuery = await call('GET', bo, `${own('things')}?owner=${ann.pk}&publicKey=${ann.pk}`);
     assert(boQuery.status === 200 && boQuery.body?.doc === null, `a query naming the owner reads the signer's own all the same (${show(boQuery)})`);
     const spoofs = [
@@ -266,10 +292,16 @@ async function main(): Promise<void> {
     assert(sw.status === 200 && same(JSON.parse(rowOf(shop, 'stock')?.body ?? 'null'), shopDoc) && rowOf(ann.pk, 'stock') === undefined,
         `a keeper keeps the enterprise's copy, under the enterprise's key, not her own (${show(sw)})`);
     const boKeeps = await call('GET', bo, ent(shop, 'stock'));
-    assert(boKeeps.status === 200 && same(boKeeps.body?.doc, shopDoc), `a second keeper of it reads the same copy (${show(boKeeps)})`);
+    assert(boKeeps.status === 200 && same(boKeeps.body?.doc, shopDoc) && boKeeps.body?.deletedAt === null, `a second keeper of it reads the same copy (${show(boKeeps)})`);
     const annOwn = await call('GET', ann, own('stock'));
     assert(annOwn.status === 200 && annOwn.body?.doc === null, "the keeper's own copies and the enterprise's are apart");
-    const notKeeper = [await call('GET', dee, ent(shop, 'stock')), await put(dee, ent(shop, 'stock'), { v: 9 }), await call('DELETE', dee, ent(shop, 'stock'))];
+    await put(ann, ent(shop, 'catalog'), { v: 1 });
+    const delEnt = await call('DELETE', bo, ent(shop, 'catalog'));
+    const tEnt = tombOf(shop, 'catalog');
+    const keeperGetDeleted = await call('GET', ann, ent(shop, 'catalog'));
+    assert(delEnt.status === 200 && keeperGetDeleted.status === 200 && keeperGetDeleted.body?.doc === null && keeperGetDeleted.body?.deletedAt === tEnt && typeof tEnt === 'string',
+        `an enterprise GET by a keeper answers deletedAt matching its tombstone (${keeperGetDeleted.body?.deletedAt})`);
+    const notKeeper = [await call('GET', dee, ent(shop, 'stock')), await put(dee, ent(shop, 'stock'), { v: 9 }), await call('DELETE', dee, ent(shop, 'stock')), await call('GET', dee, ent(shop, 'catalog'))];
     assert(notKeeper.every(r => r.status === 403 && /not a keeper of this enterprise/.test(r.body?.error ?? '')),
         `another member: 403, not a keeper of this enterprise (${notKeeper.map(r => r.status).join(', ')})`);
     const otherKeeper = [await call('GET', cy, ent(shop, 'stock')), await put(cy, ent(shop, 'stock'), { v: 9 }), await call('DELETE', cy, ent(shop, 'stock'))];
@@ -423,8 +455,40 @@ async function main(): Promise<void> {
         `her copies are hers on the new key, each whole (${eveBefore.length} → ${rowsOf(eveNew.pk).length})`);
     const newRead = await call('GET', eveNew, own('t2'));
     const oldRead = await call('GET', eve, own('t2'));
-    assert(newRead.status === 200 && newRead.body?.doc?.v === 'rekey', `she reads them on her new key (${show(newRead)})`);
+    assert(newRead.status === 200 && newRead.body?.doc?.v === 'rekey' && newRead.body?.deletedAt === null, `she reads them on her new key with deletedAt null (${show(newRead)})`);
     assert(oldRead.status === 403 && oldRead.body?.code === 'key_invalidated', `the old key reads nothing (${show(oldRead)})`);
+    const dEveNew = await call('DELETE', eveNew, own('t2'));
+    const tDelNew = tombOf(eveNew.pk, 't2');
+    const newReadDel = await call('GET', eveNew, own('t2'));
+    const oldReadDel = await call('GET', eve, own('t2'));
+    assert(dEveNew.status === 200 && dEveNew.body?.removed === true && newReadDel.status === 200 && newReadDel.body?.doc === null
+        && newReadDel.body?.deletedAt === tDelNew && typeof tDelNew === 'string',
+        `after a re-key the new key's GET answers deletedAt (${newReadDel.body?.deletedAt})`);
+    assert(oldReadDel.status === 403 && oldReadDel.body?.code === 'key_invalidated', `and the old key still reads nothing (${show(oldReadDel)})`);
+
+    // A recovery onto a key that already holds a copy, or a removal, of a tool the old key removed. No route makes one (the
+    // new key is no member until the move), so the engine writes them: the new key's is kept, even a copy older than the
+    // old key's removal, and the old key's removal goes, hiding nothing.
+    const hal = member('Hal');
+    const halNew = newId('HalNew');
+    attempt(() => store.writeToolState(halNew.pk, 'things', { v: 'new' }));
+    await sleep(5);
+    await put(hal, own('things'), { v: 1 });
+    await put(hal, own('notes'), { v: 1 });
+    await call('DELETE', hal, own('things'));
+    await call('DELETE', hal, own('notes'));
+    await sleep(5);
+    attempt(() => { store.writeToolState(halNew.pk, 'notes', { v: 'new' }); store.deleteToolState(halNew.pk, 'notes'); });
+    const tHalNewNotes = tombOf(halNew.pk, 'notes');
+    const halOldThings = tombOf(hal.pk, 'things');
+    const halMoved = attempt(() => { const code = issueRekeyCode(hal.pk, owner.pk).code; return completeRekey(hal.pk, halNew.pk, code, owner.pk); });
+    const halThings = await call('GET', halNew, own('things'));
+    const halNotes = await call('GET', halNew, own('notes'));
+    assert(halMoved?.success === true && halThings.status === 200 && halThings.body?.doc?.v === 'new' && halThings.body?.deletedAt === null
+        && (rowOf(halNew.pk, 'things')?.updated_at ?? '') < (halOldThings ?? '') && tombOf(halNew.pk, 'things') === null && tombOf(hal.pk, 'things') === null,
+        `the new key's own copy stays, and the old key's removal of it goes, hiding nothing (${show(halThings)})`);
+    assert(halNotes.status === 200 && halNotes.body?.doc === null && halNotes.body?.deletedAt === tHalNewNotes && typeof tHalNewNotes === 'string'
+        && tombsOf(hal.pk) === 0, `the new key's own removal stays, and the old key's goes (${show(halNotes)}; ${tombsOf(hal.pk)} left under the old key)`);
 
     // ── 7. replication ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 7. replication: a standby holds every copy ──');
@@ -473,7 +537,10 @@ async function main(): Promise<void> {
     setNodeRole('backup');
     importError = '';
     try { await importRemoteState(deltaCopy); } catch (e: any) { importError = e?.message || String(e); }
+    const sStandbyEnt = await call('GET', bo, ent(shop, 'stock'));
     setNodeRole('primary');
+    assert(sStandbyEnt.status === 200 && sStandbyEnt.body?.doc === null && sStandbyEnt.body?.deletedAt === dTomb.deletedAt && typeof dTomb.deletedAt === 'string',
+        `the standby answers the same deletedAt after the delta (${show(sStandbyEnt)})`);
     assert(importError === '' && same(everyRow(), afterMain) && rowOf(shop, 'stock') === undefined,
         `the standby follows: the new copy and the change in, the deleted one gone (${importError || `${everyRow().length} rows`})`);
 
@@ -511,11 +578,15 @@ async function main(): Promise<void> {
     const since3 = new Date(Date.now() - 1).toISOString();
     await sleep(5);
     const fayDelete = await call('DELETE', fay, own('gone'));
+    const tFay = tombOf(fay.pk, 'gone');
     const fayNew = newId('FayNew');
     const fayMoved = attempt(() => { const code = issueRekeyCode(fay.pk, owner.pk).code; return completeRekey(fay.pk, fayNew.pk, code, owner.pk); });
     const afterMain3 = everyRow();
     assert(fayDelete.status === 200 && fayMoved?.success === true && rowsOf(fay.pk).length === 0 && same(rowsOf(fayNew.pk).map(r => r.tool), ['kept']),
         `on the main server: her deleted copy gone, the one she kept on her new key (${show(fayDelete)}; ${rowsOf(fayNew.pk).map(r => r.tool).join(', ')})`);
+    const fayMainGone = await call('GET', fayNew, own('gone'));
+    assert(fayMainGone.status === 200 && fayMainGone.body?.doc === null && fayMainGone.body?.deletedAt === tFay && typeof tFay === 'string'
+        && tombOf(fay.pk, 'gone') === null, `and her removal is hers on the new key, at the same time (${show(fayMainGone)})`);
     const delta3: any = await exportSyncState(nodeId, since3);
     // The standby as it was before: a whole copy from then.
     const beforeCopy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(beforeRekey));
@@ -526,11 +597,89 @@ async function main(): Promise<void> {
     try { await importRemoteState(beforeCopy, { full: true }); } catch (e: any) { importError = e?.message || String(e); }
     const standbyHad = rowsOf(fay.pk).map(r => r.tool);
     try { await importRemoteState(delta3Copy); } catch (e: any) { importError ||= e?.message || String(e); }
+    const fayStandbyGone = await call('GET', fayNew, own('gone'));
     setNodeRole('primary');
     reconcileLedgerFromDb();
     assert(importError === '' && same(standbyHad, ['gone', 'kept']) && rowsOf(fay.pk).length === 0 && rowOf(fayNew.pk, 'gone') === undefined
         && same(everyRow(), afterMain3),
         `and the standby follows both: the deleted copy gone under either key, the kept one on her new key (${importError || `${standbyHad.join(', ')} → ${rowsOf(fayNew.pk).map(r => r.tool).join(', ')}`})`);
+    assert(fayStandbyGone.status === 200 && fayStandbyGone.body?.deletedAt === tFay && tombOf(fayNew.pk, 'gone') === tFay && tombOf(fay.pk, 'gone') === null,
+        `and its removal on her new key, answered the same (${show(fayStandbyGone)})`);
+
+    // The design's §5 test 2 (scratch/tools/DESIGN-t04-node-copy-delete-fable.md): Gus switches a tool's copy off, a standby
+    // pulls that, and then his account is recovered onto a new key. His removals are his on the new key, each at its own
+    // time, so his new phone reads the copy as removed and sends none. The standby's next delta brings no tombstone for
+    // them (they are older than its cursor): it moves its own as it follows the re-key, and answers the same.
+    const toolTombs = () => db.prepare("SELECT row_key, deleted_at FROM tombstones WHERE table_name = 'member_tool_state' ORDER BY row_key").all();
+    const gus = member('Gus');
+    const mill = await startEnterprise(gus, 'Gus Mill');
+    await put(gus, own('kept'), { v: 1 });
+    await put(gus, own('gone'), { v: 1 });
+    await put(gus, own('back'), { v: 1 });
+    await call('DELETE', gus, own('gone'));
+    await call('DELETE', gus, own('back'));
+    await put(gus, own('back'), { v: 2 });
+    await put(gus, ent(mill, 'stock'), { v: 1 });
+    await put(gus, ent(mill, 'catalog'), { v: 1 });
+    await call('DELETE', gus, ent(mill, 'catalog'));
+    const tGone = tombOf(gus.pk, 'gone');
+    const tBack = tombOf(gus.pk, 'back');
+    const tCatalog = tombOf(mill, 'catalog');
+    const millStock = rowOf(mill, 'stock');
+    await sleep(5);
+    const beforeGus: any = await exportSyncState(nodeId);
+    const since4 = new Date().toISOString();
+    await sleep(5);
+    const gusNew = newId('GusNew');
+    const gusMoved = attempt(() => { const code = issueRekeyCode(gus.pk, owner.pk).code; return completeRekey(gus.pk, gusNew.pk, code, owner.pk); });
+    const gusGone = await call('GET', gusNew, own('gone'));
+    const gusKept = await call('GET', gusNew, own('kept'));
+    const gusBack = await call('GET', gusNew, own('back'));
+    const gusOld = await call('GET', gus, own('gone'));
+    assert(gusMoved?.success === true && gusGone.status === 200 && gusGone.body?.doc === null && gusGone.body?.deletedAt === tGone && typeof tGone === 'string',
+        `recovered onto a new key, the copy he switched off reads as removed, at the same time (${show(gusGone)})`);
+    assert(gusKept.status === 200 && gusKept.body?.doc?.v === 1 && gusKept.body?.deletedAt === null,
+        `the copy he kept reads as kept, deletedAt null (${show(gusKept)})`);
+    assert(gusBack.status === 200 && gusBack.body?.doc?.v === 2 && gusBack.body?.deletedAt === null && typeof tBack === 'string'
+        && tombOf(gusNew.pk, 'back') === null && tombOf(gus.pk, 'back') === null,
+        `one removed and kept again reads as kept, and its older removal, beside it, goes as a standby never keeps it (${show(gusBack)})`);
+    assert(gusOld.status === 403 && gusOld.body?.code === 'key_invalidated' && rowsOf(gus.pk).length === 0 && tombsOf(gus.pk) === 0,
+        `the old key reads nothing, and nothing is left under it (${show(gusOld)}; ${tombsOf(gus.pk)} removals)`);
+    const millReads = [await call('GET', gusNew, ent(mill, 'stock')), await call('GET', gusNew, ent(mill, 'catalog'))];
+    assert(!!millStock && same(rowOf(mill, 'stock'), millStock) && tombOf(mill, 'catalog') === tCatalog && typeof tCatalog === 'string'
+        && millReads[0].body?.doc?.v === 1 && millReads[1].body?.doc === null && millReads[1].body?.deletedAt === tCatalog,
+        `his enterprise's copy and removal stay put, under the enterprise (${millReads.map(show).join(' | ')})`);
+    const mainTombs = toolTombs();
+    const afterMain4 = everyRow();
+    const delta4: any = await exportSyncState(nodeId, since4);
+    assert(!(delta4.tombstones ?? []).some((t: any) => t.tableName === 'member_tool_state' && (t.rowKey.startsWith(`${gus.pk}|`) || t.rowKey.startsWith(`${gusNew.pk}|`))),
+        "the delta after the recovery brings no tombstone of his: each is older than the standby's cursor");
+    const beforeGusCopy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(beforeGus));
+    const delta4Copy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(delta4));
+    attempt(() => emptyCopiedTables(db));
+    setNodeRole('backup');
+    importError = '';
+    try { await importRemoteState(beforeGusCopy, { full: true }); } catch (e: any) { importError = e?.message || String(e); }
+    const standbyHadGone = tombOf(gus.pk, 'gone');
+    try { await importRemoteState(delta4Copy); } catch (e: any) { importError ||= e?.message || String(e); }
+    const standbyGone = await call('GET', gusNew, own('gone'));
+    const standbyCatalog = await call('GET', gusNew, ent(mill, 'catalog'));
+    setNodeRole('primary');
+    reconcileLedgerFromDb();
+    assert(importError === '' && standbyHadGone === tGone && standbyGone.status === 200 && standbyGone.body?.doc === null && standbyGone.body?.deletedAt === tGone
+        && standbyCatalog.body?.deletedAt === tCatalog,
+        `the standby, which had his removal under the old key, answers the new key the same deletedAt after the delta (${importError || show(standbyGone)})`);
+    assert(same(toolTombs(), mainTombs) && same(everyRow(), afterMain4) && tombsOf(gus.pk) === 0,
+        `and holds the same copies and removals as the main server, under the same keys (${tombsOf(gusNew.pk)} under the new key, ${tombsOf(gus.pk)} under the old)`);
+
+    // His removal keeps its age: it goes 30 days after he switched the copy off, not 30 days after the recovery.
+    const DAYS_30 = 30 * 86_400_000;
+    pruneTombstones(Date.parse(tGone ?? '') + DAYS_30);
+    const atThirty = await call('GET', gusNew, own('gone'));
+    pruneTombstones(Date.parse(tGone ?? '') + DAYS_30 + 1);
+    const pastThirty = await call('GET', gusNew, own('gone'));
+    assert(atThirty.body?.deletedAt === tGone && pastThirty.status === 200 && pastThirty.body?.doc === null && pastThirty.body?.deletedAt === null,
+        `pruned at 30 days + 1 ms from the delete, whenever the recovery was: deletedAt null on the new key (${atThirty.body?.deletedAt} → ${show(pastThirty)})`);
 
     // ── 8. privacy by construction ──────────────────────────────────────────────────────────────
     console.log('\n── 8. no other code reads the store ──');

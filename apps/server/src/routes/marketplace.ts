@@ -36,6 +36,7 @@ import { createEventFromBody, eventTimeAnswer } from './event-post.js';
 import type { EventTimeOut } from '../engine/posts.js';
 import { EVENT_CHAT_HIDDEN, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
+import { LEND_ASK_FIRST_CODE } from '../engine/escrow.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
@@ -1200,6 +1201,13 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         }
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
+        // A lendable Offer is asked for, never taken in one step (engine/escrow.ts acceptPost): its code goes with its words,
+        // so an app can open the ask instead.
+        if (err?.code === LEND_ASK_FIRST_CODE) {
+            ctx.status = 409;
+            ctx.body = { error: err.message, code: LEND_ASK_FIRST_CODE };
+            return;
+        }
         // #102: the escrow engine refuses a visitor's draw — surface it as 503 + code, not a 400.
         respondSettlementAware(ctx, err, 'Failed to accept post');
     }

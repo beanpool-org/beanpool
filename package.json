@@ -13,6 +13,7 @@
     "website:check": "node scripts/website-build.mjs --check",
     "guide:publish": "node packages/beanpool-guide/scripts/publish.mjs",
     "words:check": "node scripts/words/words.mjs check",
+    "words:draft": "node scripts/words/draft.mjs",
     "words:lint": "node scripts/words/words.mjs lint",
     "words:extract": "node scripts/words/words.mjs extract",
     "words:count": "node scripts/words/words.mjs count",

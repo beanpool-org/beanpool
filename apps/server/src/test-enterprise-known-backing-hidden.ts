@@ -13,6 +13,8 @@
  *   4. an owner or admin (signed, or the manager's admin sign-in): every pledge and every keeper's backing as before
  *   5. a guest (no key) is refused these reads, as before; another keeper of the same enterprise reads it as the ordinary
  *      member does; the keeper reads their own row as before
+ *   6. a confirmed keeper pledges more, and releases it: the socket event every member hears names the enterprise only, so
+ *      the folded total a member re-reads moves with no one to tie it to (state-engine.ts broadcastPledgesChanged)
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-enterprise-known-backing-hidden.ts
  */
@@ -24,6 +26,7 @@ delete process.env.NODE_PROFILE;
 process.env.ADMIN_PASSWORD = 'KnownBacking123!';
 
 import crypto from 'node:crypto';
+import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import { initStateEngine, transfer, seedGenesisMember, pledgeEnterpriseBacking, requestToJoinEnterprise, approveKeeperRequest } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
@@ -131,6 +134,31 @@ async function readAs(who: Id | null, enterprise: string, extra: Record<string, 
 const folded = (pledges: Pledge[]) => pledges.filter(p => p.id === 'known');
 const knownRows = (pledges: Pledge[]) => pledges.filter(p => p.id.startsWith('known:'));
 const keeperOf = (keepers: Keeper[], who: Id) => keepers.find(k => k.publicKey === who.pk);
+
+type Sock = { ws: WebSocket; events: any[] };
+function socket(id: Id): Promise<Sock> {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const sig = crypto.sign(null, Buffer.from(`WS\n/ws\n${ts}\n${nonce}\n`), id.priv).toString('base64');
+    const url = `${BASE.replace('https', 'wss')}/ws?pubkey=${id.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(url, { rejectUnauthorized: false });
+        const s: Sock = { ws, events: [] };
+        ws.on('message', (d) => { try { s.events.push(JSON.parse(d.toString())); } catch { /* not JSON */ } });
+        ws.on('open', () => resolve(s));
+        ws.on('error', reject);
+    });
+}
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/** The events `sock` hears while `act` runs, once an enterprise_pledge_updated for `enterprise` has arrived (or 3 s pass). */
+async function heardDuring(sock: Sock, enterprise: string, act: () => Promise<Res>): Promise<{ res: Res; heard: any[] }> {
+    const from = sock.events.length;
+    const res = await act();
+    for (let i = 0; i < 60 && !sock.events.slice(from).some(e => e?.type === 'enterprise_pledge_updated' && e.enterprise === enterprise); i++) await sleep(50);
+    await sleep(100);
+    return { res, heard: sock.events.slice(from) };
+}
 
 /** An answer that names no known pledge: one folded entry of `sum`, naming no one, and no `known:` id anywhere in it. */
 function assertFolded(label: string, answer: { pledges: Pledge[] }, sum: number, confirmed: Id[]): void {
@@ -278,6 +306,31 @@ async function main(): Promise<void> {
     const plainReads = await readAs(una, plain);
     assert(folded(plainReads.detail.pledges).length === 0 && plainReads.detail.pledges.length === 1 && plainReads.detail.pledges[0].keeper === lee.pk,
         `an enterprise with no known pledge reads as before: Lee's 100, no folded entry (${show(plainReads.detail.pledges)})`);
+
+    // ── 6. the socket event every member hears ───────────────────────────────────────────────────────
+    console.log('── 6. a pledge and its release, as a member\'s socket hears them ──');
+    const unaSock = await socket(una);
+    await sleep(100);
+    const foldOf = async () => (await readAs(una, twoCo)).detail;
+    const before = await foldOf();
+    const pledged = await heardDuring(unaSock, twoCo, () => call('POST', lia, `/api/enterprise/${twoCo}/backing`, { amount: 100 }));
+    const afterPledge = await foldOf();
+    const pledgeEvents = pledged.heard.filter(e => e?.type === 'enterprise_pledge_updated' && e.enterprise === twoCo);
+    assert(pledged.res.status === 200 && folded(afterPledge.pledges)[0]?.amount === folded(before.pledges)[0]?.amount + 100,
+        `Lia, confirmed, pledges 100 more to Two Co: the folded total Una re-reads moves ${folded(before.pledges)[0]?.amount} → ${folded(afterPledge.pledges)[0]?.amount} (${pledged.res.status})`);
+    assert(pledgeEvents.length >= 1 && pledgeEvents.every(e => Object.keys(e).sort().join(',') === 'enterprise,type'),
+        `Una's socket hears the pledge as { type, enterprise } only, no keeper (${show(pledgeEvents)})`);
+    assert(!JSON.stringify(pledged.heard).includes(lia.pk) && !JSON.stringify(pledged.heard).includes('Lia'),
+        `nothing Una's socket heard around the pledge names Lia, so the move ties to no one (${show(pledged.heard)})`);
+    const released = await heardDuring(unaSock, twoCo, () => call('POST', lia, `/api/enterprise/${twoCo}/backing/release`, { amount: 100 }));
+    const afterRelease = await foldOf();
+    const releaseEvents = released.heard.filter(e => e?.type === 'enterprise_pledge_updated' && e.enterprise === twoCo);
+    assert(released.res.status === 200 && folded(afterRelease.pledges)[0]?.amount === folded(before.pledges)[0]?.amount,
+        `Lia releases it: the folded total moves back to ${folded(afterRelease.pledges)[0]?.amount} (${released.res.status} ${show(released.res.body)})`);
+    assert(releaseEvents.length >= 1 && releaseEvents.every(e => Object.keys(e).sort().join(',') === 'enterprise,type')
+        && !JSON.stringify(released.heard).includes(lia.pk) && !JSON.stringify(released.heard).includes('Lia'),
+        `the release's event names no keeper either, and nothing heard around it names Lia (${show(released.heard)})`);
+    unaSock.ws.close();
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

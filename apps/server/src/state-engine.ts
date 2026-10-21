@@ -3909,6 +3909,15 @@ export function treasuryKeepersForReader(treasuryPubkey: string, reader: Backing
 }
 
 /**
+ * An enterprise's pledges changed. It reaches every member socket, so it names the enterprise only: with the keeper whose
+ * pledge it was, a member who re-reads would see the folded total move and that keeper's named pledges stay, and so whose
+ * known part it was (getEnterprisePledgesForReader). No app reads more of it than its type.
+ */
+function broadcastPledgesChanged(enterprisePubkey: string): void {
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey });
+}
+
+/**
  * List active pledges made by a keeper.
  */
 export function getKeeperPledges(keeperPubkey: string): Array<{
@@ -4001,7 +4010,7 @@ export function pledgeEnterpriseBacking(
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     return res;
 }
 
@@ -4078,7 +4087,7 @@ export function releaseEnterpriseBacking(
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     return res;
 }
 
@@ -4380,7 +4389,7 @@ function broadcastKeeperBound(enterprisePubkey: string, memberPubkey: string): v
     clearEnterpriseFloorCache(enterprisePubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: memberPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     broadcast({ type: 'enterprise_keeper_approved', enterprisePubkey, memberPubkey });
 }
 
@@ -4700,7 +4709,7 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
             clearEnterpriseFloorCache(c.enterprise_pubkey);
             broadcast({ type: 'profile_updated', publicKey: c.member_pubkey });
             broadcast({ type: 'profile_updated', publicKey: c.enterprise_pubkey });
-            broadcast({ type: 'enterprise_pledge_updated', enterprise: c.enterprise_pubkey, keeper: c.member_pubkey });
+            broadcastPledgesChanged(c.enterprise_pubkey);
         }
     }
     // To the people who heard of the request (keeperRequestRecipients: the member, the lead or sole keeper, node admins), never every socket.
@@ -4833,7 +4842,7 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
     if (result.promoted) broadcast({ type: 'profile_updated', publicKey: result.promoted });
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: memberPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     broadcast({ type: 'enterprise_keeper_stepped_down', enterprisePubkey, memberPubkey, promoted: result.promoted, paused: result.paused });
     return { ok: true, promoted: result.promoted, paused: result.paused, releasedBacking: pledge };
 }

@@ -3747,5 +3747,14 @@
     "few": "Додавання {name} доглядачем, із {n} бобами іменної підтримки",
     "many": "Додавання {name} доглядачем, із {n} бобами іменної підтримки",
     "other": "Додавання {name} доглядачем, із {n} бобами іменної підтримки"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Доглядач вимкнув копію цього інструмента на сервері, тому він зберігається лише в цьому браузері. Ви можете знову увімкнути її в Налаштуваннях.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Не вдалося зв'язатися з сервером вашої спільноти, тому нічого не змінилося. Спробуйте знову, коли будете в мережі.",
+  "Keep a private copy on your community's server": "Зберігати приватну копію на сервері вашої спільноти",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Зберігається в цьому браузері, з приватною копією на сервері вашої спільноти, яку через додаток можете читати лише ви. Як і до всього на цьому сервері, його оператор міг би мати доступ.",
+  "One device at a time: the copy you changed last is the one kept.": "Один пристрій за раз: зберігається та копія, яку ви змінили останньою.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Видаляє дані цієї спільноти для {tool} із цього браузера та його копію на сервері вашої спільноти. Інший пристрій, підключений під вашим обліковим записом, зберігає те, що має, і більше його не надсилає. Той самий інструмент в іншій спільноті зберігає власні дані. Цю дію не можна скасувати.",
+  "You can edit a message for 15 minutes after sending it.": "Ви можете редагувати повідомлення протягом 15 хвилин після надсилання.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Сервер вашої спільноти поки що не може зберігати копію, тому наразі все залишається лише в цьому браузері.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Сервер вашої спільноти більше не зберігає копію цього інструмента, тому він зберігається лише в цьому браузері. Ви можете знову увімкнути копію в Налаштуваннях."
 }

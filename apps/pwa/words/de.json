@@ -3501,5 +3501,14 @@
   },
   "{name}, already in the group": "{name}, bereits in der Gruppe",
   "{name}, already invited": "{name}, bereits eingeladen",
-  "{name}, asked to join": "{name}, Beitritt angefragt"
+  "{name}, asked to join": "{name}, Beitritt angefragt",
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Ein Verwalter hat die Serverkopie dieses Werkzeugs ausgeschaltet, daher wird es nur in diesem Browser gespeichert. Du kannst sie in den Einstellungen wieder einschalten.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Der Server deiner Community konnte nicht erreicht werden, daher wurde nichts geändert. Versuche es erneut, wenn du online bist.",
+  "Keep a private copy on your community's server": "Eine private Kopie auf dem Server deiner Community speichern",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Wird in diesem Browser gespeichert, mit einer privaten Kopie auf dem Server deiner Community, die nur du über die App lesen kannst. Wie bei allem auf diesem Server könnte der Betreiber darauf zugreifen.",
+  "One device at a time: the copy you changed last is the one kept.": "Immer nur ein Gerät: Die zuletzt geänderte Kopie wird behalten.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Entfernt die Daten dieser Community für {tool} aus diesem Browser und die Kopie auf dem Server deiner Community. Ein anderes Gerät, das als du angemeldet ist, behält, was es hat, und sendet es nicht mehr. Dasselbe Werkzeug in einer anderen Community behält seine Daten. Dies kann nicht rückgängig gemacht werden.",
+  "You can edit a message for 15 minutes after sending it.": "Du kannst eine Nachricht nach dem Senden 15 Minuten lang bearbeiten.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Der Server deiner Community kann noch keine Kopie speichern, daher bleibt es vorerst nur in diesem Browser.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Der Server deiner Community speichert keine Kopie dieses Werkzeugs mehr, daher wird es nur in diesem Browser gespeichert. Du kannst die Kopie in den Einstellungen wieder einschalten."
 }

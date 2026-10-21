@@ -2538,8 +2538,6 @@
   "Next level": "下一等级",
   "Up ahead": "前方目标",
   "Your current floor": "你当前的底线",
-  "Floor from this tier": "此等级提供的底线",
-  "Floor starts at": "底线起始于",
   "Grows deeper as you trade more": "交易越多，底线越深",
   "Reach {min} trust ({left} to go) from the real value you trade.": "通过真实交易价值达到 {min} 信任分（还差 {left}）。",
   "🚀 Reach {emoji} {tier}": "🚀 达到 {emoji} {tier}",

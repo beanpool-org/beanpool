@@ -54,8 +54,8 @@ interface Props extends LocalCommunityWays {
 }
 
 // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
-// `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
-// the tier (floors slide continuously between them). Only presentation lives here. The names, blurbs and perks are
+// `min` = the credit that earns the tier (what they did, never the known grant). Levels are merit badges, not
+// tied to a floor. Only presentation lives here. The names, blurbs and perks are
 // word() keys (the phone's, apps/native/utils/trust-tier.ts and app/(tabs)/ledger.tsx), put through t() where shown.
 // The invite perk: not shown in preview, where inviting is off (global) and its Invites screen says so.
 const INVITE_PERK = word('Invite others to join');
@@ -79,9 +79,9 @@ const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string; b
       blurb: word("A pillar of the commons — the deepest possible credit line and the community's highest recognition."),
       perks: [{ words: word('Credit floor can reach -2000 (the maximum)') }, { words: word('Recognised as a community Elder') }] },
 };
-const { CREDIT_MAX_EARNED, TRUST_CURVE_K, CREDIT_BASE_FLOOR } = PROTOCOL_CONSTANTS;
+const { CREDIT_MAX_EARNED, TRUST_CURVE_K } = PROTOCOL_CONSTANTS;
 const TIERS = TIER_LEVELS.map(lvl => ({
-    name: lvl.name, emoji: lvl.emoji, ...TIER_LOOK[lvl.name], min: lvl.minCredit, floor: CREDIT_BASE_FLOOR - lvl.minCredit,
+    name: lvl.name, emoji: lvl.emoji, ...TIER_LOOK[lvl.name], min: lvl.minCredit,
 }));
 
 /** A translated sentence with **bold** parts, each drawn as `bold` draws it (the phone's richWords). */
@@ -660,20 +660,22 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
 
                         <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{t(sel.blurb)}</p>
 
-                        {/* Credit floor — show YOUR actual floor when viewing your own tier */}
+                        {/* Credit floor — show YOUR actual floor when viewing your own tier; what earns it in trust otherwise */}
                         <div className="flex items-start gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
-                            <span className="mt-0.5">⚖️</span>
+                            <span className="mt-0.5">{selCurrent ? '⚖️' : '🛡️'}</span>
                             <div className="flex-1">
                                 <div className="text-[13px] text-nature-600 dark:text-nature-300 font-semibold">
-                                    {selCurrent ? t('Your current floor') : selReached ? t('Floor from this tier') : t('Floor starts at')}
+                                    {selCurrent ? t('Your current floor') : tn(sel.min, 'from {n} trust', 'from {n} trust')}
                                 </div>
                                 {selCurrent && (
                                     <div className="text-[10px] text-nature-400 dark:text-nature-300 mt-0.5">{t('Grows deeper as you trade more')}</div>
                                 )}
                             </div>
-                            <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
-                                {formatNumber(selCurrent ? floor : sel.floor)}
-                            </span>
+                            {selCurrent && (
+                                <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
+                                    {formatNumber(floor)}
+                                </span>
+                            )}
                         </div>
 
                         <div className="flex flex-col gap-2">

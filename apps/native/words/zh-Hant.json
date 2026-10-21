@@ -3220,8 +3220,6 @@
   "Next level": "下一等級",
   "Up ahead": "前方目標",
   "Your current floor": "你目前的底線",
-  "Floor from this tier": "此等級提供的底線",
-  "Floor starts at": "底線起始於",
   "Grows deeper as you trade more": "交易越多，底線越深",
   "Reach {min} trust ({left} to go) from the real value you trade.": "透過實質交易價值達到 {min} 信任分（還差 {left}）。",
   "🚀 Reach {emoji} {tier}": "🚀 達到 {emoji} {tier}",

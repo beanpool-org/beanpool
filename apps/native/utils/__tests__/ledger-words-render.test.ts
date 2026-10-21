@@ -433,6 +433,43 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(bypassing()).toEqual([]);
     });
 
+    it('a confirmed member (floor -1,000, 0 Trust Points): sees no level promising a floor, and their own line once', async () => {
+        ledger.balance = {
+            balance: 0, floor: -1000, usableFloor: -1000, liveOffers: 0, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 1000,
+            tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 0, earnedCredit: 0, qualifiedValue: 0, avgRating: 0, reviewCount: 0, commons: 0,
+            trustStats: { uniquePartners: 0 },
+        };
+        await renderIn('en');
+        // Own line shown once from their real floor (-1000)
+        expect(text()).toContain('Your current floor');
+        expect(text()).toContain('-1000');
+        expect(text()).not.toContain('Floor starts at');
+        expect(text()).not.toContain('Floor from this tier');
+
+        // Tap Resident shelf button
+        const residentBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Resident'));
+        await click(residentBtn, 'Resident');
+        expect(text()).toContain('from 200 trust');
+        expect(text()).not.toContain('Floor starts at');
+        expect(text()).not.toContain('Floor from this tier');
+        expect(text()).not.toContain('-200');
+
+        // Tap Steward shelf button
+        const stewardBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Steward'));
+        await click(stewardBtn, 'Steward');
+        expect(text()).toContain('from 600 trust');
+        expect(text()).not.toContain('Floor starts at');
+        expect(text()).not.toContain('Floor from this tier');
+        expect(text()).not.toContain('-600');
+
+        // Tap Elder shelf button
+        const elderBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Elder'));
+        await click(elderBtn, 'Elder');
+        expect(text()).toContain('from 1400 trust');
+        expect(text()).not.toContain('Floor starts at');
+        expect(text()).not.toContain('Floor from this tier');
+    });
+
     it('a phone that has lost its community: Send asks to connect first', async () => {
         await renderIn('xx');
         store.map.delete('beanpool_anchor_url');
@@ -581,6 +618,32 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
         const wallet = Array.from(host.querySelectorAll('span')).filter((s) => styleOf(s).textTransform);
         expect([...levels, ...wallet].map((s) => s.textContent)).toEqual([]);
         for (const label of ['YOUR BALANCE', 'COMMONS ⓘ', 'CREDIT FLOOR', 'IN ESCROW', 'RECENT TRANSACTIONS']) expect(text(), label).toContain(xx(label));
+    });
+
+    it('a confirmed member\'s levels card at 320 dp with 1.3× text in the pseudo-locale', async () => {
+        ledger.balance = {
+            balance: 0, floor: -1000, usableFloor: -1000, liveOffers: 0, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 1000,
+            tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 0, earnedCredit: 0, qualifiedValue: 0, avgRating: 0, reviewCount: 0, commons: 0,
+            trustStats: { uniquePartners: 0 },
+        };
+        await renderIn('xx');
+        expect(bypassing()).toEqual([]);
+        expect(text()).toContain(xx('Your current floor'));
+        expect(text()).not.toContain(xx('Floor starts at'));
+
+        const residentBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(xx('Resident')));
+        await click(residentBtn, 'Resident');
+        expect(bypassing()).toEqual([]);
+        const residentTrust = spanSaying(xx('from {n} trust').replace('{n}', '200'))!;
+        expect(residentTrust).not.toBeNull();
+        expect(text()).not.toContain(xx('Floor starts at'));
+
+        const elderBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(xx('Elder')));
+        await click(elderBtn, 'Elder');
+        expect(bypassing()).toEqual([]);
+        const elderTrust = spanSaying(xx('from {n} trust').replace('{n}', formatNumber(1400, undefined, 'xx')))!;
+        expect(elderTrust).not.toBeNull();
+        expect(text()).not.toContain(xx('Floor starts at'));
     });
 });
 

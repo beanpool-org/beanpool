@@ -112,6 +112,7 @@ export const SUITES = [
     'test-enterprise-credit-rules',
     'test-derived-enterprise-floor',
     'test-known-floor-http',
+    'test-known-pledge-counted-once',
     'test-badge-earned-only-http',
     'test-balance-tier-credit-http',
     'test-names-debts-http',

@@ -780,4 +780,62 @@ describe('Send Beans reads the amount in the member\'s language (#2202)', () => 
             vi.useRealTimers();
         }
     });
+
+    it('starting a second send clears any pending timer while the send is in flight (#ledger-send-timer)', async () => {
+        let resolveSend: (() => void) | null = null;
+        try {
+            await sendIn('en', '5', false);
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Confirm Transfer'), 'Confirm Transfer');
+            expect(text()).toContain('✓ Sent!');
+            expect(vi.getTimerCount()).toBe(1);
+
+            await click(Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Select recipient...')), 'Select recipient');
+            await click(Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').startsWith('Mia')), 'Mia');
+            await type(byLabel('Amount to send'), '3');
+
+            const answer = net.answer!;
+            net.answer = (name, args) => {
+                if (name === 'sendTransfer') {
+                    return new Promise((r) => { resolveSend = () => r({}); });
+                }
+                return answer(name, args);
+            };
+
+            await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Confirm Transfer'), 'Confirm Transfer');
+            expect(vi.getTimerCount()).toBe(0);
+            expect(text()).toContain('Sending...');
+
+            await act(async () => { vi.advanceTimersByTime(2000); });
+            expect(text()).toContain('Sending...');
+
+            await act(async () => { resolveSend?.(); });
+            await settle(4);
+            expect(text()).toContain('✓ Sent!');
+            expect(vi.getTimerCount()).toBe(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('cancelling the form clears any pending success timer (#ledger-send-timer)', async () => {
+        try {
+            await sendIn('en', '5', false);
+            vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+            await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Confirm Transfer'), 'Confirm Transfer');
+            expect(text()).toContain('✓ Sent!');
+            expect(vi.getTimerCount()).toBe(1);
+
+            await click(Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Cancel'), 'Cancel');
+            expect(vi.getTimerCount()).toBe(0);
+
+            await click(byLabel('Send Beans'), 'Send Beans');
+            expect(text()).toContain('Confirm Transfer');
+
+            await act(async () => { vi.advanceTimersByTime(2000); });
+            expect(text()).toContain('Confirm Transfer');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

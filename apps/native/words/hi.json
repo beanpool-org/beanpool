@@ -6011,5 +6011,13 @@
     "one": "{n} विश्वास से",
     "other": "{n} विश्वास से"
   },
-  "{name}, already invited": "{name}, पहले से आमंत्रित हैं"
+  "{name}, already invited": "{name}, पहले से आमंत्रित हैं",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "एक व्यवस्थापक ने इस टूल की सर्वर प्रति बंद कर दी है, इसलिए यह केवल इसी फ़ोन पर रखी गई है। आप इसे सेटिंग्स में फिर से चालू कर सकते हैं।",
+  "Asked to join": "जुड़ने का अनुरोध किया",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "आपके समुदाय के सर्वर से संपर्क नहीं हो सका, इसलिए कुछ भी नहीं बदला। ऑनलाइन होने पर पुनः प्रयास करें।",
+  "One phone at a time: the copy you changed last is the one kept.": "एक समय में एक फ़ोन: जिसे आपने आख़िरी बार बदला था, वही प्रति रखी जाती है।",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "इस फ़ोन से इस टूल के लिए आपका डेटा, और आपके समुदाय के सर्वर पर इसकी प्रति हटाता है। आपके रूप में साइन इन दूसरा फ़ोन अपने पास मौजूद डेटा रखता है और इसे भेजना बंद कर देता है। दूसरे समुदाय में यही टूल अपना डेटा रखता है। इसे पूर्ववत नहीं किया जा सकता।",
+  "You can edit a message for 15 minutes after sending it.": "आप संदेश भेजने के बाद 15 मिनट तक उसे संपादित कर सकते हैं।",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "आपके समुदाय का सर्वर अब इस टूल की प्रति नहीं रखता है, इसलिए यह केवल इसी फ़ोन पर रखी गई है। आप सेटिंग्स में इस प्रति को फिर से चालू कर सकते हैं।",
+  "{name}, asked to join": "{name}, जुड़ने का अनुरोध किया"
 }

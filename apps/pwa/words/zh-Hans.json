@@ -3363,5 +3363,14 @@
   "{n} week|{n} weeks": {
     "other": "{n} 周"
   },
-  "📦 Ask to borrow": "📦 申请借用"
+  "📦 Ask to borrow": "📦 申请借用",
+  "Asked to join": "已申请加入",
+  "Invited": "已邀请",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "欢迎。从第一天起，你就可以浏览、交易、接收信用额度并邀请他人 — 而且你的信用额度已经开启。",
+  "from {n} trust|from {n} trust": {
+    "other": "从 {n} 信任分起"
+  },
+  "{name}, already in the group": "{name}，已在群组中",
+  "{name}, already invited": "{name}，已邀请",
+  "{name}, asked to join": "{name}，已申请加入"
 }

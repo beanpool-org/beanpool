@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fr",
     "name": "French",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-22",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "« {name} » est déjà pris dans cette communauté. Choisissez un autre nom.",
@@ -3502,5 +3502,14 @@
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "one": "Ajout de {name} comme gestionnaire, avec {n} haricot de soutien nominatif",
     "other": "Ajout de {name} comme gestionnaire, avec {n} haricots de soutien nominatif"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Un gestionnaire a désactivé la copie sur le serveur de cet outil, il est donc conservé dans ce navigateur uniquement. Vous pouvez la réactiver dans Paramètres.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Impossible de joindre le serveur de votre communauté, rien n'a donc changé. Réessayez lorsque vous serez en ligne.",
+  "Keep a private copy on your community's server": "Conserver une copie privée sur le serveur de votre communauté",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Conservé dans ce navigateur, avec une copie privée sur le serveur de votre communauté que vous seul pouvez lire via l'application. Comme pour tout ce qui se trouve sur ce serveur, son opérateur le pourrait.",
+  "One device at a time: the copy you changed last is the one kept.": "Un appareil à la fois : la copie que vous avez modifiée en dernier est celle qui est conservée.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Supprime les données de cette communauté pour {tool} de ce navigateur, ainsi que sa copie sur le serveur de votre communauté. Un autre appareil connecté avec votre compte conserve ce qu'il a et cesse de l'envoyer. Le même outil dans une autre communauté conserve les siennes. Cette action est irréversible.",
+  "You can edit a message for 15 minutes after sending it.": "Vous pouvez modifier un message pendant 15 minutes après son envoi.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Le serveur de votre communauté ne peut pas encore en conserver une copie, donc pour l'instant cela reste uniquement dans ce navigateur.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Le serveur de votre communauté ne conserve plus de copie de cet outil, il est donc conservé dans ce navigateur uniquement. Vous pouvez réactiver la copie dans Paramètres."
 }

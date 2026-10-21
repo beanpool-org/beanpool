@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server status — BeanPool</title>
-    <meta name="description" content="Whether BeanPool's own servers answer: the global community, the test community and the registrar, checked from outside every 5 minutes.">
+    <title>Server-Status — BeanPool</title>
+    <meta name="description" content="Ob die eigenen Server von BeanPool antworten: die globale Gemeinschaft, die Testgemeinschaft und der Registrar, alle 5 Minuten von außen geprüft.">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.8">
@@ -77,22 +77,22 @@
 <body>
     <nav id="navbar">
         <div class="nav-inner">
-            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool-Symbol" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
-                <a href="index.html#how-it-works">How It Works</a>
-                <a href="help.html">Help</a>
-                <a href="getting-started.html" class="nav-cta">Get Started</a>
+                <a href="index.html#how-it-works">So funktioniert's</a>
+                <a href="help.html">Hilfe</a>
+                <a href="getting-started.html" class="nav-cta">Erste Schritte</a>
             </div>
         </div>
     </nav>
 
     <main class="status-page glass-panel">
-        <h1>Server status</h1>
-        <p class="lede">Whether BeanPool's own servers answer, checked from outside every 5 minutes. Local communities run on their own servers and are not on this page: when ours are down, they carry on.</p>
-        <p class="status-note" id="status-note" role="status">Reading the status…</p>
+        <h1>Server-Status</h1>
+        <p class="lede">Ob die eigenen Server von BeanPool antworten, alle 5 Minuten von außen geprüft. Lokale Gemeinschaften laufen auf ihren eigenen Servern und sind nicht auf dieser Seite: Wenn unsere Server ausfallen, laufen sie weiter.</p>
+        <p class="status-note" id="status-note" role="status">Status wird geladen…</p>
         <ul class="status-list" id="status-list" hidden></ul>
         <p class="status-foot" id="status-foot" hidden></p>
-        <noscript><p class="status-note">This page needs JavaScript to read the status. The figures themselves: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
+        <noscript><p class="status-note">Diese Seite benötigt JavaScript, um den Status auszulesen. Die Rohdaten selbst: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
     </main>
 
     <script>
@@ -102,16 +102,16 @@
         var URL_ = '/api/registrar/status.json';
         var LATE_S = 15 * 60;   // three ticks without a new status: the registrar's checks are late
         var SERVERS = {
-            global: { label: 'The global community', host: 'global.beanpool.org' },
-            test: { label: 'The test community', host: 'test.beanpool.org' },
-            vault: { label: 'The key vault', host: 'vault.beanpool.org' },
-            registrar: { label: 'Community addresses', host: 'beanpool.org: gives communities their name.beanpool.org addresses. When it is down, those addresses keep working; new ones and beanpool.org/i/ links wait.' },
+            global: { label: 'Die globale Gemeinschaft', host: 'global.beanpool.org' },
+            test: { label: 'Die Testgemeinschaft', host: 'test.beanpool.org' },
+            vault: { label: 'Der Schlüsseltresor', host: 'vault.beanpool.org' },
+            registrar: { label: 'Adressen der Gemeinschaften', host: 'beanpool.org: vergibt für Gemeinschaften ihre name.beanpool.org-Adressen. Bei Ausfall funktionieren diese Adressen weiter; neue Adressen und beanpool.org/i/-Links warten.' },
         };
         var WHY = {
-            'timed-out': 'it did not answer in time',
-            'unreachable': 'it could not be reached',
-            'not-ours': 'something else answered at its address',
-            'checks-missed': 'the checks did not run',
+            'timed-out': 'hat nicht rechtzeitig geantwortet',
+            'unreachable': 'konnte nicht erreicht werden',
+            'not-ours': 'etwas anderes hat unter dieser Adresse geantwortet',
+            'checks-missed': 'die Prüfungen wurden nicht ausgeführt',
         };
         var list = document.getElementById('status-list');
         var note = document.getElementById('status-note');
@@ -131,16 +131,16 @@
         function day(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d) ? dayFmt.format(new Date(d + 'T00:00:00Z')) : null; }
         function lasted(s) {
             var m = Math.max(1, Math.round(s / 60));
-            if (m < 60) return m + (m === 1 ? ' minute' : ' minutes');
+            if (m < 60) return m + (m === 1 ? ' Minute' : ' Minuten');
             var h = Math.floor(m / 60), r = m % 60;
-            if (h >= 48) return Math.round(h / 24) + ' days';
-            return h + (h === 1 ? ' hour' : ' hours') + (r ? ' ' + r + (r === 1 ? ' minute' : ' minutes') : '');
+            if (h >= 48) return Math.round(h / 24) + ' Tage';
+            return h + (h === 1 ? ' Stunde' : ' Stunden') + (r ? ' ' + r + (r === 1 ? ' Minute' : ' Minuten') : '');
         }
         function why(code) {
-            if (typeof code !== 'string') return 'it did not answer';
+            if (typeof code !== 'string') return 'hat nicht geantwortet';
             var http = code.match(/^http-(\d{3})$/);
-            if (http) return 'it answered with an error (HTTP ' + http[1] + ')';
-            return WHY[code] || 'it did not answer';
+            if (http) return 'hat mit einem Fehler geantwortet (HTTP ' + http[1] + ')';
+            return WHY[code] || 'hat nicht geantwortet';
         }
 
         function row(s, late) {
@@ -148,11 +148,11 @@
             var inc = s.incident && num(s.incident.began_at) ? s.incident : null;
             var open = inc && inc.ended_at === null;
             var state, words;
-            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Its checks are late'; }
-            else if (open) { state = 'down'; words = 'Down'; }
-            else if (s.up === true) { state = 'up'; words = 'Answering'; }
-            else if (s.up === false) { state = 'missed'; words = 'Missed its last check'; }
-            else { state = 'unknown'; words = 'Not checked yet'; }
+            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Prüfungen verspätet'; }
+            else if (open) { state = 'down'; words = 'Ausgefallen'; }
+            else if (s.up === true) { state = 'up'; words = 'Antwortet'; }
+            else if (s.up === false) { state = 'missed'; words = 'Letzte Prüfung verpasst'; }
+            else { state = 'unknown'; words = 'Noch nicht geprüft'; }
 
             var li = el('li', 'status-row');
             li.setAttribute('data-state', state);
@@ -169,19 +169,19 @@
             var share = el('p', 'status-share');
             var pct = num(s.percent);
             var since = day(s.since);
-            if (pct === null) share.textContent = 'No checks counted yet.';
+            if (pct === null) share.textContent = 'Noch keine Prüfungen erfasst.';
             else {
                 share.appendChild(el('strong', null, pct + '%'));
-                var of = s.name === 'registrar' ? ' of its 5-minute checks ran' : ' of checks answered';
-                share.appendChild(document.createTextNode(of + (since ? ' since ' + since : ' over the last 90 days') + '.'));
+                var of = s.name === 'registrar' ? ' seiner 5-Minuten-Prüfungen liefen' : ' der Prüfungen haben geantwortet';
+                share.appendChild(document.createTextNode(of + (since ? ' seit dem ' + since : ' in den letzten 90 Tagen') + '.'));
             }
             li.appendChild(share);
 
             var last = el('p', 'status-incident');
-            if (!inc) last.textContent = since ? 'No incident since ' + since + '.' : 'No incident recorded.';
-            else if (open) last.textContent = 'Down since ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
-            else if (num(inc.ended_at)) last.textContent = 'Last incident: ' + when(inc.began_at) + ' for ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
-            else last.textContent = 'Last incident: ' + when(inc.began_at) + '.';
+            if (!inc) last.textContent = since ? 'Kein Vorfall seit dem ' + since + '.' : 'Kein Vorfall verzeichnet.';
+            else if (open) last.textContent = 'Ausgefallen seit ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
+            else if (num(inc.ended_at)) last.textContent = 'Letzter Vorfall: ' + when(inc.began_at) + ' für ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
+            else last.textContent = 'Letzter Vorfall: ' + when(inc.began_at) + '.';
             li.appendChild(last);
             return li;
         }
@@ -191,14 +191,14 @@
             var servers = doc && doc.v === 1 && Array.isArray(doc.servers) ? doc.servers.filter(function (s) {
                 return s && typeof s.name === 'string' && /^[a-z0-9-]{1,32}$/.test(s.name);
             }).slice(0, 6) : [];
-            if (!at || !servers.length) { say('The status could not be read: it is not in a form this page knows.'); return; }
+            if (!at || !servers.length) { say('Der Status konnte nicht gelesen werden: Format wird von dieser Seite nicht unterstützt.'); return; }
             var late = Date.now() / 1000 - at > LATE_S;
             list.textContent = '';
             servers.forEach(function (s) { list.appendChild(row(s, late)); });
             list.hidden = false;
-            if (late) { note.textContent = 'These are from ' + zoneFmt.format(new Date(at * 1000)) + ': the checks have not run since. What a server says now may differ.'; note.setAttribute('data-tone', 'late'); }
-            else { note.textContent = 'Checked ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
-            foot.textContent = 'A check is one look from outside, 5 minutes apart. Two failed looks in a row are an incident; the share counts every look. Times are your own time zone’s.';
+            if (late) { note.textContent = 'Stand vom ' + zoneFmt.format(new Date(at * 1000)) + ': Die Prüfungen wurden seither nicht ausgeführt. Was ein Server aktuell meldet, kann abweichen.'; note.setAttribute('data-tone', 'late'); }
+            else { note.textContent = 'Geprüft am ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
+            foot.textContent = 'Eine Prüfung ist ein Blick von außen im Abstand von 5 Minuten. Zwei fehlgeschlagene Prüfungen in Folge gelten als Vorfall; die Quote zählt jede Prüfung. Zeiten in deiner eigenen Zeitzone.';
             foot.hidden = false;
         }
         function say(text) {
@@ -212,11 +212,11 @@
         function read() {
             lastRead = Date.now();
             fetch(URL_, { headers: { accept: 'application/json' } }).then(function (res) {
-                if (res.status === 404) { say('No status is published here yet.'); return null; }
+                if (res.status === 404) { say('Hier ist noch kein Status veröffentlicht.'); return null; }
                 if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json().then(draw, function () { say('The status could not be read: it is not in a form this page knows.'); });
+                return res.json().then(draw, function () { say('Der Status konnte nicht gelesen werden: Format wird von dieser Seite nicht unterstützt.'); });
             }).catch(function () {
-                say('The status could not be read just now: the registrar that keeps it may be down. Local communities are not affected. Try again in a few minutes.');
+                say('Der Status konnte gerade nicht abgerufen werden: Der Registrar, der ihn verwaltet, ist möglicherweise offline. Lokale Gemeinschaften sind nicht betroffen. Versuche es in wenigen Minuten erneut.');
             });
         }
         read();

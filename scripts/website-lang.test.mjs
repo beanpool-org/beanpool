@@ -1092,6 +1092,7 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
         const runWorker = async (items) => {
             const ctx100 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
             const ctx130 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            const ctxWide = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
             await ctx100.addInitScript(() => {
                 const style = document.createElement('style');
                 style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
@@ -1110,16 +1111,69 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                 });
                 observer.observe(document, { childList: true, subtree: true });
             });
+            await ctxWide.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; } #navbar .nav-inner * { letter-spacing: 0.08em !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            });
 
             const p100 = await ctx100.newPage();
             const p130 = await ctx130.newPage();
+            const pWide = await ctxWide.newPage();
 
             const clipped = [];
             const wrapped = [];
             const phoneHeaderBad = [];
             const unreachable = [];
+            const wideClipped = [];
+            const wideGlobeClipped = [];
+            const wideSizeBad = [];
 
             for (const item of items) {
+                // Wide script pass for desktop ☰ row (1024, 1080, 1200, 1280 px, 100% text)
+                await pWide.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
+                const hasMenu = await pWide.evaluate(() => !!document.querySelector('.nav-inner.has-menu'));
+                if (hasMenu) {
+                    for (const width of [1024, 1080, 1200, 1280]) {
+                        await pWide.setViewportSize({ width, height: 800 });
+                        const res = await pWide.evaluate(({ isRtl }) => {
+                            const cta = document.querySelector('.nav-cta');
+                            const globe = document.querySelector('.desktop-lang-menu summary') || document.querySelector('.lang-menu summary');
+                            if (!cta || !globe) return null;
+                            const ctaR = cta.getBoundingClientRect();
+                            const globeR = globe.getBoundingClientRect();
+                            const ctaOff = isRtl
+                                ? (ctaR.left < -0.5 || ctaR.right > window.innerWidth + 0.5)
+                                : (ctaR.left < -0.5 || ctaR.right > window.innerWidth + 0.5);
+                            const globeOff = isRtl
+                                ? (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5)
+                                : (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5);
+                            return {
+                                ctaOff,
+                                globeOff,
+                                ctaRight: ctaR.right,
+                                ctaLeft: ctaR.left,
+                                ctaHeight: ctaR.height,
+                                globeRight: globeR.right,
+                                globeLeft: globeR.left,
+                                globeHeight: globeR.height
+                            };
+                        }, { isRtl: item.rtl });
+
+                        if (res) {
+                            if (res.ctaOff) {
+                                wideClipped.push({ page: item.url, width, right: res.ctaRight, left: res.ctaLeft });
+                            }
+                            if (res.globeOff) {
+                                wideGlobeClipped.push({ page: item.url, width, right: res.globeRight, left: res.globeLeft });
+                            }
+                            if (width >= 1280 && res.ctaHeight < 43.5) {
+                                wideSizeBad.push({ page: item.url, width, target: 'cta', h: res.ctaHeight });
+                            }
+                        }
+                    }
+                }
+
                 for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
                     await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
 
@@ -1207,7 +1261,8 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
 
             await ctx100.close();
             await ctx130.close();
-            return { clipped, wrapped, phoneHeaderBad, unreachable };
+            await ctxWide.close();
+            return { clipped, wrapped, phoneHeaderBad, unreachable, wideClipped, wideGlobeClipped, wideSizeBad };
         };
 
         const NUM_WORKERS = 6;
@@ -1219,6 +1274,9 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
         const allWrapped = results.flatMap(r => r.wrapped);
         const allPhoneHeaderBad = results.flatMap(r => r.phoneHeaderBad);
         const allUnreachable = results.flatMap(r => r.unreachable);
+        const allWideClipped = results.flatMap(r => r.wideClipped);
+        const allWideGlobeClipped = results.flatMap(r => r.wideGlobeClipped);
+        const allWideSizeBad = results.flatMap(r => r.wideSizeBad);
 
         // Banner reachability check with pt-BR locale
         const bannerUnreachable = [];
@@ -1417,11 +1475,14 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
 
         const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length
             + noMenuCtaSizeBad.length + noMenuGlobeSizeBad.length + noMenuPaddingBad.length + noMenuClipped.length + noMenuWrapped.length
-            + noMenuLinkGapBad.length;
+            + noMenuLinkGapBad.length + allWideClipped.length + allWideGlobeClipped.length + allWideSizeBad.length;
         assert.equal(totalFailures, 0,
             `Failing counts:\n` +
             `  - Clipped CTAs: ${allClipped.length}\n` +
             `  - Wrapped CTAs: ${allWrapped.length}\n` +
+            `  - Wide-text desktop ☰ clipped CTAs: ${allWideClipped.length}\n` +
+            `  - Wide-text desktop ☰ clipped 🌐 buttons: ${allWideGlobeClipped.length}\n` +
+            `  - Wide-text desktop ☰ controls < 44px: ${allWideSizeBad.length}\n` +
             `  - Phone header mismatches: ${allPhoneHeaderBad.length}\n` +
             `  - Unreachable panel links without banner: ${allUnreachable.length}\n` +
             `  - Unreachable panel links with banner: ${bannerUnreachable.length}\n` +
@@ -1432,6 +1493,9 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
             `  - No-menu wrapped CTAs: ${noMenuWrapped.length}\n` +
             `  - No-menu text links closer than 12px: ${noMenuLinkGapBad.length}` +
             (noMenuLinkGapBad.length ? ` (e.g. ${noMenuLinkGapBad.slice(0, 3).map(g => `${g.page} @ ${g.width}px ${g.scale * 100}%: ${g.gap.toFixed(1)}px`).join('; ')})` : '') + `\n\n` +
+            (allWideClipped.length ? `Wide-text desktop ☰ clipped CTA samples:\n  ` + allWideClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (right: ${c.right.toFixed(1)}, left: ${c.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
+            (allWideGlobeClipped.length ? `Wide-text desktop ☰ clipped 🌐 samples:\n  ` + allWideGlobeClipped.slice(0, 10).map(g => `${g.page} @ ${g.width}px (right: ${g.right.toFixed(1)}, left: ${g.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
+            (allWideSizeBad.length ? `Wide-text desktop ☰ size bad samples:\n  ` + allWideSizeBad.slice(0, 5).map(s => `${s.page} @ ${s.width}px: ${s.target} height ${s.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
             (noMenuCtaSizeBad.length ? `No-menu CTA size bad samples:\n  ` + noMenuCtaSizeBad.slice(0, 5).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text): ${c.w.toFixed(1)}x${c.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
             (noMenuGlobeSizeBad.length ? `No-menu 🌐 size bad samples:\n  ` + noMenuGlobeSizeBad.slice(0, 5).map(g => `${g.page} @ ${g.width}px (${g.scale * 100}% text): ${g.w.toFixed(1)}x${g.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
             (noMenuPaddingBad.length ? `No-menu padding bad samples:\n  ` + noMenuPaddingBad.slice(0, 5).map(p => `${p.page} @ ${p.width}px (${p.scale * 100}% text): L=${p.padL.toFixed(1)}px R=${p.padR.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +

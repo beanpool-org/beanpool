@@ -3,7 +3,7 @@ slug: how-it-works
 title: Cara kerja BeanPool
 summary: Kacang, perdagangan, penawaran dan permintaan, serta kredit, secara sederhana.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Kacang
@@ -66,11 +66,11 @@ Kepercayaan menentukan seberapa dalam kamu **bisa** mencapai saldo negatif. Pena
 
 Jika kamu menurunkan Penawaran saat kamu berada di bawah nol, kamu mungkin berutang lebih banyak daripada yang sekarang ditanggung oleh Penawaranmu. Maka kamu tidak dapat berbelanja lebih banyak sampai kamu kembali berada dalam batasmu. Kamu tetap bisa memperoleh kacang, dan tidak ada yang diambil darimu.
 
-Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat "Batas kredit".
+Beberapa komunitas mengonfirmasi identitas anggotanya. Di sana, anggota yang terkonfirmasi mendapatkan batas kredit secara langsung: 1.000 kacang, kecuali komunitas memilih jumlah lain. Satu Penawaran aktif membuka seluruh batas tersebut. Batas terdalam di sana bisa mencapai 5.000. Lihat "Batas kreditmu".
 
 ## Lencana kepercayaan
 
-Tingkat kepercayaanmu ditampilkan sebagai lencana. Lencananya adalah Pendatang Baru, Warga, Pengelola, dan Tetua. Kepercayaan di balik lencanamu menjumlahkan tiga hal: awal yang diberikan oleh penjamin, kepercayaan yang kamu peroleh dari bertransaksi, dan kepercayaan apa pun yang diberikan admin kepadamu. Seorang admin dapat memberikan lencana kepada anggota secara langsung, tanpa transaksi. Di komunitas yang mengonfirmasi anggotanya, batas kredit yang didapatkan anggota terkonfirmasi juga dihitung.
+Tingkat kepercayaanmu ditampilkan sebagai lencana. Lencananya adalah Pendatang Baru, Warga, Pengelola, dan Tetua. Kepercayaan di balik lencanamu menjumlahkan tiga hal: awal yang diberikan oleh penjamin, kepercayaan yang kamu peroleh dari bertransaksi, dan kepercayaan apa pun yang diberikan admin kepadamu. Seorang admin dapat memberikan lencana kepada anggota secara langsung, tanpa transaksi. Di komunitas yang mengonfirmasi anggotanya, anggota yang terkonfirmasi mendapatkan batas kredit yang lebih tinggi, bukan lencana yang lebih tinggi: lencana mereka hanya menghitung apa yang telah mereka lakukan.
 
 - Warga dari 200 kepercayaan.
 - Pengelola dari 600 kepercayaan.

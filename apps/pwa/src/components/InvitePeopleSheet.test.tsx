@@ -115,7 +115,7 @@ describe('InvitePeopleSheet member statuses and accessibility', () => {
             { memberPubkey: BOB, status: 'invited' },
             { memberPubkey: CHARLIE, status: 'pending_approval' },
             { memberPubkey: DAVE, status: 'removed' },
-        ];
+        ] as const;
         const split = alreadyInGroup(roster);
 
         render(

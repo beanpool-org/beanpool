@@ -22,6 +22,9 @@ import { SAMPLE_COMMUNITY } from '@beanpool/core';
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
+// use-global-guest-visit reads useNodeStatus().recheck (only during a visit, which these screens never start); the real
+// context pulls expo-crypto in at import.
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'unknown' }) }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button' };
     const el = (tag: string) => (props: Record<string, any>) => {

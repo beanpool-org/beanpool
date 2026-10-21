@@ -22,7 +22,8 @@ let next: { to: MemberLanding; publicKey: string | null } | null = null;
 
 /**
  * The guard's next landing from welcome goes to `to`. Call it before `setIdentity`, and don't navigate: the guard does.
- * Today only the welcome screen's community restore in a vault build uses it (Settings, whose first card is the move).
+ * Used by the welcome screen's community restore in a vault build (Settings, whose first card is the move), and by a
+ * guest visit to the global community before its bounce through Welcome (use-global-guest-visit.ts, {@link guestRedirect}).
  */
 export function landNextOn(to: MemberLanding, publicKey: string | null = null): void {
     next = { to, publicKey };
@@ -38,6 +39,21 @@ export function memberRedirect(segments: readonly string[], publicKey: string | 
     if (next && next.publicKey !== null && next.publicKey !== publicKey) next = null;
     if (segments.length !== 0 && segments[0] !== 'welcome') return null;
     const to = next?.to ?? DEFAULT_MEMBER_LANDING;
+    next = null;
+    return to;
+}
+
+/**
+ * The root guard's check for a chosen guest it finds on welcome: the community in use answered "not a member" and the
+ * phone marked it a guest visit (nodes.ts markGuestNode). The guard holds every stranger on welcome (mismatch-plan.ts
+ * notRecognisedStays), so {@link memberRedirect} is never reached for one, and a guest visit that bounced through Welcome,
+ * as every switch does, stayed there (PR #2320 review). Only a landing a screen asked for with `landNextOn`, taken once:
+ * nothing asked (a guest on welcome to use an invite for that community), null, and the guest stays to use it.
+ */
+export function guestRedirect(segments: readonly string[], publicKey: string | null = null): MemberLanding | null {
+    if (next && next.publicKey !== null && next.publicKey !== publicKey) next = null;
+    if (!next || segments[0] !== 'welcome') return null;
+    const to = next.to;
     next = null;
     return to;
 }

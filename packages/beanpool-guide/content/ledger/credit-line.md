@@ -45,7 +45,7 @@ The line under the bar tells you, for example "Post an offer to open your credit
 
 ## In a known community
 
-Some communities have admins who know every member by name. If yours has turned on **the known floor**, a member an admin has confirmed gets a credit line straight away: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for. It raises your limit, not your level: your trust badge still counts only what you have done.
+Some communities have admins who know every member by name. A member an admin has confirmed gets a credit line straight away, **the known floor**: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for. It raises your limit, not your level: your trust badge still counts only what you have done. The known floor is on in every community with Beans unless its owner switched it off.
 
 - One live Offer lets you use all of it. With no Offers, you can't use it.
 - Trust you earn by trading adds to it, up to your community's cap (2,000 Beans unless it chose more, up to 5,000).
@@ -54,7 +54,7 @@ Some communities have admins who know every member by name. If yours has turned 
 
 ## A mixed community
 
-In some communities any member can invite people, so the admins don't know everyone. If yours has turned on **the known floor**, the admins can confirm the members they do know, and those members start with a higher limit. Everyone else starts at zero, and everyone's limit grows the same way after that as they trade and build trust.
+In some communities any member can invite people, so the admins don't know everyone. The admins can confirm the members they do know, and those members start with a higher limit, **the known floor**, unless your community's owner switched it off. Everyone else starts at zero, and everyone's limit grows the same way after that as they trade and build trust.
 
 ## Frozen by the admins
 

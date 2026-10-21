@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 150,
-  "hash": "2fad99cc67718e48fa9e895db9cf594378a4fef0e5f32e90ea252fd9a676aaad",
+  "version": 151,
+  "hash": "dd75df4047616f81c8abf17ee31f15575939dc08f45b316640a786a8274f3182",
   "sections": [
     {
       "id": "about",
@@ -5876,7 +5876,7 @@
         },
         {
           "type": "p",
-          "text": "Some communities have admins who know every member by name. If yours has turned on **the known floor**, a member an admin has confirmed gets a credit line straight away: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for. It raises your limit, not your level: your trust badge still counts only what you have done."
+          "text": "Some communities have admins who know every member by name. A member an admin has confirmed gets a credit line straight away, **the known floor**: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for. It raises your limit, not your level: your trust badge still counts only what you have done. The known floor is on in every community with Beans unless its owner switched it off."
         },
         {
           "type": "ul",
@@ -5893,7 +5893,7 @@
         },
         {
           "type": "p",
-          "text": "In some communities any member can invite people, so the admins don't know everyone. If yours has turned on **the known floor**, the admins can confirm the members they do know, and those members start with a higher limit. Everyone else starts at zero, and everyone's limit grows the same way after that as they trade and build trust."
+          "text": "In some communities any member can invite people, so the admins don't know everyone. The admins can confirm the members they do know, and those members start with a higher limit, **the known floor**, unless your community's owner switched it off. Everyone else starts at zero, and everyone's limit grows the same way after that as they trade and build trust."
         },
         {
           "type": "h2",
@@ -6438,7 +6438,7 @@
           "type": "ul",
           "items": [
             "A confirmation carries no name. The server records which account, which entry and which admin, never who you are.",
-            "It is not a trust badge, and for now it changes nothing else in the app.",
+            "It is not a trust badge. It also gives you a credit line straight away, the known floor, unless your community's owner switched it off: see \"Your credit line\".",
             "If an admin invited you by name, joining with their invite confirmed you against your entry, by that admin. \"Confirmed\" means only that an admin says this account is the person on that entry.",
             "If you replace a lost phone and your account moves to a new key, your confirmation moves with it.",
             "If you leave or delete your account, your confirmation ends. Your entry stays on the admins' list until an admin deletes it: ask them to.",

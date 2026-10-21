@@ -1,9 +1,10 @@
 /**
  * The known floor (community modes slice 4, design §4.2): the community's settings and one member's known grant,
  * read from the node's own tables. Every read tolerates a database without the tables (an engine test, a server from
- * before them): that reads as the dial off, which is today's behaviour.
+ * before them): that reads as the defaults, with nobody confirmed, so nobody holds a known grant.
  *
- *   node_config 'confirmation' = 'on'   the confirmation dial (absent = off)
+ *   node_config 'confirmation' = 'off'  the confirmation dial, switched off by the owner (absent = on, Marty, 21 Oct: "Yes,
+ *                                       on by default"; an 'on' row from before that default reads on too)
  *   node_config 'known_floor'           the community's known floor (absent = KNOWN_FLOOR_DEFAULT)
  *   node_config 'credit_cap'            the community's cap (absent = CREDIT_CAP_DEFAULT)
  *   known_floor_exceptions              an admin's exception for one member (amount, or frozen)
@@ -36,8 +37,24 @@ function wholeBeans(v: string | null): number | null {
     return Number(v);
 }
 
+/**
+ * Whether this node has Beans (the server's profile switch, apps/server config/node-profile.ts), installed by the node at
+ * boot (state-engine.ts initStateEngine). Not installed (an engine test): Beans on.
+ */
+let beansOn: (() => boolean) | null = null;
+
+/** Installs (or, with null, removes) what says whether this node has Beans: without them the dial reads off. */
+export function configureKnownFloorBeans(beans: (() => boolean) | null): void {
+    beansOn = beans;
+}
+
+/**
+ * The dial: on unless the owner switched it off. With nobody confirmed it changes nobody's limit: the grant is a confirmed
+ * member's. Never on a node without Beans (the global profile), whatever its row says.
+ */
 export function confirmationDialOn(db: Db): boolean {
-    return configValue(db, CONFIRMATION_DIAL_KEY) === 'on';
+    if (configValue(db, CONFIRMATION_DIAL_KEY) === 'off') return false;
+    return beansOn === null || beansOn();
 }
 
 /** The cap the owner has saved: the stored value within [CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX], else the default. */
@@ -49,7 +66,7 @@ export function savedCreditCap(db: Db): number {
 
 /**
  * The cap every floor uses: the saved cap only while the dial is on. With the dial off it is main's CREDIT_FLOOR_CAP
- * whatever is saved, so a community that never turns the dial on reads exactly main's floors.
+ * whatever is saved, so a community whose owner switches the dial off reads exactly main's floors.
  */
 export function creditCap(db: Db): number {
     return confirmationDialOn(db) ? savedCreditCap(db) : CREDIT_CAP_DEFAULT;
@@ -150,6 +167,18 @@ export function knownPledgeRoom(db: Db, pubkey: string): number {
 export function memberUsableKnownGrant(db: Db, pubkey: string, extraPledged = 0): number {
     const { grant: g, counted } = countedKnownPledged(db, pubkey, undefined, extraPledged);
     return Math.max(0, g - counted);
+}
+
+/**
+ * Whether any keeper's known pledge to this enterprise is active: while none is, no confirmation, exception or binding can
+ * move what known pledges add to its floor (0), until a pledge writes one.
+ */
+export function enterpriseHasKnownPledge(db: Db, enterprisePubkey: string): boolean {
+    try {
+        return !!prepared(db, "SELECT 1 FROM enterprise_pledges WHERE enterprise = ? AND released_at IS NULL AND id LIKE 'known:%' LIMIT 1").get(enterprisePubkey);
+    } catch {
+        return false;
+    }
 }
 
 /**

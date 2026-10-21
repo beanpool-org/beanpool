@@ -12,8 +12,9 @@ import { nodeCredential } from '../../lib/profiles';
  *
  * The confirmation dial, the known floor and the cap. With the dial on, a member an admin has confirmed on the names
  * list may go into debt down to the known floor while they keep at least one offer listed. Every community starts with
- * the dial off: nothing changes until an owner turns it on. Only an owner saves; an admin sees the numbers and why they
- * aren't theirs to change. A node older than the known floor answers 404, and nothing is shown.
+ * the dial on (Marty, 21 Oct: "Yes, on by default"): nobody's limit changes until an admin confirms someone, and an
+ * owner can switch it off. Only an owner saves; an admin sees the numbers and why they aren't theirs to change. A node
+ * older than the known floor answers 404, and nothing is shown.
  *
  * Operator manual text: packages/beanpool-guide/operators/people/running-a-known-community.md.
  */
@@ -132,7 +133,7 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
                 </p>
                 {door === 'members' && (
                     <p data-testid="known-floor-mixed-note" className="text-xs text-nature-300 m-0 mt-2 leading-relaxed break-words">
-                        {t('A mixed community: anyone a member invites can join, and once the known floor is on, members your admins confirm start with a higher limit.')}
+                        {t('A mixed community: anyone a member invites can join, and members your admins confirm start with a higher limit, unless an owner switches the known floor off.')}
                     </p>
                 )}
             </div>
@@ -150,7 +151,7 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
                 <span className="min-w-0 text-sm text-white break-words">
                     Confirmed members get the known floor
                     <span className="block text-xs text-nature-300 mt-0.5 leading-relaxed">
-                        Turned on, nobody loses anything: every member keeps the limit they have, and the known floor adds to it once an admin confirms them.
+                        {t('On in every community with Beans unless an owner switches it off. Nobody’s limit changes until an admin confirms them: confirm a member on the names list, in the app, and their limit grows by up to {knownFloor} Beans, your community’s known floor. Switched off, nobody loses Beans they hold.', { knownFloor: saved.knownFloor.toLocaleString('en') })}
                     </span>
                 </span>
             </label>

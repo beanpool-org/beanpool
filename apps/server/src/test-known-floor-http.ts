@@ -1,8 +1,8 @@
 /**
  * The known floor (community modes slice 4, config/known-floor.ts) over HTTPS, through the real middleware:
  *
- *   1. the dial off (every community today): a confirmed member's floor and usable floor are what main gives, 0, and a
- *      marketplace spend past it is refused
+ *   1. the dial off (on by default, Marty, 21 Oct: the owner switches it off): a confirmed member's floor and usable floor
+ *      are what main gives, 0, and a marketplace spend past it is refused
  *   2. only an owner sets the dial, the known floor and the cap; an admin is refused; a known floor above the cap, a cap
  *      above 5,000 or below 2,000 is refused and nothing is written; every change is a line in the log
  *   3. the dial on: a confirmed member with one live offer may spend to -1,000 and no further; with no live offer, none;
@@ -158,8 +158,11 @@ async function main(): Promise<void> {
     const exception = (headers: Record<string, string>, body: unknown) => call('POST', null, '/api/local/admin/known-floor/exception', body, headers);
     const read = () => call('GET', null, '/api/local/admin/known-floor', undefined, owner);
 
-    // ── 1. the dial off: today's floor ─────────────────────────────────────────────────────────
+    // ── 1. the dial off: main's floor ──────────────────────────────────────────────────────────
     console.log('── 1. the dial off ──');
+    // The dial is on by default (test-known-floor-default.ts): the owner switches it off.
+    const switchedOff = await settings(owner, { confirmation: false });
+    assert(switchedOff.status === 200 && switchedOff.body?.confirmation === false, `the owner switches the dial off (${show(switchedOff)})`);
     const off = await balanceOf(kim);
     assert(off.status === 200 && off.body?.floor === 0 && off.body?.usableFloor === 0,
         `a confirmed member in a community with the dial off has main's floor, 0 (${show(off)})`);
@@ -232,7 +235,8 @@ async function main(): Promise<void> {
     const raiseLine = logged.find(l => l.action === 'exception_raised');
     assert(raiseLine?.actor === ada.pk && raiseLine.memberPubkey === kim.pk && raiseLine.oldValue === '300' && raiseLine.newValue === '1800',
         `the raise names the admin, the member, and 300 → 1,800 (${JSON.stringify(raiseLine)})`);
-    assert(!actions.includes('credit_cap') && logged.length === 3, `the refused requests wrote no line (${logged.length} lines)`);
+    assert(!actions.includes('credit_cap') && logged.length === 4 && actions.filter(a => a === 'confirmation').length === 2,
+        `the refused requests wrote no line: the dial off and on, the lowering and the raise (${logged.length} lines)`);
 
     // An admin freezes Kim's line through the same route the manager's settings use (rehearsal 5 Oct, b): the member's own
     // answer says the admins froze it (knownFrozen), she has no line while it lasts, and her tier doesn't move (tiers are

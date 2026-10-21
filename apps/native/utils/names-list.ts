@@ -75,7 +75,8 @@ export interface NamesState extends NamesServerState {
     newKeyNeeded: boolean;
     /** The name each key the history names goes by, for words only. */
     callsigns: Record<string, string>;
-    settings: { twoAdminsToConfirm: boolean; namesShownToMembers: boolean };
+    /** `knownFloor`: the limit a confirmation gives here, null with the dial off; absent from a node from before it said. */
+    settings: { twoAdminsToConfirm: boolean; namesShownToMembers: boolean; knownFloor?: number | null };
     counts: { entries: number; confirmed: number; awaitingSecond: number; byKey: Record<string, number>; locked: number };
     me: { pubkey: string; role: 'owner' | 'admin' | null; owner: boolean };
     /** The node's word on this admin's own locked copy (design §3), null when it holds none. */
@@ -1534,6 +1535,15 @@ export function saveNamesEntry(
 export interface CommunityMember {
     publicKey: string;
     callsign: string;
+}
+
+/**
+ * The limit a confirmation gives the member, for the Confirm screen: the community's known floor (the dial is on by
+ * default), or null where it gives none (the owner switched the dial off, a known floor of 0) or the node doesn't say.
+ */
+export function confirmationLimit(state: Pick<NamesState, 'settings'> | null): number | null {
+    const n = state?.settings?.knownFloor;
+    return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**

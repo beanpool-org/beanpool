@@ -122,11 +122,18 @@ async function main() {
     assert(usableFloor(shed) === -200, `Usable floor holds at snapshot -200 while paused (got ${usableFloor(shed)})`);
 
     // Assertion B: Earned growth still counts (higher value)
-    // Credit ToolShed with 100 earned credit in members table
+    // An enterprise grows by its keepers' pledges, the bigger of its line or them, never both (Marty, 21 Oct): its own
+    // members.earned_credit (createTreasury's copy of its opening line, or an admin's tier badge) is no part of its limit.
     db.prepare("UPDATE members SET earned_credit = 100 WHERE public_key = ?").run(shed);
-    assert(usableFloor(shed) === -300, `Earned growth raised usable floor to -300 while paused (got ${usableFloor(shed)})`);
-    // Reset earned credit
+    assert(usableFloor(shed) === -200, `ToolShed's own earned_credit doesn't stack on its pledges: still -200 while paused (got ${usableFloor(shed)})`);
     db.prepare("UPDATE members SET earned_credit = 0 WHERE public_key = ?").run(shed);
+    // Dave's 100 more of backing is the growth (a pledge row, as assignWithPledge writes one)
+    const growthPledge = crypto.randomUUID();
+    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, 100, ?, NULL)`)
+        .run(growthPledge, daveKeeper, shed, new Date().toISOString());
+    assert(usableFloor(shed) === -300, `Earned growth raised usable floor to -300 while paused (got ${usableFloor(shed)})`);
+    // Reset the growth
+    db.prepare("UPDATE enterprise_pledges SET released_at = ? WHERE id = ?").run(new Date().toISOString(), growthPledge);
     assert(usableFloor(shed) === -200, `Resetting earned credit returns floor to -200 (got ${usableFloor(shed)})`);
 
     // Assertion C: Keeper exits still release backing

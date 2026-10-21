@@ -33,7 +33,7 @@
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { getLocalConfig, updateLocalConfig, DEFAULT_THRESHOLDS, type LocalConfig, type GatewayConfig } from './local-config.js';
-import { getNodeConfig, updateNodeConfig, type NodeConfig } from '../state-engine.js';
+import { getNodeConfig, updateNodeConfig, clearEnterpriseFloorCache, type NodeConfig } from '../state-engine.js';
 import { isAutoSnapshotInterval, restartScheduler, MAX_SNAPSHOTS_KEPT } from '../services/snapshot-scheduler.js';
 import type { SyncCommunitySettings } from '@beanpool/engine';
 import { cleanLabel } from './clean-label.js';
@@ -215,8 +215,9 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     door: orNull(oneOf('members', 'admins')),
     // Only `true` is stored: one admin confirms, the default, is no row (engine/names-list.ts).
     names_two_admins: orNull(oneOf('true')),
-    // The known floor (config/known-floor.ts): only `on` is stored for the dial; the two numbers are whole Beans.
-    confirmation: orNull(oneOf('on')),
+    // The known floor (config/known-floor.ts): the dial is on with no row, `off` once the owner switches it off (an `on`
+    // row from before that default reads on); the two numbers are whole Beans.
+    confirmation: orNull(oneOf('on', 'off')),
     known_floor: orNull(wholeBeans),
     credit_cap: orNull(wholeBeans),
     // The Community health panel's two lines (engine/community-health.ts): whole numbers as text.
@@ -395,6 +396,8 @@ export function installCommunitySettings(): InstallOutcome {
     // without this, the promoted server kept the standby's schedule until its next restart while the Backup tab
     // showed the community's.
     if ('autosnapshot_config' in nc) restartScheduler();
+    // The dial and the cap move enterprises' floors, which are kept in memory (engine getEnterpriseFloor).
+    if ('confirmation' in nc || 'credit_cap' in nc) clearEnterpriseFloorCache();
 
     const name = lc.communityName || lc.callsign || null;
     const hidden = [dir.publishContactEmail !== true ? 'contact email' : null, dir.publishContactPhone !== true ? 'contact phone' : null,

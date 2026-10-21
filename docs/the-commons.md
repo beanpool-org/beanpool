@@ -409,6 +409,11 @@ available_to_back(keeper) = earnedCredit(keeper) − Σ backing already pledged 
   If the shed is at −80, that 80 stays until inventory sells or another keeper pledges cover.
 - Total capacity traceable to one member is therefore capped at `2 × earnedCredit` — their own floor
   plus their pledged backing — no matter how many enterprises they join.
+- **A pledge from a keeper's known grant is visible as one total, never by name** (Marty, 2026-10-21:
+  "Hide the names"). Only a member the admins confirmed has a known grant, and a confirmation stays
+  private, so members read every known pledge to an enterprise folded into one line with no keeper;
+  each keeper's backing beside it is their named pledges only. The node's owner and admins, who decided
+  the confirmations, read whose each one is.
 
 **Rule 4 — the enterprise fails, not the keeper's household.** If an enterprise defaults, its own
 credit freezes (floor → 0; it can still *receive*, so it can trade its way back). Its keepers are

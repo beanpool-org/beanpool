@@ -987,7 +987,7 @@ export interface BalanceInfo {
     floor: number;
 
     tier: TierInfo;
-    tierCredit?: number;      // the credit `tier` is read from (a freeze keeps the line held unfrozen); memberLevel
+    tierCredit?: number;      // the credit `tier` is read from (what they did, never the known grant); memberLevel
     earnedCredit?: number;
     grantedCredit?: number;   // vouch/genesis/admin grants (separate lane, no vote weight)
     qualifiedValue?: number;  // diversity-capped trade value behind the earned score

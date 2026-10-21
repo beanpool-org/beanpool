@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>更新情報 — BeanPool members' guide</title>
+    <meta name="description" content="アプリの変更点をわかりやすく説明します。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">BeanPoolについて</a></p>
+        <h1>更新情報</h1>
+        <p class="lede">アプリの変更点をわかりやすく説明します。</p>
+        <h2>あなたの近くのグローバルコミュニティ</h2>
+        <p>これらはグローバルコミュニティのサーバーが更新されたときに利用できるようになります。スマートフォンでは最新版のアプリが必要です。</p>
+        <ul>
+            <li><strong>無料、利用制限あり：</strong> グローバルコミュニティでは、最後の変更から90日経過した投稿はその写真とともにアーカイブされます。再度保存すると掲載が維持されます。制限の一覧は専用ページにまとめられています。「グローバルコミュニティの制限」を参照してください。</li>
+            <li><strong>お近くの投稿：</strong> グローバルコミュニティには世界中からの投稿が集まります。スマートフォンには、あなたの地域から250 km以内の最も近い500件、およびあなたが進行中の取引や会話を行っている投稿（場所を問わず）が保存されます。市場の検索では引き続きすべての投稿を見つけることができます。「複数のコミュニティ」を参照してください。</li>
+            <li><strong>あなたの地域：</strong> Webアプリでは、グローバルコミュニティに参加する際、写真の後に<strong>だいたいどこにいますか？</strong>という手順が追加されます。スマートフォンでは、既存のアカウントで参加した際に尋ねられます。新しいスマートフォンアカウントでは、後から設定の<strong>あなたの地域</strong>で設定します。その際、<strong>現在地を使う</strong>、<strong>町や地区の名前を入力</strong>、または<strong>いまはスキップ</strong>をタップしてください。地域は約10 kmの範囲までしか保持されず、正確な位置は保存されません。設定の<strong>あなたの地域</strong>からいつでも変更や消去ができます。「お住まいの地域」を参照してください。</li>
+            <li><strong>地域が未設定でも問題ありません：</strong> 地域を設定していなくても、すべての場所からの新着投稿が表示され、市場の上部にその旨が表示されます。スマートフォンでは、そこをタップして地域を設定できます。</li>
+            <li><strong>近くの新着投稿：</strong> 投稿されるとすぐに届きます。遠く離れた場所の投稿がスマートフォンに届くことはなくなりました。</li>
+            <li><strong>Webアプリでは、</strong> 市場と地図はあなたの地域、または<strong>距離</strong>で指定した場所を起点として表示されます。近い順に並び、各投稿までの距離が表示されます。「近くの投稿を探す」を参照してください。</li>
+            <li><strong>アンケート</strong>には独自の場所がないため、作成したメンバーの地域に表示されます。</li>
+            <li><strong>町の名前を入力：</strong> グローバルコミュニティでは、ホームの<strong>コミュニティを探す</strong>で位置情報の取得が不要になりました。<strong>または町名を入力</strong>をタップして町を選択してください。大まかな地点のみが保持されます。「近くのコミュニティを探す」を参照してください。</li>
+            <li><strong>価格なしでの投稿：</strong> 豆は地域のコミュニティで使われるため、グローバルコミュニティの投稿フォームでは価格を尋ねられません。Webアプリでは、<strong>提供を投稿</strong>と<strong>求めを投稿</strong>が価格なしで利用できるようになりました。地域のコミュニティでは引き続き価格の入力が必要です。</li>
+        </ul>
+        <h2>ホーム</h2>
+        <ul>
+            <li><strong>新しい「ホーム」タブ：</strong> アプリを開くと最初にホームが表示されるようになりました。要対応の用件、周辺の新着情報、次にできることなどをひと目で確認できるダッシュボードです。「市場」は独立したタブとなり、「Pulse」はホーム上のカードになりました。カードは自由に選択できます。<strong>カードを追加</strong>でホームに配置し、各カードの<strong>…</strong>で移動や削除を行い、<strong>ホームを編集</strong>で並び替えや削除ができます（スマートフォンとWebアプリ共通）。</li>
+            <li><strong>スタートガイド：</strong> 新しいメンバーのホームは、<strong>はじめに</strong>という1枚のカードから始まります。<strong>見てみる</strong>をタップすると1分間のツアーが始まり、<strong>スキップ</strong>すると通常のカードが表示されます。各画面の右上にある<strong>？</strong>をタップすると、その画面のヘルプが表示されます。</li>
+            <li><strong>ホームに保存した検索：</strong> 「卵」のようなキーワードを選び、提供・求め・両方の別、カテゴリー、距離を指定できます。カードには条件に一致する最初の4件が表示されます（市場の検索で見つかるものと同じです）。<strong>もっと見る</strong>をタップすると、そのキーワードで市場の検索が開きます。最新のアプリとコミュニティサーバーの更新が必要です。</li>
+            <li><strong>市場から検索を保存：</strong> 市場の検索バーにキーワードが入力されているとき、<strong>この検索をホームに保存</strong>が表示されます（スマートフォンとWebアプリ共通）。これをタップすると、入力したキーワード、<strong>提供</strong>または<strong>求め</strong>、カテゴリー、距離が入力された状態でホームが開きます。<strong>ホームに追加</strong>をタップしてください。保存した検索では新着が優先して表示されます（グローバルコミュニティでは最も近いものが優先）。提供と求め専用であるため、イベントやアンケートの下には表示されません。</li>
+            <li><strong>ホームの太陽と月：</strong> 今夜の月と本日の日の出・日の入りの時刻が、コミュニティの場所またはあなたの地域を基準に、お使いのスマートフォンやブラウザの時計で計算されます。コミュニティのサーバーに問い合わせることはありません。最新のアプリが必要です（コミュニティのサーバーが更新されるまでは、あなたの地域が使用されます）。</li>
+        </ul>
+        <h2>初期設定でプライバシーを保護</h2>
+        <p>これらの変更はコミュニティのサーバー側で行われます。コミュニティのサーバーが更新されたときに利用できるようになります。アンケートの選択肢を利用するには最新のアプリが必要です。</p>
+        <ul>
+            <li><strong>残高と取引はあなただけのもの：</strong> コミュニティ内の他のメンバーがあなたの残高や取引履歴を見ることはできません。取引相手の2人のみに表示され、コミュニティのアクティビティでも同様です。メンバーの除名に関する投票では、投票権を持つメンバーにのみ該当メンバーの残高が表示され、それ以外の場所には表示されません。</li>
+            <li><strong>投稿はメンバー限定：</strong> 参加していない人は、コミュニティの投稿や写真を見ることができません。代わりに、誰でも自由に見て回れるグローバルコミュニティへの案内が表示されます。</li>
+            <li><strong>匿名のアンケート：</strong> 作成者が<strong>公開投票</strong>に設定しない限り、アンケートには合計数のみが表示されます。</li>
+            <li><strong>事業体の帳簿：</strong> 事業体の金額は誰でも確認できます。誰が支払ったかやメモは、その事業体の運営者と該当メンバーのみに表示されます。</li>
+            <li><strong>レビューの作成者：</strong> コミュニティの誰もがレビューの星と文章を読むことができます。誰が書いたのか、どの取引に関するものなのかは、その取引の当事者2人のみが見ることができます。</li>
+            <li><strong>児童の安全：</strong> スマートフォンとWebアプリのすべての通報画面で、理由として<strong>児童の安全</strong>を選択できるようになりました。子どもが危険にさらされている可能性がある場合にこれを選択してください。コミュニティのサーバー管理者に直ちに通知され、最優先で確認されます。「問題の通報」を参照してください。</li>
+        </ul>
+        <h2>1日の利用制限</h2>
+        <p>これらはコミュニティのサーバー側で設定されます。コミュニティのサーバーが更新されたときに利用できるようになります。</p>
+        <ul>
+            <li><strong>過度な連続投稿の防止：</strong> 1つのアカウントが1日に行える変更は最大5,000件です（投稿、メッセージ、編集など）。その内訳として、1日に新規投稿は最大100件、新しいグループは5件、新しい事業体は3件、招待は20件、Pulseへのリンクは50件までとなります。通常の利用でこれらの制限に達することはありません。達した場合は、アプリが該当する項目と再開できる時刻をお知らせします。</li>
+            <li><strong>メッセージ：</strong> ダイレクトメッセージを含め、どのチャットでも1分あたり最大30件までです。長すぎるメッセージは送信できません。分割して送信してください。写真はこの制限にカウントされません。</li>
+            <li><strong>新しい相手とのやり取り：</strong> コミュニティ外の人と1日に開始できる会話は20人までです。既存メンバーへのメッセージや返信に制限はありません。</li>
+            <li><strong>招待：</strong> まだ使われていない招待は最大50件まで保持できます。使われなかった招待は30日後に削除されます。</li>
+            <li><strong>支払い：</strong> 1日に最大100件の支払い、およびこれまで支払ったことのない相手への支払いは最大30人までです。取引の申請・承諾・承認は最大100件まで、プレッジの作成・変更は20件までとなります。受け取りに制限はありません。</li>
+            <li><strong>プロジェクトと事業体：</strong> メンバーの10倍の制限が設定されています。運営者がプロジェクトや事業体に対して行う操作は、運営業務そのもの（運営者の追加・変更、休止、解散、取引の完了または却下）を除き、事業体側の制限にカウントされ、運営者自身の個人制限にはカウントされません。事業体の1日の上限を使い切った場合、それ以降の操作は運営者個人の制限にカウントされるため、特定の運営者が上限を使い切って他の運営者の活動を止めてしまうことはありません。運営者は、自身が担当するすべての事業体を合わせて、1日に1つの事業体分の操作枠を使用できます。</li>
+            <li><strong>友達：</strong> 1日に最大100人まで友達として追加できます。追加すると相手に通知されます。</li>
+        </ul>
+        <h2>バージョン 1.2.38</h2>
+        <p>これらの変更の一部はコミュニティのサーバー側で行われます。コミュニティのサーバーが更新されたときに利用できるようになります。</p>
+        <h3>新機能</h3>
+        <ul>
+            <li><strong>BeanPoolシート：</strong> BeanPoolの仕組み、ルール、よくある質問、更新情報に関するガイドです。インターネット接続がなくても利用できます。設定の<strong>BeanPool</strong>内にある<strong>ヘルプと仕組み</strong>から開くことができます。画面上部の<strong>？</strong>をタップすると、その画面のヘルプが表示されます。</li>
+            <li><strong>ライトモードとダークモード：</strong> アプリはライトモードで起動します。ダークモードにする場合やスマートフォンの設定に合わせる場合は、設定 → 外観から「端末の設定に合わせる」「ライト」「ダーク」を選択してください。</li>
+            <li><strong>バッジ：</strong> すべての画面でコミュニティのサーバーと同じ信頼レベルが適用されるようになりました（信頼200からの「住民」、600からの「世話人」、1,400からの「長老」）。一部の画面で正しくないバッジが表示されていた問題が修正されました。「新規」バッジが見やすくなりました。</li>
+        </ul>
+        <h3>投票</h3>
+        <ul>
+            <li><strong>無記名投票：</strong> 「決定」であなたがどのように投票したかは、管理者を含め誰にも表示されなくなりました。自分自身の投票は確認できます。</li>
+            <li><strong>投票権：</strong> 「決定」の開始前に参加していたメンバーのみが投票できます。</li>
+            <li><strong>投票率：</strong> 過去30日間にアプリ内で何らかの活動を行ったメンバーを基準として投票率が計算されるようになりました。</li>
+            <li><strong>緊急のアカウント停止：</strong> 管理者が誰かのアカウントを停止すると、直ちに7日間の投票が開始されます（「この停止措置を継続しますか？」）。可決されない場合、停止は自動的に解除されます。グローバルコミュニティでは投票は行われません。停止措置は7日間継続した後に自動的に解除されるか、管理者がそれより早く解除することができます。</li>
+            <li><strong>ボイスクレジット：</strong> コモンズの豆に関する投票で表示されるボイスクレジットが、有効な投票権となります。対象となるすべての投票で全額が付与されます。</li>
+            <li><strong>「決定」の種類の整理：</strong> 「決定」によって信頼バッジを変更することはできなくなりました。従来の「投票ラウンド」は廃止されました。</li>
+        </ul>
+        <h3>事業体</h3>
+        <ul>
+            <li>代表運営者が運営者を追加または削除した場合、他の運営者には3日間の異議申し立て期間があります。</li>
+            <li>唯一の運営者である場合や、事業体の債務をカバーするためにプレッジが依然として必要な場合を除き、運営者は辞任することができます。</li>
+            <li>新しい代表者の選出には14日間の期限が設けられ、運営者は「反対」に投票できるようになりました。</li>
+            <li>代表者が辞任した場合、最も在任期間の長い運営者が直ちに引き継ぎます。</li>
+        </ul>
+        <h3>グループ</h3>
+        <ul>
+            <li><strong>すべてのグループにチャット機能：</strong> 「トーク」に<strong>メッセージ</strong>、<strong>グループ</strong>、<strong>メンバー</strong>の3つのボタンが配置されました。<strong>グループ</strong>には参加しているグループ、担当している事業体、参加予定のイベントが一覧表示され、それぞれ最新のメッセージと未読数が確認できます。</li>
+            <li><strong>グループの作成方法を統一：</strong> 「トーク」の<strong>新しいグループ</strong>とコモンズの<strong>＋</strong>から同じフォームが開き、あらかじめ<strong>交流サークル</strong>が選択された状態になります。作成後はそのチャット画面に移動し、誰を招待するか尋ねられます。</li>
+            <li><strong>招待：</strong> まとめ役はチャットのメニューから人を招待できます。招待には送信者が表示され、<strong>グループに参加</strong>をタップするとチャットに直接移動します。</li>
+            <li><strong>チャットのミュート：</strong> 「8時間」「1週間」「常に」から選択できます。グループ内での@メンションは引き続き届きます。</li>
+            <li><strong>チャットヘッダーの共通化：</strong> 上部にグループ、事業体、またはイベントの名前が表示されます。タップするとそのグループ、事業体、またはイベントの詳細を確認できます。</li>
+            <li>「トーク」内の以前のグループチャットは、メッセージとともに削除されました。</li>
+            <li>すべてのグループに<strong>代表まとめ役</strong>（初期状態では作成者）が置かれるようになりました。まとめ役は誰でもメンバーや投稿の管理を行えますが、まとめ役の削除や降格を行えるのは代表まとめ役のみであり、代表まとめ役を解任することは誰にもできません。代表まとめ役は他の誰かにその役割を譲渡できます。代表まとめ役が30日間活動しなかった場合、グループの名簿の上にある画面から新しい代表を選出できます。「ルールと決定の仕組み」を参照してください。</li>
+            <li><strong>グループ内での投票：</strong> グループのメンバーは、新しいまとめ役や新しい代表の選出など、グループ自体の事柄について投票できます。グループを開いて<strong>決定</strong>を確認してください。</li>
+            <li><strong>活動のないグループでの新しい代表の選出：</strong> 代表が活動しなくなる前からグループにいた人のみが投票できます。その後に参加した人やまとめ役に任命された人には発言権がないため、新しいアカウントが活動のないグループを乗っ取ることはできません。</li>
+        </ul>
+        <h3>安全性</h3>
+        <ul>
+            <li>オーナーや管理者の役割を付与または剥奪できるのはオーナーのみです。</li>
+            <li>管理者は、自身が関与している停滞した取引を自己解決することはできません。</li>
+            <li>グループやイベントのチャットでは、1人の投稿頻度が制限されます。</li>
+            <li><strong>1対1のチャットは常に暗号化保護：</strong> 相手の鍵が見つからない場合、アプリは保護なしでメッセージを送信していましたが、現在は送信されなくなりました。入力した文章はメッセージボックスに残り、しばらくしてから再送信できます。コミュニティのサーバーは、暗号化保護されていない1対1のメッセージを拒否します。</li>
+        </ul>
+        <h3>修正</h3>
+        <ul>
+            <li>地図に現在地ボタンが1つに戻りました。</li>
+            <li>ダークモードで市場のタイムラインが読みやすくなりました。</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>ホーム</strong><span>ホームの概要、スマートフォンやWebアプリで表示されるカード、追加・移動・削除方法、興味の設定、サインアウト時のプライバシーについて説明します。</span></a></li>
+            <li><a href="the-bean.html"><strong>本ガイド</strong><span>本ガイドの確認場所、検索方法、最新の状態に保たれる仕組みについて説明します。</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPoolの仕組み</strong><span>豆、取引、提供と求め、そしてクレジットについてわかりやすく説明します。</span></a></li>
+            <li><a href="rules.html"><strong>ルールと決定の仕組み</strong><span>投票、投票率、秘密投票、投票権、停止処分、メンバーの除名、運営者、まとめ役および代表まとめ役について説明します。</span></a></li>
+            <li><a href="faq.html"><strong>よくある質問</strong><span>メンバーから最も多く寄せられる質問への簡潔な回答です。</span></a></li>
+            <li><a href="communities.html"><strong>複数のコミュニティ</strong><span>1つのアカウントで複数のコミュニティに参加し、切り替えたり、コミュニティの移転先に追従したり、グローバルコミュニティの表示内容を確認する方法を説明します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 4.</p>
+    </main>
+</body>
+</html>

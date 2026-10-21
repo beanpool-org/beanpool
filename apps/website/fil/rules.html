@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fil">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ang Mga Panuntunan — Paano Gumagana ang BeanPool</title>
+    <meta name="description" content="Ang mga simpleng panuntunan ng BeanPool: kung paano gumagana ang mga balanse, credit, mga alok, mga bayarin, pederasyong Keynesian, mga negosyo ng komunidad, at pamamahala.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/rules">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/rules">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/rules">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/rules">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/rules">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/rules">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/rules">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/rules">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/rules">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/rules">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/rules">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/rules">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/rules">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/rules">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/rules">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/rules">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/rules">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/rules">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/rules">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/rules">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/rules">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/rules">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/rules">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/rules">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/rules">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/rules">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Icon ng BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Paano Ito Gumagana</a>
+                <a href="rules.html">Ang Mga Panuntunan</a>
+                <a href="index.html#features">Mga Tampok</a>
+                <a href="help.html">Tulong</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mga Tutorial</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Manood ng mga Video Tutorial sa YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Sumali sa Komunidad sa Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Tingnan sa GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Magsimula</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Buksan ang menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Magsimula</a>
+                    <a href="index.html#how-it-works">Paano Ito Gumagana</a>
+                    <a href="rules.html" aria-current="page">Ang Mga Panuntunan</a>
+                    <a href="index.html#features">Mga Tampok</a>
+                    <a href="help.html">Tulong</a>
+                    <a href="../guide/index.html">Gabay ng mga miyembro</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mga Tutorial sa YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool sa Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Source code sa GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Ang Mga Panuntunan — Paano Gumagana ang BeanPool</h1>
+        <p class="lede">Ang BeanPool ay isang palitan ng komunidad kung saan nagsisimula ang lahat sa zero. Kumikita ka ng Munggo sa pamamagitan ng pagtulong sa iba at ginagastos ang mga ito kapag may tumutulong sa iyo. Walang perang nagpapalipat-lipat, at walang mga corporate middleman — ang mga simpleng panuntunang ito lamang.</p>
+
+        <div class="callout amber">Sa madaling sabi: <strong>kitain ang iyong credit line sa pamamagitan ng pakikipagkalakalan, magpanatili ng isa o dalawang alok na aktibo upang magamit ito, at hayaang umikot ang Munggo.</strong> Zero ang layunin — magbigay nang kasingdami ng kinukuha.</div>
+
+        <h2 id="1"><span class="num">1.</span>Munggo at ang iyong balanse</h2>
+        <p>Sinusukat ng Munggo ang halagang naibigay at natanggap mo (humigit-kumulang, oras). <strong style="color:var(--text-primary)">Zero ang layunin</strong> — nangangahulugan itong nakapagbigay ka nang halos kasingdami ng iyong kinuha.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Positibong balanse</strong> — nakapagbigay ka nang higit kaysa sa iyong kinuha. May utang ang komunidad sa iyo.</li>
+            <li><strong style="color:var(--text-primary)">Negatibong balanse</strong> — binigyan ka ng komunidad ng credit. Utang mo itong ibalik sa pamamagitan ng pagbibigay.</li>
+            <li>Sa karamihan ng mga komunidad, ang pinakamalalim na maaaring puntahan ng sinuman ay <strong>−2000 Munggo</strong>. Ang isang komunidad na nagpapatunay ng mga miyembro nito gamit ang totoong pangalan ay maaaring magtakda ng sarili nitong limitasyon, hanggang −5000, at magbigay sa mga nakumpirmang miyembro ng panimulang linya.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Pagsisimula</h2>
+        <p>Sumasali ka sa pamamagitan ng imbitasyon. Mula sa unang araw maaari kang mag-browse at tumanggap ng Munggo. Kapag may hawak ka nang Munggo (sa pamamagitan ng pagkita ng mga ito o pagtanggap ng regalo), maaari mo na itong gastusin. Upang gumastos gamit ang credit, dapat kang mag-post ng kahit isang <strong style="color:var(--text-primary)">Alok</strong> (tingnan ang §4 at §5). Nagsisimula ang mga bagong miyembro nang <strong style="color:var(--text-primary)">walang credit line</strong> — maaari ka lamang gumastos ng Munggo na aktwal mong hawak hanggang sa ma-activate ang iyong linya ng iyong unang natapos na kalakalan (o kung ang isang nagpapatunay o admin ay nagbigay sa iyo ng panimulang linya — tingnan ang §3 at §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Kinikita ang iyong credit line sa pamamagitan ng pakikipagkalakalan</h2>
+        <p>Pinapayagan ka ng iyong credit line na bumaba nang bahagya sa negatibo — gumagastos bago mo pa ito naibalik. Ito ay <strong style="color:var(--text-primary)">kinikita, hindi ibinibigay</strong>:</p>
+        <ul>
+            <li>Nagmumula ang tiwala sa <strong style="color:var(--text-primary)">mga natapos na kalakalan sa merkado</strong> — hindi kailanman mula sa mga regalo. Mabagal itong lumalaki sa simula: ang isang kalakalan na may 100 Munggo ay kumikita ng humigit-kumulang 37 Munggo ng credit line. Ang isang admin o isang itinalagang nagpapatunay ay maaari ding magbigay sa isang tao ng panimulang linya; ang kaloob ng admin ay lumalabas bilang kanilang badge.</li>
+            <li>Ang pakikipagkalakalan sa <strong style="color:var(--text-primary)">maraming iba't ibang tao</strong> ay bumubuo ng tiwala nang mas mabilis kaysa sa paulit-ulit na kalakalan sa iisang tao.</li>
+            <li>Itinatakda ng iyong tiwala ang iyong <em>limitasyon</em> sa credit — kung gaano kalalim ang maaaring marating ng iyong sahig, mula 0 pababa sa −2000 sa karamihan ng mga komunidad (tingnan ang §1).</li>
+            <li>Nagbubukas ang iyong sahig pagkatapos ng iyong <strong style="color:var(--text-primary)">unang tunay na kalakalan</strong>, at lumalaki sa bawat kalakalan pagkatapos nito (o maaaring magbigay sa iyo ang isang nagpapatunay sa komunidad ng panimulang sahig — tingnan ang §9). Walang kinakailangang pagpapatunay.</li>
+        </ul>
+        <div class="callout">Ang mga antas ng tiwala — <strong>Baguhan → Residente → Katiwala → Nakatatanda</strong> — ay mga badge ng pagkilala. Ang mga badge na kinikita mo ay walang binubuksan o ipinagkakait sa sarili ng mga ito; ang mas malalim na credit line ay nagmumula sa tunay na pakikipagkalakalan. Maaari ding magbigay ang isang admin ng badge sa isang tao, at kasama nito ang panimulang credit line ng badge na iyon.</div>
+
+        <h2 id="4"><span class="num">4.</span>Pagtutulungan: Upang gumamit ng credit, dapat kang magpanatili ng mga aktibong alok</h2>
+        <p>Itinatakda ng pagkita ng tiwala ang iyong <strong style="color:var(--text-primary)">limitasyon</strong> sa credit (kung gaano kalalim ang maaari mong marating). Ngunit upang aktwal na <strong style="color:var(--text-primary)">humugot</strong> sa credit na iyon, dapat kang magpanatili ng mga aktibong Alok na naka-post. Tinitiyak nito na ang sinumang may utang ay aktibong nagpapakita sa komunidad kung paano nila planong mag-ambag.</p>
+        
+        <p>Ang bilang ng mga aktibong alok na pinapanatili mong naka-post ang nagtatakda kung gaano karaming credit ang <strong style="color:var(--text-primary)">nagagamit</strong>:</p>
+        <table>
+            <thead><tr><th>Aktibong mga alok</th><th>Nagagamit na credit line</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — gastusin lamang ang hawak na Munggo</td></tr>
+                <tr><td class="num-col">1</td><td>Pababa sa −200 Munggo</td></tr>
+                <tr><td class="num-col">2</td><td>Pababa sa −500 Munggo</td></tr>
+                <tr><td class="num-col">3</td><td>Pababa sa −1000 Munggo</td></tr>
+                <tr><td class="num-col">4</td><td>Pababa sa −1500 Munggo</td></tr>
+                <tr><td class="num-col">5</td><td>Pababa sa −2000 Munggo <em>(ang karaniwang limitasyon)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Ang iyong aktwal na limitasyon sa paggastos ay ang <strong style="color:var(--text-primary)">mas maliit</strong> sa pagitan ng iyong kinita at ng nagagamit sa pamamagitan ng iyong mga aktibong alok.</p>
+        <p><em>Halimbawa: Kung kumita ka ng limitasyong −600 sa pamamagitan ng mga kalakalan, ang pagpapanatili ng 2 aktibong alok ay nagpapagamit ng −500 nito. Ang pagpapanatili ng ika-3 alok ay nagpapagamit ng iyong buong limitasyon na −600 (hindi mo na kailangan ng ika-4 o ika-5 alok dahil naabot na ang iyong kinikitang limitasyon).</em></p>
+        <div class="callout">
+            <strong>Ang Paghinto Pansamantala sa Paggastos (Freeze):</strong><br>
+            Kung bumaba ka sa bilang ng mga aktibong alok na kinakailangan para sa iyong kasalukuyang utang (hal., kung ang isa sa iyong mga alok ay nabenta at nakumpleto, o pinahinto mo ang isa), ang iyong <strong>kakayahang gumastos gamit ang credit ay pansamantalang hihinto</strong>. Isa itong pansalag sa kaligtasan, hindi isang parusa: walang kinukuha sa iyo. Maaari ka pa ring tumanggap ng Munggo, magpatuloy sa pagbebenta, at mag-browse. Kusang nagpapatuloy muli ang iyong credit line kapag ang iyong balanse ay nasa loob na ng sakop ng iyong mga aktibong alok: mag-post ng isa pang alok, o tumanggap ng Munggo.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Mga Alok (iyong mga listing)</h2>
+        <ul>
+            <li>Magpanatili ng kasingdami ng mga alok na gusto mo — kabilang ang mga paulit-ulit — at ilipat ang bawat isa sa <strong style="color:var(--text-primary)">Aktibo o Naka-pause</strong> kailan mo man gusto. Tanging ang mga <em>Aktibong</em> alok ang binibilang sa iyong credit line.</li>
+            <li><strong style="color:var(--text-primary)">Magbigay bago kumuha:</strong> sa komunidad na may Munggo, dapat ay nakapagtala ka na ng kahit isang alok bago ka makapag-post ng Kahilingan o makabili mula sa iba. Kung saan walang Munggo, tulad ng sa pandaigdigang komunidad, ang una mong post ay maaaring isang Kahilingan.</li>
+            <li>Positibong balanse? I-pause ang lahat kung nais mo — kailangan lamang ang mga alok upang maging negatibo.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Mga bayarin at ang pool ng komunidad</h2>
+        <p>Dalawang maliliit na singil, at parehong dumadaloy sa <strong style="color:var(--text-primary)">Komun ng Komunidad</strong> — isang pinagsasaluhang pool na ibinoboto ng iyong komunidad na gastusin sa mga lokal na proyekto. Walang nawawala sa isang korporasyon.</p>
+        <p><strong style="color:var(--text-primary)">a) Bayarin sa merkado — 1.5% sa mga natapos na kalakalan.</strong> Kapag naisaayos ang isang benta sa merkado, ang nagbebenta ay nakakakuha ng 1.5% na mas mababa sa presyo at ang pagkakaiba ay napupunta sa Komun. Ang <strong style="color:var(--text-primary)">mga regalo (direktang pagpapadala sa pagitan ng mga miyembro) ay libre</strong> — gayundin ang mga refund at mga paglipat ng sistema.</p>
+        <p><strong style="color:var(--text-primary)">b) Bayarin sa sirkulasyon sa mga positibong balanse — buwanan, at sa bahagi lamang na higit sa 200.</strong> Tulad ng mga progresibong bracket, ang bawat bahagi ay sinisingil lamang sa bahagi ng iyong balanse sa loob nito:</p>
+        <table>
+            <thead><tr><th>Bahagi ng balanse</th><th>Buwanang rate ng sirkulasyon</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Libre</span> berdeng sona</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
+            </tbody>
+        </table>
+        <p>Dahan-dahan nitong hinihikayat ang Munggo na <strong style="color:var(--text-primary)">umikot sa halip na maipon</strong>. Ang <strong style="color:var(--text-primary)">mga negatibong balanse ay hindi kailanman pinapatawan ng bayarin sa sirkulasyon</strong> — nagdadala ka na ng credit para sa komunidad. Pansinin na ang libreng sonang +200 ay sumasalamin sa unang credit band na −200, kaya simetriko ang sistema sa paligid ng zero.</p>
+
+        <h2 id="7"><span class="num">7.</span>Mga Regalo (pagpapadala ng Munggo)</h2>
+        <ul>
+            <li>Maaari ka lamang <strong style="color:var(--text-primary)">magregalo ng Munggo na aktwal mong hawak</strong> — ang isang regalo ay hindi kailanman nagiging negatibo at hindi kailanman gumagamit ng iyong credit line.</li>
+            <li>Maaari kang magpadala kapag nakatapos ka na ng kahit isang tunay na kalakalan (pinipigilan nito ang mga bagong-bagong account na agad magpasa ng Munggo at maglaho).</li>
+            <li>Ang mga regalo ay hindi bumubuo ng tiwala para sa tumatanggap, at <strong style="color:var(--text-primary)">libre</strong> — walang bayarin (maaari ka lamang magregalo ng Munggo na hawak mo na).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Paano naisasaayos ang mga kalakalan</h2>
+        <p>Ligtas na itinatago ang mga kalakalan sa merkado sa <strong style="color:var(--text-primary)">escrow</strong> (itinatago sa tiwala ng sistema) hanggang sa matapos ang kasunduan, pagkatapos ay ibinibigay sa nagbebenta (bawas ang 1.5% na bayarin). Kung makansela ang kasunduan, ganap na ibinabalik ang bayad sa mamimili.</p>
+
+        <h2 id="9"><span class="num">9.</span>Pagpapatunay (isang opsyonal na paunang simula)</h2>
+        <p>Ang isang pinagkakatiwalaan at itinalaga ng komunidad na <strong style="color:var(--text-primary)">tagapagpatunay</strong> ay maaaring magbigay sa isang baguhan ng <strong style="color:var(--text-primary)">panimulang sahig na 25, 50, o 100 Munggo</strong> upang makapagsimula silang gumamit ng credit bago pa nila ito kitain. Karaniwang iginagawad ang mga ito — ganap na ayon sa pagpapasya ng tagapagpatunay — sa mga taong ang mga post at kontribusyon ay nakikita ng tagapagpatunay na tunay na kapaki-pakinabang at nakakapukaw ng interes. Opsyonal ito sa alinmang paraan: walang nangangailangan ng patunay upang makibahagi, dahil mabubuksan mo rin ang iyong credit line sa simpleng pakikipagkalakalan (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Pederasyong Pag-clear sa Pagitan ng mga Komunidad</h2>
+        <p>Hindi kailangang umiral ang mga komunidad nang nag-iisa. Sa pamamagitan ng <strong style="color:var(--text-primary)">Mga Pederasyong Trade Connector</strong> (hango sa clearing union ni Keynes), ang mga independiyenteng node ng komunidad ay maaaring mag-clear ng mga kalakalan sa isang kalapit na node nang peer-to-peer, nang walang fiat currency o mga reserba sa bangko. Hindi kailanman umaalis ang Munggo sa kanilang sariling komunidad — bawat pares ng mga node ay nagpapanatili ng tulay na talaan ng kung ano ang utang nila sa isa't isa sa trabaho, at bawat panig ay nagtatakda ng sarili nitong limitasyon sa kung gaano kalayo ito maaaring umabot. Ang pag-clear ay sa pagitan ng mga pares ng komunidad, kusang binubuksan ito ng bawat operator, at maaga pa ito: binuo na ito, kasama ang mga screen nito sa web app, at nasubukan pa lamang sa pagitan ng dalawa sa sarili naming mga pansubukang komunidad, hindi kailanman sa pagitan ng mga live na komunidad.</p>
+
+        <h2 id="11"><span class="num">11.</span>Cryptographic Identity at Pag-iingat ng Key</h2>
+        <p>Pinoprotektahan ang iyong account ng isang pares ng cryptographic key na Ed25519 na nabuo sa iyong device. Nag-aalok ang BeanPool ng nababagay na pag-iingat ayon sa iyong mga pangangailangan:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Ganap na Sariling Pamamahala:</strong> Sa mga app sa telepono, ang iyong private key ay itinatago sa secure storage ng device (iOS Keychain / Android Keystore); sa web app itinatago ito sa sariling storage ng browser. Umaalis lamang ito sa device bilang isang nakakandadong kopya para sa pagbawi sa sign-in, o kapag kinopya mo ang iyong account sa isa pa sa iyong mga device. Panatilihing offline ang iyong backup ng 12-salitang seed.</li>
+            <li><strong style="color:var(--text-primary)">Pagbawi:</strong> Ibinabalik ng iyong 12-salitang parirala ang iyong account sa anumang device. Maaari ka ring mag-link ng sign-in sa Google, Apple o Facebook. Pagkatapos ay itinatago ang isang nakakandadong kopya ng iyong key para dito: itinatago ito roon ng mga app sa telepono na gumagamit ng key vault ng BeanPool, sa isang maliit na server sa Iceland; itinatago ito ng mga mas lumang bersyon ng app sa telepono sa node ng iyong komunidad; itinatago ito ng web app sa pandaigdigang komunidad sa server ng komunidad na iyon, na aming pinapatakbo. Sinumang nagtatago ng kopya ay maaaring magbukas nito. Ang pag-restore mula sa vault ay naghihintay ng 24 oras maliban kung aprubahan ito ng isa sa sarili mong mga device. Kung mawala mo ang iyong device, ang iyong 12 salita at ang iyong sign-in, maaaring ilipat ng isang admin ng iyong komunidad ang iyong account sa isang bagong telepono gamit ang isang one-time code, sa harap mo; nananatili ang iyong kasaysayan. Kaya isulat ang mga salita.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Mga limitasyon at kaligtasan</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Limitasyon sa sahig na −2000</strong> sa karamihan ng mga komunidad (tingnan ang §1). Walang pang-araw-araw na limitasyon sa kung gaano karaming Munggo ang iyong gagastusin — ang iyong sahig ang hangganan. May limitasyon sa kung gaano kadalas: 100 pagbabayad, 30 taong hindi mo pa nabayaran noon at 100 kahilingan sa merkado sa loob ng anumang 24 oras.</li>
+            <li>May limitasyon ang tiwala sa sinumang iisang kapareha, upang walang sinumang makapagpalobo ng kanilang katayuan sa pamamagitan ng pabalik-balik na kalakalan sa iisang kasabwat.</li>
+            <li>Itinatago ng <strong style="color:var(--text-primary)">Holiday mode</strong> ang iyong mga alok at pinapahinto pansamantala ang mga dumarating na kahilingan habang wala ka.</li>
+            <li>Maaaring mag-report at mag-flag ang mga miyembro ng mga masasamang aktor; maaaring alisin sila ng mga admin ng komunidad.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Mga Negosyo ng Komunidad at Pamamahala</h2>
+        <p>Ang mga negosyo ng komunidad (tulad ng isang aklatan ng kagamitan ng komunidad, isang kawan ng mga manok na nangingitlog, o isang imbakan ng panggatong) at mga natatakdaang proyekto ay mga pinagsasaluhang inisyatiba sa ilalim ng kolektibong pangangasiwa. Gumagana ang mga ito sa ilalim ng malilinaw, ipinapatupad ng code na mga panuntunan (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">ang modelo ng pamamahala ng Komun</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Isang bagay, dalawang lifecycle (§2.1):</strong> Ang isang nagpapatuloy na negosyo ay nananatili at nakikipagkalakalan; ang isang natatakdaang negosyo (isang proyekto) ay may layunin at petsa ng pagtatapos, isinasara ang account nito at ibinabalik ang anumang natitira sa Komun kapag natapos.</li>
+            <li><strong style="color:var(--text-primary)">Mga kinikitang sahig at mga pangako ng tagapangalaga (Mga Panuntunan 1–3):</strong> Nagsisimula ang isang bagong negosyo nang walang hindi kinikitang overdraft: ang credit floor nito ay sinusuportahan ng tahasang mga pangako mula sa kinikitang katayuan sa kalakalan ng mga tagapangalaga nito (tuwirang kabuuan, walang sintetikong multiplier). Ang pangakong suporta ay hindi kailanman sumasaling o nagbabawas sa personal na credit floor ng sambahayan ng isang tagapangalaga. Pinapanatili ng mga mas lumang negosyo ang panimulang sahig na mayroon sila bago ang mga pangako.</li>
+            <li><strong style="color:var(--text-primary)">Limitadong pananagutan (Panuntunan 4):</strong> Ang negosyo ang nabibigo, hindi ang sambahayan ng tagapangalaga. Kung mag-default ang isang negosyo, hihinto ang paggasta nito, ngunit protektado ang mga personal na sahig ng mga tagapangalaga nito.</li>
+            <li><strong style="color:var(--text-primary)">Bumibili ng inputs ang credit, nagpapasahod sa mga tao ang kita (Panuntunan 5):</strong> Maaaring humugot ang isang negosyo sa credit pababa sa nagagamit nitong sahig upang bumili ng mga supply o serbisyo mula sa mga panlabas na kapitbahay. Hindi ito maaaring <em>kailanman</em> humugot sa credit upang bayaran ang sarili nitong mga tagapangalaga — binabayaran lamang ang mga tagapangalaga habang <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Sahod ng tagapangalaga ay may limitasyon sa kinikitang labis (Panuntunan 6):</strong> Ang mga bayad sa mga tagapangalaga ay mahigpit na nililimitahan ng tunay na labis sa kalakalan (kita sa benta bawas ang mga bayad sa tagapangalaga). Ang mga grant, pangako, at regalo ay hindi kailanman maaaring gawing mga sahod ng tagapangalaga.</li>
+            <li><strong style="color:var(--text-primary)">Awtomatikong pag-sweep ng working-capital (Panuntunan 7):</strong> Maaaring magtakda ang isang negosyo ng kisame sa working-capital. Ang kinikitang labis na higit dito ay awtomatikong wina-sweep pabalik sa pool ng Komun ng Komunidad upang maiwasan ang pag-iimbak. Ang mga grant at regalo ay hindi kailanman wina-sweep.</li>
+            <li><strong style="color:var(--text-primary)">Panuntunan ng pag-apruba ng dalawang tao:</strong> Hindi maaaring aprubahan ng mga tagapangalaga ang sarili nilang mga bayad o personal na tawad sa mga pangangailangan ng negosyo — dapat aprubahan ng isa pang tagapangalaga.</li>
+            <li><strong style="color:var(--text-primary)">Mga Poll laban sa Mga Desisyon (§3):</strong> Ang mga impormal na tanong ay <em>Mga Poll</em> sa feed ng merkado: isang boto bawat isa, binibilang, walang ipinag-uutos. Ang may bisang pamamahala (mga grant ng pool, pagbura ng utang, pagbabago ng tungkulin, at pagsuspinde, pag-freeze o pag-alis ng isang miyembro) ay tumatakbo sa pamamagitan ng <em>Mga Desisyon</em> sa tab ng Komun, na may 7-araw na panahon ng pagboto. Pumapasa ang isang Desisyon sa 60% ng mga boto (66% para mag-alis ng miyembro; mahigit sa kalahati para mag-alis ng suspensyon o freeze, o para magbalik ng miyembro) kapag sapat na miyembro ang bumoto: 30% ng mga aktibo sa huling 30 araw, hindi bababa sa 3 (25% para sa pag-alis ng miyembro). Pagkatapos ay kusang ipinapatupad nito ang sarili nito. Gumagamit ang mga grant ng pool ng quadratic voting sa kinikitang katayuan sa kalakalan — ang likidong Munggo ay hindi makakabili ng mga boto.</li>
+            <li><strong style="color:var(--text-primary)">Napagkasunduang bokabularyo (§9):</strong> Apat na antas, apat na magkakaibang salita: node → <em>may-ari / admin</em> · negosyo → <em>punong tagapangalaga / tagapangalaga</em> · grupo → <em>tagapag-ugnay</em> · antas ng tiwala → <em>Katiwala</em>.</li>
+        </ul>
+        <div class="callout amber">Sa madaling sabi: <strong>kitain ang iyong credit line sa pamamagitan ng pakikipagkalakalan, magpanatili ng isa o dalawang alok na aktibo upang magamit ito, at hayaang umikot ang Munggo.</strong> Zero ang layunin — magbigay nang kasingdami ng kinukuha.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Icon ng BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Mutual credit para sa mga komunidad, pinapatakbo ng mga komunidad.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Sentro ng Tulong</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Paano Ito Gumagana</a>
+                    <a href="getting-started.html">Pagsisimula</a>
+                    <a href="rules.html">Ang Mga Panuntunan</a>
+                    <a href="safety.html">Kaligtasan ng Bata</a>
+                    <a href="../privacy.html">Patakaran sa Privacy</a>
+                    <a href="../terms.html">Mga Tuntunin ng Serbisyo</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../rules.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/rules.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/rules.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/rules.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/rules.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/rules.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/rules.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/rules.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/rules.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/rules.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/rules.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/rules.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/rules.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/rules.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/rules.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/rules.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/rules.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/rules.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/rules.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/rules.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/rules.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/rules.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="rules.html" hreflang="fil" lang="fil" aria-current="page">Filipino</a>
+                    <a href="../ja/rules.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/rules.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source sa ilalim ng lisensyang MIT. Ginawa nang may <img src="../bean.png" alt="pagmamahal" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> ng mga komunidad, para sa mga komunidad. Mga hangganan ng time zone © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">mga contributor ng OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

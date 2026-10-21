@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” இந்தச் சமூகத்தில் ஏற்கெனவே எடுக்கப்பட்டுவிட்டது. வேறொரு பெயரைத் தேர்ந்தெடுக்கவும்.",
@@ -2557,8 +2557,6 @@
   "Next level": "அடுத்த நிலை",
   "Up ahead": "முன்னே உள்ளது",
   "Your current floor": "உங்கள் தற்போதைய தளம்",
-  "Floor from this tier": "இந்த அடுக்கின் தளம்",
-  "Floor starts at": "தளம் தொடங்குமிடம்",
   "Grows deeper as you trade more": "அதிக வர்த்தகம் செய்யும்போது ஆழமாகிறது",
   "Reach {min} trust ({left} to go) from the real value you trade.": "நீங்கள் வர்த்தகம் செய்யும் உண்மையான மதிப்பிலிருந்து {min} நம்பிக்கையை அடையுங்கள் (இன்னும் {left} உள்ளது).",
   "🚀 Reach {emoji} {tier}": "🚀 {emoji} {tier}-ஐ அடையுங்கள்",
@@ -3425,5 +3423,75 @@
   "Recurring listing (stays active after purchase)": "தொடரும் பட்டியல் (வாங்கிய பிறகும் செயலில் இருக்கும்)",
   "Posting…": "பதிவிடுகிறது…",
   "Publish Listing": "பட்டியலை வெளியிடு",
-  "Translated by machine: some words may be wrong.": "இயந்திர மொழிபெயர்ப்பு: சில சொற்கள் தவறாக இருக்கலாம்."
+  "Translated by machine: some words may be wrong.": "இயந்திர மொழிபெயர்ப்பு: சில சொற்கள் தவறாக இருக்கலாம்.",
+  "About this tool": "இந்தக் கருவியைப் பற்றி",
+  "Ask to borrow this?": "இதை இரவல் வாங்கக் கேட்கவா?",
+  "Asked to borrow": "இரவல் கேட்கப்பட்டது",
+  "Check your connection, then try again.": "உங்கள் இணைப்பைச் சரிபார்த்துவிட்டு, மீண்டும் முயற்சிக்கவும்.",
+  "For example": "எடுத்துக்காட்டாக",
+  "Free to borrow. Nothing is held: the lender says yes first.": "இரவல் பெற இலவசம். எதுவும் நிறுத்தி வைக்கப்படாது: முதலில் இரவல் தருபவர் ஒப்புக்கொள்ள வேண்டும்.",
+  "How it's going": "எவ்வாறு போகிறது",
+  "How you deal": "நீங்கள் எவ்வாறு பரிமாறுகிறீர்கள்",
+  "I already do this": "நான் ஏற்கனவே இதைச் செய்கிறேன்",
+  "I'm starting out": "நான் இப்போதுதான் தொடங்குகிறேன்",
+  "It couldn't be removed. Try again.": "அதை அகற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "உங்களுக்காக மட்டுமே இந்த உலாவியில் வைக்கப்பட்டுள்ளது. இதில் உள்ள எதுவும் இந்த உலாவியை விட்டு வெளியேறாது, மேலும் இங்கே வெளியேறினால் அது அகற்றப்படும்.",
+  "No tools in this version of the app yet.": "பயன்பாட்டின் இந்தப் பதிப்பில் இன்னும் கருவிகள் இல்லை.",
+  "Nothing is held until the lender says yes.": "இரவல் தருபவர் ஒப்புக்கொள்ளும் வரை எதுவும் நிறுத்தி வைக்கப்படாது.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "இரவல் தருபவர் ஒப்புக்கொள்ளும் வரை எதுவும் நிறுத்தி வைக்கப்படாது. பின்னர் கட்டணம் தற்காலிக பொறுப்புடைமைப் பணப்பைக்குச் செல்லும், அது திரும்பியதும் இரவல் தருபவர் பொதுத் தொகுப்புக்கு 1.5% பரிவர்த்தனை கட்டணம் {owned} போக அதைப் பெறுவார்.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "இரவல் தருபவர் ஒப்புக்கொள்ளும் வரை எதுவும் நிறுத்தி வைக்கப்படாது. பின்னர் {total} B ஒரு பொறுப்புடைமைப் பணப்பைக்குச் செல்லும், அது திரும்பியதும் இரவல் தருபவர் {net} B பெறுவார் (பொதுத் தொகுப்புக்கு 1.5% பரிவர்த்தனை கட்டணம் {owned} போக).",
+  "On your Home": "உங்கள் முகப்பில்",
+  "Open {tool}": "{tool}-ஐத் திறக்கவும்",
+  "Options for {tool}": "{tool}-க்கான விருப்பங்கள்",
+  "Read in English": "ஆங்கிலத்தில் படிக்கவும்",
+  "Read the guide": "வழிகாட்டியைப் படிக்கவும்",
+  "Refresh the page to load the newest version your community has.": "உங்கள் சமூகம் கொண்டுள்ள புதிய பதிப்பை ஏற்ற பக்கத்தைப் புதுப்பிக்கவும்.",
+  "Remove my data": "என் தரவை அகற்று",
+  "Remove my data from this browser": "இந்த உலாவியிலிருந்து என் தரவை அகற்று",
+  "Removed from this browser.": "இந்த உலாவியிலிருந்து அகற்றப்பட்டது.",
+  "Show translation": "மொழிபெயர்ப்பைக் காட்டு",
+  "Start": "தொடங்கு",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "இந்த உலாவியிலிருந்து {tool}-க்கான இந்தச் சமூகத்தின் தரவை நீக்குகிறது. மற்றொரு சமூகத்தில் உள்ள அதே கருவி அதன் சொந்தத் தரவை வைத்திருக்கும். இதைச் செயல்தவிர்க்க முடியாது.",
+  "Things you can do on your own, that make your community stronger.": "உங்கள் சமூகத்தை மேலும் வலிமையாக்கும், நீங்களாகவே செய்யக்கூடிய விஷயங்கள்.",
+  "This page is in English for now.": "இப்போதைக்கு இந்தப் பக்கம் ஆங்கிலத்தில் உள்ளது.",
+  "This page is newer in English.": "இந்தப் பக்கம் ஆங்கிலத்தில் புதியதாக உள்ளது.",
+  "This screen stopped working": "இந்தத் திரை செயல்படுவதை நிறுத்திவிட்டது",
+  "This tool didn't load": "இந்தக் கருவி ஏற்றப்படவில்லை",
+  "This tool isn't in this version of the app": "பயன்பாட்டின் இந்தப் பதிப்பில் இந்தக் கருவி இல்லை",
+  "What this tool keeps is safe. Go back and open it again.": "இந்தக் கருவி வைத்திருப்பவை பாதுகாப்பாக உள்ளன. பின்சென்று அதை மீண்டும் திறக்கவும்.",
+  "What you have": "உங்களிடம் உள்ளவை",
+  "Where it is kept": "இது எங்கு வைக்கப்படுகிறது",
+  "Withdraw request": "கோரிக்கையைத் திரும்பப் பெறு",
+  "Yes, remove it": "ஆம், அதை அகற்று",
+  "for {n} day|for {n} days": {
+    "one": "{n} நாளுக்கு",
+    "other": "{n} நாட்களுக்கு"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} வாரத்துக்கு",
+    "other": "{n} வாரங்களுக்கு"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} நாள்",
+    "other": "{n} நாட்கள்"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} மாதம்",
+    "other": "{n} மாதங்கள்"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} வாரம்",
+    "other": "{n} வாரங்கள்"
+  },
+  "📦 Ask to borrow": "📦 இரவல் கேட்க",
+  "Asked to join": "இணையக் கோரியவர்",
+  "Invited": "அழைக்கப்பட்டவர்",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "வரவேற்கிறோம். முதல் நாளிலிருந்தே நீங்கள் உலாவலாம், வர்த்தகம் செய்யலாம், வரவுகளைப் பெறலாம் மற்றும் பிறரை அழைக்கலாம் — மேலும் உங்கள் கடன் வரம்பு ஏற்கனவே திறக்கப்பட்டுள்ளது.",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} நம்பிக்கையிலிருந்து",
+    "other": "{n} நம்பிக்கையிலிருந்து"
+  },
+  "{name}, already in the group": "{name}, ஏற்கனவே குழுவில் உள்ளார்",
+  "{name}, already invited": "{name}, ஏற்கனவே அழைக்கப்பட்டுள்ளார்",
+  "{name}, asked to join": "{name}, இணையக் கோரியுள்ளார்"
 }

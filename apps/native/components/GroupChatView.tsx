@@ -106,6 +106,20 @@ function headerDetail(memberCount: number | null, muted: boolean): string | null
 }
 
 /**
+ * Splits a group's roster rows into active member keys and invited keys (damo-1021).
+ * Active members count toward the group and are "In the group"; invited members are "Invited".
+ */
+export function splitRosterKeys(members: readonly { memberPubkey: string; status: string }[]): {
+    memberKeys: Set<string>;
+    invitedKeys: Set<string>;
+} {
+    return {
+        memberKeys: new Set(members.filter(m => m.status === 'active').map(m => m.memberPubkey)),
+        invitedKeys: new Set(members.filter(m => m.status === 'invited').map(m => m.memberPubkey)),
+    };
+}
+
+/**
  * A message this phone is still sending, or could not send. The node holds nothing for it yet, so it lives
  * here until the chat is read again — that is what lets a group chat offer Resend / Discard the way a DM
  * does. The client id is the same one the POST carries, so a resend is stored once, not twice.
@@ -132,6 +146,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [view, setView] = useState<any | null>(null);
     const [group, setGroup] = useState<GroupItem | null>(null);
     const [memberKeys, setMemberKeys] = useState<Set<string>>(new Set());
+    const [invitedKeys, setInvitedKeys] = useState<Set<string>>(new Set());
     // The roster as last read (with each row's formerKeys when the node serves them): names a sealed line's signer.
     const [rosterRows, setRosterRows] = useState<GroupMemberItem[]>([]);
     // Members whose name this phone saw on another key, with no statement from the new key reaching it (pick 3).
@@ -199,9 +214,9 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         // No roster this time (the node busy, or offline): keep who we knew was in, and the count.
         const members = details.members;
         if (!members) return;
-        setMemberKeys(new Set(members
-            .filter(m => m.status === 'active' || m.status === 'invited')
-            .map(m => m.memberPubkey)));
+        const { memberKeys: activeKeys, invitedKeys: invKeys } = splitRosterKeys(members);
+        setMemberKeys(activeKeys);
+        setInvitedKeys(invKeys);
         setRosterRows(members.filter(m => m.status === 'active'));
         anchorUrl()
             .then(url => (url ? rememberRosterNames(url, members.filter(m => m.status === 'active')) : new Set<string>()))
@@ -885,6 +900,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     groupId={id}
                     groupName={name}
                     existing={memberKeys}
+                    invited={invitedKeys}
                     myPubkey={me}
                     onClose={() => setInviteOpen(false)}
                     onInvited={(n) => { if (n > 0) { setInviteSkipped(true); loadDetails().catch(() => { }); } }}

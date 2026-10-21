@@ -1,0 +1,647 @@
+<!-- source-hash: 5c4a962db9481e5e -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool — Ticari Bankalar İçin Değil, Topluluklar İçin Takas</title>
+    <meta name="description" content="BeanPool, bir topluluğun para yerine Fasulye kullanarak yardım, eşya ve beceri takası yapmak için kendi kendine işlettiği ücretsiz bir uygulamadır. Yakınınızdaki bir topluluğu bulun veya başlatın ya da bir davetle katılın; küresel topluluk yakında herkese açılıyor. iPhone, Android ve web.">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="style.css?v=2.8">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="#" class="logo"><img src="bean.png" alt="BeanPool Simgesi" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="#how-it-works">Nasıl Çalışır</a>
+                <a href="#features">Neler Yapabilirsiniz</a>
+                <a href="rules.html">Kurallar</a>
+                <a href="#run-a-node">Bir Topluluk Yönetin</a>
+                <a href="help.html" title="Her kural, rehber ve kılavuz tek bir yerde">Yardım</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube'da Eğitim Videolarını İzleyin (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit Topluluğuna Katılın (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub'da Görüntüle">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Başlayın</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Menüyü aç"><span aria-hidden="true">☰</span> Menü</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Başlayın</a>
+                    <a href="#how-it-works">Nasıl Çalışır</a>
+                    <a href="#features">Neler Yapabilirsiniz</a>
+                    <a href="rules.html">Kurallar</a>
+                    <a href="#run-a-node">Bir Topluluk Yönetin</a>
+                    <a href="help.html">Yardım</a>
+                    <a href="guide/index.html">Üye rehberi</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube'da Videolar</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit'te r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub'da Kaynak Kod</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+            <div class="hero-header">
+                <div class="hero-badge">Telefonda ve web'de ücretsiz</div>
+                <h1>Ticari Bankalar İçin Değil,<br><span class="gradient-text">Topluluklar</span> İçin Takas</h1>
+                <p class="hero-subtitle">BeanPool, topluluğunuzun birbirinizle yardım, eşya ve beceri takası yapmak için kullandığı ücretsiz bir uygulamadır. Para yerine Fasulye kullanırsınız: birine yardım edersiniz ve Fasulyeler size gelir; yardım alırsınız ve diğer tarafa giderler. Sıfır hedef noktasıdır &mdash; aldığınız kadar verin.</p>
+            </div>
+
+            <div class="hero-lower-grid">
+                <!-- Left: what BeanPool is not -->
+                <div class="not-card glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">🚫 Sömürü Karşıtı Manifesto</span>
+                        <h3>BeanPool Ne <span class="text-rose">Değildir</span></h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Bir Reklam Dağıtım Makinesi Değildir</strong>
+                                <p>Benzer kitle takibi, veri toplama veya zengin olma gurusu algoritmaları yok.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Spekülatif Bir Kripto Jetonu Değildir</strong>
+                                <p>Fasulyeler gerçek takas için karşılıklı kredidir — borsalarda asla şişirilmez.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Bir Dikkat Kumar Makinesi Değildir</strong>
+                                <p>Dopamin döngülü felaket kaydırması yok — yalnızca gerçek yerel teklifler ve komşular.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Şirket Borcu veya Sömürü Değildir</strong>
+                                <p>Faiz yok, bankalar yok, aracılar yok. Tek ücretler küçüktür ve topluluğunuzun kendi Ortak havuzuna gider, asla bize değil.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Bir Kripto Uygulaması Değildir</strong>
+                                <p>Blokzincir yok, madeni para yok, satın alınacak cüzdan yok. 12 kelimeniz yalnızca kendi hesabınızı açar.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <div class="hero-cta-card glass-panel">
+                    <div class="hero-cta-header">
+                        <span class="hero-cta-tag">Üç giriş yolu</span>
+                        <h3>Olduğunuz yerden başlayın</h3>
+                    </div>
+
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">Şimdi deneyin, dünya çapında</a>
+                            <p>Küresel topluluk yakında herkese davetsiz olarak açılıyor: etrafa bakın, ücretsiz veya takas için bir şeyler paylaşın ve yakınınızda bir topluluk bulun. Bugün özel bir önizlemedir. Açılana kadar, aşağıda halihazırda çalışan toplulukları görün, bir tane başlatın veya bir üyenin size verdiği daveti kullanın.</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">Bir topluluk bulun veya başlatın</a>
+                            <p>Halihazırda çalışan toplulukları görün veya boş bir bilgisayarda ya da kiralanmış küçük bir sunucuda bir tane başlatın. Yakınınızdaki bir topluluktan sizi içeri almasını isteme özelliği yakında, küresel topluluk açıldığında geliyor.</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">Davetiniz var mı?</a>
+                            <p>Uygulamayı yükleyin ve bir üyenin size verdiği bağlantıyı açın veya QR kodunu tarayın; bir davet bir kez çalışır ve 30 gün geçerlidir.</p>
+                        </div>
+                    </div>
+                    <p class="hero-web-note">Fasulyeler, her biri kendi sunucusunda bulunan yerel topluluklarda yaşar. Küresel topluluk size etrafı gösterir ve birine yönlendirir. Bir örnek toplulukla, Fasulyelerin orada nasıl çalıştığını size gösterir.</p>
+
+                    <div class="hero-logos-group">
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="App Store'dan İndirin">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Download on the</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                        <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                        <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Google Play'den Edinin">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">GET IT ON</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
+                        <p class="hero-web-note">Uygulama mağazası yok mu? Hem küresel topluluk hem de kendi topluluğunuz telefonunuzun tarayıcısında açılır; bunları ana ekranınıza ekleyin.</p>
+                    </div>
+                    <!-- Where to find us: small round links, same destinations as the menu -->
+                    <div class="hero-social-row">
+                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" aria-label="YouTube'da BeanPool" title="YouTube'da BeanPool">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--youtube)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        </a>
+                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" aria-label="Reddit'te BeanPool" title="Reddit'te BeanPool">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--reddit)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                        </a>
+                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" aria-label="GitHub'da BeanPool kaynak kodu" title="GitHub'da BeanPool kaynak kodu">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hero Principles / Trust Banner -->
+            <div class="hero-principles-banner">
+                <div class="principle-item">
+                    <span class="principle-text">%100 Ücretsiz</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">Uygulama içi satın alma yok</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">Açık Kaynak</span>
+                </div>
+            </div>
+
+            <!-- How Beans move, below the two cards -->
+            <div class="hero-example-row">
+                <div class="not-card hero-example glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">Fasulyeler nasıl hareket eder</span>
+                        <h3>Üç komşu, bir hafta</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">1</div>
+                            <div class="not-item-content">
+                                <strong>Sam, Ana'nın bisikletini tamir eder &mdash; 30 Fasulye</strong>
+                                <p>Sam +30'a çıkar. Ana −30'a iner.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">2</div>
+                            <div class="not-item-content">
+                                <strong>Ana, Lee için ekmek pişirir &mdash; 30 Fasulye</strong>
+                                <p>Ana tekrar 0'a döner. Lee şimdi −30'dadır.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">3</div>
+                            <div class="not-item-content">
+                                <strong>Lee, Sam'in köpeğine bakar &mdash; 30 Fasulye</strong>
+                                <p>Herkes sıfıra yaklaşır ve kimse para harcamadan üç iş yapılmış olur.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="hero-example-note">Satıcı her fiyatın %98,5'ini elinde tutar; diğer %1,5 topluluğun Ortak havuzuna gider, bu yüzden gerçek rakamlar bunların biraz altında kalır.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>BeanPool nedir</h2>
+            </div>
+            <p class="what-it-is-lead">Bir topluluk BeanPool'u kendi küçük sunucusunda çalıştırır. Üyeler neler sunabileceklerini ve nelere ihtiyaç duyduklarını paylaşır ve Fasulye ile takas yapar. Fasulye satın aldığınız para değildir: birinin birine yardım ettiğinin kaydıdır. Herkes sıfırdan başlar. Yardım ettiğinizde bakiyeniz artar; yardım aldığınızda azalır; topluluk genelinde bakiyelerin toplamı her zaman sıfırdır. Kimse Fasulye basmaz, kimse faizle borç vermez ve kimse bunları nakde çevirmez. Her takastaki küçük bir ücret topluluğun kendi havuzuna gider ve üyeler bunu oylamayla harcar. Uygulama ücretsiz ve açık kaynaklıdır; bir topluluk kendi sunucusunu seçer ve üzerindeki veriler kendilerinindir.</p>
+            <ul class="what-it-is-not">
+                <li><strong>Kripto para değildir.</strong> Blokzincir yok, jeton yok, alınıp satılacak bir şey yok. 12 kelimeniz yalnızca kendi hesabınızı açar.</li>
+                <li><strong>Banka değildir.</strong> Kredi kendi ticaretinizden gelir, faiz yoktur: kredi limitiniz ilk tamamlanan takasınızdan sonra küçük olarak açılır ve takas yaptıkça büyür.</li>
+                <li><strong>Aracı bir şirket değildir.</strong> BeanPool bir takastan hiçbir şey almaz ve reklam göstermez.</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">Karşılıklı kredi eskidir: LETS grupları bunu onlarca yıl kağıt üzerinde yürüttü ve İsviçre'de bir işletme çevresi olan WIR, 1934'ten beri kendi kredisiyle ticaret yaptı. Çoğunu tüketen şey evrak işleriydi. BeanPool, uygulama tarafından yapılan bu evrak işidir.</p>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2>Nasıl Çalışır</h2>
+                <p>İlk ekrandan ilk takasınıza kadar.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
+                    <div class="step-number" aria-hidden="true">01</div>
+                    <div>
+                        <h3>1. Üç kapıdan birinden girin</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>Bir üyenin size gönderdiği daveti açın; yakında küresel topluluğu davetsiz olarak da deneyebilir ve oradan yakınınızdaki bir topluluktan sizi içeri almasını isteyebilirsiniz. Her iki durumda da insanların sizi tanıyacağı adı seçersiniz.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🔑</div>
+                    <div class="step-number" aria-hidden="true">02</div>
+                    <div>
+                        <h3>2. 12 kelimenizi saklayın</h3>
+                        <p>Uygulama telefonunuzda hesabınızı oluşturur ve size 12 kelime gösterir. Bunları yazın ve güvenle saklayın: telefonunuzu kaybeder veya değiştirirseniz hesabınızı geri getirirler.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
+                    <div class="step-number" aria-hidden="true">03</div>
+                    <div>
+                        <h3>3. Bir teklif yayınlayın</h3>
+                        <p>Yapabileceğiniz veya paylaşabileceğiniz bir şey koyun: şehre bir araç yolculuğu, yumurta, bir bisikleti tamir etme, bir saatlik bahçe işi. Fasulye olan bir toplulukta, bir ihtiyaç yayınlamadan veya satın almadan önce en az bir teklifinizin bulunması gerekir. Fasulye olmayan küresel toplulukta ilk gönderiniz bir ihtiyaç olabilir.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-number" aria-hidden="true">04</div>
+                    <div>
+                        <h3>4. Takas yapın</h3>
+                        <p>Fasulye cinsinden bir fiyatta anlaşın. Fasulyeler iş bitene kadar güvenle tutulur, ardından satıcıya gider. Sonrasında birbirinizi değerlendirirsiniz.</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-more"><a href="getting-started.html">Başlarken kılavuzunun tamamını okuyun →</a></p>
+        </div>
+    </section>
+
+    <!-- What you can do: one card per part of the app, in the app's own words -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>Neler Yapabilirsiniz</h2>
+                <p>Uygulama, seçtiğiniz kartlardan oluşan Ana Sayfa'da açılır. Arkasında: Pazar, Harita, Sohbet (web uygulamasında Sohbet), Kişiler, Nabız, Ortak ve bakiyenizi ve takaslarınızı gördüğünüz Defter.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧺</div>
+                    <h3>Pazar</h3>
+                    <p>Topluluğunuzdaki insanların neler sunduğu ve nelere ihtiyaç duyduğu; anketler ve etkinlikler aynı akışta yer alır. Arayın, kategoriye göre filtreleyin ve takas yapmak için dokunun.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗺️</div>
+                    <h3>Harita</h3>
+                    <p>Yakınınızda neyin sunulduğunu görün. Her iğne sizin yerleştirdiğiniz bir iğnedir: o andaki konumunuzu kullanın veya iğneyi elle bırakın. İzin verdiğinizde, uygulama size en yakın olanı göstermek için konumunuzu da kullanır ve bunu asla arka planda yapmaz. Etkinlik iğneleri ve web uygulamasında ayarlanan girişim iğneleri, noktayı yaklaşık 100&nbsp;m'ye yuvarlayan Yaklaşık olarak ayarlanabilir. İğneler topluluğunuzun üyeleri tarafından görülür. Küresel topluluk herkese açıldığında, oradaki bir ziyaretçi ilanları ve kabaca nerede olduklarını görür, ancak isimleri, profil resimlerini ve kesin konumları görmez. Herkes bir dakika içinde katılabilir, bu nedenle üyeleri de birbirlerinin ilanlarını yaklaşık bir kilometreye kadar görür; kesin konum, buluşmayı ayarladığınızda paylaşmanız içindir.</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📅</div>
+                    <h3>Etkinlikler <span class="new-pill">Yeni</span></h3>
+                    <p>Bir imece, tamir kafesi veya beceri paylaşımını zaman ve yer belirterek paylaşın. İnsanlar Katılıyor veya İlgileniyor seçeneğine dokunur. Gidenler etkinlik sohbetine ve ev sahibinin özel notuna &mdash; kapı kodu, ne getirileceği &mdash; erişir ve zaman veya yer değişirse ya da iptal edilirse bundan haberdar olur. Küresel toplulukta olduğu gibi herkesin katılabileceği yerlerde, ev sahibi varsayılan olarak önce her kişiyi içeri alır. Etkinlikler ücretsizdir; Fasulye el değiştirmez. Bunları haritada Bugün, Bu hafta sonu veya Gelecek 7 gün altında bulun ve bir etkinliği tekrar yürütmek için Yeni bir tarihe kopyala'yı kullanın.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">💬</div>
+                    <h3>Sohbet (web uygulamasında Sohbet)</h3>
+                    <p>Topluluğunuzdaki herkese mesaj gönderin. Doğrudan mesajlar ve grup sohbetleri uçtan uca şifrelidir: topluluğunuzun düğümü bunları taşır ancak okuyamaz. Henüz güncellenmemiş bir düğümde, bir grup sohbeti onu yöneten kişiler tarafından yine de okunabilir ve sohbet bunu belirtir. Girişim tartışmaları ve etkinlik sohbetleri, denetlenebilmeleri için topluluğunuzun düğümünü yöneten kişiler tarafından okunabilir.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>Ortak: girişimler <span class="new-pill">Yeni</span></h3>
+                    <p>Bir girişim, topluluğunuzun birlikte yürüttüğü bir şeydir: bir yumurta kümesi, alet kütüphanesi, odun deposu veya bir hedefi ve bitiş tarihi olan bir proje. Sorumlular onu yönetir ve bir baş sorumlu liderlik eder; üyeler sorumlu olarak katılmak isteyebilir. Kendi Fasulyeleri vardır, herkes gibi Pazar'da teklifler ve ihtiyaçlar yayınlar, gelirini ve giderini gösterir ve mevsim için duraklatılabilir. Hiçbir sorumlu kendisine yapılacak bir ödemeyi onaylayamaz: başka bir sorumlu onaylamalıdır.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>Anketler ve Kararlar <span class="new-pill">Yeni</span></h3>
+                    <p>Herkes Pazar'daki bir anketle topluluğa bir soru sorabilir. Daha büyük seçimler Ortak sekmesindeki Kararlar'dır: Ortak havuzundan bir girişime hibe, bir ihtiyaç hibesi, bir baş sorumluyu değiştirme. Bir Karar 7 gün boyunca açıktır ve geçerse kendini yürütür. Bir takası tamamladığınızda bir öneride bulunabilirsiniz.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>Gruplar <span class="new-pill">Yeni</span></h3>
+                    <p>Sokağınız, bahçe kulübünüz veya müzik grubunuz için bir grup başlatın ve koordinatörü siz olun. Yalnızca gruba gönderi paylaşın ve grubun açık mı olduğunu, insanların katılmak mı istediğini yoksa yalnızca davetle mi olduğunu seçin.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>Nabız</h3>
+                    <p>Yerel halkın neler ürettiğini görün. Üyeler kendi kanallarını bağlayabilir &mdash; TikTok, Instagram, YouTube, SoundCloud veya bir blog akışı &mdash; ve herkese açık gönderileri topluluğunuzun Nabız'ında görünür. Bağlanmak her üyenin kendi tercihidir. Orada olmaması gereken her şey bildirilebilir ve topluluğunuzun düğümü bunu kaldırabilir.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>Borç Alınmayan, Kazanılan Kredi</h2>
+                <p>Kimse Fasulye satın almaz ve kimse faiz ödemez.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>Herkes sıfırdan başlar</h3>
+                    <p>Yeni bir hesabın 0 Fasulyesi vardır. Sattığınızda bakiyeniz artar; satın aldığınızda azalır. Tüm topluluk genelinde bakiyelerin toplamı her zaman sıfırdır.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>İlk takasınız bir kredi limiti açar</h3>
+                    <p>Bir takası tamamladığınızda, yardım vermeden önce yardım almak için sıfırın altına inmeye başlayabilirsiniz. Kredi limitiniz küçük başlar (100 Fasulyelik bir takas bunun yaklaşık 37 Fasulyesini kazandırır) ve daha fazla kişiyle takas yaptıkça büyür. Yayında tuttuğunuz teklifler bunun ne kadarını kullanabileceğinizi belirler: bir teklif 200 Fasulyeye kadar, beş teklif 2000'e kadar.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>Engeller değil, rozetler</h3>
+                    <p>Zamanla rozetler kazanırsınız: Yeni Gelen, Sakin, Temsilci, Büyük. Bunlar topluluktaki geçmişinizi gösterir. Hiçbir şeyin kilidini açmazlar. Bir yönetici de birine bir rozet verebilir ve bununla birlikte o rozetin başlangıç kredi limitini sağlayabilir.</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">Tüm sayılar için Kurallar'ı okuyun →</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">Ücretler nereye gidiyor</span>
+                    <h3>Değer topluluğunuzda kalır</h3>
+                </div>
+                <p class="stays-local-lead">Tamamlanan takaslardaki %1,5'lik ücret ve 200 Fasulye üzerindeki bakiyenin kalan kısmından alınan küçük bir aylık ücret, topluluğunuzun Ortak havuzuna gider &mdash; bize veya başka birine değil. Topluluğunuz havuzun neyi finanse edeceğine Kararlar aracılığıyla karar verir.</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Reklam yok ve takip yok</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Alınıp satılacak jeton yok &mdash; Fasulyeler yalnızca takas içindir</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Faiz yok ve bankalar yok</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">Bunu neden bu şekilde inşa ettik: sömürü sonrası bir ekonomi →</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>Hesabınız ve Güvenliğiniz</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>Anahtarınız telefonunuzda kalır</h3>
+                    <p>Telefon uygulamasında anahtarınız telefonun güvenli depolama alanında tutulur ve telefonunuzun kendi ekran kilidini soran Uygulama Kilidi'ni ekleyebilirsiniz. Web uygulamasında bu tarayıcının kendi depolama alanında tutulur. 12 kelimeniz kimseye bağımlı olmayan yedektir.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>Her şeyi bildirin</h3>
+                    <p>Bir gönderiyi, bir üyeyi, bir etkinliği veya bir Nabız öğesini bildirebilir ve herkesi engelleyebilirsiniz. Bildirimler topluluğunuzun düğümünü yöneten kişilere &mdash; sahibine ve yöneticilerine &mdash; gider; onlar içeriği ve hesapları kaldırabilir. Üyeler birini askıya almak veya kaldırmak için bir Karar üzerinde de oy kullanabilir.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>Ayrıntılar</h3>
+                    <p>Neler saklanır, kimler görebilir ve hesabınızı nasıl silersiniz.</p>
+                    <p class="card-links"><a href="privacy.html">Gizlilik Politikası</a>&nbsp;· <a href="safety.html">Çocuk Güvenliği</a>&nbsp;· <a href="terms.html">Şartlar</a>&nbsp;· <a href="data-deletion.html">Verilerinizi silme</a></p>
+                </div>
+                <div class="feature-card glass-panel feature-wide" id="key-copy">
+                    <h3>Anahtarınıza ikinci bir dönüş yolu ve onu kimlerin açabileceği</h3>
+                    <p>İkinci bir dönüş yolu olarak Google, Apple veya Facebook ile oturum açmayı da bağlayabilirsiniz. Bu durumda oturum açma için anahtarınızın kilitli bir kopyası saklanır. BeanPool'un anahtar kasasını kullanan telefon uygulamaları bunu orada, İzlanda'da başka hiçbir şey yapmayan küçük bir sunucuda tutar; telefon uygulamasının eski sürümleri bunu topluluğunuzun düğümünde tutar; küresel topluluktaki web uygulaması bunu bizim çalıştırdığımız o topluluğun sunucusunda tutar. Kopyayı kim tutuyorsa onu açabilir: kasa ve küresel topluluk için BeanPool, orada tutulan bir kopya için düğümünüzü yöneten kişiler. Kasadan geri yükleme, kendi cihazlarınızdan biri siz olduğunuzu söylemediği sürece bir gün bekler. Bu kopya ve hesabınızı başka bir cihazınıza kopyalamak, anahtarınızın cihazınızdan ayrılmasının tek yollarıdır.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <span id="find-or-start"></span>
+        <div class="container">
+            <div class="section-header">
+                <h2>Yerel Takas Topluluğunuzu Bulun</h2>
+                <p>BeanPool çalıştıran ve dizinde listelenen topluluklar.</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">Henüz yakınınızda bir topluluk yok.</span>
+                    <a id="map-empty-start" href="#run-a-node">Bir topluluk başlatın</a>
+                </div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">Listelenen topluluklar</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">Üyeler (bildirildiği üzere)</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
+        <div class="container">
+            <div class="section-header">
+                <span class="audience-tag">Topluluk organizatörleri için</span>
+                <h2>Topluluğunuz İçin BeanPool Çalıştırın</h2>
+                <p>Her topluluk kendi düğümünde çalışır: o topluluğun üyelerini, gönderilerini ve defterini tutan küçük bir sunucu. Yerel biri bunu çalıştırır. Kasabanızda veya vadinizde henüz bir tane yoksa, o kişi siz olabilirsiniz.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>Nelere bakarsınız</h3>
+                    <p>Siz ve atadığınız yöneticiler topluluğunuzun moderatörlerisiniz: bildirimler size gelir. Üyelerinizin verileri makinenizde yaşar, bu nedenle yedekli tutarsınız. Girişim tartışmalarını ve etkinlik sohbetlerini okuyabilirsiniz; doğrudan mesajları okuyamazsınız. İlk üyeleri siz davet edersiniz, onlar da geri kalanları davet eder.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>Ayarlar uygulaması</h3>
+                    <p>Düğümünüz tarayıcıda kendi ayarlar uygulamasıyla birlikte gelir. Buradan topluluğunuza isim verir, kendi anahtarlarıyla oturum açan bir sahip ve yöneticiler atar, QR davetleri yazdırır, disk sağlığını izler, herkese açık bir web adresi veya tünel seçer ve hem telefonunu hem de 12 kelimesini kaybetmiş bir üyenin bizzat onayladığınız tek seferlik bir kodla yeni bir telefonda kendi hesabına dönmesine yardımcı olursunuz.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>İlk açılıştan itibaren gizli</h3>
+                    <p>Bir topluluğun ilanları, haritası, mesajları ve bakiyeleri, düğümü başladığı andan itibaren üyeleri içindir; açılacak bir şey yoktur. Adresini hesabı olmadan açan biri, yakında herkese açılacak olan küresel topluluğa yönlendirilir.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Komşu bir toplulukla bağlantı kurma</h3>
+                    <p>İki topluluk, üyelerinin birbirleriyle takas yapabilmesi için bağlantı kurma konusunda anlaşabilir. Fasulyeler asla evden ayrılmaz: her çift, bir topluluğun diğerine ne kadar borçlu olduğunun sürekli bir çetelesini tutar ve her iki taraf da kendi limitini belirler. Her iki operatör de açmadıkça bağlantı kapalıdır ve henüz erkendir: ekranları web uygulamasında mevcuttur ve yalnızca kendi test topluluklarımızdan ikisi arasında denenmiştir, hiçbir zaman canlı topluluklar arasında denenmemiştir.</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>Bir topluluk başlatın</h2>
+                <p>Bir tarifi takip edebiliyorsanız yaklaşık yarım saat. Önce bilinmesi gereken altı şey:</p>
+                <ul class="run-node-facts">
+                    <li><strong>Maliyeti.</strong> Yazılım ücretsizdir. Evde açık kalan yedek bir bilgisayarda (Mini PC, NAS veya 64 bit sistemli Raspberry Pi) ya da ayda birkaç dolara (yaklaşık 6 ABD Doları) kiralanmış küçük bir sunucuda çalışır.</li>
+                    <li><strong>Kim barındırır.</strong> Kendi makinenizde veya kiraladığınız makinede siz barındırırsınız. Asla beanpool.org'a ihtiyaç duymaz: kendi web adresiniz çalışır.</li>
+                    <li><strong>Neleri üstlenirsiniz.</strong> Üyelerinizden gelen bildirimler size gelir. Veri klasörünü bir kurtarma koduyla yedeklemek size aittir. İki sahip bulundurun. Sunucuyu açık ve güncel tutun.</li>
+                    <li><strong>Asla görmedikleriniz.</strong> Üyelerinizin doğrudan mesajlarını.</li>
+                    <li><strong>Önce Docker.</strong> Aşağıdaki bloktan önce makinede Docker kurulu olmalıdır; yeni kiralanan bir sunucuda hiçbiri yoktur.</li>
+                    <li><strong>Telefonların ulaşabileceği bir adres.</strong> Telefonlar internetteki bir topluluğa yalnızca https üzerinden ulaşır. Genel IP adresine sahip ve 80 ile 443 numaralı bağlantı noktaları açık olan kiralanmış bir sunucuda bu IP adresi yeterlidir: sunucunuz Cloudflare hesabı olmadan bunun için kendi sertifikasını alır ve aynısı kendinize ait bir alan adı için de geçerlidir. Evde veya açık bağlantı noktası olmadığında, talep işlemi sunucunuzun kendi çalıştırdığı bir tünel aracılığıyla size .beanpool.org ile biten ücretsiz bir ad verir. Düz bir http:// adresi yalnızca ev ağında çalışır.</li>
+                </ul>
+                <p>Ardından, Docker kurulu olan o makineye bu tek bloğu yapıştırın. Compose dosyasını getirir, düğümün kullandığı ağı oluşturur, yayınlanan imajı (Intel/AMD veya ARM64) çeker, başlatır, sunucu tek seferlik talep kodunu oluşturana kadar bekler (Raspberry Pi'de yavaş bir ilk başlangıç için beş dakikaya kadar) ve talep eder. Başlamadan önce yapılandırılacak hiçbir şey yoktur.</p>
+
+                <!-- macOS Style Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — bir topluluk başlatın</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">Tek blok: getir, ağ oluştur, çek, başlat, bekle, talep et</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="Panoya kopyala">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">Son satır: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Adresiniz.</strong> Yapıştırmadan önce seçin ve son satırı eşleşecek şekilde değiştirin. Zaten yapıştırdıysanız sorularında Enter tuşuna basın, ardından son satırı tekrar çalıştırın: talep kodu bir telefon bekler. Genel bir IP adresine ve 80 ile 443 numaralı bağlantı noktaları açık olan <strong>kiralanmış bir sunucu</strong>: <code>beanpool claim --ip 203.0.113.7</code> örneğindeki gibi <code>--ip</code> ve IP adresini ekleyin. Sunucunuz 80 numaralı bağlantı noktası üzerinden Let's Encrypt'ten bu adres için kendi sertifikasını alır ve telefonlar buna https://203.0.113.7 adresinden ulaşır. <strong>Evdeki bir bilgisayar veya açık bağlantı noktası yok</strong>: olduğu gibi bırakın. Sunucunuzun kendisinin çalıştırdığı bir tünel üzerinden ulaşılan ücretsiz bir adın ilk bölümünü sorar (yourtown.beanpool.org için yalnızca <strong>yourtown</strong> yazın; Enter atlar) ve yayına girmesi için üç dakikaya kadar bekler. <strong>Kendi alan adınız</strong>: bunun için bir A kaydını sunucunun IP adresine yönlendirin, 80 ve 443 numaralı bağlantı noktalarını açın ve <code>--address https://your.domain</code> ekleyin. Bir ad sunucu değişikliğinde korunur; bir numara korunmaz: daha sonra Ayarlar'dan bir ad ekleyebilirsiniz ve IP adresini kullanan üyeler çalışmaya devam eder. Daha sonra Ayarlar'dan seçmek için <code>--no-name</code> ekleyin. Düz bir <code>http://</code> adresi yalnızca ev ağında çalışır: telefonlar internette bunu reddeder ve talep sizi uyarır. BeanPool projesinin adres hizmeti kapalı olsa bile talep çalışmaya devam eder.</li>
+                    <li><strong>Kod ve QR.</strong> Tek seferlik bir talep kodu ve bir QR kodu gösterir. QR kodunu telefonunuzun kamerasıyla tarayın veya BeanPool'u açın, <strong>Topluluğunuzu bulun</strong> altına sunucunun adresini yazın ve <strong>Talep Et</strong>'e dokunun. O telefon sahip olur.</li>
+                    <li><strong>Ayarlar.</strong> Adresinizi (veya sunucunun kendi adresini) ardından <strong>/settings</strong> yazarak açın. Kurulum sihirbazı topluluğunuza ad verir, ikinci bir sahip eklemenizi ister ve üç kurucu davet oluşturur. Yakındaki kişilerin sizi bulabilmesi için Düğüm Kimliği altında haritadaki yerinizi belirleyin.</li>
+                </ol>
+                <p class="run-node-note">Blok <strong>No claim code after 5 minutes</strong> diyorsa veya <code>beanpool claim</code> komutu <strong>This community has no claim code waiting</strong> diyorsa sunucunun başlatılması henüz bitmemiştir: <code>docker compose logs beanpool-node</code> nerede olduğunu gösterir. Günlük topluluğun henüz bir sahibi olmadığını ve bir talep koduna sahip olduğunu söylediğinde, son satırı tekrar çalıştırın. Tüm adımlar operatör kılavuzunun <a href="guide/operators/first-time-setup.html">ilk kurulum</a> bölümündedir.</p>
+
+                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    GitHub'da Görüntüle →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section id="newsletter">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="newsletter-content">
+                    <h3><img src="bean.png" alt="Simge" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />Gelişmelerden Haberdar Olun</h3>
+                    <p>Yeni bir sürüm veya yeni bir topluluk olduğunda e-posta alın.</p>
+                </div>
+                <div class="newsletter-form-container">
+                    <form id="newsletter-form" class="newsletter-form">
+                        <input type="email" id="newsletter-email" placeholder="eposta@ornek.com" aria-label="E-posta adresi" required>
+                        <button type="submit" class="btn btn-primary btn-subscribe">Abone Ol</button>
+                    </form>
+                    <div id="newsletter-status" class="newsletter-status"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool Simgesi" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Komşularınızla Fasulye ile takas yapmak için ücretsiz bir uygulama.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Yardım Merkezi</a>
+                    <a href="getting-started.html">Başlarken</a>
+                    <a href="rules.html">Kurallar</a>
+                    <a href="post-extraction.html">Sömürü Sonrası</a>
+                    <a href="#run-a-node">Bir Topluluk Yönetin</a>
+                    <a href="guide/index.html">Üye rehberi</a>
+                    <a href="status.html">Sunucu durumu</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">Gizlilik Politikası</a>
+                    <a href="terms.html">Hizmet Şartları</a>
+                    <a href="safety.html">Çocuk Güvenliği</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT lisansı altında açık kaynak. Topluluklar tarafından topluluklar için <img src="bean.png" alt="sevgiyle" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> yapıldı. Saat dilimi sınırları © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap katkıda bulunanları</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="main.js?v=1.10"></script>
+</body>
+</html>

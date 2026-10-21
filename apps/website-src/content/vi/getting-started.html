@@ -1,0 +1,159 @@
+<!-- source-hash: 4ad64dc454d69949 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bắt đầu — Ba lối vào BeanPool</title>
+    <meta name="description" content="Cách trải nghiệm BeanPool trên cộng đồng toàn cầu, tìm hoặc khởi tạo cộng đồng gần bạn, hoặc tham gia bằng lời mời; sau đó là 12 từ của bạn và giao dịch đầu tiên.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The doors land on these headings (#global, #invite…): below the fixed bar, 74 px tall on a phone, 88 px wide */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content p strong { color: var(--text-primary); }
+        .rules-content p { overflow-wrap: anywhere; }
+        .rules-content .guide-links { font-size: 0.95rem; margin-top: -0.5rem; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Biểu tượng BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Cách hoạt động</a>
+                <a href="rules.html">Quy tắc</a>
+                <a href="index.html#features">Tính năng</a>
+                <a href="help.html">Trợ giúp</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Hướng dẫn</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Xem video hướng dẫn trên YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Tham gia cộng đồng Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Xem trên GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Bắt đầu</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Mở menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta" aria-current="page">Bắt đầu</a>
+                    <a href="index.html#how-it-works">Cách hoạt động</a>
+                    <a href="rules.html">Quy tắc</a>
+                    <a href="index.html#features">Tính năng</a>
+                    <a href="help.html">Trợ giúp</a>
+                    <a href="guide/index.html">Cẩm nang thành viên</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Hướng dẫn trên YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool trên Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Mã nguồn trên GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Bắt đầu</h1>
+        <p class="lede">Có ba lối vào. Hãy chọn cách phù hợp với bạn hôm nay; tài khoản của bạn đều như nhau dù chọn cách nào, và có thể thuộc về nhiều hơn một cộng đồng.</p>
+
+        <!-- OPEN-GLOBAL: when global's private preview is off, the heading becomes "Try it now on the global community" and the
+             two paragraphs below become this one:
+             The global community is people from everywhere. You need no invite: open <strong>global.beanpool.org</strong> in a browser and tap <strong>Join</strong>, or install the app and tap <strong>Explore BeanPool worldwide</strong> on the first screen. Create an account with <strong>12 secret words</strong> (no Google, Apple or Facebook account needed), or sign in once with Google, Apple or Facebook; that sign-in also becomes a way back if you lose your phone. Tell it roughly where you are, to about 10 km, or skip that. Then you can see what people near you offer, post something free or for swap, message people, and ask a community near you to let you in. Beans, trades, the Commons and its Decisions are switched off there: they belong to a local community. The app shows you each of them with an example community, so you know what a local community offers before you join or start one. -->
+        <h2 id="global"><span class="num">1.</span>Trải nghiệm trên toàn thế giới: cộng đồng toàn cầu</h2>
+        <p>Cộng đồng toàn cầu tập hợp mọi người từ khắp nơi và sẽ không cần lời mời. BeanPool vận hành cộng đồng này trên một máy chủ chúng tôi thuê tại Hoa Kỳ. Hiện tại đây là bản xem trước riêng tư trong khi các thành viên đầu tiên trải nghiệm: chỉ những ai được chủ sở hữu hoặc quản trị viên mời mới có thể tham gia, và bất kỳ ai khác mở <strong>global.beanpool.org</strong> sẽ thấy một thông báo: “Cộng đồng này đang trong bản xem trước riêng tư. Hãy hỏi chủ sở hữu để nhận lời mời.” Cộng đồng này sẽ sớm mở cửa cho tất cả mọi người. Khi đó bạn có thể tham gia trên trình duyệt hoặc trong ứng dụng với <strong>12 từ bí mật</strong> hay đăng nhập bằng Google, Apple hoặc Facebook, xem những gì mọi người ở gần chia sẻ, đăng thứ gì đó miễn phí hoặc để trao đổi, nhắn tin cho mọi người và xin gia nhập một cộng đồng gần bạn. Đậu, các giao dịch, Commons và Quyết định thuộc về một cộng đồng địa phương; cộng đồng toàn cầu giới thiệu từng phần này thông qua một cộng đồng ví dụ, để bạn biết một cộng đồng địa phương mang lại những gì trước khi tham gia hoặc khởi tạo.</p>
+        <p>Cho đến khi mở cửa: hãy tải ứng dụng từ <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> hoặc <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a>, xem các cộng đồng đang hoạt động trên <a href="index.html#find-or-start">bản đồ của chúng tôi</a> hoặc khởi tạo một cộng đồng (phần 2), hay tham gia bằng một lời mời (phần 3).</p>
+        <p class="guide-links">Cẩm nang: <a href="guide/joining.html">Tham gia BeanPool</a>, <a href="guide/web-app.html">Sử dụng BeanPool trên trình duyệt web</a>.</p>
+
+        <h2 id="find"><span class="num">2.</span>Tìm hoặc khởi tạo một cộng đồng</h2>
+        <!-- OPEN-GLOBAL: when global's private preview is off, the paragraph below goes back to starting:
+             On the global community, <strong>Find your community</strong> on Home lists the communities nearest you. Tap <strong>Ask to join</strong>, write a few words about yourself, and any member of that community can let you in with one tap, and if no answer comes in 30 days you can ask again. Nothing near you? <strong>Tell me when one starts here</strong> watches your area. Or start one: every community … (the rest unchanged) -->
+        <p>Hiện tại bạn có thể xem các cộng đồng đang hoạt động trên <a href="index.html#find-or-start">bản đồ của chúng tôi</a> và tham gia một cộng đồng bằng lời mời từ một thành viên (phần 3). Tính năng xin gia nhập sẽ sớm ra mắt khi cộng đồng toàn cầu mở cửa (phần 1): tại đó, mục <strong>Tìm cộng đồng của bạn</strong> trên Trang chủ sẽ liệt kê các cộng đồng gần bạn nhất. Nhấn vào <strong>Xin tham gia</strong>, viết vài dòng giới thiệu về bản thân, và bất kỳ thành viên nào của cộng đồng đó cũng có thể phê duyệt cho bạn vào bằng một lần nhấn; nếu không nhận được phản hồi sau 30 ngày, bạn có thể xin lại. Chưa có cộng đồng nào gần bạn? Mục <strong>Báo cho tôi khi có cộng đồng ở đây</strong> sẽ theo dõi khu vực của bạn. Hoặc bạn có thể khởi tạo một cộng đồng: mỗi cộng đồng đều chạy trên một máy chủ nhỏ riêng, một máy tính dự phòng luôn bật hoặc máy chủ thuê với vài đô la mỗi tháng, do một người địa phương trông nom. Màn hình <strong>Tạo một cộng đồng</strong> của ứng dụng sẽ hướng dẫn bạn từng bước, và quy trình chi tiết có trên trang chủ của chúng tôi trong phần <a href="index.html#run-a-node">Vận hành BeanPool cho cộng đồng của bạn</a>.</p>
+        <p class="guide-links">Cẩm nang: <a href="guide/finding-a-community.html">Tìm một cộng đồng gần bạn</a>.</p>
+
+        <h2 id="invite"><span class="num">3.</span>Bạn có lời mời?</h2>
+        <p>Lời mời là một liên kết, một mã QR hoặc một mã bắt đầu bằng <strong>INV-</strong> hoặc <strong>BP-</strong>. Lời mời dùng được một lần và có hiệu lực trong 30 ngày. Hãy cài đặt ứng dụng, nhấn vào <strong>Tham gia bằng lời mời</strong> (trên ứng dụng web là <strong>Tôi mới đến</strong>), dán liên kết hoặc mã, rồi chọn tên hiển thị mà mọi người sẽ thấy, tối đa 20 ký tự. Nếu bạn chỉ có mã, hãy nhập thêm tên hoặc địa chỉ của cộng đồng; người đã mời bạn có thể cho bạn biết thông tin này.</p>
+        <p class="guide-links">Cẩm nang: <a href="guide/joining.html">Tham gia BeanPool</a>.</p>
+
+        <h2 id="words"><span class="num">4.</span>12 từ của bạn</h2>
+        <p>Tài khoản của bạn là một khóa được lưu trên điện thoại, hoặc trong ứng dụng web trên trình duyệt của bạn. Không có mật khẩu. Ứng dụng hiển thị cho bạn 12 từ trong mục <strong>Sao lưu</strong>: hãy ghi lại và giữ gìn cẩn thận, bởi vì chúng là thứ giúp khôi phục tài khoản của bạn trên điện thoại mới. Trên ứng dụng điện thoại và trên cộng đồng toàn cầu, bạn có thể thêm đăng nhập bằng Google, Apple hoặc Facebook làm cách thứ hai để khôi phục. Khi đó, một bản sao khóa được khóa mã hóa sẽ được lưu trữ tương ứng: các ứng dụng điện thoại sử dụng kho khóa bảo mật của BeanPool sẽ lưu trữ tại đó, trên một máy chủ nhỏ ở Iceland; các phiên bản ứng dụng điện thoại cũ hơn sẽ lưu trên máy chủ cộng đồng của bạn; ứng dụng web trên cộng đồng toàn cầu sẽ lưu trên máy chủ của cộng đồng đó do chúng tôi vận hành. Bất kỳ ai giữ bản sao đều có thể mở khóa, và việc khôi phục từ kho khóa bảo mật sẽ phải chờ một ngày trừ khi một trong các thiết bị của chính bạn xác nhận danh tính của bạn. Nếu bạn muốn không ai ngoài bạn có thể truy cập, hãy chỉ sử dụng 12 từ của bạn.</p>
+        <p class="guide-links">Cẩm nang: <a href="guide/your-12-words.html">12 từ của bạn</a>.</p>
+
+        <h2 id="trade"><span class="num">5.</span>Giao dịch đầu tiên của bạn</h2>
+        <p>Trong cộng đồng địa phương, hãy đăng một <strong>Lời đề nghị</strong> trước tiên: cho đi nhờ xe vào thị trấn, trứng gà, một giờ làm vườn. Thống nhất mức giá bằng Đậu; số Đậu được giữ cho đến khi công việc hoàn thành, sau đó chuyển cho người bán và hai bên đánh giá nhau. Hạn mức tín dụng của bạn mở ra sau giao dịch hoàn tất đầu tiên; hạn mức ban đầu nhỏ và tăng dần khi bạn giao dịch với nhiều người hơn. Các lời đề nghị bạn duy trì sẽ quyết định mức bạn có thể sử dụng: một lời đề nghị cho phép sử dụng tối đa 200 Đậu, năm lời đề nghị tối đa 2000 Đậu. Các huy hiệu (Người mới, Cư dân, Quản lý, Trưởng bối) thể hiện quá trình gắn bó của bạn; chúng không dùng để mở khóa bất cứ thứ gì.</p>
+        <p class="guide-links">Cẩm nang: <a href="guide/a-deal-step-by-step.html">Từng bước thực hiện thỏa thuận</a>, <a href="guide/credit-line.html">Hạn mức tín dụng của bạn</a>, các con số trong <a href="rules.html#4">Quy tắc</a>.</p>
+
+        <h2 id="6"><span class="num">6.</span>Trợ giúp</h2>
+        <p>Bạn thích xem video hướng dẫn trực quan hoặc cần trợ giúp để bắt đầu vận hành máy chủ của mình? Hãy kết nối với cộng đồng BeanPool:</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1.25rem;">
+            <div class="feature-card feature-card-brand brand-youtube glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper youtube-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </div>
+                    <span class="brand-badge youtube-badge">▶ Video hướng dẫn</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Video hướng dẫn trên YouTube</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Video ngắn hướng dẫn cách tham gia, 12 từ của bạn và thực hiện giao dịch.</p>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-youtube" style="margin-top: 0.5rem;">Xem trên YouTube →</a>
+            </div>
+            <div class="feature-card feature-card-brand brand-reddit glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper reddit-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </div>
+                    <span class="brand-badge reddit-badge">💬 r/beanpool</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Thảo luận trên Reddit</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Tham gia thảo luận, đặt câu hỏi, chia sẻ lời đề nghị và kết nối với những người cùng vận hành máy chủ khác.</p>
+                <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-reddit" style="margin-top: 0.5rem;">Tham gia r/beanpool →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Biểu tượng BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Ứng dụng miễn phí để trao đổi với hàng xóm của bạn, bằng Đậu.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Trung tâm trợ giúp</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Cách hoạt động</a>
+                    <a href="getting-started.html">Bắt đầu</a>
+                    <a href="rules.html">Quy tắc</a>
+                    <a href="safety.html">An toàn cho trẻ em</a>
+                    <a href="privacy.html">Chính sách quyền riêng tư</a>
+                    <a href="terms.html">Điều khoản dịch vụ</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Mã nguồn mở theo giấy phép MIT. Được tạo nên với <img src="bean.png" alt="tình yêu" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> bởi các cộng đồng, vì các cộng đồng. Ranh giới múi giờ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Những người đóng góp cho OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

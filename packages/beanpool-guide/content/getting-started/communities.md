@@ -24,8 +24,8 @@ The global community needs no invite, and you join it with the account you alrea
 
 Under **Your communities** there is always a row for the **Global community**. Its second line says where you stand: its address when you are a member (tap it to switch to it), **Join with this account: 12 words or a sign-in** (**Join with this account: a sign-in** where the community doesn't take the 12 words) when you can join it, or why you can't right now: **Checking…**, **Can't reach it right now** (with **Tap to try again.** while this phone hasn't saved the global community), **Not taking new members right now.**, **This community is in a private preview. Ask its owner for an invite.**, or **Your account there was closed.** When the global community can't be reached and you are connected to a community you are a member of, a line under it says **Your own community isn't affected.** Nothing else on the phone depends on it.
 
-- Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Global community** (its second line says **Join with this account**). It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with 12 words or a sign-in** (**Join with a sign-in** where a community takes sign-ins only). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.
-- Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.
+- Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Global community** (its second line says **Join with this account**). It is also in **Settings**, under **Saved communities**. If you are visiting the global community as a guest, tap **Join** at the top, beside the **?**, then **Join with 12 words or a sign-in** (**Join with a sign-in** where a community takes sign-ins only). If the app shows **You're not a member here yet** for the global community, tap **Join with this account**.
+- Choose how to join: **Join with this account**, which uses the key and 12 words already on this phone (no sign-in, so no phone lock), or, under **Also add a sign-in**, sign in once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.
 - Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.
 - Then choose your photo for the global community, as for any new community, and then roughly where you are (**Roughly where are you?**; you can tap **Skip for now**): the global community shows you the listings near it. See "Joining BeanPool".
 
@@ -63,7 +63,7 @@ Your other communities work as before.
 - Tap the bean at the top left. The **BeanPool** sheet opens, with **Your communities** near the top.
 - Tap the one you want.
 
-You can also switch in **Settings**, under **System**, then **Advanced / Subsystem**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to Town** on another one to move to it.
+You can also switch in **Settings**, under **System**, then **Saved communities**. Your communities are listed there. The one you are using is marked as active. Tap **Switch to this community** on another one to move to it.
 
 ## When your community moves to a new address
 
@@ -76,7 +76,7 @@ A community can move to a new address: for example, from its server's number (su
 
 ## Forgetting a community on this phone
 
-- In **Advanced / Subsystem**, tap **Forget** on a community you are not using right now. This removes it and its saved data from this phone.
+- In **Saved communities**, tap **Forget** on a community you are not using right now. This removes it and its saved data from this phone.
 - In the **BeanPool** sheet, under **Your communities**, pressing and holding a community and tapping **Remove** only takes it off the list. Its data stays on the phone.
 
 Neither deletes your account there, and your other communities are not affected.

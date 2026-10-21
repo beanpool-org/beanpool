@@ -3,7 +3,7 @@ slug: trust-badges
 title: Mga trust badge
 summary: Baguhan, Residente, Pangasiwa at Pinuno. Ano ang kahulugan ng mga ito, at bakit wala itong ina-unlock.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: d954cfcd237a4685
+source-hash: a6cc3bb74fc395bb
 ---
 
 ## Kung ano ang mga ito
@@ -15,9 +15,9 @@ Ipinapakita ng iyong trust badge kung gaano kalaking tiwala ang iyong nabuo:
 - **Pangasiwa:** 600 tiwala;
 - **Pinuno:** 1,400 tiwala.
 
-Ang isang miyembro na hindi pa nakikipagkalakalan ay nagpapakita ng **TAGAPAGTATAG** sa kanilang mga post.
+Ang isang miyembro na hindi pa nakikipagkalakalan ay nagpapakita ng **FOUNDING** sa kanilang mga post.
 
-Ang tiwala ay nagmumula sa isang vouch kapag sumali ka, mula sa mga nakumpletong kalakalan, at mula sa tiwalang ipinagkaloob ng isang admin. Sa isang komunidad na nagpapatunay sa mga miyembro nito, ang credit line na nakukuha ng isang kumpirmadong miyembro ay ibinibilang din.
+Ang tiwala ay nagmumula sa isang vouch kapag sumali ka, mula sa mga nakumpletong kalakalan, at mula sa tiwalang ipinagkaloob ng isang admin. Sa isang komunidad na nagpapatunay sa mga miyembro nito, ang pagiging kumpirmado ay nagbibigay sa iyo ng mas mataas na limitasyon sa kredito, hindi mas mataas na badge: binibilang lamang ng iyong badge kung ano ang nagawa, kaya hindi nito kailanman ipinapakita na ikaw ay kumpirmado.
 
 ## Wala itong binubuksan
 

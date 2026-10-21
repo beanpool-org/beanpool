@@ -1,0 +1,647 @@
+<!-- source-hash: 5c4a962db9481e5e -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool — Pertukaran untuk Komunitas, Bukan Bank Komersial</title>
+    <meta name="description" content="BeanPool adalah aplikasi gratis yang dijalankan oleh komunitas untuk saling bertukar bantuan, barang, dan keahlian dengan Kacang alih-alih uang. Temukan atau mulai komunitas di dekat Anda, atau bergabung dengan undangan; komunitas global segera dibuka untuk semua orang. iPhone, Android, dan web.">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="style.css?v=2.8">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="#" class="logo"><img src="bean.png" alt="Ikon BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="#how-it-works">Cara Kerja</a>
+                <a href="#features">Yang Dapat Anda Lakukan</a>
+                <a href="rules.html">Aturan</a>
+                <a href="#run-a-node">Jalankan Komunitas</a>
+                <a href="help.html" title="Semua aturan, panduan, dan petunjuk dalam satu tempat">Bantuan</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tonton Video Tutorial di YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Gabung ke Komunitas Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Lihat di GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Mulai</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Buka menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Mulai</a>
+                    <a href="#how-it-works">How It Works</a>
+                    <a href="#features">What You Can Do</a>
+                    <a href="rules.html">Aturan</a>
+                    <a href="#run-a-node">Jalankan Komunitas</a>
+                    <a href="help.html">Bantuan</a>
+                    <a href="guide/index.html">Panduan anggota</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Video di YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool di Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Kode Sumber di GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+            <div class="hero-header">
+                <div class="hero-badge">Gratis di ponsel dan web</div>
+                <h1>Pertukaran untuk <span class="gradient-text">Komunitas</span>,<br>Bukan Bank Komersial</h1>
+                <p class="hero-subtitle">BeanPool adalah aplikasi gratis yang digunakan komunitas Anda untuk saling bertukar bantuan, barang, dan keahlian. Alih-alih uang, Anda menggunakan Kacang: bantu seseorang dan Kacang masuk ke Anda; terima bantuan dan Kacang beralih ke orang lain. Nol adalah tujuannya &mdash; memberi kurang lebih sebanyak yang Anda terima.</p>
+            </div>
+
+            <div class="hero-lower-grid">
+                <!-- Left: what BeanPool is not -->
+                <div class="not-card glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">🚫 Manifesto Anti-Ekstraksi</span>
+                        <h3>Yang <span class="text-rose">Bukan</span> BeanPool</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Bukan Mesin Penayang Iklan</strong>
+                                <p>Tanpa pelacakan audiens serupa, pemanenan data, atau algoritma bujukan cepat kaya.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Bukan Token Kripto Spekulatif</strong>
+                                <p>Kacang adalah kredit bersama untuk transaksi nyata — tidak pernah dipermainkan di bursa.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Bukan Mesin Pengeruk Perhatian</strong>
+                                <p>Tanpa candu gulir linimasa tanpa henti — hanya penawaran lokal nyata dan tetangga Anda.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Bukan Utang Korporasi atau Ekstraksi</strong>
+                                <p>Tanpa bunga, tanpa bank, tanpa perantara. Biaya yang ada bernilai kecil dan disalurkan ke lumbung Sarana Bersama komunitas Anda sendiri, bukan untuk kami.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>Bukan Aplikasi Kripto</strong>
+                                <p>Tanpa blockchain, tanpa koin, tanpa dompet yang harus dibeli. 12 katamu hanya membuka akunmu sendiri.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <div class="hero-cta-card glass-panel">
+                    <div class="hero-cta-header">
+                        <span class="hero-cta-tag">Tiga pintu masuk</span>
+                        <h3>Mulai dari tempat Anda berada</h3>
+                    </div>
+
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">Coba sekarang, di seluruh dunia</a>
+                            <p>Komunitas global akan segera terbuka bagi siapa saja, tanpa undangan: lihat-lihat, pasang sesuatu secara gratis atau untuk barter, dan temukan komunitas di dekat Anda. Saat ini masih berupa pratinjau pribadi. Sebelum dibuka, lihat komunitas yang sudah berjalan di bawah ini, mulai sebuah komunitas, atau gunakan undangan yang diberikan oleh anggota.</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">Temukan atau mulai komunitas</a>
+                            <p>Lihat komunitas yang sudah berjalan, atau mulai satu komunitas di komputer cadangan atau server sewaan kecil. Mengajukan diri untuk bergabung ke komunitas di dekat Anda akan segera hadir saat komunitas global dibuka.</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">Punya undangan?</a>
+                            <p>Pasang aplikasinya dan buka tautan atau pindai kode QR yang diberikan oleh anggota; undangan berlaku satu kali dan aktif selama 30 hari.</p>
+                        </div>
+                    </div>
+                    <p class="hero-web-note">Kacang digunakan di komunitas lokal, masing-masing pada servernya sendiri. Komunitas global memperkenalkan cara kerjanya dan menghubungkan Anda ke salah satunya. Ini menunjukkan bagaimana Kacang bekerja di sana, dengan contoh komunitas.</p>
+
+                    <div class="hero-logos-group">
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="Unduh di App Store">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Unduh di</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                        <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                        <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Dapatkan di Google Play">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">DAPATKAN DI</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
+                        <p class="hero-web-note">Tidak ada toko aplikasi? Komunitas global maupun komunitas Anda sendiri dapat dibuka di peramban ponsel Anda; tambahkan ke layar utama Anda.</p>
+                    </div>
+                    <!-- Where to find us: small round links, same destinations as the menu -->
+                    <div class="hero-social-row">
+                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" aria-label="BeanPool di YouTube" title="BeanPool di YouTube">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--youtube)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        </a>
+                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" aria-label="BeanPool di Reddit" title="BeanPool di Reddit">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--reddit)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                        </a>
+                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" aria-label="Kode sumber BeanPool di GitHub" title="Kode sumber BeanPool di GitHub">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hero Principles / Trust Banner -->
+            <div class="hero-principles-banner">
+                <div class="principle-item">
+                    <span class="principle-text">100% Gratis</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">Tanpa pembelian dalam aplikasi</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">Sumber Terbuka</span>
+                </div>
+            </div>
+
+            <!-- How Beans move, below the two cards -->
+            <div class="hero-example-row">
+                <div class="not-card hero-example glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">Cara Kacang berpindah</span>
+                        <h3>Tiga tetangga, satu minggu</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">1</div>
+                            <div class="not-item-content">
+                                <strong>Sam memperbaiki sepeda Ana &mdash; 30 Kacang</strong>
+                                <p>Saldo Sam naik menjadi +30. Ana turun menjadi −30.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">2</div>
+                            <div class="not-item-content">
+                                <strong>Ana memanggang roti untuk Lee &mdash; 30 Kacang</strong>
+                                <p>Saldo Ana kembali ke 0. Lee kini di −30.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">3</div>
+                            <div class="not-item-content">
+                                <strong>Lee menjaga anjing Sam &mdash; 30 Kacang</strong>
+                                <p>Semua orang kembali mendekati nol, dan tiga pekerjaan terselesaikan tanpa seorang pun mengeluarkan uang.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="hero-example-note">Penjual menyimpan 98,5% dari setiap harga; 1,5% lainnya disalurkan ke lumbung Sarana Bersama komunitas, sehingga angka sebenarnya sedikit di bawah ini.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>Apa itu BeanPool</h2>
+            </div>
+            <p class="what-it-is-lead">Komunitas menjalankan BeanPool di server kecilnya sendiri. Para anggota memasang apa yang bisa mereka tawarkan dan apa yang mereka butuhkan, lalu bertransaksi dengan Kacang. Kacang bukanlah uang yang Anda beli: ini adalah catatan bahwa seseorang telah membantu orang lain. Semua orang mulai dari nol. Saat Anda membantu, saldo Anda bertambah; saat Anda dibantu, saldo berkurang; di seluruh komunitas, jumlah saldo selalu nol. Tidak ada yang menerbitkan Kacang, tidak ada yang meminjamkannya dengan bunga, dan tidak ada yang mencairkannya menjadi uang tunai. Biaya kecil pada setiap transaksi disalurkan ke lumbung komunitas sendiri, yang dibelanjakan anggotanya melalui pemungutan suara. Aplikasi ini gratis dan sumber terbuka; komunitas memilih servernya sendiri, dan data di dalamnya adalah milik mereka.</p>
+            <ul class="what-it-is-not">
+                <li><strong>Bukan mata uang kripto.</strong> Tanpa blockchain, tanpa token, tidak ada yang perlu dibeli atau dijual. 12 katamu hanya membuka akunmu sendiri.</li>
+                <li><strong>Bukan bank.</strong> Kredit berasal dari aktivitas transaksi Anda sendiri, tanpa bunga: batas Anda mulai kecil setelah transaksi pertama Anda yang selesai dan bertambah seiring Anda bertransaksi.</li>
+                <li><strong>Bukan perusahaan perantara.</strong> BeanPool tidak mengambil apa pun dari transaksi, dan tidak menampilkan iklan.</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">Kredit bersama sudah ada sejak lama: kelompok LETS menjalankannya di atas kertas selama puluhan tahun, dan di Swiss lingkaran bisnis, WIR, telah bertransaksi dengan kredit mereka sendiri sejak 1934. Urusan dokumen dan pencatatan yang melelahkan membuat sebagian besar dari mereka terhenti. BeanPool adalah pencatatan itu, yang diselesaikan oleh aplikasi.</p>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2>Cara Kerja</h2>
+                <p>Dari layar pertama hingga transaksi pertama Anda.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
+                    <div class="step-number" aria-hidden="true">01</div>
+                    <div>
+                        <h3>1. Masuk melalui salah satu dari tiga pintu</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>Buka undangan yang dikirimkan oleh seorang anggota; segera Anda juga dapat mencoba komunitas global tanpa undangan dan, dari sana, mengajukan diri untuk bergabung ke komunitas di dekat Anda. Apa pun pilihannya, Anda menentukan nama panggilan yang akan dikenal orang lain.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🔑</div>
+                    <div class="step-number" aria-hidden="true">02</div>
+                    <div>
+                        <h3>2. Simpan 12 katamu</h3>
+                        <p>Aplikasi membuat akun di ponselmu dan menampilkan 12 kata. Catat dan simpan dengan aman: kata-kata ini memulihkan akunmu jika ponselmu hilang atau berganti.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
+                    <div class="step-number" aria-hidden="true">03</div>
+                    <div>
+                        <h3>3. Pasang penawaran</h3>
+                        <p>Tampilkan sesuatu yang bisa Anda lakukan atau bagikan: tumpangan ke kota, telur, memperbaiki sepeda, satu jam berkebun. Di komunitas yang menggunakan Kacang, Anda harus memasang setidaknya satu penawaran sebelum dapat memasang permintaan atau membeli. Di komunitas global, yang tidak menggunakan Kacang, kiriman pertama Anda bisa berupa permintaan.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-number" aria-hidden="true">04</div>
+                    <div>
+                        <h3>4. Bertransaksi</h3>
+                        <p>Sepakati harga dalam Kacang. Kacang disimpan dengan aman hingga pekerjaan selesai, lalu diserahkan kepada penjual. Anda saling memberikan ulasan setelahnya.</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-more"><a href="getting-started.html">Baca panduan Memulai selengkapnya →</a></p>
+        </div>
+    </section>
+
+    <!-- What you can do: one card per part of the app, in the app's own words -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>Yang Dapat Anda Lakukan</h2>
+                <p>Aplikasi terbuka di Beranda, serangkaian kartu yang Anda pilih. Di baliknya: Pasar, Peta, Obrolan (Obrolan di aplikasi web), Anggota, Kabar, Sarana Bersama, dan Buku kas, tempat Anda melihat saldo dan transaksi Anda.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧺</div>
+                    <h3>Pasar</h3>
+                    <p>Apa yang ditawarkan orang-orang di komunitas Anda dan apa yang mereka butuhkan, dengan jajak pendapat dan acara di umpan yang sama. Cari, saring berdasarkan kategori, dan ketuk untuk bertransaksi.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗺️</div>
+                    <h3>Peta</h3>
+                    <p>Lihat apa yang ditawarkan di dekat Anda. Setiap pin Anda tempatkan sendiri: gunakan lokasi Anda saat itu, atau pasang pin secara manual. Saat Anda mengizinkannya, aplikasi juga menggunakan lokasi Anda untuk menampilkan apa yang terdekat dari Anda, dan tidak pernah di latar belakang. Pin acara, dan pin usaha yang diatur di aplikasi web, dapat disetel ke Perkiraan, yang membulatkan titik sekitar 100&nbsp;m. Pin dilihat oleh anggota komunitas Anda. Ketika komunitas global dibuka untuk semua orang, pengunjung di sana dapat melihat daftar dan perkiraan lokasinya, tetapi tanpa nama, tanpa foto profil, dan tanpa titik pasti. Siapa pun dapat bergabung dalam satu menit, sehingga para anggotanya juga melihat daftar satu sama lain dengan perkiraan sekitar satu kilometer; titik pasti Anda bagikan sendiri saat mengatur janji temu.</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📅</div>
+                    <h3>Acara <span class="new-pill">Baru</span></h3>
+                    <p>Pasang kerja bakti, kafe perbaikan, atau berbagi keahlian lengkap dengan waktu dan tempat. Orang-orang mengetuk Hadir atau Tertarik. Orang yang ikut mendapatkan obrolan acara dan catatan pribadi dari tuan rumah &mdash; kode gerbang, apa yang harus dibawa &mdash; dan mendapatkan kabar jika waktu atau tempat berubah atau dibatalkan. Di mana siapa pun dapat bergabung, seperti di komunitas global, tuan rumah mengizinkan masuk setiap orang terlebih dahulu secara default. Acara gratis; tidak ada Kacang yang berpindah tangan. Temukan acara di peta pada bagian Hari ini, Akhir pekan ini, atau 7 hari ke depan, dan gunakan Salin ke tanggal baru untuk mengadakannya lagi.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">💬</div>
+                    <h3>Obrolan (Obrolan di aplikasi web)</h3>
+                    <p>Kirim pesan ke siapa saja di komunitas Anda. Pesan langsung dan obrolan grup dienkripsi ujung ke ujung: node komunitas Anda meneruskannya tetapi tidak dapat membacanya. Pada node yang belum diperbarui, obrolan grup masih dapat dibaca oleh pengelolanya, dan obrolan menyatakan demikian. Diskusi usaha dan obrolan acara dapat dibaca oleh pengelola node komunitas Anda, agar dapat dimoderasi.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>Sarana Bersama: usaha <span class="new-pill">Baru</span></h3>
+                    <p>Usaha adalah sesuatu yang dijalankan bersama oleh komunitas Anda: ternak ayam petelur, perpustakaan alat, gudang kayu bakar, atau proyek dengan target dan tenggat waktu. Pengurus menjalankannya dan pengurus utama memimpinnya; anggota dapat meminta untuk bergabung sebagai pengurus. Usaha memiliki saldo Kacang sendiri, memasang penawaran dan permintaan di Pasar seperti anggota lainnya, menampilkan pemasukan dan pengeluarannya, serta dapat dijeda sesuai musim. Tidak ada pengurus yang dapat menyetujui pembayaran untuk dirinya sendiri: harus disetujui oleh pengurus lain.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>Jajak Pendapat dan Keputusan <span class="new-pill">Baru</span></h3>
+                    <p>Siapa pun dapat mengajukan pertanyaan kepada komunitas lewat jajak pendapat di Pasar. Pilihan yang lebih besar adalah Keputusan, di tab Sarana Bersama: hibah dari lumbung Sarana Bersama ke sebuah usaha, hibah kesulitan, mengganti pengurus utama. Keputusan dibuka selama 7 hari dan otomatis berjalan jika disetujui. Setelah menyelesaikan satu transaksi, Anda dapat mengusulkan Keputusan.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>Grup <span class="new-pill">Baru</span></h3>
+                    <p>Mulai grup untuk jalan Anda, klub berkebun, atau grup musik Anda, dan Anda menjadi koordinatornya. Buat kiriman hanya untuk grup tersebut, dan pilih apakah grup terbuka, orang perlu meminta untuk bergabung, atau hanya melalui undangan.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>Kabar</h3>
+                    <p>Lihat apa yang sedang dibuat oleh warga lokal. Anggota dapat menghubungkan saluran mereka sendiri &mdash; TikTok, Instagram, YouTube, SoundCloud, atau umpan blog &mdash; dan kiriman publik mereka muncul di Kabar komunitas Anda. Menghubungkannya terserah masing-masing anggota. Apa pun yang tidak pantas berada di sana dapat dilaporkan, dan node komunitas Anda dapat menghapusnya.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>Kredit yang Anda Bangun, Bukan Pinjaman</h2>
+                <p>Tidak ada yang membeli Kacang, dan tidak ada yang membayar bunga.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>Semua orang mulai dari nol</h3>
+                    <p>Akun baru memiliki 0 Kacang. Saat Anda menjual, saldo Anda naik; saat Anda membeli, saldo turun. Di seluruh komunitas, jumlah saldo selalu nol.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>Transaksi pertama Anda membuka batas kredit</h3>
+                    <p>Setelah menyelesaikan satu transaksi, Anda dapat mulai berada di bawah nol untuk mendapatkan bantuan sebelum membalasnya. Batas kredit Anda mulai kecil (transaksi 100 Kacang menghasilkan sekitar 37 Kacang kredit) dan bertambah seiring Anda bertransaksi dengan lebih banyak orang. Penawaran yang tetap Anda pasang menentukan seberapa banyak kredit yang dapat Anda gunakan: satu penawaran hingga 200 Kacang, lima penawaran hingga 2000 Kacang.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>Lencana, bukan pembatas</h3>
+                    <p>Seiring waktu Anda mendapatkan lencana: Pendatang Baru, Warga, Pengelola, Tetua. Lencana tersebut menunjukkan riwayat Anda di komunitas. Lencana ini tidak mengunci apa pun. Admin juga dapat memberikan lencana kepada seseorang, beserta batas kredit awal untuk lencana tersebut.</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">Baca Aturan untuk setiap rincian angka →</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">Ke mana biaya disalurkan</span>
+                    <h3>Nilai tetap berada di komunitas Anda</h3>
+                </div>
+                <p class="stays-local-lead">Biaya 1,5% pada transaksi yang selesai, dan sedikit biaya bulanan pada bagian saldo di atas 200 Kacang, disalurkan ke lumbung Sarana Bersama komunitas Anda &mdash; bukan untuk kami atau pihak lain. Komunitas Anda menentukan untuk apa lumbung tersebut digunakan, melalui Keputusan.</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Tanpa iklan dan tanpa pelacakan</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Tanpa token untuk dibeli atau dijual &mdash; Kacang hanya untuk bertransaksi</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>Tanpa bunga dan tanpa bank</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">Alasan kami membangunnya seperti ini: ekonomi pasca-ekstraksi →</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>Akun dan Keamanan Anda</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>Kunci Anda tetap berada di ponsel Anda</h3>
+                    <p>Pada aplikasi ponsel, kunci Anda disimpan dalam penyimpanan aman ponsel, dan Anda dapat menambahkan Kunci Aplikasi, yang meminta kunci layar ponsel Anda sendiri. Di aplikasi web, kunci disimpan dalam penyimpanan peramban tersebut. 12 katamu adalah cadangan yang tidak bergantung pada siapa pun.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>Laporkan apa pun</h3>
+                    <p>Anda dapat melaporkan kiriman, anggota, acara, atau item Kabar, serta memblokir siapa saja. Laporan masuk ke pengelola node komunitas Anda &mdash; pemilik dan adminnya &mdash; yang dapat menghapus konten dan akun. Anggota juga dapat melakukan pemungutan suara pada Keputusan untuk menangguhkan atau menghapus seseorang.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>Rincian penting</h3>
+                    <p>Apa yang disimpan, siapa yang dapat melihatnya, dan cara menghapus akun Anda.</p>
+                    <p class="card-links"><a href="privacy.html">Kebijakan Privasi</a>&nbsp;· <a href="safety.html">Keselamatan Anak</a>&nbsp;· <a href="terms.html">Ketentuan</a>&nbsp;· <a href="data-deletion.html">Menghapus data Anda</a></p>
+                </div>
+                <div class="feature-card glass-panel feature-wide" id="key-copy">
+                    <h3>Cara kedua memulihkan kunci Anda, dan siapa yang dapat membukanya</h3>
+                    <p>Anda juga dapat menautkan akun masuk Google, Apple, atau Facebook sebagai cara kedua untuk kembali. Salinan terkunci dari kunci Anda kemudian disimpan untuk akun masuk tersebut. Aplikasi ponsel yang menggunakan brankas kunci BeanPool menyimpannya di sana, pada server kecil di Islandia yang tidak melakukan hal lain; versi aplikasi ponsel yang lebih lama menyimpannya di node komunitas Anda; aplikasi web di komunitas global menyimpannya di server komunitas tersebut, yang kami jalankan. Siapa pun yang menyimpan salinan dapat membukanya: BeanPool untuk brankas dan komunitas global, pengelola node Anda untuk salinan yang disimpan di sana. Pemulihan dari brankas menunggu satu hari kecuali salah satu perangkat Anda sendiri mengonfirmasi bahwa itu Anda. Salinan itu, dan menyalin akun Anda ke perangkat Anda yang lain, adalah satu-satunya cara kunci Anda keluar dari perangkat Anda.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <span id="find-or-start"></span>
+        <div class="container">
+            <div class="section-header">
+                <h2>Temukan Pertukaran Lokal Anda</h2>
+                <p>Komunitas yang menjalankan BeanPool yang telah mendaftarkan diri di direktori.</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">Belum ada komunitas di dekat Anda.</span>
+                    <a id="map-empty-start" href="#run-a-node">Mulai komunitas</a>
+                </div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">Komunitas terdaftar</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">Anggota (sesuai laporan)</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
+        <div class="container">
+            <div class="section-header">
+                <span class="audience-tag">Untuk penggerak komunitas</span>
+                <h2>Jalankan BeanPool untuk Komunitas Anda</h2>
+                <p>Setiap komunitas berjalan pada nodenya sendiri: server kecil yang menyimpan anggota, kiriman, dan buku kas komunitas tersebut. Dijalankan oleh warga lokal. Jika kota atau wilayah Anda belum memilikinya, Anda bisa menjadi orangnya.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>Yang Anda kelola</h3>
+                    <p>Anda dan admin yang Anda tunjuk adalah moderator komunitas Anda: laporan masuk kepada Anda. Data anggota Anda berada di komputer Anda, jadi Anda yang menjaga cadangannya. Anda dapat membaca diskusi usaha dan obrolan acara; Anda tidak dapat membaca pesan langsung. Anda mengundang anggota pertama, dan mereka mengundang yang lain.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>Aplikasi pengaturan</h3>
+                    <p>Node Anda dilengkapi dengan aplikasi pengaturannya sendiri di peramban. Dari sana Anda memberi nama komunitas Anda, menunjuk pemilik dan admin yang masuk dengan kunci mereka sendiri, mencetak undangan QR, memantau kesehatan disk, memilih alamat web publik atau tunnel, dan membantu anggota yang kehilangan ponsel sekaligus 12 katanya kembali ke akun mereka sendiri di ponsel baru, dengan kode sekali pakai yang Anda konfirmasi langsung secara tatap muka.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Pribadi sejak pertama kali dinyalakan</h3>
+                    <p>Daftar penawaran, peta, pesan, dan saldo komunitas hanya untuk anggotanya sejak node dinyalakan; tidak ada yang perlu diaktifkan secara manual. Seseorang yang membuka alamatnya tanpa akun akan diarahkan ke komunitas global, yang segera dibuka untuk semua orang.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Menghubungkan dengan komunitas tetangga</h3>
+                    <p>Dua komunitas dapat sepakat untuk terhubung agar anggotanya dapat saling bertransaksi. Kacang tidak pernah keluar dari tempat asalnya: setiap pasangan mencatat saldo berjalan dari utang piutang antar-komunitas, dan masing-masing pihak menentukan batasnya sendiri. Hubungan ini nonaktif kecuali kedua operator menyalakannya, dan ini masih tahap awal: fitur ini sudah dibangun, dengan antarmukanya di aplikasi web, dan baru diuji coba di antara dua komunitas uji kami sendiri, belum pernah di antara komunitas yang berjalan langsung.</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>Mulai sebuah komunitas</h2>
+                <p>Sekitar setengah jam, jika Anda bisa mengikuti petunjuk. Enam hal yang perlu diketahui terlebih dahulu:</p>
+                <ul class="run-node-facts">
+                    <li><strong>Biaya yang dibutuhkan.</strong> Perangkat lunaknya gratis. Aplikasi ini berjalan pada komputer cadangan yang terus menyala di rumah (Mini PC, NAS, atau Raspberry Pi dengan sistem 64-bit), atau pada server sewaan kecil dengan biaya beberapa dolar per bulan (sekitar US$6).</li>
+                    <li><strong>Siapa yang meng-hosting.</strong> Anda sendiri, di komputer Anda sendiri atau yang Anda sewa. Tidak memerlukan beanpool.org: alamat web Anda sendiri berfungsi.</li>
+                    <li><strong>Tanggung jawab Anda.</strong> Laporan dari anggota Anda masuk kepada Anda. Folder data adalah tanggung jawab Anda untuk dicadangkan, dengan kode pemulihan. Pertahankan dua pemilik. Biarkan server terus menyala dan diperbarui.</li>
+                    <li><strong>Yang tidak pernah Anda lihat.</strong> Pesan langsung anggota Anda.</li>
+                    <li><strong>Docker terlebih dahulu.</strong> Komputer tersebut harus sudah terpasang Docker sebelum menjalankan blok di bawah; server yang baru disewa belum memilikinya.</li>
+                    <li><strong>Alamat yang dapat dijangkau ponsel.</strong> Ponsel hanya dapat menjangkau komunitas di internet melalui https. Pada server sewaan dengan alamat IP publik dan porta 80 serta 443 terbuka, alamat IP tersebut sudah cukup: server Anda mendapatkan sertifikatnya sendiri untuk alamat itu, tanpa akun Cloudflare, dan hal yang sama berlaku untuk domain milik Anda sendiri. Di rumah, atau tanpa porta yang terbuka, proses klaim memberi Anda nama gratis berakhiran .beanpool.org, melalui tunnel yang dijalankan sendiri oleh server Anda. Alamat http:// biasa hanya berfungsi di jaringan rumah.</li>
+                </ul>
+                <p>Kemudian, pada komputer tersebut yang telah terpasang Docker, tempel satu blok ini. Perintah ini mengambil file compose, membuat jaringan yang digunakan node, menarik citra yang diterbitkan (Intel/AMD atau ARM64), memulainya, menunggu hingga server membuat kode klaim sekali pakai (hingga lima menit, untuk booting pertama yang lambat di Raspberry Pi), dan mengklaimnya. Tidak ada yang perlu dikonfigurasi sebelum dimulai.</p>
+
+                <!-- macOS Style Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — mulai komunitas</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">Satu blok: unduh, jaringan, tarik, mulai, tunggu, klaim</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="Salin ke papan klip">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">Baris terakhir: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>Alamat Anda.</strong> Pilih sebelum Anda menempelkan perintah, dan ubah baris terakhir agar sesuai. Jika Anda sudah menempelkannya, tekan Enter pada pertanyaannya, lalu jalankan baris terakhir lagi: kode klaim menunggu ponsel. <strong>Server sewaan</strong> dengan alamat IP publik dan porta 80 serta 443 terbuka: tambahkan <code>--ip</code> dan alamat IP-nya, seperti pada <code>beanpool claim --ip 203.0.113.7</code>. Server Anda mendapatkan sertifikatnya sendiri untuk alamat tersebut dari Let's Encrypt, melalui porta 80, dan ponsel menjangkaunya di https://203.0.113.7. <strong>Komputer di rumah, atau tanpa porta yang terbuka</strong>: biarkan apa adanya. Perintah ini akan meminta bagian pertama dari nama gratis (cukup ketik <strong>namakota</strong> untuk namakota.beanpool.org; Enter untuk melewati), yang dijangkau melalui tunnel yang dijalankan sendiri oleh server Anda, dan menunggu hingga tiga menit untuk aktif. <strong>Domain milik Anda sendiri</strong>: arahkan data DNS record A ke alamat IP server, buka porta 80 dan 443, serta tambahkan <code>--address https://domain.anda</code>. Sebuah nama tetap bertahan saat berganti server; sebuah angka tidak: Anda dapat menambahkan nama nanti di Pengaturan, dan anggota yang menggunakan alamat IP tetap dapat terhubung. Untuk memilih nanti di Pengaturan, tambahkan <code>--no-name</code>. Alamat <code>http://</code> biasa hanya berfungsi di jaringan rumah: ponsel menolaknya di internet, dan proses klaim akan memperingatkan Anda. Jika layanan alamat proyek BeanPool sedang tidak aktif, klaim tetap berfungsi.</li>
+                    <li><strong>Kode dan QR.</strong> Perintah ini menampilkan kode klaim sekali pakai dan kode QR. Pindai kode QR dengan kamera ponsel Anda, atau buka BeanPool, ketik alamat server di bawah <strong>Temukan komunitas Anda</strong> dan ketuk <strong>Klaim</strong>. Ponsel tersebut menjadi pemilik.</li>
+                    <li><strong>Pengaturan.</strong> Buka alamat Anda (atau alamat server itu sendiri) diikuti dengan <strong>/settings</strong>. Panduan penyiapan memberi nama komunitas Anda, meminta Anda menambahkan pemilik kedua, dan membuat tiga undangan awal. Tentukan tempat Anda di peta di bawah Identitas Node agar orang-orang di sekitar dapat menemukan Anda.</li>
+                </ol>
+                <p class="run-node-note">Jika blok perintah menyatakan <strong>No claim code after 5 minutes</strong>, atau <code>beanpool claim</code> menyatakan <strong>This community has no claim code waiting</strong>, server belum selesai memulai: <code>docker compose logs beanpool-node</code> menunjukkan statusnya. Setelah log menyatakan komunitas belum memiliki pemilik dan memiliki kode klaim, jalankan baris terakhir lagi. Langkah-langkah selengkapnya ada di <a href="guide/operators/first-time-setup.html">penyiapan pertama kali</a> pada panduan operator.</p>
+
+                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    Lihat di GitHub →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section id="newsletter">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="newsletter-content">
+                    <h3><img src="bean.png" alt="Ikon" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />Tetap Terhubung</h3>
+                    <p>Dapatkan email saat ada rilis baru atau komunitas baru.</p>
+                </div>
+                <div class="newsletter-form-container">
+                    <form id="newsletter-form" class="newsletter-form">
+                        <input type="email" id="newsletter-email" placeholder="anda@example.com" aria-label="Alamat email" required>
+                        <button type="submit" class="btn btn-primary btn-subscribe">Langganan</button>
+                    </form>
+                    <div id="newsletter-status" class="newsletter-status"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Ikon BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Aplikasi gratis untuk bertransaksi dengan tetangga Anda, menggunakan Kacang.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Pusat Bantuan</a>
+                    <a href="getting-started.html">Memulai</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="post-extraction.html">Pasca-Ekstraksi</a>
+                    <a href="#run-a-node">Run a Community</a>
+                    <a href="guide/index.html">Panduan anggota</a>
+                    <a href="status.html">Status server</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">Kebijakan Privasi</a>
+                    <a href="terms.html">Ketentuan Layanan</a>
+                    <a href="safety.html">Keselamatan Anak</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Sumber terbuka di bawah lisensi MIT. Dibuat dengan <img src="bean.png" alt="cinta" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> oleh komunitas, untuk komunitas. Batas zona waktu © kontributor <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="main.js?v=1.10"></script>
+</body>
+</html>

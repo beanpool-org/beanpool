@@ -219,6 +219,43 @@ describe('the Ledger in English', () => {
         expect(screen.getByText('No transactions yet. Start trading on the Marketplace!')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: '⬇️ Export mine' })).toBeInTheDocument();
     });
+
+    it('a confirmed member (floor -1,000, 0 Trust Points): sees no level promising a floor, and their own line once', async () => {
+        await open({
+            balance: 0, floor: -1000, usableFloor: -1000, activated: true, knownGrant: 1000, tierCredit: 0, earnedCredit: 0,
+            tier: { name: 'Newcomer' }, callsign: 'Visitor',
+        });
+        const detail = screen.getByTestId('level-detail');
+        expect(within(detail).getByText('Your current floor')).toBeInTheDocument();
+        expect(within(detail).getByText('-1000')).toBeInTheDocument();
+        expect(screen.queryByText('Floor starts at')).toBeNull();
+        expect(screen.queryByText('Floor from this tier')).toBeNull();
+        // Their line is open already: no 'your first completed trade … opens your credit line' above it
+        expect(within(detail).getByText(/and your credit line is already open\.$/)).toBeInTheDocument();
+        expect(within(detail).queryByText(/opens your credit line/)).toBeNull();
+
+        const shelf = screen.getByTestId('levels-shelf');
+        const buttons = within(shelf).getAllByRole('button');
+        // Click Resident
+        fireEvent.click(buttons[1]);
+        expect(within(detail).getByText('from 200 trust')).toBeInTheDocument();
+        expect(within(detail).queryByText('Floor starts at')).toBeNull();
+        expect(within(detail).queryByText('Floor from this tier')).toBeNull();
+        expect(within(detail).queryByText('-200')).toBeNull();
+
+        // Click Steward
+        fireEvent.click(buttons[2]);
+        expect(within(detail).getByText('from 600 trust')).toBeInTheDocument();
+        expect(within(detail).queryByText('Floor starts at')).toBeNull();
+        expect(within(detail).queryByText('Floor from this tier')).toBeNull();
+        expect(within(detail).queryByText('-600')).toBeNull();
+
+        // Click Elder
+        fireEvent.click(buttons[3]);
+        expect(within(detail).getByText('from 1400 trust')).toBeInTheDocument();
+        expect(within(detail).queryByText('Floor starts at')).toBeNull();
+        expect(within(detail).queryByText('Floor from this tier')).toBeNull();
+    });
 });
 
 describe('a switch to Russian redraws the Ledger', () => {

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 2,
+  "version": 4,
   "language": "tr",
-  "hash": "90bca4608bd8d46b36067ad1d1cb45d462dbebfbaa5a23b72691b608bf0734ad",
+  "hash": "12d44f38b007b309bc76b5593f796de165d52d69b1c22216e5a9ee5919c622fe",
   "sections": [
     {
       "id": "about",
@@ -11,7 +11,8 @@
       "slugs": [
         "how-it-works",
         "rules",
-        "faq"
+        "faq",
+        "whats-new"
       ]
     },
     {
@@ -131,8 +132,8 @@
       "slug": "how-it-works",
       "title": "BeanPool nasıl çalışır",
       "summary": "Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -267,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Güveniniz bir rozet olarak görünür. Rozetler Yeni Gelen, Sakin, Temsilci ve Büyük'tür. Rozetinizin arkasındaki güven üç şeyi toplar: bir kefaletin size sağladığı başlangıç, takas yaparak kazandığınız güven ve bir yöneticinin size tanıdığı her türlü güven. Bir yönetici bir üyeye takas olmadan doğrudan bir rozet verebilir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üyenin aldığı kredi limiti de sayılır."
+          "text": "Güveniniz bir rozet olarak görünür. Rozetler Yeni Gelen, Sakin, Temsilci ve Büyük'tür. Rozetinizin arkasındaki güven üç şeyi toplar: bir kefaletin size sağladığı başlangıç, takas yaparak kazandığınız güven ve bir yöneticinin size tanıdığı her türlü güven. Bir yönetici bir üyeye takas olmadan doğrudan bir rozet verebilir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üye daha yüksek bir kredi limiti alır, daha yüksek bir rozet değil: rozetleri yalnızca yaptıklarını sayar."
         },
         {
           "type": "ul",
@@ -279,7 +280,7 @@
         },
         {
           "type": "p",
-          "text": "Rozet bir takdirdir, daha fazlası değildir. Hiçbir özelliğe erişim şartı koymaz. Rozeti ne olursa olsun herkes takas yapabilir, davet edebilir ve oy kullanabilir."
+          "text": "Rozet bir takdirdir, daha fazlası değildir. Hiçbir özelliğin kilidini açmaz. Rozeti ne olursa olsun herkes takas yapabilir, davet edebilir ve oy kullanabilir."
         },
         {
           "type": "h2",
@@ -767,6 +768,189 @@
         {
           "type": "p",
           "text": "Bir kişiyle veya bir takasla ilgili sorunlar için topluluğunuzun yöneticileriyle görüşün. Bir ilanı, bir etkinliği veya bir Nabız gönderisini bildirmek için **🚩 Bildir** bayrağına dokunun (telefonda bir ilanın düğmesinde **İlanı Bildir** yazar). Web uygulamasında tek bir kişiyle yapılan sohbette de bir **Bildir** düğmesi bulunur. Topluluğunuzun yöneticilerine haber verilir. Bir çocuk risk altında olabileceği durumlarda **Çocuk güvenliği** seçeneğini belirleyin. \"Sorun bildirme\" bölümüne bakın. Uygulamanın kendisiyle ilgili fikirler için beanpool.org adresini ziyaret edin."
+        }
+      ]
+    },
+    {
+      "slug": "whats-new",
+      "title": "Yenilikler",
+      "summary": "Uygulamada nelerin değiştiğine dair sade açıklamalar.",
+      "sourceHash": "c2a0d89c3be40880",
+      "source-hash": "c2a0d89c3be40880",
+      "section": "about",
+      "related": [
+        "home",
+        "the-bean",
+        "how-it-works",
+        "rules",
+        "faq",
+        "communities"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Küresel topluluk, yakınınızda"
+        },
+        {
+          "type": "p",
+          "text": "Bunları, küresel topluluğun sunucusu güncellendiğinde alırsınız. Telefonda güncel bir uygulama gerekir."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ücretsiz, sınırlarla birlikte.** Küresel toplulukta bir ilan, en son değiştirildikten 90 gün sonra fotoğraflarıyla birlikte arşivlenir. Tekrar kaydetmek onu yayında tutar. Sınırların hepsi tek bir sayfadadır. \"Küresel topluluğun sınırları\" bölümüne bakın.",
+            "**Yakınınızdaki ilanlar.** Küresel toplulukta her yerden ilanlar bulunur. Telefonunuz artık bölgenizin 250 km içindeki en yakın 500 ilanı ve nerede olurlarsa olsunlar kendi ilanlarınız ile devam eden bir takasınız veya sohbetiniz olan tüm ilanları saklar. Pazar'ın araması her yerden ilanları bulmaya devam eder. \"Birden fazla topluluk\" bölümüne bakın.",
+            "**Bölgeniz.** Web uygulamasında küresel topluluğa katılmanın fotoğrafınızdan sonra bir adımı daha vardır: **Yaklaşık olarak neredesiniz?** Telefonda, zaten sahip olduğunuz bir hesapla katıldığınızda sorulur; yeni bir telefon hesabı bunu daha sonra Ayarlar'da **Bölgeniz** altından belirler. Bu adımda **Konumumu kullan**, **Bir kasaba veya semt yaz** veya **Şimdilik atla** seçeneğine dokunun. Yaklaşık 10 km'lik bir alan olarak tutulur, tam konumunuz asla tutulmaz. Ayarlar'da **Bölgeniz** altından değiştirin veya temizleyin. \"Bölgeniz\" bölümüne bakın.",
+            "**Bölge yoksa sorun yok.** Bir bölge olmadan her yerden en yeni ilanları görürsünüz ve Pazar'ın üzerindeki bir satır bunu belirtir. Telefonda bölgenizi belirlemek için bu satıra dokunun.",
+            "**Yakınınızdaki yeni ilanlar.** Paylaşıldıkça gelirler. Uzaktakiler artık telefonunuza ulaşmaz.",
+            "**Web uygulamasında** Pazar ve Harita bölgenizden veya **Mesafe** ile seçtiğiniz bir yerden başlar: en yakın olan ilk sırada, her ilanın ne kadar uzakta olduğu belirtilir. \"Yakınınızdakileri bulma\" bölümüne bakın.",
+            "**Anketlerin** kendilerine ait bir konumları yoktur, bu nedenle her anket onu oluşturan üyenin bölgesinde gösterilir.",
+            "**Kasabanızı yazın.** Küresel toplulukta Ana Sayfa'daki **Topluluğunu bul** artık konumunuza ihtiyaç duymaz: **veya kasabanı yaz** seçeneğine dokunup kasabanızı seçin. Yalnızca yaklaşık bir nokta tutulur. \"Yakınınızda bir topluluk bulma\" bölümüne bakın.",
+            "**Fiyatsız paylaşım.** Küresel toplulukta ilan formu fiyat sormaz; çünkü Fasulyeler yerel topluluklarda geçerlidir. Web uygulamasında **Teklif Paylaş** ve **İhtiyaç Paylaş** artık fiyatsız çalışır. Yerel bir topluluk hâlâ fiyat ister."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Ana Sayfa"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Yeni bir Ana Sayfa sekmesi.** Uygulama artık Ana Sayfa'da açılır: size neyin ihtiyaç duyduğunu, etrafınızda nelerin yeni olduğunu ve bundan sonra ne yapabileceğinizi yanıtlayan bir pano. Pazar artık kendi sekmesindedir ve Nabız Ana Sayfa'da bir karttır. Kartlarınızı siz seçersiniz: **Kart ekle** Ana Sayfa'ya bir kart koyar, her karttaki **…** onu taşır veya kaldırır ve **Ana Sayfayı düzenle** telefonda ve web uygulamasında yeniden sıralamak veya kaldırmak için hepsini listeler.",
+            "**Başlarken.** Yeni bir üyenin Ana Sayfası tek bir kartla başlar: **Başlarken**. Bir dakikalık tur için **Göz at**'a veya **Atla**'ya dokunun; her zamanki kartlarınız görünür. Her ekranın üst kısmında o ekranın yardımını açan bir **?** bulunur.",
+            "**Ana Sayfa'da kayıtlı bir arama.** \"Yumurta\" gibi kelimeleri ve teklif mi, ihtiyaç mı yoksa her ikisini mi istediğinizi, bir kategoriyi ve bir mesafeyi seçin. Kart, eşleşen ilk dört ilanı gösterir; bunlar Pazar aramasının bulduğu ilanlarla aynıdır ve **Daha fazla gör**, Pazar'ı arama kutusunda kelimelerinizle açar. Güncel bir uygulama ve topluluğunuzun sunucusunun güncellenmesi gerekir.",
+            "**Pazar'dan bir aramayı kaydetme.** Pazar'ın aramasında kelimeler varken telefonda ve web uygulamasında **Bu aramayı Ana Sayfaya kaydet** görünür. Ana Sayfa'yı kelimeleriniz, **Teklifler** veya **İhtiyaçlar**, kategori ve mesafe doldurulmuş olarak açar. **Ana Sayfaya Ekle**'ye dokunun. Kayıtlı bir arama eşleşen en yeni ilanları ilk olarak gösterir; küresel toplulukta en yakın olanı ilk olarak gösterir. Teklifler ve İhtiyaçlar içindir, bu nedenle Etkinlikler veya Anketler altında gösterilmez.",
+            "**Ana Sayfa'da güneş ve ay.** Bu geceki ay ile bugünkü gün doğumu ve gün batımı; topluluğunuzun yeri veya bölgeniz için telefonunuzda ya da tarayıcınızda kendi saatinize göre hesaplanır. Topluluğunuzun sunucusundan hiçbir şey istemez. Güncel bir uygulama gerekir; topluluğunuzun sunucusu güncellenene kadar bölgenizi kullanır."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Varsayılan olarak gizlilik"
+        },
+        {
+          "type": "p",
+          "text": "Bu değişiklikler topluluğunuzun sunucusunda yer alır. Topluluğunuzun sunucusu güncellendiğinde bunları alırsınız. Anket seçeneği güncel bir uygulama gerektirir."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bakiyeniz ve takaslarınız sizindir.** Topluluğunuzdaki başka hiç kimse bakiyenizi veya geçmişinizi okuyamaz. Bir takas, topluluk etkinliğinde de yalnızca ilgili iki kişiyi gösterir. Bir üyenin çıkarılmasına ilişkin bir oylama, o üyenin bakiyesini yalnızca oy kullanabilen kişilere gösterir, başka hiçbir yerde göstermez.",
+            "**İlanlar üyelere özeldir.** Katılmamış biri topluluğunuzun ilanlarını veya fotoğraflarını göremez. Bunun yerine herkesin göz atabileceği küresel topluluğa giden yol gösterilir.",
+            "**Anonim anketler.** Anketler, anketi başlatan kişi onu bir **Açık oylama** yapmadığı sürece yalnızca toplamları gösterir.",
+            "**Girişimlerin defterleri.** Herkes bir girişimin tutarlarını görmeye devam eder. Kime ödendiğini ve notu yalnızca sorumluları ve o üye görür.",
+            "**Yorumu kimin yazdığı.** Topluluğunuzdaki herkes bir değerlendirmenin yıldızlarını ve kelimelerini okuyabilir. Yalnızca takastaki iki kişi değerlendirmeyi kimin yazdığını ve hangi takasla ilgili olduğunu görebilir.",
+            "**Çocuk güvenliği.** Telefonda ve web uygulamasında her bildirme ekranı artık bir neden olarak **Çocuk güvenliği** seçeneğini sunar. Bir çocuğun risk altında olabileceği durumlarda bunu seçin: topluluğunuzun sunucusunu yürüten kişilere anında haber verilir ve ilk olarak bunu incelerler. \"Sorun bildirme\" bölümüne bakın."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Günlük sınırlar"
+        },
+        {
+          "type": "p",
+          "text": "Bunlar topluluğunuzun sunucusunda yer alır. Topluluğunuzun sunucusu güncellendiğinde bunları alırsınız."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Kimse bir topluluğu mesaj veya işlemle boğamaz.** Bir hesap günde en fazla 5.000 değişiklik yapabilir: gönderiler, mesajlar, düzenlemeler ve benzerleri. Bunun içinde günde en fazla 100 yeni gönderi, 5 yeni grup, 3 yeni girişim, 20 davet ve Nabız'da 50 bağlantı yer alır. Normal şekilde BeanPool kullanan hiç kimse bu sınırlara yaklaşmaz. Bir sınıra ulaşırsanız uygulama hangisine ulaştığınızı ve ne zaman devam edebileceğinizi belirtir.",
+            "**Mesajlar.** Doğrudan mesajlar dahil herhangi bir sohbette dakikada en fazla 30 mesaj. Çok uzun bir mesaj reddedilir: parçalar halinde gönderin. Fotoğraflar sayılmaz.",
+            "**Yeni kişiler.** Günde topluluğunuzun dışından 20 kişiyle sohbet başlatabilirsiniz. Üyelere mesaj göndermek ve yanıt vermek sınırlı değildir.",
+            "**Davetler.** Henüz kimsenin kullanmadığı 50 davetiniz olabilir. Kimsenin kullanmadığı bir davet 30 gün sonra silinir.",
+            "**Ödemeler.** Günde en fazla 100 ödeme ve daha önce hiç ödeme yapmadığınız en fazla 30 kişi. En fazla 100 takas talebi, kabulü veya onayı ve yapılan ya da değiştirilen 20 taahhüt. Ödeme almak hiçbir zaman sınırlı değildir.",
+            "**Projeler ve girişimler** bir üyenin on katı kadar kendi sınırlarına sahiptir. Bir sorumlunun bir girişim için yaptığı işlemler girişimin sınırından sayılır, sorumlunun kendi sınırından sayılmaz; yürütme işlemleri hariç: sorumlular, duraklatma, tasfiye etme ve takasları tamamlama veya reddetme. Bir girişim o günkü sınırını tükettiğinde, bir sorumlunun onun için yaptığı bu tür işlemler sorumlunun kendi sınırından sayılır; böylece hiçbir sorumlu gününü tüketip diğerlerini durduramaz. Bir sorumlu, birlikte yürüttüğü tüm girişimler için günde bir girişimlik işlem yapabilir.",
+            "**Arkadaşlar.** Günde en fazla 100 kişiyi arkadaş olarak ekleyebilirsiniz. Birini eklemek ona haber verir."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Sürüm 1.2.38"
+        },
+        {
+          "type": "p",
+          "text": "Bu değişikliklerin bazıları topluluğunuzun sunucusunda yer alır. Topluluğunuzun sunucusu güncellendiğinde bunları alırsınız."
+        },
+        {
+          "type": "h3",
+          "text": "Yeni"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bu BeanPool kılavuzu.** BeanPool'un nasıl çalıştığına, kurallara, yaygın sorulara ve yeniliklere dair rehberler. Bağlantı olmadan da çalışırlar. Ayarlar'da **BeanPool**: **Yardım ve işleyiş** altından açın. Herhangi bir ekranın üst kısmındaki **?** işareti o ekranın yardımını açar.",
+            "**Açık veya koyu tema.** Uygulama açık temayla başlar. Koyu yapmak veya telefonunuzu takip etmesini sağlamak için Ayarlar → Görünüm bölümüne gidin: Telefonla aynı, Açık veya Koyu.",
+            "**Rozetler.** Her ekran artık topluluğunuzun sunucusuyla aynı güven seviyelerini kullanır: 200 güvenden itibaren Sakin, 600'den itibaren Rehber, 1.400'den itibaren Kıdemli. Bazı ekranlar daha önce yanlış rozeti gösteriyordu. Yeni Gelen rozetinin okunması artık daha kolaydır."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Oylama"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Gizli oylama.** Uygulama artık bir Kararda nasıl oy kullandığınızı yöneticiler dahil hiç kimseye göstermez. Kendi oyunuzu görebilirsiniz.",
+            "**Kimler oy kullanabilir.** Yalnızca bir Karar açılmadan önce katılmış olan üyeler o Kararda oy kullanabilir.",
+            "**Katılım oranı.** Katılım oranı artık son 30 gün içinde uygulamada bir şey yapmış olan üyeleri sayar.",
+            "**Acil askıya alma.** Bir yönetici birini askıya aldığında hemen 7 günlük bir oylama açılır: \"Bu askıya alma korunsun mu?\". Kabul edilmezse askıya alma kendiliğinden kalkar. Küresel toplulukta oylama yoktur: askıya alma 7 gün sürer ve ardından kendiliğinden kalkar ya da bir yönetici daha önce kaldırırsa daha erken kalkar.",
+            "**Söz kredileri.** Ortak fasulye oylamalarında gösterilen söz kredileri geçerli olanlardır. Bu tür her oylamada bunları eksiksiz olarak alırsınız.",
+            "**Daha az Karar türü.** Kararlar artık güven rozetlerini değiştiremez. Eski \"oylama turları\" kalktı."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Girişimler"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Baş sorumlu bir sorumlu eklediğinde veya çıkardığında, diğer sorumluların itiraz etmek için 3 günü vardır.",
+            "Bir sorumlu tek sorumlu olmadığı sürece veya taahhüdü girişimin borcunu karşılamak için hâlâ gerekmediği sürece görevden çekilebilir.",
+            "Yeni bir lider seçmenin artık 14 günlük bir sınırı vardır ve sorumlular Hayır oyu verebilir.",
+            "Lider ayrılırsa, en uzun süredir hizmet veren sorumlu hemen görevi devralır."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Gruplar"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Her grubun bir sohbeti vardır.** Sohbet sekmesinde artık üç düğme bulunur: **Mesajlar**, **Gruplar** ve **Kişiler**. **Gruplar**; gruplarınızı, yürüttüğünüz girişimleri ve katılacağınız etkinlikleri en son mesajları ve okunmamış mesaj sayılarıyla birlikte listeler.",
+            "**Grup kurmanın tek yolu.** Sohbet'teki **Yeni grup** ve Ortak Alan'daki **+** simgesi sizin için **Sosyal Çevre** seçilmiş olarak aynı formu açar. Grubu oluşturduktan sonra kimi davet etmek istediğinizi soran sohbetine ulaşırsınız.",
+            "**Davetler.** Koordinatörler sohbetin menüsünden kişileri davet edebilir. Bir davet kimin gönderdiğini gösterir ve **Gruba katıl** sizi doğrudan sohbete götürür.",
+            "**Bir sohbeti sessize alma**: 8 saatliğine, Bir haftalığına veya Her zaman. Bir grupta @bahsetmeleri yine de iletilir.",
+            "**Her sohbet için tek bir başlık**: en üstte grubun, girişimin veya etkinliğin adı yer alır. Grubu, girişimi veya etkinliği görmek için bu başlığa dokunun.",
+            "Sohbet'teki eski grup sohbetleri mesajlarıyla birlikte kaldırıldı.",
+            "Artık her grubun bir **baş koordinatörü** vardır — başlangıçta grubu kim kurduysa odur. Herhangi bir koordinatör üyelerle ve gönderilerle ilgilenmeye devam eder, ancak yalnızca lider bir koordinatörü çıkarabilir veya rolünü düşürebilir ve hiç kimse lideri çıkaramaz. Lider, liderliği başkasına devredebilir. Lider 30 gün boyunca sessiz kalırsa, grup üye listesinin üzerindeki grup ekranında yeni bir lider seçebilir. \"Kurallar ve karar alma süreci\" bölümüne bakın.",
+            "**Bir grupta oylamalar.** Bir grubun üyeleri yeni bir koordinatör veya yeni bir lider gibi grubun kendi meseleleri hakkında oy kullanabilir: grubu açın ve **Kararlar** altına bakın.",
+            "**Sessiz bir grup için yeni bir lider seçme.** Yalnızca lideri sessiz kalmadan önce grupta bulunan kişiler oy kullanabilir. Bundan sonra katılan veya koordinatör yapılan kişilerin söz hakkı yoktur; böylece yeni hesaplar lideri sessiz kalmış bir grubu ele geçiremez."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Güvenlik"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Yalnızca bir mülk sahibi, bir mülk sahibinin veya yöneticinin rolünü geri verebilir ya da alabilir.",
+            "Bir yönetici, parçası olduğu takılmış bir takası çözemez.",
+            "Grup ve etkinlik sohbetleri bir kişinin ne sıklıkla paylaşım yapabileceğini sınırlar.",
+            "**İki kişi arasındaki sohbetler her zaman kilitlidir.** Uygulama eskiden diğer kişinin anahtarını bulamazsa mesajı kilit olmadan gönderirdi. Artık göndermez: kelimeleriniz mesaj kutusunda kalır ve birazdan tekrar gönderebilirsiniz. Topluluğunuzun sunucusu iki kişi arasında kilitli olmayan bir mesajı reddeder."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Düzeltmeler"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Haritanın yeniden tek bir konum bulma düğmesi vardır.",
+            "Pazar akışının koyu modda okunması artık daha kolaydır."
+          ]
         }
       ]
     },
@@ -5691,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Kredi limitiniz",
       "summary": "Sıfırın ne kadar altına inebileceğiniz ve bu limitin nasıl büyüdüğü.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5763,10 +5947,10 @@
           "items": [
             "Teklif yoksa: hiçbiri;",
             "1 Teklif: −200'e kadar;",
-            "2 Teklif: −500;",
-            "3 Teklif: −1.000;",
-            "4 Teklif: −1.500;",
-            "5 Teklif: −2.000."
+            "2: −500;",
+            "3: −1.000;",
+            "4: −1.500;",
+            "5: −2.000."
           ]
         },
         {
@@ -5779,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Sizinki **bilinen taban**ı açtıysa, bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır."
+          "text": "Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Sizinki **bilinen taban**ı açtıysa, bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır. Limitinizi yükseltir, seviyenizi değil: güven rozetiniz yalnızca yaptıklarınızı saymaya devam eder."
         },
         {
           "type": "ul",
@@ -5789,6 +5973,14 @@
             "Bir yönetici sizin için örneğin yeni olduğunuz dönemde daha küçük bir limit belirleyebilir. Bu sizden asla Fasulye almaz: zaten bu sınırın altındaysanız, tekrar üzerine çıkana kadar harcama duraklatılır.",
             "Daha önceki bir hesaptan kalan bir borcu ödüyorsanız, sıfırın üzerinde aldığınız Fasulyeler borç ödenene kadar Ortak Alana gider. Defteriniz ne kadar kaldığını belirtir. Ayrıca **Defter → Ortak'a Öde** bölümünden kendiniz de bir kısmını veya tamamını ödeyebilirsiniz: geri ödeme kodunuz orada doldurulmuştur (veya bir yöneticinin size verdiğini girin). Kodla ödediğiniz miktar doğrudan borçtan düşülür ve geriye hiçbir şey kalmadığında borç kapatılmış olur: bir ödemeyle veya aldığınız miktardan başka bir şey kesilmez. Kod olmadan yapılan bir ödeme Ortak Alana gider ancak borcunuzdan düşülmez ve uygulama bunu belirtir: sayılması için bir yöneticiden referansıyla birlikte bunu borcunuza saymasını isteyin. Bunu yapana kadar borç ödenmeye devam eder: bir dahaki sefere Fasulye aldığınızda, kalan miktar sıfırın üzerinde tuttuğunuz miktardan alınır. Yöneticinin mesajındaki miktar paylaştıkları anda kalan miktardır: şu anda daha az kaldıysa sunucunuz daha büyük bir ödemeyi reddeder, ne kadar kaldığını söyler ve hiçbir şey ödenmez. Uygulama bir ödemenin gerçekleşmiş olabileceğini söylerse aynı ekranda **Tekrar dene** seçeneğine dokunun: aynı ödeme asla iki kez ödenmez. O ekrandan ayrıldıysanız tekrar ödeme yapmadan önce Defterinizi kontrol edin."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Karma bir topluluk"
+        },
+        {
+          "type": "p",
+          "text": "Bazı topluluklarda herhangi bir üye insanları davet edebilir, bu nedenle yöneticiler herkesi tanımaz. Sizinki **bilinen taban**ı açtıysa, yöneticiler tanıdıkları üyeleri teyit edebilir ve bu üyeler daha yüksek bir limitle başlar. Geri kalan herkes sıfırdan başlar ve sonrasında herkesin limiti takas yaptıkça ve güven inşa ettikçe aynı şekilde büyür."
         },
         {
           "type": "h2",
@@ -5807,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Seviyeniz değişmez: yöneticiler limitinizi topluluğunkinden daha düşük veya daha yüksek belirlemiş olsa bile, dondurulmadığında kredi limitinizin size verdiği seviyedir; profilinizde de ilanlarınızda da aynıdır. Nedenini sormak veya tekrar açtırmak için yöneticilerden birine danışın."
+          "text": "Seviyeniz değişmez; profilinizde de ilanlarınızda da aynı kalır: yaptıklarınızı sayar (bir kefalet, takaslarınız ve bir yöneticinin size tanıdığı herhangi bir güven), asla teyit edilmekten gelen limitinizi veya yöneticilerin bunun için belirlediği herhangi bir miktarı saymaz. Nedenini sormak veya tekrar açtırmak için yöneticilerden birine danışın."
         },
         {
           "type": "h2",
@@ -5888,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Güven rozetleri",
       "summary": "Yeni Gelen, Sakin, Temsilci ve Büyük. Anlamları ve neden ayrıcalık kilidi açmadıkları.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -5921,7 +6113,7 @@
         },
         {
           "type": "p",
-          "text": "Güven; katıldığınızdaki bir kefaletten, tamamlanan takaslardan ve bir yöneticinin verdiği güvenden gelir. Üyelerini teyit eden bir toplulukta teyit edilmiş bir üyenin aldığı kredi limiti de sayılır."
+          "text": "Güven; katıldığınızdaki bir kefaletten, tamamlanan takaslardan ve bir yöneticinin verdiği güvenden gelir. Üyelerini teyit eden bir toplulukta teyit edilmiş olmak size daha yüksek bir kredi limiti verir, daha yüksek bir rozet değil: rozetiniz yalnızca yaptıklarınızı sayar, bu nedenle teyit edilmiş olduğunuzu asla göstermez."
         },
         {
           "type": "h2",
@@ -5937,13 +6129,13 @@
         },
         {
           "type": "h2",
-          "text": "Nerede görünür"
+          "text": "Nerede görünürler"
         },
         {
           "type": "ul",
           "items": [
-            "**Defter**, ardından **Seviyeler:** rozetiniz, ne kadar güveniniz olduğu ve bir sonrakine ne kadar kaldığı. **TÜM SEVİYELER** her rozeti gösterir. Henüz ulaşmadığınız bir seviye, ne kadar güven gerektirdiğiyle birlikte **Sonraki seviye** veya **İleride** der: içine doğru büyüyeceğiniz bir şeydir, sizden saklanan bir şey asla değildir.",
-            "**GÜVENİNİZİ NE OLUŞTURUR:** ne kadar takas yaptığınız, kaç kişiyle yaptığınız ve değerlendirmeniz.",
+            "**Defter**, ardından **Seviyeler:** rozetiniz, ne kadar güveniniz olduğu ve bir sonrakine ne kadar kaldığı. **Tüm seviyeler** her rozeti gösterir. Henüz ulaşmadığınız bir seviye, ne kadar güven gerektirdiğiyle birlikte **Sonraki seviye** veya **İleride** der: içine doğru büyüyeceğiniz bir şeydir, sizden saklanan bir şey asla değildir.",
+            "**Güveninizi ne oluşturur:** ne kadar takas yaptığınız, kaç kişiyle yaptığınız ve değerlendirmeniz.",
             "Gönderilerde ve profillerde her üyenin adının yanında."
           ]
         },

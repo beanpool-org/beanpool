@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 144,
-  "hash": "0cd821383e8a86890ad82bd8f157845c236dcaeff07a3d4df95685bc180dba02",
+  "version": 145,
+  "hash": "8394b0e4ce069b6904a49746bc18beddb7caa8a5c7fc778ef467a3bfe6f86926",
   "sections": [
     {
       "id": "setup",
@@ -1540,7 +1540,7 @@
           "items": [
             "**Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Where the community votes, members then vote for 7 days on keeping the suspension, and if the vote does not pass it lifts by itself. On the global community there is no vote: the suspension lasts 7 days and lifts by itself, or sooner if you lift it. See Decisions and emergencies.",
             "**Lift suspension**: ends a suspension early and closes its vote.",
-            "**Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation. Their Ledger tells them the admins froze their credit line: they can't spend into debit while it lasts, but can still sell, receive and spend what they hold above zero (a member in debit is also told how far down they are), and to ask an admin. Their level stays the one their line gives them unfrozen, on their profile and their listings alike.",
+            "**Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation. Their Ledger tells them the admins froze their credit line: they can't spend into debit while it lasts, but can still sell, receive and spend what they hold above zero (a member in debit is also told how far down they are), and to ask an admin. Their level doesn't change, on their profile and their listings alike: it counts what they have done, not their credit line.",
             "**Promote** and **Demote**: whether they can vouch for others.",
             "**Grant Operator**: lets them act for enterprises they are a keeper of.",
             "**Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**, with a QR. Their old key stops working the moment you make the code, and they are suspended until you bind their new phone. Their balance, role and keeper places move to the new key. See Re-Key below.",
@@ -1676,7 +1676,7 @@
         },
         {
           "type": "p",
-          "text": "A confirmation is a fact about a member, not a trust badge. On its own it changes nothing. If your owner turns on **the known floor** (below), it also gives that member a credit line."
+          "text": "A confirmation is a fact about a member, not a trust badge. On its own it changes nothing. If your owner turns on **the known floor** (below), it also gives that member a credit line. It never changes their level: the badge other members see counts only what they have done, so it never shows who is confirmed."
         },
         {
           "type": "p",
@@ -1841,7 +1841,7 @@
         },
         {
           "type": "p",
-          "text": "An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level stays the one their line gives them unfrozen (the known floor less what they have pledged to enterprises), on their profile and their listings alike."
+          "text": "An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level doesn't change, on their profile and their listings alike: the known floor never counts towards a level, frozen, lowered or raised."
         },
         {
           "type": "p",
@@ -1862,6 +1862,26 @@
         {
           "type": "p",
           "text": "Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read one member's lines on that member's **Known floor** panel. A raise above the community's known floor is its own line, so other admins notice."
+        },
+        {
+          "type": "h2",
+          "text": "Running a mixed community"
+        },
+        {
+          "type": "p",
+          "text": "A community can be a mix of members your admins know and members they do not. To run a mixed community:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Any member invites.** In the manager, open **People & Safety → Invites & QR**; under **Who may invite**, keep **Invite** (any member invites). People your members bring in join without your admins needing to know them.",
+            "**Keep the names list.** In the BeanPool app on an owner's or admin's phone, open **Settings → Community admin → Names list**, tap **Add a name**, and tap **Confirm a member** for each person your admins know.",
+            "**Turn on the known floor.** In the manager, open **People & Safety → Invites & QR**, find **The known floor**, check **Confirmed members get the known floor**, set your amounts, and tap **Save the known floor**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Members who join through another member's invite start at zero, while members your admins have confirmed on the names list get the known floor."
         },
         {
           "type": "h2",

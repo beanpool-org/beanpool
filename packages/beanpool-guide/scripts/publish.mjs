@@ -92,6 +92,11 @@ function attempt() {
         branch = `guide/publish-members-v${after.guide}-manual-v${after.manual}${langSuffix}`;
         run('git', ['switch', '-q', '-c', branch], dir);
         run('git', ['add', '--', ...PUBLISHED], dir);
+        const websiteBuild = path.join(dir, 'scripts/website-build.mjs');
+        if (fs.existsSync(websiteBuild)) {
+            run(process.execPath, ['scripts/website-build.mjs'], dir);
+            run('git', ['add', '--', 'apps/website'], dir);
+        }
         run('git', ['commit', '-q', '-m', title, '-m',
             `Written by pnpm guide:publish from ${REMOTE}/${BASE} at ${base.slice(0, 10)}: the text of the pages that merged since the last publish.`], dir);
         // The same check CI runs, against origin/main: a publish-only change, one version up, the pages' own text.

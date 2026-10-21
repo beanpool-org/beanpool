@@ -1,0 +1,167 @@
+<!-- source-hash: 64da0b917fdb13a9 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>സഹായ കേന്ദ്രം — BeanPool</title>
+    <meta name="description" content="എല്ലാ BeanPool നിയമങ്ങളും ഗൈഡുകളും മാന്വലുകളും ഒരിടത്ത്: ആരംഭിക്കൽ, നിയമങ്ങൾ, അംഗങ്ങളുടെ ഗൈഡ്, ഒരു കമ്മ്യൂണിറ്റി നടത്തൽ, സുരക്ഷ, സ്വകാര്യത എന്നിവയും അതിലേറെയും.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.8">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool ഐക്കൺ" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">ഇത് എങ്ങനെ പ്രവർത്തിക്കുന്നു</a>
+                <a href="index.html#features">നിങ്ങൾക്ക് എന്തൊക്കെ ചെയ്യാം</a>
+                <a href="rules.html">നിയമങ്ങൾ</a>
+                <a href="index.html#run-a-node">ഒരു കമ്മ്യൂണിറ്റി നടത്തുക</a>
+                <a href="help.html" aria-current="page" title="എല്ലാ നിയമങ്ങളും ഗൈഡുകളും മാന്വലുകളും ഒരിടത്ത്">സഹായം</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube-ൽ വീഡിയോ ട്യൂട്ടോറിയലുകൾ കാണുക (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit കമ്മ്യൂണിറ്റിയിൽ ചേരുക (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub-ൽ കാണുക">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">ആരംഭിക്കുക</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="മെനു തുറക്കുക"><span aria-hidden="true">☰</span> മെനു</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">ആരംഭിക്കുക</a>
+                    <a href="index.html#how-it-works">ഇത് എങ്ങനെ പ്രവർത്തിക്കുന്നു</a>
+                    <a href="index.html#features">നിങ്ങൾക്ക് എന്തൊക്കെ ചെയ്യാം</a>
+                    <a href="rules.html">നിയമങ്ങൾ</a>
+                    <a href="index.html#run-a-node">ഒരു കമ്മ്യൂണിറ്റി നടത്തുക</a>
+                    <a href="help.html" aria-current="page">സഹായം</a>
+                    <a href="guide/index.html">അംഗങ്ങളുടെ ഗൈഡ്</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube-ലെ വീഡിയോകൾ</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit-ൽ r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub-ലെ സോഴ്സ് കോഡ്</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <main class="legal-content help-centre">
+        <h1>സഹായ കേന്ദ്രം</h1>
+        <p class="lede">എല്ലാ BeanPool നിയമങ്ങളും ഗൈഡുകളും മാന്വലുകളും ഒരിടത്ത്. നിങ്ങൾക്ക് ഏറ്റവും അനുയോജ്യമായ ഒന്ന് തിരഞ്ഞെടുക്കുക.</p>
+
+        <h2>ഗൈഡുകളും നിയമങ്ങളും</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="getting-started.html">
+                <h3>ആരംഭിക്കുക</h3>
+                <p class="help-who">നിങ്ങൾ BeanPool-ൽ പുതിയ ആളാണെങ്കിൽ ഇത് നിങ്ങൾക്കുള്ളതാണ്.</p>
+                <p>പ്രവേശിക്കാൻ മൂന്ന് വഴികൾ: ആഗോള കമ്മ്യൂണിറ്റി (ഉടൻ തന്നെ എല്ലാവർക്കുമായി തുറക്കും), നിങ്ങളുടെ അടുത്തുള്ള ഒരു കമ്മ്യൂണിറ്റി കണ്ടെത്തുകയോ ആരംഭിക്കുകയോ ചെയ്യുക, അല്ലെങ്കിൽ ഒരു ക്ഷണത്തിലൂടെ ചേരുക. തുടർന്ന് നിങ്ങളുടെ 12 വാക്കുകളും ആദ്യ വ്യാപാരവും.</p>
+                <!-- OPEN-GLOBAL: "The three ways in: try the global community, find or start a community near you, or join with an invite. Then your 12 words and your first trade." -->
+            </a>
+            <a class="help-card glass-panel" href="rules.html">
+                <h3>നിയമങ്ങൾ</h3>
+                <p class="help-who">നിങ്ങൾക്ക് ഓരോ സംഖ്യകളും കൃത്യമായി അറിയണമെങ്കിൽ ഇത് നിങ്ങൾക്കുള്ളതാണ്.</p>
+                <p>പയർ, ക്രെഡിറ്റ് പരിധികൾ, ഫീസ്, സമ്മാനങ്ങൾ, പരിധികൾ, വ്യാപാരങ്ങൾ എങ്ങനെ തീർപ്പാക്കുന്നു എന്നിവയെല്ലാം ഒരിടത്ത്.</p>
+            </a>
+            <a class="help-card glass-panel" href="guide/index.html">
+                <h3>അംഗങ്ങളുടെ ഗൈഡ്</h3>
+                <p class="help-who">നിങ്ങൾ ഇതിനകം ഒരു കമ്മ്യൂണിറ്റിയിൽ അംഗമാണെങ്കിൽ ഇത് നിങ്ങൾക്കുള്ളതാണ്.</p>
+                <p>എങ്ങനെ പോസ്റ്റ് ചെയ്യാം, വ്യാപാരം ചെയ്യാം, സന്ദേശമയക്കാം, വോട്ട് ചെയ്യാം, അക്കൗണ്ട് സുരക്ഷിതമായി സൂക്ഷിക്കാം. ഇതേ ഗൈഡ് ആപ്പിനുള്ളിലും ലഭ്യമാണ്: ഫോൺ ആപ്പിന്റെ മുകളിൽ ഇടതുവശത്തുള്ള പയർ ഐക്കണിൽ ടാപ്പ് ചെയ്യുക, അല്ലെങ്കിൽ വെബ് ആപ്പിലെ <strong>?</strong> ചിഹ്നത്തിൽ ടാപ്പ് ചെയ്യുക.</p>
+            </a>
+            <a class="help-card glass-panel" href="index.html#run-a-node">
+                <h3>ഒരു കമ്മ്യൂണിറ്റി നടത്തൽ</h3>
+                <p class="help-who">നിങ്ങൾക്ക് ഒരു കമ്മ്യൂണിറ്റി ആരംഭിക്കാനോ നടത്താനോ താൽപ്പര്യമുണ്ടെങ്കിൽ ഇത് നിങ്ങൾക്കുള്ളതാണ്.</p>
+                <p>നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സ്വന്തം സെർവർ പ്രവർത്തിപ്പിക്കാൻ എന്തൊക്കെ ആവശ്യമാണ്, അത് എങ്ങനെ സജ്ജീകരിക്കാം.</p>
+                <p class="help-note">ഓപ്പറേറ്റർ മാനുവൽ നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിലാണ് ഉള്ളത്: ക്രമീകരണങ്ങളിലേക്ക് സൈൻ ഇൻ ചെയ്ത് (സെർവറിന്റെ വിലാസത്തിന് ശേഷം /settings നൽകുക) സൈഡ് ബാറിലെ Manual ക്ലിക്ക് ചെയ്യുക, അല്ലെങ്കിൽ സ്ക്രീൻ ശീർഷകത്തിന് അടുത്തുള്ള ? ചിഹ്നം അമർത്തുക. ഇതിന്റെ ആദ്യ തവണ സജ്ജീകരണ പേജ് (First-time setup) മാത്രമേ ഗൈഡിൽ ഈ വെബ്‌സൈറ്റിൽ ഉൾപ്പെടുത്തിയിട്ടുള്ളൂ.</p>
+            </a>
+        </div>
+
+        <h2>സുരക്ഷയും നിങ്ങളുടെ ഡാറ്റയും</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="safety.html">
+                <h3>സുരക്ഷ</h3>
+                <p class="help-who">BeanPool-ലെ ദോഷകരമായ കാര്യങ്ങളെക്കുറിച്ച് ആശങ്കയുള്ള ആർക്കും വേണ്ടി.</p>
+                <p>ഞങ്ങൾ കുട്ടികളെ എങ്ങനെ സുരക്ഷിതമായി സൂക്ഷിക്കുന്നു, എന്തെങ്കിലും എങ്ങനെ റിപ്പോർട്ട് ചെയ്യാം, ഞങ്ങളെ എങ്ങനെ ബന്ധപ്പെടാം.</p>
+            </a>
+            <a class="help-card glass-panel" href="privacy.html">
+                <h3>സ്വകാര്യത</h3>
+                <p class="help-who">എന്തൊക്കെ വിവരങ്ങൾ സംഭരിക്കുന്നു എന്ന് അറിയാൻ ആഗ്രഹിക്കുന്ന ആർക്കും വേണ്ടി.</p>
+                <p>നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവർ നിങ്ങളെക്കുറിച്ച് എന്തൊക്കെ സൂക്ഷിക്കുന്നു, എന്തിനാണ് സൂക്ഷിക്കുന്നത്.</p>
+            </a>
+            <a class="help-card glass-panel" href="terms.html">
+                <h3>നിബന്ധനകൾ</h3>
+                <p class="help-who">BeanPool ഉപയോഗിക്കുന്ന ഏതൊരാൾക്കും വേണ്ടി.</p>
+                <p>ആപ്പ് ഉപയോഗിക്കുമ്പോൾ നിങ്ങൾ അംഗീകരിക്കുന്ന കരാർ.</p>
+            </a>
+            <a class="help-card glass-panel" href="data-deletion.html">
+                <h3>ഡാറ്റ ഇല്ലാതാക്കൽ</h3>
+                <p class="help-who">നിങ്ങളുടെ ഡാറ്റ നീക്കം ചെയ്യാൻ ആഗ്രഹിക്കുന്നുവെങ്കിൽ ഇത് നിങ്ങൾക്കുള്ളതാണ്.</p>
+                <p>കണക്റ്റ് ചെയ്ത അക്കൗണ്ടോ നിങ്ങളുടെ മുഴുവൻ BeanPool അക്കൗണ്ടോ എങ്ങനെ ഇല്ലാതാക്കാം.</p>
+            </a>
+        </div>
+
+        <h2 id="writing-to-us">ഞങ്ങൾക്ക് എഴുതുക</h2>
+        <p>നിങ്ങൾ അയയ്ക്കുന്നത് ആരെല്ലാമാണ് വായിക്കുന്നത്, എത്ര വേഗത്തിലാണ് വായിക്കുന്നത് എന്ന് ഇവിടെ കാണാം.</p>
+        <p><strong>ആഗോള കമ്മ്യൂണിറ്റിയിലെ ഒരു റിപ്പോർട്ട്.</strong> ഞങ്ങൾ തന്നെയാണ് ആഗോള കമ്മ്യൂണിറ്റി നടത്തുന്നത്, അതിനാൽ അവിടെയുള്ള ആപ്പിൽ നിങ്ങൾ നൽകുന്ന റിപ്പോർട്ട് ഞങ്ങളിലേക്ക് എത്തുന്നു, ഒരു ദിവസത്തിനുള്ളിൽ ഞങ്ങൾ അത് പരിശോധിക്കുകയും ചെയ്യുന്നു.</p>
+        <p><strong>ഒരു പ്രാദേശിക കമ്മ്യൂണിറ്റിയിലെ റിപ്പോർട്ട്.</strong> ഇത് ആ കമ്മ്യൂണിറ്റിയുടെ സ്വന്തം മോഡറേറ്റർമാരിലേക്കാണ് പോകുന്നത്, ഞങ്ങളിലേക്കല്ല.</p>
+        <p><strong>ഒരു ഇമെയിൽ.</strong> <a href="mailto:admin@beanpool.org">admin@beanpool.org</a> എന്ന വിലാസത്തിലേക്ക് എഴുതുക, രണ്ട് ദിവസത്തിനുള്ളിൽ നിങ്ങൾക്ക് മറുപടി ലഭിക്കും. നിങ്ങളുടെ 12 വാക്കുകൾ ഒരിക്കലും ഞങ്ങൾക്ക് അയക്കരുത്. നിങ്ങളുടെ 12 വാക്കുകൾ ലഭിക്കുന്ന ആർക്കും നിങ്ങളുടെ അക്കൗണ്ട് ഉപയോഗിക്കാൻ കഴിയും. BeanPool-ൽ നിന്നോ നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയിൽ നിന്നോ ആരും ഒരിക്കലും അവ ചോദിക്കില്ല.</p>
+        <p>ഒരു കുട്ടിയുടെ സുരക്ഷയെ സംബന്ധിച്ച കാര്യങ്ങൾ: ആദ്യം ആപ്പിൽ റിപ്പോർട്ട് ചെയ്യുക, തുടർന്ന് <a href="safety.html">സുരക്ഷ</a> കാണുക.</p>
+
+        <h2>മറ്റിടങ്ങളിൽ</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">
+                <h3><svg style="color: var(--youtube)" class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>വീഡിയോകൾ</h3>
+                <p class="help-who">വായിക്കുന്നതിനേക്കാൾ കണ്ടുമനസ്സിലാക്കാൻ താൽപ്പര്യപ്പെടുന്നുവെങ്കിൽ ഇത് നിങ്ങൾക്കുള്ളതാണ്.</p>
+                <p>BeanPool എങ്ങനെ പ്രവർത്തിക്കുന്നുവെന്ന് കാണിക്കുന്ന YouTube-ലെ ലഘു വീഡിയോകൾ.</p>
+            </a>
+            <a class="help-card glass-panel" href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">
+                <h3><svg style="color: var(--reddit)" class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>കമ്മ്യൂണിറ്റി</h3>
+                <p class="help-who">നിങ്ങൾക്ക് ഒരു ചോദ്യമോ ആശയമോ ഉണ്ടെങ്കിൽ ഇത് നിങ്ങൾക്കുള്ളതാണ്.</p>
+                <p>Reddit-ൽ മറ്റ് അംഗങ്ങളോടും BeanPool നിർമ്മിക്കുന്ന ആളുകളോടും ചോദിക്കുക.</p>
+            </a>
+            <a class="help-card glass-panel" href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">
+                <h3><svg class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>സോഴ്സ് കോഡ്</h3>
+                <p class="help-who">നിങ്ങൾ കോഡ് എഴുതുന്ന ആളാണെങ്കിൽ ഇത് നിങ്ങൾക്കുള്ളതാണ്.</p>
+                <p>BeanPool ഓപ്പൺ സോഴ്സാണ്. GitHub-ൽ കോഡ് വായിക്കുക, ബഗ് റിപ്പോർട്ട് ചെയ്യുക അല്ലെങ്കിൽ ഇത് നിർമ്മിക്കാൻ സഹായിക്കുക.</p>
+            </a>
+        </div>
+    </main>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool ഐക്കൺ" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>അയൽക്കാരുമായി പയർ ഉപയോഗിച്ച് വ്യാപാരം നടത്തുന്നതിനുള്ള സൗജന്യ ആപ്പ്.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">സഹായ കേന്ദ്രം</a>
+                    <a href="getting-started.html">ആരംഭിക്കുക</a>
+                    <a href="rules.html">നിയമങ്ങൾ</a>
+                    <a href="post-extraction.html">പോസ്റ്റ്-എക്സ്ട്രാക്ഷൻ</a>
+                    <a href="index.html#run-a-node">ഒരു കമ്മ്യൂണിറ്റി നടത്തുക</a>
+                    <a href="guide/index.html">അംഗങ്ങളുടെ ഗൈഡ്</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">സ്വകാര്യതാ നയം</a>
+                    <a href="terms.html">സേവന നിബന്ധനകൾ</a>
+                    <a href="safety.html">കുട്ടികളുടെ സുരക്ഷ</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>എംഐടി ലൈസൻസിന് കീഴിലുള്ള ഓപ്പൺ സോഴ്സ്. കമ്മ്യൂണിറ്റികൾക്കായി, കമ്മ്യൂണിറ്റികളാൽ <img src="bean.png" alt="സ്നേഹത്തോടെ" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> നിർമ്മിച്ചത്. ടൈം സോൺ അതിരുകൾ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

@@ -3,7 +3,7 @@ slug: how-it-works
 title: Come funziona BeanPool
 summary: Fagioli, scambi, offerte e richieste, e credito, in parole semplici.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Fagioli
@@ -70,13 +70,13 @@ Alcune comunità confermano l'identità dei loro membri. Lì, un membro conferma
 
 ## Badge di fiducia
 
-La tua fiducia si mostra come un badge. I badge sono Nuovo arrivato, Residente, Custode e Saggio. La fiducia dietro il tuo badge somma tre elementi: l'avvio fornito da una garanzia, la fiducia guadagnata scambiando e l'eventuale fiducia concessa da un amministratore. Un amministratore può assegnare direttamente un badge a un membro, senza scambi. In una comunità che conferma i propri membri, conta anche la linea di credito che un membro confermato riceve.
+La tua fiducia si mostra come un badge. I badge sono Nuovo arrivato, Residente, Custode e Saggio. La fiducia dietro il tuo badge somma tre elementi: l'avvio fornito da una garanzia, la fiducia guadagnata scambiando e l'eventuale fiducia concessa da un amministratore. Un amministratore può assegnare direttamente un badge a un membro, senza scambi. In una comunità che conferma i propri membri, un membro confermato riceve un limite di credito più alto, non un badge più alto: il suo badge conta solo ciò che ha fatto.
 
 - Residente a partire da 200 di fiducia.
 - Custode a partire da 600 di fiducia.
 - Saggio a partire da 1.400 di fiducia.
 
-Un badge è un riconoscimento, niente di più. Non vincola e non condiziona nulla: tutti possono scambiare, invitare e votare, qualunque sia il loro badge.
+Un badge è un riconoscimento, niente di più. Non sblocca nulla. Tutti possono scambiare, invitare e votare, qualunque sia il loro badge.
 
 ## Commissioni e Beni comuni
 

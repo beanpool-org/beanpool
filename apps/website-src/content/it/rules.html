@@ -1,0 +1,219 @@
+<!-- source-hash: b6cb7426f4ee45f1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Le Regole — Come funziona BeanPool</title>
+    <meta name="description" content="Le semplici regole di BeanPool: come funzionano saldi, credito, offerte, commissioni, federazione keynesiana, imprese della comunità e governance.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Icona BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Come funziona</a>
+                <a href="rules.html">Le Regole</a>
+                <a href="index.html#features">Funzionalità</a>
+                <a href="help.html">Aiuto</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Guarda i video tutorial su YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Partecipa alla community su Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Visualizza su GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Inizia</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Apri menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Inizia</a>
+                    <a href="index.html#how-it-works">Come funziona</a>
+                    <a href="rules.html" aria-current="page">Le Regole</a>
+                    <a href="index.html#features">Funzionalità</a>
+                    <a href="help.html">Aiuto</a>
+                    <a href="guide/index.html">Guida per i membri</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial su YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool su Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Codice sorgente su GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Le Regole — Come funziona BeanPool</h1>
+        <p class="lede">BeanPool è una rete di scambio comunitario in cui tutti partono da zero. Guadagni fagioli aiutando gli altri e li spendi quando gli altri aiutano te. Non circola denaro e non ci sono intermediari aziendali — solo queste semplici regole.</p>
+
+        <div class="callout amber">In breve: <strong>costruisci la tua linea di credito scambiando, mantieni una o due offerte attive per usarla e lascia circolare i fagioli.</strong> Lo zero è l'obiettivo — dai all'incirca quanto ricevi.</div>
+
+        <h2 id="1"><span class="num">1.</span>I fagioli e il tuo saldo</h2>
+        <p>I fagioli misurano il valore che hai dato e ricevuto (in sostanza, il tempo). <strong style="color:var(--text-primary)">Lo zero è l'obiettivo</strong> — significa che hai dato all'incirca quanto hai preso.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Saldo positivo</strong> — hai dato più di quanto hai ricevuto. La comunità ti è debitrice.</li>
+            <li><strong style="color:var(--text-primary)">Saldo negativo</strong> — la comunità ti ha concesso credito. Lo restituisci offrendo il tuo aiuto.</li>
+            <li>Nella maggior parte delle comunità il punto più basso a cui si può scendere è <strong>−2000 fagioli</strong>. Una comunità che verifica i propri membri con il nome reale può impostare il proprio limite, fino a −5000, e assegnare ai membri verificati una linea iniziale.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Per iniziare</h2>
+        <p>Ti unisci su invito. Dal primo giorno puoi esplorare e ricevere fagioli. Una volta che possiedi fagioli (guadagnandoli o ricevendoli in dono), puoi spenderli. Per spendere a credito, devi pubblicare almeno un'<strong style="color:var(--text-primary)">Offerta</strong> (vedi §4 e §5). I nuovi membri iniziano <strong style="color:var(--text-primary)">senza linea di credito</strong> — puoi spendere solo i fagioli che possiedi effettivamente fino a quando la tua linea non viene attivata dal tuo primo scambio completato (o se un garante o un amministratore ti assegna una linea iniziale — vedi §3 e §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>La tua linea di credito si guadagna scambiando</h2>
+        <p>La tua linea di credito ti permette di andare leggermente in negativo — spendendo prima di aver recuperato il valore. Viene <strong style="color:var(--text-primary)">guadagnata, non regalata</strong>:</p>
+        <ul>
+            <li>La fiducia nasce da <strong style="color:var(--text-primary)">scambi completati nel mercato</strong> — mai da doni. All'inizio cresce lentamente: uno scambio da 100 fagioli genera circa 37 fagioli di linea di credito. Un amministratore o un garante nominato può anche assegnare a qualcuno una linea iniziale; l'assegnazione da parte di un amministratore viene mostrata come il suo distintivo.</li>
+            <li>Scambiare con <strong style="color:var(--text-primary)">molte persone diverse</strong> crea fiducia molto più rapidamente rispetto a scambi ripetuti con una sola persona.</li>
+            <li>La tua fiducia determina il tuo <em>limite</em> di credito — quanto in basso può scendere la tua soglia minima, da 0 fino a −2000 nella maggior parte delle comunità (vedi §1).</li>
+            <li>La tua soglia minima si apre dopo il tuo <strong style="color:var(--text-primary)">primo scambio reale</strong> e cresce con ogni scambio successivo (oppure un garante della comunità può assegnarti una soglia di partenza — vedi §9). Non è richiesta alcuna garanzia obbligatoria.</li>
+        </ul>
+        <div class="callout">I livelli di fiducia — <strong>Nuovo arrivato → Residente → Custode → Saggio</strong> — sono distintivi di riconoscimento. I distintivi che ottieni non limitano né condizionano l'accesso a nulla di per sé; una linea di credito più ampia deriva da scambi reali. Un amministratore può anche assegnare un distintivo a qualcuno, e con esso la linea di credito iniziale di quel distintivo.</div>
+
+        <h2 id="4"><span class="num">4.</span>Reciprocità: per usare il credito, devi mantenere offerte attive</h2>
+        <p>Guadagnare fiducia determina il tuo <strong style="color:var(--text-primary)">limite</strong> di credito (quanto puoi scendere potenzialmente). Ma per <strong style="color:var(--text-primary)">attingere</strong> effettivamente a quel credito, devi mantenere delle Offerte attive pubblicate. Ciò assicura che chiunque sia in debito stia attivamente mostrando alla comunità come intende contribuire.</p>
+        
+        <p>Il numero di offerte attive che mantieni pubblicate determina quanto credito è <strong style="color:var(--text-primary)">disponibile</strong>:</p>
+        <table>
+            <thead><tr><th>Offerte attive</th><th>Linea di credito disponibile</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — spendi solo i fagioli posseduti</td></tr>
+                <tr><td class="num-col">1</td><td>Fino a −200 fagioli</td></tr>
+                <tr><td class="num-col">2</td><td>Fino a −500 fagioli</td></tr>
+                <tr><td class="num-col">3</td><td>Fino a −1000 fagioli</td></tr>
+                <tr><td class="num-col">4</td><td>Fino a −1500 fagioli</td></tr>
+                <tr><td class="num-col">5</td><td>Fino a −2000 fagioli <em>(il limite consueto)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Il tuo effettivo limite di spesa è il <strong style="color:var(--text-primary)">minore</strong> tra quanto hai guadagnato e quanto le tue offerte attive rendono accessibile.</p>
+        <p><em>Ad esempio: se hai maturato un limite di −600 tramite gli scambi, mantenere 2 offerte attive ne rende accessibili −500. Mantenere una terza offerta rende accessibile l'intero limite di −600 (non avrai mai bisogno di una quarta o quinta offerta perché il tuo limite guadagnato è già raggiunto).</em></p>
+        <div class="callout">
+            <strong>La pausa di spesa (congelamento):</strong><br>
+            Se scendi al di sotto delle offerte attive richieste per il tuo debito attuale (ad es. se una delle tue offerte viene venduta e completata, o se ne metti una in pausa), la tua <strong>possibilità di spendere a credito viene sospesa</strong>. Questa è una rete di sicurezza, non una sanzione: non ti viene tolto nulla. Puoi ancora ricevere fagioli, continuare a vendere ed esplorare. La tua linea di credito si riattiva da sola non appena il tuo saldo rientra in quanto coperto dalle tue offerte attive: pubblica un'altra offerta o ricevi fagioli.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Offerte (i tuoi annunci)</h2>
+        <ul>
+            <li>Mantieni tutte le offerte che desideri — incluse quelle ricorrenti — e imposta ciascuna su <strong style="color:var(--text-primary)">Attiva o In pausa</strong> quando vuoi. Solo le offerte <em>Attive</em> contano ai fini della tua linea di credito.</li>
+            <li><strong style="color:var(--text-primary)">Dai prima di ricevere:</strong> in una comunità con i fagioli, devi aver pubblicato almeno un'offerta prima di poter pubblicare una Richiesta o acquistare da altri. Dove non ci sono fagioli, come nella comunità globale, il tuo primo post può essere una Richiesta.</li>
+            <li>Saldo positivo? Metti tutto in pausa se preferisci — le offerte sono necessarie solo per andare in negativo.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Commissioni e il fondo della comunità</h2>
+        <p>Due piccoli contributi, ed entrambi confluiscono nei <strong style="color:var(--text-primary)">Beni comuni della comunità</strong> &mdash; un fondo condiviso che la tua comunità vota per finanziare progetti locali. Nulla va perso a favore di società terze.</p>
+        <p><strong style="color:var(--text-primary)">a) Commissione del Mercato — 1,5% sugli scambi completati.</strong> Quando una vendita sul mercato si conclude, chi vende riceve l'1,5% in meno rispetto al prezzo e la differenza va ai Beni comuni. <strong style="color:var(--text-primary)">I doni (invii diretti tra membri) sono gratuiti</strong> &mdash; così come i rimborsi e i trasferimenti di sistema.</p>
+        <p><strong style="color:var(--text-primary)">b) Tassa di circolazione sui saldi positivi — mensile, e solo sulla parte superiore a 200.</strong> Come gli scaglioni progressivi, ogni fascia viene applicata solo alla porzione del tuo saldo al suo interno:</p>
+        <table>
+            <thead><tr><th>Fascia di saldo</th><th>Aliquota mensile di circolazione</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Gratis</span> zona verde</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1,5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2,5%</td></tr>
+            </tbody>
+        </table>
+        <p>Questo incoraggia delicatamente i fagioli a <strong style="color:var(--text-primary)">circolare invece di accumularsi</strong>. <strong style="color:var(--text-primary)">I saldi negativi non subiscono mai una tassa di circolazione</strong> &mdash; stai già sostenendo il credito per la comunità. Nota come la fascia gratuita fino a +200 rifletta la prima fascia di credito fino a −200, così il sistema è simmetrico attorno allo zero.</p>
+
+        <h2 id="7"><span class="num">7.</span>Doni (inviare fagioli)</h2>
+        <ul>
+            <li>Puoi <strong style="color:var(--text-primary)">donare solo i fagioli che possiedi effettivamente</strong> &mdash; un dono non va mai in negativo e non usa mai la tua linea di credito.</li>
+            <li>Puoi inviare fagioli una volta completato almeno uno scambio reale (questo impedisce che account appena creati inoltrino subito fagioli per poi svanire).</li>
+            <li>I doni non creano fiducia per chi li riceve, e sono <strong style="color:var(--text-primary)">gratuiti</strong> &mdash; nessuna commissione (puoi donare solo fagioli che già possiedi).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Come si regolano gli scambi</h2>
+        <p>Gli scambi del mercato sono custoditi in sicurezza in un <strong style="color:var(--text-primary)">deposito di garanzia (escrow)</strong> (trattenuti fiduciariamente dal sistema) fino a quando l'accordo non è concluso, poi trasferiti a chi ha venduto (meno la commissione dell'1,5%). Se un accordo viene annullato, l'acquirente viene rimborsato per intero.</p>
+
+        <h2 id="9"><span class="num">9.</span>Garanzie (un vantaggio iniziale facoltativo)</h2>
+        <p>Un <strong style="color:var(--text-primary)">garante</strong> di fiducia, nominato dalla comunità, può assegnare a un nuovo arrivato una <strong style="color:var(--text-primary)">soglia iniziale di 25, 50 o 100 fagioli</strong> affinché possa iniziare a usare il credito prima di averlo guadagnato. Questi vantaggi sono solitamente attribuiti &mdash; a totale discrezione del garante &mdash; a persone i cui post e contributi sono ritenuti autenticamente stimolanti e partecipativi. È del tutto facoltativo: a nessuno serve un garante per partecipare, poiché apri la tua linea di credito semplicemente scambiando (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Compensazione federata tra comunità</h2>
+        <p>Le comunità non devono esistere in isolamento. Tramite i <strong style="color:var(--text-primary)">Connettori di scambio federati</strong> (ispirati all'unione di compensazione di Keynes), i nodi di comunità indipendenti possono regolare gli scambi con un nodo vicino peer-to-peer, senza valuta fiat o riserve bancarie. I fagioli non lasciano mai la comunità di origine &mdash; ciascuna coppia di nodi mantiene un registro ponte di ciò che si devono reciprocamente in termini di lavoro, e ciascuna parte stabilisce il proprio limite massimo per tale debito. La compensazione avviene tra coppie di comunità, ciascun gestore la attiva intenzionalmente, ed è ancora in fase iniziale: è implementata, con le sue schermate nell'app web, ed è stata sperimentata solo tra due delle nostre comunità di test, mai tra comunità attive reali.</p>
+
+        <h2 id="11"><span class="num">11.</span>Identità crittografica e custodia delle chiavi</h2>
+        <p>Il tuo account è protetto da una coppia di chiavi crittografiche Ed25519 generata sul tuo dispositivo. BeanPool offre una custodia flessibile per soddisfare le tue esigenze:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Piena sovranità personale:</strong> Nelle app per smartphone, la tua chiave privata è custodita nella memoria sicura del dispositivo (iOS Keychain / Android Keystore); nell'app web è conservata nella memoria del browser. Lascia il dispositivo solo sotto forma di copia protetta per il recupero dell'accesso, oppure quando copi il tuo account su un altro dei tuoi dispositivi. Conserva la tua copia di backup delle 12 parole offline.</li>
+            <li><strong style="color:var(--text-primary)">Recupero:</strong> La tua frase di 12 parole ripristina il tuo account su qualsiasi dispositivo. Puoi anche collegare un account Google, Apple o Facebook. Viene quindi conservata una copia protetta della tua chiave per quell'accesso: le app per smartphone che usano la cassaforte delle chiavi di BeanPool la mantengono lì, su un piccolo server in Islanda; le versioni precedenti dell'app la mantengono sul nodo della tua comunità; l'app web sulla comunità globale la mantiene sul server di quella comunità, gestito da noi. Chiunque conservi la copia può aprirla. Un ripristino dalla cassaforte attende 24 ore a meno che uno dei tuoi dispositivi non lo approvi. Se perdi il dispositivo, le tue 12 parole e il tuo accesso, un amministratore della tua comunità può trasferire il tuo account su un nuovo telefono con un codice monouso, di persona davanti a te; la tua cronologia resta. Quindi trascrivi le parole.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Limiti e sicurezza</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Limite minimo di −2000</strong> nella maggior parte delle comunità (vedi §1). Non c'è limite giornaliero al numero di fagioli che puoi spendere &mdash; la tua soglia minima fa da confine. C'è un limite alla frequenza: 100 pagamenti, 30 persone mai pagate prima e 100 richieste nel mercato in qualsiasi periodo di 24 ore.</li>
+            <li>La fiducia con un singolo partner ha un tetto massimo, così nessuno può gonfiare la propria reputazione scambiando avanti e indietro con un complice.</li>
+            <li>La <strong style="color:var(--text-primary)">Modalità vacanza</strong> nasconde le tue offerte e mette in pausa le richieste in arrivo mentre sei via.</li>
+            <li>I membri possono segnalare e contrassegnare comportamenti scorretti; gli amministratori della comunità possono rimuoverli.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Imprese della comunità e governance</h2>
+        <p>Le imprese della comunità (come una biblioteca degli attrezzi, un pollaio o un deposito di legna da ardere) e i progetti circoscritti sono iniziative condivise affidate a una gestione collettiva. Funzionano secondo regole chiare e applicate dal codice (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">il modello di governance dei Beni comuni</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Un solo oggetto, due cicli di vita (§2.1):</strong> Un'impresa continuativa persiste e scambia; un'impresa circoscritta (un progetto) ha un obiettivo e una data di termine, liquidando il proprio conto e restituendo quanto rimane ai Beni comuni al termine.</li>
+            <li><strong style="color:var(--text-primary)">Soglie guadagnate e impegni dei custodi (Regole 1–3):</strong> Una nuova impresa parte senza scoperti non guadagnati: la sua soglia di credito è garantita da impegni espliciti basati sulla reputazione commerciale guadagnata dai suoi custodi (somma diretta, nessun moltiplicatore sintetico). L'impegno di garanzia non tocca né riduce mai la soglia di credito personale del nucleo familiare di un custode. Le imprese più vecchie mantengono la soglia iniziale che avevano prima degli impegni.</li>
+            <li><strong style="color:var(--text-primary)">Responsabilità limitata (Regola 4):</strong> Fallisce l'impresa, non il nucleo familiare del custode. Se un'impresa va in default, le sue spese vengono congelate, ma le soglie personali dei suoi custodi sono protette.</li>
+            <li><strong style="color:var(--text-primary)">Il credito acquista forniture, il surplus ripaga le persone (Regola 5):</strong> Un'impresa può attingere al credito fino alla sua soglia utilizzabile per acquistare materiali o servizi da vicini esterni. Non può <em>mai</em> attingere al credito per pagare i propri custodi &mdash; i custodi vengono pagati solo fintanto che <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Compensi dei custodi limitati dal surplus guadagnato (Regola 6):</strong> I compensi erogati ai custodi sono rigorosamente limitati dal surplus effettivo delle transazioni (entrate dalle vendite meno pagamenti ai custodi). Finanziamenti, impegni e doni non possono mai essere convertiti in compensi per i custodi.</li>
+            <li><strong style="color:var(--text-primary)">Recupero automatico del capitale operativo (Regola 7):</strong> Un'impresa può stabilire un tetto al capitale operativo. Il surplus guadagnato al di sopra di tale soglia confluisce automaticamente nel fondo dei Beni comuni della comunità per impedire accumuli improduttivi. Finanziamenti e doni non vengono mai prelevati.</li>
+            <li><strong style="color:var(--text-primary)">Regola dell'approvazione a due persone:</strong> I custodi non possono approvare i propri pagamenti né offerte personali per le esigenze dell'impresa &mdash; deve approvare un altro custode.</li>
+            <li><strong style="color:var(--text-primary)">Sondaggi rispetto alle Decisioni (§3):</strong> Le domande informali sono <em>Sondaggi</em> nel feed del mercato: un voto ciascuno, conteggiati, non vincolanti. La governance vincolante (finanziamenti dal fondo, cancellazioni del debito, cambi di ruolo e sospensione, congelamento o rimozione di un membro) passa tramite le <em>Decisioni</em> nella scheda Comuni, con una finestra di voto di 7 giorni. Una Decisione viene approvata con il 60% dei voti (66% per rimuovere un membro; più della metà per revocare una sospensione o un congelamento, o per riammettere un membro) una volta raggiunto il quorum: il 30% di chi è stato attivo negli ultimi 30 giorni, con un minimo di 3 membri (25% per la rimozione di un membro). Successivamente si attua in automatico. I finanziamenti dal fondo usano il voto quadratico basato sulla reputazione commerciale guadagnata &mdash; i fagioli liquidi non possono comprare voti.</li>
+            <li><strong style="color:var(--text-primary)">Vocabolario consolidato (§9):</strong> Quattro livelli, quattro parole distinte: nodo → <em>proprietario / amministratore</em> · impresa → <em>custode principale / custode</em> · gruppo → <em>coordinatore</em> · livello di fiducia → <em>Custode</em>.</li>
+        </ul>
+        <div class="callout amber">In breve: <strong>costruisci la tua linea di credito scambiando, mantieni una o due offerte attive per usarla e lascia circolare i fagioli.</strong> Lo zero è l'obiettivo — dai all'incirca quanto ricevi.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Icona BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Credito reciproco per le comunità, gestito dalle comunità.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Centro assistenza</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Come funziona</a>
+                    <a href="getting-started.html">Per iniziare</a>
+                    <a href="rules.html">Le Regole</a>
+                    <a href="safety.html">Sicurezza dei minori</a>
+                    <a href="privacy.html">Informativa sulla privacy</a>
+                    <a href="terms.html">Termini di servizio</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source sotto licenza MIT. Creato con <img src="bean.png" alt="amore" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> dalle comunità, per le comunità. Confini dei fusi orari © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Contributori di OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

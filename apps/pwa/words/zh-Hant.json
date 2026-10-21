@@ -2,10 +2,10 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "「{name}」在這個社區已被使用。請選擇其他名稱。",
@@ -2538,8 +2538,6 @@
   "Next level": "下一等級",
   "Up ahead": "前方目標",
   "Your current floor": "你目前的底線",
-  "Floor from this tier": "此等級提供的底線",
-  "Floor starts at": "底線起始於",
   "Grows deeper as you trade more": "交易越多，底線越深",
   "Reach {min} trust ({left} to go) from the real value you trade.": "透過實質交易價值達到 {min} 信任分（還差 {left}）。",
   "🚀 Reach {emoji} {tier}": "🚀 達到 {emoji} {tier}",
@@ -3310,5 +3308,69 @@
   "Recurring listing (stays active after purchase)": "循環刊登（交易完成後仍保持有效）",
   "Posting…": "正在發布…",
   "Publish Listing": "發布刊登",
-  "Translated by machine: some words may be wrong.": "機器翻譯:部分用詞可能有誤。"
+  "Translated by machine: some words may be wrong.": "機器翻譯:部分用詞可能有誤。",
+  "About this tool": "關於此工具",
+  "Ask to borrow this?": "請求借用此物品？",
+  "Asked to borrow": "已請求借用",
+  "Check your connection, then try again.": "請檢查網路連線，然後重試。",
+  "For example": "例如",
+  "Free to borrow. Nothing is held: the lender says yes first.": "免費借用。不扣留任何款項：須由出借人先同意。",
+  "How it's going": "營運狀況",
+  "How you deal": "你的往來方式",
+  "I already do this": "我已經在做這件事了",
+  "I'm starting out": "我才剛開始",
+  "It couldn't be removed. Try again.": "無法移除。請重試。",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "僅為你保存在此瀏覽器中。相關資訊絕不會離開此瀏覽器，且在此處登出將會予以移除。",
+  "No tools in this version of the app yet.": "此版本的應用程式中尚無工具。",
+  "Nothing is held until the lender says yes.": "在出借人同意之前，不會扣留任何款項。",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "在出借人同意之前，不會扣留任何款項。同意後，費用會存入臨時信任錢包中，物品歸還後出借人將收到扣除 1.5% 交易手續費{owned}後的款項，費用用於資助公共資金池。",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "在出借人同意之前，不會扣留任何款項。同意後，{total} B 會存入信任錢包中，物品歸還後出借人將收到 {net} B（扣除用於資助公共資金池的 1.5% 交易手續費{owned}）。",
+  "On your Home": "在你的首頁上",
+  "Open {tool}": "開啟 {tool}",
+  "Options for {tool}": "{tool} 的選項",
+  "Read in English": "閱讀英文版",
+  "Read the guide": "閱讀指南",
+  "Refresh the page to load the newest version your community has.": "重新整理頁面以載入你社群擁有的最新版本。",
+  "Remove my data": "移除我的資料",
+  "Remove my data from this browser": "從此瀏覽器移除我的資料",
+  "Removed from this browser.": "已從此瀏覽器移除。",
+  "Show translation": "顯示翻譯",
+  "Start": "開始",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "將此社群中 {tool} 的資料從此瀏覽器中移除。另一個社群中的相同工具仍會保留其自身資料。此操作無法復原。",
+  "Things you can do on your own, that make your community stronger.": "你可以獨自完成的事，並能讓你的社群更加壯大。",
+  "This page is in English for now.": "此頁面目前僅有英文版。",
+  "This page is newer in English.": "此頁面的英文版內容較新。",
+  "This screen stopped working": "此畫面已停止運作",
+  "This tool didn't load": "無法載入此工具",
+  "This tool isn't in this version of the app": "此版本的應用程式中沒有此工具",
+  "What this tool keeps is safe. Go back and open it again.": "此工具保存的內容很安全。請返回並重新開啟。",
+  "What you have": "你擁有的物品",
+  "Where it is kept": "保存位置",
+  "Withdraw request": "撤回請求",
+  "Yes, remove it": "是，移除它",
+  "for {n} day|for {n} days": {
+    "other": "借用 {n} 天"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "借用 {n} 週"
+  },
+  "{n} day|{n} days": {
+    "other": "{n} 天"
+  },
+  "{n} month|{n} months": {
+    "other": "{n} 個月"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n} 週"
+  },
+  "📦 Ask to borrow": "📦 請求借用",
+  "Asked to join": "已申請加入",
+  "Invited": "已邀請",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "歡迎。從第一天起，你就可以瀏覽、交易、接收信用額度並邀請他人 — 而且你的信用額度已經開啟。",
+  "from {n} trust|from {n} trust": {
+    "other": "從 {n} 信任分起"
+  },
+  "{name}, already in the group": "{name}，已在群組中",
+  "{name}, already invited": "{name}，已邀請",
+  "{name}, asked to join": "{name}，已申請加入"
 }

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Η οικονομία μετά την εκμετάλλευση — BeanPool</title>
+    <meta name="description" content="Τι σημαίνει οικονομία μετά την εκμετάλλευση, και οι συγκεκριμένοι μηχανισμοί που χρησιμοποιεί το BeanPool για να οικοδομήσει μία: αμοιβαία πίστωση χωρίς τόκο, κυκλοφορία αντί για συσσώρευση, Κοινά που ψηφίζονται από τα μέλη και ομοσπονδία που δεν αποστραγγίζει τη μικρότερη πόλη.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/post-extraction">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/post-extraction">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/post-extraction">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/post-extraction">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/post-extraction">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/post-extraction">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/post-extraction">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/post-extraction">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/post-extraction">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/post-extraction">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/post-extraction">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/post-extraction">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/post-extraction">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/post-extraction">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/post-extraction">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/post-extraction">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/post-extraction">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/post-extraction">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/post-extraction">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/post-extraction">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/post-extraction">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/post-extraction">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/post-extraction">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/post-extraction">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/post-extraction">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/post-extraction">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Εικονίδιο BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Πώς λειτουργεί</a>
+                <a href="rules.html">Οι Κανόνες</a>
+                <a href="index.html#features">Δυνατότητες</a>
+                <a href="help.html">Βοήθεια</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Εκπαιδευτικά βίντεο</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Δείτε εκπαιδευτικά βίντεο στο YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Γίνετε μέλος της κοινότητας στο Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Προβολή στο GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Ξεκινήστε</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Άνοιγμα μενού"><span aria-hidden="true">☰</span> Μενού</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Ξεκινήστε</a>
+                    <a href="index.html#how-it-works">Πώς λειτουργεί</a>
+                    <a href="rules.html">Οι Κανόνες</a>
+                    <a href="index.html#features">Δυνατότητες</a>
+                    <a href="help.html">Βοήθεια</a>
+                    <a href="../guide/index.html">Οδηγός μελών</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Εκπαιδευτικά βίντεο στο YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool στο Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Πηγαίος κώδικας στο GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>Η οικονομία μετά την εκμετάλλευση</h1>
+
+        <p class="lede">Τα περισσότερα από τα εργαλεία που χρησιμοποιεί μια κοινότητα για τις συναλλαγές της έχουν σχεδιαστεί για να αποσπούν μερίδιο. Όχι από κακή πρόθεση — απλώς δομικά. Ένα ποσοστό πηγαίνει σε έναν εκκαθαριστή πληρωμών, οι τόκοι πηγαίνουν σε μια τράπεζα, η προσοχή πηγαίνει σε έναν διαφημιστή και τα δεδομένα πηγαίνουν κάπου που κανείς στην κοινότητα δεν επέλεξε. <strong>Το BeanPool έχει κατασκευαστεί για να αφαιρέσει αυτές τις διεξόδους διαφυγής.</strong></p>
+
+        <div class="pe-define">
+            <p><strong>Μετά την εκμετάλλευση</strong> σημαίνει υποδομή που επιτρέπει στις κοινότητες να δημιουργούν και να διατηρούν την αξία που παράγουν, αντί να την υφαρπάζουν οι μεσάζοντες. Δεν είναι ένα σύνθημα για το πώς να είμαστε καλοί. Είναι ένας περιορισμός στον τρόπο κατασκευής του λογισμικού — και οτιδήποτε θα τον παραβίαζε δεν ενσωματώνεται στον κώδικα.</p>
+        </div>
+
+        <h2>Πώς μοιάζει στην πράξη η εκμετάλλευση</h2>
+        <p>Αξίζει να είμαστε συγκεκριμένοι, επειδή η «εκμετάλλευση» συνήθως αφήνεται ασαφής. Όταν ένας γείτονας πληρώνει έναν άλλο γείτονα μέσω μιας συμβατικής πλατφόρμας, η αξία εγκαταλείπει την κοινότητα μέσα από πολλές πόρτες ταυτόχρονα:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ Από πού διαφεύγει η αξία</h4>
+                <ul>
+                    <li><strong>Τέλη συναλλαγών</strong> σε έναν εκκαθαριστή που εδρεύει κάπου αλλού.</li>
+                    <li><strong>Τόκοι</strong> για την πίστωση που κατέστησε δυνατή τη συναλλαγή, πληρωμένοι σε μια τράπεζα.</li>
+                    <li><strong>Διαφήμιση</strong> — η προσοχή σας πωλείται σε όποιον κάνει τη μεγαλύτερη προσφορά.</li>
+                    <li><strong>Δεδομένα</strong> — οι σχέσεις και οι αγορές σας γίνονται περιουσιακό στοιχείο κάποιου άλλου.</li>
+                    <li><strong>Πρόσοδος πλατφόρμας</strong> — μόλις μπουν όλοι σε αυτήν, η τιμή ανεβαίνει, επειδή το να φύγετε σημαίνει να εγκαταλείψετε τους γείτονές σας.</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ Τι κάνουμε αντ' αυτού</h4>
+                <ul>
+                    <li>Η πίστωση <strong>δημιουργείται από την ίδια τη συναλλαγή</strong>, επομένως δεν υπάρχει δανειστής για να πληρωθεί.</li>
+                    <li>Τα μικρά τέλη που υπάρχουν ρέουν σε ένα <strong>Ταμείο Κοινών που η κοινότητά σας ψηφίζει πώς θα δαπανηθεί</strong>.</li>
+                    <li><strong>Χωρίς διαφημίσεις.</strong> Δεν υπάρχει διαφημιστής, επομένως δεν υπάρχει τίποτα για το οποίο να βελτιστοποιηθεί η προσοχή σας.</li>
+                    <li><strong>Χωρίς συλλογή δεδομένων.</strong> Το ιδιωτικό σας κλειδί παραμένει στη συσκευή σας. Εάν συνδέσετε μια μέθοδο εισόδου για να το επαναφέρετε, διατηρείται ένα κλειδωμένο αντίγραφο για αυτό: στο θησαυροφυλάκιο κλειδιών του BeanPool ή στον διακομιστή μιας κοινότητας, ανάλογα με την εφαρμογή. Όποιος το διατηρεί μπορεί να το ανοίξει. Τα άμεσα μηνύματα και οι ομαδικές συνομιλίες είναι κρυπτογραφημένα από άκρο σε άκρο.</li>
+                    <li><strong>Χωρίς εγκλωβισμό.</strong> Το πρωτόκολλο είναι ανοιχτού κώδικα και η κοινότητά σας εκτελεί τον δικό της κόμβο.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">Για να είμαστε ξεκάθαροι σχετικά με το ειλικρινές μέρος: <strong>το BeanPool δεν είναι απαλλαγμένο από κόστη.</strong> Υπάρχει ένα μικρό τέλος κυκλοφορίας σε μεγάλα αδρανή υπόλοιπα και ένα μικρό τέλος στις συναλλαγές. Η διαφορά δεν είναι ότι τα χρήματα εξαφανίζονται — είναι το <strong>πού πηγαίνουν</strong>. Πηγαίνουν στο Ταμείο των Κοινών και η κοινότητα ψηφίζει για το πώς θα δαπανηθούν. Τίποτα δεν καταβάλλεται σε μετόχους, επειδή δεν υπάρχει κανένας.</div>
+
+        <h2>Δεν επινοήσαμε εμείς αυτήν την κριτική</h2>
+        <p>Το παραπάνω μοτίβο έχει μελετηθεί προσεκτικά και κατονομαστεί επανειλημμένα από ανθρώπους που έχουν αφιερώσει χρόνια σε αυτό. Πιστεύουμε ότι η ανάλυση είναι σωστή· εκεί που διαφέρουμε είναι ότι προσπαθούμε να κατασκευάσουμε τη διέξοδο αντί απλώς να περιγράφουμε την παγίδα. Εάν θέλετε το επιχείρημα αναλυτικά αντί για τη σύνοψή μας, αυτά είναι τα σημεία εκκίνησης.</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Platform Capitalism <span>— Nick Srnicek, 2016</span></h4>
+                <p>Αντιμετωπίζει την πλατφόρμα ως επιχειρηματικό μοντέλο αντί ως τεχνολογία: τοποθετείσαι ανάμεσα σε δύο ομάδες που πρέπει να επικοινωνήσουν μεταξύ τους και στη συνέχεια παίρνεις μερίδιο από κάθε σύνδεση. Επειδή η αξία της πλατφόρμας αυξάνεται με τον αριθμό των ανθρώπων σε αυτήν, η αποχώρηση γίνεται πιο δύσκολη καθώς το ποσοστό απόσπασης μεγαλώνει.</p>
+            </div>
+            <div class="pe-book">
+                <h4>The Age of Surveillance Capitalism <span>— Shoshana Zuboff, 2019</span></h4>
+                <p>Περιγράφει μια δεύτερη μορφή εκμετάλλευσης που λειτουργεί παράλληλα με την πρώτη. Η συνηθισμένη ανθρώπινη εμπειρία αντιμετωπίζεται ως αδέσποτη πρώτη ύλη, που μετατρέπεται σε προβλέψεις για το τι θα κάνουν οι άνθρωποι στη συνέχεια και πωλείται σε όποιον ωφελείται από τη γνώση αυτή. Το άτομο από το οποίο προήλθαν τα δεδομένα δεν είναι ο πελάτης.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Technofeudalism <span>— Yanis Varoufakis, 2023</span></h4>
+                <p>Η πιο αιχμηρή εκδοχή του επιχειρήματος. Αυτό που εισπράττει ο ιδιοκτήτης μιας πλατφόρμας δεν είναι κέρδος από την παραγωγή κάποιου πράγματος — είναι <em>πρόσοδος</em>, που χρεώνεται για την πρόσβαση σε έναν χώρο που του ανήκει. Το επιχείρημα του Βαρουφάκη είναι ότι αυτό καθιστά τη διευθέτηση παλαιότερη από τον καπιταλισμό αντί για νεότερη: μια σχέση γαιοκτήμονα με ρούχα εταιρείας τεχνολογίας.</p>
+            </div>
+        </div>
+
+        <p>Υπάρχει μια πιο απλή φράση για το πώς γίνεται αισθητή αυτή η κατάσταση από κάτω — <strong>ψηφιακή επίμορτη αγροληψία</strong>. Κάνετε τη δουλειά, σε γη που δεν σας ανήκει, και ο ιδιοκτήτης παίρνει μερίδιο από όλα όσα παράγετε. Περιγράφει εξίσου καλά τον οδηγό, τον πωλητή, τον μουσικό και τον διανομέα, κάτι που συνήθως αποτελεί ένδειξη ότι μια περιγραφή αγγίζει κάτι πραγματικό.</p>
+
+        <p>Η απάντησή μας δεν είναι ένας πιο δίκαιος γαιοκτήμονας ή ένα μικρότερο μερίδιο. Είναι ότι <strong>δεν θα έπρεπε εξαρχής να υπάρχει γη προς ενοικίαση.</strong> Δύο γείτονες που ανταλλάσσουν τη δουλειά ενός απογεύματος δεν χρειάζεται να περάσουν από έναν χώρο που ανήκει σε κάποιον. Έτσι, η κοινότητα κατέχει τον κόμβο, το πρωτόκολλο είναι ανοιχτό για οποιονδήποτε θέλει να το εκτελέσει ή να το διακλαδώσει, και η μόνη χρέωση που υπάρχει πηγαίνει στα Κοινά της ίδιας της κοινότητας. Δεν υπάρχει θέση στη μέση για να πουλήσει κανείς πρόσβαση σε αυτήν — συμπεριλαμβανομένων εμάς.</p>
+
+        <p class="pe-credit">Ένας καλός τρόπος γνωριμίας, αν προτιμάτε να παρακολουθήσετε παρά να διαβάσετε: το βίντεο του Benn Jordan <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">«You Are Witnessing the Death of American Capitalism»</a>, το οποίο καλύπτει αυτό το πεδίο και παραπέμπει και στα τρία παραπάνω βιβλία.</p>
+
+        <h2>Οι μηχανισμοί</h2>
+        <p>Οι πρώτοι τέσσερις αποτελούν λειτουργικά μέρη κάθε κοινότητας σήμερα. Ο πέμπτος, ο συμψηφισμός μεταξύ κοινοτήτων, έχει κατασκευαστεί και έχει δοκιμαστεί μόνο μεταξύ δύο δικών μας δοκιμαστικών κοινοτήτων, όχι ακόμη μεταξύ πραγματικών ενεργών κοινοτήτων. Περιγράφονται αναλυτικά στους <a href="rules.html">Κανόνες</a>.</p>
+
+        <div class="pe-mech">
+            <h3>Χρήματα που δημιουργεί η ίδια η κοινότητα</h3>
+            <p>Το BeanPool λειτουργεί με <strong>αμοιβαία πίστωση</strong>. Όταν κάνετε τρεις ώρες δουλειάς για έναν γείτονα, τρεις ώρες πίστωσης έρχονται σε ύπαρξη εκείνη τη στιγμή — το θετικό σας υπόλοιπο και το αρνητικό του υπόλοιπο, δημιουργημένα μαζί από τη συναλλαγή. Καμία τράπεζα δεν τα εξέδωσε. Κανείς δεν σας τα δάνεισε. Δεν υπάρχει τόκος, επειδή δεν υπάρχει δανειστής.</p>
+            <p>Αυτή είναι η ρίζα ολόκληρου του σχεδιασμού. Εάν η προσφορά χρήματος πρέπει να δημιουργείται μέσω δανεισμού, κάποιος έξω από την κοινότητα κατέχει μια απαίτηση επί της μελλοντικής της εργασίας. Εάν η κοινότητα τη δημιουργεί μέσω συναλλαγών, δεν την κατέχει κανείς.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Το μηδέν είναι ο στόχος, όχι ένα μεγάλο υπόλοιπο</h3>
+            <p>Ένα υπόλοιπο <strong>μηδέν</strong> σημαίνει ότι έχετε δώσει περίπου όσα έχετε λάβει. Αυτή είναι η υγιής κατάσταση, και είναι ένας πραγματικά διαφορετικός στόχος από αυτόν που θέτουν οι περισσότερες οικονομίες. Δεν υπάρχει κανένα έπαθλο για τη συσσώρευση φασολιών και κανένας τρόπος να μετατραπούν σε αξίωση έναντι οποιουδήποτε εκτός της κοινότητας.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Κυκλοφορία αντί για συσσώρευση</h3>
+            <p>Τα μεγάλα αδρανή υπόλοιπα μειώνονται ήπια με την πάροδο του χρόνου, με προοδευτικό συντελεστή. Το αποτέλεσμα είναι να διατηρούνται τα φασόλια σε κίνηση — να ξοδεύονται σε γείτονες, να τοποθετούνται σε τοπικά έργα — αντί να μένουν στάσιμα. Μια οικονομία όπου το μέσο ανταλλαγής σταματά να κινείται είναι μια οικονομία που έχει σταματήσει να λειτουργεί.</p>
+            <p>Κυρίως, αυτό που μειώνεται δεν καταστρέφεται και δεν λαμβάνεται ως κέρδος: <strong>μεταφέρεται στο Ταμείο των Κοινών.</strong> Τα αρνητικά υπόλοιπα δεν χρεώνονται ποτέ. Κάποιος με αρνητικό υπόλοιπο έχει αντλήσει πίστωση που του επέκτεινε η κοινότητα, και η χρέωση ενός ατόμου που βρίσκεται ήδη πίσω θα βάθαινε την τρύπα αντί να θέσει τα φασόλια σε κίνηση — το αντίθετο ακριβώς από τον επιδιωκόμενο σκοπό.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Κοινά που αποτελούν κλειστό βρόχο, όχι καταβόθρα</h3>
+            <p>Το Ταμείο των Κοινών διακρατά όσα συγκεντρώνουν τα τέλη κυκλοφορίας και συναλλαγών, και όσα διακρατά πηγαίνουν σε δύο σημεία: στην απορρόφηση ενός χρέους που μένει πίσω όταν ένα μέλος αποχωρεί ή απομακρύνεται ενώ βρίσκεται σε χρέος, και στη χρηματοδότηση εγχειρημάτων και έργων που εγκρίνουν τα μέλη μέσω αυτόματα εκτελούμενων <strong>Αποφάσεων</strong> — εργαλεία για έναν κοινόχρηστο κήπο, εξοπλισμός για έναν χώρο εργασίας, οτιδήποτε προτείνεται και υπερψηφίζεται. Η κοινότητα αποφασίζει τι οικοδομεί το δικό της πλεόνασμα.</p>
+            <p>Είναι ένας κλειστός βρόχος εξ ορισμού: η αξία παράγεται τοπικά, διακρατείται συλλογικά και επανεπενδύεται στην ίδια κοινότητα.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Ομοσπονδία που δεν αποστραγγίζει τη μικρότερη πόλη</h3>
+            <p>Όταν οι κοινότητες συναλλάσσονται μεταξύ τους, η εκμετάλλευση μπορεί να επανεμφανιστεί με μια πιο λεπτή μορφή — η πλουσιότερη πόλη να αποστραγγίζει αθόρυβα τη μικρότερη. Αυτό είναι το πρόβλημα που επιχείρησε να λύσει ο John Maynard Keynes στο Bretton Woods, και ο συμψηφισμός μεταξύ κοινοτήτων του BeanPool βασίζεται στη δική του απάντηση.</p>
+            <p><strong>Τα Φασόλια δεν περνούν ποτέ τα σύνορα.</strong> Μια συναλλαγή μεταξύ δύο κοινοτήτων διακανονίζεται μέσω ενός ζεύγους καθολικών-γεφυρών, ένα σε κάθε κόμβο, που καταγράφουν όσα οφείλει η μία στην άλλη σε εργασία. Κάθε πλευρά ορίζει το δικό της όριο στο πόσο μπορεί να φτάσει αυτό — έτσι μια γειτονική κοινότητα μπορεί να σας οφείλει μόνο ένα ποσό που επιλέξατε εκ των προτέρων.</p>
+            <p>Δύο πράγματα προκύπτουν από αυτό, και αποτελούν τον λόγο για τον οποίο αυτό δεν είναι απλώς ένα όριο δαπανών. <strong>Ο συμψηφισμός όσων οφείλετε δεν μπλοκάρεται ποτέ</strong> — το ανώτατο όριο συγκρατεί την κατεύθυνση που επεκτείνει την πίστωση, ποτέ την κατεύθυνση που τη διευθετεί. Και μια κοινότητα που κατέχει πλεόνασμα δεν κάθεται απλώς πάνω σε αυτό: <strong>όσο περισσότερα οφείλονται σε μια πόλη, τόσο περισσότερη εργασία μπορεί να αναθέσει στην πόλη που της οφείλει</strong>, μετατρέποντας μια ανισορροπία ξανά σε εμπόριο αντί να την αφήνει ως χρέος.</p>
+            <div class="pe-worked">
+                <strong>Γιατί ο σχεδιασμός πρέπει να λειτουργεί με αυτόν τον τρόπο.</strong> Κάθε θετικό φασόλι έχει ένα αντίστοιχο αρνητικό που κατέχεται από ένα συγκεκριμένο μέλος, το οποίο το εκκαθαρίζει εργαζόμενο. Εάν τα +50 ενός μέλους απλώς έφευγαν για μια άλλη πόλη, ο γείτονας που βρίσκεται στο −50 δεν θα μπορούσε πλέον να τα κερδίσει πίσω από την τοπική κυκλοφορία — το αντίστοιχο του χρέους του έχει χαθεί. Επαναλάβετε το σε πολλούς επισκέπτες και η κυκλοφορία της μικρότερης κοινότητας συρρικνώνεται μόνιμα. Όχι μέσω απάτης· μέσω μεταφορών που όλες φαίνονταν σωστές.
+            </div>
+            <p class="pe-edges">Πού βρίσκονται τα όρια, ξεκάθαρα: μια κοινότητα σε έλλειμμα δεν χρεώνεται <em>ποτέ</em> επειδή βρίσκεται σε έλλειμμα — το επιχείρημα του Keynes, και το δικό μας, είναι ότι η πίεση πρέπει να ασκείται μόνο σε κάποιον που έχει τη δύναμη να ενεργήσει επ' αυτής. Ο μόνος εναπομένων μοχλός, μια χρέωση σε ένα πλεόνασμα που σκοπίμως αφήνεται αδρανές, έχει προδιαγραφεί και σκοπίμως δεν έχει κατασκευαστεί μέχρι να περάσει το ίδιο τεστ δικαιοσύνης. Ο συμψηφισμός εκτελείται μεταξύ ζευγών κοινοτήτων αντί σε ένα ευρύτερο δίκτυο, και ο διαχειριστής κάθε κοινότητας τον ενεργοποιεί κατ' επιλογή.</p>
+        </div>
+
+        <h2>Οι δεσμεύσεις στις οποίες βασίζεται αυτό</h2>
+        <p>Αυτές είναι οι θεμελιώδεις αξίες με βάση τις οποίες κρίνεται κάθε συνεισφορά στο BeanPool. Δημοσιεύονται στον <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">οδηγό συνεισφερόντων</a> του έργου και έχουν πραγματική ισχύ: έργα που έρχονται σε σύγκρουση μαζί τους απορρίπτονται, όσο καλός κι αν είναι ο κώδικας.</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>Μετά την εκμετάλλευση</h4>
+                <p>Χτίζουμε υποδομές που επιτρέπουν στις κοινότητες να δημιουργούν και να διατηρούν αξία αντί να την υφαρπάζουν οι μεσάζοντες. Συνεισφορές που εισάγουν δυναμικές εκμετάλλευσης — δικτυακές επιδράσεις που ωφελούν ένα μόνο ελέγχον μέρος, ιδιοκτησιακό εγκλωβισμό, νομισματοποίηση βάσει επιτήρησης — δεν είναι ευπρόσδεκτες.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Επικουρικότητα</h4>
+                <p>Οι τοπικές κοινότητες θα πρέπει να μπορούν να λειτουργούν τους δικούς τους κόμβους, να λαμβάνουν τις δικές τους αποφάσεις διακυβέρνησης και να λειτουργούν ανεξάρτητα. Συνεισφορές που ωθούν τη λήψη αποφάσεων προς τα πάνω σε μια παγκόσμια αρχή, ή που καθιστούν την τοπική λειτουργία ανέφικτη, λειτουργούν ενάντια στους στόχους του πρωτοκόλλου.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Κατανοητότητα</h4>
+                <p>Το πρωτόκολλο θα πρέπει να είναι κατανοητό από τις κοινότητες που εξυπηρετεί — όχι μόνο από μηχανικούς λογισμικού. Οι προδιαγραφές συντάσσονται σε απλή γλώσσα όπου είναι δυνατόν, με τις τεχνικές λεπτομέρειες να τοποθετούνται από κάτω.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Συναίνεση και ιδιωτικότητα</h4>
+                <p>Κανένα χαρακτηριστικό δεν θα πρέπει να επιτρέπει τη μετακίνηση δεδομένων χωρίς τη ρητή, ανακλητή και ελέγξιμη συναίνεση του μέρους στο οποίο ανήκουν. Λειτουργίες που παραβιάζουν το απόρρητο δεν θα ενσωματώνονται, ανεξάρτητα από την τεχνική τους κομψότητα.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Αναγέννηση</h4>
+                <p>Μετράμε την επιτυχία από το αν οι κοινότητες, οι οικολογίες και τα κοινά είναι πιο υγιή χάρη στο BeanPool — όχι από μετρήσεις ανάπτυξης ή την τιμή κάποιου νομίσματος.</p>
+            </div>
+        </div>
+
+        <h2>Πώς να ελέγξετε ότι το εννοούμε</h2>
+        <p>Ένας τέτοιος ισχυρισμός αξίζει μόνο όσο η δυνατότητα επαλήθευσής του, επομένως:</p>
+        <ul class="pe-check">
+            <li>Ολόκληρο το πρωτόκολλο είναι <strong>ανοιχτού κώδικα υπό την άδεια MIT</strong> — <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">διαβάστε τον κώδικα</a>, συμπεριλαμβανομένου κάθε κανόνα που περιγράφεται σε αυτή τη σελίδα.</li>
+            <li>Οι οικονομικοί κανόνες είναι καταγεγραμμένοι σε απλή γλώσσα στους <a href="rules.html">Κανόνες</a> — υπόλοιπα, πίστωση, χρεώσεις και πού πηγαίνει η καθεμία.</li>
+            <li>Η κοινότητά σας μπορεί να <strong>εκτελεί τον δικό της κόμβο</strong>. Εάν γινόμασταν ποτέ ο μεσάζοντας, θα μπορούσατε να αποχωρήσετε και να πάρετε την κοινότητά σας μαζί σας.</li>
+            <li>Δεν υπάρχει <strong>κανένα token και κανένας επενδυτής</strong>. Τα Φασόλια είναι αμοιβαία πίστωση για πραγματικές συναλλαγές και δεν διαπραγματεύονται ποτέ σε ανταλλακτήριο.</li>
+        </ul>
+
+        <div class="callout">Εν συντομία: <strong>μια οικονομία είναι μετά την εκμετάλλευση όταν η αξία που δημιουργεί μια κοινότητα δεν έχει από πουθενά να διαρρεύσει.</strong> Όχι επειδή όλοι είναι ενάρετοι, αλλά επειδή δεν υπάρχουν πόρτες στον σχεδιασμό.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Εικονίδιο BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Αμοιβαία πίστωση για κοινότητες, από τις κοινότητες.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Κέντρο βοήθειας</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Πώς λειτουργεί</a>
+                    <a href="getting-started.html">Ξεκινώντας</a>
+                    <a href="rules.html">Οι Κανόνες</a>
+                    <a href="post-extraction.html">Μετά την εκμετάλλευση</a>
+                    <a href="safety.html">Ασφάλεια παιδιών</a>
+                    <a href="../privacy.html">Πολιτική απορρήτου</a>
+                    <a href="../terms.html">Όροι χρήσης</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../post-extraction.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/post-extraction.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/post-extraction.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/post-extraction.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/post-extraction.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/post-extraction.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/post-extraction.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/post-extraction.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/post-extraction.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/post-extraction.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/post-extraction.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/post-extraction.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/post-extraction.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/post-extraction.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/post-extraction.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/post-extraction.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/post-extraction.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/post-extraction.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/post-extraction.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/post-extraction.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/post-extraction.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="post-extraction.html" hreflang="el" lang="el" aria-current="page">Ελληνικά</a>
+                    <a href="../fil/post-extraction.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/post-extraction.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/post-extraction.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Ανοιχτού κώδικα υπό την άδεια MIT. Φτιαγμένο με <img src="../bean.png" alt="αγάπη" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> από κοινότητες, για κοινότητες. Όρια ζωνών ώρας © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Συνεισφέροντες του OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

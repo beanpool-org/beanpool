@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool — مبادله برای جامعه‌ها، نه برای بانک‌های تجاری</title>
+    <meta name="description" content="BeanPool یک برنامه رایگان است که هر جامعه برای خود اجرا می‌کند تا کمک‌ها، کالاها و مهارت‌ها را به جای پول با لوبیا مبادله کند. جامعه‌ای نزدیک خود پیدا کنید یا راه‌اندازی کنید، یا با یک دعوت‌نامه بپیوندید؛ جامعه جهانی به‌زودی برای همه باز می‌شود. آیفون، اندروید و وب.">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../style.css?v=2.8">
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/">
+</head>
+<body dir="rtl">
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="#" class="logo"><img src="../bean.png" alt="آیکون BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="#how-it-works">نحوه کارکرد</a>
+                <a href="#features">کارهایی که می‌توانید انجام دهید</a>
+                <a href="rules.html">قوانین</a>
+                <a href="#run-a-node">راه‌اندازی یک جامعه</a>
+                <a href="help.html" title="همه قوانین، راهنماها و دستورالعمل‌ها در یک جا">راهنما</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="تماشای آموزش‌های ویدیویی در یوتیوب (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="پیوستن به جامعه ردیت (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="مشاهده در گیت‌هاب">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">شروع کار</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="باز کردن منو"><span aria-hidden="true">☰</span> منو</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">شروع کار</a>
+                    <a href="#how-it-works">نحوه کارکرد</a>
+                    <a href="#features">کارهایی که می‌توانید انجام دهید</a>
+                    <a href="rules.html">قوانین</a>
+                    <a href="#run-a-node">راه‌اندازی یک جامعه</a>
+                    <a href="help.html">راهنما</a>
+                    <a href="../guide/index.html">راهنمای اعضا</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">ویدیوها در یوتیوب</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool در ردیت</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">کد منبع در گیت‌هاب</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+            <div class="hero-header">
+                <div class="hero-badge">رایگان در گوشی و وب</div>
+                <h1>مبادله برای <span class="gradient-text">جامعه‌ها</span>،<br>نه برای بانک‌های تجاری</h1>
+                <p class="hero-subtitle">BeanPool یک برنامه رایگان است که جامعه شما برای مبادله کمک، کالا و مهارت با یکدیگر از آن استفاده می‌کند. به جای پول، از لوبیا استفاده می‌کنید: به کسی کمک کنید و لوبیا دریافت کنید؛ کمک بگیرید و لوبیا بدهید. هدف رسیدن به صفر است &mdash; تقریباً به همان اندازه‌ای که می‌گیرید، ببخشید.</p>
+            </div>
+
+            <div class="hero-lower-grid">
+                <!-- Left: what BeanPool is not -->
+                <div class="not-card glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">🚫 بیانیه ضد بهره‌کشی</span>
+                        <h3>آنچه BeanPool <span class="text-rose">نیست</span></h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>ماشین تحویل تبلیغات نیست</strong>
+                                <p>بدون ردیابی رفتاری، جمع‌آوری داده‌ها یا الگوریتم‌های مروجان ثروتمند شدن سریع.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>توکن سفته‌بازی رمزارز نیست</strong>
+                                <p>لوبیاها اعتبار متقابل برای تجارت واقعی هستند — هرگز در صرافی‌ها پامپ نمی‌شوند.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>ماشین قمار جلب توجه نیست</strong>
+                                <p>بدون اسکرول بی‌پایان برای دوپامین — فقط پیشنهادهای واقعی محلی و همسایگان.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>بدهی شرکتی یا بهره‌کشی مالی نیست</strong>
+                                <p>بدون بهره، بدون بانک، بدون واسطه. تنها کارمزدها ناچیز هستند و به صندوق مشاع خود جامعه می‌روند، نه به ما.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>یک برنامه رمزارز نیست</strong>
+                                <p>بدون بلاک‌چین، بدون سکه، بدون کیف پولی که نیاز به خرید داشته باشد. ۱۲ کلمه شما صرفاً حساب خودتان را باز می‌کند.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <div class="hero-cta-card glass-panel">
+                    <div class="hero-cta-header">
+                        <span class="hero-cta-tag">سه راه ورود</span>
+                        <h3>از همان‌جا که هستید شروع کنید</h3>
+                    </div>
+
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">اکنون در سراسر جهان امتحان کنید</a>
+                            <p>جامعه جهانی به‌زودی و بدون نیاز به دعوت‌نامه برای همه باز می‌شود: نگاهی بیندازید، چیزی رایگان یا برای معاوضه ارسال کنید و جامعه‌ای نزدیک خود پیدا کنید. این بخش امروز یک پیش‌نمایش خصوصی است. تا زمان باز شدن آن، جامعه‌هایی را که در حال حاضر فعال هستند در زیر ببینید، یکی را راه‌اندازی کنید، یا از دعوت‌نامه‌ای که عضوی به شما داده استفاده کنید.</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">یافتن یا راه‌اندازی یک جامعه</a>
+                            <p>جامعه‌هایی را که در حال حاضر فعال هستند ببینید، یا روی یک رایانه یدکی یا یک سرور اجاره‌ای کوچک یکی را راه‌اندازی کنید. درخواست ورود به جامعه‌ای در نزدیکی شما به‌زودی، با باز شدن جامعه جهانی، امکان‌پذیر خواهد بود.</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">دعوت‌نامه دارید؟</a>
+                            <p>برنامه را نصب کنید و پیوند یا کد QR که یکی از اعضا به شما داده است را باز یا اسکن کنید؛ هر دعوت‌نامه یک بار کار می‌کند و ۳۰ روز اعتبار دارد.</p>
+                        </div>
+                    </div>
+                    <p class="hero-web-note">لوبیاها در جامعه‌های محلی جریان دارند که هرکدام روی سرور خودشان قرار دارند. جامعه جهانی شما را راهنمایی می‌کند و به یکی از آن‌ها هدایت می‌نماید. این جامعه با یک نمونه نشان می‌دهد که لوبیا در آنجا چگونه کار می‌کند.</p>
+
+                    <div class="hero-logos-group">
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="دانلود از App Store">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Download on the</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                        <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                        <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="دریافت از Google Play">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">GET IT ON</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
+                        <p class="hero-web-note">به فروشگاه برنامه دسترسی ندارید؟ هم جامعه جهانی و هم جامعه خودتان در مرورگر گوشی شما باز می‌شوند؛ آن‌ها را به صفحه اصلی خود اضافه کنید.</p>
+                    </div>
+                    <!-- Where to find us: small round links, same destinations as the menu -->
+                    <div class="hero-social-row">
+                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" aria-label="BeanPool در یوتیوب" title="BeanPool در یوتیوب">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--youtube)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        </a>
+                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" aria-label="BeanPool در ردیت" title="BeanPool در ردیت">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--reddit)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                        </a>
+                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" aria-label="کد منبع BeanPool در گیت‌هاب" title="کد منبع BeanPool در گیت‌هاب">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hero Principles / Trust Banner -->
+            <div class="hero-principles-banner">
+                <div class="principle-item">
+                    <span class="principle-text">۱۰۰٪ رایگان</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">بدون خرید درون‌برنامه‌ای</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">متن‌باز</span>
+                </div>
+            </div>
+
+            <!-- How Beans move, below the two cards -->
+            <div class="hero-example-row">
+                <div class="not-card hero-example glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">نحوه گردش لوبیا</span>
+                        <h3>سه همسایه، یک هفته</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">1</div>
+                            <div class="not-item-content">
+                                <strong>سام دوچرخه آنا را تعمیر می‌کند &mdash; ۳۰ لوبیا</strong>
+                                <p>موجودی سام به ۳۰+ می‌رسد. موجودی آنا به ۳۰− کاهش می‌یابد.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">2</div>
+                            <div class="not-item-content">
+                                <strong>آنا برای لی نان می‌پزد &mdash; ۳۰ لوبیا</strong>
+                                <p>آنا به ۰ برمی‌گردد. موجودی لی اکنون ۳۰− است.</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">3</div>
+                            <div class="not-item-content">
+                                <strong>لی از سگ سام مراقبت می‌کند &mdash; ۳۰ لوبیا</strong>
+                                <p>همه نزدیک به صفر برمی‌گردند و سه کار بدون اینکه کسی پولی خرج کند انجام شد.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="hero-example-note">فروشنده ۹۸.۵٪ از هر مبلغ را نزد خود نگه می‌دارد؛ ۱.۵٪ دیگر به صندوق مشاع جامعه می‌رود، بنابراین ارقام واقعی کمی کمتر از این مقدار خواهند بود.</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>BeanPool چیست</h2>
+            </div>
+            <p class="what-it-is-lead">یک جامعه، BeanPool را روی سرور کوچک اختصاصی خود اجرا می‌کند. اعضا آنچه می‌توانند ارائه دهند و آنچه نیاز دارند را ارسال می‌کنند و با لوبیا دادوستد می‌کنند. لوبیا پولی نیست که خریداری کنید: نشانه‌ای ثبت‌شده است از اینکه کسی به فرد دیگری کمک کرده است. همه از صفر شروع می‌کنند. وقتی کمک می‌کنید، موجودی شما افزایش می‌یابد؛ وقتی به شما کمک می‌شود، کاهش می‌یابد؛ در سراسر جامعه، مجموع موجودی‌ها همیشه برابر با صفر است. هیچ‌کس لوبیا صادر نمی‌کند، هیچ‌کس آن را با بهره وام نمی‌دهد و هیچ‌کس آن را نقد نمی‌کند. کارمزد اندکی از هر دادوستد به صندوق متعلق به خود جامعه می‌رود که اعضا با رأی‌گیری درباره خرج کردن آن تصمیم می‌گیرند. این برنامه رایگان و متن‌باز است؛ هر جامعه سرور خودش را انتخاب می‌کند و داده‌های روی آن متعلق به خودشان است.</p>
+            <ul class="what-it-is-not">
+                <li><strong>رمزارز نیست.</strong> بدون بلاک‌چین، بدون توکن و بدون هیچ‌چیزی برای خرید یا فروش. ۱۲ کلمه شما صرفاً حساب خودتان را باز می‌کند.</li>
+                <li><strong>بانک نیست.</strong> اعتبار از تجارت خودتان حاصل می‌شود، بدون هیچ بهره‌ای: خط اعتباری شما پس از اولین معامله انجام‌شده با مقدار کمی باز می‌شود و با دادوستد بیشتر رشد می‌کند.</li>
+                <li><strong>یک شرکت واسطه نیست.</strong> BeanPool هیچ سهمی از معاملات برنمی‌دارد و هیچ تبلیغاتی نشان نمی‌دهد.</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">اعتبار متقابل پیشینه‌ای طولانی دارد: گروه‌های LETS دهه‌ها آن را روی کاغذ اجرا می‌کردند، و در سوئیس حلقه‌ای از کسب‌وکارها به نام WIR از سال ۱۹۳۴ با اعتبار اختصاصی خود تجارت کرده‌اند. کاغذبازی اداری همان چیزی است که بیشتر آن‌ها را فرسوده کرد. BeanPool همان کاغذبازی است که توسط برنامه انجام می‌شود.</p>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2>نحوه کارکرد</h2>
+                <p>از اولین صفحه تا اولین معامله شما.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
+                    <div class="step-number" aria-hidden="true">01</div>
+                    <div>
+                        <h3>۱. از یکی از سه مسیر وارد شوید</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>دعوت‌نامه‌ای را که عضوی برایتان فرستاده باز کنید؛ به‌زودی می‌توانید جامعه جهانی را نیز بدون دعوت‌نامه امتحان کنید و از آنجا از جامعه‌ای نزدیک خود بخواهید اجازه ورود دهد. در هر صورت، نامی را انتخاب می‌کنید که دیگران شما را با آن بشناسند.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🔑</div>
+                    <div class="step-number" aria-hidden="true">02</div>
+                    <div>
+                        <h3>۲. ۱۲ کلمه خود را نگه دارید</h3>
+                        <p>برنامه حساب شما را روی گوشی‌تان می‌سازد و ۱۲ کلمه را به شما نشان می‌دهد. آن‌ها را یادداشت کرده و در جای امنی نگه دارید: اگر گوشی خود را گم کنید یا تغییر دهید، حسابتان را بازمی‌گردانند.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
+                    <div class="step-number" aria-hidden="true">03</div>
+                    <div>
+                        <h3>۳. یک پیشنهاد ثبت کنید</h3>
+                        <p>کاری را که می‌توانید انجام دهید یا به اشتراک بگذارید درج کنید: همسفری تا شهر، تخم‌مرغ، تعمیر دوچرخه، یک ساعت باغبانی. در جامعه‌ای با لوبیا، قبل از اینکه بتوانید نیازی ثبت کنید یا خریدی انجام دهید، باید حداقل یک پیشنهاد فعال داشته باشید. در جامعه جهانی که فاقد لوبیا است، اولین پست شما می‌تواند یک نیاز باشد.</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-number" aria-hidden="true">04</div>
+                    <div>
+                        <h3>۴. معامله کنید</h3>
+                        <p>روی قیمتی بر حسب لوبیا توافق کنید. لوبیاها تا زمان اتمام کار به‌صورت امن نگهداری می‌شوند و سپس به فروشنده تحویل داده می‌شوند. پس از آن به یکدیگر امتیاز می‌دهید.</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-more"><a href="getting-started.html">راهنمای کامل شروع کار را بخوانید ←</a></p>
+        </div>
+    </section>
+
+    <!-- What you can do: one card per part of the app, in the app's own words -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>کارهایی که می‌توانید انجام دهید</h2>
+                <p>برنامه در بخش «خانه» باز می‌شود، مجموعه‌ای از کارت‌ها که خودتان انتخاب می‌کنید. در پشت آن: بازار، نقشه، گفتگو (در برنامه تحت وب با نام Chat)، افراد، نبض، مشاع و دفتر کل، جایی که موجودی و معاملات خود را در آن می‌بینید.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧺</div>
+                    <h3>بازار</h3>
+                    <p>آنچه افراد جامعه شما پیشنهاد می‌دهند و آنچه نیاز دارند، به همراه نظرسنجی‌ها و رویدادها در همان فید. جستجو کنید، بر اساس دسته‌بندی فیلتر نمایید و برای معامله ضربه بزنید.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗺️</div>
+                    <h3>نقشه</h3>
+                    <p>ببینید چه چیزهایی در نزدیکی شما ارائه می‌شود. هر پین را خودتان قرار می‌دهید: از موقعیت مکانی همان لحظه خود استفاده کنید، یا پین را با دست قرار دهید. وقتی اجازه دهید، برنامه همچنین از موقعیت شما برای نمایش نزدیک‌ترین موارد استفاده می‌کند، و هرگز در پس‌زمینه اجرا نمی‌شود. پین‌های رویداد و پین‌های طرح تجاری تنظیم‌شده در برنامه تحت وب را می‌توان روی تقریبی قرار داد که محل را تا حدود ۱۰۰&nbsp;متر گرد می‌کند. پین‌ها توسط اعضای جامعه شما دیده می‌شوند. وقتی جامعه جهانی برای همه باز شود، یک بازدیدکننده فهرست‌ها و موقعیت تقریبی آن‌ها را می‌بیند، اما هیچ نام، عکس نمایه یا محل دقیقی را نمی‌بیند. هر کسی می‌تواند ظرف یک دقیقه به آن بپیوندد، بنابراین اعضای آن نیز فهرست‌های یکدیگر را تا حدود یک کیلومتر می‌بینند؛ محل دقیق برای زمانی است که برای ملاقات هماهنگ می‌کنید و خودتان به اشتراک می‌گذارید.</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📅</div>
+                    <h3>رویدادها <span class="new-pill">جدید</span></h3>
+                    <p>یک کار گروهی داوطلبانه، یک کارگاه تعمیر یا اشتراک مهارت را با زمان و مکان مشخص ارسال کنید. افراد روی «می‌روم» یا «علاقه‌مندم» ضربه می‌زنند. شرکت‌کنندگان به چت رویداد و یادداشت خصوصی میزبان &mdash; کد ورودی، وسایل مورد نیاز &mdash; دسترسی پیدا می‌کنند و در صورت تغییر زمان یا مکان یا لغو رویداد مطلع می‌شوند. در جایی که هر کسی می‌تواند بپیوندد، مانند جامعه جهانی، میزبان به‌طور پیش‌فرض ابتدا به هر فرد اجازه ورود می‌دهد. رویدادها رایگان هستند؛ هیچ لوبیایی دست به دست نمی‌شود. آن‌ها را در نقشه زیر «امروز»، «این آخر هفته» یا «۷ روز آینده» پیدا کنید و از «کپی به تاریخی دیگر» برای برگزاری مجدد استفاده کنید.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">💬</div>
+                    <h3>گفتگو (Chat در برنامه تحت وب)</h3>
+                    <p>به هر کسی در جامعه خود پیام دهید. پیام‌های مستقیم و گپ‌های گروهی سرتاسر رمزگذاری شده‌اند: نود جامعه شما آن‌ها را منتقل می‌کند اما نمی‌تواند آن‌ها را بخواند. در نودی که هنوز به‌روزرسانی نشده است، یک گپ گروهی همچنان می‌تواند توسط گردانندگان خوانده شود و در چت این موضوع ذکر می‌شود. مباحث طرح تجاری و چت‌های رویداد می‌توانند توسط افرادی که نود جامعه شما را اداره می‌کنند خوانده شوند تا امکان مدیریت و تعدیل محتوا وجود داشته باشد.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>مشاع: طرح‌های تجاری <span class="new-pill">جدید</span></h3>
+                    <p>طرح تجاری فعالیتی است که جامعه شما با هم اداره می‌کند: پرورش مرغ تخم‌گذار، کتابخانه ابزار، انبار هیزم، یا پروژه‌ای با یک هدف و تاریخ پایان مشخص. مدیران آن را اداره می‌کنند و یک مدیر ارشد آن را هدایت می‌نماید؛ اعضا می‌توانند درخواست دهند تا به‌عنوان مدیر بپیوندند. این بخش لوبیای اختصاصی خود را دارد، پیشنهادها و نیازها را مانند هر شخص دیگری در بازار ثبت می‌کند، درآمد و هزینه‌های خود را نشان می‌دهد و می‌تواند برای یک فصل متوقف شود. هیچ مدیری نمی‌تواند پرداختی به خودش را تأیید کند: مدیر دیگری باید این کار را انجام دهد.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>نظرسنجی‌ها و تصمیمات <span class="new-pill">جدید</span></h3>
+                    <p>هر کسی می‌تواند با یک نظرسنجی در بازار از جامعه سؤالی بپرسد. انتخاب‌های بزرگ‌تر، «تصمیمات» در برگه مشاع هستند: کمک مالی از صندوق مشاع به یک طرح تجاری، کمک‌هزینه برای شرایط سخت، یا جایگزینی یک مدیر ارشد. یک تصمیم به مدت ۷ روز باز است و در صورت تصویب خودبه‌خود اجرا می‌شود. پس از تکمیل یک معامله، می‌توانید تصمیمی را پیشنهاد دهید.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>گروه‌ها <span class="new-pill">جدید</span></h3>
+                    <p>گروهی برای خیابان، باشگاه باغبانی یا گروه موسیقی خود راه‌اندازی کنید و خودتان هماهنگ‌کننده آن شوید. فقط برای اعضای گروه پست بگذارید و انتخاب کنید که عضویت باز باشد، افراد درخواست عضویت دهند، یا فقط با دعوت باشد.</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>نبض</h3>
+                    <p>ببینید افراد محلی چه چیزهایی تولید می‌کنند. اعضا می‌توانند کانال‌های خود &mdash; تیک‌تاک، اینستاگرام، یوتیوب، ساندکلاد یا فید وبلاگ &mdash; را متصل کنند و پست‌های عمومی آن‌ها در نبض جامعه شما نمایش داده می‌شود. اتصال به انتخاب خود هر عضو است. هر چیزی که نباید در آنجا باشد قابل گزارش است و نود جامعه شما می‌تواند آن را حذف کند.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>اعتباری که کسب می‌کنید، نه قرضی</h2>
+                <p>هیچ‌کس لوبیا نمی‌خرد، و هیچ‌کس بهره‌ای پرداخت نمی‌کند.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>همه از صفر شروع می‌کنند</h3>
+                    <p>حساب جدید دارای ۰ لوبیا است. وقتی می‌فروشید، موجودی شما افزایش می‌یابد؛ وقتی می‌خرید، کاهش می‌یابد. در کل جامعه، مجموع موجودی‌ها همیشه برابر صفر است.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>اولین معامله شما یک خط اعتباری باز می‌کند</h3>
+                    <p>پس از انجام یک معامله، می‌توانید به زیر صفر بروید تا قبل از جبران، کمک دریافت کنید. خط اعتباری شما از مقدار کمی شروع می‌شود (یک معامله ۱۰۰ لوبیایی حدود ۳۷ لوبیا از آن را ایجاد می‌کند) و با دادوستد با افراد بیشتر افزایش می‌یابد. پیشنهادهایی که فعال نگه می‌دارید مشخص می‌کنند چه مقدار از آن را می‌توانید استفاده کنید: یک پیشنهاد تا ۲۰۰ لوبیا، پنج پیشنهاد تا ۲۰۰۰ لوبیا.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>نشان‌ها، نه موانع</h3>
+                    <p>با گذشت زمان نشان‌هایی کسب می‌کنید: تازه‌وارد، ساکن، پیشکار، ریش‌سفید. آن‌ها پیشینه شما را در جامعه نشان می‌دهند. آن‌ها چیزی را باز نمی‌کنند. مدیر سیستم همچنین می‌تواند به فردی نشان بدهد و همراه با آن، خط اعتباری آغازین آن نشان را اعطا کند.</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">قوانین را برای دیدن همه ارقام بخوانید ←</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">کارمزدها کجا می‌روند</span>
+                    <h3>ارزش در جامعه شما باقی می‌ماند</h3>
+                </div>
+                <p class="stays-local-lead">کارمزد ۱.۵٪ برای معاملات انجام‌شده، و کارمزد ماهانه ناچیز برای بخشی از موجودی که بالای ۲۰۰ لوبیا باشد، به صندوق مشاع جامعه شما می‌رود &mdash; نه به ما یا هر کس دیگری. جامعه شما از طریق «تصمیمات» درباره محل هزینه این صندوق تصمیم می‌گیرد.</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>بدون تبلیغات و بدون ردیابی</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>بدون توکن برای خرید یا فروش &mdash; لوبیا صرفاً برای دادوستد است</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>بدون بهره و بدون بانک</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">چرا آن را این‌گونه ساختیم: اقتصادی پسا-بهره‌کشی ←</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>حساب شما و امنیت شما</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>کلید شما روی گوشی شما می‌ماند</h3>
+                    <p>در برنامه گوشی، کلید شما در فضای ذخیره‌سازی امن گوشی نگهداری می‌شود و می‌توانید قفل برنامه را اضافه کنید که از همان قفل صفحه گوشی شما استفاده می‌کند. در برنامه تحت وب، کلید در حافظه اختصاصی همان مرورگر نگهداری می‌شود. ۱۲ کلمه شما نسخه پشتیبانی هستند که به هیچ‌کس وابسته نیستند.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>گزارش هر مورد مشکوک</h3>
+                    <p>می‌توانید یک پست، یک عضو، یک رویداد یا یک مورد از نبض را گزارش کنید و هر کاربری را مسدود نمایید. گزارش‌ها به دست افرادی می‌رسد که نود جامعه شما را اداره می‌کنند &mdash; مالک و مدیران سیستم &mdash; که می‌توانند محتوا و حساب‌ها را حذف کنند. اعضا همچنین می‌توانند برای تعلیق یا حذف یک فرد در تصمیمات رأی دهند.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>جزئیات قانونی و دقیق</h3>
+                    <p>چه چیزی ذخیره می‌شود، چه کسی می‌تواند آن را ببیند و چگونه حسابتان را حذف کنید.</p>
+                    <p class="card-links"><a href="../privacy.html">سیاست حفظ حریم خصوصی</a>&nbsp;· <a href="safety.html">ایمنی کودکان</a>&nbsp;· <a href="../terms.html">شرایط استفاده</a>&nbsp;· <a href="../data-deletion.html">حذف داده‌های شما</a></p>
+                </div>
+                <div class="feature-card glass-panel feature-wide" id="key-copy">
+                    <h3>راه دوم برای دسترسی مجدد به کلیدتان، و اینکه چه کسی می‌تواند آن را باز کند</h3>
+                    <p>همچنین می‌توانید ورود با Google، Apple یا Facebook را به‌عنوان راه دوم بازگشت متصل کنید. در این صورت، یک نسخه قفل‌شده از کلید شما برای آن ورود نگهداری می‌شود. برنامه‌های گوشی که از خزن کلید BeanPool استفاده می‌کنند، آن را در آنجا نگه می‌دارند، روی یک سرور کوچک در ایسلند که هیچ کار دیگری انجام نمی‌دهد؛ نسخه‌های قدیمی‌تر برنامه گوشی آن را روی نود جامعه شما نگهداری می‌کنند؛ برنامه تحت وب در جامعه جهانی آن را روی سرور همان جامعه که ما اداره می‌کنیم نگه می‌دارد. هر کس نسخه را نگه دارد می‌تواند آن را باز کند: BeanPool برای خزن و جامعه جهانی، افرادی که نود شما را اداره می‌کنند برای نسخه‌ای که در آنجا نگهداری می‌شود. بازیابی از خزن یک روز به انتظار می‌ماند مگر اینکه یکی از دستگاه‌های خودتان تأیید کند که خود شما هستید. آن نسخه، و کپی کردن حسابتان به دستگاه دیگر شما، تنها راه‌هایی هستند که کلید شما از دستگاهتان خارج می‌شود.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <span id="find-or-start"></span>
+        <div class="container">
+            <div class="section-header">
+                <h2>مبادله محلی خود را پیدا کنید</h2>
+                <p>جامعه‌هایی که BeanPool را اجرا می‌کنند و نام خود را در فهرست ثبت کرده‌اند.</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">هنوز جامعه‌ای در نزدیکی شما نیست.</span>
+                    <a id="map-empty-start" href="#run-a-node">راه‌اندازی یک جامعه</a>
+                </div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">جامعه‌های فهرست‌شده</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">اعضا (طبق گزارش)</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
+        <div class="container">
+            <div class="section-header">
+                <span class="audience-tag">برای سازمان‌دهندگان جامعه</span>
+                <h2>اجرای BeanPool برای جامعه خود</h2>
+                <p>هر جامعه روی نود اختصاصی خود اجرا می‌شود: یک سرور کوچک که اعضا، پست‌ها و دفتر کل آن جامعه را در خود نگه می‌دارد. فردی محلی آن را اداره می‌کند. اگر شهر یا منطقه شما هنوز نودی ندارد، آن فرد می‌تواند شما باشید.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>مسئولیت‌های شما چیست</h3>
+                    <p>شما و مدیرانی که منصوب می‌کنید ناظران جامعه خود هستید: گزارش‌ها به دست شما می‌رسد. داده‌های اعضای شما روی دستگاه شما ذخیره می‌شود، بنابراین شما نسخه پشتیبان آن را نگه می‌دارید. شما می‌توانید گفتگوهای طرح تجاری و چت‌های رویداد را بخوانید؛ نمی‌توانید پیام‌های مستقیم را بخوانید. شما اولین اعضا را دعوت می‌کنید و آن‌ها بقیه را دعوت می‌نمایند.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>برنامه تنظیمات</h3>
+                    <p>نود شما همراه با برنامه تنظیمات اختصاصی خود در مرورگر ارائه می‌شود. از طریق آن، جامعه خود را نام‌گذاری می‌کنید، یک مالک و مدیرانی را منصوب می‌کنید که با کلیدهای خود وارد می‌شوند، دعوت‌نامه‌های QR را چاپ می‌کنید، سلامت دیسک را زیر نظر می‌گیرید، آدرس وب عمومی یا تونل را انتخاب می‌کنید، و به عضوی که هم گوشی و هم ۱۲ کلمه خود را گم کرده کمک می‌کنید تا با یک کد یک‌بارمصرف که شخصاً تأیید می‌کنید، به حساب خود در یک گوشی جدید بازگردد.</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>از اولین راه‌اندازی خصوصی است</h3>
+                    <p>فهرست‌ها، نقشه، پیام‌ها و موجودی‌های یک جامعه از لحظه شروع نود، فقط برای اعضای آن است؛ چیزی برای روشن کردن وجود ندارد. اگر فردی بدون داشتن حساب، آدرس آن را باز کند، به جامعه جهانی هدایت می‌شود که به‌زودی برای همه باز خواهد شد.</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>پیوند با یک جامعه همسایه</h3>
+                    <p>دو جامعه می‌توانند برای ایجاد پیوند توافق کنند تا اعضای آن‌ها بتوانند با یکدیگر معامله کنند. لوبیاها هرگز محل خود را ترک نمی‌کنند: هر جفت حساب جاری از آنچه یک جامعه به جامعه دیگر بدهکار است را نگه می‌دارد و هر طرف سقف مشخصی برای خود تعیین می‌کند. پیوند غیرفعال است مگر اینکه گردانندگان هر دو طرف آن را فعال کنند، و هنوز در مراحل اولیه است: این ویژگی همراه با صفحه‌های آن در برنامه تحت وب ساخته شده است و فقط بین دو جامعه آزمایشی خودمان آزمایش شده است، نه میان جوامع فعال واقعی.</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>راه‌اندازی یک جامعه</h2>
+                <p>حدود نیم ساعت زمان می‌برد، اگر بتوانید یک دستورالعمل ساده را دنبال کنید. ابتدا شش نکته‌ای که باید بدانید:</p>
+                <ul class="run-node-facts">
+                    <li><strong>هزینه آن چقدر است.</strong> نرم‌افزار رایگان است. روی یک رایانه یدکی که در خانه روشن بماند (یک Mini PC، یک NAS یا یک رزبری پای با سیستم ۶۴ بیتی)، یا روی یک سرور اجاره‌ای کوچک با هزینه چند دلار در ماه (حدود ۶ دلار آمریکا) اجرا می‌شود.</li>
+                    <li><strong>چه کسی آن را میزبانی می‌کند.</strong> شما، روی دستگاه خودتان یا دستگاهی که اجاره می‌کنید. هرگز نیازی به beanpool.org نیست: آدرس وب اختصاصی خودتان کار می‌کند.</li>
+                    <li><strong>مسئولیت‌هایی که بر عهده می‌گیرید.</strong> گزارش‌های اعضا به شما می‌رسد. پوشه داده‌ها در اختیار شماست تا با یک کد بازیابی از آن نسخه پشتیبان تهیه کنید. دو مالک داشته باشید. سرور را روشن و به‌روز نگه دارید.</li>
+                    <li><strong>آنچه هرگز نمی‌بینید.</strong> پیام‌های مستقیم اعضای شما.</li>
+                    <li><strong>ابتدا داکر (Docker).</strong> پیش از اجرای بلوک زیر، دستگاه باید داکر نصب شده داشته باشد؛ یک سرور تازه اجاره‌شده داکر ندارد.</li>
+                    <li><strong>آدرسی که گوشی‌ها بتوانند به آن متصل شوند.</strong> گوشی‌ها فقط از طریق https در اینترنت به یک جامعه متصل می‌شوند. در یک سرور اجاره‌ای با آدرس IP عمومی و پورت‌های باز ۸۰ و ۴۴۳، همان آدرس IP کافی است: سرور شما گواهی اختصاصی خود را بدون نیاز به حساب Cloudflare برای آن دریافت می‌کند، و همین امر برای دامنه اختصاصی شما نیز صدق می‌کند. در خانه یا بدون پورت‌های باز، فرایند ثبت به شما یک نام رایگان با پسوند .beanpool.org از طریق تونلی که خود سرور اجرا می‌کند می‌دهد. آدرس معمولی http:// فقط روی یک شبکه خانگی کار می‌کند.</li>
+                </ul>
+                <p>سپس، در آن رایانه‌ای که داکر روی آن نصب است، این یک بلوک را جای‌گذاری کنید. این دستور فایل compose را دریافت می‌کند، شبکه‌ای را که نود استفاده می‌کند می‌سازد، تصویر منتشرشده را دریافت می‌کند (Intel/AMD یا ARM64)، آن را اجرا می‌کند، منتظر می‌ماند تا سرور کد مالکیت یک‌بارمصرف خود را بسازد (تا پنج دقیقه، برای اولین راه‌اندازی کند در رزبری پای)، و آن را ثبت می‌کند. قبل از شروع هیچ چیزی برای پیکربندی وجود ندارد.</p>
+
+                <!-- macOS Style Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — راه‌اندازی یک جامعه</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">یک بلوک: دریافت، شبکه، دانلود، اجرا، انتظار، ثبت</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="کپی در کلیپ‌بورد">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">خط آخر: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>آدرس شما.</strong> پیش از چسباندن کد، آن را انتخاب کنید و خط آخر را متناسب با آن تغییر دهید. اگر قبلاً چسبانده‌اید، در پاسخ به سؤالات Enter را بزنید، سپس خط آخر را دوباره اجرا کنید: کد مالکیت منتظر یک گوشی می‌ماند. <strong>یک سرور اجاره‌ای</strong> با آدرس IP عمومی و پورت‌های باز ۸۰ و ۴۴۳: عبارت <code>--ip</code> و آدرس IP آن را اضافه کنید، مانند <code>beanpool claim --ip 203.0.113.7</code>. سرور شما گواهی اختصاصی خود را برای آن آدرس از طریق Let's Encrypt روی پورت ۸۰ دریافت می‌کند و گوشی‌ها در نشانی https://203.0.113.7 به آن متصل می‌شوند. <strong>یک رایانه در خانه، یا بدون پورت‌های باز</strong>: آن را همان‌طور که هست بگذارید. این دستور بخش اول نام رایگان را می‌پرسد (فقط عبارت <strong>yourtown</strong> را برای yourtown.beanpool.org تایپ کنید؛ زدن Enter از آن رد می‌شود)، که از طریق تونلی که خود سرور اجرا می‌کند در دسترس قرار می‌گیرد و تا سه دقیقه منتظر فعال شدن آن می‌ماند. <strong>دامنه اختصاصی شما</strong>: یک رکورد A برای آن به سمت آدرس IP سرور تنظیم کنید، پورت‌های ۸۰ و ۴۴۳ را باز بگذارید و عبارت <code>--address https://your.domain</code> را اضافه کنید. یک نام پس از تغییر سرور باقی می‌ماند؛ یک عدد IP باقی نمی‌ماند: می‌توانید بعداً در تنظیمات نامی اضافه کنید و اعضایی که از آدرس IP استفاده می‌کنند همچنان متصل می‌مانند. برای انتخاب در آینده از طریق تنظیمات، عبارت <code>--no-name</code> را اضافه کنید. یک آدرس معمولی <code>http://</code> فقط روی شبکه خانگی کار می‌کند: گوشی‌ها در اینترنت آن را رد می‌کنند و دستور ثبت به شما هشدار می‌دهد. اگر سرویس آدرس پروژه BeanPool قطع باشد، دستور ثبت همچنان کار می‌کند.</li>
+                    <li><strong>کد و QR.</strong> یک کد مالکیت یک‌بارمصرف و یک کد QR نشان می‌دهد. کد QR را با دوربین گوشی خود اسکن کنید، یا BeanPool را باز کنید، آدرس سرور را در بخش <strong>جامعه خود را پیدا کنید</strong> تایپ کنید و روی <strong>ثبت (Claim)</strong> ضربه بزنید. آن گوشی مالک جامعه می‌شود.</li>
+                    <li><strong>تنظیمات.</strong> آدرس خود (یا آدرس سرور) را به همراه <strong>/settings</strong> در انتها باز کنید. راهنمای راه‌اندازی جامعه شما را نام‌گذاری می‌کند، از شما می‌خواهد مالک دومی اضافه کنید و سه دعوت‌نامه اولیه می‌سازد. مکان خود را روی نقشه زیر هویت نود تنظیم کنید تا افراد نزدیک بتوانند شما را پیدا کنند.</li>
+                </ol>
+                <p class="run-node-note">اگر در بلوک متن <strong>No claim code after 5 minutes</strong> نمایش داده شد، یا دستور <code>beanpool claim</code> اعلام کرد <strong>This community has no claim code waiting</strong>، سرور هنوز مراحل راه‌اندازی را به پایان نرسانده است: دستور <code>docker compose logs beanpool-node</code> نشان می‌دهد در چه مرحله‌ای قرار دارد. هنگامی که در گزارش ثبت شد جامعه هنوز مالکی ندارد و کد مالکیت آماده است، خط آخر را دوباره اجرا کنید. مراحل کامل در بخش <a href="../guide/operators/first-time-setup.html">راه‌اندازی اولیه</a> از راهنمای گردانندگان آمده است.</p>
+
+                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    مشاهده در GitHub ←
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section id="newsletter">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="newsletter-content">
+                    <h3><img src="../bean.png" alt="آیکون" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />در جریان باشید</h3>
+                    <p>هنگام انتشار نسخه جدید یا راه‌اندازی جامعه جدید، ایمیل دریافت کنید.</p>
+                </div>
+                <div class="newsletter-form-container">
+                    <form id="newsletter-form" class="newsletter-form">
+                        <input type="email" id="newsletter-email" placeholder="you@example.com" aria-label="نشانی ایمیل" required>
+                        <button type="submit" class="btn btn-primary btn-subscribe">اشتراک</button>
+                    </form>
+                    <div id="newsletter-status" class="newsletter-status"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="آیکون BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>برنامه‌ای رایگان برای دادوستد با همسایگان، با لوبیا.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">مرکز راهنما</a>
+                    <a href="getting-started.html">شروع کار</a>
+                    <a href="rules.html">قوانین</a>
+                    <a href="post-extraction.html">پسا-بهره‌کشی</a>
+                    <a href="#run-a-node">راه‌اندازی یک جامعه</a>
+                    <a href="../guide/index.html">راهنمای اعضا</a>
+                    <a href="status.html">وضعیت سرور</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="../privacy.html">سیاست حفظ حریم خصوصی</a>
+                    <a href="../terms.html">شرایط خدمات</a>
+                    <a href="safety.html">ایمنی کودکان</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../index.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/index.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/index.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/index.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/index.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/index.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/index.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/index.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/index.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/index.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/index.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/index.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/index.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/index.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/index.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/index.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/index.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/index.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="index.html" hreflang="fa" lang="fa" aria-current="page">فارسی</a>
+                    <a href="../vi/index.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/index.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/index.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/index.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/index.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>متن‌باز تحت مجوز MIT. ساخته شده با <img src="../bean.png" alt="عشق" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> توسط جامعه‌ها، برای جامعه‌ها. مرزهای منطقه زمانی © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">مشارکت‌کنندگان OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../main.js?v=1.10"></script>
+</body>
+</html>

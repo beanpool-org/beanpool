@@ -103,7 +103,7 @@ async function main() {
         const { publicKey } = createTreasury(name, AVATAR, 0, withLocation
             ? { leadKeeperPubkey: keeper.pubKeyHex, lat: -28.55, lng: 153.5, locationAuthSigner: keeper.pubKeyHex }
             : { leadKeeperPubkey: keeper.pubKeyHex });
-        adminAssignTreasuryOperator(publicKey, keeper.pubKeyHex, 'admin', 0);
+        adminAssignTreasuryOperator(publicKey, keeper.pubKeyHex, 'admin');
         return publicKey;
     };
     const setStatus = (pk: string, status: string) =>

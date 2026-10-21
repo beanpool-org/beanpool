@@ -3,7 +3,7 @@ slug: how-it-works
 title: Cách BeanPool hoạt động
 summary: Đậu, giao dịch, lời đề nghị và nhu cầu, cùng tín dụng bằng lời giải thích đơn giản.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Đậu
@@ -70,7 +70,7 @@ Một số cộng đồng xác nhận danh tính thành viên của mình. Ở �
 
 ## Huy hiệu tin cậy
 
-Mức uy tín của bạn hiển thị dưới dạng huy hiệu. Các huy hiệu gồm Người mới, Cư dân, Quản lý và Trưởng bối. Uy tín đằng sau huy hiệu của bạn là tổng của ba điều: mức khởi đầu do người bảo lãnh trao cho bạn, uy tín bạn kiếm được từ giao dịch, và uy tín do quản trị viên cấp cho bạn. Quản trị viên có thể trao huy hiệu trực tiếp cho thành viên mà không cần giao dịch. Trong một cộng đồng có xác nhận thành viên, hạn mức tín dụng mà thành viên đã xác nhận nhận được cũng được tính.
+Mức uy tín của bạn hiển thị dưới dạng huy hiệu. Các huy hiệu gồm Người mới, Cư dân, Quản lý và Trưởng bối. Uy tín đằng sau huy hiệu của bạn là tổng của ba điều: mức khởi đầu do người bảo lãnh trao cho bạn, uy tín bạn kiếm được từ giao dịch, và uy tín do quản trị viên cấp cho bạn. Quản trị viên có thể trao huy hiệu trực tiếp cho thành viên mà không cần giao dịch. Trong một cộng đồng có xác nhận thành viên, thành viên đã xác nhận nhận được hạn mức tín dụng cao hơn chứ không phải huy hiệu cao hơn: huy hiệu của họ chỉ tính những gì họ đã làm.
 
 - Cư dân từ 200 uy tín.
 - Quản lý từ 600 uy tín.

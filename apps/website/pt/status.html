@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status do servidor — BeanPool</title>
+    <meta name="description" content="Status de resposta dos servidores do BeanPool: a comunidade global, a comunidade de testes e o registrador, verificados externamente a cada 5 minutos.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.8">
+    <!-- beanpool.org/status: the public status line of our own servers (the mothership design §3.2 U4, slice A8,
+     accepted by Marty 18 Oct 2026). The registrar's watch looks at them from outside every 5 minutes and writes
+     status.json (apps/registrar/src/status.js); this page reads it from the visitor's browser at
+     /api/registrar/status.json and draws it. Only our servers are on it, never a community's: local communities
+     run on their own servers and no node reads this page. Colours are the site's tokens (style.css), light and
+     dark. Checked by scripts/website-status.test.mjs. -->
+    <style>
+        .status-page { max-width: 40rem; margin: 120px auto 60px; padding: 2.5rem; border-radius: var(--radius-lg); overflow-wrap: anywhere; }
+        .status-page [hidden] { display: none; }
+        .status-page h1 { font-family: var(--font-header); font-size: clamp(1.9rem, 4vw, 2.4rem); font-weight: 900; line-height: 1.15; color: var(--text-heading); margin-bottom: 0.75rem; }
+        .status-page .lede { font-size: 1.05rem; line-height: 1.6; color: var(--text-secondary); margin-bottom: 1.25rem; }
+        .status-note { font-size: 1rem; line-height: 1.5; color: var(--text-secondary); margin: 0 0 1rem; }
+        .status-note[data-tone="late"] { color: var(--accent-ink); font-weight: 600; }
+        .status-list { list-style: none; display: grid; gap: 0.9rem; margin: 0; padding: 0; }
+        .status-row { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem 1.1rem; background: rgba(var(--rgb-panel), 0.5); }
+        .status-head { display: flex; align-items: center; gap: 0.35rem 0.6rem; flex-wrap: wrap; }
+        .status-dot { width: 0.75rem; height: 0.75rem; border-radius: 50%; flex: none; background: var(--text-muted); }
+        .status-name { font-family: var(--font-header); font-size: 1.1rem; font-weight: 700; line-height: 1.3; color: var(--text-heading); flex: 1 1 10rem; min-width: 0; }
+        .status-state { font-size: 0.95rem; font-weight: 600; color: var(--text-muted); }
+        .status-host { font-size: 0.85rem; line-height: 1.4; color: var(--text-muted); margin: 0.2rem 0 0.5rem; }
+        .status-share, .status-incident { font-size: 0.95rem; line-height: 1.5; color: var(--text-secondary); margin: 0.3rem 0 0; }
+        .status-share strong { color: var(--text-primary); }
+        /* Each state in words and in a colour of its own; the words carry it, the dot repeats it. */
+        .status-row[data-state="up"] .status-dot { background: var(--success-ink); }
+        .status-row[data-state="up"] .status-state { color: var(--success-ink); }
+        .status-row[data-state="down"] { border-color: rgba(var(--rgb-danger), 0.5); }
+        .status-row[data-state="down"] .status-dot { background: var(--danger-ink); }
+        .status-row[data-state="down"] .status-state { color: var(--danger-ink); }
+        .status-row[data-state="missed"] .status-dot { background: var(--accent-ink); }
+        .status-row[data-state="missed"] .status-state { color: var(--accent-ink); }
+        .status-foot { font-size: 0.85rem; line-height: 1.5; color: var(--text-muted); margin-top: 1.25rem; }
+        @media (max-width: 768px) {
+            .status-page { margin: 100px 16px 40px; padding: 1.75rem 1.25rem; }
+        }
+        @media (max-width: 400px) {
+            .status-page { padding: 1.5rem 1rem; }
+            .status-row { padding: 0.9rem 0.85rem; }
+        }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/status">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/status">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/status">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/status">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/status">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/status">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/status">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/status">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/status">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/status">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/status">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/status">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/status">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/status">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/status">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/status">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/status">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/status">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/status">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/status">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/status">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/status">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/status">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/status">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/status">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/status">
+</head>
+<body>
+    <nav id="navbar">
+        <div class="nav-inner">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Ícone do BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Como funciona</a>
+                <a href="help.html">Ajuda</a>
+                <a href="getting-started.html" class="nav-cta">Primeiros passos</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="status-page glass-panel">
+        <h1>Status do servidor</h1>
+        <p class="lede">Status de resposta dos servidores do próprio BeanPool, verificados externamente a cada 5 minutos. Comunidades locais operam em servidores próprios e não constam nesta página: se os nossos ficarem fora do ar, elas continuam funcionando normalmente.</p>
+        <p class="status-note" id="status-note" role="status">Lendo o status…</p>
+        <ul class="status-list" id="status-list" hidden></ul>
+        <p class="status-foot" id="status-foot" hidden></p>
+        <noscript><p class="status-note">Esta página precisa de JavaScript para ler o status. Os dados brutos: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
+    </main>
+
+    <script>
+    // Reads status.json from the registrar (same site: beanpool.org/api/registrar/status.json) and draws it. Everything
+    // it shows is set as text, never as markup. Read again every 5 minutes while the page is in view.
+    (function () {
+        var URL_ = '/api/registrar/status.json';
+        var LATE_S = 15 * 60;   // three ticks without a new status: the registrar's checks are late
+        var SERVERS = {
+            global: { label: 'A comunidade global', host: 'global.beanpool.org' },
+            test: { label: 'A comunidade de teste', host: 'test.beanpool.org' },
+            vault: { label: 'O cofre de chaves', host: 'vault.beanpool.org' },
+            registrar: { label: 'Endereços das comunidades', host: 'beanpool.org: fornece às comunidades seus endereços nome.beanpool.org. Quando estiver fora do ar, esses endereços continuam funcionando; novos endereços e links beanpool.org/i/ aguardam.' },
+        };
+        var WHY = {
+            'timed-out': 'não respondeu a tempo',
+            'unreachable': 'não pôde ser alcançado',
+            'not-ours': 'outro serviço respondeu em seu endereço',
+            'checks-missed': 'as verificações não foram executadas',
+        };
+        var list = document.getElementById('status-list');
+        var note = document.getElementById('status-note');
+        var foot = document.getElementById('status-foot');
+
+        function num(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+        function el(tag, cls, text) {
+            var e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (text !== undefined) e.textContent = text;
+            return e;
+        }
+        var timeFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        var zoneFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+        var dayFmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+        function when(s) { return timeFmt.format(new Date(s * 1000)); }
+        function day(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d) ? dayFmt.format(new Date(d + 'T00:00:00Z')) : null; }
+        function lasted(s) {
+            var m = Math.max(1, Math.round(s / 60));
+            if (m < 60) return m + (m === 1 ? ' minuto' : ' minutos');
+            var h = Math.floor(m / 60), r = m % 60;
+            if (h >= 48) return Math.round(h / 24) + ' dias';
+            return h + (h === 1 ? ' hora' : ' horas') + (r ? ' ' + r + (r === 1 ? ' minuto' : ' minutos') : '');
+        }
+        function why(code) {
+            if (typeof code !== 'string') return 'não respondeu';
+            var http = code.match(/^http-(\d{3})$/);
+            if (http) return 'respondeu com um erro (HTTP ' + http[1] + ')';
+            return WHY[code] || 'não respondeu';
+        }
+
+        function row(s, late) {
+            var known = SERVERS[s.name] || { label: s.name, host: '' };
+            var inc = s.incident && num(s.incident.began_at) ? s.incident : null;
+            var open = inc && inc.ended_at === null;
+            var state, words;
+            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Suas verificações estão atrasadas'; }
+            else if (open) { state = 'down'; words = 'Fora do ar'; }
+            else if (s.up === true) { state = 'up'; words = 'Respondendo'; }
+            else if (s.up === false) { state = 'missed'; words = 'Falhou na última verificação'; }
+            else { state = 'unknown'; words = 'Ainda não verificado'; }
+
+            var li = el('li', 'status-row');
+            li.setAttribute('data-state', state);
+            li.setAttribute('data-name', s.name);
+            var head = el('div', 'status-head');
+            var dot = el('span', 'status-dot');
+            dot.setAttribute('aria-hidden', 'true');
+            head.appendChild(dot);
+            head.appendChild(el('h2', 'status-name', known.label));
+            head.appendChild(el('span', 'status-state', words));
+            li.appendChild(head);
+            if (known.host) li.appendChild(el('p', 'status-host', known.host));
+
+            var share = el('p', 'status-share');
+            var pct = num(s.percent);
+            var since = day(s.since);
+            if (pct === null) share.textContent = 'Nenhuma verificação contabilizada ainda.';
+            else {
+                share.appendChild(el('strong', null, pct + '%'));
+                var of = s.name === 'registrar' ? ' de suas verificações de 5 minutos foram executadas' : ' das verificações responderam';
+                share.appendChild(document.createTextNode(of + (since ? ' desde ' + since : ' nos últimos 90 dias') + '.'));
+            }
+            li.appendChild(share);
+
+            var last = el('p', 'status-incident');
+            if (!inc) last.textContent = since ? 'Nenhum incidente desde ' + since + '.' : 'Nenhum incidente registrado.';
+            else if (open) last.textContent = 'Fora do ar desde ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
+            else if (num(inc.ended_at)) last.textContent = 'Último incidente: ' + when(inc.began_at) + ' por ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
+            else last.textContent = 'Último incidente: ' + when(inc.began_at) + '.';
+            li.appendChild(last);
+            return li;
+        }
+
+        function draw(doc) {
+            var at = num(doc && doc.at);
+            var servers = doc && doc.v === 1 && Array.isArray(doc.servers) ? doc.servers.filter(function (s) {
+                return s && typeof s.name === 'string' && /^[a-z0-9-]{1,32}$/.test(s.name);
+            }).slice(0, 6) : [];
+            if (!at || !servers.length) { say('Não foi possível ler o status: formato não reconhecido por esta página.'); return; }
+            var late = Date.now() / 1000 - at > LATE_S;
+            list.textContent = '';
+            servers.forEach(function (s) { list.appendChild(row(s, late)); });
+            list.hidden = false;
+            if (late) { note.textContent = 'Dados de ' + zoneFmt.format(new Date(at * 1000)) + ': as verificações não foram executadas desde então. O status atual do servidor pode ser diferente.'; note.setAttribute('data-tone', 'late'); }
+            else { note.textContent = 'Verificado em ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
+            foot.textContent = 'Uma verificação é uma consulta externa a cada 5 minutos. Duas falhas consecutivas configuram um incidente; a porcentagem contabiliza todas as consultas. Os horários estão no seu fuso horário local.';
+            foot.hidden = false;
+        }
+        function say(text) {
+            note.textContent = text;
+            note.removeAttribute('data-tone');
+            list.hidden = true;
+            foot.hidden = true;
+        }
+
+        var lastRead = 0;
+        function read() {
+            lastRead = Date.now();
+            fetch(URL_, { headers: { accept: 'application/json' } }).then(function (res) {
+                if (res.status === 404) { say('Nenhum status publicado aqui ainda.'); return null; }
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.json().then(draw, function () { say('Não foi possível ler o status: formato não reconhecido por esta página.'); });
+            }).catch(function () {
+                say('Não foi possível ler o status no momento: o registrador responsável pode estar fora do ar. Comunidades locais não são afetadas. Tente novamente em alguns minutos.');
+            });
+        }
+        read();
+        setInterval(function () { if (document.visibilityState === 'visible') read(); }, 5 * 60 * 1000);
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible' && Date.now() - lastRead > 5 * 60 * 1000) read();
+        });
+    })();
+    </script>
+</body>
+</html>

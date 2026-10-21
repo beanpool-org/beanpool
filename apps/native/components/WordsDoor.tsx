@@ -18,6 +18,10 @@ export const DOOR_CHOICE_TEXT = {
     wordsLine: word('No Google, Apple or Facebook needed. Your 12 words are the only way back in.'),
     signInHeading: word('Or sign in'),
     signInLine: word('Also a way back if you lose your phone.'),
+    wordsExisting: word('Join with this account'),
+    wordsLineExisting: word('Uses the key and 12 words already on this phone. No new account is made.'),
+    signInHeadingExisting: word('Also add a sign-in'),
+    signInLineExisting: word("A way back in if you lose this phone. It's linked to this same account."),
 } as const;
 
 export function DoorChoices({
@@ -28,6 +32,7 @@ export function DoorChoices({
     wordsProblem = null,
     signInNote,
     colors = lightColors,
+    account = 'new',
 }: {
     onWords: () => void;
     onSignIn: (provider: SsoProvider) => void;
@@ -39,8 +44,14 @@ export function DoorChoices({
     /** What a sign-in also does here, said once under the buttons (where the copy goes, and what is never seen). */
     signInNote?: string;
     colors?: AppColors;
+    account?: 'new' | 'existing';
 }): React.JSX.Element {
     const s = styles(colors);
+    const isExisting = account === 'existing';
+    const wordsBtnText = isExisting ? t(DOOR_CHOICE_TEXT.wordsExisting) : t(DOOR_CHOICE_TEXT.words);
+    const wordsLineText = isExisting ? t(DOOR_CHOICE_TEXT.wordsLineExisting) : t(DOOR_CHOICE_TEXT.wordsLine);
+    const signInHeadingText = isExisting ? t(DOOR_CHOICE_TEXT.signInHeadingExisting) : t(DOOR_CHOICE_TEXT.signInHeading);
+    const signInLineText = isExisting ? t(DOOR_CHOICE_TEXT.signInLineExisting) : t(DOOR_CHOICE_TEXT.signInLine);
     return (
         <View>
             <View style={s.block}>
@@ -49,25 +60,25 @@ export function DoorChoices({
                     onPress={onWords}
                     disabled={disabled}
                     accessibilityRole="button"
-                    accessibilityLabel={t(DOOR_CHOICE_TEXT.words)}
-                    accessibilityHint={t(DOOR_CHOICE_TEXT.wordsLine)}
+                    accessibilityLabel={wordsBtnText}
+                    accessibilityHint={wordsLineText}
                 >
                     <Text style={s.wordsIcon} accessible={false}>🔑</Text>
-                    <Text style={s.wordsBtnText}>{t(DOOR_CHOICE_TEXT.words)}</Text>
+                    <Text style={s.wordsBtnText}>{wordsBtnText}</Text>
                 </Pressable>
-                <Text style={s.line}>{t(DOOR_CHOICE_TEXT.wordsLine)}</Text>
+                <Text style={s.line}>{wordsLineText}</Text>
                 {busy ? <Text style={s.busy} accessibilityLiveRegion="polite">{busy}</Text> : null}
                 {wordsProblem ? <Text style={s.problem} accessibilityLiveRegion="polite">{wordsProblem}</Text> : null}
             </View>
 
             <View style={[s.block, s.signInBlock]}>
-                <Text style={s.heading} accessibilityRole="header">{t(DOOR_CHOICE_TEXT.signInHeading)}</Text>
+                <Text style={s.heading} accessibilityRole="header">{signInHeadingText}</Text>
                 {Platform.OS === 'ios' && (
                     <AppleButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.apple })} onPress={() => onSignIn('apple')} disabled={disabled} style={s.sso} />
                 )}
                 <GoogleButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.google })} onPress={() => onSignIn('google')} disabled={disabled} style={s.sso} />
                 <FacebookButton title={t('Continue with {provider}', { provider: SSO_PROVIDER_NAMES.facebook })} onPress={() => onSignIn('facebook')} disabled={disabled} style={s.sso} />
-                <Text style={s.line}>{t(DOOR_CHOICE_TEXT.signInLine)}</Text>
+                <Text style={s.line}>{signInLineText}</Text>
                 {signInNote ? <Text style={s.small}>{signInNote}</Text> : null}
             </View>
         </View>

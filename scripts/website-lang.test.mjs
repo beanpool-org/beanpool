@@ -796,13 +796,14 @@ test('language menu in top menu opens the same list of 25 languages with own nam
     }
 });
 
-test('keyboard interaction: Escape key closes open language menus and focuses summary button', () => {
+test('keyboard interaction: Escape key closes open language menus and focuses summary button when menu had focus', () => {
     const mainJsText = fs.readFileSync(path.join(WEBSITE_DIR, 'main.js'), 'utf8');
     const dom = new JSDOM(`<!DOCTYPE html><html><body>
+        <input id="outside" />
         <details class="lang-menu desktop-lang-menu" open>
             <summary class="lang-btn" aria-label="Choose language">🌐</summary>
             <div class="lang-dropdown">
-                <a href="/es/">Español</a>
+                <a id="link" href="/es/">Español</a>
             </div>
         </details>
     </body></html>`, { runScripts: 'dangerously' });
@@ -811,14 +812,26 @@ test('keyboard interaction: Escape key closes open language menus and focuses su
 
     const details = dom.window.document.querySelector('.lang-menu');
     const summary = dom.window.document.querySelector('.lang-btn');
+    const link = dom.window.document.querySelector('#link');
+    const outsideInput = dom.window.document.querySelector('#outside');
     assert.equal(details.open, true, 'menu is initially open');
 
-    // Dispatch Escape keydown
-    const event = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
-    dom.window.document.dispatchEvent(event);
+    // Case 1: Focus within the menu -> Escape returns focus to summary
+    link.focus();
+    const event1 = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    dom.window.document.dispatchEvent(event1);
 
     assert.equal(details.open, false, 'menu is closed after Escape key');
     assert.equal(dom.window.document.activeElement, summary, 'focus returned to summary button');
+
+    // Case 2: Focus outside the menu -> Escape closes menu without stealing focus
+    details.open = true;
+    outsideInput.focus();
+    const event2 = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    dom.window.document.dispatchEvent(event2);
+
+    assert.equal(details.open, false, 'menu is closed after Escape key');
+    assert.equal(dom.window.document.activeElement, outsideInput, 'focus not stolen from outside input');
 });
 
 test('browser offer banner dismissal is remembered in localStorage and works without storage', () => {
@@ -905,9 +918,10 @@ test('mobile width (320px and 360px with 1.3x text) with language menu open has 
 
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     const port = server.address().port;
-    const browser = await chromium.launch({ headless: true });
+    let browser;
 
     try {
+        browser = await chromium.launch({ headless: true });
         for (const width of [320, 360]) {
             for (const testPage of ['index.html', 'ar/index.html']) {
                 const page = await browser.newPage({ viewport: { width, height: 640 } });
@@ -948,7 +962,7 @@ test('mobile width (320px and 360px with 1.3x text) with language menu open has 
             }
         }
     } finally {
-        await browser.close();
+        if (browser) await browser.close();
         server.close();
     }
 });
@@ -966,9 +980,10 @@ test('RTL desktop top language menu mirrors without horizontal overflow at 1280p
 
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     const port = server.address().port;
-    const browser = await chromium.launch({ headless: true });
+    let browser;
 
     try {
+        browser = await chromium.launch({ headless: true });
         const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
         await page.goto(`http://127.0.0.1:${port}/ar/index.html`, { waitUntil: 'load' });
 
@@ -992,7 +1007,54 @@ test('RTL desktop top language menu mirrors without horizontal overflow at 1280p
         assert.ok(bounds.right <= bounds.viewportWidth, `dropdown right (${bounds.right}) <= viewportWidth (${bounds.viewportWidth})`);
         assert.ok(bounds.scrollWidth <= bounds.viewportWidth, `page scrollWidth (${bounds.scrollWidth}) <= viewportWidth`);
     } finally {
-        await browser.close();
+        if (browser) await browser.close();
+        server.close();
+    }
+});
+
+test('mobile width (320px) desktop-lang-menu on pages without phone menu stays within viewport for LTR and RTL', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    let browser;
+
+    try {
+        browser = await chromium.launch({ headless: true });
+        for (const testPage of ['privacy.html', 'ar/status.html']) {
+            const page = await browser.newPage({ viewport: { width: 320, height: 640 } });
+            await page.goto(`http://127.0.0.1:${port}/${testPage}`, { waitUntil: 'load' });
+
+            await page.locator('.desktop-lang-menu summary').click();
+            await page.waitForTimeout(50);
+
+            const bounds = await page.evaluate(() => {
+                const dropdown = document.querySelector('.desktop-lang-menu .lang-dropdown');
+                const rect = dropdown.getBoundingClientRect();
+                return {
+                    x: rect.x,
+                    right: rect.right,
+                    width: rect.width,
+                    viewportWidth: window.innerWidth,
+                    scrollWidth: document.documentElement.scrollWidth
+                };
+            });
+
+            assert.ok(bounds.x >= 0, `${testPage} dropdown x (${bounds.x}) >= 0`);
+            assert.ok(bounds.right <= bounds.viewportWidth, `${testPage} dropdown right (${bounds.right}) <= viewportWidth (${bounds.viewportWidth})`);
+            assert.ok(bounds.scrollWidth <= bounds.viewportWidth, `${testPage} scrollWidth (${bounds.scrollWidth}) <= viewportWidth`);
+            await page.close();
+        }
+    } finally {
+        if (browser) await browser.close();
         server.close();
     }
 });

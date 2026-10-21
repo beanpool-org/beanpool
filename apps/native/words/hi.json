@@ -5975,5 +5975,27 @@
     "one": "{n} सप्ताह",
     "other": "{n} सप्ताह"
   },
-  "📦 Ask to borrow": "📦 उधार लेने का अनुरोध करें"
+  "📦 Ask to borrow": "📦 उधार लेने का अनुरोध करें",
+  "Add a community by address": "पते से समुदाय जोड़ें",
+  "COMMUNITY ADDRESS": "समुदाय का पता",
+  "COMMUNITY NAME (OPTIONAL)": "समुदाय का नाम (वैकल्पिक)",
+  "Clear this phone's copy and download again": "इस फ़ोन की प्रति साफ़ करें और फिर से डाउनलोड करें",
+  "Community name (optional)": "समुदाय का नाम (वैकल्पिक)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "समुदाय का पता लिखकर उससे जुड़ें। आपका फ़ोन इसे इस सूची में सहेज लेगा और उस पर स्विच कर देगा।",
+  "Have an invite code for this community?": "क्या इस समुदाय के लिए कोई आमंत्रण कोड है?",
+  "Invited": "आमंत्रित",
+  "Reached at **{trust}** trust": "**{trust}** विश्वास पर पहुँचने पर",
+  "Reached at **{trust}** trust (up to {upTo})": "**{trust}** विश्वास पर पहुँचने पर ({upTo} तक)",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "इस समुदाय को चलाते हैं? मालिकों और एडमिन को सेटिंग्स में सबसे ऊपर 'प्रबंधन करें' पंक्ति दिखाई देती है।",
+  "Saved communities": "सहेजे गए समुदाय",
+  "Switch to this community": "इस समुदाय पर स्विच करें",
+  "Switch, forget or refresh the communities on this phone": "इस फ़ोन पर समुदायों को स्विच करें, भूलें या रीफ़्रेश करें",
+  "Switching...": "स्विच किया जा रहा है...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "वे समुदाय जिनसे यह फ़ोन जुड़ा है। प्रत्येक में आपकी चाबी और 12 शब्द एक ही हैं; इस्तेमाल करने के लिए किसी एक पर स्विच करें।",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "स्वागत है। पहले दिन से ही आप बाज़ार देख सकते हैं, व्यापार कर सकते हैं, क्रेडिट प्राप्त कर सकते हैं और दूसरों को आमंत्रित कर सकते हैं — और आपकी क्रेडिट लाइन पहले से खुली है।",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} विश्वास से",
+    "other": "{n} विश्वास से"
+  },
+  "{name}, already invited": "{name}, पहले से आमंत्रित हैं"
 }

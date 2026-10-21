@@ -5975,5 +5975,27 @@
     "one": "{n} ആഴ്ച",
     "other": "{n} ആഴ്ച"
   },
-  "📦 Ask to borrow": "📦 കടം ചോദിക്കുക"
+  "📦 Ask to borrow": "📦 കടം ചോദിക്കുക",
+  "Add a community by address": "വിലാസം വഴി ഒരു കമ്മ്യൂണിറ്റി ചേർക്കുക",
+  "COMMUNITY ADDRESS": "കമ്മ്യൂണിറ്റി വിലാസം",
+  "COMMUNITY NAME (OPTIONAL)": "കമ്മ്യൂണിറ്റിയുടെ പേര് (ഐച്ഛികം)",
+  "Clear this phone's copy and download again": "ഈ ഫോണിലെ പകർപ്പ് മായ്ച്ച് വീണ്ടും ഡൗൺലോഡ് ചെയ്യുക",
+  "Community name (optional)": "കമ്മ്യൂണിറ്റിയുടെ പേര് (ഐച്ഛികം)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "ഒരു കമ്മ്യൂണിറ്റിയുടെ വിലാസം ടൈപ്പ് ചെയ്ത് കണക്റ്റ് ചെയ്യുക. നിങ്ങളുടെ ഫോൺ അത് ഈ ലിസ്റ്റിൽ സേവ് ചെയ്യുകയും അതിലേക്ക് മാറുകയും ചെയ്യും.",
+  "Have an invite code for this community?": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് ഒരു ക്ഷണ കോഡ് ഉണ്ടോ?",
+  "Invited": "ക്ഷണിച്ചു",
+  "Reached at **{trust}** trust": "**{trust}** വിശ്വാസ്യതയിൽ കൈവരിക്കുന്നു",
+  "Reached at **{trust}** trust (up to {upTo})": "**{trust}** വിശ്വാസ്യതയിൽ കൈവരിക്കുന്നു ({upTo} വരെ)",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "ഈ കമ്മ്യൂണിറ്റി നടത്തുകയാണോ? ഉടമകൾക്കും അഡ്മിൻമാർക്കും ക്രമീകരണങ്ങളുടെ മുകളിൽ Manage എന്ന വരി കാണാം.",
+  "Saved communities": "സംരക്ഷിച്ച കമ്മ്യൂണിറ്റികൾ",
+  "Switch to this community": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് മാറുക",
+  "Switch, forget or refresh the communities on this phone": "ഈ ഫോണിലെ കമ്മ്യൂണിറ്റികളിലേക്ക് മാറുക, ഒഴിവാക്കുക അല്ലെങ്കിൽ പുതുക്കുക",
+  "Switching...": "മാറുന്നു...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "ഈ ഫോൺ ചേർന്നിട്ടുള്ള കമ്മ്യൂണിറ്റികൾ. നിങ്ങളുടെ കീയും 12 വാക്കുകളും ഓരോന്നിലും ഒന്നുതന്നെയാണ്; അത് ഉപയോഗിക്കാൻ ഒന്നിലേക്ക് മാറുക.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "സ്വാഗതം. ആദ്യ ദിവസം മുതൽ നിങ്ങൾക്ക് ബ്രൗസ് ചെയ്യാനും വ്യാപാരം നടത്താനും ക്രെഡിറ്റുകൾ സ്വീകരിക്കാനും മറ്റുള്ളവരെ ക്ഷണിക്കാനും കഴിയും — കൂടാതെ നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ ഇതിനകം തുറന്നതാണ്.",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} വിശ്വാസ്യത മുതൽ",
+    "other": "{n} വിശ്വാസ്യത മുതൽ"
+  },
+  "{name}, already invited": "{name}, ഇതിനകം ക്ഷണിച്ചു"
 }

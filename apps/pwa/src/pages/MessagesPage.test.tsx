@@ -1,6 +1,7 @@
 import { render, screen, act, waitFor, fireEvent, createEvent, cleanup, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
+import { brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, editMessageApi, createGroup, getGroupChat, type Conversation, type ApiMessage } from '../lib/api';
@@ -1229,6 +1230,130 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         // The app's own words for such a chat, never the node's notice.
         expect(screen.getByTestId('group-chat-notice').textContent).toContain('This community\'s node is older and can read this group\'s chat.');
         vi.unstubAllGlobals();
+    });
+
+    describe('15-minute edit window explanation', () => {
+        it('no sentence on old own messages until their actions are opened; opening shows it once', async () => {
+            mockMessagesByConv = {
+                'conv-1': [
+                    { id: 'm1', conversationId: 'conv-1', authorPubkey: 'my-pubkey', ciphertext: 'old msg 1', nonce: '00000', timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString() } as ApiMessage,
+                    { id: 'm2', conversationId: 'conv-1', authorPubkey: 'my-pubkey', ciphertext: 'old msg 2', nonce: '00000', timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() } as ApiMessage,
+                    { id: 'm3', conversationId: 'conv-1', authorPubkey: 'my-pubkey', ciphertext: 'old msg 3', nonce: '00000', timestamp: new Date(Date.now() - 90 * 60 * 1000).toISOString() } as ApiMessage,
+                    { id: 'm4', conversationId: 'conv-1', authorPubkey: 'my-pubkey', ciphertext: 'old msg 4', nonce: '00000', timestamp: new Date(Date.now() - 120 * 60 * 1000).toISOString() } as ApiMessage,
+                ],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('old msg 1');
+
+            // 4 old messages: zero sentences before any click
+            expect(screen.queryAllByText('You can edit a message for 15 minutes after sending it.')).toHaveLength(0);
+
+            // Reaching for Edit / opening actions shows it once for that message
+            const editButtons = screen.getAllByRole('button', { name: 'Edit message' });
+            expect(editButtons).toHaveLength(4);
+            fireEvent.click(editButtons[0]);
+
+            expect(screen.getAllByText('You can edit a message for 15 minutes after sending it.')).toHaveLength(1);
+        });
+
+        it('shows the pencil edit button and no explanation when own DM message is 14 minutes old', async () => {
+            mockMessagesByConv = {
+                'conv-1': [{
+                    id: 'msg-fresh', conversationId: 'conv-1', authorPubkey: 'my-pubkey',
+                    ciphertext: 'within window text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('within window text');
+
+            expect(screen.getByRole('button', { name: 'Edit message' })).toBeInTheDocument();
+            expect(screen.queryByText('You can edit a message for 15 minutes after sending it.')).toBeNull();
+        });
+
+        it('shows no explanation and no edit button for someone else\'s message at 16 minutes old', async () => {
+            mockMessagesByConv = {
+                'conv-1': [{
+                    id: 'msg-peer-old', conversationId: 'conv-1', authorPubkey: 'peer-pubkey',
+                    ciphertext: 'peer old text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('peer old text');
+
+            expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+            expect(screen.queryByText('You can edit a message for 15 minutes after sending it.')).toBeNull();
+        });
+
+        it('shows the explanation when own group chat message is 16 minutes old and its actions are opened', async () => {
+            mockConversations = [{
+                id: 'group-1', type: 'group_thread' as any, name: 'Garden crew',
+                participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+                unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+            } as Conversation];
+            mockConversationDetails = { 'group-1': mockConversations[0] };
+            mockMessagesByConv = {
+                'group-1': [{
+                    id: 'msg-group-old', conversationId: 'group-1', authorPubkey: 'my-pubkey',
+                    ciphertext: 'group past window text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="group-1" />);
+            await screen.findByText('group past window text');
+
+            expect(screen.queryByText('You can edit a message for 15 minutes after sending it.')).toBeNull();
+            const editBtn = screen.getByRole('button', { name: 'Edit message' });
+            fireEvent.click(editBtn);
+            expect(screen.getByText('You can edit a message for 15 minutes after sending it.')).toBeInTheDocument();
+        });
+
+        it('a deleted own message never shows the explanation or an edit button', async () => {
+            mockMessagesByConv = {
+                'conv-1': [{
+                    id: 'msg-deleted', conversationId: 'conv-1', authorPubkey: 'my-pubkey',
+                    ciphertext: 'deleted msg', nonce: '00000',
+                    type: 'removed',
+                    timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('deleted msg');
+            expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+            expect(screen.queryByText('You can edit a message for 15 minutes after sending it.')).toBeNull();
+        });
+
+        it('contrast of the sentence colour token on the own bubble meets 4.5:1 in both light and dark themes', async () => {
+            mockMessagesByConv = {
+                'conv-1': [{
+                    id: 'msg-contrast', conversationId: 'conv-1', authorPubkey: 'my-pubkey',
+                    ciphertext: 'contrast test text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('contrast test text');
+
+            const editBtn = screen.queryByRole('button', { name: 'Edit message' });
+            if (editBtn) fireEvent.click(editBtn);
+
+            const sentence = screen.getByText('You can edit a message for 15 minutes after sending it.');
+            const varMatch = /var\((--[a-z0-9-]+)\)/.exec(sentence.style.color);
+            expect(varMatch, 'must use a central CSS variable token, not a raw rgba/hex').not.toBeNull();
+
+            const token = varMatch![1];
+            const theme = { light: brandCssVariableMap('light'), dark: brandCssVariableMap('dark') };
+            const bubbleBg = { light: '#647664', dark: '#809380' };
+
+            const lightColor = theme.light[token];
+            const darkColor = theme.dark[token];
+            expect(lightColor).toBeDefined();
+            expect(darkColor).toBeDefined();
+
+            expect(contrastRatio(lightColor, bubbleBg.light)).toBeGreaterThanOrEqual(4.5);
+            expect(contrastRatio(darkColor, bubbleBg.dark)).toBeGreaterThanOrEqual(4.5);
+        });
     });
 });
 

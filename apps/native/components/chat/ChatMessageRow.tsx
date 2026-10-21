@@ -7,7 +7,8 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
+import { t } from '@beanpool/core';
 import type { ChatMessage, MessageActions, ChatKind } from '../../utils/chat-actions';
 import { ChatBubble, type ChatQuote } from './ChatBubble';
 import { ChatEmojiPicker, ChatMessageActions } from './ChatMessageActions';
@@ -79,6 +80,11 @@ export function ChatMessageRow({
                 />
                 {!isMe && actionBar}
             </View>
+            {showActions && actions.editClosed && (
+                <Text style={[styles.editClosedText, isMe && { alignSelf: 'flex-end' }]}>
+                    {t('You can edit a message for 15 minutes after sending it.')}
+                </Text>
+            )}
         </View>
     );
 }

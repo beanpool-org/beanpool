@@ -880,7 +880,7 @@ export interface ApiMessage {
     authorPubkey: string;
     ciphertext: string;
     nonce: string;
-    type?: 'text' | 'system' | 'image';
+    type?: 'text' | 'system' | 'image' | 'removed';
     systemType?: SystemMessageType;
     metadata?: string;
     timestamp: string;

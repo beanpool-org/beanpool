@@ -80,6 +80,9 @@ export function createMessagingRoutes(deps: RouteDeps): Router {
  *  megabyte of text to reach the members lookup. */
 const MAX_PARTICIPANT_KEY_LENGTH = 128;
 
+/** Upper bound on participant array length for conversation creation (prevents DoS on Set/iteration). */
+const MAX_CONVERSATION_PARTICIPANTS = 10;
+
 /**
  * Answer a thrown messaging error. An expected refusal (MessagingError) keeps its 4xx and message. Anything
  * else is a server fault: 500 with a generic message, logged here, so clients retry rather than treat a
@@ -120,6 +123,11 @@ router.post('/api/messages/conversation', async (ctx) => {
     if (!Array.isArray(participants)) {
         ctx.status = 400;
         ctx.body = { error: 'participants must be an array' };
+        return;
+    }
+    if (participants.length > MAX_CONVERSATION_PARTICIPANTS) {
+        ctx.status = 400;
+        ctx.body = { error: 'DM conversations must have exactly 2 distinct participants' };
         return;
     }
     if (!participants.every((p: unknown) => typeof p === 'string' && p.length > 0 && p.length <= MAX_PARTICIPANT_KEY_LENGTH)) {

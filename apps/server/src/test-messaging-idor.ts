@@ -98,6 +98,9 @@ async function main() {
     const a15ok = await signedFetch('POST', '/api/messages/conversation', C,
         { type: 'dm', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex] });
     assert(a15ok.status === 200, `A2-15: creator-included is allowed (got ${a15ok.status} ${a15ok.error ?? ''})`);
+    const a15oversized = await signedFetch('POST', '/api/messages/conversation', C,
+        { type: 'dm', createdBy: C.pubKeyHex, participants: Array.from({ length: 15 }, () => C.pubKeyHex) });
+    assert(a15oversized.status === 400, `oversized participants array (>10) is REJECTED with 400 (got ${a15oversized.status} ${a15oversized.error ?? ''})`);
     // A DM has no name: one typed for it would be the member's words, stored where the node can read them.
     const a15named = await signedFetch('POST', '/api/messages/conversation', C,
         { type: 'dm', createdBy: C.pubKeyHex, participants: [C.pubKeyHex, A.pubKeyHex], name: 'legit' });

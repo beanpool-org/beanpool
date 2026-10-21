@@ -217,6 +217,45 @@ describe('MemberDetailModal', () => {
         expect(screen.getByText("Only an owner can change this member's role.")).toBeInTheDocument();
     });
 
+    it("shows only Revoke moderator when an admin views a moderator's profile", () => {
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: 'moderator' }}
+                isFrozen={false}
+                nodeRole="moderator"
+                viewerRole="admin"
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.getByText('Revoke moderator')).toBeInTheDocument();
+        expect(screen.queryByText(/Grant Moderator/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Owner/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Admin/i)).not.toBeInTheDocument();
+        expect(screen.queryByText('Assign role:')).not.toBeInTheDocument();
+        expect(screen.queryByText("Only an owner can change this member's role.")).not.toBeInTheDocument();
+    });
+
+    it("shows Grant Moderator when an admin views a member with no role", () => {
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: null }}
+                isFrozen={false}
+                nodeRole={null}
+                viewerRole="admin"
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.getByText('🛡️ Grant Moderator')).toBeInTheDocument();
+        expect(screen.getByText('Assign role:')).toBeInTheDocument();
+        expect(screen.queryByText(/Grant Owner/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Admin/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Revoke/i)).not.toBeInTheDocument();
+    });
+
     it("shows role buttons when an owner views an owner's profile with multiple owners", () => {
         render(
             <MemberDetailModal

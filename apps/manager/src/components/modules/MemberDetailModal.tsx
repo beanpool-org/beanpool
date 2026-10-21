@@ -215,7 +215,7 @@ export function MemberDetailModal({
     const canGrantRole = (role: MemberNodeRole): boolean => {
         if (effectiveViewerRole === 'owner') return true;
         if (effectiveViewerRole === 'admin') {
-            return role === 'moderator' && (currentRole === null || currentRole === 'moderator');
+            return role === 'moderator' && currentRole === null;
         }
         return false;
     };

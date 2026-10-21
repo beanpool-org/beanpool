@@ -23,6 +23,9 @@ import { createRoot, type Root } from 'react-dom/client';
 // The screens don't import React (Metro's automatic JSX runtime); this runner compiles JSX the classic way.
 (globalThis as any).React = ReactAll;
 
+// use-global-guest-visit reads useNodeStatus().recheck (only during a visit, which these screens never start); the real
+// context pulls expo-crypto in at import.
+vi.mock('../../app/NodeStatusContext', () => ({ useNodeStatus: () => ({ recheck: async () => 'unknown' }) }));
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link' };
     const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));

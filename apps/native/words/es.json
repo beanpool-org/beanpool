@@ -5997,5 +5997,19 @@
     "one": "desde {n} de confianza",
     "other": "desde {n} de confianza"
   },
-  "{name}, already invited": "{name}, ya con invitación"
+  "{name}, already invited": "{name}, ya con invitación",
+  "A way back in if you lose this phone. It's linked to this same account.": "Una forma de volver a entrar si pierdes este teléfono. Está vinculado a esta misma cuenta.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Añadiendo a {name} como colaborador, con {n} frijol de respaldo nominal",
+    "other": "Añadiendo a {name} como colaborador, con {n} frijoles de respaldo nominal"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Añadiendo a {name} como custodio, con {n} frijol de respaldo nominal",
+    "other": "Añadiendo a {name} como custodio, con {n} frijoles de respaldo nominal"
+  },
+  "Also add a sign-in": "También añadir un inicio de sesión",
+  "Look around first, then join with this account": "Explora primero, luego únete con esta cuenta",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Conoce a personas de todas partes y encuentra comunidades cerca de ti. Explora primero como invitado, luego toca Unirse en la parte superior para unirte con la cuenta de este teléfono: tu clave y tus 12 palabras siguen siendo las mismas, y nada cambia en tus otras comunidades.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Al confirmarse, su límite crece hasta en {amount}: el límite mínimo conocido de tu comunidad, mientras mantenga una oferta publicada.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Usa la clave y las 12 palabras que ya están en este teléfono. No se crea una cuenta nueva."
 }

@@ -2071,12 +2071,21 @@ footer {
 .hero-social-btn:hover { color: var(--text-heading); }
 
 /* A .has-menu desktop nav stays on one line down to 1024px (below that its menu takes over):
-   nav words never break, and the spacing tightens first to accommodate the 🌐 language button */
+   nav words never break, the spacing tightens first, and the text links give way before the CTA or 🌐 */
 .nav-inner.has-menu .nav-links a { white-space: nowrap; }
 @media (min-width: 1024px) {
-    .nav-inner.has-menu { padding: 1.1rem clamp(1rem, 2vw, 2rem); }
-    .nav-inner.has-menu .nav-links { gap: 1rem; }
-    .nav-inner.has-menu .nav-cta { padding: 0.625rem 1.1rem !important; }
+    .nav-inner.has-menu { min-width: 0; padding: 1.1rem clamp(1rem, 2vw, 2rem); }
+    .nav-inner.has-menu .logo { flex-shrink: 0; }
+    .nav-inner.has-menu .nav-links { min-width: 0; gap: 1rem; }
+    .nav-inner.has-menu .nav-social-icons { flex-shrink: 0; }
+    .nav-inner.has-menu .desktop-lang-menu { flex-shrink: 0; }
+    .nav-inner.has-menu .nav-cta { flex-shrink: 0; padding: 0.625rem 1.1rem !important; }
+    .nav-inner.has-menu .nav-links > a:not(.nav-cta) {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex-shrink: 1;
+    }
 }
 @media (min-width: 1024px) and (max-width: 1440px) {
     .nav-inner.has-menu { padding: 0.9rem clamp(1rem, 2vw, 2rem); }

@@ -15,8 +15,8 @@
  *   4. a keeper with earned credit E and a known part: joining with E + 300 is -(E + 300), never -(E + 600); releasing
  *      E + 100 (the known part first) leaves the 200 still pledged
  *   5. a partial release of a known joining pledge: 400 less 150 is -250, never -650
- *   6. the dial off (every community today): a joining pledge of earned credit released in full gives the floor back, 0,
- *      and a spend moves nothing
+ *   6. the dial off (its owner switched it off; on by default): a joining pledge of earned credit released in full gives
+ *      the floor back, 0, and a spend moves nothing
  *   7. unbinding: a step-down while solvent gives the floor back; an admin's unbinding in debt keeps locked only the part
  *      the debt needs, counted once
  *   8. a stored row as origin/main wrote it (a joining figure with a known part, and an enterprise that spent past its
@@ -48,7 +48,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
-import { setMemberPhoto, getEnterpriseFloor, clearEnterpriseFloorCache } from '@beanpool/engine';
+import { setMemberPhoto, getEnterpriseFloor, clearEnterpriseFloorCache, confirmationDialOn, CONFIRMATION_DIAL_KEY } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -195,7 +195,12 @@ async function main(): Promise<void> {
         .map(r => `${r.id.startsWith('known:') ? 'known' : 'earned'} ${r.amount}`).sort();
     const figure = (co: string, keeper: Id) => (db.prepare('SELECT backing FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(co, keeper.pk) as { backing: number } | undefined)?.backing;
 
+    // The dial is on by default (Marty, 21 Oct): a new node has no row and reads on, and the owner's "on" writes none, so
+    // every check below with the dial on runs on the default, never on a stored 'on'.
+    const dialRow = () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CONFIRMATION_DIAL_KEY) as { value: string } | undefined)?.value ?? null;
+    assert(confirmationDialOn(db) && dialRow() === null, `a new node reads the dial on with no row: on by default (${dialRow()})`);
     await dial(true);
+    assert(dialRow() === null, `and the owner turning it on writes no row (${dialRow()})`);
 
     // ── 1. the measured sequence ─────────────────────────────────────────────────────────────────
     console.log('── 1. Kai joins by request with a known 500 ──');
@@ -304,6 +309,7 @@ async function main(): Promise<void> {
     const leeSpend = await spendAs(lee, leeCo, 50);
     assert(refused(leeSpend), `and a 50-Bean spend with nothing pledged is refused (${said(leeSpend)})`);
     await dial(true);
+    assert(confirmationDialOn(db) && dialRow() === null, `switched back on, the 'off' row is gone: the default again (${dialRow()})`);
 
     // ── 7. unbinding ────────────────────────────────────────────────────────────────────────────
     console.log('── 7. unbinding ──');

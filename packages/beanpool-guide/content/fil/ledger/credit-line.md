@@ -3,7 +3,7 @@ slug: credit-line
 title: Iyong credit line
 summary: Kung gaano kababa sa zero ang puwede mong abutin, at paano ito lumalago.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Ano ito
@@ -46,7 +46,7 @@ Sinasabi sa iyo ng linya sa ilalim ng bar, halimbawa "Mag-post ng alok para buks
 
 ## Sa isang kilalang komunidad
 
-Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Kung binuksan ng iyong komunidad ang **kilalang floor**, ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad. Itinataas nito ang iyong limitasyon, hindi ang iyong antas: binibilang pa rin ng iyong trust badge kung ano lamang ang iyong nagawa na.
+Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line, **ang kilalang floor**: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad. Itinataas nito ang iyong limitasyon, hindi ang iyong antas: binibilang pa rin ng iyong trust badge kung ano lamang ang iyong nagawa na. Naka-on ang kilalang floor sa bawat komunidad na may Munggo maliban kung ini-off ito ng may-ari nito.
 
 - Ang isang live na Alok ay nagbibigay-daan sa iyo na gamitin ang lahat nito. Kapag walang Mga Alok, hindi mo ito magagamit.
 - Ang tiwalang kinikita mo sa pakikipagkalakalan ay nagdaragdag dito, hanggang sa limitasyon ng iyong komunidad (2,000 Munggo maliban kung pumili ito ng higit pa, hanggang sa 5,000).
@@ -55,7 +55,7 @@ Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. K
 
 ## Isang magkahalong komunidad
 
-Sa ilang komunidad kahit sinong miyembro ay maaaring mag-imbita ng mga tao, kaya hindi kilala ng mga admin ang lahat. Kung binuksan ng komunidad mo ang **kilalang floor**, maaaring kumpirmahin ng mga admin ang mga miyembrong kilala nila, at ang mga miyembrong iyon ay magsisimula sa mas mataas na limitasyon. Ang lahat ng iba pa ay magsisimula sa zero, at ang limitasyon ng bawat isa ay lalago sa parehong paraan pagkatapos noon habang sila ay nakikipagkalakalan at bumubuo ng tiwala.
+Sa ilang komunidad kahit sinong miyembro ay maaaring mag-imbita ng mga tao, kaya hindi kilala ng mga admin ang lahat. Maaaring kumpirmahin ng mga admin ang mga miyembrong kilala nila, at ang mga miyembrong iyon ay magsisimula sa mas mataas na limitasyon, **ang kilalang floor**, maliban kung ini-off ito ng may-ari ng komunidad mo. Ang lahat ng iba pa ay magsisimula sa zero, at ang limitasyon ng bawat isa ay lalago sa parehong paraan pagkatapos noon habang sila ay nakikipagkalakalan at bumubuo ng tiwala.
 
 ## Naka-freeze ng mga admin
 

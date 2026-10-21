@@ -3849,6 +3849,65 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
 }
 
 /**
+ * The one entry an enterprise's pledge list folds every known pledge into (engine known-floor.ts KNOWN_PLEDGE_PREFIX), for a
+ * reader who is no owner or admin of the node. A known pledge is drawn from a confirmed keeper's known grant, so naming it
+ * names a keeper the admins confirmed, and a confirmation stays private (Marty, 2026-10-21: "Hide the names").
+ */
+export const KNOWN_BACKING_ENTRY_ID = 'known';
+
+/**
+ * Who reads an enterprise's backing: the signer, if any, and whether they are an owner or admin of the node (a signer
+ * isAdminPubkey passes, or the admin routes' own sign-in, which has no member key).
+ */
+export type BackingReader = { pubkey?: string; nodeAdmin: boolean };
+
+export function backingReaderOf(pubkey: string | undefined): BackingReader {
+    return { pubkey, nodeAdmin: !!pubkey && isAdminPubkey(pubkey) };
+}
+
+/**
+ * The active pledges backing an enterprise, as `reader` may read them. An owner or admin of the node reads every pledge
+ * as getEnterprisePledges lists it: they decided the confirmations. Anyone else reads each keeper's own (earned) pledges
+ * named as today, and every known pledge folded into one entry last: id `known`, kind `known`, their sum, and no keeper,
+ * name, photo or date (a known pledge is written as its keeper joins, so its date would match their row in the keepers list).
+ */
+export function getEnterprisePledgesForReader(enterprisePubkey: string, reader: BackingReader): Array<{
+    id: string;
+    kind?: 'known';
+    keeper: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string | null;
+}> {
+    const pledges = getEnterprisePledges(enterprisePubkey);
+    if (reader.nodeAdmin) return pledges;
+    const isKnown = (p: { id: string }) => p.id.startsWith(engine.KNOWN_PLEDGE_PREFIX);
+    const known = pledges.filter(isKnown);
+    const named = pledges.filter(p => !isKnown(p));
+    if (known.length === 0) return named;
+    const amount = Math.round(known.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
+    return [...named, { id: KNOWN_BACKING_ENTRY_ID, kind: 'known', keeper: '', callsign: '', avatarUrl: null, amount, pledgedAt: null }];
+}
+
+/**
+ * Who keeps this enterprise, as `reader` may read it. A keeper's `backing` is what they pledged as they joined, earned and
+ * known together (bindApprovedKeeper), so beside the named pledges it would show whose part is known. An owner or admin of
+ * the node, and the keeper on their own row, read it as treasuryKeepers gives it. To anyone else every keeper's backing is
+ * their named pledges standing now, the ones getEnterprisePledgesForReader names; never their known part.
+ */
+export function treasuryKeepersForReader(treasuryPubkey: string, reader: BackingReader): ReturnType<typeof treasuryKeepers> {
+    const keepers = treasuryKeepers(treasuryPubkey);
+    if (reader.nodeAdmin) return keepers;
+    const named = new Map((db.prepare(`
+        SELECT keeper, SUM(amount) AS total FROM enterprise_pledges
+        WHERE enterprise = ? AND released_at IS NULL AND id NOT LIKE 'known:%'
+        GROUP BY keeper
+    `).all(treasuryPubkey) as { keeper: string; total: number }[]).map(r => [r.keeper, Math.round(Number(r.total) * 100) / 100]));
+    return keepers.map(k => k.publicKey === reader.pubkey ? k : { ...k, backing: named.get(k.publicKey) ?? 0 });
+}
+
+/**
  * List active pledges made by a keeper.
  */
 export function getKeeperPledges(keeperPubkey: string): Array<{

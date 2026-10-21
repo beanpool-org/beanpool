@@ -19,7 +19,7 @@ import {
     sweepEnterpriseCeiling,
     pauseEnterprise, resumeEnterprise, initiateWindUp, cancelWindUp, finaliseWindUp, getEnterpriseLedger,
     setEnterpriseLocation, clearEnterpriseLocation,
-    getEnterpriseFloor, getAvailableBacking, getEnterprisePledges, getKeeperPledges,
+    getEnterpriseFloor, getAvailableBacking, getEnterprisePledgesForReader, treasuryKeepersForReader, backingReaderOf, type BackingReader,
     pledgeEnterpriseBacking, releaseEnterpriseBacking,
     isLeadOrSoleKeeperOrAdmin, requestToJoinEnterprise, getKeeperRequests, approveKeeperRequest, declineKeeperRequest,
     getLeadInactivity, proposeLeadSuccession, voteLeadSuccession, getSuccessionProposals,
@@ -184,7 +184,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ? { lat: null, lng: null }
             : { lat: Number(row.lat), lng: Number(row.lng) };
 
-    const listTreasuriesHandler = async (ctx: any) => {
+    // `adminSignIn`: the admin routes' own sign-in (the manager's password), which reads the keepers' backing as an admin.
+    const listTreasuries = async (ctx: any, adminSignIn: boolean) => {
         const includeBounded = ctx.query?.includeBounded === 'true';
         const whereClause = includeBounded
             ? "is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
@@ -204,6 +205,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // 3N queries with a statement recompiled each time — and most nodes have zero links, so every
         // community with an egg flock and no federation was paying for a feature it does not use.
         const linksByTreasury = new Map(listFederationLinks().map(l => [l.treasuryPubkey, l]));
+        // Which keepers the admins confirmed is the admins' (getEnterprisePledgesForReader): anyone else reads it as one total.
+        const backingReader: BackingReader = adminSignIn ? { pubkey: viewer, nodeAdmin: true } : backingReaderOf(viewer);
         ctx.body = {
             treasuries: rows.map(r => {
                 const b = getBalance(r.public_key);
@@ -279,13 +282,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     locationUpdatedAt: r.location_updated_at ?? null,
                     // #106: lets the Commons list say "Kept by doone" / "No steward yet"
                     // without an extra round trip per enterprise.
-                    keepers: treasuryKeepers(r.public_key),
-                    pledges: getEnterprisePledges(r.public_key),
+                    keepers: treasuryKeepersForReader(r.public_key, backingReader),
+                    pledges: getEnterprisePledgesForReader(r.public_key, backingReader),
                     link: link && linkShape(link),
                 };
             }),
         };
     };
+    const listTreasuriesHandler = (ctx: any) => listTreasuries(ctx, false);
     router.get('/api/treasuries', listTreasuriesHandler);
     router.get('/api/enterprises', listTreasuriesHandler);
 
@@ -380,6 +384,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // Gate pending bids, active deals, and worker wage details so only verified operators of this treasury receive sensitive operational data
         const actor = ctx.state?.actor;
         const isOperator = !!(actor && canOperateTreasury(actor, treasury));
+        const backingReader = backingReaderOf(actor);
         // The amounts in and out are everyone's to see; a line's memo is the words of the trade behind it, which only its
         // two people read (ledgerForReader): the keepers, and the member who wrote it or was paid.
         const flow = (db.prepare(
@@ -470,8 +475,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             deferredClaims,
             // #106: who is accountable for this enterprise, public by design — a community should be
             // able to see who keeps what without asking an admin.
-            keepers: treasuryKeepers(treasury),
-            pledges: getEnterprisePledges(treasury),
+            keepers: treasuryKeepersForReader(treasury, backingReader),
+            // Every known pledge as one total, unless the reader is an owner or admin (getEnterprisePledgesForReader).
+            pledges: getEnterprisePledgesForReader(treasury, backingReader),
             isLeadOrSoleKeeperOrAdmin: actor ? isLeadOrSoleKeeperOrAdmin(treasury, actor) : false,
             availableToBack: actor ? getAvailableBacking(actor, treasury) : null,
             keeperRequests: actor && isLeadOrSoleKeeperOrAdmin(treasury, actor)
@@ -702,7 +708,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // (https-server.ts MEMBERS_ONLY_READS_PATTERNS). Off with the enterprises, as the rest under this path.
     router.get('/api/local/admin/treasury', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
-        await listTreasuriesHandler(ctx);
+        await listTreasuries(ctx, true);
     });
 
     router.post('/api/local/admin/treasury', async (ctx) => {
@@ -1286,7 +1292,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const actor = ctx.state?.actor;
         const floorInfo = getEnterpriseFloor(treasury);
         ctx.body = {
-            pledges: getEnterprisePledges(treasury),
+            pledges: getEnterprisePledgesForReader(treasury, backingReaderOf(actor)),
             floor: floorInfo.floor,
             allowance: floorInfo.allowance,
             derivedAllowance: floorInfo.derivedAllowance,

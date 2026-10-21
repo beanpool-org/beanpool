@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server status — BeanPool</title>
-    <meta name="description" content="Whether BeanPool's own servers answer: the global community, the test community and the registrar, checked from outside every 5 minutes.">
+    <title>伺服器狀態 —— BeanPool</title>
+    <meta name="description" content="BeanPool 自身伺服器是否正常回應：全球社群、測試社群與註冊中心，每 5 分鐘從外部檢測一次。">
     <link rel="icon" type="image/png" href="../favicon.png">
     <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.8">
@@ -77,22 +77,22 @@
 <body>
     <nav id="navbar">
         <div class="nav-inner">
-            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool 圖示" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
-                <a href="index.html#how-it-works">How It Works</a>
-                <a href="help.html">Help</a>
-                <a href="getting-started.html" class="nav-cta">Get Started</a>
+                <a href="index.html#how-it-works">運作方式</a>
+                <a href="help.html">說明</a>
+                <a href="getting-started.html" class="nav-cta">開始使用</a>
             </div>
         </div>
     </nav>
 
     <main class="status-page glass-panel">
-        <h1>Server status</h1>
-        <p class="lede">Whether BeanPool's own servers answer, checked from outside every 5 minutes. Local communities run on their own servers and are not on this page: when ours are down, they carry on.</p>
-        <p class="status-note" id="status-note" role="status">Reading the status…</p>
+        <h1>伺服器狀態</h1>
+        <p class="lede">BeanPool 自身的伺服器是否正常回應，每 5 分鐘從外部檢測一次。在地社群運作在各自的伺服器上，不在此頁面列出：當我們的伺服器發生中斷時，在地社群仍照常運作。</p>
+        <p class="status-note" id="status-note" role="status">正在讀取狀態…</p>
         <ul class="status-list" id="status-list" hidden></ul>
         <p class="status-foot" id="status-foot" hidden></p>
-        <noscript><p class="status-note">This page needs JavaScript to read the status. The figures themselves: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
+        <noscript><p class="status-note">此頁面需要啟用 JavaScript 以讀取狀態。具體數據請見：<a href="/api/registrar/status.json">/api/registrar/status.json</a>。</p></noscript>
     </main>
 
     <script>
@@ -102,16 +102,16 @@
         var URL_ = '/api/registrar/status.json';
         var LATE_S = 15 * 60;   // three ticks without a new status: the registrar's checks are late
         var SERVERS = {
-            global: { label: 'The global community', host: 'global.beanpool.org' },
-            test: { label: 'The test community', host: 'test.beanpool.org' },
-            vault: { label: 'The key vault', host: 'vault.beanpool.org' },
-            registrar: { label: 'Community addresses', host: 'beanpool.org: gives communities their name.beanpool.org addresses. When it is down, those addresses keep working; new ones and beanpool.org/i/ links wait.' },
+            global: { label: '全球社群', host: 'global.beanpool.org' },
+            test: { label: '測試社群', host: 'test.beanpool.org' },
+            vault: { label: '金鑰保險庫', host: 'vault.beanpool.org' },
+            registrar: { label: '社群網址', host: 'beanpool.org：為社群提供 name.beanpool.org 網址。當其服務中斷時，現有網址依然保持運作；新增網址與 beanpool.org/i/ 連結需等待恢復。' },
         };
         var WHY = {
-            'timed-out': 'it did not answer in time',
-            'unreachable': 'it could not be reached',
-            'not-ours': 'something else answered at its address',
-            'checks-missed': 'the checks did not run',
+            'timed-out': '未能及時回應',
+            'unreachable': '無法連線',
+            'not-ours': '其網址由其他服務回應',
+            'checks-missed': '檢測未執行',
         };
         var list = document.getElementById('status-list');
         var note = document.getElementById('status-note');
@@ -131,16 +131,16 @@
         function day(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d) ? dayFmt.format(new Date(d + 'T00:00:00Z')) : null; }
         function lasted(s) {
             var m = Math.max(1, Math.round(s / 60));
-            if (m < 60) return m + (m === 1 ? ' minute' : ' minutes');
+            if (m < 60) return m + ' 分鐘';
             var h = Math.floor(m / 60), r = m % 60;
-            if (h >= 48) return Math.round(h / 24) + ' days';
-            return h + (h === 1 ? ' hour' : ' hours') + (r ? ' ' + r + (r === 1 ? ' minute' : ' minutes') : '');
+            if (h >= 48) return Math.round(h / 24) + ' 天';
+            return h + ' 小時' + (r ? ' ' + r + ' 分鐘' : '');
         }
         function why(code) {
-            if (typeof code !== 'string') return 'it did not answer';
+            if (typeof code !== 'string') return '未回應';
             var http = code.match(/^http-(\d{3})$/);
-            if (http) return 'it answered with an error (HTTP ' + http[1] + ')';
-            return WHY[code] || 'it did not answer';
+            if (http) return '傳回錯誤（HTTP ' + http[1] + '）';
+            return WHY[code] || '未回應';
         }
 
         function row(s, late) {
@@ -148,11 +148,11 @@
             var inc = s.incident && num(s.incident.began_at) ? s.incident : null;
             var open = inc && inc.ended_at === null;
             var state, words;
-            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Its checks are late'; }
-            else if (open) { state = 'down'; words = 'Down'; }
-            else if (s.up === true) { state = 'up'; words = 'Answering'; }
-            else if (s.up === false) { state = 'missed'; words = 'Missed its last check'; }
-            else { state = 'unknown'; words = 'Not checked yet'; }
+            if (s.name === 'registrar' && late) { state = 'missed'; words = '檢測延遲'; }
+            else if (open) { state = 'down'; words = '已中斷'; }
+            else if (s.up === true) { state = 'up'; words = '正常回應'; }
+            else if (s.up === false) { state = 'missed'; words = '未通過最近一次檢測'; }
+            else { state = 'unknown'; words = '尚未檢測'; }
 
             var li = el('li', 'status-row');
             li.setAttribute('data-state', state);
@@ -169,19 +169,19 @@
             var share = el('p', 'status-share');
             var pct = num(s.percent);
             var since = day(s.since);
-            if (pct === null) share.textContent = 'No checks counted yet.';
+            if (pct === null) share.textContent = '暫無已統計的檢測。';
             else {
                 share.appendChild(el('strong', null, pct + '%'));
-                var of = s.name === 'registrar' ? ' of its 5-minute checks ran' : ' of checks answered';
-                share.appendChild(document.createTextNode(of + (since ? ' since ' + since : ' over the last 90 days') + '.'));
+                var of = s.name === 'registrar' ? ' 的 5 分鐘檢測成功執行' : ' 的檢測正常回應';
+                share.appendChild(document.createTextNode(of + (since ? '（自 ' + since + ' 以來）。' : '（過去 90 天內）。')));
             }
             li.appendChild(share);
 
             var last = el('p', 'status-incident');
-            if (!inc) last.textContent = since ? 'No incident since ' + since + '.' : 'No incident recorded.';
-            else if (open) last.textContent = 'Down since ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
-            else if (num(inc.ended_at)) last.textContent = 'Last incident: ' + when(inc.began_at) + ' for ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
-            else last.textContent = 'Last incident: ' + when(inc.began_at) + '.';
+            if (!inc) last.textContent = since ? '自 ' + since + ' 以來無事故記錄。' : '暫無事故記錄。';
+            else if (open) last.textContent = '自 ' + when(inc.began_at) + ' 起中斷：' + why(inc.why) + '。';
+            else if (num(inc.ended_at)) last.textContent = '最近一次事故：' + when(inc.began_at) + '，持續 ' + lasted(inc.ended_at - inc.began_at) + '：' + why(inc.why) + '。';
+            else last.textContent = '最近一次事故：' + when(inc.began_at) + '。';
             li.appendChild(last);
             return li;
         }
@@ -191,14 +191,14 @@
             var servers = doc && doc.v === 1 && Array.isArray(doc.servers) ? doc.servers.filter(function (s) {
                 return s && typeof s.name === 'string' && /^[a-z0-9-]{1,32}$/.test(s.name);
             }).slice(0, 6) : [];
-            if (!at || !servers.length) { say('The status could not be read: it is not in a form this page knows.'); return; }
+            if (!at || !servers.length) { say('無法讀取狀態：格式無法識別。'); return; }
             var late = Date.now() / 1000 - at > LATE_S;
             list.textContent = '';
             servers.forEach(function (s) { list.appendChild(row(s, late)); });
             list.hidden = false;
-            if (late) { note.textContent = 'These are from ' + zoneFmt.format(new Date(at * 1000)) + ': the checks have not run since. What a server says now may differ.'; note.setAttribute('data-tone', 'late'); }
-            else { note.textContent = 'Checked ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
-            foot.textContent = 'A check is one look from outside, 5 minutes apart. Two failed looks in a row are an incident; the share counts every look. Times are your own time zone’s.';
+            if (late) { note.textContent = '資料截至 ' + zoneFmt.format(new Date(at * 1000)) + '：此後未再執行檢測。目前伺服器實際狀態可能有所不同。'; note.setAttribute('data-tone', 'late'); }
+            else { note.textContent = '檢測時間：' + zoneFmt.format(new Date(at * 1000)) + '。'; note.removeAttribute('data-tone'); }
+            foot.textContent = '檢測是從外部發起，每 5 分鐘一次。連續兩次失敗視為一次事故；比例統計包含每一次檢測。時間均為你的本地時區。';
             foot.hidden = false;
         }
         function say(text) {
@@ -212,11 +212,11 @@
         function read() {
             lastRead = Date.now();
             fetch(URL_, { headers: { accept: 'application/json' } }).then(function (res) {
-                if (res.status === 404) { say('No status is published here yet.'); return null; }
+                if (res.status === 404) { say('此處尚未發布狀態。'); return null; }
                 if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json().then(draw, function () { say('The status could not be read: it is not in a form this page knows.'); });
+                return res.json().then(draw, function () { say('無法讀取狀態：格式無法識別。'); });
             }).catch(function () {
-                say('The status could not be read just now: the registrar that keeps it may be down. Local communities are not affected. Try again in a few minutes.');
+                say('剛才無法讀取狀態：儲存資料的註冊中心可能已停止回應。在地社群不受影響。請過幾分鐘再試。');
             });
         }
         read();

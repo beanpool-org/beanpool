@@ -27,9 +27,37 @@ export function canInviteToGroup(opts: {
     return !!mine && mine.role === 'convenor' && mine.status === 'active';
 }
 
-/** Already in the group, or already asked: active, invited or waiting for approval. A removed member may be invited again. */
-export function alreadyInGroup(members: readonly Pick<GroupMember, 'memberPubkey' | 'status'>[]): Set<string> {
-    return new Set(members.filter(m => m.status === 'active' || m.status === 'invited' || m.status === 'pending_approval').map(m => m.memberPubkey));
+export interface GroupMembershipSplit {
+    active: Set<string>;
+    invited: Set<string>;
+    pending: Set<string>;
+    /** Convenience aliases matching the phone's roster split (#2300) */
+    memberKeys: Set<string>;
+    invitedKeys: Set<string>;
+    pendingKeys: Set<string>;
+}
+
+/**
+ * Splits a group's roster rows by status: active ("In the group"), invited ("Invited"),
+ * and pending_approval ("Asked to join"). Removed members stay invitable (excluded from all sets).
+ */
+export function alreadyInGroup(members: readonly Pick<GroupMember, 'memberPubkey' | 'status'>[]): GroupMembershipSplit {
+    const active = new Set<string>();
+    const invited = new Set<string>();
+    const pending = new Set<string>();
+    for (const m of members) {
+        if (m.status === 'active') active.add(m.memberPubkey);
+        else if (m.status === 'invited') invited.add(m.memberPubkey);
+        else if (m.status === 'pending_approval') pending.add(m.memberPubkey);
+    }
+    return {
+        active,
+        invited,
+        pending,
+        memberKeys: active,
+        invitedKeys: invited,
+        pendingKeys: pending,
+    };
 }
 
 export interface InvitablePerson { publicKey: string; callsign: string; avatarUrl?: string | null }

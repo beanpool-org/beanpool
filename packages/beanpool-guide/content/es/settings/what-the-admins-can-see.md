@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Qué ven los administradores
 summary: En comunidades donde la administración lleva una lista de nombres: qué contiene sobre ti, quién la lee, qué guarda el servidor de tu comunidad y qué implica estar confirmado.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## La lista de nombres
@@ -27,7 +27,7 @@ Un administrador puede hacer una copia en PDF de la lista en su teléfono para r
 Un administrador puede **confirmarte**: declara que tu cuenta corresponde a la persona de tu entrada. Solo alguien que te conozca debería hacer eso, y en algunas comunidades dos administradores deben estar de acuerdo.
 
 - Una confirmación no lleva ningún nombre. El servidor registra qué cuenta, qué entrada y qué administrador, nunca quién eres.
-- No es una insignia de confianza y, por ahora, no cambia nada más en la app.
+- No es una insignia de confianza. También te da una línea de crédito de inmediato, el límite mínimo conocido, a menos que el propietario de tu comunidad lo haya desactivado: consulta "Tu línea de crédito".
 - Si un administrador te invitó por tu nombre, unirte con su invitación te confirmó con respecto a tu entrada, por parte de ese administrador. «Confirmado» solo significa que un administrador afirma que esta cuenta corresponde a la persona en esa entrada.
 - Si reemplazas un teléfono perdido y tu cuenta pasa a una nueva clave, tu confirmación pasa con ella.
 - Si dejas la comunidad o eliminas tu cuenta, tu confirmación termina. Tu entrada permanece en la lista de los administradores hasta que un administrador la elimine: pídeles que lo hagan.

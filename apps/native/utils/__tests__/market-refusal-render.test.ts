@@ -78,17 +78,21 @@ const sync = vi.hoisted(() => {
 });
 
 // The members-only card's way to the global community (utils/use-global-guest-visit.ts), and any browser it opened.
-const visits = vi.hoisted(() => ({ n: 0, browser: [] as string[] }));
+const visits = vi.hoisted(() => ({ n: 0, browser: [] as string[], visiting: false }));
 vi.mock('../use-global-guest-visit', () => ({
-    useGlobalGuestVisit: () => ({ visit: async () => { visits.n++; return { kind: 'guest' }; }, visiting: false }),
+    useGlobalGuestVisit: () => ({ visit: async () => { visits.n++; return { kind: 'guest' }; }, get visiting() { return visits.visiting; } }),
 }));
 
 vi.mock('react-native', () => {
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, testID } = props;
+        const { children, onPress, testID, accessibilityState, disabled, accessibilityLabel } = props;
         const attrs: Record<string, unknown> = {};
         if (testID) attrs['data-testid'] = testID;
         if (onPress) attrs.onClick = () => onPress({ stopPropagation() {} });
+        if (disabled) attrs['data-disabled'] = 'true';
+        if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
+        if (accessibilityState?.disabled !== undefined) attrs['aria-disabled'] = String(accessibilityState.disabled);
+        if (accessibilityState?.busy !== undefined) attrs['aria-busy'] = String(accessibilityState.busy);
         return createElement(tag, attrs, children);
     };
     const listener = () => ({ remove() {} });
@@ -210,6 +214,9 @@ beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
+    visits.n = 0;
+    visits.browser.length = 0;
+    visits.visiting = false;
     net.calls.length = 0;
     sync.reset();
     sync.listeners.clear();
@@ -276,6 +283,16 @@ describe('the Market of a community that refused this phone its listings', () =>
         await act(async () => { button!.click(); });
         expect(visits.n).toBe(1);
         expect(visits.browser).toEqual([]);
+    });
+
+    it('members only: while visiting, the button is busy and disabled in accessibilityState', async () => {
+        visits.visiting = true;
+        store.map.set(`beanpool_members_only_${NODE}`, '1');
+        await render();
+        const button = host.querySelector('[data-testid="members-only-look-around"]');
+        expect(button).not.toBeNull();
+        expect(button?.getAttribute('aria-busy')).toBe('true');
+        expect(button?.getAttribute('aria-disabled')).toBe('true');
     });
 });
 

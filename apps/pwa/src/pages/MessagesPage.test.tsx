@@ -1354,6 +1354,26 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
             expect(contrastRatio(lightColor, bubbleBg.light)).toBeGreaterThanOrEqual(4.5);
             expect(contrastRatio(darkColor, bubbleBg.dark)).toBeGreaterThanOrEqual(4.5);
         });
+
+        it('clicking an expired Edit gives the sentence role="status" and keeps focus off body', async () => {
+            mockMessagesByConv = {
+                'conv-1': [{
+                    id: 'msg-expired-edit', conversationId: 'conv-1', authorPubkey: 'my-pubkey',
+                    ciphertext: 'expired edit text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('expired edit text');
+
+            const editBtn = screen.getByRole('button', { name: 'Edit message' });
+            editBtn.focus();
+            fireEvent.click(editBtn);
+
+            const sentence = screen.getByText('You can edit a message for 15 minutes after sending it.');
+            expect(sentence).toHaveAttribute('role', 'status');
+            expect(document.activeElement).not.toBe(document.body);
+        });
     });
 });
 

@@ -6443,5 +6443,29 @@
     "many": "{n} тижнів",
     "other": "{n} тижня"
   },
-  "📦 Ask to borrow": "📦 Попросити позичити"
+  "📦 Ask to borrow": "📦 Попросити позичити",
+  "Add a community by address": "Додати спільноту за адресою",
+  "COMMUNITY ADDRESS": "АДРЕСА СПІЛЬНОТИ",
+  "COMMUNITY NAME (OPTIONAL)": "НАЗВА СПІЛЬНОТИ (НЕОБОВ'ЯЗКОВО)",
+  "Clear this phone's copy and download again": "Очистити копію на телефоні та завантажити знову",
+  "Community name (optional)": "Назва спільноти (необов'язково)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Підключіться до спільноти, ввівши її адресу. Телефон збереже її в цей список і перемкнеться на неї.",
+  "Have an invite code for this community?": "Маєте код запрошення до цієї спільноти?",
+  "Invited": "Запрошено",
+  "Reached at **{trust}** trust": "Досягається при **{trust}** довіри",
+  "Reached at **{trust}** trust (up to {upTo})": "Досягається при **{trust}** довіри (до {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Керуєте цією спільнотою? Власники та адміністратори бачать рядок «Керування» вгорі Налаштувань.",
+  "Saved communities": "Збережені спільноти",
+  "Switch to this community": "Перемкнутися на цю спільноту",
+  "Switch, forget or refresh the communities on this phone": "Перемикайтеся, забувайте або оновлюйте спільноти на цьому телефоні",
+  "Switching...": "Перемикання...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Спільноти, до яких приєднався цей телефон. Ваш ключ і 12 слів однакові в кожній із них; перемкніться на потрібну, щоб використовувати її.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Ласкаво просимо. З першого дня ви можете переглядати ринок, торгувати, отримувати кредити та запрошувати інших — а ваша кредитна лінія вже відкрита.",
+  "from {n} trust|from {n} trust": {
+    "one": "від {n} довіри",
+    "few": "від {n} довіри",
+    "many": "від {n} довіри",
+    "other": "від {n} довіри"
+  },
+  "{name}, already invited": "{name}, вже запрошено"
 }

@@ -1333,7 +1333,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         const blocked = new Set(getBlockedUsers());
         const seen = new Set<string>();
         const recents = conversations.filter(c => c.type === 'dm').flatMap(c => {
-            const peer = (c.participants || []).find(p => p && p !== identity.publicKey);
+            // ⚡ Bolt: O(1) index lookup for 2-element DM participant array instead of O(P) .find() scan
+            const parts = c.participants;
+            const candidate = parts && parts.length > 0 ? (parts[0] === identity.publicKey ? parts[1] : parts[0]) : undefined;
+            const peer = candidate !== identity.publicKey ? candidate : undefined;
             if (!peer || blocked.has(peer) || seen.has(peer)) return [];
             seen.add(peer);
             const held = membersByPublicKey.get(peer);

@@ -3363,5 +3363,14 @@
   "{n} week|{n} weeks": {
     "other": "{n} minggu"
   },
-  "📦 Ask to borrow": "📦 Minta pinjam"
+  "📦 Ask to borrow": "📦 Minta pinjam",
+  "Asked to join": "Meminta bergabung",
+  "Invited": "Diundang",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Selamat datang. Sejak hari pertama Anda dapat menelusuri, bertransaksi, menerima kredit, dan mengundang orang lain — dan jalur kredit Anda sudah terbuka.",
+  "from {n} trust|from {n} trust": {
+    "other": "dari {n} kepercayaan"
+  },
+  "{name}, already in the group": "{name}, sudah berada di grup",
+  "{name}, already invited": "{name}, sudah diundang",
+  "{name}, asked to join": "{name}, meminta bergabung"
 }

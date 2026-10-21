@@ -2,10 +2,10 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, native tools top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "fasulye",
@@ -5895,5 +5895,103 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Sunucunuz çalışmaya başladığında, ayarlar uygulamasında topluluğunuza bir isim verirsiniz, ilk üyeleri davet edersiniz ve onlar da geri kalanları davet eder. Orada \"konumu yayınla\" seçeneğini açtığınızda, haber verilmesini isteyen yakınınızdaki insanlar bunu duyar.",
   "How to run a node, on beanpool.org": "beanpool.org üzerinde sunucu nasıl çalıştırılır",
   "Copy my community's details": "Topluluğumun ayrıntılarını kopyala",
-  "Copied. Paste them into your node's settings app.": "Kopyalandı. Bunları sunucunuzun ayarlar uygulamasına yapıştırın."
+  "Copied. Paste them into your node's settings app.": "Kopyalandı. Bunları sunucunuzun ayarlar uygulamasına yapıştırın.",
+  "A few examples to start from, and a guide.": "Başlamak için birkaç örnek ve bir rehber.",
+  "A fixed number of Beans": "Sabit sayıda fasulye",
+  "About this tool": "Bu araç hakkında",
+  "Allow notifications": "Bildirimlere izin ver",
+  "Ask to borrow this?": "Bunu ödünç almak istiyor musun?",
+  "Asked to borrow": "Ödünç istendi",
+  "Beans per day": "Günlük fasulye",
+  "Beans per week": "Haftalık fasulye",
+  "Books: how it's going": "Defter: gidişat",
+  "Fee": "Ücret",
+  "Free": "Ücretsiz",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Ödünç alması ücretsizdir. Hiçbir şey tutulmaz: önce ödünç veren evet der.",
+  "Go on": "Devam et",
+  "Go on to post": "Paylaşmaya devam et",
+  "Go straight in and add what you keep.": "Doğrudan gir ve tuttuklarını ekle.",
+  "I already do this": "Bunu zaten yapıyorum",
+  "I already do this: go straight in and add what you keep.": "Bunu zaten yapıyorum: doğrudan gir ve tuttuklarını ekle.",
+  "I'm starting out": "Yeni başlıyorum",
+  "I'm starting out: a few examples to start from, and a guide.": "Yeni başlıyorum: başlamak için birkaç örnek ve bir rehber.",
+  "It shows in the Market as an Offer.": "Pazar'da bir Teklif olarak görünür.",
+  "Keep a private copy on your community's server": "Topluluğunun sunucusunda gizli bir kopya tut",
+  "Kept on this phone only. Nothing in it leaves this phone.": "Yalnızca bu telefonda tutulur. İçindeki hiçbir şey bu telefondan dışarı çıkmaz.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Bu telefonda tutulur; topluluğunun sunucusunda yalnızca senin uygulama üzerinden okuyabileceğin gizli bir kopyası bulunur. O sunucudaki her şey gibi, işleticisi de okuyabilir.",
+  "List it in the Market": "Pazar'da listele",
+  "More tools": "Daha fazla araç",
+  "Next you check it and tap Post. Nothing is posted before that.": "Ardından kontrol edip Paylaş'a dokunursun. Ondan önce hiçbir şey paylaşılmaz.",
+  "No thanks": "Hayır, teşekkürler",
+  "No tools here yet. They come with updates of the app.": "Burada henüz araç yok. Uygulama güncellemeleriyle birlikte gelir.",
+  "Nothing is held until the lender says yes.": "Ödünç veren evet diyene kadar hiçbir şey tutulmaz.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Ödünç veren evet diyene kadar hiçbir şey tutulmaz. Ardından ücret geçici bir Emanet Cüzdanına aktarılır ve geri verildiğinde ödünç veren kişi, Ortak Alan Havuzunu finanse etmek için %1.5 işlem ücreti {owned} düşülmüş olarak bunu alır.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "Bu telefonda BeanPool için bildirimler kapalı olduğundan hatırlatıcılar gösterilemez.",
+  "Open {tool}": "{tool} aç",
+  "Options for {tool}": "{tool} seçenekleri",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "Bu araç Ana Sayfana eklensin mi? Tuttuğu şeyleri bir bakışta gösterir.",
+  "Read in English": "İngilizce oku",
+  "Read the guide": "Rehberi oku",
+  "Reminders": "Hatırlatıcılar",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "Araçlarının bu telefonda kurduğu hatırlatıcılar. Onlarla ilgili hiçbir şey bu telefondan dışarı çıkmaz.",
+  "Remove my data from this phone": "Verilerimi bu telefondan kaldır",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "Bu araç için bu topluluğa ait listeyi, fotoğrafları ve hatırlatıcıları bu telefondan kaldırır. Aynı aracın başka bir topluluktaki kopyası korunur. Bu işlem geri alınamaz.",
+  "Replace your unfinished post?": "Yarım kalan ilanın değiştirilsin mi?",
+  "Show translation": "Çeviriyi göster",
+  "Some examples": "Bazı örnekler",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "Bu araçta bir sorun oluştu. Bu telefonda tuttuğu veriler güvende.",
+  "Stock: what you have": "Stok: elindekiler",
+  "Things you can do on your own": "Kendi başına yapabileceğin şeyler",
+  "Things you can do on your own, that make your community stronger.": "Kendi başına yapabileceğin ve topluluğunu güçlendiren şeyler.",
+  "This page is in English for now.": "Bu sayfa şimdilik İngilizce.",
+  "This page is newer in English.": "Bu sayfanın İngilizce hali daha yeni.",
+  "This tool isn't in this version of the app": "Bu araç uygulamanın bu sürümünde yok",
+  "Tool reminders": "Araç hatırlatıcıları",
+  "Trade: how you deal": "Takas: nasıl anlaştığın",
+  "Update": "Güncelle",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "Kullanmak için BeanPool'u güncelle. Sürümün Ayarlar'ın en altında gösterilir.",
+  "You have an unfinished post on the map. Going on replaces it.": "Haritada yarım kalmış bir ilanın var. Devam etmek bunun yerine geçer.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "Bu teklif için bir Emanet Cüzdanına {credits} kredi ({n} gün) taahhüt ettin.",
+    "other": "Bu teklif için bir Emanet Cüzdanına {credits} kredi ({n} gün) taahhüt ettin."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "Bu teklif için bir Emanet Cüzdanına {credits} kredi ({n} ay) taahhüt ettin.",
+    "other": "Bu teklif için bir Emanet Cüzdanına {credits} kredi ({n} ay) taahhüt ettin."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "Bu teklif için bir Emanet Cüzdanına {credits} kredi ({n} hafta) taahhüt ettin.",
+    "other": "Bu teklif için bir Emanet Cüzdanına {credits} kredi ({n} hafta) taahhüt ettin."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Bu ihtiyacı karşılamak için {credits} kredi ({n} gün) kazanmayı talep ettin (%1.5 işlem ücreti düşüldükten sonra net {net}) {owned}.",
+    "other": "Bu ihtiyacı karşılamak için {credits} kredi ({n} gün) kazanmayı talep ettin (%1.5 işlem ücreti düşüldükten sonra net {net}) {owned}."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Bu ihtiyacı karşılamak için {credits} kredi ({n} ay) kazanmayı talep ettin (%1.5 işlem ücreti düşüldükten sonra net {net}) {owned}.",
+    "other": "Bu ihtiyacı karşılamak için {credits} kredi ({n} ay) kazanmayı talep ettin (%1.5 işlem ücreti düşüldükten sonra net {net}) {owned}."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Bu ihtiyacı karşılamak için {credits} kredi ({n} hafta) kazanmayı talep ettin (%1.5 işlem ücreti düşüldükten sonra net {net}) {owned}.",
+    "other": "Bu ihtiyacı karşılamak için {credits} kredi ({n} hafta) kazanmayı talep ettin (%1.5 işlem ücreti düşüldükten sonra net {net}) {owned}."
+  },
+  "Your community asks for a profile photo before you post.": "Topluluğun paylaşım yapmadan önce bir profil fotoğrafı ister.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "Topluluğunun sunucusu henüz bir kopya tutamıyor, bu yüzden şimdilik yalnızca bu telefonda kalır.",
+  "for {n} day|for {n} days": {
+    "one": "{n} gün için",
+    "other": "{n} gün için"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} hafta için",
+    "other": "{n} hafta için"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} ay",
+    "other": "{n} ay"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} hafta",
+    "other": "{n} hafta"
+  },
+  "📦 Ask to borrow": "📦 Ödünç iste"
 }

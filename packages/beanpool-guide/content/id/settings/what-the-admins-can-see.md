@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Yang bisa dilihat admin
 summary: Dalam komunitas yang adminnya menyimpan daftar nama: apa yang tercatat tentangmu, siapa yang bisa membacanya, apa yang disimpan server, dan arti status terkonfirmasi.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## Daftar nama
@@ -27,7 +27,7 @@ Seorang admin dapat membuat salinan PDF dari daftar tersebut di ponsel mereka, u
 Seorang admin dapat **mengonfirmasimu**: mereka menyatakan akunmu adalah orang yang ada pada entri tersebut. Hanya seseorang yang mengenalmu yang seharusnya melakukan itu, dan di beberapa komunitas dua admin harus sepakat.
 
 - Konfirmasi tidak memuat nama. Server mencatat akun mana, entri mana, dan admin mana, tidak pernah siapa dirimu.
-- Ini bukan lencana percaya, dan untuk saat ini tidak mengubah hal lain di dalam aplikasi.
+- Ini bukan lencana percaya. Ini juga langsung memberimu batas kredit, batas dasar yang diketahui, kecuali jika pemilik komunitasmu menonaktifkannya: lihat "Batas kreditmu".
 - Jika seorang admin mengundangmu berdasarkan nama, bergabung dengan undangan mereka mengonfirmasimu terhadap entrimu, oleh admin tersebut. "Terkonfirmasi" hanya berarti bahwa seorang admin menyatakan akun ini adalah orang yang ada pada entri tersebut.
 - Jika kamu mengganti ponsel yang hilang dan akunmu berpindah ke kunci baru, konfirmasimu berpindah bersamanya.
 - Jika kamu keluar atau menghapus akunmu, konfirmasimu berakhir. Entrimu tetap berada di daftar admin sampai seorang admin menghapusnya: mintalah kepada mereka.

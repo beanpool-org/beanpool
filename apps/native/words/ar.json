@@ -6959,5 +6959,13 @@
   "Look around first, then join with this account": "استكشف أولاً، ثم انضم بهذا الحساب",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "تعرف على أشخاص من كل مكان واعثر على مجتمعات قريبة منك. استكشف أولاً كضيف، ثم اضغط على «انضمام» في الأعلى للانضمام بالحساب الموجود على هذا الهاتف: يظل مفتاحك وكلماتك الـ 12 كما هي، ولا يتغير شيء في مجتمعاتك الأخرى.",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "بمجرد التأكيد، يزداد حده بما يصل إلى {amount}: الحد الأدنى المعلوم لمجتمعك، طالما كان لديه عرض مدرج.",
-  "Uses the key and 12 words already on this phone. No new account is made.": "يستخدم المفتاح والكلمات الـ 12 الموجودة بالفعل على هذا الهاتف. لا يتم إنشاء حساب جديد."
+  "Uses the key and 12 words already on this phone. No new account is made.": "يستخدم المفتاح والكلمات الـ 12 الموجودة بالفعل على هذا الهاتف. لا يتم إنشاء حساب جديد.",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "أوقف مسؤول نسخة الخادم لهذه الأداة، لذا فهي تُحفظ على هذا الهاتف فقط. يمكنك تشغيلها مجددًا في الإعدادات.",
+  "Asked to join": "طلب الانضمام",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "تعذر الوصول إلى خادم مجتمعك، لذا لم يتغير شيء. حاول مرة أخرى عندما تكون متصلاً بالإنترنت.",
+  "One phone at a time: the copy you changed last is the one kept.": "هاتف واحد في كل مرة: النسخة التي قمت بتغييرها أخيرًا هي التي يتم الاحتفاظ بها.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "يزيل بياناتك لهذه الأداة من هذا الهاتف، ونسختها على خادم مجتمعك. أي هاتف آخر مسجّل الدخول باسمك يحتفظ بما لديه ويتوقف عن إرساله. تحتفظ الأداة نفسها في مجتمع آخر ببياناتها الخاصة. لا يمكن التراجع عن هذا الإجراء.",
+  "You can edit a message for 15 minutes after sending it.": "يمكنك تعديل الرسالة لمدة 15 دقيقة بعد إرسالها.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "لم يعد خادم مجتمعك يحتفظ بنسخة من هذه الأداة، لذا فهي تُحفظ على هذا الهاتف فقط. يمكنك تشغيل النسخة مجددًا في الإعدادات.",
+  "{name}, asked to join": "{name}، طلب الانضمام"
 }

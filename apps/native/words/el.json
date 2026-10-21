@@ -5975,5 +5975,27 @@
     "one": "{n} εβδομάδα",
     "other": "{n} εβδομάδες"
   },
-  "📦 Ask to borrow": "📦 Αίτημα δανεισμού"
+  "📦 Ask to borrow": "📦 Αίτημα δανεισμού",
+  "Add a community by address": "Προσθήκη κοινότητας με διεύθυνση",
+  "COMMUNITY ADDRESS": "ΔΙΕΥΘΥΝΣΗ ΚΟΙΝΟΤΗΤΑΣ",
+  "COMMUNITY NAME (OPTIONAL)": "ΟΝΟΜΑ ΚΟΙΝΟΤΗΤΑΣ (ΠΡΟΑΙΡΕΤΙΚΟ)",
+  "Clear this phone's copy and download again": "Εκκαθάριση του αντιγράφου αυτού του τηλεφώνου και εκ νέου λήψη",
+  "Community name (optional)": "Όνομα κοινότητας (προαιρετικό)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Συνδέσου σε μια κοινότητα πληκτρολογώντας τη διεύθυνσή της. Το τηλέφωνό σου θα την αποθηκεύσει σε αυτήν τη λίστα και θα μεταβεί σε αυτήν.",
+  "Have an invite code for this community?": "Έχεις κωδικό πρόσκλησης για αυτήν την κοινότητα;",
+  "Invited": "Προσκλήθηκε",
+  "Reached at **{trust}** trust": "Επιτυγχάνεται σε **{trust}** εμπιστοσύνη",
+  "Reached at **{trust}** trust (up to {upTo})": "Επιτυγχάνεται σε **{trust}** εμπιστοσύνη (έως {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Διαχειρίζεσαι αυτήν την κοινότητα; Οι ιδιοκτήτες και οι διαχειριστές βλέπουν μια γραμμή «Διαχείριση» στο επάνω μέρος των Ρυθμίσεων.",
+  "Saved communities": "Αποθηκευμένες κοινότητες",
+  "Switch to this community": "Εναλλαγή σε αυτήν την κοινότητα",
+  "Switch, forget or refresh the communities on this phone": "Εναλλαγή, διαγραφή ή ανανέωση των κοινοτήτων σε αυτό το τηλέφωνο",
+  "Switching...": "Εναλλαγή...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Οι κοινότητες στις οποίες έχει συνδεθεί αυτό το τηλέφωνο. Το κλειδί σου και οι 12 λέξεις σου είναι τα ίδια σε καθεμία· κάνε εναλλαγή σε μία για να τη χρησιμοποιήσεις.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Καλώς ήρθατε. Από την πρώτη μέρα μπορείτε να περιηγηθείτε, να συναλλαχθείτε, να λάβετε πιστώσεις και να προσκαλέσετε άλλους — και το πιστωτικό σας όριο είναι ήδη ανοιχτό.",
+  "from {n} trust|from {n} trust": {
+    "one": "από {n} εμπιστοσύνη",
+    "other": "από {n} εμπιστοσύνη"
+  },
+  "{name}, already invited": "{name}, έχει ήδη προσκληθεί"
 }

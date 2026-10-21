@@ -3,7 +3,7 @@ slug: what-the-admins-can-see
 title: Was die Admins sehen
 summary: In einer Community mit Namensliste: was über dich gespeichert wird, wer es lesen darf, was der Server behält und was bestätigt bedeutet.
 related: privacy, joining, leaving-or-deleting, admins-ai-assistants
-source-hash: 61fa5ecae00a414b
+source-hash: 88d60b236e7653ab
 ---
 
 ## Die Namensliste
@@ -27,7 +27,7 @@ Ein Admin kann auf seinem Telefon eine PDF-Kopie der Liste zur sicheren Aufbewah
 Ein Admin kann dich **bestätigen**: Er erklärt, dass dein Konto zu der Person in deinem Eintrag gehört. Nur jemand, der dich kennt, sollte dies tun, und in manchen Communitys müssen zwei Admins zustimmen.
 
 - Eine Bestätigung enthält keinen Namen. Der Server speichert, welches Konto, welcher Eintrag und welcher Admin beteiligt sind – niemals, wer du bist.
-- Es ist kein Vertrauensabzeichen und ändert vorerst nichts weiter in der App.
+- Es ist kein Vertrauensabzeichen. Es gibt dir auch sofort einen Kreditrahmen, den bekannten Kreditrahmen, es sei denn, der Eigentümer deiner Community hat ihn abgeschaltet: Siehe „Dein Kreditrahmen“.
 - Wenn ein Admin dich mit Namen eingeladen hat, hat der Beitritt über diese Einladung dich durch diesen Admin mit deinem Eintrag bestätigt. „Bestätigt“ bedeutet lediglich, dass ein Admin erklärt, dieses Konto gehöre zu der Person in jenem Eintrag.
 - Wenn du ein verlorenes Telefon ersetzt und dein Konto auf einen neuen Schlüssel umzieht, zieht deine Bestätigung mit um.
 - Wenn du die Community verlässt oder dein Konto löschst, erlischt deine Bestätigung. Dein Eintrag bleibt auf der Liste der Admins, bis ein Admin ihn löscht: Bitte ihn darum.

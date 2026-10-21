@@ -1363,7 +1363,7 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
                     timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
                 } as ApiMessage],
             };
-            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            const { container } = render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
             await screen.findByText('expired edit text');
 
             const editBtn = screen.getByRole('button', { name: 'Edit message' });
@@ -1373,6 +1373,13 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
             const sentence = screen.getByText('You can edit a message for 15 minutes after sending it.');
             expect(sentence).toHaveAttribute('role', 'status');
             expect(document.activeElement).not.toBe(document.body);
+
+            // Re-rendering (e.g. typing in composer) must not steal focus back to the status notice
+            const textarea = container.querySelector('textarea')!;
+            textarea.focus();
+            expect(document.activeElement).toBe(textarea);
+            fireEvent.change(textarea, { target: { value: 'drafting next message' } });
+            expect(document.activeElement).toBe(textarea);
         });
     });
 });

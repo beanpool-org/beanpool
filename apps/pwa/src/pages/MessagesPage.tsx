@@ -2245,7 +2245,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 <span
                                                     role="status"
                                                     tabIndex={-1}
-                                                    ref={(el) => { el?.focus(); }}
+                                                    ref={(el) => {
+                                                        // Only focus if focus dropped to body when the button unmounted
+                                                        if (el && document.activeElement === document.body) {
+                                                            el.focus();
+                                                        }
+                                                    }}
                                                     style={{
                                                         fontSize: '0.75rem',
                                                         lineHeight: 1.3,

@@ -26,13 +26,16 @@ export interface ColumnException {
 /**
  * A copied table's `watermark` is how a delta finds a changed row, so every write must move it: a touch trigger that
  * stamps it, or each write setting it. A write that moves nothing reaches a standby only in a whole copy, so the column
- * it writes can't be listed as copied (test-replication-manifest.ts §3 checks the source's writes).
+ * it writes can't be listed as copied (test-replication-manifest.ts §3 checks the source's writes), unless a standby makes
+ * the same write itself: a tombstone's clear (`clearedByTombstone`), or a re-key's move (`movedByRekey`, by column with the
+ * reason: a column moveMemberKeyRows rewrites from the old key to the new, engine/key-move.ts, which a standby's follow of
+ * the re-key runs too; §3 accepts that write inside moveMemberKeyRows alone, and checks the follow runs it).
  */
 export type TableEntry =
     /** Every column copied with the main server's value. `columns` names them all. `payload`: its SyncPayload key. */
-    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true; rows?: RowRule; agedOut?: AgedOut } & Carried
+    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear>; movedByRekey?: Record<string, string>; plain?: true; rows?: RowRule; agedOut?: AgedOut } & Carried
     /** `columns` copied, and the `except` ones not. Between them they name every column. */
-    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true; rows?: RowRule; agedOut?: AgedOut } & Carried
+    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear>; movedByRekey?: Record<string, string>; plain?: true; rows?: RowRule; agedOut?: AgedOut } & Carried
     /** Never copied. With `gap`, main doesn't copy it although the design says it should, and the twin suite compares it. */
     | { kind: 'local'; reason: string; gap?: GapId; key?: string[]; except?: Record<string, ColumnException> }
     /** Not in the sync payload; the take-over bundle brings it (services/takeover-envelope.ts). `bySetting`: a
@@ -368,6 +371,9 @@ export const TABLES: Record<string, TableEntry> = {
     tombstones: {
         kind: 'replicated', payload: 'tombstones', watermark: 'deleted_at',
         columns: cols('table_name row_key deleted_at'),
+        movedByRekey: {
+            row_key: "a member's tool removals (`<key>|<tool>`) go to the new key keeping their time, so each still goes 30 days after its delete",
+        },
     },
 
     // ── Carried by the take-over bundle ──

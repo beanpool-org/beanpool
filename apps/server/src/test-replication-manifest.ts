@@ -13,7 +13,8 @@
  *     write to it moves the watermark: a touch trigger
  *     stamps it, or each UPDATE and upsert in the source sets it, or writes only columns the table doesn't copy (a write
  *     that moves nothing reaches a standby only in a whole copy), or clears a column the standby clears itself when the
- *     named tombstone arrives (the importer is read for the clear).
+ *     named tombstone arrives (the importer is read for the clear), or is a re-key's move of a column declared
+ *     `movedByRekey`, inside moveMemberKeyRows, which a standby's follow of the re-key runs too (key-move.ts is read for it).
  *  4. Every members column except the declared ones is in `members_touch_updated_at`'s column list (read from
  *     sqlite_master), and each declared one is really missing from it, so the fix that adds one deletes its line.
  *  5. Every field of local-config.json (LocalConfig) and of the `node_config` row (NodeConfig) is classified, and the
@@ -282,6 +283,9 @@ async function main(): Promise<void> {
         const cleared = 'clearedByTombstone' in entry ? Object.keys(entry.clearedByTombstone ?? {}) : [];
         const clearedNotCopied = 'columns' in entry ? cleared.filter((c) => !entry.columns.includes(c)) : cleared;
         if (cleared.length > 0) assert(clearedNotCopied.length === 0, `${t}: each column a tombstone clears is a copied one (not: ${list(clearedNotCopied)})`);
+        const rekeyMoved = 'movedByRekey' in entry ? Object.keys(entry.movedByRekey ?? {}) : [];
+        const rekeyMovedNotCopied = 'columns' in entry ? rekeyMoved.filter((c) => !entry.columns.includes(c)) : rekeyMoved;
+        if (rekeyMoved.length > 0) assert(rekeyMovedNotCopied.length === 0, `${t}: each column a re-key moves is a copied one (not: ${list(rekeyMovedNotCopied)})`);
         const notAColumn = [...except, ...key].filter((c) => !actual.includes(c));
         if (entry.kind === 'replicated' || entry.kind === 'replicated-except') {
             const named = [...entry.columns, ...except];
@@ -411,9 +415,21 @@ async function main(): Promise<void> {
     const engineWrites = fs.existsSync(engineSrc) ? writesIn(engineSrc, () => false) : [];
     assert(serverWrites.length > 0 && engineWrites.length > 0,
         `the server's and the engine's source are read (${serverWrites.length} and ${engineWrites.length} writes)`);
+    // A re-key's move (the manifest's `movedByRekey`) is accepted inside moveMemberKeyRows alone, the move a standby's
+    // follow runs too (checked below).
+    const keyMove = path.join(here, 'engine/key-move.ts');
+    const keyMoveSource = fs.readFileSync(keyMove, 'utf-8');
+    const keyMoveLines = keyMoveSource.split('\n');
+    const moveFrom = keyMoveLines.findIndex((l) => l.startsWith('export function moveMemberKeyRows(')) + 1;
+    const moveTo = moveFrom > 0 ? keyMoveLines.findIndex((l, i) => i >= moveFrom && l === '}') + 1 : 0;
+    const inRekeyMove = (at: string) => {
+        const [file, line] = at.split(':');
+        return file === path.relative(here, keyMove) && Number(line) > moveFrom && Number(line) < moveTo;
+    };
     const still: string[] = [];
     const notCopiedOnly: string[] = [];
     const tombstoneCleared: string[] = [];
+    const rekeyMoves: string[] = [];
     const inParentRow = new Set<string>();
     for (const w of [...serverWrites, ...engineWrites]) {
         const entry = TABLES[w.table];
@@ -424,14 +440,17 @@ async function main(): Promise<void> {
         if (stamps(w.table, entry.watermark) || w.set.includes(entry.watermark) || (!!entry.orWatermark && w.set.includes(entry.orWatermark))) continue;
         const notCopied = entry.kind === 'replicated-except' ? entry.except : {};
         const cleared = entry.clearedByTombstone ?? {};
+        const movedByRekey = entry.movedByRekey ?? {};
         if (w.set.length > 0 && w.set.every((c) => notCopied[c])) notCopiedOnly.push(`${w.table}.${w.set.join('+')} (${w.at})`);
         else if (w.set.length > 0 && w.set.every((c) => cleared[c])) tombstoneCleared.push(`${w.table}.${w.set.join('+')} (${w.at})`);
+        else if (w.set.length > 0 && w.set.every((c) => movedByRekey[c]) && inRekeyMove(w.at)) rekeyMoves.push(`${w.table}.${w.set.join('+')} (${w.at})`);
         else still.push(`${w.table} SET ${w.set.join(', ') || '?'} (${w.at})`);
     }
     assert(still.length === 0,
-        `every write to a copied table moves its watermark, or writes only columns it doesn't copy or a tombstone clears (moves nothing: ${list(still)})`);
+        `every write to a copied table moves its watermark, or writes only columns it doesn't copy, a tombstone clears or a re-key moves (moves nothing: ${list(still)})`);
     console.log(`  writes that move no watermark, of columns not copied: ${list(notCopiedOnly)}`);
     console.log(`  writes that move no watermark, of columns a tombstone clears: ${list(tombstoneCleared)}`);
+    console.log(`  writes that move no watermark, a re-key's move a standby makes itself: ${list(rekeyMoves)}`);
     // member_photos, written by its one writer (@beanpool/engine members.ts setMemberPhoto): every change moves the member's
     // updated_at, a photo whose version and size stay the same included (here, the same bytes with the blanks moved). And
     // group_pictures by its one writer (@beanpool/engine groups.ts setGroupPicture), the group's (#1486).
@@ -485,6 +504,14 @@ async function main(): Promise<void> {
             assert(new RegExp(`UPDATE\\s+${t}\\s+SET\\s+${c}\\s*=\\s*NULL\\b`, 'i').test(body),
                 `${t}.${c}: the importer clears it when a \`${clear.tombstone}\` tombstone arrives (engine/sync.ts applyTombstoneLocally)`);
         }
+    }
+    // And each re-key's move itself: the importer follows its main server's re-keys, each with moveMemberKeyRows.
+    const follow = keyMoveSource.slice(keyMoveSource.indexOf('export function followReplicatedRekeys('));
+    const followBody = follow.slice(0, follow.indexOf('\n}\n'));
+    const declaredMoves = Object.entries(TABLES).flatMap(([t, e]) => (e.kind === 'replicated' || e.kind === 'replicated-except') ? Object.keys(e.movedByRekey ?? {}).map((c) => `${t}.${c}`) : []);
+    if (declaredMoves.length > 0) {
+        assert(moveFrom > 0 && moveTo > moveFrom && /\bmoveMemberKeyRows\([^)]*keepStamps:\s*true/.test(followBody) && /\bfollowReplicatedRekeys\(/.test(importerSource),
+            `${list(declaredMoves)}: a standby makes the re-key's move itself (engine/sync.ts → key-move.ts followReplicatedRekeys → moveMemberKeyRows)`);
     }
 
     console.log('\n— 4. the members touch trigger —');

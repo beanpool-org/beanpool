@@ -2,10 +2,10 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-22",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” इस समुदाय में पहले से लिया जा चुका है। कोई दूसरा नाम चुनें।",
@@ -2443,9 +2443,17 @@
     "one": "{name} को सहयोगी के रूप में जोड़ा जा रहा है, {n} फली का समर्थन",
     "other": "{name} को सहयोगी के रूप में जोड़ा जा रहा है, {n} फलियों का समर्थन"
   },
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "{name} को सहयोगी के रूप में जोड़ा जा रहा है, {n} फली के नामित समर्थन के साथ",
+    "other": "{name} को सहयोगी के रूप में जोड़ा जा रहा है, {n} फलियों के नामित समर्थन के साथ"
+  },
   "Adding {name} as a keeper, backing {n} beans|Adding {name} as a keeper, backing {n} beans": {
     "one": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है, {n} फली का समर्थन",
     "other": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है, {n} फलियों का समर्थन"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है, {n} फली के नामित समर्थन के साथ",
+    "other": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है, {n} फलियों के नामित समर्थन के साथ"
   },
   "Adding {name} as a collaborator": "{name} को सहयोगी के रूप में जोड़ा जा रहा है",
   "Adding {name} as a keeper": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है",

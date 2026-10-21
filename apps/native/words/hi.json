@@ -2,10 +2,10 @@
   "_meta": {
     "language": "hi",
     "name": "Hindi",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-22",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "फलियाँ",
@@ -58,6 +58,7 @@
   "Global community": "वैश्विक समुदाय",
   "Join with this account: 12 words or a sign-in": "इस खाते से जुड़ें: 12 शब्द या साइन-इन",
   "Join with this account: a sign-in": "इस खाते से जुड़ें: साइन-इन",
+  "Look around first, then join with this account": "पहले देखें, फिर इस खाते से जुड़ें",
   "Can't reach it right now. Tap to try again.": "अभी वहाँ तक नहीं पहुँचा जा सकता। फिर से कोशिश करने के लिए टैप करें।",
   "Can't reach it right now": "अभी वहाँ तक नहीं पहुँचा जा सकता",
   "Your account there was closed.": "वहाँ आपका खाता बंद कर दिया गया।",
@@ -302,6 +303,7 @@
   "That restore has already gone through: the other phone has your account now. If it wasn't you, someone else has your account: make sure the sign-in account it used is yours alone, and ask your community's admins for help.": "वह पुनर्स्थापना पहले ही हो चुकी है: दूसरे फ़ोन के पास अब आपका खाता है। यदि वह आप नहीं थे, तो किसी और के पास आपका खाता है: सुनिश्चित करें कि इस्तेमाल किया गया साइन-इन खाता केवल आपका है, और अपने समुदाय के एडमिन से मदद माँगें।",
   "Link a device": "डिवाइस जोड़ें",
   "🌍 Join the global community": "🌍 वैश्विक समुदाय से जुड़ें",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "हर जगह के लोगों से मिलें और अपने आस-पास के समुदायों को खोजें। पहले एक अतिथि के रूप में देखें, फिर इस फ़ोन पर मौजूद खाते के रूप में जुड़ने के लिए सबसे ऊपर 'शामिल हों' पर टैप करें: आपकी चाबी और आपके 12 शब्द वही रहते हैं, और आपके अन्य समुदायों में कुछ भी नहीं बदलता है।",
   "This opened from a link. Go on only if you just pointed your camera at a code on your own screen.": "यह एक लिंक से खुला है। आगे तभी बढ़ें जब आपने अभी-अभी अपना कैमरा अपनी ही स्क्रीन पर किसी कोड की ओर किया हो।",
   "Copies your own account to a browser, to use BeanPool there as you": "आपका अपना खाता एक ब्राउज़र में कॉपी करता है, ताकि आप वहाँ खुद के रूप में BeanPool इस्तेमाल कर सकें",
   "BeanPool can't read the account on this phone. Restart and try again, or restore with your 12 words.": "BeanPool इस फ़ोन पर खाता नहीं पढ़ पा रहा है। फिर से शुरू करें और दोबारा कोशिश करें, या अपने 12 शब्दों से बहाल करें।",
@@ -4258,9 +4260,17 @@
     "one": "{name} को सहयोगी के रूप में जोड़ा जा रहा है, {n} फली का समर्थन",
     "other": "{name} को सहयोगी के रूप में जोड़ा जा रहा है, {n} फलियों का समर्थन"
   },
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "{name} को सहयोगी के रूप में जोड़ा जा रहा है, {n} फली के नामित समर्थन के साथ",
+    "other": "{name} को सहयोगी के रूप में जोड़ा जा रहा है, {n} फलियों के नामित समर्थन के साथ"
+  },
   "Adding {name} as a keeper, backing {n} beans|Adding {name} as a keeper, backing {n} beans": {
     "one": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है, {n} फली का समर्थन",
     "other": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है, {n} फलियों का समर्थन"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है, {n} फली के नामित समर्थन के साथ",
+    "other": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है, {n} फलियों के नामित समर्थन के साथ"
   },
   "Adding {name} as a collaborator": "{name} को सहयोगी के रूप में जोड़ा जा रहा है",
   "Adding {name} as a keeper": "{name} को व्यवस्थापक के रूप में जोड़ा जा रहा है",
@@ -4414,6 +4424,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "{name} कौन से सदस्य हैं? केवल उसी की पुष्टि करें जिसे आप जानते हैं कि वह वही व्यक्ति है।",
   "Which member is this person? Confirm only someone you know is them.": "यह व्यक्ति कौन सा सदस्य है? केवल उसी की पुष्टि करें जिसे आप जानते हैं कि वह वही व्यक्ति है।",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "वे {amount} चुकाने के लिए काम करते हैं: 0 की एक निश्चित फ़्लोर सीमा, और 0 से ऊपर मिलने वाली प्रत्येक फली तब तक साझा संसाधन में जाती है जब तक कि यह चुकता न हो जाए।",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "एक बार पुष्टि होने के बाद, उनकी सीमा {amount} तक बढ़ जाती है: आपके समुदाय की निश्चित फ़्लोर सीमा, जब तक वे एक प्रस्ताव लिस्टेड रखते हैं।",
   "Find a member": "सदस्य खोजें",
   "Find a member by name": "नाम से सदस्य खोजें",
   "Nobody here is waiting to be confirmed.": "यहाँ कोई भी पुष्टि की प्रतीक्षा नहीं कर रहा है।",
@@ -4655,6 +4666,9 @@
   "No Google, Apple or Facebook needed. Your 12 words are the only way back in.": "Google, Apple या Facebook की कोई ज़रूरत नहीं। आपके 12 शब्द ही वापस आने का एकमात्र रास्ता हैं।",
   "Or sign in": "या साइन इन करें",
   "Also a way back if you lose your phone.": "यदि आप अपना फ़ोन खो देते हैं तो भी वापस आने का एक रास्ता।",
+  "Uses the key and 12 words already on this phone. No new account is made.": "इस फ़ोन पर पहले से मौजूद चाबी और 12 शब्दों का उपयोग करता है। कोई नया खाता नहीं बनाया जाता है।",
+  "Also add a sign-in": "एक साइन-इन भी जोड़ें",
+  "A way back in if you lose this phone. It's linked to this same account.": "यदि आप यह फ़ोन खो देते हैं तो वापस आने का एक रास्ता। यह इसी खाते से जुड़ा है।",
   "Setting up your account…": "आपका खाता सेटअप किया जा रहा है…",
   "🔑 These 12 words ARE your account.": "🔑 ये 12 शब्द ही आपका खाता हैं।",
   "Nobody can reset them: not us, not this community. If you lose them and this phone, the account is gone for good.": "कोई भी इन्हें रीसेट नहीं कर सकता: न हम, न यह समुदाय। यदि आप इन्हें और इस फ़ोन को खो देते हैं, तो खाता हमेशा के लिए चला जाएगा।",

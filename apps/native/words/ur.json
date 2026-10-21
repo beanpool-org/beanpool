@@ -5975,5 +5975,27 @@
     "one": "{n} ہفتہ",
     "other": "{n} ہفتے"
   },
-  "📦 Ask to borrow": "📦 ادھار مانگیں"
+  "📦 Ask to borrow": "📦 ادھار مانگیں",
+  "Add a community by address": "پتے کے ذریعے کمیونٹی شامل کریں",
+  "COMMUNITY ADDRESS": "کمیونٹی کا پتہ",
+  "COMMUNITY NAME (OPTIONAL)": "کمیونٹی کا نام (اختیاری)",
+  "Clear this phone's copy and download again": "اس فون پر موجود کاپی صاف کریں اور دوبارہ ڈاؤن لوڈ کریں",
+  "Community name (optional)": "کمیونٹی کا نام (اختیاری)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "پتہ لکھ کر کسی کمیونٹی سے جڑیں۔ آپ کا فون اسے اس فہرست میں محفوظ کر لے گا اور اس پر سوئچ کر لے گا۔",
+  "Have an invite code for this community?": "کیا آپ کے پاس اس کمیونٹی کے لیے دعوتی کوڈ ہے؟",
+  "Invited": "مدعو",
+  "Reached at **{trust}** trust": "**{trust}** اعتماد پر حاصل ہوتا ہے",
+  "Reached at **{trust}** trust (up to {upTo})": "**{trust}** اعتماد پر حاصل ہوتا ہے ({upTo} تک)",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "اس کمیونٹی کو چلاتے ہیں؟ مالکان اور ایڈمنز کو سیٹنگز کے اوپر «انتظام کریں» کی قطار نظر آتی ہے۔",
+  "Saved communities": "محفوظ کردہ کمیونٹیز",
+  "Switch to this community": "اس کمیونٹی پر سوئچ کریں",
+  "Switch, forget or refresh the communities on this phone": "اس فون پر موجود کمیونٹیز کو سوئچ کریں، فراموش کریں یا ریفریش کریں",
+  "Switching...": "سوئچ ہو رہا ہے...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "وہ کمیونٹیز جن میں یہ فون شامل ہو چکا ہے۔ آپ کی کلید اور 12 الفاظ ہر ایک میں یکساں ہیں؛ استعمال کرنے کے لیے کسی ایک پر سوئچ کریں۔",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "خوش آمدید۔ پہلے دن سے ہی آپ براؤز کر سکتے ہیں، لین دین کر سکتے ہیں، کریڈٹ وصول کر سکتے ہیں اور دوسروں کو مدعو کر سکتے ہیں — اور آپ کی کریڈٹ لائن پہلے سے ہی کھلی ہے۔",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} اعتماد سے",
+    "other": "{n} اعتماد سے"
+  },
+  "{name}, already invited": "{name}، پہلے ہی مدعو ہیں"
 }

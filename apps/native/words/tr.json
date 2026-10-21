@@ -4424,7 +4424,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "Hangi üye {name}? Yalnızca o kişi olduğunu bildiğiniz birini onaylayın.",
   "Which member is this person? Confirm only someone you know is them.": "Hangi üye bu kişi? Yalnızca o kişi olduğunu bildiğiniz birini onaylayın.",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "{amount} borcu çalışarak öderler: bilinen taban 0'dır ve 0'ın üzerinde aldıkları her fasulye borç temizlenene kadar Ortak'a gider.",
-  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Onaylandığında, bir teklifi yayında tuttukları sürece limitleri {amount}'a kadar artar: topluluğunuzun bilinen tabanı.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Onaylandığında, bir teklifi yayında tuttukları sürece limitleri en fazla {amount} artar: topluluğunuzun bilinen tabanı.",
   "Find a member": "Bir üye bul",
   "Find a member by name": "İsme göre üye bul",
   "Nobody here is waiting to be confirmed.": "Burada onay bekleyen kimse yok.",

@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server status — BeanPool</title>
-    <meta name="description" content="Whether BeanPool's own servers answer: the global community, the test community and the registrar, checked from outside every 5 minutes.">
+    <title>Κατάσταση διακομιστή — BeanPool</title>
+    <meta name="description" content="Εάν ανταποκρίνονται οι διακομιστές του BeanPool: η παγκόσμια κοινότητα, η δοκιμαστική κοινότητα και το μητρώο, ελεγμένοι από έξω κάθε 5 λεπτά.">
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="fonts/fonts.css">
     <link rel="stylesheet" href="style.css?v=2.8">
@@ -52,22 +52,22 @@
 <body>
     <nav id="navbar">
         <div class="nav-inner">
-            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Icon" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <a href="index.html" class="logo"><img src="bean.png" alt="Εικονίδιο BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
             <div class="nav-links">
-                <a href="index.html#how-it-works">How It Works</a>
-                <a href="help.html">Help</a>
-                <a href="getting-started.html" class="nav-cta">Get Started</a>
+                <a href="index.html#how-it-works">Πώς λειτουργεί</a>
+                <a href="help.html">Βοήθεια</a>
+                <a href="getting-started.html" class="nav-cta">Ξεκινήστε</a>
             </div>
         </div>
     </nav>
 
     <main class="status-page glass-panel">
-        <h1>Server status</h1>
-        <p class="lede">Whether BeanPool's own servers answer, checked from outside every 5 minutes. Local communities run on their own servers and are not on this page: when ours are down, they carry on.</p>
-        <p class="status-note" id="status-note" role="status">Reading the status…</p>
+        <h1>Κατάσταση διακομιστή</h1>
+        <p class="lede">Εάν ανταποκρίνονται οι διακομιστές του BeanPool, ελεγμένοι από έξω κάθε 5 λεπτά. Οι τοπικές κοινότητες εκτελούνται στους δικούς τους διακομιστές και δεν βρίσκονται σε αυτή τη σελίδα: όταν οι δικοί μας είναι εκτός λειτουργίας, εκείνες συνεχίζουν κανονικά.</p>
+        <p class="status-note" id="status-note" role="status">Ανάγνωση κατάστασης…</p>
         <ul class="status-list" id="status-list" hidden></ul>
         <p class="status-foot" id="status-foot" hidden></p>
-        <noscript><p class="status-note">This page needs JavaScript to read the status. The figures themselves: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
+        <noscript><p class="status-note">Αυτή η σελίδα χρειάζεται JavaScript για την ανάγνωση της κατάστασης. Οι αριθμοί απευθείας: <a href="/api/registrar/status.json">/api/registrar/status.json</a>.</p></noscript>
     </main>
 
     <script>
@@ -77,16 +77,16 @@
         var URL_ = '/api/registrar/status.json';
         var LATE_S = 15 * 60;   // three ticks without a new status: the registrar's checks are late
         var SERVERS = {
-            global: { label: 'The global community', host: 'global.beanpool.org' },
-            test: { label: 'The test community', host: 'test.beanpool.org' },
-            vault: { label: 'The key vault', host: 'vault.beanpool.org' },
-            registrar: { label: 'Community addresses', host: 'beanpool.org: gives communities their name.beanpool.org addresses. When it is down, those addresses keep working; new ones and beanpool.org/i/ links wait.' },
+            global: { label: 'Η παγκόσμια κοινότητα', host: 'global.beanpool.org' },
+            test: { label: 'Η δοκιμαστική κοινότητα', host: 'test.beanpool.org' },
+            vault: { label: 'Το θησαυροφυλάκιο κλειδιών', host: 'vault.beanpool.org' },
+            registrar: { label: 'Διευθύνσεις κοινότητας', host: 'beanpool.org: δίνει στις κοινότητες τις διευθύνσεις όνομα.beanpool.org. Όταν είναι εκτός λειτουργίας, αυτές οι διευθύνσεις συνεχίζουν να λειτουργούν· οι νέες διευθύνσεις και οι σύνδεσμοι beanpool.org/i/ περιμένουν.' },
         };
         var WHY = {
-            'timed-out': 'it did not answer in time',
-            'unreachable': 'it could not be reached',
-            'not-ours': 'something else answered at its address',
-            'checks-missed': 'the checks did not run',
+            'timed-out': 'δεν απάντησε εγκαίρως',
+            'unreachable': 'δεν ήταν δυνατή η πρόσβαση',
+            'not-ours': 'κάτι άλλο απάντησε στη διεύθυνσή του',
+            'checks-missed': 'οι έλεγχοι δεν εκτελέστηκαν',
         };
         var list = document.getElementById('status-list');
         var note = document.getElementById('status-note');
@@ -106,16 +106,16 @@
         function day(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d) ? dayFmt.format(new Date(d + 'T00:00:00Z')) : null; }
         function lasted(s) {
             var m = Math.max(1, Math.round(s / 60));
-            if (m < 60) return m + (m === 1 ? ' minute' : ' minutes');
+            if (m < 60) return m + (m === 1 ? ' λεπτό' : ' λεπτά');
             var h = Math.floor(m / 60), r = m % 60;
-            if (h >= 48) return Math.round(h / 24) + ' days';
-            return h + (h === 1 ? ' hour' : ' hours') + (r ? ' ' + r + (r === 1 ? ' minute' : ' minutes') : '');
+            if (h >= 48) return Math.round(h / 24) + ' ημέρες';
+            return h + (h === 1 ? ' ώρα' : ' ώρες') + (r ? ' ' + r + (r === 1 ? ' λεπτό' : ' λεπτά') : '');
         }
         function why(code) {
-            if (typeof code !== 'string') return 'it did not answer';
+            if (typeof code !== 'string') return 'δεν απάντησε';
             var http = code.match(/^http-(\d{3})$/);
-            if (http) return 'it answered with an error (HTTP ' + http[1] + ')';
-            return WHY[code] || 'it did not answer';
+            if (http) return 'απάντησε με σφάλμα (HTTP ' + http[1] + ')';
+            return WHY[code] || 'δεν απάντησε';
         }
 
         function row(s, late) {
@@ -123,11 +123,11 @@
             var inc = s.incident && num(s.incident.began_at) ? s.incident : null;
             var open = inc && inc.ended_at === null;
             var state, words;
-            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Its checks are late'; }
-            else if (open) { state = 'down'; words = 'Down'; }
-            else if (s.up === true) { state = 'up'; words = 'Answering'; }
-            else if (s.up === false) { state = 'missed'; words = 'Missed its last check'; }
-            else { state = 'unknown'; words = 'Not checked yet'; }
+            if (s.name === 'registrar' && late) { state = 'missed'; words = 'Οι έλεγχοί του έχουν καθυστερήσει'; }
+            else if (open) { state = 'down'; words = 'Εκτός λειτουργίας'; }
+            else if (s.up === true) { state = 'up'; words = 'Απαντά'; }
+            else if (s.up === false) { state = 'missed'; words = 'Έχασε τον τελευταίο έλεγχο'; }
+            else { state = 'unknown'; words = 'Δεν έχει ελεγχθεί ακόμη'; }
 
             var li = el('li', 'status-row');
             li.setAttribute('data-state', state);
@@ -144,19 +144,19 @@
             var share = el('p', 'status-share');
             var pct = num(s.percent);
             var since = day(s.since);
-            if (pct === null) share.textContent = 'No checks counted yet.';
+            if (pct === null) share.textContent = 'Δεν έχουν καταμετρηθεί έλεγχοι ακόμη.';
             else {
                 share.appendChild(el('strong', null, pct + '%'));
-                var of = s.name === 'registrar' ? ' of its 5-minute checks ran' : ' of checks answered';
-                share.appendChild(document.createTextNode(of + (since ? ' since ' + since : ' over the last 90 days') + '.'));
+                var of = s.name === 'registrar' ? ' από τους ελέγχους των 5 λεπτών εκτελέστηκαν' : ' των ελέγχων απάντησαν';
+                share.appendChild(document.createTextNode(of + (since ? ' από ' + since : ' τις τελευταίες 90 ημέρες') + '.'));
             }
             li.appendChild(share);
 
             var last = el('p', 'status-incident');
-            if (!inc) last.textContent = since ? 'No incident since ' + since + '.' : 'No incident recorded.';
-            else if (open) last.textContent = 'Down since ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
-            else if (num(inc.ended_at)) last.textContent = 'Last incident: ' + when(inc.began_at) + ' for ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
-            else last.textContent = 'Last incident: ' + when(inc.began_at) + '.';
+            if (!inc) last.textContent = since ? 'Κανένα περιστατικό από ' + since + '.' : 'Δεν έχει καταγραφεί περιστατικό.';
+            else if (open) last.textContent = 'Εκτός λειτουργίας από ' + when(inc.began_at) + ': ' + why(inc.why) + '.';
+            else if (num(inc.ended_at)) last.textContent = 'Τελευταίο περιστατικό: ' + when(inc.began_at) + ' για ' + lasted(inc.ended_at - inc.began_at) + ': ' + why(inc.why) + '.';
+            else last.textContent = 'Τελευταίο περιστατικό: ' + when(inc.began_at) + '.';
             li.appendChild(last);
             return li;
         }
@@ -166,14 +166,14 @@
             var servers = doc && doc.v === 1 && Array.isArray(doc.servers) ? doc.servers.filter(function (s) {
                 return s && typeof s.name === 'string' && /^[a-z0-9-]{1,32}$/.test(s.name);
             }).slice(0, 6) : [];
-            if (!at || !servers.length) { say('The status could not be read: it is not in a form this page knows.'); return; }
+            if (!at || !servers.length) { say('Δεν ήταν δυνατή η ανάγνωση της κατάστασης: δεν είναι σε μορφή που αναγνωρίζει αυτή η σελίδα.'); return; }
             var late = Date.now() / 1000 - at > LATE_S;
             list.textContent = '';
             servers.forEach(function (s) { list.appendChild(row(s, late)); });
             list.hidden = false;
-            if (late) { note.textContent = 'These are from ' + zoneFmt.format(new Date(at * 1000)) + ': the checks have not run since. What a server says now may differ.'; note.setAttribute('data-tone', 'late'); }
-            else { note.textContent = 'Checked ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
-            foot.textContent = 'A check is one look from outside, 5 minutes apart. Two failed looks in a row are an incident; the share counts every look. Times are your own time zone’s.';
+            if (late) { note.textContent = 'Αυτά προέρχονται από ' + zoneFmt.format(new Date(at * 1000)) + ': οι έλεγχοι δεν έχουν εκτελεστεί έκτοτε. Αυτό που δηλώνει ένας διακομιστής τώρα μπορεί να διαφέρει.'; note.setAttribute('data-tone', 'late'); }
+            else { note.textContent = 'Ελέγχθηκε ' + zoneFmt.format(new Date(at * 1000)) + '.'; note.removeAttribute('data-tone'); }
+            foot.textContent = 'Ένας έλεγχος είναι μία ματιά από έξω, ανά 5 λεπτά. Δύο αποτυχημένες ματιές στη σειρά αποτελούν περιστατικό· το ποσοστό μετρά κάθε ματιά. Οι ώρες είναι στη δική σας ζώνη ώρας.';
             foot.hidden = false;
         }
         function say(text) {
@@ -187,11 +187,11 @@
         function read() {
             lastRead = Date.now();
             fetch(URL_, { headers: { accept: 'application/json' } }).then(function (res) {
-                if (res.status === 404) { say('No status is published here yet.'); return null; }
+                if (res.status === 404) { say('Δεν έχει δημοσιευτεί κατάσταση εδώ ακόμη.'); return null; }
                 if (!res.ok) throw new Error('HTTP ' + res.status);
-                return res.json().then(draw, function () { say('The status could not be read: it is not in a form this page knows.'); });
+                return res.json().then(draw, function () { say('Δεν ήταν δυνατή η ανάγνωση της κατάστασης: δεν είναι σε μορφή που αναγνωρίζει αυτή η σελίδα.'); });
             }).catch(function () {
-                say('The status could not be read just now: the registrar that keeps it may be down. Local communities are not affected. Try again in a few minutes.');
+                say('Δεν ήταν δυνατή η ανάγνωση της κατάστασης αυτή τη στιγμή: το μητρώο που την διατηρεί μπορεί να είναι εκτός λειτουργίας. Οι τοπικές κοινότητες δεν επηρεάζονται. Δοκιμάστε ξανά σε λίγα λεπτά.');
             });
         }
         read();

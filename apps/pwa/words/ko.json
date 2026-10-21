@@ -3378,5 +3378,14 @@
   },
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "other": "{name}님을 {n} 콩의 기명 보증과 함께 운영자로 추가"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "운영자가 이 도구의 서버 사본을 꺼서 이 브라우저에만 보관돼요. 설정에서 다시 켤 수 있어요.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "내 커뮤니티 서버에 연결할 수 없어 변경된 내용이 없어요. 온라인 상태일 때 다시 시도하세요.",
+  "Keep a private copy on your community's server": "내 커뮤니티 서버에 비공개 사본 보관",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "이 브라우저에 보관되며, 앱을 통해 나만 읽을 수 있는 비공개 사본이 내 커뮤니티 서버에 저장돼요. 그 서버의 모든 정보와 마찬가지로 서버 운영자는 볼 수 있어요.",
+  "One device at a time: the copy you changed last is the one kept.": "한 번에 기기 하나만: 마지막으로 변경한 사본이 유지돼요.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "이 브라우저에서 {tool}에 대한 이 커뮤니티의 데이터와 내 커뮤니티 서버에 있는 사본을 삭제해요. 회원님 계정으로 로그인된 다른 기기는 가지고 있는 내용을 유지하고 전송을 중단해요. 다른 커뮤니티의 동일한 도구 데이터는 그대로 유지돼요. 이는 되돌릴 수 없어요.",
+  "You can edit a message for 15 minutes after sending it.": "메시지는 보낸 후 15분 동안 수정할 수 있어요.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "내 커뮤니티 서버가 아직 사본을 보관할 수 없으므로, 현재는 이 브라우저에만 저장돼요.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "내 커뮤니티 서버가 더 이상 이 도구의 사본을 보관하지 않아 이 브라우저에만 보관돼요. 설정에서 사본을 다시 켤 수 있어요."
 }

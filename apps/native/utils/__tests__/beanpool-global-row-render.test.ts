@@ -743,6 +743,17 @@ describe('guest view first: what a visit asks, writes and never touches (utils/g
         expect(store.map.get('beanpool_guest_nodes') ?? null).toBeNull();
     });
 
+    it('while the visit asks: Checking…, and the row waits (never a second visit from a second tap)', async () => {
+        await open();
+        // The probe never answers this time: the visit is still asking when the row is read.
+        scene.standing = 'hang';
+        await tap();
+        expect(line()).toBe('Checking…');
+        expect(row().getAttribute('data-disabled')).toBe('true');
+        expect(moved.to).toEqual([]);
+        expect(nav.pushed).toEqual([]);
+    });
+
     it('already there as a guest: the row is the door itself, as before (the next step is joining)', async () => {
         list.rows = [RIVERSIDE, { url: GLOBAL, name: 'BeanPool Global', status: 'guest' }];
         list.active = GLOBAL;

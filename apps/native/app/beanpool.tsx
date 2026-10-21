@@ -149,7 +149,10 @@ export default function BeanPoolSheet() {
     const globalUrl = globalSaved?.url ?? GLOBAL_NODE_URL;
     const globalHost = globalUrl.replace(/^https?:\/\//, '');
     const globalInUse = !!globalSaved && globalSaved.url === communities.active;
-    const globalLine = globalEntryLine(globalEntry, { host: globalHost, wordsDoor: globalDoor.wordsDoor, saved: !!globalSaved, visit: !globalInUse })
+    const guestVisit = useGlobalGuestVisit();
+    // While a visit asks (the door, then the key's standing): Checking…, as the row says while it asks anything.
+    const globalLine = guestVisit.visiting ? t('Checking…')
+        : globalEntryLine(globalEntry, { host: globalHost, wordsDoor: globalDoor.wordsDoor, saved: !!globalSaved, visit: !globalInUse })
         ?? t('Explore BeanPool worldwide');
     // A member's row switches to it. Where the door is open, guest view first (Marty, 21 Oct 2026; §A row 16), as the web
     // opens its lobby: the row opens the global community as a guest (utils/global-guest-visit.ts), where the header's Join
@@ -159,7 +162,6 @@ export default function BeanPoolSheet() {
     // waits.
     const switchToGlobal = () => communities.switchTo(globalUrl);
     const openDoor = () => router.push('/join-global');
-    const guestVisit = useGlobalGuestVisit();
     const visitGlobal = () => { void guestVisit.visit(globalUrl); };
     const globalTap: (() => void) | undefined = globalEntry === 'member' ? switchToGlobal
         : globalEntry === 'join' ? (globalInUse ? openDoor : visitGlobal)

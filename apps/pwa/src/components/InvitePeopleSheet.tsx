@@ -18,15 +18,23 @@ import { useDialogFocus } from './dialog-focus';
 interface Props {
     groupId: string;
     groupName: string;
-    /** Already in the group (active, invited or asking): shown ticked and disabled. */
-    existing: ReadonlySet<string>;
+    /** Already in the group: shown ticked and disabled. Can also accept the split from alreadyInGroup. */
+    existing: ReadonlySet<string> | { active: ReadonlySet<string>; invited?: ReadonlySet<string>; pending?: ReadonlySet<string> };
+    /** Already invited to the group: shown with clock icon and disabled (damo-1021). */
+    invited?: ReadonlySet<string>;
+    /** Asked to join the group (pending approval): shown disabled. */
+    pending?: ReadonlySet<string>;
     myPubkey?: string | null;
     onClose: () => void;
     /** After a send, with how many went: the roster reloads. */
     onInvited?: (sent: number) => void;
 }
 
-export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onClose, onInvited }: Props) {
+export function InvitePeopleSheet({ groupId, groupName, existing, invited, pending, myPubkey, onClose, onInvited }: Props) {
+    const activeSet: ReadonlySet<string> = 'active' in existing ? existing.active : existing;
+    const invitedSet: ReadonlySet<string> = 'invited' in existing && existing.invited ? existing.invited : (invited ?? new Set<string>());
+    const pendingSet: ReadonlySet<string> = 'pending' in existing && existing.pending ? existing.pending : (pending ?? new Set<string>());
+
     const membersOnDemand = useMembersOnDemand();
     // null while the list is on its way: "nobody here" is only said once the node has answered with nobody.
     const [people, setPeople] = useState<InvitablePerson[] | null>(null);
@@ -72,6 +80,7 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
     const names = useMemo(() => new Map(shown.map(p => [p.publicKey, p.callsign])), [shown]);
 
     const toggle = (pk: string) => {
+        if (activeSet.has(pk) || invitedSet.has(pk) || pendingSet.has(pk)) return;
         setPicked(prev => {
             const next = new Set(prev);
             if (next.has(pk)) next.delete(pk); else next.add(pk);
@@ -154,24 +163,56 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
                     {waitingForList && <li className="p-4 text-center text-sm text-nature-600 dark:text-nature-400">{t('Loading people…')}</li>}
                     {emptyNote && <li className="p-4 text-center text-sm text-nature-600 dark:text-nature-300">{emptyNote}</li>}
                     {!waitingForList && shown.map(p => {
-                        const already = existing.has(p.publicKey);
-                        const on = already || picked.has(p.publicKey);
+                        const isActive = activeSet.has(p.publicKey);
+                        const isInvited = !!invitedSet.has(p.publicKey);
+                        const isPending = !!pendingSet.has(p.publicKey);
+                        const isUnpickable = isActive || isInvited || isPending;
+                        const on = isActive || (!isInvited && !isPending && picked.has(p.publicKey));
                         const avatar = p.avatarUrl ? resolveAvatarUrl(p.avatarUrl) : null;
+                        const ariaLabel = isActive
+                            ? t('{name}, already in the group', { name: p.callsign })
+                            : isInvited
+                            ? t('{name}, already invited', { name: p.callsign })
+                            : isPending
+                            ? t('{name}, asked to join', { name: p.callsign })
+                            : p.callsign;
+
                         return (
                             <li key={p.publicKey}>
-                                <label className={`flex items-center gap-3 min-h-[48px] px-2 rounded-xl min-w-0 ${already ? 'opacity-60' : 'cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-800'}`}>
-                                    <input
-                                        type="checkbox"
-                                        checked={on}
-                                        disabled={already || sending}
-                                        onChange={() => toggle(p.publicKey)}
-                                        className="w-5 h-5 shrink-0 accent-emerald-600"
-                                    />
+                                <label className={`flex items-center gap-3 min-h-[48px] px-2 rounded-xl min-w-0 ${isUnpickable ? 'opacity-60' : 'cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-800'}`}>
+                                    {isInvited ? (
+                                        <span className="w-5 h-5 shrink-0 flex items-center justify-center text-nature-500 dark:text-nature-400" data-icon="clock-outline">
+                                            <input
+                                                type="checkbox"
+                                                checked={false}
+                                                disabled={true}
+                                                aria-label={ariaLabel}
+                                                className="sr-only"
+                                                tabIndex={-1}
+                                                readOnly
+                                            />
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                                                <circle cx="12" cy="12" r="9" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 3" />
+                                            </svg>
+                                        </span>
+                                    ) : (
+                                        <input
+                                            type="checkbox"
+                                            checked={on}
+                                            disabled={isUnpickable || sending}
+                                            aria-label={ariaLabel}
+                                            onChange={() => toggle(p.publicKey)}
+                                            className="w-5 h-5 shrink-0 accent-emerald-600"
+                                        />
+                                    )}
                                     {avatar
                                         ? <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
                                         : <span aria-hidden="true" className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-800 dark:text-nature-100 flex items-center justify-center text-xs font-bold shrink-0">{(p.callsign || '?').charAt(0).toUpperCase()}</span>}
                                     <span className="flex-1 min-w-0 truncate text-sm font-semibold text-nature-900 dark:text-white">{p.callsign}</span>
-                                    {already && <span className="shrink-0 text-xs text-nature-600 dark:text-nature-400">{t('In the group')}</span>}
+                                    {isActive && <span className="shrink-0 text-xs text-nature-600 dark:text-nature-400">{t('In the group')}</span>}
+                                    {isInvited && <span className="shrink-0 text-xs text-nature-600 dark:text-nature-400">{t('Invited')}</span>}
+                                    {isPending && <span className="shrink-0 text-xs text-nature-600 dark:text-nature-400">{t('Asked to join')}</span>}
                                 </label>
                             </li>
                         );

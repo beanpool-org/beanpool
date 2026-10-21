@@ -70,16 +70,19 @@ export function leadPubkeyOf(group: Pick<GroupItem, 'leadPubkey' | 'convenorPubk
 }
 
 /**
- * Splits a group's roster rows into active member keys and invited keys (damo-1021).
- * Active members count toward the group and are "In the group"; invited members are "Invited".
+ * Splits a group's roster rows into active member keys, invited keys, and pending keys (damo-1021).
+ * Active members count toward the group and are "In the group"; invited members are "Invited";
+ * pending members asked to join and are "Asked to join".
  */
 export function splitRosterKeys(members: readonly { memberPubkey: string; status: string }[]): {
     memberKeys: Set<string>;
     invitedKeys: Set<string>;
+    pendingKeys: Set<string>;
 } {
     return {
         memberKeys: new Set(members.filter(m => m.status === 'active').map(m => m.memberPubkey)),
         invitedKeys: new Set(members.filter(m => m.status === 'invited').map(m => m.memberPubkey)),
+        pendingKeys: new Set(members.filter(m => m.status === 'pending_approval').map(m => m.memberPubkey)),
     };
 }
 

@@ -136,6 +136,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [group, setGroup] = useState<GroupItem | null>(null);
     const [memberKeys, setMemberKeys] = useState<Set<string>>(new Set());
     const [invitedKeys, setInvitedKeys] = useState<Set<string>>(new Set());
+    const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
     // The roster as last read (with each row's formerKeys when the node serves them): names a sealed line's signer.
     const [rosterRows, setRosterRows] = useState<GroupMemberItem[]>([]);
     // Members whose name this phone saw on another key, with no statement from the new key reaching it (pick 3).
@@ -203,9 +204,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         // No roster this time (the node busy, or offline): keep who we knew was in, and the count.
         const members = details.members;
         if (!members) return;
-        const { memberKeys: activeKeys, invitedKeys: invKeys } = splitRosterKeys(members);
+        const { memberKeys: activeKeys, invitedKeys: invKeys, pendingKeys: pendKeys } = splitRosterKeys(members);
         setMemberKeys(activeKeys);
         setInvitedKeys(invKeys);
+        setPendingKeys(pendKeys);
         setRosterRows(members.filter(m => m.status === 'active'));
         anchorUrl()
             .then(url => (url ? rememberRosterNames(url, members.filter(m => m.status === 'active')) : new Set<string>()))
@@ -890,6 +892,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                     groupName={name}
                     existing={memberKeys}
                     invited={invitedKeys}
+                    pending={pendingKeys}
                     myPubkey={me}
                     onClose={() => setInviteOpen(false)}
                     onInvited={(n) => { if (n > 0) { setInviteSkipped(true); loadDetails().catch(() => { }); } }}

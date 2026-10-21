@@ -32,7 +32,7 @@
  *     a. onto a lived-in server (an owner, an admin, a moderator, a member, a photo, 2FA on), with each credential that
  *        passes the gate (the password with an earlier 2FA session, a password session, the owner's computer session, a
  *        fresh phone hand-off, the password with a current code): 409 otherCommunity; node_roles, libp2p_key,
- *        genesis.json and local-config.json byte for byte as they were; no point, nothing left in the data folder;
+ *        genesis.json and local-config.json as they were (leaving out the 2FA step recorded on sign-in); no point, nothing left in the data folder;
  *     b. the same file with no take-over bundle inside: the same;
  *     c. "open with an owner's phone" there: 409, not 202; no file kept for the phone, no unlock started;
  *     d. onto a fresh server that was claimed (one owner, their own post, an enterprise): 200, the bundle applied, a
@@ -313,12 +313,22 @@ async function child(): Promise<void> {
         };
         const signIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
         const tfaSession: string = signIn.json?.tfaSessionToken;
+        let clockOffsetMs = 0;
+        const realDateNow = Date.now;
+        Date.now = () => realDateNow() + clockOffsetMs;
+        const advancePastNextTotpStep = () => {
+            const stepMs = 30_000;
+            const current = Date.now();
+            const nextStepStart = (Math.floor(current / stepMs) + 1) * stepMs + 1000;
+            clockOffsetMs += (nextStepStart - current);
+        };
         const creds: Record<string, () => Record<string, string>> = {
             'the password with an earlier 2FA session': () => ({ 'X-Admin-Password': MAIN_PW, 'X-Admin-2FA-Session': tfaSession }),
             'a password session': () => ({ 'x-admin-session': createPasswordSession().sessionId }),
             "the owner's computer session": () => ({ 'x-admin-session': keySession(owner) }),
             'a fresh phone hand-off': () => ({ 'x-admin-session': keySession(owner, true) }),
             'the password with a current code': () => tfa.headers(),
+            'the password with a current code in a later 30-second step': () => { advancePastNextTotpStep(); return tfa.headers(); },
         };
         // Read from the files, by a handle of its own: a server that took the file has closed its own.
         const state = () => {
@@ -328,7 +338,18 @@ async function child(): Promise<void> {
                 try { roles = JSON.stringify(d.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all()); } finally { d.close(); }
             } catch (e: any) { roles = `unreadable: ${e?.message}`; }
             const h = (f: string) => { const b = read(f); return b ? sha(b) : null; };
-            return { roles, key: h('libp2p_key'), genesis: h('genesis.json'), config: h('local-config.json'), points: points(), leftovers: leftovers() };
+            const configSha = () => {
+                const b = read('local-config.json');
+                if (!b) return null;
+                try {
+                    const c = JSON.parse(b.toString('utf8'));
+                    delete c.totpLastAcceptedStep;
+                    return sha(Buffer.from(JSON.stringify(c)));
+                } catch {
+                    return sha(b);
+                }
+            };
+            return { roles, key: h('libp2p_key'), genesis: h('genesis.json'), config: configSha(), points: points(), leftovers: leftovers() };
         };
         const otherFile = new Uint8Array(fs.readFileSync(process.env.TEST_OTHER_FILE!));
         const otherCode = process.env.TEST_OTHER_CODE!;
@@ -878,28 +899,54 @@ async function main(): Promise<void> {
         const refusedOther = (r: any) => r.answer?.status === 409 && r.answer.otherCommunity === true && r.answer.livedIn === true
             && r.answer.error === OTHER_WORDS && r.answer.command === 'beanpool restore FILE' && r.answer.fileCommunityId === made.community
             && typeof r.answer.thisCommunityId === 'string' && r.answer.thisCommunityId !== made.community;
-        const nothingMoved = (r: any) => !!r.before && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after.points.length === 0 && r.after.leftovers.length === 0;
+        const unreadable = (s: any) => typeof s?.roles === 'string' && s.roles.startsWith('unreadable');
+        const diffMoved = (r: any): string => {
+            if (!r?.before) return 'no before snapshot';
+            if (!r?.after) return 'no after snapshot';
+            const diffs: string[] = [];
+            const keys = Array.from(new Set([...Object.keys(r.before), ...Object.keys(r.after)]));
+            for (const k of keys) {
+                const b = JSON.stringify(r.before[k]);
+                const a = JSON.stringify(r.after[k]);
+                if (b !== a) {
+                    diffs.push(`${k}: before=${String(b).slice(0, 200)} after=${String(a).slice(0, 200)}`);
+                } else if (k === 'roles' && typeof r.before[k] === 'string' && r.before[k].startsWith('unreadable')) {
+                    diffs.push(`roles unreadable in both: before=${String(b).slice(0, 200)} after=${String(a).slice(0, 200)}`);
+                }
+            }
+            if (diffs.length > 0) return diffs.join(', ');
+            return `${JSON.stringify(r.after?.points)} ${JSON.stringify(r.after?.leftovers)}`;
+        };
+        const nothingMoved = (r: any) => !!r?.before && !!r?.after && !unreadable(r.before) && !unreadable(r.after)
+            && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after?.points?.length === 0 && r.after?.leftovers?.length === 0;
         const said = (r: any) => `${r.answer?.status} ${String(r.answer?.error ?? (r.answer?.success ? 'restored' : '')).slice(0, 110)}`;
 
-        for (const who of ['the password with an earlier 2FA session', 'a password session', "the owner's computer session", 'a fresh phone hand-off', 'the password with a current code']) {
+        for (const who of [
+            'the password with an earlier 2FA session',
+            'a password session',
+            "the owner's computer session",
+            'a fresh phone hand-off',
+            'the password with a current code',
+            'the password with a current code in a later 30-second step',
+        ]) {
             const r = row('lived-in', `a:${who}`);
             assert(r.signIn === 200 && refusedOther(r), `S2b-a. a lived-in server, ${who}, the other community's file and its own right code: 409 otherCommunity (${said(r)})`);
-            assert(nothingMoved(r), `S2b-a. …node_roles, libp2p_key, genesis.json and local-config.json as they were; no point, nothing left (${JSON.stringify(r.after?.points)} ${JSON.stringify(r.after?.leftovers)})`);
+            assert(nothingMoved(r), `S2b-a. …node_roles, libp2p_key, genesis.json and local-config.json as they were; no point, nothing left (${diffMoved(r)})`);
         }
         const b = row('lived-in', 'b');
-        assert(refusedOther(b) && nothingMoved(b), `S2b-b. the same file with no take-over bundle inside: 409, nothing moved (${said(b)})`);
+        assert(refusedOther(b) && nothingMoved(b), `S2b-b. the same file with no take-over bundle inside: 409, nothing moved (${said(b)}, ${diffMoved(b)})`);
         const c = row('lived-in', 'c');
         assert(refusedOther(c) && c.answer?.needsOwnerPhone !== true && !c.answer?.phone, `S2b-c. "open with an owner's phone": 409, not 202, no unlock started (${said(c)})`);
-        assert(nothingMoved(c) && c.pending?.length === 0, `S2b-c. …no file kept for the phone, nothing moved (${JSON.stringify(c.pending)})`);
+        assert(nothingMoved(c) && c.pending?.length === 0, `S2b-c. …no file kept for the phone, nothing moved (${diffMoved(c)}, pending: ${JSON.stringify(c.pending)})`);
         const d = row('claimed', 'd');
         assert(d.post === 1, `S2b-d. setup: the claimed server holds its owner's own post and an enterprise (${d.post})`);
         assert(d.answer?.status === 200 && d.answer.success === true && d.answer.restoredKeys === true && d.community === made.community,
             `S2b-d. a fresh claimed server (one owner, their post, an enterprise): 200, the bundle applied, the other community here (${said(d)})`);
         assert(d.after?.points?.length === 1 && d.answer?.restorePoint?.name === d.after.points[0], `S2b-d. …and a restore point kept (${JSON.stringify(d.after?.points)})`);
         const e = row('claimed', 'e');
-        assert(refusedOther(e) && nothingMoved(e), `S2b-e. one invited member joins that server: 409, nothing moved (${said(e)})`);
+        assert(refusedOther(e) && nothingMoved(e), `S2b-e. one invited member joins that server: 409, nothing moved (${said(e)}, ${diffMoved(e)})`);
         const es = row('claimed', 'e-suspended');
-        assert(refusedOther(es) && nothingMoved(es), `S2b-e. …that member suspended: still 409 (${said(es)})`);
+        assert(refusedOther(es) && nothingMoved(es), `S2b-e. …that member suspended: still 409 (${said(es)}, ${diffMoved(es)})`);
         const f = row('lived-in', 'f');
         assert(f.answer?.status === 200 && f.answer.success === true && f.after?.points?.length === 1,
             `S2b-f. a lived-in server's own backup, signed by itself, with its own code: still 200, a point kept (${said(f)})`);
@@ -908,10 +955,10 @@ async function main(): Promise<void> {
             assert(h.answer?.status === 409 && h.answer.ownRecordUnreadable === true && h.answer.error === UNREADABLE_WORDS && h.answer.thisCommunityId === null
                 && h.answer.command === 'beanpool restore FILE',
                 `S2b-h. genesis.json cannot be read, ${which === 'h-own' ? "the server's own backup" : "the other community's"}: 409 in its own words (${said(h)})`);
-            assert(nothingMoved(h), `S2b-h. …nothing moved (${JSON.stringify(h.after?.points)})`);
+            assert(nothingMoved(h), `S2b-h. …nothing moved (${diffMoved(h)})`);
         }
         const g = row('lived-in', 'a:the password with an earlier 2FA session', { NODE_PROFILE: 'global' });
-        assert(refusedOther(g) && nothingMoved(g), `S2b-i. the global profile, lived-in: the other community's file is 409, nothing moved (${said(g)})`);
+        assert(refusedOther(g) && nothingMoved(g), `S2b-i. the global profile, lived-in: the other community's file is 409, nothing moved (${said(g)}, ${diffMoved(g)})`);
     }
 
     // ── 8. The plain archive naming a new owner (last: on a server that takes it, it replaces this process's database) ──

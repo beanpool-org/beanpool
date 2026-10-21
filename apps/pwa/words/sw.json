@@ -3493,5 +3493,13 @@
   },
   "{name}, already in the group": "{name}, tayari yumo kwenye kikundi",
   "{name}, already invited": "{name}, tayari amealikwa",
-  "{name}, asked to join": "{name}, ameomba kujiunga"
+  "{name}, asked to join": "{name}, ameomba kujiunga",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Kumwongeza {name} kama mshiriki, akiwa na maharagwe {n} ya dhamana iliyotajwa",
+    "other": "Kumwongeza {name} kama mshiriki, akiwa na maharagwe {n} ya dhamana iliyotajwa"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Kumwongeza {name} kama msimamizi, akiwa na maharagwe {n} ya dhamana iliyotajwa",
+    "other": "Kumwongeza {name} kama msimamizi, akiwa na maharagwe {n} ya dhamana iliyotajwa"
+  }
 }

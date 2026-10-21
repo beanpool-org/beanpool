@@ -13,7 +13,11 @@
  *   anything is sent.
  * - Switching it on is a GET, the step and a PUT; off is a DELETE. The setting moves only once the node has answered.
  * - Remove my data takes the node's copy first ({@link removeToolCopy}); if that fails, the host removes nothing.
- * - A request the node hasn't answered in {@link TOOL_COPY_ANSWER_MS} is no answer, so nothing waits on it for ever.
+ * - A request the node hasn't answered in {@link TOOL_COPY_ANSWER_MS} is no answer, so nothing waits on it for ever; the
+ *   hosts let it go then ({@link withinAnswerTime}), and nothing else on that tool starts until it has (the queue).
+ * - Off means gone, even when a slow PUT is still on its way: a PUT whose end the device never heard, or that ended while
+ *   the copy was going off, leaves a mark ({@link ToolCopyMarks}); once off, the next open asks whether the node's copy
+ *   is gone, and DELETEs it again if not.
  *
  * The owner is never in a body: a member's copy is the signer's own route, an enterprise's the treasury route of a keeper
  * ({@link toolCopyPath}), and a PUT carries the document alone, under `doc`. Nothing here needs any address but the
@@ -64,6 +68,28 @@ export interface ToolCopyDevice {
     /** The setting as this device last heard it: false is off; true or never set (undefined) is on. */
     setting(): Promise<boolean | undefined>;
     setSetting(on: boolean): Promise<void>;
+    /** The node copy's marks, kept beside the setting in the same record (so they go wherever it goes). */
+    marks(): Promise<ToolCopyMarks>;
+    /**
+     * The marks `change` makes of them and of the setting as they stand, read and written as one step, so another tab's
+     * write between is never lost.
+     */
+    mark(change: (marks: ToolCopyMarks, setting: boolean | undefined) => ToolCopyMarks): Promise<void>;
+}
+
+/**
+ * What a device keeps so that off means gone even when a PUT is slower than its DELETE (PR #2297's deciding review):
+ * a PUT the node takes after the DELETE that follows it puts the copy back, and a device whose setting is off never asks
+ * again. Each host's queue keeps its own PUT and DELETE apart, but a PUT let go at the limit may still reach the node, and
+ * another tab of the same browser has a queue of its own. So:
+ * - `unsure`: `out` while a PUT is on its way; `check` once one ended unheard (no answer in time, let go, the network, a
+ *   5xx), or heard while the copy was going off. With the setting off, the next open asks once whether the node's copy
+ *   is gone ({@link syncToolCopy}), and only a node that says so clears it. Never cleared by a later PUT.
+ * - `deleting`: a DELETE is on its way (off, Remove my data). A PUT that ends meanwhile may land after it: `check`.
+ */
+export interface ToolCopyMarks {
+    unsure?: 'out' | 'check';
+    deleting?: boolean;
 }
 
 /**
@@ -71,6 +97,20 @@ export interface ToolCopyDevice {
  * browser's fetch waits minutes) never holds the tool's queue. Long enough for a 64 KB copy on a slow mobile line.
  */
 export const TOOL_COPY_ANSWER_MS = 30_000;
+
+/**
+ * A host's request, let go at {@link TOOL_COPY_ANSWER_MS}: `send` passes the signal on to its fetch, so one the network
+ * never answers settles then and frees the tool's queue. Letting go doesn't say the node never got it: the marks do.
+ */
+export async function withinAnswerTime<T>(send: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const letGo = new AbortController();
+    const timer = setTimeout(() => letGo.abort(), TOOL_COPY_ANSWER_MS);
+    try {
+        return await send(letGo.signal);
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 /** The node's answer, or null once it has taken too long or failed. */
 function answered(request: () => Promise<ToolNodeAnswer | null>): Promise<ToolNodeAnswer | null> {
@@ -86,6 +126,8 @@ function answered(request: () => Promise<ToolNodeAnswer | null>): Promise<ToolNo
 }
 
 const ok = (a: ToolNodeAnswer | null): a is ToolNodeAnswer => !!a && a.status >= 200 && a.status < 300;
+/** An answer that says what became of the request: a 5xx (the node's, or a proxy's that gave up waiting) may not. */
+const heard = (a: ToolNodeAnswer | null): boolean => !!a && a.status < 500;
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /**
@@ -125,7 +167,7 @@ export function readTakenBody<D>(manifest: ToolManifest<D>, body: string): strin
 
 /**
  * What a sync did:
- * - `off`: the setting is off, so the node was asked nothing.
+ * - `off`: the setting is off, so the node was asked nothing (or, with a mark, only whether its copy is gone).
  * - `nothing`, `taken` (the device now holds the node's copy: the screen redraws), `put` (the node now holds the device's).
  * - `switched-off`: the node keeps no copy any more; the setting is off now and the device's copy stays: say so once.
  * - `older-node`: this server keeps no copies yet: on this device only, and nothing sent.
@@ -159,7 +201,17 @@ async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, nod
             let doc: unknown;
             try { doc = JSON.parse(body); } catch { doc = null; }
             if (!isObject(doc)) return 'later';
+            // Off as it goes is turning on; off only by its end is another device's or tab's off, made meanwhile.
+            let offBefore = false;
+            await device.mark((m, setting) => {
+                offBefore = setting === false;
+                return { ...m, unsure: m.unsure === 'check' ? 'check' : 'out' };
+            });
             const answer = await answered(() => node.put(doc as Record<string, unknown>));
+            // Going off meanwhile, it may have landed after the DELETE; unheard, it may land yet.
+            await device.mark((m, setting) => (m.deleting || (setting === false && !offBefore) || !heard(answer)
+                ? { ...m, unsure: 'check' }
+                : m.unsure === 'out' ? { ...m, unsure: undefined } : m));
             if (answer?.status === 404) return 'older-node';
             const at = keptAt(answer);
             if (!at) return 'later';
@@ -175,10 +227,28 @@ async function syncWith<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, no
     return runStep(manifest, device, node, local, reconcile(local, remote, intent));
 }
 
-/** A tool's open, or the sync after a write: nothing while the setting is off; else the GET and the step. */
+/**
+ * A tool's open, or the sync after a write: the GET and the step. While the setting is off, nothing; but a mark
+ * ({@link ToolCopyMarks}) asks once whether the node's copy is gone, and DELETEs it again if not.
+ */
 export async function syncToolCopy<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, node: ToolCopyNode): Promise<ToolCopyOutcome> {
-    if (await device.setting() === false) return 'off';
+    if (await device.setting() === false) {
+        if ((await device.marks()).unsure) await checkGone(device, node);
+        return 'off';
+    }
     return syncWith(manifest, device, node, 'open');
+}
+
+/**
+ * Off, with a PUT that may have landed after its DELETE: one GET, and the DELETE again if the node holds a copy. The mark
+ * goes only once the node has said its copy is gone (none, deleted, or an older node, which keeps none); else it stays.
+ */
+async function checkGone(device: ToolCopyDevice, node: ToolCopyNode): Promise<boolean> {
+    const remote = toolRemoteOf(await answered(() => node.get()));
+    const gone = remote.kind === 'copy' ? deleted(await answered(() => node.delete()))
+        : remote.kind === 'none' || remote.kind === 'deleted' || remote.kind === 'older-node';
+    if (gone) await device.mark((m) => ({ ...m, unsure: undefined }));
+    return gone;
 }
 
 /**
@@ -197,39 +267,97 @@ export async function turnToolCopyOn<D>(manifest: ToolManifest<D>, device: ToolC
 /** A DELETE the node answered: it keeps no copy now (a 404: an older node, which never kept one). */
 const deleted = (answer: ToolNodeAnswer | null): boolean => answer?.status === 404 || ok(answer);
 
+/**
+ * The DELETE, marked `deleting` while it is on its way (a PUT that ends meanwhile, in another tab, marks itself); once the
+ * node has answered, the setting off. An `unsure` mark stays: the PUT it stands for may land after this DELETE too.
+ */
+async function deleteCopy(device: ToolCopyDevice, node: ToolCopyNode): Promise<boolean> {
+    await device.mark((m) => ({ ...m, deleting: true }));
+    const gone = deleted(await answered(() => node.delete()));
+    if (gone) await device.setSetting(false);
+    await device.mark((m) => ({ ...m, deleting: undefined }));
+    return gone;
+}
+
 /** The member switches the copy off: the DELETE, then the setting, off. `failed`: the setting is not written. */
 export async function turnToolCopyOff(device: ToolCopyDevice, node: ToolCopyNode): Promise<'off' | 'failed'> {
-    if (!deleted(await answered(() => node.delete()))) return 'failed';
-    await device.setSetting(false);
-    return 'off';
+    return (await deleteCopy(device, node)) ? 'off' : 'failed';
 }
 
 /**
- * Remove my data, the node's part, first: the DELETE while the setting is on (off, the node keeps none). True when the
- * node keeps no copy now: the host removes the device's and writes the setting off, the one setting kept. False: the
- * host removes nothing, so nothing removed comes back from the server on the next open.
+ * Remove my data, the node's part, first: the DELETE while the setting is on, and the setting off once it is answered
+ * (off, the node keeps none, unless a mark says a PUT may have landed since: then it is asked, as an open would). True
+ * when the node keeps no copy now: the host removes the device's and keeps the setting off, the one setting kept (with
+ * the marks). False: the host removes nothing, so nothing removed comes back from the server on the next open.
  */
 export async function removeToolCopy(device: ToolCopyDevice, node: ToolCopyNode): Promise<boolean> {
-    if (await device.setting() === false) return true;
-    return deleted(await answered(() => node.delete()));
+    if (await device.setting() === false) return !(await device.marks()).unsure || checkGone(device, node);
+    return deleteCopy(device, node);
 }
 
 /** How long after the last write the sync runs: one PUT for a burst of typing, not one a keystroke. */
 export const TOOL_COPY_PUSH_MS = 5_000;
 
 /**
- * Each host's one queue of node-copy work, by a key of community, owner and tool: an open, a toggle and a removal run
- * one after another (a PUT in flight never lands after the DELETE that follows it), and the sync after a write waits
- * until no write has come for {@link TOOL_COPY_PUSH_MS}.
+ * How a host keeps one key's work to one at a time beyond its own queue: the web's other tabs (Web Locks). It runs
+ * `turn` once, holding the key until `turn` settles.
  */
-export function createToolCopyQueue(delayMs: number = TOOL_COPY_PUSH_MS) {
+export type ToolCopyAlone = (key: string, turn: () => Promise<void>) => Promise<unknown>;
+
+/**
+ * Each host's one queue of node-copy work, by a key of community, owner and tool: an open, a toggle and a removal run
+ * one after another, and the sync after a write waits until no write has come for {@link TOOL_COPY_PUSH_MS}. A job's
+ * caller hears its answer when the job has one (a request past {@link TOOL_COPY_ANSWER_MS} is no answer), but the next
+ * job on the key starts only once every request of the one before has settled ({@link held}: the hosts let one go at the
+ * limit), so a PUT in flight never lands after the DELETE that follows it. One the node may still take after being let
+ * go is the marks' ({@link ToolCopyMarks}). `alone` holds the key beyond this queue too (the web's other tabs).
+ */
+export function createToolCopyQueue(delayMs: number = TOOL_COPY_PUSH_MS, alone?: ToolCopyAlone) {
     const chains = new Map<string, Promise<unknown>>();
     const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const out = new Map<string, Set<Promise<unknown>>>();
+    const settled = async (key: string) => {
+        for (let requests = out.get(key); requests?.size; requests = out.get(key)) await Promise.allSettled([...requests]);
+    };
     const run = <T>(key: string, job: () => Promise<T>): Promise<T> => {
-        const next = (chains.get(key) ?? Promise.resolve()).catch(() => undefined).then(job);
+        let answer!: (result: Promise<T>) => void;
+        const result = new Promise<T>((resolve) => { answer = resolve; });
+        let ran = false;
+        const turn = async () => {
+            if (ran) return;
+            ran = true;
+            const done = Promise.resolve().then(job);
+            answer(done);
+            await done.catch(() => undefined);
+            await settled(key);
+        };
+        const next = (chains.get(key) ?? Promise.resolve()).then(async () => {
+            // A lock that fails, or answers without calling back, still lets the job run here, in this queue's order.
+            if (alone) await Promise.resolve().then(() => alone(key, turn)).catch(() => undefined);
+            await turn();
+        });
         chains.set(key, next);
-        void next.catch(() => undefined).then(() => { if (chains.get(key) === next) chains.delete(key); });
-        return next;
+        void next.then(() => { if (chains.get(key) === next) chains.delete(key); });
+        return result;
+    };
+    /**
+     * `node` with each request held on `key` until it has settled, answered or not: the job after waits for it. The hosts
+     * hand every job's node through here.
+     */
+    const held = (key: string, node: ToolCopyNode): ToolCopyNode => {
+        const track = (request: () => Promise<ToolNodeAnswer | null>): Promise<ToolNodeAnswer | null> => {
+            const sent = request();
+            let requests = out.get(key);
+            if (!requests) out.set(key, (requests = new Set()));
+            const mine = requests;
+            mine.add(sent);
+            void sent.catch(() => undefined).then(() => {
+                mine.delete(sent);
+                if (!mine.size && out.get(key) === mine) out.delete(key);
+            });
+            return sent;
+        };
+        return { get: () => track(() => node.get()), put: (doc) => track(() => node.put(doc)), delete: () => track(() => node.delete()) };
     };
     const cancel = (key: string) => {
         const timer = timers.get(key);
@@ -238,6 +366,7 @@ export function createToolCopyQueue(delayMs: number = TOOL_COPY_PUSH_MS) {
     };
     return {
         run,
+        held,
         /** After a write: `job` once, `delayMs` after the last call for this key. */
         later(key: string, job: () => Promise<unknown>): void {
             cancel(key);

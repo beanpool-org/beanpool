@@ -4424,7 +4424,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "کدام عضو {name} است؟ فقط کسی را تأیید کنید که مطمئنید خودش است.",
   "Which member is this person? Confirm only someone you know is them.": "کدام عضو این شخص است؟ فقط کسی را تأیید کنید که مطمئنید خودش است.",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "آن‌ها در ازای {amount} کار می‌کنند: کف اعتبار مشخص 0، و هر لوبیایی که بالاتر از 0 دریافت کنند به مشاع می‌رود تا زمانی که تسویه شود.",
-  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "پس از تأیید، سقف اعتبار آن‌ها تا {amount} افزایش می‌یابد: کف اعتبار مشخص جامعه شما، تا زمانی که پیشنهادی ثبت‌شده داشته باشند.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "پس از تأیید، سقف اعتبار آن‌ها به میزان حداکثر {amount} افزایش می‌یابد: کف اعتبار مشخص جامعه شما، تا زمانی که پیشنهادی ثبت‌شده داشته باشند.",
   "Find a member": "یافتن یک عضو",
   "Find a member by name": "یافتن یک عضو بر اساس نام",
   "Nobody here is waiting to be confirmed.": "هیچ‌کس اینجا منتظر تأیید نیست.",

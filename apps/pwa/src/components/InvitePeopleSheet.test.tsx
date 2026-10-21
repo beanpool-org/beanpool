@@ -80,6 +80,8 @@ describe('InvitePeopleSheet member statuses and accessibility', () => {
 
         expect(bobBox).toBeDisabled();
         expect(bobBox).not.toBeChecked();
+        expect(bobBox.getAttribute('tabindex')).toBeNull();
+        expect(bobBox.hasAttribute('readonly')).toBe(false);
         expect(bobRow.querySelector('[data-icon="clock-outline"]')).toBeInTheDocument();
 
         expect(charlieBox).toBeDisabled();

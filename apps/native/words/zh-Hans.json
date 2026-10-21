@@ -5671,5 +5671,93 @@
   "This event has ended, so it can no longer be edited.": "此活动已结束，无法再进行编辑。",
   "{n} going|{n} going": {
     "other": "{n} 人参加"
-  }
+  },
+  "A few examples to start from, and a guide.": "从几个示例开始，并附有指南。",
+  "A fixed number of Beans": "固定数量的豆子",
+  "About this tool": "关于此工具",
+  "Allow notifications": "允许通知",
+  "Ask to borrow this?": "申请借用此物品？",
+  "Asked to borrow": "已申请借用",
+  "Beans per day": "每天豆子数",
+  "Beans per week": "每周豆子数",
+  "Books: how it's going": "账目：经营情况",
+  "Fee": "费用",
+  "Free": "免费",
+  "Free to borrow. Nothing is held: the lender says yes first.": "免费借用。无需暂扣任何费用：出借方须先同意。",
+  "Go on": "继续",
+  "Go on to post": "继续发布",
+  "Go straight in and add what you keep.": "直接进入并添加你保管的物品。",
+  "I already do this": "我已经在做",
+  "I already do this: go straight in and add what you keep.": "我已经在做：直接进入并添加你保管的物品。",
+  "I'm starting out": "我刚刚开始",
+  "I'm starting out: a few examples to start from, and a guide.": "我刚刚开始：从几个示例开始，并附有指南。",
+  "It shows in the Market as an Offer.": "它将在市集中显示为一项提供。",
+  "Keep a private copy on your community's server": "在你所在社区的服务器上保留一份私密副本",
+  "Kept on this phone only. Nothing in it leaves this phone.": "仅保存在这部手机上。其中的任何内容都不会离开这部手机。",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "保存在这部手机上，同时在你所在社区的服务器上保留一份私密副本，仅你可以通过应用读取。但与该服务器上的所有内容一样，其运营者也可以读取。",
+  "List it in the Market": "在市集中发布",
+  "More tools": "更多工具",
+  "Next you check it and tap Post. Nothing is posted before that.": "接下来请检查内容并点按“发布”。在此之前不会发布任何内容。",
+  "No thanks": "不用了，谢谢",
+  "No tools here yet. They come with updates of the app.": "这里暂无工具。它们将随应用更新一起提供。",
+  "Nothing is held until the lender says yes.": "在出借方同意之前，不会暂扣任何费用。",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "在出借方同意之前，不会暂扣任何费用。同意后费用将存入临时信任钱包，归还物品后出借方将收到扣除 1.5% 交易费 {owned} 后的费用，用于资助公共资金池。",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "此手机上已关闭 BeanPool 的通知，因此无法显示提醒。",
+  "Open {tool}": "打开 {tool}",
+  "Options for {tool}": "{tool} 的选项",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "要将此工具添加到首页吗？它能让你一眼看清所保管的物品。",
+  "Read in English": "阅读英文原文",
+  "Read the guide": "阅读指南",
+  "Reminders": "提醒",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "你的工具在此手机上设置的提醒。关于它们的任何信息都不会离开此手机。",
+  "Remove my data from this phone": "从这部手机中移除我的数据",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "从此手机中移除此工具在该社区的列表、照片和提醒。另一社区中的同一工具将保留其自身数据。此操作无法撤销。",
+  "Replace your unfinished post?": "替换未完成的发布？",
+  "Show translation": "显示译文",
+  "Some examples": "一些示例",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "此工具出现问题。它保存在此手机上的内容是安全的。",
+  "Stock: what you have": "库存：你所拥有的",
+  "Things you can do on your own": "你可以独立做的事情",
+  "Things you can do on your own, that make your community stronger.": "你可以独立做的事情，让你的社区更强大。",
+  "This page is in English for now.": "此页面目前为英文。",
+  "This page is newer in English.": "此页面在英文版中有更新。",
+  "This tool isn't in this version of the app": "当前应用版本中不包含此工具",
+  "Tool reminders": "工具提醒",
+  "Trade: how you deal": "交易：你的交易方式",
+  "Update": "更新",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "更新 BeanPool 即可使用。你的版本显示在“设置”底部。",
+  "You have an unfinished post on the map. Going on replaces it.": "你在地图上有一条未完成的发布。继续操作将会替换它。",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "other": "你已为此提供向信任钱包预存了 {credits} 信用额度（{n} 天）。"
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "other": "你已为此提供向信任钱包预存了 {credits} 信用额度（{n} 个月）。"
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "other": "你已为此提供向信任钱包预存了 {credits} 信用额度（{n} 周）。"
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "你已申请通过满足此需求来赚取 {credits} 信用额度（{n} 天）（扣除 1.5% 交易费后实收 {net}）{owned}。"
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "你已申请通过满足此需求来赚取 {credits} 信用额度（{n} 个月）（扣除 1.5% 交易费后实收 {net}）{owned}。"
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "你已申请通过满足此需求来赚取 {credits} 信用额度（{n} 周）（扣除 1.5% 交易费后实收 {net}）{owned}。"
+  },
+  "Your community asks for a profile photo before you post.": "你的社区要求在发布前提供头像。",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "你所在社区的服务器暂时无法保存副本，因此目前仅保留在此手机上。",
+  "for {n} day|for {n} days": {
+    "other": "借用 {n} 天"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "借用 {n} 周"
+  },
+  "{n} month|{n} months": {
+    "other": "{n} 个月"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n} 周"
+  },
+  "📦 Ask to borrow": "📦 申请借用"
 }

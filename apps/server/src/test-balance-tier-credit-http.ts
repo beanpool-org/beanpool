@@ -9,8 +9,9 @@
  *   1. an admin with no trades: 0
  *   2. a member granted Steward by the tier badge: 600 (floor -600); an Elder: 1,400
  *   3. the whole line frozen (the manager's "Freeze"): still 600 / 1,400 with floor 0, and back to the line unfrozen
- *   4. the known floor (dial on, confirmed, one live offer): 1,000; an admin's exception lowers it to 300, then a freeze
- *      of that exception keeps 300
+ *   4. the known floor (dial on, confirmed, one live offer) on top of a granted Resident: 200, the grant, never the known
+ *      floor (Marty, 21 Oct: "Badge counts what they did only"), with floor -1,200; an admin's exception lowers the known
+ *      floor to 300 (floor -500), then freezes it (floor -200): 200 throughout
  *   5. another member's read is refused (403) and an unsigned one (401): neither body has a tierCredit, tier or floor
  *
  * Registered in scripts/server-suites.mjs: the plain run (read auth on, the default) and read auth opted out.
@@ -176,14 +177,17 @@ async function main(): Promise<void> {
     const on = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
     assert(on.status === 200 && on.body?.confirmation === true, `the owner turns the known floor on (${show(on)})`);
     createPost('offer', 'produce', 'Kim mends bikes', 'Bike repairs', 40, 'fixed', kim.pk);
+    await setTier(kim, 'Resident');
     confirm(kim, ada);
-    await ownRead(kim, 'Kim (confirmed, one live offer, known floor 1,000)', 1000, -1000);
+    // Marty, 21 Oct ("Badge counts what they did only"): the known floor is the admins' confirmation, which stays private,
+    // so it deepens Kim's line but never her trust figure. Before, tierCredit was the whole line: 1,200, then 500, then 500.
+    await ownRead(kim, 'Kim (granted Resident, confirmed, one live offer, known floor 1,000)', 200, -1200);
     const lower = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: kim.pk, amount: 300 }, adaAdmin);
     assert(lower.status === 200 && lower.body?.exception?.amount === 300, `an admin lowers Kim's known floor to 300 (${show(lower)})`);
-    await ownRead(kim, 'Kim (known floor lowered to 300)', 300, -300);
+    await ownRead(kim, 'Kim (known floor lowered to 300)', 200, -500);
     const kf = await call('POST', null, '/api/local/admin/known-floor/exception', { memberPubkey: kim.pk, frozen: true }, adaAdmin);
     assert(kf.status === 200 && kf.body?.exception?.frozen === true, `an admin freezes Kim's lowered known floor (${show(kf)})`);
-    const kimFrozen = await ownRead(kim, 'Kim (lowered known floor, frozen)', 300);
+    const kimFrozen = await ownRead(kim, 'Kim (lowered known floor, frozen)', 200, -200);
     assert(kimFrozen.knownFrozen === true, `Kim's answer says the known floor is frozen (knownFrozen ${kimFrozen.knownFrozen})`);
 
     // ── 5. someone else's read ─────────────────────────────────────────────────────────────────

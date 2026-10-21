@@ -6,10 +6,10 @@
 // so the node and the fleet manager compute an identical floor instead of the
 // manager keeping a hand-copied, drift-prone reimplementation.
 import type Database from 'better-sqlite3';
-import { earnedCreditFromValue, getTier, knownGrantFor, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
+import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 import { prepared } from './statements.js';
-import { memberUsableKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf, isConfirmed, knownFloor, knownFloorException } from './known-floor.js';
+import { memberUsableKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf, isConfirmed, knownFloorException } from './known-floor.js';
 
 type Db = Database.Database;
 
@@ -901,8 +901,9 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     /** An admin froze this member's whole credit line (members.credit_frozen, the manager's "Freeze"): no line while it lasts. */
     creditFrozen: boolean;
     /**
-     * The credit `tier` is read from (tierForCredit(tierCredit) is `tier`): CREDIT_BASE_FLOOR − floor, except that a freeze
-     * keeps the line the member holds unfrozen. A post card's badge takes it, so every surface shows the same tier.
+     * The credit `tier` is read from (tierForCredit(tierCredit) is `tier`): what the member did, vouch + earned + granted
+     * under the cap, never the known grant (an enterprise: its line less its keepers' known pledges). A freeze doesn't move
+     * it. A post card's badge takes it, so every surface shows the same tier.
      */
     tierCredit: number;
     qualifiedValue: number;
@@ -920,7 +921,11 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     if (isTreasury) {
         const ef = getEnterpriseFloor(db, publicKey);
         const floor = ef.floor;
-        const tier = getTier(floor);
+        // Its tier leaves out what its keepers' known pledges add (enterpriseKnownShareOf): a known pledge is carved from a
+        // keeper's confirmation, which stays private (Marty, 21 Oct), so a keeper's confirmation never moves the enterprise's
+        // badge. Without one (and always with the dial off) this is the line itself, as before.
+        const tierCredit = memberRow?.credit_frozen === 1 ? 0 : Math.min(creditCap(db), Math.max(ef.legacyFloor, ef.derivedAllowance));
+        const tier = getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - tierCredit);
         return {
             stats,
             floor,
@@ -936,7 +941,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
             activated: ef.activated,
             knownFrozen: false,
             creditFrozen: false,
-            tierCredit: PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - floor,
+            tierCredit,
         };
     }
 
@@ -979,7 +984,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     // The known floor (community modes slice 4): a confirmed member's grant, and the community's cap (default
     // CREDIT_FLOOR_CAP). With the confirmation dial off both are today's: knownGrant 0, cap 2,000.
     // Less what of it they have pledged to enterprises (known-floor.ts: own line + known pledges <= their grant).
-    const knownGrant = memberUsableKnownGrant(db, publicKey, undefined, extraKnownPledged);
+    const knownGrant = memberUsableKnownGrant(db, publicKey, extraKnownPledged);
     const cap = creditCap(db);
     const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0 || knownGrant > 0;
     const otherAllowance = vouchCredit + earnedCredit + grantedCredit;
@@ -991,23 +996,19 @@ export function getMemberTrustProfile(db: Db, publicKey: string, extraKnownPledg
     // -CREDIT_FLOOR_CAP; 0 for an un-vouched member. CREDIT_BASE_FLOOR is 0 — no baked-in overdraft.
     const floor = c.CREDIT_BASE_FLOOR - allowance;
 
-    // An admin's freeze takes the line away, not the tier: tiers are merit badges, and a frozen member keeps the one their
-    // line would give them (rehearsal 5 Oct, b: a frozen Resident showed "Newcomer"). That is either freeze: the whole line
-    // (members.credit_frozen) or the known floor's: a frozen exception keeps the amount it froze (config/known-floor.ts; NULL
-    // is the community's known floor), so the tier reads that amount as if unfrozen, less their counted known pledges exactly
-    // as unfrozen. So a freeze never moves a tier, up or down (r4178376530, r4178445093). A lowered or raised exception is
-    // the member's line itself, so its tier follows it.
-    const exception = knownFloorException(db, publicKey);
-    const knownFrozen = confirmationDialOn(db) && exception?.frozen === true && isConfirmed(db, publicKey);
-    const tierKnownGrant = knownFrozen
-        ? memberUsableKnownGrant(db, publicKey, knownGrantFor({ dialOn: true, confirmed: true, knownFloor: knownFloor(db), cap, exception: { amount: exception!.amount, frozen: false } }), extraKnownPledged)
-        : knownGrant;
-    const tierAllowance = (activated || tierKnownGrant > 0) ? Math.min(cap, tierKnownGrant + otherAllowance) : 0;
-    const tier = getTier(c.CREDIT_BASE_FLOOR - tierAllowance);
+    // The tier counts what the member did: vouch + earned + granted, under the same cap (Marty, 21 Oct: "Badge counts what
+    // they did only"). The known grant is the admins' confirmation, which stays private, and every member reads the tier
+    // (a post card's badge, the trust profile), so it never counts towards it: a confirmed member's limit is higher than
+    // their badge. A freeze takes the line away, not the tier: tiers are merit badges, and a frozen member keeps the one
+    // they have (rehearsal 5 Oct, b: a frozen Resident showed "Newcomer"). With the known grant out of it, neither freeze,
+    // the whole line's (members.credit_frozen) or the known floor's, nor a lowered or raised exception, moves a tier.
+    const knownFrozen = confirmationDialOn(db) && knownFloorException(db, publicKey)?.frozen === true && isConfirmed(db, publicKey);
+    const tierCredit = Math.min(cap, otherAllowance);
+    const tier = getTier(c.CREDIT_BASE_FLOOR - tierCredit);
 
     // qualifiedValue: raw diversity-capped trade value (drives the native "value traded"
     // achievement + value-to-next-tier estimate). avgRating/reviewCount: the reputation
     // multiplier inputs, surfaced so the client can show them honestly.
-    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated, knownFrozen, creditFrozen: isCreditFrozen, tierCredit: tierAllowance };
+    return { stats, floor, tier, earnedCredit, grantedCredit, knownGrant: isCreditFrozen ? 0 : knownGrant, otherAllowance: isCreditFrozen ? 0 : otherAllowance, qualifiedValue: value, avgRating, reviewCount, vouched: elderVouched, activated, knownFrozen, creditFrozen: isCreditFrozen, tierCredit };
 }
 

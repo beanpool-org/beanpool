@@ -124,6 +124,65 @@ describe('Invite people on the web group sheet', () => {
         await waitFor(() => expect(vi.mocked(getGroupMembers).mock.calls.length).toBeGreaterThanOrEqual(2));
     });
 
+    it('the sheet with one active, one invited and one pending member shows the three labels, none selectable', async () => {
+        vi.mocked(getGroupMembers).mockResolvedValue([
+            { groupId: 'g-1', memberPubkey: ME, callsign: 'Marty', role: viewerRole, status: 'active', joinedAt: '' },
+            { groupId: 'g-1', memberPubkey: BEN, callsign: 'Ben', role: 'member', status: 'active', joinedAt: '' },
+            { groupId: 'g-1', memberPubkey: CAT, callsign: 'Cat', role: 'member', status: 'invited', joinedAt: '' },
+            { groupId: 'g-1', memberPubkey: DEE, callsign: 'Dee', role: 'member', status: 'pending_approval', joinedAt: '' },
+        ] as any);
+
+        open();
+        fireEvent.click(await screen.findByTestId('group-invite-people'));
+        const sheet = await screen.findByTestId('invite-people-sheet');
+
+        await within(sheet).findByText('Eve');
+
+        // Three labels present
+        const benLabel = within(sheet).getByText('Ben').closest('label')!;
+        const catLabel = within(sheet).getByText('Cat').closest('label')!;
+        const deeLabel = within(sheet).getByText('Dee').closest('label')!;
+
+        expect(within(benLabel).getByText('In the group')).toBeInTheDocument();
+        expect(within(catLabel).getByText('Invited')).toBeInTheDocument();
+        expect(within(deeLabel).getByText('Asked to join')).toBeInTheDocument();
+
+        // Inputs disabled and checked state matches status
+        const benBox = benLabel.querySelector('input')!;
+        const catBox = catLabel.querySelector('input')!;
+        const deeBox = deeLabel.querySelector('input')!;
+
+        expect(benBox).toBeDisabled();
+        expect(benBox).toBeChecked();
+        expect(benBox.getAttribute('aria-label')).toBe('Ben, already in the group');
+
+        expect(catBox).toBeDisabled();
+        expect(catBox).not.toBeChecked();
+        expect(catBox.getAttribute('aria-label')).toBe('Cat, already invited');
+        expect(catLabel.querySelector('[data-icon="clock-outline"]')).toBeInTheDocument();
+
+        expect(deeBox).toBeDisabled();
+        expect(deeBox).not.toBeChecked();
+        expect(deeBox.getAttribute('aria-label')).toBe('Dee, asked to join');
+
+        // None selectable: clicking each does not select them
+        fireEvent.click(benBox);
+        fireEvent.click(catBox);
+        fireEvent.click(deeBox);
+        fireEvent.click(benLabel);
+        fireEvent.click(catLabel);
+        fireEvent.click(deeLabel);
+
+        const inviteButton = within(sheet).getByRole('button', { name: 'Pick people to invite' });
+        expect(inviteButton).toBeDisabled();
+
+        // Eve is invitable
+        const eveBox = within(sheet).getByText('Eve').closest('label')!.querySelector('input')!;
+        expect(eveBox).toBeEnabled();
+        fireEvent.click(eveBox);
+        expect(within(sheet).getByRole('button', { name: 'Invite 1 person' })).toBeEnabled();
+    });
+
     it('a partial failure is said in plain words, naming who was not invited, and the sheet stays', async () => {
         vi.mocked(inviteGroupMember).mockImplementation(async (_g, pk) => {
             if (pk === EVE) throw new Error('offline');

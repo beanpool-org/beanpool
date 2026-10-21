@@ -41,7 +41,7 @@ import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN } fr
 //   earned = floor(CREDIT_MAX_EARNED × V / (V + TRUST_CURVE_K))
 // There is NO baked-in floor: floor = -(vouch + earned + granted), so it slides
 // continuously from 0 down to -2000. Tiers are recognition milestones (they don't set the floor).
-const { CREDIT_MAX_EARNED, TRUST_CURVE_K, CREDIT_BASE_FLOOR } = PROTOCOL_CONSTANTS;
+const { CREDIT_MAX_EARNED, TRUST_CURVE_K } = PROTOCOL_CONSTANTS;
 const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP;   // diversity: value with any ONE partner counts at most this much (canonical 500 from @beanpool/core)
 /** The balance before the member's own has been read. */
 const NO_BALANCE = {
@@ -108,9 +108,9 @@ export default function LedgerScreen() {
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
-    // `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
-    // the tier (floors slide continuously between them). Only presentation lives here. The blurbs and perks are word()
-    // keys, put through t() where they are shown.
+    // `min` = the credit that earns the tier (what they did, never the known grant). Levels are merit badges, not
+    // tied to a floor. Only presentation lives here. The blurbs and perks are word() keys, put through t() where
+    // they are shown.
     const TIERS = useMemo(() => {
         const look: Record<TierName, { tone: { fg: string; bg: string; border: string }; blurb: WordKey; perks: WordKey[] }> = {
             Newcomer: { tone: colors.trust.newcomer,
@@ -129,7 +129,7 @@ export default function LedgerScreen() {
         return TIER_LEVELS.map(lvl => {
             const { tone, blurb, perks } = look[lvl.name];
             return { name: lvl.name, emoji: lvl.emoji, color: tone.fg, bg: tone.bg, border: tone.border,
-                min: lvl.minCredit, floor: CREDIT_BASE_FLOOR - lvl.minCredit, blurb, perks: perks.map(words => ({ words })) };
+                min: lvl.minCredit, blurb, perks: perks.map(words => ({ words })) };
         });
     }, [colors]);
 
@@ -518,7 +518,7 @@ export default function LedgerScreen() {
     // Trust calculations (value-based)
     const earned = balanceState.earnedCredit || 0;   // from the saturating value curve
     // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
-    // its tierCredit, the credit that tier is read from (a freeze keeps the line held unfrozen), so the badge above and the
+    // its tierCredit, the credit that tier is read from (what they did, never the known grant), so the badge above and the
     // Levels card show one level. CREDIT_BASE_FLOOR − floor only from a node that sends no tierCredit.
     const level = memberLevel(balanceState);
     const totalCredit = level.credit;
@@ -662,14 +662,18 @@ export default function LedgerScreen() {
                     </View>
                 </View>
 
-                <Text style={styles.detailBlurb}>{t(sel.blurb)}</Text>
+                <Text style={styles.detailBlurb}>{selCurrent && selLevel === 0 && balanceState.floor < 0
+                    // Your own Newcomer level with your credit line already open (a vouch, or the admins' confirmation): not
+                    // the blurb's 'your first completed trade … opens your credit line' right above a floor below zero.
+                    ? t("Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.")
+                    : t(sel.blurb)}</Text>
 
-                {/* Credit floor — show YOUR actual floor when this is your tier; the tier entry floor otherwise */}
+                {/* Credit floor — show YOUR actual floor when this is your tier; what earns it in trust otherwise */}
                 <View style={styles.detailFloorRow}>
-                    <MaterialCommunityIcons name="scale-balance" size={18} color={sel.color} />
+                    <MaterialCommunityIcons name={selCurrent ? 'scale-balance' : 'shield-star-outline'} size={18} color={sel.color} />
                     <View style={{ flex: 1 }}>
                         <Text style={styles.detailFloorLabel}>
-                            {selCurrent ? t('Your current floor') : selReached ? t('Floor from this tier') : t('Floor starts at')}
+                            {selCurrent ? t('Your current floor') : tn(sel.min, 'from {n} trust', 'from {n} trust')}
                         </Text>
                         {selCurrent && (
                             <Text style={{ fontSize: 10, color: colors.text.muted, marginTop: 1 }}>
@@ -677,9 +681,11 @@ export default function LedgerScreen() {
                             </Text>
                         )}
                     </View>
-                    <Text style={[styles.detailFloorVal, { color: sel.color }]}>
-                        {formatNumber(selCurrent ? balanceState.floor : sel.floor)}
-                    </Text>
+                    {selCurrent && (
+                        <Text style={[styles.detailFloorVal, { color: sel.color }]}>
+                            {formatNumber(balanceState.floor)}
+                        </Text>
+                    )}
                 </View>
 
                 {sel.perks.filter(p => !(preview && p.words === INVITE_PERK)).map(p => (

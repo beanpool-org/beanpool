@@ -643,16 +643,21 @@ export function GroupDetailModal({
                     </div>
                 </div>
             </div>
-            {inviteOpen && canInvite && (
-                <InvitePeopleSheet
-                    groupId={groupData.id}
-                    groupName={groupData.name}
-                    existing={alreadyInGroup(members)}
-                    myPubkey={myPubkey}
-                    onClose={() => setInviteOpen(false)}
-                    onInvited={(sent) => { if (sent > 0) { loadRoster(); onMembershipChanged?.(); } }}
-                />
-            )}
+            {inviteOpen && canInvite && (() => {
+                const { active, invited, pending } = alreadyInGroup(members);
+                return (
+                    <InvitePeopleSheet
+                        groupId={groupData.id}
+                        groupName={groupData.name}
+                        existing={active}
+                        invited={invited}
+                        pending={pending}
+                        myPubkey={myPubkey}
+                        onClose={() => setInviteOpen(false)}
+                        onInvited={(sent) => { if (sent > 0) { loadRoster(); onMembershipChanged?.(); } }}
+                    />
+                );
+            })()}
         </div>
     );
 }

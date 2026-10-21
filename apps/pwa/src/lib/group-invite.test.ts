@@ -34,12 +34,14 @@ describe('canInviteToGroup mirrors the server', () => {
 });
 
 describe('the people offered and the send', () => {
-    it('active, invited and asking members are already in; a removed member may be invited again', () => {
-        const s = alreadyInGroup([
+    it('splits active, invited and asking members; a removed member may be invited again', () => {
+        const { active, invited, pending } = alreadyInGroup([
             { memberPubkey: 'a', status: 'active' }, { memberPubkey: 'b', status: 'invited' },
             { memberPubkey: 'c', status: 'pending_approval' }, { memberPubkey: 'd', status: 'removed' },
         ] as any);
-        expect([...s].sort()).toEqual(['a', 'b', 'c']);
+        expect([...active].sort()).toEqual(['a']);
+        expect([...invited].sort()).toEqual(['b']);
+        expect([...pending].sort()).toEqual(['c']);
     });
     it('never the signer or a system account, matched by name, once each, by name', () => {
         const shown = invitableShown([

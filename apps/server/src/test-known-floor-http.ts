@@ -14,12 +14,14 @@
  *   7. a keeper backs an enterprise from their known grant only by a recorded pledge (at most half the grant, off their
  *      own line 1:1): 6 enterprises in turn back 500 in all, not 1,224; a keeper can't step down from, or be unbound
  *      off, the debt their known pledge backs; a lowered floor, a revoked confirmation or the dial off spend-freezes
- *   7b. a freeze never moves a keeper's tier: either freeze, or both, keeps the tier their own known line (the grant less
- *      their counted known pledges) gives them, on their own answer and on their cards
+ *   7b. a keeper's tier is what they did, never their known line (Marty, 21 Oct: "Badge counts what they did only"): a
+ *      keeper with nothing else is a Newcomer and one granted Steward a Steward, whatever their known floor and pledges,
+ *      and either freeze, or both, keeps it, on their own answer and on their cards
  *   7c. a freeze keeps the amount it froze: a lowered (50), raised (1,500) or default line, with or without known
- *      pledges, keeps its tier frozen, and unfreezing goes back to that amount; money is the frozen line's; restoring the
- *      default clears both; the log reads 50 → frozen → 50. Another member reading the board gets the badge (the tier's
- *      least credit) and the trust profile their Trust Points, never the line itself (50, 1,500, 1,000 less pledges)
+ *      pledges, keeps its tier (Newcomer: the line never counts towards it) frozen, and unfreezing goes back to that
+ *      amount; money is the frozen line's; restoring the default clears both; the log reads 50 → frozen → 50. Another
+ *      member reading the board gets the badge (the tier's least credit) and the trust profile their Trust Points, never
+ *      the line itself (50, 1,500, 1,000 less pledges)
  *   8. one member's exception needs an owner's or admin's own key session: no automation token, no node password
  *   10. a change that changes nothing (the same amount, the same freeze, the default restored where it is) answers 200
  *      and writes no line; a freeze at the same amount, an unfreeze, an exception at the community's floor still do
@@ -233,16 +235,18 @@ async function main(): Promise<void> {
     assert(!actions.includes('credit_cap') && logged.length === 3, `the refused requests wrote no line (${logged.length} lines)`);
 
     // An admin freezes Kim's line through the same route the manager's settings use (rehearsal 5 Oct, b): the member's own
-    // answer says the admins froze it (knownFrozen), she has no line while it lasts, and her tier stays the one her line
-    // gives her, the 1,800 it froze (tiers are merit badges; r4178445093): not "Newcomer", and not the default's.
+    // answer says the admins froze it (knownFrozen), she has no line while it lasts, and her tier doesn't move (tiers are
+    // merit badges; r4178445093). Marty, 21 Oct ("Badge counts what they did only"): the 1,800 is the admins'
+    // confirmation, which stays private, so it never gave her a tier: she has completed no trade, so she is a Newcomer,
+    // raised or frozen. Before, the tier was the one her known line gave her (Elder on 1,800).
     const kimRaised = await balanceOf(kim);
     const freeze = await exception(adaAdmin, { memberPubkey: kim.pk, frozen: true });
     assert(freeze.status === 200 && freeze.body?.exception?.frozen === true, `an admin freezes Kim's known floor (${show(freeze)})`);
     const kimFrozen = await balanceOf(kim);
     assert(kimFrozen.status === 200 && kimFrozen.body?.knownFrozen === true && kimFrozen.body?.floor === 0 && kimFrozen.body?.activated === false,
         `Kim's own answer: knownFrozen, no line while it lasts (${show(kimFrozen)})`);
-    assert(kimFrozen.body?.tier?.name === kimRaised.body?.tier?.name && kimFrozen.body?.tier?.name !== 'Newcomer',
-        `and her tier stays ${kimRaised.body?.tier?.name}, the one 1,800 gives, not Newcomer (${kimFrozen.body?.tier?.name})`);
+    assert(kimFrozen.body?.tier?.name === kimRaised.body?.tier?.name && kimRaised.body?.tier?.name === 'Newcomer',
+        `and her tier stays ${kimRaised.body?.tier?.name}, what she did, never the 1,800 (${kimFrozen.body?.tier?.name})`);
     const unfreeze = await exception(adaAdmin, { memberPubkey: kim.pk, amount: 1800 });
     assert(unfreeze.status === 200 && getBalance(kim.pk).knownFrozen === false && getBalance(kim.pk).usableFloor === -1800,
         `an admin opens it again at 1,800 and the freeze is gone (${show(unfreeze)})`);
@@ -371,23 +375,26 @@ async function main(): Promise<void> {
     assert(dialOn.status === 200 && getEnterpriseUnderlyingFloor(kaiCos[0]).floor === -500, 'the dial on again: the pledge, never released, counts again');
 
     // ── 7b. a freeze never moves a keeper's tier (r4178376530) ──────────────────────────────────
-    // Unfrozen, a keeper's tier follows their own known line: the grant less their counted known pledges. Either freeze, or
-    // both, keeps exactly that tier, on their own answer and on their cards: never higher (the full grant) and never lower.
+    // Marty, 21 Oct ("Badge counts what they did only"): a keeper's tier is what they did, never their known line (the
+    // grant less their counted known pledges), so 1,000 less 500 pledged no longer makes a Resident: a keeper with nothing
+    // else is a Newcomer, and one granted Steward is a Steward. Either freeze, or both, keeps exactly that tier, on their
+    // own answer and on their cards: never higher and never lower. The line is the known one plus the grant.
     console.log('── 7b. a frozen keeper\'s tier ──');
-    for (const [grant, pledged, tierName] of [[300, 150, 'Newcomer'], [1000, 500, 'Resident']] as const) {
+    for (const [grant, pledged, granted, tierName] of [[300, 150, 0, 'Newcomer'], [1000, 500, 0, 'Newcomer'], [1000, 500, 600, 'Steward']] as const) {
         const set = await settings(owner, { knownFloor: grant });
         assert(set.status === 200, `the owner sets the known floor to ${grant} (${show(set)})`);
-        const keeper = makeMember(`Keeper ${grant}`);
+        const keeper = makeMember(`Keeper ${grant} ${granted}`);
+        if (granted) db.prepare('UPDATE members SET earned_credit = ? WHERE public_key = ?').run(granted, keeper.pk);
         confirm(keeper, ada);
-        const card = createPost('offer', 'produce', `Keeper ${grant} mends shoes`, 'Shoes', 10, 'fixed', keeper.pk)!;
-        pledgeEnterpriseBacking(makeEnterprise(`Keeper Co ${grant}`, [keeper]), keeper.pk, pledged);
+        const card = createPost('offer', 'produce', `Keeper ${grant} ${granted} mends shoes`, 'Shoes', 10, 'fixed', keeper.pk)!;
+        pledgeEnterpriseBacking(makeEnterprise(`Keeper Co ${grant} ${granted}`, [keeper]), keeper.pk, pledged);
         const tiers = async (label: string, frozen: { known: boolean; whole: boolean }) => {
             const own = await balanceOf(keeper);
             const cardTier = tierForCredit(getPosts({ id: card.id })[0]?.authorEnergyCycled ?? NaN).name;
-            const line = frozen.known || frozen.whole ? 0 : -(grant - pledged);
+            const line = frozen.whole ? 0 : -((frozen.known ? 0 : grant - pledged) + granted);
             assert(own.status === 200 && own.body?.floor === line && own.body?.knownFrozen === frozen.known && own.body?.creditFrozen === frozen.whole
                 && own.body?.tier?.name === tierName && cardTier === tierName,
-                `known floor ${grant}, ${pledged} pledged, ${label}: floor ${line}, tier ${tierName} on their answer and their card (${own.body?.floor}, ${own.body?.tier?.name}, card ${cardTier})`);
+                `known floor ${grant}, ${pledged} pledged, ${granted} granted, ${label}: floor ${line}, tier ${tierName} on their answer and their card (${own.body?.floor}, ${own.body?.tier?.name}, card ${cardTier})`);
         };
         await tiers('unfrozen', { known: false, whole: false });
         await exception(adaAdmin, { memberPubkey: keeper.pk, frozen: true });
@@ -402,8 +409,10 @@ async function main(): Promise<void> {
     await settings(owner, { knownFloor: 1000 });
 
     // ── 7c. a freeze keeps the amount it froze (r4178445093) ────────────────────────────────────
-    // An exception's freeze keeps its amount: their tier is the one that amount gives them, frozen or not, and unfreezing
-    // goes back to it. Money is the freeze's: no known line while frozen.
+    // An exception's freeze keeps its amount, and unfreezing goes back to it. Money is the freeze's: no known line while
+    // frozen. Their tier never moves: Marty, 21 Oct ("Badge counts what they did only"), the amount is the admins'
+    // decision about a confirmed member and stays private, so it gives no tier: these members have done nothing yet, so
+    // whatever the amount they are Newcomers. Before, their tier was the one the amount gave them (1,500: Elder).
     console.log('── 7c. a frozen exception keeps its amount ──');
     for (const [amount, pledged] of [[50, 0], [50, 20], [1500, 0], [1500, 600], [null, 0], [null, 400]] as const) {
         const grant = amount ?? 1000;
@@ -429,8 +438,8 @@ async function main(): Promise<void> {
                 row: db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(who.pk) as { amount: number | null; frozen: number } | undefined };
         };
         const before = await look();
-        assert(before.floor === -(grant - pledged) && !!before.tier && before.profileTier === before.tier && before.cardTier === before.tier,
-            `${label}, unfrozen: floor ${-(grant - pledged)}, one tier everywhere (${JSON.stringify(before)})`);
+        assert(before.floor === -(grant - pledged) && before.tier === 'Newcomer' && before.profileTier === before.tier && before.cardTier === before.tier,
+            `${label}, unfrozen: floor ${-(grant - pledged)}, one tier everywhere, Newcomer (${JSON.stringify(before)})`);
         const frz = await exception(adaAdmin, { memberPubkey: who.pk, frozen: true });
         const frozen = await look();
         assert(frz.status === 200 && frozen.row?.frozen === 1 && frozen.row?.amount === amount,

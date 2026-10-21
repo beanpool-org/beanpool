@@ -3,12 +3,12 @@ slug: communities
 title: Mahigit sa isang komunidad
 summary: Maging kabilang sa ilang komunidad gamit ang iisang account, lumipat sa pagitan nila, sundan ang iyong komunidad sa bagong address, at tingnan ang ipinapakita ng pandaigdigang komunidad.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar
-source-hash: b123b0f66fb01c9d
+source-hash: fe1d603a6bf1c424
 ---
 
 ## Isang account, ilang komunidad
 
-May hawak na isang account ang iyong telepono: isang pangalan, isang susi, isang hanay ng 12 salita sa Ingles. Maaari mo itong gamitin upang sumali sa mahigit sa isang komunidad. Ang bawat komunidad ay nagtatabi ng sarili nitong munggo, mga transaksyon at mga post.
+May hawak na isang account ang iyong telepono: isang pangalan, isang susi, isang hanay ng 12 salita. Maaari mo itong gamitin upang sumali sa mahigit sa isang komunidad. Ang bawat komunidad ay nagtatabi ng sarili nitong munggo, mga transaksyon at mga post.
 
 ## Pagsali sa isa pang komunidad
 
@@ -17,20 +17,21 @@ May hawak na isang account ang iyong telepono: isang pangalan, isang susi, isang
 - Sa ilalim ng **Join Another Community**, i-paste ang link o code ng imbitasyon. Kung code lang ang mayroon ka, punan din ang address ng komunidad.
 - I-tap ang **Sumali sa Komunidad**.
 
-Kasama mo ang iyong susi, ang iyong 12 salita sa Ingles at ang iyong pangalan. Ang iyong mga post, chat at kalakalan ay nananatili sa bawat komunidad. Susunod mong susuriin ang iyong pangalan at larawan para sa bagong komunidad. Ang isang sign-in na nagpoprotekta sa iyong account ay itinatabi ng bawat komunidad, kaya humihiling ang app na protektahan mo rin ang iyong account sa bago: i-tap ang **Protektahan ito**, o **Mamaya**.
+Kasama mo ang iyong susi, ang iyong 12 salita at ang iyong pangalan. Ang iyong mga post, chat at kalakalan ay nananatili sa bawat komunidad. Susunod mong susuriin ang iyong pangalan at larawan para sa bagong komunidad. Ang isang sign-in na nagpoprotekta sa iyong account ay itinatabi ng bawat komunidad, kaya humihiling ang app na protektahan mo rin ang iyong account sa bago: i-tap ang **Protektahan ito**, o **Mamaya**.
 
 ## Pagsali sa pandaigdigang komunidad mula sa iyong account
 
-Hindi nangangailangan ng imbitasyon ang pandaigdigang komunidad, at sasali ka rito gamit ang account na mayroon ka na: ang parehong susi at ang parehong 12 salita sa Ingles. Iniaalok ito ng app kapag bukas ang pandaigdigang komunidad at hindi pa nito nasasabi sa app na ang account na ito ay miyembro na roon.
+Hindi nangangailangan ng imbitasyon ang pandaigdigang komunidad, at sasali ka rito gamit ang account na mayroon ka na: ang parehong susi at ang parehong 12 salita. Iniaalok ito ng app kapag bukas ang pandaigdigang komunidad at hindi pa nito nasasabi sa app na ang account na ito ay miyembro na roon.
 
-Sa ilalim ng **Your communities** ay palaging may hanay para sa **Pandaigdigang komunidad**. Sinasabi ng ikalawang linya nito kung nasaan ka: ang address nito kapag ikaw ay miyembro (i-tap ito upang lumipat dito), **Sumali gamit ang account na ito: 12 salita o sign-in** (**Sumali gamit ang account na ito: sign-in** kung saan hindi tinatanggap ng komunidad ang 12 salita) kapag maaari kang sumali rito, o kung bakit hindi mo magawa sa ngayon: **Sinusuri…**, **Hindi ito maabot ngayon** (na may **Tap to try again.** habang hindi pa naitatabi ng teleponong ito ang pandaigdigang komunidad), **Hindi tumatanggap ng bagong miyembro ngayon.**, **Nasa pribadong preview ang komunidad na ito. Humingi ng imbitasyon sa may-ari nito.**, o **Isinara ang account mo roon.** Kapag hindi maabot ang pandaigdigang komunidad at nakakonekta ka sa isang komunidad kung saan ikaw ay miyembro, sinasabi ng isang linya sa ilalim nito na **Hindi apektado ang sarili mong komunidad.** Walang iba pa sa telepono ang umaasa rito.
+Sa ilalim ng **Your communities** ay palaging may hanay para sa **Pandaigdigang komunidad**. Sinasabi ng ikalawang linya nito kung nasaan ka: ang address nito kapag ikaw ay miyembro (i-tap ito upang lumipat dito), **Maglibot muna, pagkatapos ay sumali gamit ang account na ito** kapag maaari kang sumali rito (habang bumibisita ka rito bilang bisita: **Sumali gamit ang account na ito: 12 salita o sign-in**, o **Sumali gamit ang account na ito: sign-in** kung saan hindi tinatanggap ng komunidad ang 12 salita), o kung bakit hindi mo magawa sa ngayon: **Sinusuri…**, **Hindi ito maabot ngayon** (na may **Tap to try again.** habang hindi pa naitatabi ng teleponong ito ang pandaigdigang komunidad), **Hindi tumatanggap ng bagong miyembro ngayon.**, **Nasa pribadong preview ang komunidad na ito. Humingi ng imbitasyon sa may-ari nito.**, o **Isinara ang account mo roon.** Kapag hindi maabot ang pandaigdigang komunidad at nakakonekta ka sa isang komunidad kung saan ikaw ay miyembro, sinasabi ng isang linya sa ilalim nito na **Hindi apektado ang sarili mong komunidad.** Walang iba pa sa telepono ang umaasa rito.
 
-- I-tap ang bean sa itaas sa kaliwa. Sa sheet ng **BeanPool**, sa ilalim ng **Your communities**, i-tap ang **Pandaigdigang komunidad** (sinasabi ng ikalawang linya nito ang **Sumali gamit ang account na ito**). Nasa **Mga Setting** din ito, sa ilalim ng **Advanced / Subsystem**. Kung bumibisita ka sa pandaigdigang komunidad bilang bisita, i-tap ang **Sumali** sa itaas, sa tabi ng **?**, pagkatapos ay **Join with 12 words or a sign-in** (**Join with a sign-in** kung saan tumatanggap lamang ng mga sign-in ang komunidad). Kung ipinapakita ng app ang **Hindi ka pa miyembro rito** para sa pandaigdigang komunidad, i-tap ang **Sumali gamit ang account na ito**.
-- Piliin kung paano sasali: **Gumawa ng account gamit ang 12 lihim na salita**, na gumagamit ng 12 salita na mayroon na ang iyong account (walang sign-in, kaya walang lock ng telepono), o **O mag-sign in** nang isang beses gamit ang Google, Apple (sa iPhone) o Facebook. Para sa isang sign-in, humihingi muna ang app ng lock ng iyong telepono, dahil ang sign-in na ito ay nagiging paraan din pabalik sa iyong account.
+- I-tap ang bean sa itaas sa kaliwa. Sa sheet ng **BeanPool**, sa ilalim ng **Your communities**, i-tap ang **Pandaigdigang komunidad** (sinasabi ng ikalawang linya nito ang **Maglibot muna, pagkatapos ay sumali gamit ang account na ito**). Binubuksan ng app ang pandaigdigang komunidad bilang bisita, tulad ng ginagawa ng website: maglilibot ka muna, at ang tuldok sa bean ay nagpapakita na isa kang bisita. Nasa **Mga Setting** din ito, sa ilalim ng **Mga naka-save na komunidad**: **🌍 Maglibot sa pandaigdigang komunidad**. Walang sinasalihan at walang nagagawang account sa pamamagitan lamang ng paglibot.
+- Kapag handa ka na, i-tap ang **Sumali** sa itaas, sa tabi ng **?**, pagkatapos ay **Join with 12 words or a sign-in** (**Join with a sign-in** kung saan tumatanggap lamang ng mga sign-in ang komunidad). Kung ipinapakita ng app ang **Hindi ka pa miyembro rito** para sa pandaigdigang komunidad, i-tap ang **Sumali gamit ang account na ito**.
+- Piliin kung paano sasali: **Sumali gamit ang account na ito**, na gumagamit ng susi at 12 salita na nasa teleponong ito na (walang sign-in, kaya walang lock ng telepono), o, sa ilalim ng **Magdagdag din ng sign-in**, mag-sign in nang isang beses gamit ang Google, Apple (sa iPhone) o Facebook. Para sa isang sign-in, humihingi muna ang app ng lock ng iyong telepono, dahil ang sign-in na ito ay nagiging paraan din pabalik sa iyong account.
 - Suriin ang pangalang makikita ng mga tao roon, at i-tap ang **Sumali**. Kung mayroon nang ganoong pangalan ang iba, nagmumungkahi ang app ng iba.
-- Pagkatapos ay piliin ang iyong larawan para sa pandaigdigang komunidad, gaya ng para sa anumang bagong komunidad, at pagkatapos ay humigit-kumulang kung nasaan ka (**Humigit-kumulang nasaan ka?**; maaari mong i-tap ang **Laktawan muna**): ipinapakita sa iyo ng pandaigdigang komunidad ang mga listing na malapit dito. Tingnan ang "Pagsali sa BeanPool".
+- Pagkatapos ay piliin ang iyong larawan para sa pandaigdigang komunidad, gaya ng para sa anumang bagong komunidad, at pagkatapos ay humigit-kumulang kung nasaan ka (**Saan ka humigit-kumulang?**; maaari mong i-tap ang **Laktawan muna**): ipinapakita sa iyo ng pandaigdigang komunidad ang mga listing na malapit dito. Tingnan ang "Pagsali sa BeanPool".
 
-Walang magbabago sa iba mo pang mga komunidad, at mananatiling pareho ang iyong 12 salita sa Ingles. Ang isang sign-in ay nagiging paraan din pabalik sa parehong account: ang isang nakakandadong kopya nito ay itinatabi para sa sign-in na iyon, kaya kung mawala mo ang iyong telepono, ibinabalik nito ang account na ito, hindi ang bago. Tingnan ang "Pagbawi sa iyong account". Ang isang sign-in na ini-link mo sa iyong account noon ay patuloy na gumagana. Kung sumali ka gamit ang 12 salita at walang sign-in na nagtatago ng kopya ng iyong account, ipinapakita ng app ang card na **May isang paraan pabalik ang iyong account**, tulad ng para sa sinumang sumasali gamit ang 12 salita (tingnan ang "Pagsali sa BeanPool").
+Walang magbabago sa iba mo pang mga komunidad, at mananatiling pareho ang iyong 12 salita. Ang isang sign-in ay nagiging paraan din pabalik sa parehong account: ang isang nakakandadong kopya nito ay itinatabi para sa sign-in na iyon, kaya kung mawala mo ang iyong telepono, ibinabalik nito ang account na ito, hindi ang bago. Tingnan ang "Pagbawi sa iyong account". Ang isang sign-in na ini-link mo sa iyong account noon ay patuloy na gumagana. Kung sumali ka gamit ang 12 salita at walang sign-in na nagtatago ng kopya ng iyong account, ipinapakita ng app ang card na **May isang paraan pabalik ang iyong account**, tulad ng para sa sinumang sumasali gamit ang 12 salita (tingnan ang "Pagsali sa BeanPool").
 
 Kung sinasabi ng app ang **This sign-in already joined the global community with a different BeanPool account**, ang sign-in na iyon ay may sarili nang account doon. Gumamit ng ibang sign-in: ang isang sign-in account ay gumagawa ng isang account sa pandaigdigang komunidad.
 
@@ -64,7 +65,7 @@ Gumagana ang iba mo pang mga komunidad tulad ng dati.
 - I-tap ang bean sa itaas sa kaliwa. Bubukas ang sheet ng **BeanPool**, na may **Your communities** malapit sa itaas.
 - I-tap ang nais mo.
 
-Maaari ka ring lumipat sa **Mga Setting**, sa ilalim ng **System**, pagkatapos ay **Advanced / Subsystem**. Nakalista roon ang iyong mga komunidad. Ang ginagamit mo ay minarkahan bilang aktibo. I-tap ang **Lumipat sa Town** sa isa pa upang lumipat dito.
+Maaari ka ring lumipat sa **Mga Setting**, sa ilalim ng **System**, pagkatapos ay **Mga naka-save na komunidad**. Nakalista roon ang iyong mga komunidad. Ang ginagamit mo ay minarkahan bilang aktibo. I-tap ang **Switch to this community** sa isa pa upang lumipat dito.
 
 ## Kapag lumipat ang iyong komunidad sa bagong address
 
@@ -77,7 +78,7 @@ Maaaring lumipat ang isang komunidad sa bagong address: halimbawa, mula sa numer
 
 ## Pagkalimot sa isang komunidad sa teleponong ito
 
-- Sa **Advanced / Subsystem**, i-tap ang **Kalimutan** sa isang komunidad na hindi mo ginagamit sa ngayon. Inaalis nito ito at ang na-save na data nito mula sa teleponong ito.
+- Sa **Mga naka-save na komunidad**, i-tap ang **Kalimutan** sa isang komunidad na hindi mo ginagamit sa ngayon. Inaalis nito ito at ang na-save na data nito mula sa teleponong ito.
 - Sa sheet ng **BeanPool**, sa ilalim ng **Your communities**, ang pagpindot at pagpigil sa isang komunidad at pag-tap sa **Alisin** ay nag-aalis lamang nito sa listahan. Nananatili ang data nito sa telepono.
 
 Wala sa dalawa ang nagbubura ng iyong account doon, at hindi apektado ang iba mo pang mga komunidad.

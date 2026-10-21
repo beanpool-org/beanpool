@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "\"{name}\" 이름은 이 커뮤니티에서 이미 사용 중이에요. 다른 이름을 골라 주세요.",
@@ -3310,5 +3310,60 @@
   "Recurring listing (stays active after purchase)": "정기 게시물 (구매 후에도 활성 상태 유지)",
   "Posting…": "게시 중…",
   "Publish Listing": "게시물 등록",
-  "Translated by machine: some words may be wrong.": "기계로 번역했어요. 틀린 단어가 있을 수 있어요."
+  "Translated by machine: some words may be wrong.": "기계로 번역했어요. 틀린 단어가 있을 수 있어요.",
+  "About this tool": "이 도구 정보",
+  "Ask to borrow this?": "대여를 요청할까요?",
+  "Asked to borrow": "대여 요청함",
+  "Check your connection, then try again.": "연결 상태를 확인한 후 다시 시도해 주세요.",
+  "For example": "예시",
+  "Free to borrow. Nothing is held: the lender says yes first.": "무료 대여예요. 아무것도 예치되지 않으며, 빌려주는 사람이 먼저 수락해야 해요.",
+  "How it's going": "진행 상황",
+  "How you deal": "거래하는 방법",
+  "I already do this": "이미 이렇게 하고 있어요",
+  "I'm starting out": "처음 시작해요",
+  "It couldn't be removed. Try again.": "삭제할 수 없었어요. 다시 시도해 주세요.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "회원님만을 위해 이 브라우저에 보관돼요. 어떤 내용도 이 브라우저 밖으로 나가지 않으며, 여기서 로그아웃하면 삭제돼요.",
+  "No tools in this version of the app yet.": "현재 앱 버전에는 아직 도구가 없어요.",
+  "Nothing is held until the lender says yes.": "빌려주는 사람이 수락할 때까지는 아무것도 예치되지 않아요.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "빌려주는 사람이 수락할 때까지는 아무것도 예치되지 않아요. 수락하면 대여료가 임시 신뢰 지갑에 들어가며, 물건이 반납되면 빌려준 사람은 커먼즈 풀을 지원하기 위한 거래 수수료 1.5%{owned}를 제외한 금액을 받게 돼요.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "빌려주는 사람이 수락할 때까지는 아무것도 예치되지 않아요. 수락하면 {total} B가 신뢰 지갑에 들어가며, 반납되면 빌려준 사람은 {net} B(커먼즈 풀을 지원하기 위한 거래 수수료 1.5%{owned} 제외)를 받게 돼요.",
+  "On your Home": "홈 화면에 표시",
+  "Open {tool}": "{tool} 열기",
+  "Options for {tool}": "{tool} 옵션",
+  "Read in English": "영어로 읽기",
+  "Read the guide": "안내서 읽기",
+  "Refresh the page to load the newest version your community has.": "페이지를 새로고침하여 커뮤니티의 최신 버전을 불러오세요.",
+  "Remove my data": "내 데이터 삭제",
+  "Remove my data from this browser": "이 브라우저에서 내 데이터 삭제",
+  "Removed from this browser.": "이 브라우저에서 삭제되었어요.",
+  "Show translation": "번역 보기",
+  "Start": "시작하기",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "이 브라우저에서 {tool}에 대한 이 커뮤니티의 데이터를 삭제해요. 다른 커뮤니티의 동일한 도구 데이터는 그대로 유지돼요. 이는 되돌릴 수 없어요.",
+  "Things you can do on your own, that make your community stronger.": "혼자서도 할 수 있고 커뮤니티를 더 튼튼하게 만드는 일이에요.",
+  "This page is in English for now.": "이 페이지는 현재 영어로만 제공돼요.",
+  "This page is newer in English.": "이 페이지는 영어 원문이 더 최신이에요.",
+  "This screen stopped working": "이 화면이 작동을 멈췄어요",
+  "This tool didn't load": "이 도구를 불러오지 못했어요",
+  "This tool isn't in this version of the app": "현재 앱 버전에는 이 도구가 없어요",
+  "What this tool keeps is safe. Go back and open it again.": "이 도구에 보관된 내용은 안전해요. 뒤로 돌아가서 다시 열어보세요.",
+  "What you have": "내가 가진 것",
+  "Where it is kept": "보관 위치",
+  "Withdraw request": "요청 철회",
+  "Yes, remove it": "네, 삭제합니다",
+  "for {n} day|for {n} days": {
+    "other": "{n}일 동안"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "{n}주 동안"
+  },
+  "{n} day|{n} days": {
+    "other": "{n}일"
+  },
+  "{n} month|{n} months": {
+    "other": "{n}개월"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n}주"
+  },
+  "📦 Ask to borrow": "📦 대여 요청"
 }

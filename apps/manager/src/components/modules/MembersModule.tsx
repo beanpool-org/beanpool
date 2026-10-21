@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { tierForCredit } from '@beanpool/core';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
+import type { RolesViewer } from './NodeRolesPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { Avatar } from '../common/Avatar';
@@ -102,6 +103,10 @@ interface MembersModuleProps {
     onToggleOperator?: (pubkey: string, canOperate: boolean) => Promise<void>;
     onGrantNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
     onRevokeNodeRole?: (pubkey: string, role: MemberNodeRole, code?: string) => Promise<void>;
+    /** Who is looking at /settings — decides whether role management buttons are offered. */
+    rolesViewer?: RolesViewer;
+    /** The role of whoever is viewing this module, if passed directly. */
+    viewerRole?: MemberNodeRole | null;
 }
 
 export function getMemberRawAvatar(m: MemberItem | null | undefined, profiles: ProfileItem[] | Map<string, ProfileItem> = []): string | null {
@@ -224,7 +229,10 @@ export function MembersModule({
     onToggleOperator,
     onGrantNodeRole,
     onRevokeNodeRole,
+    rolesViewer,
+    viewerRole: propsViewerRole,
 }: MembersModuleProps) {
+    const effectiveViewerRole: MemberNodeRole = propsViewerRole ?? (rolesViewer?.kind === 'key' ? rolesViewer.role : 'owner');
     const [searchTerm, setSearchTerm] = useState('');
     const [activeThreat, setActiveThreat] = useState<ThreatItem | null>(null);
     const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
@@ -498,6 +506,9 @@ export function MembersModule({
     };
 
     const members = nodeData?.members || [];
+    const ownerCount = React.useMemo(() => {
+        return members.filter((m) => (m.nodeRole || (m as any).role) === 'owner').length;
+    }, [members]);
     const profiles = nodeData?.profiles || [];
     const posts = nodeData?.posts || [];
 
@@ -1042,6 +1053,9 @@ export function MembersModule({
                     onGrantNodeRole={onGrantNodeRole}
                     onRevokeNodeRole={onRevokeNodeRole}
                     nodeRole={selectedMember.nodeRole}
+                    viewerRole={effectiveViewerRole}
+                    ownerCount={ownerCount}
+                    isSoleOwner={selectedMember.nodeRole === 'owner' && ownerCount <= 1}
                     members={members}
                     accounts={nodeData?.accounts}
                     nodeUrl={activeNodeUrl}

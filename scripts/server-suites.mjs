@@ -113,6 +113,7 @@ export const SUITES = [
     'test-derived-enterprise-floor',
     'test-known-floor-http',
     'test-known-pledge-counted-once',
+    'test-boot-drift-count-moves-nothing',
     'test-badge-earned-only-http',
     'test-balance-tier-credit-http',
     'test-names-debts-http',

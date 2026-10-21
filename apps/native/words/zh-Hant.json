@@ -2,10 +2,10 @@
   "_meta": {
     "language": "zh-Hant",
     "name": "Chinese (Traditional)",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "豆子",
@@ -5671,5 +5671,93 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "伺服器運作後，在伺服器設定應用程式中為社群命名，邀請首批成員，再由他們邀請其他人。開啟「發布地點」後，周邊已要求接收通知的人便會收到相關訊息。",
   "How to run a node, on beanpool.org": "如何在 beanpool.org 上運作伺服器",
   "Copy my community's details": "複製我的社群詳細資訊",
-  "Copied. Paste them into your node's settings app.": "已複製。請貼入伺服器的設定應用程式中。"
+  "Copied. Paste them into your node's settings app.": "已複製。請貼入伺服器的設定應用程式中。",
+  "A few examples to start from, and a guide.": "幾個入門範例和指南。",
+  "A fixed number of Beans": "固定數量的豆子",
+  "About this tool": "關於此工具",
+  "Allow notifications": "允許通知",
+  "Ask to borrow this?": "請求借用此物品？",
+  "Asked to borrow": "已請求借用",
+  "Beans per day": "每天豆子數",
+  "Beans per week": "每週豆子數",
+  "Books: how it's going": "帳目：營運狀況",
+  "Fee": "費用",
+  "Free": "免費",
+  "Free to borrow. Nothing is held: the lender says yes first.": "免費借用。不扣留任何款項：須由出借人先同意。",
+  "Go on": "繼續",
+  "Go on to post": "繼續發布",
+  "Go straight in and add what you keep.": "直接進入並新增你保存的物品。",
+  "I already do this": "我已經在做這件事了",
+  "I already do this: go straight in and add what you keep.": "我已經在做這件事了：直接進入並新增你保存的物品。",
+  "I'm starting out": "我才剛開始",
+  "I'm starting out: a few examples to start from, and a guide.": "我才剛開始：幾個入門範例和指南。",
+  "It shows in the Market as an Offer.": "它會在市集中顯示為「提供」。",
+  "Keep a private copy on your community's server": "在你的社群伺服器上保留私人複本",
+  "Kept on this phone only. Nothing in it leaves this phone.": "僅保存在這支手機上。其中的任何內容都不會離開這支手機。",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "保存在這支手機上，並在你的社群伺服器上保留一份私人複本，只有你能透過應用程式讀取。如同該伺服器上的所有內容一樣，伺服器營運者也可以讀取。",
+  "List it in the Market": "刊登到市集",
+  "More tools": "更多工具",
+  "Next you check it and tap Post. Nothing is posted before that.": "接下來你會進行確認並點一下「發布」。在此之前不會發布任何內容。",
+  "No thanks": "不用了，謝謝",
+  "No tools here yet. They come with updates of the app.": "這裡目前還沒有工具。它們會隨應用程式更新推出。",
+  "Nothing is held until the lender says yes.": "在出借人同意之前，不會扣留任何款項。",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "在出借人同意之前，不會扣留任何款項。同意後，費用會存入臨時信任錢包中，物品歸還後出借人將收到扣除 1.5% 交易手續費{owned}後的款項，費用用於資助公共資金池。",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "這支手機上的 BeanPool 已關閉通知，因此無法顯示提醒。",
+  "Open {tool}": "開啟 {tool}",
+  "Options for {tool}": "{tool} 的選項",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "要把這個工具放在首頁嗎？讓你在首頁對其保存的內容一目了然。",
+  "Read in English": "閱讀英文版",
+  "Read the guide": "閱讀指南",
+  "Reminders": "提醒",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "你的工具在這支手機上設定的提醒。相關資訊絕不會離開這支手機。",
+  "Remove my data from this phone": "從這支手機移除我的資料",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "移除此工具在這支手機上屬於本社群的清單、相片和提醒。另一個社群中的相同工具仍會保留其自身資料。此操作無法復原。",
+  "Replace your unfinished post?": "要替換未完成的發文嗎？",
+  "Show translation": "顯示翻譯",
+  "Some examples": "部分範例",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "此工具發生錯誤。保存在這支手機上的內容很安全。",
+  "Stock: what you have": "庫存：你擁有的物品",
+  "Things you can do on your own": "你可以獨自完成的事",
+  "Things you can do on your own, that make your community stronger.": "你可以獨自完成的事，並能讓你的社群更加壯大。",
+  "This page is in English for now.": "此頁面目前僅有英文版。",
+  "This page is newer in English.": "此頁面的英文版內容較新。",
+  "This tool isn't in this version of the app": "此版本的應用程式中沒有此工具",
+  "Tool reminders": "工具提醒",
+  "Trade: how you deal": "交易：你的往來方式",
+  "Update": "更新",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "請更新 BeanPool 以使用它。你的版本顯示在「設定」的底部。",
+  "You have an unfinished post on the map. Going on replaces it.": "你在地圖上有未完成的發文。繼續操作將會替換它。",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "other": "你已為此提供向信任錢包預存了 {credits} 信用額度（{n} 天）。"
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "other": "你已為此提供向信任錢包預存了 {credits} 信用額度（{n} 個月）。"
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "other": "你已為此提供向信任錢包預存了 {credits} 信用額度（{n} 週）。"
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "你已申請透過滿足此需求賺取 {credits} 信用額度（{n} 天）（扣除 1.5% 交易手續費後實收 {net}）{owned}。"
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "你已申請透過滿足此需求賺取 {credits} 信用額度（{n} 個月）（扣除 1.5% 交易手續費後實收 {net}）{owned}。"
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "你已申請透過滿足此需求賺取 {credits} 信用額度（{n} 週）（扣除 1.5% 交易手續費後實收 {net}）{owned}。"
+  },
+  "Your community asks for a profile photo before you post.": "你的社群要求在發布前提供個人相片。",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "你的社群伺服器目前尚無法保存複本，因此現在僅保存在這支手機上。",
+  "for {n} day|for {n} days": {
+    "other": "借用 {n} 天"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "借用 {n} 週"
+  },
+  "{n} month|{n} months": {
+    "other": "{n} 個月"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n} 週"
+  },
+  "📦 Ask to borrow": "📦 請求借用"
 }

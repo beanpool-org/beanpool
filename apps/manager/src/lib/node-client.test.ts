@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+    isAutomationToken,
+    passwordField,
+    isAuthFailure,
+    nodeReadLimits,
+    PASSWORD_NEEDS_2FA_HINT,
+    PASSWORD_RETIRED_HINT,
     fetchHarvesterStatus,
     triggerHarvesterSync,
     fetchNodeHistory,
@@ -190,6 +196,71 @@ describe('resolveNodeApiUrl', () => {
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
 
         vi.unstubAllGlobals();
+    });
+});
+
+describe('automation token, auth failure, and read limits helpers', () => {
+    it('isAutomationToken identifies valid automation tokens correctly', () => {
+        const validToken = 'bp_1234567890ab_' + '0123456789abcdef'.repeat(4);
+        expect(isAutomationToken(validToken)).toBe(true);
+
+        expect(isAutomationToken('admin-password-123')).toBe(false);
+        expect(isAutomationToken('bp_1234567890ab_short_token')).toBe(false);
+        expect(isAutomationToken('')).toBe(false);
+        expect(isAutomationToken(undefined)).toBe(false);
+        expect(isAutomationToken(null)).toBe(false);
+    });
+
+    it('passwordField includes password field only when credential is not an automation token', () => {
+        const token = 'bp_1234567890ab_' + '0123456789abcdef'.repeat(4);
+        expect(passwordField(token)).toEqual({});
+        expect(passwordField('my-secret-password')).toEqual({ password: 'my-secret-password' });
+        expect(passwordField(undefined)).toEqual({ password: undefined });
+    });
+
+    it('isAuthFailure recognizes authentication failure indicators', () => {
+        expect(isAuthFailure('HTTP 401: Unauthorized')).toBe(true);
+        expect(isAuthFailure('Error: unauthorized access')).toBe(true);
+        expect(isAuthFailure('Invalid admin password provided')).toBe(true);
+        expect(isAuthFailure(`Error: ${PASSWORD_NEEDS_2FA_HINT}`)).toBe(true);
+        expect(isAuthFailure(`Error: ${PASSWORD_RETIRED_HINT}`)).toBe(true);
+
+        expect(isAuthFailure('HTTP 500: Internal Server Error')).toBe(false);
+        expect(isAuthFailure('Failed to fetch node data')).toBe(false);
+    });
+
+    it('nodeReadLimits enforces answer timeout and abort signal', async () => {
+        vi.useFakeTimers();
+        const limits = nodeReadLimits(500, 1000, {
+            answer: 'Answer timed out',
+            all: 'Body timed out',
+        });
+
+        expect(limits.signal.aborted).toBe(false);
+
+        const neverResolving = new Promise<string>(() => {});
+        const answerPromise = limits.answer(neverResolving);
+
+        vi.advanceTimersByTime(501);
+
+        await expect(answerPromise).rejects.toThrow('Answer timed out');
+        expect(limits.signal.aborted).toBe(true);
+
+        vi.useRealTimers();
+    });
+
+    it('nodeReadLimits resolves successfully within time limits', async () => {
+        const limits = nodeReadLimits(500, 1000, {
+            answer: 'Answer timed out',
+            all: 'Body timed out',
+        });
+
+        const answerResult = await limits.answer(Promise.resolve('ok'));
+        expect(answerResult).toBe('ok');
+        expect(limits.signal.aborted).toBe(false);
+
+        const bodyResult = await limits.body(Promise.resolve({ data: 123 }));
+        expect(bodyResult).toEqual({ data: 123 });
     });
 });
 

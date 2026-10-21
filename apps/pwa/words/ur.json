@@ -3483,5 +3483,15 @@
     "one": "{n} ہفتہ",
     "other": "{n} ہفتے"
   },
-  "📦 Ask to borrow": "📦 ادھار مانگیں"
+  "📦 Ask to borrow": "📦 ادھار مانگیں",
+  "Asked to join": "شامل ہونے کی درخواست کی",
+  "Invited": "مدعو",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "خوش آمدید۔ پہلے دن سے ہی آپ براؤز کر سکتے ہیں، لین دین کر سکتے ہیں، کریڈٹ وصول کر سکتے ہیں اور دوسروں کو مدعو کر سکتے ہیں — اور آپ کی کریڈٹ لائن پہلے سے ہی کھلی ہے۔",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} اعتماد سے",
+    "other": "{n} اعتماد سے"
+  },
+  "{name}, already in the group": "{name}، پہلے ہی گروپ میں ہیں",
+  "{name}, already invited": "{name}، پہلے ہی مدعو ہیں",
+  "{name}, asked to join": "{name}، شامل ہونے کی درخواست کی ہے"
 }

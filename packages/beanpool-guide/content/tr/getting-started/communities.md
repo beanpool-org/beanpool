@@ -3,7 +3,7 @@ slug: communities
 title: Birden fazla topluluk
 summary: Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.
 related: joining, finding-a-community, your-area, leaving-or-deleting, your-12-words, faq, the-top-bar
-source-hash: b123b0f66fb01c9d
+source-hash: fe1d603a6bf1c424
 ---
 
 ## Tek hesap, birden fazla topluluk
@@ -23,10 +23,11 @@ Anahtarınız, 12 kelimeniz ve adınız sizinle gelir. Gönderileriniz, sohbetle
 
 Küresel topluluk davet gerektirmez ve ona zaten sahip olduğunuz hesapla katılırsınız: aynı anahtar ve aynı 12 kelime. Küresel topluluk açık olduğunda ve uygulamaya bu hesabın orada zaten üye olduğunu bildirmediğinde uygulama bunu sunar.
 
-**Topluluklarınız** altında her zaman **Küresel topluluk** için bir satır bulunur. İkinci satırı durumunuzu belirtir: üye olduğunuzda adresi (geçiş yapmak için dokunun), katılabileceğinizde **Bu hesapla katıl: 12 sözcük veya oturum açma** (topluluğun 12 kelimeyi kabul etmediği yerlerde **Bu hesapla katıl: oturum açma**) ya da şu anda neden katılamadığınızı söyler: **Kontrol ediliyor…**, **Şu anda ulaşılamıyor** (bu telefon küresel topluluğu kaydetmemişken **Yeniden denemek için dokunun.** ile birlikte), **Şu anda yeni üye almıyor.**, **Bu topluluk özel önizlemede. Sahibinden bir davet iste.** veya **Oradaki hesabınız kapatıldı.** Küresel topluluğa ulaşılamadığında ve üyesi olduğunuz bir topluluğa bağlı olduğunuzda, altındaki bir satır **Kendi topluluğun bundan etkilenmez.** der. Telefondaki başka hiçbir şey buna bağlı değildir.
+**Topluluklarınız** altında her zaman **Küresel topluluk** için bir satır bulunur. İkinci satırı durumunuzu belirtir: üye olduğunuzda adresi (geçiş yapmak için dokunun), katılabileceğinizde **Önce etrafa göz at, sonra bu hesapla katıl** (misafir olarak ziyaret ederken: **Bu hesapla katıl: 12 sözcük veya oturum açma** veya topluluğun 12 kelimeyi kabul etmediği yerlerde **Bu hesapla katıl: oturum açma**) ya da şu anda neden katılamadığınızı söyler: **Kontrol ediliyor…**, **Şu anda ulaşılamıyor** (bu telefon küresel topluluğu kaydetmemişken **Yeniden denemek için dokun.** ile birlikte), **Şu anda yeni üye almıyor.**, **Bu topluluk özel önizlemede. Sahibinden bir davet iste.** veya **Oradaki hesabınız kapatıldı.** Küresel topluluğa ulaşılamadığında ve üyesi olduğunuz bir topluluğa bağlı olduğunuzda, altındaki bir satır **Kendi topluluğun bundan etkilenmez.** der. Telefondaki başka hiçbir şey buna bağlı değildir.
 
-- Sol üstteki fasulyeye dokunun. **BeanPool** sayfasında, **Topluluklarınız** altında **Küresel topluluk**'a dokunun (ikinci satırında **Bu hesapla katıl** yazar). Ayrıca **Ayarlar**'da **Gelişmiş / Alt Sistem** altındadır. Küresel topluluğu misafir olarak ziyaret ediyorsanız, üstteki **?** işaretinin yanındaki **Katıl**'a dokunun, ardından **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Girişle katılın**). Uygulama küresel topluluk için **Henüz burada üye değilsin** gösteriyorsa, **Bu hesapla katıl**'a dokunun.
-- Nasıl katılacağınızı seçin: hesabınızın halihazırda sahip olduğu 12 kelimeyi kullanan **12 gizli kelimeyle hesap oluşturun** (giriş yok, bu nedenle telefon kilidi yok) veya Google, Apple (iPhone'da) ya da Facebook ile bir kez **Veya giriş yapın**. Bir oturum açma yöntemi için uygulama önce telefonunuzun kilidini ister, çünkü bu oturum açma yöntemi hesabınıza bir geri dönüş yolu da olur.
+- Sol üstteki fasulyeye dokunun. **BeanPool** sayfasında, **Topluluklarınız** altında **Küresel topluluk**'a dokunun (ikinci satırında **Önce etrafa göz at, sonra bu hesapla katıl** yazar). Uygulama, web sitesinin yaptığı gibi küresel topluluğu misafir olarak açar: önce etrafa göz atarsınız ve fasulyedeki nokta misafir olduğunuzu gösterir. Ayrıca **Ayarlar**'da **Kayıtlı topluluklar** altındadır: **Küresel topluluğa göz at**. Bakmakla hiçbir yere katılınmaz ve hiçbir hesap oluşturulmaz.
+- Hazır olduğunuzda üstteki **?** işaretinin yanındaki **Katıl**'a dokunun, ardından **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Bir girişle katılın**). Uygulama küresel topluluk için **Henüz burada üye değilsin** gösteriyorsa, **Bu hesapla katıl**'a dokunun.
+- Nasıl katılacağınızı seçin: bu telefonda zaten bulunan anahtarı ve 12 kelimeyi kullanan **Bu hesapla katıl** (giriş yok, bu nedenle telefon kilidi yok) veya **Ayrıca bir giriş ekleyin** altında Google, Apple (iPhone'da) ya da Facebook ile bir kez giriş yapın. Bir oturum açma yöntemi için uygulama önce telefonunuzun kilidini ister, çünkü bu oturum açma yöntemi hesabınıza bir geri dönüş yolu da olur.
 - Oradaki insanların göreceği adı kontrol edin ve **Katıl**'a dokunun. Birisi bu ada zaten sahipse uygulama başkalarını önerir.
 - Ardından herhangi bir yeni toplulukta olduğu gibi küresel topluluk için fotoğrafınızı seçin ve sonra kabaca nerede olduğunuzu belirleyin (**Kabaca neredesiniz?**; **Şimdilik atla**'ya dokunabilirsiniz): küresel topluluk size yakındaki ilanları gösterir. "BeanPool'a katılma" bölümüne bakın.
 
@@ -64,7 +65,7 @@ Diğer topluluklarınız eskisi gibi çalışır.
 - Sol üstteki fasulyeye dokunun. Üst kısma yakın yerde **Topluluklarınız** ile birlikte **BeanPool** sayfası açılır.
 - İstediğinize dokunun.
 
-Ayrıca **Ayarlar**'da **Sistem**, ardından **Gelişmiş / Alt Sistem** altında geçiş yapabilirsiniz. Topluluklarınız orada listelenir. Kullandığınız topluluk etkin olarak işaretlenir. Başka birine geçmek için üzerindeki **Kasabaya Geç** seçeneğine dokunun.
+Ayrıca **Ayarlar**'da **Sistem**, ardından **Kayıtlı topluluklar** altında geçiş yapabilirsiniz. Topluluklarınız orada listelenir. Kullandığınız topluluk etkin olarak işaretlenir. Başka birine geçmek için üzerindeki **Bu topluluğa geç** seçeneğine dokunun.
 
 ## Topluluğunuz yeni bir adrese taşındığında
 
@@ -77,7 +78,7 @@ Bir topluluk yeni bir adrese taşınabilir: örneğin sunucusunun numarasından 
 
 ## Bu telefonda bir topluluğu unutma
 
-- **Gelişmiş / Alt Sistem**'de şu anda kullanmadığınız bir toplulukta **Unut** seçeneğine dokunun. Bu, onu ve kayıtlı verilerini bu telefondan kaldırır.
+- **Kayıtlı topluluklar**'da şu anda kullanmadığınız bir toplulukta **Unut** seçeneğine dokunun. Bu, onu ve kayıtlı verilerini bu telefondan kaldırır.
 - **BeanPool** sayfasında, **Topluluklarınız** altında bir topluluğa basılı tutup **Kaldır**'a dokunmak onu yalnızca listeden çıkarır. Verileri telefonda kalır.
 
 İkisi de oradaki hesabınızı silmez ve diğer topluluklarınız bundan etkilenmez.

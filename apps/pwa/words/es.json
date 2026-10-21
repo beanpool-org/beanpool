@@ -3494,5 +3494,13 @@
   },
   "{name}, already in the group": "{name}, ya en el grupo",
   "{name}, already invited": "{name}, ya con invitación",
-  "{name}, asked to join": "{name}, pidió unirse"
+  "{name}, asked to join": "{name}, pidió unirse",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Añadiendo a {name} como colaborador, con {n} frijol de respaldo nominal",
+    "other": "Añadiendo a {name} como colaborador, con {n} frijoles de respaldo nominal"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Añadiendo a {name} como custodio, con {n} frijol de respaldo nominal",
+    "other": "Añadiendo a {name} como custodio, con {n} frijoles de respaldo nominal"
+  }
 }

@@ -307,6 +307,34 @@ describe('two phones, one server: the open rule', () => {
         expect(node.doc(ME, 'kit')).toEqual(doc('Ladder', 'Tent'));
     });
 
+    it("the account the phone held from the start, announced again (a name change), drops nothing; another, with no Sign Out between (Replace), still does", async () => {
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        /** As this build starts: no account announced yet. */
+        const fresh = async () => {
+            vi.resetModules();
+            return { copy: await import('../../tools/node-copy'), announce: (await import('../account-on-phone')).announceAccountOnPhone };
+        };
+        use(A);
+        let started = await fresh();
+        await writeToolDoc(ME, KIT, doc('Ladder'), (t0 += 60_000));
+        started.copy.toolCopyAfterWrite(member(A), () => {});
+        started.announce(ME);
+        await vi.advanceTimersByTimeAsync(10_000);
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
+        expect(node.doc(ME, 'kit')).toEqual(doc('Ladder'));
+
+        started = await fresh();
+        await writeToolDoc(ME, KIT, doc('Ladder', 'Tent'), (t0 += 60_000));
+        started.copy.toolCopyAfterWrite(member(A), () => {});
+        started.announce('someone-else');
+        net.signer = 'someone-else';
+        await vi.advanceTimersByTimeAsync(10_000);
+        // Nothing more is asked, so nothing is signed as them.
+        expect(node.log.map((r) => r.method)).toEqual(['GET', 'PUT']);
+        expect(node.count('PUT')).toBe(1);
+        expect(node.doc('someone-else', 'kit')).toBeNull();
+    });
+
     it("a GET still out when the phone moves to another community or its account changes: nothing after it is sent or kept", async () => {
         await write(A, doc('Ladder'));
         // Moved while the GET was out (getDb opens that community's file, the helpers sign to its server): A's copy is not PUT.

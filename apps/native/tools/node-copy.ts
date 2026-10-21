@@ -119,6 +119,16 @@ onAccountOnPhone((key) => {
     accountTurn++;
 });
 
+/**
+ * The account turn a job is made in. Until an account has been announced since this build started, a member's own copy
+ * says which the phone holds (the host route's owner is the phone's account), so that account announced again (a name
+ * change, its words added) drops nothing; any other still does, Replace included, which announces no Sign Out between.
+ */
+function turnFor(c: PhoneToolCopy): number {
+    if (accountHeld === undefined && c.owner.kind === 'member') accountHeld = c.owner.publicKey;
+    return accountTurn;
+}
+
 /** Whether the phone is still on the community the tool was opened in: its file and its server are the copy's. */
 async function stillHere(url: string | null): Promise<boolean> {
     const now = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
@@ -145,21 +155,21 @@ async function sync(c: PhoneToolCopy, turn: number): Promise<ToolCopyOutcome> {
 
 /** On a tool's open: the GET and the step, unless the setting is off. */
 export function openToolCopy(c: PhoneToolCopy): Promise<ToolCopyOutcome> {
-    const turn = accountTurn;
+    const turn = turnFor(c);
     return queue.run(keyOf(c), () => sync(c, turn));
 }
 
 /** After a write: one sync five seconds after the last (an open's rule, so an off made elsewhere is heard first). */
 export function toolCopyAfterWrite(c: PhoneToolCopy, then: (outcome: ToolCopyOutcome) => void): void {
     if (!keepsNodeCopy(c.manifest)) return;
-    const turn = accountTurn;
+    const turn = turnFor(c);
     queue.later(keyOf(c), async () => then(await sync(c, turn)));
 }
 
 /** The member's toggle: on is the GET, the step and the PUT; off the DELETE. The setting moves only once the node answered. */
 export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'off' | 'older-node' | 'failed'> {
     if (!on) queue.cancel(keyOf(c));
-    const turn = accountTurn;
+    const turn = turnFor(c);
     return queue.run(keyOf(c), async () => {
         const { holds, device, node } = parts(c, turn);
         if (!await holds()) return 'failed';
@@ -171,7 +181,7 @@ export function switchToolCopy(c: PhoneToolCopy, on: boolean): Promise<'on' | 'o
 export function removeToolCopyFirst(c: PhoneToolCopy): Promise<boolean> {
     if (!keepsNodeCopy(c.manifest)) return Promise.resolve(true);
     queue.cancel(keyOf(c));
-    const turn = accountTurn;
+    const turn = turnFor(c);
     return queue.run(keyOf(c), async () => {
         const { holds, device, node } = parts(c, turn);
         if (!await holds()) return false;

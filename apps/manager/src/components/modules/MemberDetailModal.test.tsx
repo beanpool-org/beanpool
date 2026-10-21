@@ -145,7 +145,7 @@ describe('MemberDetailModal', () => {
         expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'admin');
     });
 
-    it('reactively surfaces sole owner notice after granting owner role when ownerCount is 1', async () => {
+    it('does not call a newly granted owner the only one when another owner exists (ownerCount 1)', async () => {
         const handleGrantRole = vi.fn().mockResolvedValue(undefined);
         render(
             <MemberDetailModal
@@ -162,6 +162,43 @@ describe('MemberDetailModal', () => {
         expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
         await userEvent.click(screen.getByText('👑 Grant Owner'));
         expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner');
+        // ownerCount 1 is someone else: granting makes two owners, so this member is NOT the only one
+        await screen.findByText('Revoke owner');
+        expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
+    });
+
+    it('names the only owner after a grant when no other owner exists, and not when the stale list holds another', async () => {
+        const handleGrantRole = vi.fn().mockResolvedValue(undefined);
+        const others = [{ publicKey: 'pubkey-other-owner', callsign: 'A', nodeRole: 'owner' }];
+        const { unmount } = render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                nodeRole={null}
+                ownerCount={1}
+                members={[...others, { ...mockMember, nodeRole: null }] as any}
+                onToggleFreeze={vi.fn()}
+                onGrantNodeRole={handleGrantRole}
+                onClose={vi.fn()}
+            />
+        );
+        await userEvent.click(screen.getByText('👑 Grant Owner'));
+        await screen.findByText('Revoke owner');
+        expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
+        unmount();
+
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                nodeRole={null}
+                ownerCount={0}
+                onToggleFreeze={vi.fn()}
+                onGrantNodeRole={handleGrantRole}
+                onClose={vi.fn()}
+            />
+        );
+        await userEvent.click(screen.getByText('👑 Grant Owner'));
         expect(await screen.findByText("This is the community's only owner. Another owner must be added before this one can step down or be removed.")).toBeInTheDocument();
     });
 

@@ -201,16 +201,21 @@ export function MemberDetailModal({
     const currentRole = localRole;
     const effectiveViewerRole: MemberNodeRole | null = viewerRole !== undefined ? viewerRole : 'owner';
 
+    // Counts the OTHER owners, and lets this member's live role stand for them: the members list and ownerCount were
+    // loaded before any grant made in this panel, so this member's own row in them can be stale.
     const effectiveIsSoleOwner = useMemo(() => {
         if (currentRole !== 'owner') return false;
         if (typeof isSoleOwner === 'boolean') return isSoleOwner;
-        if (typeof ownerCount === 'number') return ownerCount <= 1;
         if (Array.isArray(members) && members.length > 0) {
-            const count = members.filter((m) => (m?.nodeRole || m?.role) === 'owner').length;
-            return count <= 1;
+            const others = members.filter((m) => m && (m.publicKey || m.pubkey) !== pubkey && (m.nodeRole || m.role) === 'owner').length;
+            return others === 0;
+        }
+        if (typeof ownerCount === 'number') {
+            const listedRole = (nodeRole ?? (member?.nodeRole as MemberNodeRole | null | undefined)) || null;
+            return ownerCount - (listedRole === 'owner' ? 1 : 0) <= 0;
         }
         return true;
-    }, [currentRole, isSoleOwner, ownerCount, members]);
+    }, [currentRole, isSoleOwner, ownerCount, members, pubkey, nodeRole, member?.nodeRole]);
 
     const canGrantRole = (role: MemberNodeRole): boolean => {
         if (effectiveViewerRole === 'owner') return true;

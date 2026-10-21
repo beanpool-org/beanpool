@@ -5877,5 +5877,125 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "एक बार जब आपका नोड चलने लगे, तो आप इसके सेटिंग्स ऐप में अपने समुदाय का नाम रखते हैं, पहले सदस्यों को आमंत्रित करते हैं, और वे बाकी लोगों को आमंत्रित करते हैं। वहाँ \"लोकेशन प्रकाशित करें\" चालू करें, और आपके आस-पास के जिन लोगों ने सूचना पाने का अनुरोध किया था, वे इसके बारे में जान सकेंगे।",
   "How to run a node, on beanpool.org": "beanpool.org पर नोड कैसे चलाएं",
   "Copy my community's details": "मेरे समुदाय का विवरण कॉपी करें",
-  "Copied. Paste them into your node's settings app.": "कॉपी किया गया। उन्हें अपने नोड के सेटिंग्स ऐप में पेस्ट करें।"
+  "Copied. Paste them into your node's settings app.": "कॉपी किया गया। उन्हें अपने नोड के सेटिंग्स ऐप में पेस्ट करें।",
+  "A few examples to start from, and a guide.": "शुरुआत करने के लिए कुछ उदाहरण, और एक गाइड।",
+  "A fixed number of Beans": "फलियों की एक निश्चित संख्या",
+  "About this tool": "इस टूल के बारे में",
+  "Allow notifications": "सूचनाओं की अनुमति दें",
+  "Ask to borrow this?": "क्या इसे उधार लेने का अनुरोध करें?",
+  "Asked to borrow": "उधार लेने का अनुरोध किया गया",
+  "Beans per day": "प्रति दिन फलियाँ",
+  "Beans per week": "प्रति सप्ताह फलियाँ",
+  "Books: how it's going": "बहीखाता: काम कैसा चल रहा है",
+  "Fee": "शुल्क",
+  "Free": "मुफ़्त",
+  "Free to borrow. Nothing is held: the lender says yes first.": "उधार लेने के लिए मुफ़्त। कुछ भी रोका नहीं जाता: पहले उधार देने वाला हाँ कहता है।",
+  "Go on": "आगे बढ़ें",
+  "Go on to post": "पोस्ट करने के लिए आगे बढ़ें",
+  "Go straight in and add what you keep.": "सीधे अंदर जाएं और जो आपके पास है उसे जोड़ें।",
+  "I already do this": "मैं पहले से यह करता हूँ",
+  "I already do this: go straight in and add what you keep.": "मैं पहले से यह करता हूँ: सीधे अंदर जाएं और जो आपके पास है उसे जोड़ें।",
+  "I'm starting out": "मैं नई शुरुआत कर रहा हूँ",
+  "I'm starting out: a few examples to start from, and a guide.": "मैं नई शुरुआत कर रहा हूँ: शुरुआत करने के लिए कुछ उदाहरण, और एक गाइड।",
+  "It shows in the Market as an Offer.": "यह बाज़ार में एक ऑफ़र के रूप में दिखाई देता है।",
+  "Keep a private copy on your community's server": "अपने समुदाय के सर्वर पर एक निजी प्रति रखें",
+  "Kept on this phone only. Nothing in it leaves this phone.": "केवल इस फ़ोन पर रखा गया। इसमें से कुछ भी इस फ़ोन से बाहर नहीं जाता।",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "इस फ़ोन पर रखा गया, आपके समुदाय के सर्वर पर एक निजी प्रति के साथ जिसे केवल आप ऐप के माध्यम से पढ़ सकते हैं। उस सर्वर पर मौजूद हर चीज़ की तरह, इसका ऑपरेटर इसे पढ़ सकता है।",
+  "List it in the Market": "इसे बाज़ार में लिस्ट करें",
+  "More tools": "और टूल",
+  "Next you check it and tap Post. Nothing is posted before that.": "इसके बाद आप इसे जांचते हैं और पोस्ट पर टैप करते हैं। उससे पहले कुछ भी पोस्ट नहीं किया जाता है।",
+  "No thanks": "जी नहीं, धन्यवाद",
+  "No tools here yet. They come with updates of the app.": "यहाँ अभी कोई टूल नहीं हैं। वे ऐप के अपडेट के साथ आते हैं।",
+  "Nothing is held until the lender says yes.": "जब तक उधार देने वाला हाँ नहीं कहता, तब तक कुछ भी रोका नहीं जाता।",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "जब तक उधार देने वाला हाँ नहीं कहता, तब तक कुछ भी रोका नहीं जाता। फिर शुल्क एक अस्थायी ट्रस्ट वॉलेट में जाता है, और वस्तु वापस आने पर उधार देने वाले को कॉमन्स पूल के लिए 1.5% लेनदेन शुल्क {owned} घटाकर शुद्ध राशि प्राप्त होती है।",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "इस फ़ोन पर BeanPool के लिए सूचनाएं बंद हैं, इसलिए रिमाइंडर नहीं दिखाए जा सकते।",
+  "Open {tool}": "{tool} खोलें",
+  "Options for {tool}": "{tool} के विकल्प",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "क्या इस टूल को अपने होम पर रखें? यह एक नज़र में दिखाता है कि इसमें क्या रखा है।",
+  "Read in English": "अंग्रेज़ी में पढ़ें",
+  "Read the guide": "गाइड पढ़ें",
+  "Reminders": "रिमाइंडर",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "इस फ़ोन पर आपके टूल द्वारा सेट किए गए रिमाइंडर। उनके बारे में कुछ भी इस फ़ोन से बाहर नहीं जाता।",
+  "Remove my data from this phone": "इस फ़ोन से मेरा डेटा हटाएं",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "इस फ़ोन पर इस टूल के लिए इस समुदाय की सूची, फ़ोटो और रिमाइंडर हटाता है। दूसरे समुदाय में यही टूल अपना डेटा रखता है। इसे पूर्ववत नहीं किया जा सकता।",
+  "Replace your unfinished post?": "क्या अपनी अधूरी पोस्ट को बदलें?",
+  "Show translation": "अनुवाद दिखाएं",
+  "Some examples": "कुछ उदाहरण",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "इस टूल में कुछ गड़बड़ हो गई। यह फ़ोन पर जो कुछ रखता है वह सुरक्षित है।",
+  "Stock: what you have": "स्टॉक: आपके पास क्या है",
+  "Things you can do on your own": "चीजें जो आप खुद कर सकते हैं",
+  "Things you can do on your own, that make your community stronger.": "चीजें जो आप खुद कर सकते हैं, जो आपके समुदाय को मजबूत बनाती हैं।",
+  "This page is in English for now.": "यह पेज अभी अंग्रेज़ी में है।",
+  "This page is newer in English.": "यह पेज अंग्रेज़ी में नया है।",
+  "This tool isn't in this version of the app": "यह टूल ऐप के इस संस्करण में नहीं है",
+  "Tool reminders": "टूल रिमाइंडर",
+  "Trade: how you deal": "व्यापार: आप कैसे लेन-देन करते हैं",
+  "Update": "अपडेट करें",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "इसका उपयोग करने के लिए BeanPool को अपडेट करें। आपका संस्करण सेटिंग्स के निचले भाग में दिखाया गया है।",
+  "You have an unfinished post on the map. Going on replaces it.": "नक्शे पर आपकी एक अधूरी पोस्ट है। आगे बढ़ने पर यह बदल जाएगी।",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "आपने इस प्रस्ताव के लिए ट्रस्ट वॉलेट में {credits} क्रेडिट ({n} दिन) समर्पित किए हैं।",
+    "other": "आपने इस प्रस्ताव के लिए ट्रस्ट वॉलेट में {credits} क्रेडिट ({n} दिन) समर्पित किए हैं।"
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "आपने इस प्रस्ताव के लिए ट्रस्ट वॉलेट में {credits} क्रेडिट ({n} महीना) समर्पित किए हैं।",
+    "other": "आपने इस प्रस्ताव के लिए ट्रस्ट वॉलेट में {credits} क्रेडिट ({n} महीने) समर्पित किए हैं।"
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "आपने इस प्रस्ताव के लिए ट्रस्ट वॉलेट में {credits} क्रेडिट ({n} सप्ताह) समर्पित किए हैं।",
+    "other": "आपने इस प्रस्ताव के लिए ट्रस्ट वॉलेट में {credits} क्रेडिट ({n} सप्ताह) समर्पित किए हैं।"
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "आपने इस ज़रूरत को पूरा करने के लिए {credits} क्रेडिट ({n} दिन) (1.5% लेनदेन शुल्क के बाद शुद्ध {net}) {owned} कमाने का अनुरोध किया है।",
+    "other": "आपने इस ज़रूरत को पूरा करने के लिए {credits} क्रेडिट ({n} दिन) (1.5% लेनदेन शुल्क के बाद शुद्ध {net}) {owned} कमाने का अनुरोध किया है।"
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "आपने इस ज़रूरत को पूरा करने के लिए {credits} क्रेडिट ({n} महीना) (1.5% लेनदेन शुल्क के बाद शुद्ध {net}) {owned} कमाने का अनुरोध किया है।",
+    "other": "आपने इस ज़रूरत को पूरा करने के लिए {credits} क्रेडिट ({n} महीने) (1.5% लेनदेन शुल्क के बाद शुद्ध {net}) {owned} कमाने का अनुरोध किया है।"
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "आपने इस ज़रूरत को पूरा करने के लिए {credits} क्रेडिट ({n} सप्ताह) (1.5% लेनदेन शुल्क के बाद शुद्ध {net}) {owned} कमाने का अनुरोध किया है।",
+    "other": "आपने इस ज़रूरत को पूरा करने के लिए {credits} क्रेडिट ({n} सप्ताह) (1.5% लेनदेन शुल्क के बाद शुद्ध {net}) {owned} कमाने का अनुरोध किया है।"
+  },
+  "Your community asks for a profile photo before you post.": "आपका समुदाय आपके पोस्ट करने से पहले एक प्रोफ़ाइल फ़ोटो मांगता है।",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "आपके समुदाय का सर्वर अभी प्रतिलिपि नहीं रख सकता है, इसलिए अभी के लिए यह केवल इसी फ़ोन पर रहता है।",
+  "for {n} day|for {n} days": {
+    "one": "{n} दिन के लिए",
+    "other": "{n} दिनों के लिए"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} सप्ताह के लिए",
+    "other": "{n} सप्ताह के लिए"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} महीना",
+    "other": "{n} महीने"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} सप्ताह",
+    "other": "{n} सप्ताह"
+  },
+  "📦 Ask to borrow": "📦 उधार लेने का अनुरोध करें",
+  "Add a community by address": "पते से समुदाय जोड़ें",
+  "COMMUNITY ADDRESS": "समुदाय का पता",
+  "COMMUNITY NAME (OPTIONAL)": "समुदाय का नाम (वैकल्पिक)",
+  "Clear this phone's copy and download again": "इस फ़ोन की प्रति साफ़ करें और फिर से डाउनलोड करें",
+  "Community name (optional)": "समुदाय का नाम (वैकल्पिक)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "समुदाय का पता लिखकर उससे जुड़ें। आपका फ़ोन इसे इस सूची में सहेज लेगा और उस पर स्विच कर देगा।",
+  "Have an invite code for this community?": "क्या इस समुदाय के लिए कोई आमंत्रण कोड है?",
+  "Invited": "आमंत्रित",
+  "Reached at **{trust}** trust": "**{trust}** विश्वास पर पहुँचने पर",
+  "Reached at **{trust}** trust (up to {upTo})": "**{trust}** विश्वास पर पहुँचने पर ({upTo} तक)",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "इस समुदाय को चलाते हैं? मालिकों और एडमिन को सेटिंग्स में सबसे ऊपर 'प्रबंधन करें' पंक्ति दिखाई देती है।",
+  "Saved communities": "सहेजे गए समुदाय",
+  "Switch to this community": "इस समुदाय पर स्विच करें",
+  "Switch, forget or refresh the communities on this phone": "इस फ़ोन पर समुदायों को स्विच करें, भूलें या रीफ़्रेश करें",
+  "Switching...": "स्विच किया जा रहा है...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "वे समुदाय जिनसे यह फ़ोन जुड़ा है। प्रत्येक में आपकी चाबी और 12 शब्द एक ही हैं; इस्तेमाल करने के लिए किसी एक पर स्विच करें।",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "स्वागत है। पहले दिन से ही आप बाज़ार देख सकते हैं, व्यापार कर सकते हैं, क्रेडिट प्राप्त कर सकते हैं और दूसरों को आमंत्रित कर सकते हैं — और आपकी क्रेडिट लाइन पहले से खुली है।",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} विश्वास से",
+    "other": "{n} विश्वास से"
+  },
+  "{name}, already invited": "{name}, पहले से आमंत्रित हैं"
 }

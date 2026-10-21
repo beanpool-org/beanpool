@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ml",
     "name": "Malayalam",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "പയർ",
@@ -5877,5 +5877,125 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "നിങ്ങളുടെ നോഡ് പ്രവർത്തിച്ചു കഴിഞ്ഞാൽ, അതിന്റെ ക്രമീകരണ ആപ്പിൽ നിങ്ങളുടെ കമ്മ്യൂണിറ്റിക്ക് പേരിടുക, ആദ്യത്തെ അംഗങ്ങളെ ക്ഷണിക്കുക, അവർ ബാക്കിയുള്ളവരെ ക്ഷണിക്കും. അവിടെ 'ലൊക്കേഷൻ പ്രസിദ്ധീകരിക്കുക' ഓണാക്കിയാൽ, വിവരമറിയാൻ ആവശ്യപ്പെട്ട അടുത്തുള്ള ആളുകൾ ഇതറിയും.",
   "How to run a node, on beanpool.org": "ഒരു നോഡ് എങ്ങനെ പ്രവർത്തിപ്പിക്കാം, beanpool.org-ൽ",
   "Copy my community's details": "എന്റെ കമ്മ്യൂണിറ്റിയുടെ വിവരങ്ങൾ പകർത്തുക",
-  "Copied. Paste them into your node's settings app.": "പകർത്തി. നിങ്ങളുടെ നോഡിന്റെ ക്രമീകരണ ആപ്പിൽ ഒട്ടിക്കുക."
+  "Copied. Paste them into your node's settings app.": "പകർത്തി. നിങ്ങളുടെ നോഡിന്റെ ക്രമീകരണ ആപ്പിൽ ഒട്ടിക്കുക.",
+  "A few examples to start from, and a guide.": "തുടങ്ങാൻ ചില ഉദാഹരണങ്ങളും ഒരു ഗൈഡും.",
+  "A fixed number of Beans": "ഒരു നിശ്ചിത എണ്ണം പയർ",
+  "About this tool": "ഈ ടൂളിനെക്കുറിച്ച്",
+  "Allow notifications": "അറിയിപ്പുകൾ അനുവദിക്കുക",
+  "Ask to borrow this?": "ഇത് കടം ചോദിക്കണോ?",
+  "Asked to borrow": "കടം ചോദിച്ചു",
+  "Beans per day": "പ്രതിദിന പയർ",
+  "Beans per week": "പ്രതിവാര പയർ",
+  "Books: how it's going": "കണക്കുകൾ: കാര്യങ്ങളുടെ പുരോഗതി",
+  "Fee": "ഫീസ്",
+  "Free": "സൗജന്യം",
+  "Free to borrow. Nothing is held: the lender says yes first.": "സൗജന്യമായി കടം വാങ്ങാം. ഒന്നും തടഞ്ഞുവെക്കില്ല: നൽകുന്നയാൾ ആദ്യം സമ്മതിക്കണം.",
+  "Go on": "തുടരുക",
+  "Go on to post": "പോസ്റ്റിലേക്ക് തുടരുക",
+  "Go straight in and add what you keep.": "നേരിട്ട് പ്രവേശിച്ച് നിങ്ങൾ സൂക്ഷിക്കുന്നവ ചേർക്കുക.",
+  "I already do this": "ഞാൻ ഇതിനകം ഇത് ചെയ്യുന്നുണ്ട്",
+  "I already do this: go straight in and add what you keep.": "ഞാൻ ഇതിനകം ഇത് ചെയ്യുന്നുണ്ട്: നേരിട്ട് പ്രവേശിച്ച് നിങ്ങൾ സൂക്ഷിക്കുന്നവ ചേർക്കുക.",
+  "I'm starting out": "ഞാൻ ആരംഭിക്കുകയാണ്",
+  "I'm starting out: a few examples to start from, and a guide.": "ഞാൻ ആരംഭിക്കുകയാണ്: തുടങ്ങാൻ ചില ഉദാഹരണങ്ങളും ഒരു ഗൈഡും.",
+  "It shows in the Market as an Offer.": "ഇത് മാർക്കറ്റിൽ ഒരു ഓഫറായി കാണിക്കും.",
+  "Keep a private copy on your community's server": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിൽ ഒരു സ്വകാര്യ പകർപ്പ് സൂക്ഷിക്കുക",
+  "Kept on this phone only. Nothing in it leaves this phone.": "ഈ ഫോണിൽ മാത്രം സൂക്ഷിച്ചിരിക്കുന്നു. ഇതിലുള്ളതൊന്നും ഈ ഫോൺ വിട്ടുപോകില്ല.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "ഈ ഫോണിൽ സൂക്ഷിച്ചിരിക്കുന്നു, ഒപ്പം നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിൽ ഒരു സ്വകാര്യ പകർപ്പും ഉണ്ട്, അത് ആപ്പിലൂടെ നിങ്ങൾക്ക് മാത്രമേ വായിക്കാൻ കഴിയൂ. ആ സെർവറിലെ മറ്റെല്ലാ കാര്യങ്ങളെയും പോലെ, അതിന്റെ ഓപ്പറേറ്റർക്ക് ഇത് കാണാൻ കഴിഞ്ഞേക്കാം.",
+  "List it in the Market": "മാർക്കറ്റിൽ ലിസ്റ്റ് ചെയ്യുക",
+  "More tools": "കൂടുതൽ ടൂളുകൾ",
+  "Next you check it and tap Post. Nothing is posted before that.": "അടുത്തതായി നിങ്ങൾ ഇത് പരിശോധിച്ച് 'പോസ്റ്റ് ചെയ്യുക' ടാപ്പ് ചെയ്യുക. അതിന് മുമ്പ് ഒന്നും പോസ്റ്റ് ചെയ്യില്ല.",
+  "No thanks": "വേണ്ട, നന്ദി",
+  "No tools here yet. They come with updates of the app.": "ഇവിടെ ഇതുവരെ ടൂളുകളൊന്നുമില്ല. ആപ്പിന്റെ അപ്‌ഡേറ്റുകൾക്കൊപ്പം അവ എത്തും.",
+  "Nothing is held until the lender says yes.": "നൽകുന്നയാൾ സമ്മതിക്കുന്നത് വരെ ഒന്നും തടഞ്ഞുവെക്കില്ല.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "നൽകുന്നയാൾ സമ്മതിക്കുന്നത് വരെ ഒന്നും തടഞ്ഞുവെക്കില്ല. തുടർന്ന് ഫീസ് ഒരു താൽക്കാലിക ട്രസ്റ്റ് വാലറ്റിലേക്ക് പോകും, അത് തിരികെ ലഭിച്ചുകഴിഞ്ഞാൽ കോമൺസ് പൂളിനായി 1.5% ഇടപാട് ഫീസ് {owned} കുറച്ചുള്ള തുക നൽകുന്നയാൾക്ക് ലഭിക്കും.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "ഈ ഫോണിൽ BeanPool-ന്റെ അറിയിപ്പുകൾ ഓഫാണ്, അതിനാൽ റിമൈൻഡറുകൾ കാണിക്കാൻ കഴിയില്ല.",
+  "Open {tool}": "{tool} തുറക്കുക",
+  "Options for {tool}": "{tool}-ന്റെ ഓപ്ഷനുകൾ",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "ഈ ടൂൾ നിങ്ങളുടെ ഹോമിൽ ചേർക്കണോ? ഇത് സൂക്ഷിക്കുന്നവ ഒറ്റനോട്ടത്തിൽ കാണാം.",
+  "Read in English": "ഇംഗ്ലീഷിൽ വായിക്കുക",
+  "Read the guide": "ഗൈഡ് വായിക്കുക",
+  "Reminders": "റിമൈൻഡറുകൾ",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "നിങ്ങളുടെ ടൂളുകൾ ഈ ഫോണിൽ സജ്ജമാക്കിയ റിമൈൻഡറുകൾ. അവയെക്കുറിച്ചുള്ള വിവരങ്ങളൊന്നും ഈ ഫോൺ വിട്ടുപോകില്ല.",
+  "Remove my data from this phone": "ഈ ഫോണിൽ നിന്ന് എന്റെ ഡാറ്റ നീക്കം ചെയ്യുക",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "ഈ ഫോണിലുള്ള ഈ ടൂളിനായുള്ള ഈ കമ്മ്യൂണിറ്റിയുടെ ലിസ്റ്റും ഫോട്ടോകളും റിമൈൻഡറുകളും നീക്കം ചെയ്യുന്നു. മറ്റൊരു കമ്മ്യൂണിറ്റിയിലെ ഇതേ ടൂൾ അതിന്റെ ഡാറ്റ നിലനിർത്തും. ഇത് പഴയപടിയാക്കാൻ കഴിയില്ല.",
+  "Replace your unfinished post?": "പൂർത്തിയാക്കാത്ത പോസ്റ്റ് മാറ്റണോ?",
+  "Show translation": "വിവർത്തനം കാണിക്കുക",
+  "Some examples": "ചില ഉദാഹരണങ്ങൾ",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "ഈ ടൂളിൽ എന്തോ കുഴപ്പമുണ്ടായി. ഈ ഫോണിൽ അത് സൂക്ഷിച്ചിരിക്കുന്നത് സുരക്ഷിതമാണ്.",
+  "Stock: what you have": "സ്റ്റോക്ക്: നിങ്ങളുടെ കൈവശമുള്ളവ",
+  "Things you can do on your own": "നിങ്ങൾക്ക് സ്വയം ചെയ്യാൻ കഴിയുന്ന കാര്യങ്ങൾ",
+  "Things you can do on your own, that make your community stronger.": "നിങ്ങൾക്ക് സ്വയം ചെയ്യാൻ കഴിയുന്നതും നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയെ കൂടുതൽ ശക്തിപ്പെടുത്തുന്നതുമായ കാര്യങ്ങൾ.",
+  "This page is in English for now.": "ഈ പേജ് ഇപ്പോൾ ഇംഗ്ലീഷിലാണ്.",
+  "This page is newer in English.": "ഈ പേജ് ഇംഗ്ലീഷിൽ കൂടുതൽ പുതിയതാണ്.",
+  "This tool isn't in this version of the app": "ഈ ടൂൾ ആപ്പിന്റെ ഈ പതിപ്പിൽ ലഭ്യമല്ല",
+  "Tool reminders": "ടൂൾ റിമൈൻഡറുകൾ",
+  "Trade: how you deal": "വ്യാപാരം: നിങ്ങളുടെ ഇടപാടുകൾ",
+  "Update": "അപ്‌ഡേറ്റ് ചെയ്യുക",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "ഇത് ഉപയോഗിക്കാൻ BeanPool അപ്‌ഡേറ്റ് ചെയ്യുക. നിങ്ങളുടെ പതിപ്പ് ക്രമീകരണങ്ങളുടെ താഴെ കാണാം.",
+  "You have an unfinished post on the map. Going on replaces it.": "മാപ്പിൽ നിങ്ങൾക്ക് പൂർത്തിയാക്കാത്ത ഒരു പോസ്റ്റ് ഉണ്ട്. തുടർന്നാൽ ഇത് മാറ്റിസ്ഥാപിക്കപ്പെടും.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "ഈ ഓഫറിനായി ട്രസ്റ്റ് വാലറ്റിലേക്ക് {credits} ക്രെഡിറ്റുകൾ ({n} ദിവസം) നിങ്ങൾ നൽകിയിട്ടുണ്ട്.",
+    "other": "ഈ ഓഫറിനായി ട്രസ്റ്റ് വാലറ്റിലേക്ക് {credits} ക്രെഡിറ്റുകൾ ({n} ദിവസം) നിങ്ങൾ നൽകിയിട്ടുണ്ട്."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "ഈ ഓഫറിനായി ട്രസ്റ്റ് വാലറ്റിലേക്ക് {credits} ക്രെഡിറ്റുകൾ ({n} മാസം) നിങ്ങൾ നൽകിയിട്ടുണ്ട്.",
+    "other": "ഈ ഓഫറിനായി ട്രസ്റ്റ് വാലറ്റിലേക്ക് {credits} ക്രെഡിറ്റുകൾ ({n} മാസം) നിങ്ങൾ നൽകിയിട്ടുണ്ട്."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "ഈ ഓഫറിനായി ട്രസ്റ്റ് വാലറ്റിലേക്ക് {credits} ക്രെഡിറ്റുകൾ ({n} ആഴ്ച) നിങ്ങൾ നൽകിയിട്ടുണ്ട്.",
+    "other": "ഈ ഓഫറിനായി ട്രസ്റ്റ് വാലറ്റിലേക്ക് {credits} ക്രെഡിറ്റുകൾ ({n} ആഴ്ച) നിങ്ങൾ നൽകിയിട്ടുണ്ട്."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "ഈ ആവശ്യം നിറവേറ്റുന്നതിന് {credits} ക്രെഡിറ്റുകൾ ({n} ദിവസം) നേടാൻ നിങ്ങൾ അഭ്യർത്ഥിച്ചിട്ടുണ്ട് (1.5% ഇടപാട് ഫീസ് കഴിഞ്ഞ് {net} നെറ്റ്) {owned}.",
+    "other": "ഈ ആവശ്യം നിറവേറ്റുന്നതിന് {credits} ക്രെഡിറ്റുകൾ ({n} ദിവസം) നേടാൻ നിങ്ങൾ അഭ്യർത്ഥിച്ചിട്ടുണ്ട് (1.5% ഇടപാട് ഫീസ് കഴിഞ്ഞ് {net} നെറ്റ്) {owned}."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "ഈ ആവശ്യം നിറവേറ്റുന്നതിന് {credits} ക്രെഡിറ്റുകൾ ({n} മാസം) നേടാൻ നിങ്ങൾ അഭ്യർത്ഥിച്ചിട്ടുണ്ട് (1.5% ഇടപാട് ഫീസ് കഴിഞ്ഞ് {net} നെറ്റ്) {owned}.",
+    "other": "ഈ ആവശ്യം നിറവേറ്റുന്നതിന് {credits} ക്രെഡിറ്റുകൾ ({n} മാസം) നേടാൻ നിങ്ങൾ അഭ്യർത്ഥിച്ചിട്ടുണ്ട് (1.5% ഇടപാട് ഫീസ് കഴിഞ്ഞ് {net} നെറ്റ്) {owned}."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "ഈ ആവശ്യം നിറവേറ്റുന്നതിന് {credits} ക്രെഡിറ്റുകൾ ({n} ആഴ്ച) നേടാൻ നിങ്ങൾ അഭ്യർത്ഥിച്ചിട്ടുണ്ട് (1.5% ഇടപാട് ഫീസ് കഴിഞ്ഞ് {net} നെറ്റ്) {owned}.",
+    "other": "ഈ ആവശ്യം നിറവേറ്റുന്നതിന് {credits} ക്രെഡിറ്റുകൾ ({n} ആഴ്ച) നേടാൻ നിങ്ങൾ അഭ്യർത്ഥിച്ചിട്ടുണ്ട് (1.5% ഇടപാട് ഫീസ് കഴിഞ്ഞ് {net} നെറ്റ്) {owned}."
+  },
+  "Your community asks for a profile photo before you post.": "നിങ്ങൾ പോസ്റ്റ് ചെയ്യുന്നതിന് മുമ്പ് നിങ്ങളുടെ കമ്മ്യൂണിറ്റി ഒരു പ്രൊഫൈൽ ഫോട്ടോ ആവശ്യപ്പെടുന്നു.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയുടെ സെർവറിന് ഇതുവരെ ഒരു പകർപ്പ് സൂക്ഷിക്കാൻ കഴിയില്ല, അതിനാൽ ഇപ്പോൾ ഇത് ഈ ഫോണിൽ മാത്രമേ നിലനിൽക്കൂ.",
+  "for {n} day|for {n} days": {
+    "one": "{n} ദിവസത്തേക്ക്",
+    "other": "{n} ദിവസത്തേക്ക്"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} ആഴ്ചത്തേക്ക്",
+    "other": "{n} ആഴ്ചത്തേക്ക്"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} മാസം",
+    "other": "{n} മാസം"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} ആഴ്ച",
+    "other": "{n} ആഴ്ച"
+  },
+  "📦 Ask to borrow": "📦 കടം ചോദിക്കുക",
+  "Add a community by address": "വിലാസം വഴി ഒരു കമ്മ്യൂണിറ്റി ചേർക്കുക",
+  "COMMUNITY ADDRESS": "കമ്മ്യൂണിറ്റി വിലാസം",
+  "COMMUNITY NAME (OPTIONAL)": "കമ്മ്യൂണിറ്റിയുടെ പേര് (ഐച്ഛികം)",
+  "Clear this phone's copy and download again": "ഈ ഫോണിലെ പകർപ്പ് മായ്ച്ച് വീണ്ടും ഡൗൺലോഡ് ചെയ്യുക",
+  "Community name (optional)": "കമ്മ്യൂണിറ്റിയുടെ പേര് (ഐച്ഛികം)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "ഒരു കമ്മ്യൂണിറ്റിയുടെ വിലാസം ടൈപ്പ് ചെയ്ത് കണക്റ്റ് ചെയ്യുക. നിങ്ങളുടെ ഫോൺ അത് ഈ ലിസ്റ്റിൽ സേവ് ചെയ്യുകയും അതിലേക്ക് മാറുകയും ചെയ്യും.",
+  "Have an invite code for this community?": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് ഒരു ക്ഷണ കോഡ് ഉണ്ടോ?",
+  "Invited": "ക്ഷണിച്ചു",
+  "Reached at **{trust}** trust": "**{trust}** വിശ്വാസ്യതയിൽ കൈവരിക്കുന്നു",
+  "Reached at **{trust}** trust (up to {upTo})": "**{trust}** വിശ്വാസ്യതയിൽ കൈവരിക്കുന്നു ({upTo} വരെ)",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "ഈ കമ്മ്യൂണിറ്റി നടത്തുകയാണോ? ഉടമകൾക്കും അഡ്മിൻമാർക്കും ക്രമീകരണങ്ങളുടെ മുകളിൽ Manage എന്ന വരി കാണാം.",
+  "Saved communities": "സംരക്ഷിച്ച കമ്മ്യൂണിറ്റികൾ",
+  "Switch to this community": "ഈ കമ്മ്യൂണിറ്റിയിലേക്ക് മാറുക",
+  "Switch, forget or refresh the communities on this phone": "ഈ ഫോണിലെ കമ്മ്യൂണിറ്റികളിലേക്ക് മാറുക, ഒഴിവാക്കുക അല്ലെങ്കിൽ പുതുക്കുക",
+  "Switching...": "മാറുന്നു...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "ഈ ഫോൺ ചേർന്നിട്ടുള്ള കമ്മ്യൂണിറ്റികൾ. നിങ്ങളുടെ കീയും 12 വാക്കുകളും ഓരോന്നിലും ഒന്നുതന്നെയാണ്; അത് ഉപയോഗിക്കാൻ ഒന്നിലേക്ക് മാറുക.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "സ്വാഗതം. ആദ്യ ദിവസം മുതൽ നിങ്ങൾക്ക് ബ്രൗസ് ചെയ്യാനും വ്യാപാരം നടത്താനും ക്രെഡിറ്റുകൾ സ്വീകരിക്കാനും മറ്റുള്ളവരെ ക്ഷണിക്കാനും കഴിയും — കൂടാതെ നിങ്ങളുടെ ക്രെഡിറ്റ് ലൈൻ ഇതിനകം തുറന്നതാണ്.",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} വിശ്വാസ്യത മുതൽ",
+    "other": "{n} വിശ്വാസ്യത മുതൽ"
+  },
+  "{name}, already invited": "{name}, ഇതിനകം ക്ഷണിച്ചു"
 }

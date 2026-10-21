@@ -2,10 +2,10 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "«{name}» è già in uso in questa comunità. Scegli un altro nome.",
@@ -3424,5 +3424,75 @@
   "Recurring listing (stays active after purchase)": "Annuncio ricorrente (rimane attivo dopo l'acquisto)",
   "Posting…": "Pubblicazione in corso…",
   "Publish Listing": "Pubblica annuncio",
-  "Translated by machine: some words may be wrong.": "Tradotto automaticamente: alcune parole potrebbero essere sbagliate."
+  "Translated by machine: some words may be wrong.": "Tradotto automaticamente: alcune parole potrebbero essere sbagliate.",
+  "About this tool": "Informazioni su questo strumento",
+  "Ask to borrow this?": "Chiedere questo in prestito?",
+  "Asked to borrow": "Chiesto in prestito",
+  "Check your connection, then try again.": "Controlla la tua connessione, poi riprova.",
+  "For example": "Ad esempio",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Prestito gratuito. Non viene trattenuto nulla: prima chi presta deve accettare.",
+  "How it's going": "Come sta andando",
+  "How you deal": "Come tratti",
+  "I already do this": "Lo faccio già",
+  "I'm starting out": "Sto iniziando",
+  "It couldn't be removed. Try again.": "Impossibile rimuovere i dati. Riprova.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Conservato in questo browser, solo per te. Nulla esce da questo browser, e disconnettendoti qui verrà rimosso.",
+  "No tools in this version of the app yet.": "Ancora nessuno strumento in questa versione dell'app.",
+  "Nothing is held until the lender says yes.": "Non viene trattenuto nulla finché chi presta non accetta.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Non viene trattenuto nulla finché chi presta non accetta. Poi la tariffa viene versata in un Trust Wallet temporaneo, e una volta restituito l'articolo chi presta la riceve al netto dell'1,5% di commissione {owned} per finanziare il fondo Commons.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Non viene trattenuto nulla finché chi presta non accetta. Poi {total} B vengono versati in un Trust Wallet, e una volta restituito l'articolo chi presta riceve {net} B (al netto dell'1,5% di commissione {owned} per finanziare il fondo Commons).",
+  "On your Home": "Nella tua Home",
+  "Open {tool}": "Apri {tool}",
+  "Options for {tool}": "Opzioni per {tool}",
+  "Read in English": "Leggi in inglese",
+  "Read the guide": "Leggi la guida",
+  "Refresh the page to load the newest version your community has.": "Aggiorna la pagina per caricare la versione più recente disponibile per la tua comunità.",
+  "Remove my data": "Rimuovi i miei dati",
+  "Remove my data from this browser": "Rimuovi i miei dati da questo browser",
+  "Removed from this browser.": "Rimossi da questo browser.",
+  "Show translation": "Mostra traduzione",
+  "Start": "Inizia",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Rimuove i dati di questa comunità per {tool} da questo browser. Lo stesso strumento in un'altra comunità conserva i propri. Operazione irreversibile.",
+  "Things you can do on your own, that make your community stronger.": "Cose che puoi fare per conto tuo, che rendono la tua comunità più forte.",
+  "This page is in English for now.": "Questa pagina per ora è in inglese.",
+  "This page is newer in English.": "Questa pagina è più recente in inglese.",
+  "This screen stopped working": "Questa schermata ha smesso di funzionare",
+  "This tool didn't load": "Questo strumento non si è caricato",
+  "This tool isn't in this version of the app": "Questo strumento non è presente in questa versione dell'app",
+  "What this tool keeps is safe. Go back and open it again.": "Ciò che questo strumento conserva è al sicuro. Torna indietro e aprilo di nuovo.",
+  "What you have": "Cosa hai",
+  "Where it is kept": "Dove viene conservato",
+  "Withdraw request": "Ritira richiesta",
+  "Yes, remove it": "Sì, rimuovilo",
+  "for {n} day|for {n} days": {
+    "one": "per {n} giorno",
+    "other": "per {n} giorni"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "per {n} settimana",
+    "other": "per {n} settimane"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} giorno",
+    "other": "{n} giorni"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} mese",
+    "other": "{n} mesi"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} settimana",
+    "other": "{n} settimane"
+  },
+  "📦 Ask to borrow": "📦 Chiedi in prestito",
+  "Asked to join": "Ha chiesto di unirsi",
+  "Invited": "Invitato",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Ti diamo il benvenuto. Fin dal primo giorno puoi esplorare, scambiare, ricevere crediti e invitare altri — e la tua linea di credito è già aperta.",
+  "from {n} trust|from {n} trust": {
+    "one": "da {n} di fiducia",
+    "other": "da {n} di fiducia"
+  },
+  "{name}, already in the group": "{name}, già nel gruppo",
+  "{name}, already invited": "{name}, già invitato",
+  "{name}, asked to join": "{name}, ha chiesto di unirsi"
 }

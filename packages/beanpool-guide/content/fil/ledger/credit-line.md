@@ -3,7 +3,7 @@ slug: credit-line
 title: Iyong credit line
 summary: Kung gaano kababa sa zero ang puwede mong abutin, at paano ito lumalago.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 64ce3e39f9617713
+source-hash: 30c343cb535ac79a
 ---
 
 ## Ano ito
@@ -46,12 +46,16 @@ Sinasabi sa iyo ng linya sa ilalim ng bar, halimbawa "Mag-post ng alok para buks
 
 ## Sa isang kilalang komunidad
 
-Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Kung binuksan ng iyong komunidad ang **kilalang floor**, ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad.
+Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Kung binuksan ng iyong komunidad ang **kilalang floor**, ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad. Itinataas nito ang iyong limitasyon, hindi ang iyong antas: binibilang pa rin ng iyong trust badge kung ano lamang ang iyong nagawa na.
 
 - Ang isang live na Alok ay nagbibigay-daan sa iyo na gamitin ang lahat nito. Kapag walang Mga Alok, hindi mo ito magagamit.
 - Ang tiwalang kinikita mo sa pakikipagkalakalan ay nagdaragdag dito, hanggang sa limitasyon ng iyong komunidad (2,000 Munggo maliban kung pumili ito ng higit pa, hanggang sa 5,000).
 - Maaaring magtakda ang isang admin ng mas maliit na limitasyon para sa iyo, halimbawa habang bago ka pa lamang. Hindi iyon kailanman kumukuha ng Munggo mula sa iyo: kung nasa ilalim ka na nito, hihinto ang paggastos hanggang sa makabalik ka sa itaas nito.
 - Kung binabayaran mo ang isang utang mula sa naunang account, ang Munggo na natatanggap mo na lampas sa 0 ay napupunta sa Komun hanggang sa mabayaran ito. Sinasabi ng iyong Talaan kung magkano ang natitira. Maaari mo ring bayaran ang ilan o lahat nito nang ikaw mismo sa **Talaan → Magbayad sa Komun**: nakalagay na roon ang iyong pay-back code (o ilagay ang ibinigay sa iyo ng admin). Ang ibinabayad mo gamit ang code ay agad na ibinabawas sa utang, at kapag walang natira ay naisaayos na ang utang: wala nang kukunin pa, sa pamamagitan ng pagbabayad o mula sa iyong matatanggap. Ang isang pagbabayad nang walang code ay mapupunta sa Komun ngunit hindi mababawas sa iyong utang, at sinasabi ito ng app: upang maibilang ito, hilingin sa admin na ibilang ito sa iyong utang gamit ang reference nito. Hanggang sa gawin nila ito, patuloy pa ring binabayaran ang utang: sa susunod na makatanggap ka ng Munggo, ang natitira ay kukunin mula sa iyong hawak na lampas sa 0. Ang halaga sa mensahe ng admin ay ang natitira noong ibinahagi nila ito: kung mas kaunti ang natitira ngayon, tatanggihan ng iyong server ang mas malaking pagbabayad at sasabihin kung magkano ang natitira, at walang babayaran. Kung sabihin ng app na maaaring pumasok ang isang pagbabayad, i-tap ang **Subukan muli** sa parehong screen: ang parehong pagbabayad ay hindi kailanman binabayaran nang dalawang beses. Kung umalis ka sa screen na iyon, suriin ang iyong Talaan bago ka magbayad muli.
+
+## Isang magkahalong komunidad
+
+Sa ilang komunidad kahit sinong miyembro ay maaaring mag-imbita ng mga tao, kaya hindi kilala ng mga admin ang lahat. Kung binuksan ng komunidad mo ang **kilalang floor**, maaaring kumpirmahin ng mga admin ang mga miyembrong kilala nila, at ang mga miyembrong iyon ay magsisimula sa mas mataas na limitasyon. Ang lahat ng iba pa ay magsisimula sa zero, at ang limitasyon ng bawat isa ay lalago sa parehong paraan pagkatapos noon habang sila ay nakikipagkalakalan at bumubuo ng tiwala.
 
 ## Naka-freeze ng mga admin
 
@@ -60,7 +64,7 @@ Maaaring i-freeze ng mga admin ng iyong komunidad ang credit line ng isang miyem
 - Kung i-freeze nila ang lahat nito, o ang kumpirmadong bahagi lamang ang buong linyang mayroon ka, sinasabi ng Talaan na **Naka-freeze ang iyong credit line**: hindi ka maaaring gumastos sa debit habang umiiral ito, ngunit maaari ka pa ring magbenta at tumanggap ng Munggo, at gastusin ang hawak mo sa itaas ng zero. Kung ikaw ay nasa debit noong ini-freeze nila ito, sinasabi rin ng Talaan kung gaano karaming Munggo ang iyong debit: ang pagbebenta o pagtanggap ng Munggo ay magbabalik sa iyo paitaas, at kapag ikaw ay nasa itaas na ng zero ay maaari mong gastusin ang iyong hawak.
 - Kung i-freeze nila ang kumpirmadong bahagi at mayroon ka ring kredito mula sa isang vouch, mula sa pakikipagkalakalan o mula sa isang grant, mananatili ang bar, na may tala sa ilalim nito na ang kumpirmadong bahagi ay naka-freeze at ang iba pa ay gumagana tulad ng dati. Kung ikaw ay nasa ilalim ng natitira, sinasabi rin ng Talaan na **Nakahinto ang paggastos** (sa ibaba).
 
-Hindi nagbabago ang iyong antas: ito ang ibinibigay sa iyo ng iyong credit line kapag hindi ito naka-freeze, kahit na itinakda ng mga admin ang iyong linya na mas mababa o mas mataas kaysa sa komunidad, sa iyong profile at sa iyong mga listing. Upang itanong kung bakit, o upang mabuksan itong muli, magtanong sa isa sa mga admin.
+Hindi nagbabago ang iyong antas, sa iyong profile at sa iyong mga listing: binibilang nito kung ano ang iyong nagawa (isang vouch, ang iyong mga kalakalan at anumang tiwala na ipinagkaloob sa iyo ng admin), hindi kailanman ang bahagi ng iyong linya na nagmumula sa pagiging kumpirmado, o anumang halagang itinakda ng mga admin para dito. Upang itanong kung bakit, o upang mabuksan itong muli, magtanong sa isa sa mga admin.
 
 ## Nakahinto ang paggastos
 

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 148,
-  "hash": "3b9cd4212a8f881f0cb63f941ec0dc5a59ae9e4d783cb5dbef34f03885a85fdb",
+  "version": 149,
+  "hash": "8ae3bf39acf9588b86a6a5632e5e79f33388d823d20a57f8e390a004c60ee8d2",
   "sections": [
     {
       "id": "about",
@@ -265,7 +265,7 @@
         },
         {
           "type": "p",
-          "text": "Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades. In a community that confirms its members, the credit line a confirmed member gets counts too."
+          "text": "Your trust shows as a badge. The badges are Newcomer, Resident, Steward and Elder. The trust behind your badge adds up three things: the start a vouch gave you, the trust you earned by trading, and any trust an admin granted you. An admin can give a member a badge directly, without trades. In a community that confirms its members, a confirmed member gets a higher credit limit, not a higher badge: their badge counts only what they have done."
         },
         {
           "type": "ul",
@@ -5876,7 +5876,7 @@
         },
         {
           "type": "p",
-          "text": "Some communities have admins who know every member by name. If yours has turned on **the known floor**, a member an admin has confirmed gets a credit line straight away: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for."
+          "text": "Some communities have admins who know every member by name. If yours has turned on **the known floor**, a member an admin has confirmed gets a credit line straight away: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for. It raises your limit, not your level: your trust badge still counts only what you have done."
         },
         {
           "type": "ul",
@@ -5886,6 +5886,14 @@
             "An admin can set a smaller limit for you, for example while you are new. That never takes Beans from you: if you are already below it, spending pauses until you are back above it.",
             "If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid. Your Ledger says how much is left. You can also pay some or all of it yourself in **Ledger → Pay the Commons**: your pay-back code is filled in there (or enter the one an admin gives you). What you pay with the code comes off the debt at once, and when nothing is left the debt is settled: nothing more is taken, by a payment or from what you receive. A payment without the code goes to the Commons but not off your debt, and the app says so: to have it count, ask an admin to count it toward your debt with its reference. Until they do, the debt is still being worked off: the next time you receive Beans, what is left is taken from what you hold above 0. The amount in the admin's message is what was left when they shared it: if less is left now, your server refuses a larger payment and says how much is left, and nothing is paid. If the app says a payment may have gone through, tap **Try again** on the same screen: the same payment is never paid twice. If you left that screen, check your Ledger before you pay again."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "A mixed community"
+        },
+        {
+          "type": "p",
+          "text": "In some communities any member can invite people, so the admins don't know everyone. If yours has turned on **the known floor**, the admins can confirm the members they do know, and those members start with a higher limit. Everyone else starts at zero, and everyone's limit grows the same way after that as they trade and build trust."
         },
         {
           "type": "h2",
@@ -5904,7 +5912,7 @@
         },
         {
           "type": "p",
-          "text": "Your level doesn't change: it is the one your credit line gives you when it isn't frozen, even if the admins had set your line lower or higher than the community's, on your profile and on your listings alike. To ask why, or to have it opened again, ask one of the admins."
+          "text": "Your level doesn't change, on your profile and on your listings alike: it counts what you have done (a vouch, your trades and any trust an admin granted you), never the part of your line that comes from being confirmed, or any amount the admins set for it. To ask why, or to have it opened again, ask one of the admins."
         },
         {
           "type": "h2",
@@ -6014,7 +6022,7 @@
         },
         {
           "type": "p",
-          "text": "Trust comes from a vouch when you join, from completed trades, and from trust an admin has granted. In a community that confirms its members, the credit line a confirmed member gets counts too."
+          "text": "Trust comes from a vouch when you join, from completed trades, and from trust an admin has granted. In a community that confirms its members, being confirmed gives you a higher credit limit, not a higher badge: your badge counts only what you have done, so it never shows that you are confirmed."
         },
         {
           "type": "h2",

@@ -2,24 +2,36 @@
  * The tool store's routes (engine/tool-state.ts; slice S2 of scratch/tools/DESIGN-shops-and-tools-fable.md §9.3): each
  * tool's private copy of its owner's document, read and written only by its owner.
  *
- *   GET    /api/tools/:tool              → { tool, doc, updatedAt, deletedAt, bytes, max }; doc and updatedAt null when none is kept
- *   PUT    /api/tools/:tool  { doc }     → { success: true, tool, updatedAt, bytes, max }
- *   DELETE /api/tools/:tool              → { success: true, tool, removed }
+ *   GET    /api/tools/:tool                       → { tool, doc, updatedAt, deletedAt, bytes, max }; doc and updatedAt null when none is kept
+ *   PUT    /api/tools/:tool  { doc, turnOn? }     → { success: true, tool, updatedAt, bytes, max }
+ *                                                   or 410 { error, code: 'tool_copy_off', deletedAt } (below)
+ *   DELETE /api/tools/:tool                       → { success: true, tool, removed }
  *
  * and the same for an enterprise's tools, by a keeper of it, with the enterprise as the owner:
  *
  *   GET | PUT | DELETE /api/treasury/:treasury/tools/:tool
  *
+ * ## Off means gone
+ *
+ * scratch/tools/DESIGN-t04-late-put-fable.md §1 (S2.2). A PUT is the member's switch-on when its body says
+ * `turnOn: true`, the boolean true and nothing else; any other value, or none, makes it ordinary. An ordinary PUT never
+ * writes over a copy its owner removed: with no copy kept and a removal, it answers 410 `tool_copy_off` with the
+ * removal's `deletedAt` and writes nothing, so a phone's upload let go before the member switched the copy off (on
+ * this phone or another) can't put it back. The switch-on writes, as any PUT did before. A DELETE with no copy kept
+ * still leaves a removal (`removed: false`). The flag is in the body, so inside the signature: only the owner's key sets
+ * it, and all it lets them do is keep their own copy, which is what switching on is.
+ *
  * ## Only ever the owner's own
  *
  * No route takes the owner from the query or the body: a member is `ctx.state.actor`, verified by the real
  * `requireSignature` middleware, and an enterprise is the path's, which the signer must keep (canOperateTreasury, as for
- * its Offers). The body carries the document alone, under `doc`, so nothing in it can name anyone: the middleware's
- * spoof check reads the body's top level, and the document is never read for an identity. The read is a gated read
- * (unsigned 401, and a key that is no member here 403 from the middleware); the checks here answer the same where the
- * middleware lets a request through (a node with ENFORCE_READ_AUTH=false, and a write, which it does not hold to
- * membership). A closed account's key, a replaced one and a visitor's row are refused by the middleware before any of
- * this. A suspended member keeps and changes their own copies; a keeper must be active to touch an enterprise's.
+ * its Offers). The body carries the document under `doc` and the switch-on flag beside it, and nothing else is read,
+ * so nothing in it can name anyone: the middleware's spoof check reads the body's top level, and the document is never
+ * read for an identity. The read is a gated read (unsigned 401, and a key that is no member here 403 from the
+ * middleware); the checks here answer the same where the middleware lets a request through (a node with
+ * ENFORCE_READ_AUTH=false, and a write, which it does not hold to membership). A closed account's key, a replaced one
+ * and a visitor's row are refused by the middleware before any of this. A suspended member keeps and changes their own
+ * copies; a keeper must be active to touch an enterprise's.
  *
  * Every answer is private and no-store. Nothing goes to anyone's socket and nothing to the activity feed.
  *
@@ -42,12 +54,12 @@ import type { RouteDeps } from './types.js';
 
 type Op = 'read' | 'write';
 /** A request as the router hands it over, with the body the JSON middleware parsed (https-server.ts). */
-type Ctx = Koa.Context & { params: Record<string, string | undefined>; requestBody?: { doc?: unknown } };
+type Ctx = Koa.Context & { params: Record<string, string | undefined>; requestBody?: { doc?: unknown; turnOn?: unknown } };
 
-function refuse(ctx: Ctx, status: number, error: string, code?: string): void {
+function refuse(ctx: Ctx, status: number, error: string, code?: string, extra: Record<string, unknown> = {}): void {
     ctx.set('Cache-Control', 'private, no-store');
     ctx.status = status;
-    ctx.body = code ? { error, code } : { error };
+    ctx.body = code ? { error, code, ...extra } : { error };
 }
 
 /** The verified signer, or undefined once the refusal is written. */
@@ -102,7 +114,7 @@ function toolOf(ctx: Ctx): string | undefined {
 
 /** An engine refusal answered in its words, or false for anything else (rethrown by the caller). */
 function answeredRefusal(ctx: Ctx, e: unknown): boolean {
-    if (e instanceof ToolStateRefusal) { refuse(ctx, e.status, e.message, e.code); return true; }
+    if (e instanceof ToolStateRefusal) { refuse(ctx, e.status, e.message, e.code, e.extra); return true; }
     if (e instanceof StandbyLedgerError) { refuse(ctx, e.status, e.message, e.code); return true; }
     return false;
 }
@@ -135,7 +147,7 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => string | undefined) {
             const tool = owner && toolOf(ctx);
             if (!owner || !tool) return;
             try {
-                const state = writeToolState(owner, tool, ctx.requestBody?.doc);
+                const state = writeToolState(owner, tool, ctx.requestBody?.doc, { turnOn: ctx.requestBody?.turnOn === true });
                 answer(ctx, { success: true, tool, updatedAt: state.updatedAt, bytes: state.bytes, max: TOOL_STATE_MAX_BYTES });
             } catch (e) {
                 if (!answeredRefusal(ctx, e)) throw e;

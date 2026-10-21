@@ -2,10 +2,10 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "kacang",
@@ -5653,5 +5653,114 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Setelah nodemu berjalan, beri nama komunitasmu di aplikasi pengaturannya, undang anggota pertama, dan mereka akan mengundang yang lain. Aktifkan \"publikasikan lokasi\" di sana, dan orang-orang di dekatmu yang meminta diberi tahu akan mengetahuinya.",
   "How to run a node, on beanpool.org": "Cara menjalankan node, di beanpool.org",
   "Copy my community's details": "Salin detail komunitas saya",
-  "Copied. Paste them into your node's settings app.": "Tersalin. Tempelkan ke dalam aplikasi pengaturan nodemu."
+  "Copied. Paste them into your node's settings app.": "Tersalin. Tempelkan ke dalam aplikasi pengaturan nodemu.",
+  "A few examples to start from, and a guide.": "Beberapa contoh untuk memulai, dan panduan.",
+  "A fixed number of Beans": "Jumlah kacang tetap",
+  "About this tool": "Tentang alat ini",
+  "Allow notifications": "Izinkan notifikasi",
+  "Ask to borrow this?": "Minta pinjam ini?",
+  "Asked to borrow": "Sudah meminta pinjam",
+  "Beans per day": "Kacang per hari",
+  "Beans per week": "Kacang per minggu",
+  "Books: how it's going": "Pembukuan: perkembangannya",
+  "Fee": "Biaya",
+  "Free": "Gratis",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Gratis dipinjam. Tidak ada yang ditahan: pemberi pinjaman harus setuju terlebih dahulu.",
+  "Go on": "Lanjutkan",
+  "Go on to post": "Lanjut memasang",
+  "Go straight in and add what you keep.": "Langsung masuk dan tambahkan apa yang kamu simpan.",
+  "I already do this": "Saya sudah melakukan ini",
+  "I already do this: go straight in and add what you keep.": "Saya sudah melakukan ini: langsung masuk dan tambahkan apa yang kamu simpan.",
+  "I'm starting out": "Saya baru mulai",
+  "I'm starting out: a few examples to start from, and a guide.": "Saya baru mulai: beberapa contoh untuk memulai, dan panduan.",
+  "It shows in the Market as an Offer.": "Ini akan tampil di Pasar sebagai Penawaran.",
+  "Keep a private copy on your community's server": "Simpan salinan pribadi di server komunitasmu",
+  "Kept on this phone only. Nothing in it leaves this phone.": "Hanya disimpan di ponsel ini. Tidak ada data di dalamnya yang keluar dari ponsel ini.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Disimpan di ponsel ini, dengan salinan pribadi di server komunitasmu yang hanya dapat kamu baca melalui aplikasi. Seperti semua hal di server tersebut, operatornya dapat membacanya.",
+  "List it in the Market": "Daftarkan di Pasar",
+  "More tools": "Alat lainnya",
+  "Next you check it and tap Post. Nothing is posted before that.": "Selanjutnya kamu periksa dan ketuk Pasang. Tidak ada yang dipasang sebelum itu.",
+  "No thanks": "Tidak, terima kasih",
+  "No tools here yet. They come with updates of the app.": "Belum ada alat di sini. Alat akan hadir bersama pembaruan aplikasi.",
+  "Nothing is held until the lender says yes.": "Tidak ada yang ditahan sampai pemberi pinjaman setuju.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Tidak ada yang ditahan sampai pemberi pinjaman setuju. Kemudian biaya masuk ke Dompet Jaminan sementara, dan setelah barang dikembalikan, pemberi pinjaman menerimanya bersih setelah dipotong biaya transaksi 1,5% {owned} untuk mendanai Pool Bersama.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "Notifikasi dinonaktifkan untuk BeanPool di ponsel ini, sehingga pengingat tidak dapat muncul.",
+  "Open {tool}": "Buka {tool}",
+  "Options for {tool}": "Opsi untuk {tool}",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "Tampilkan alat ini di Beranda? Ini menampilkan apa yang disimpannya secara sekilas.",
+  "Read in English": "Baca dalam bahasa Inggris",
+  "Read the guide": "Baca panduannya",
+  "Reminders": "Pengingat",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "Pengingat yang disetel oleh alatmu di ponsel ini. Tidak ada data tentangnya yang keluar dari ponsel ini.",
+  "Remove my data from this phone": "Hapus dataku dari ponsel ini",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "Menghapus daftar, foto, dan pengingat komunitas ini untuk alat tersebut di ponsel ini. Alat yang sama di komunitas lain tetap menyimpan datanya sendiri. Tindakan ini tidak dapat diurungkan.",
+  "Replace your unfinished post?": "Ganti postinganmu yang belum selesai?",
+  "Show translation": "Tampilkan terjemahan",
+  "Some examples": "Beberapa contoh",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "Terjadi kesalahan pada alat ini. Data yang disimpannya di ponsel ini aman.",
+  "Stock: what you have": "Stok: apa yang kamu miliki",
+  "Things you can do on your own": "Hal yang dapat kamu lakukan sendiri",
+  "Things you can do on your own, that make your community stronger.": "Hal yang dapat kamu lakukan sendiri, yang membuat komunitasmu lebih kuat.",
+  "This page is in English for now.": "Halaman ini sementara dalam bahasa Inggris.",
+  "This page is newer in English.": "Halaman ini lebih baru dalam bahasa Inggris.",
+  "This tool isn't in this version of the app": "Alat ini tidak ada dalam versi aplikasi ini",
+  "Tool reminders": "Pengingat alat",
+  "Trade: how you deal": "Transaksi: caramu bertransaksi",
+  "Update": "Perbarui",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "Perbarui BeanPool untuk menggunakannya. Versi Anda ditampilkan di bagian bawah Pengaturan.",
+  "You have an unfinished post on the map. Going on replaces it.": "Kamu memiliki postingan yang belum selesai di peta. Melanjutkan akan menggantikannya.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "other": "Anda telah mengalokasikan {credits} kredit ({n} hari) ke Dompet Jaminan untuk penawaran ini."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "other": "Anda telah mengalokasikan {credits} kredit ({n} bulan) ke Dompet Jaminan untuk penawaran ini."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "other": "Anda telah mengalokasikan {credits} kredit ({n} minggu) ke Dompet Jaminan untuk penawaran ini."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "Anda telah mengajukan untuk mendapatkan {credits} kredit ({n} hari) (bersih {net} setelah biaya transaksi 1,5%) {owned} untuk memenuhi kebutuhan ini."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "Anda telah mengajukan untuk mendapatkan {credits} kredit ({n} bulan) (bersih {net} setelah biaya transaksi 1,5%) {owned} untuk memenuhi kebutuhan ini."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "Anda telah mengajukan untuk mendapatkan {credits} kredit ({n} minggu) (bersih {net} setelah biaya transaksi 1,5%) {owned} untuk memenuhi kebutuhan ini."
+  },
+  "Your community asks for a profile photo before you post.": "Komunitasmu meminta foto profil sebelum kamu memasang postingan.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "Server komunitasmu belum dapat menyimpan salinan, jadi untuk saat ini data hanya tersimpan di ponsel ini.",
+  "for {n} day|for {n} days": {
+    "other": "selama {n} hari"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "selama {n} minggu"
+  },
+  "{n} month|{n} months": {
+    "other": "{n} bulan"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n} minggu"
+  },
+  "📦 Ask to borrow": "📦 Minta pinjam",
+  "Add a community by address": "Tambah komunitas lewat alamat",
+  "COMMUNITY ADDRESS": "ALAMAT KOMUNITAS",
+  "COMMUNITY NAME (OPTIONAL)": "NAMA KOMUNITAS (OPSIONAL)",
+  "Clear this phone's copy and download again": "Hapus salinan ponsel ini dan unduh lagi",
+  "Community name (optional)": "Nama komunitas (opsional)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Hubungkan ke komunitas dengan mengetik alamatnya. Ponsel Anda akan menyimpannya ke daftar ini dan beralih ke sana.",
+  "Have an invite code for this community?": "Punya kode undangan untuk komunitas ini?",
+  "Invited": "Diundang",
+  "Reached at **{trust}** trust": "Dicapai pada **{trust}** kepercayaan",
+  "Reached at **{trust}** trust (up to {upTo})": "Dicapai pada **{trust}** kepercayaan (hingga {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Mengelola komunitas ini? Pemilik dan admin melihat baris Kelola di bagian atas Pengaturan.",
+  "Saved communities": "Komunitas tersimpan",
+  "Switch to this community": "Beralih ke komunitas ini",
+  "Switch, forget or refresh the communities on this phone": "Beralih, lupakan, atau segarkan komunitas di ponsel ini",
+  "Switching...": "Beralih...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Komunitas yang telah diikuti ponsel ini. Kunci dan 12 kata Anda sama di setiap komunitas; beralihlah ke salah satunya untuk menggunakannya.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Selamat datang. Sejak hari pertama Anda dapat menelusuri, bertransaksi, menerima kredit, dan mengundang orang lain — dan jalur kredit Anda sudah terbuka.",
+  "from {n} trust|from {n} trust": {
+    "other": "dari {n} kepercayaan"
+  },
+  "{name}, already invited": "{name}, sudah diundang"
 }

@@ -2,10 +2,10 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "\"{name}\" tayari limechukuliwa katika jamii hii. Chagua jina lingine.",
@@ -3423,5 +3423,75 @@
   "Recurring listing (stays active after purchase)": "Tangazo linalojirudia (hubaki amilifu baada ya ununuzi)",
   "Posting…": "Inachapisha…",
   "Publish Listing": "Chapisha Tangazo",
-  "Translated by machine: some words may be wrong.": "Imetafsiriwa na mashine: baadhi ya maneno yanaweza kuwa na makosa."
+  "Translated by machine: some words may be wrong.": "Imetafsiriwa na mashine: baadhi ya maneno yanaweza kuwa na makosa.",
+  "About this tool": "Kuhusu zana hii",
+  "Ask to borrow this?": "Omba kuazima hiki?",
+  "Asked to borrow": "Umeomba kuazima",
+  "Check your connection, then try again.": "Angalia muunganisho wako, kisha ujaribu tena.",
+  "For example": "Kwa mfano",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Bure kuazima. Hakuna kinachozuiliwa: mkopeshaji anakubali kwanza.",
+  "How it's going": "Jinsi mambo yanavyoenda",
+  "How you deal": "Jinsi unavyofanya biashara",
+  "I already do this": "Tayari ninafanya hili",
+  "I'm starting out": "Ndiyo ninaanza",
+  "It couldn't be removed. Try again.": "Haikuweza kuondolewa. Jaribu tena.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Imewekwa katika kivinjari hiki, kwa ajili yako tu. Hakuna chochote chake kinachoondoka kwenye kivinjari hiki, na kutoka humu kunaiondoa.",
+  "No tools in this version of the app yet.": "Bado hakuna zana katika toleo hili la programu.",
+  "Nothing is held until the lender says yes.": "Hakuna kinachozuiliwa hadi mkopeshaji akubali.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Hakuna kinachozuiliwa hadi mkopeshaji akubali. Kisha ada huenda kwenye Mkoba wa Amana wa muda, na ikirudishwa mkopeshaji huipokea ukiondoa ada ya muamala ya 1.5% {owned} ili kufadhili Hazina ya Pamoja.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Hakuna kinachozuiliwa hadi mkopeshaji akubali. Kisha {total} B huenda kwenye Mkoba wa Amana, na ikirudishwa mkopeshaji hupokea {net} B (ukiondoa ada ya muamala ya 1.5% {owned} ili kufadhili Hazina ya Pamoja).",
+  "On your Home": "Kwenye Nyumbani yako",
+  "Open {tool}": "Fungua {tool}",
+  "Options for {tool}": "Chaguo za {tool}",
+  "Read in English": "Soma kwa Kiingereza",
+  "Read the guide": "Soma mwongozo",
+  "Refresh the page to load the newest version your community has.": "Onyesha upya ukurasa ili kupakia toleo jipya zaidi ambalo jumuiya yako inalo.",
+  "Remove my data": "Ondoa data yangu",
+  "Remove my data from this browser": "Ondoa data yangu kwenye kivinjari hiki",
+  "Removed from this browser.": "Imeondolewa kwenye kivinjari hiki.",
+  "Show translation": "Onyesha tafsiri",
+  "Start": "Anza",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Huondoa data ya jumuiya hii ya {tool} kwenye kivinjari hiki. Zana hiyo hiyo katika jumuiya nyingine huweka zake. Hili haliwezi kutenduliwa.",
+  "Things you can do on your own, that make your community stronger.": "Mambo unayoweza kufanya peke yako, yanayoifanya jumuiya yako kuwa imara zaidi.",
+  "This page is in English for now.": "Ukurasa huu uko kwa Kiingereza kwa sasa.",
+  "This page is newer in English.": "Ukurasa huu ni mpya zaidi kwa Kiingereza.",
+  "This screen stopped working": "Skrini hii imeacha kufanya kazi",
+  "This tool didn't load": "Zana hii haikupakiwa",
+  "This tool isn't in this version of the app": "Zana hii haipo katika toleo hili la programu",
+  "What this tool keeps is safe. Go back and open it again.": "Kile ambacho zana hii inaweka kiko salama. Rudi nyuma na uifungue tena.",
+  "What you have": "Ulichonacho",
+  "Where it is kept": "Inapowekwa",
+  "Withdraw request": "Ondoa ombi",
+  "Yes, remove it": "Ndiyo, iondoe",
+  "for {n} day|for {n} days": {
+    "one": "kwa siku {n}",
+    "other": "kwa siku {n}"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "kwa wiki {n}",
+    "other": "kwa wiki {n}"
+  },
+  "{n} day|{n} days": {
+    "one": "siku {n}",
+    "other": "siku {n}"
+  },
+  "{n} month|{n} months": {
+    "one": "mwezi {n}",
+    "other": "miezi {n}"
+  },
+  "{n} week|{n} weeks": {
+    "one": "wiki {n}",
+    "other": "wiki {n}"
+  },
+  "📦 Ask to borrow": "📦 Omba kuazima",
+  "Asked to join": "Ameomba kujiunga",
+  "Invited": "Amealikwa",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Karibu. Kuanzia siku ya kwanza unaweza kuvinjari, kufanya biashara, kupokea mikopo na kualika wengine — na mstari wako wa mkopo tayari umefunguliwa.",
+  "from {n} trust|from {n} trust": {
+    "one": "kutoka uaminifu {n}",
+    "other": "kutoka uaminifu {n}"
+  },
+  "{name}, already in the group": "{name}, tayari yumo kwenye kikundi",
+  "{name}, already invited": "{name}, tayari amealikwa",
+  "{name}, asked to join": "{name}, ameomba kujiunga"
 }

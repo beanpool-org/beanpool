@@ -5877,5 +5877,125 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Depois que o nó estiver funcionando, você dá o nome à comunidade no app de configurações dele, convida os primeiros membros e eles convidam os demais. Ative \"publicar localização\" lá para que as pessoas próximas que pediram para ser avisadas saibam da novidade.",
   "How to run a node, on beanpool.org": "Como executar um nó no beanpool.org",
   "Copy my community's details": "Copiar detalhes da minha comunidade",
-  "Copied. Paste them into your node's settings app.": "Copiado. Cole-os no app de configurações do seu nó."
+  "Copied. Paste them into your node's settings app.": "Copiado. Cole-os no app de configurações do seu nó.",
+  "A few examples to start from, and a guide.": "Alguns exemplos para começar e um guia.",
+  "A fixed number of Beans": "Um número fixo de feijões",
+  "About this tool": "Sobre esta ferramenta",
+  "Allow notifications": "Permitir notificações",
+  "Ask to borrow this?": "Pedir isto emprestado?",
+  "Asked to borrow": "Empréstimo solicitado",
+  "Beans per day": "Feijões por dia",
+  "Beans per week": "Feijões por semana",
+  "Books: how it's going": "Contabilidade: como vão as coisas",
+  "Fee": "Taxa",
+  "Free": "Grátis",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Grátis para pegar emprestado. Nada fica retido: quem empresta diz sim primeiro.",
+  "Go on": "Continuar",
+  "Go on to post": "Continuar para publicar",
+  "Go straight in and add what you keep.": "Entre direto e adicione o que você guarda.",
+  "I already do this": "Já faço isso",
+  "I already do this: go straight in and add what you keep.": "Já faço isso: entre direto e adicione o que você guarda.",
+  "I'm starting out": "Estou começando",
+  "I'm starting out: a few examples to start from, and a guide.": "Estou começando: alguns exemplos para começar e um guia.",
+  "It shows in the Market as an Offer.": "Aparece no Mercado como uma Oferta.",
+  "Keep a private copy on your community's server": "Manter uma cópia privada no servidor da sua comunidade",
+  "Kept on this phone only. Nothing in it leaves this phone.": "Guardado apenas neste celular. Nada nele sai deste celular.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Guardado neste celular, com uma cópia privada no servidor da sua comunidade que apenas você pode ler pelo app. Como tudo nesse servidor, o operador dele poderia.",
+  "List it in the Market": "Anunciar no Mercado",
+  "More tools": "Mais ferramentas",
+  "Next you check it and tap Post. Nothing is posted before that.": "Depois você confere e toca em Publicar. Nada é publicado antes disso.",
+  "No thanks": "Não, obrigado",
+  "No tools here yet. They come with updates of the app.": "Nenhuma ferramenta aqui ainda. Elas chegam com as atualizações do app.",
+  "Nothing is held until the lender says yes.": "Nada fica retido até que quem empresta diga sim.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Nada fica retido até que quem empresta diga sim. Depois, a taxa vai para uma Carteira de Confiança temporária e, assim que o item for devolvido, quem emprestou a recebe líquida com desconto da taxa de transação de 1,5% {owned} para financiar o Fundo de Bens comuns.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "As notificações estão desativadas para o BeanPool neste celular, então os lembretes não podem ser exibidos.",
+  "Open {tool}": "Abrir {tool}",
+  "Options for {tool}": "Opções para {tool}",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "Colocar esta ferramenta no Início? Ela mostra o que guarda em um relance.",
+  "Read in English": "Ler em inglês",
+  "Read the guide": "Ler o guia",
+  "Reminders": "Lembretes",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "Lembretes que suas ferramentas definem neste celular. Nada sobre eles sai dele.",
+  "Remove my data from this phone": "Remover meus dados deste celular",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "Remove a lista, as fotos e os lembretes desta comunidade para esta ferramenta neste celular. A mesma ferramenta em outra comunidade mantém os seus próprios. Isso não pode ser desfeito.",
+  "Replace your unfinished post?": "Substituir sua publicação não finalizada?",
+  "Show translation": "Mostrar tradução",
+  "Some examples": "Alguns exemplos",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "Algo deu errado nesta ferramenta. O que ela guarda neste celular está seguro.",
+  "Stock: what you have": "Estoque: o que você tem",
+  "Things you can do on your own": "Coisas que você pode fazer por conta própria",
+  "Things you can do on your own, that make your community stronger.": "Coisas que você pode fazer por conta própria, que fortalecem sua comunidade.",
+  "This page is in English for now.": "Esta página está em inglês por enquanto.",
+  "This page is newer in English.": "Esta página é mais recente em inglês.",
+  "This tool isn't in this version of the app": "Esta ferramenta não está nesta versão do app",
+  "Tool reminders": "Lembretes de ferramentas",
+  "Trade: how you deal": "Trocas: como você negocia",
+  "Update": "Atualizar",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "Atualize o BeanPool para usar. Sua versão aparece no rodapé de Configurações.",
+  "You have an unfinished post on the map. Going on replaces it.": "Você tem uma publicação não finalizada no mapa. Continuar irá substituí-la.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "Você comprometeu {credits} créditos ({n} dia) em uma Carteira de Confiança para esta oferta.",
+    "other": "Você comprometeu {credits} créditos ({n} dias) em uma Carteira de Confiança para esta oferta."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "Você comprometeu {credits} créditos ({n} mês) em uma Carteira de Confiança para esta oferta.",
+    "other": "Você comprometeu {credits} créditos ({n} meses) em uma Carteira de Confiança para esta oferta."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "Você comprometeu {credits} créditos ({n} semana) em uma Carteira de Confiança para esta oferta.",
+    "other": "Você comprometeu {credits} créditos ({n} semanas) em uma Carteira de Confiança para esta oferta."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Você solicitou receber {credits} créditos ({n} dia) ({net} líquidos após taxa de transação de 1,5% {owned}) por atender a este pedido.",
+    "other": "Você solicitou receber {credits} créditos ({n} dias) ({net} líquidos após taxa de transação de 1,5% {owned}) por atender a este pedido."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Você solicitou receber {credits} créditos ({n} mês) ({net} líquidos após taxa de transação de 1,5% {owned}) por atender a este pedido.",
+    "other": "Você solicitou receber {credits} créditos ({n} meses) ({net} líquidos após taxa de transação de 1,5% {owned}) por atender a este pedido."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Você solicitou receber {credits} créditos ({n} semana) ({net} líquidos após taxa de transação de 1,5% {owned}) por atender a este pedido.",
+    "other": "Você solicitou receber {credits} créditos ({n} semanas) ({net} líquidos após taxa de transação de 1,5% {owned}) por atender a este pedido."
+  },
+  "Your community asks for a profile photo before you post.": "Sua comunidade pede uma foto de perfil antes de você publicar.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "O servidor da sua comunidade ainda não pode guardar uma cópia, então por enquanto fica apenas neste celular.",
+  "for {n} day|for {n} days": {
+    "one": "por {n} dia",
+    "other": "por {n} dias"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "por {n} semana",
+    "other": "por {n} semanas"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} mês",
+    "other": "{n} meses"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} semana",
+    "other": "{n} semanas"
+  },
+  "📦 Ask to borrow": "📦 Pedir emprestado",
+  "Add a community by address": "Adicionar uma comunidade por endereço",
+  "COMMUNITY ADDRESS": "ENDEREÇO DA COMUNIDADE",
+  "COMMUNITY NAME (OPTIONAL)": "NOME DA COMUNIDADE (OPCIONAL)",
+  "Clear this phone's copy and download again": "Limpar a cópia deste celular e baixar novamente",
+  "Community name (optional)": "Nome da comunidade (opcional)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Conecte-se a uma comunidade digitando o endereço dela. Seu celular vai salvá-la nesta lista e alternar para ela.",
+  "Have an invite code for this community?": "Tem um código de convite para esta comunidade?",
+  "Invited": "Convite enviado",
+  "Reached at **{trust}** trust": "Alcançado com **{trust}** de confiança",
+  "Reached at **{trust}** trust (up to {upTo})": "Alcançado com **{trust}** de confiança (até {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Administra esta comunidade? Proprietários e administradores veem uma linha Gerenciar no topo de Configurações.",
+  "Saved communities": "Comunidades salvas",
+  "Switch to this community": "Alternar para esta comunidade",
+  "Switch, forget or refresh the communities on this phone": "Alterne, esqueça ou atualize as comunidades neste celular",
+  "Switching...": "Alternando...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "As comunidades em que este celular entrou. Sua chave e suas 12 palavras são as mesmas em cada uma; alterne para uma para usá-la.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Boas-vindas. Desde o primeiro dia você pode explorar, trocar, receber créditos e convidar outras pessoas — e sua linha de crédito já está aberta.",
+  "from {n} trust|from {n} trust": {
+    "one": "a partir de {n} de confiança",
+    "other": "a partir de {n} de confiança"
+  },
+  "{name}, already invited": "{name}, já tem convite"
 }

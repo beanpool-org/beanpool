@@ -6,27 +6,35 @@
  * Over REAL HTTPS through the real signature middleware:
  *
  *   1. the owner's own copy: none yet; kept, read back whole, replaced (the stamp always moving on), private and no-store,
- *      nothing in the activity feed; deleted with a tombstone no earlier than the row; a delete of nothing writes
- *      nothing; written again after its delete, stamped after the tombstone
+ *      nothing in the activity feed; deleted with a tombstone no earlier than the row; off means gone
+ *      (scratch/tools/DESIGN-t04-late-put-fable.md §5 tests 1 to 4): an ordinary upload after the delete is refused, 410
+ *      tool_copy_off with the removal's time, writing nothing; a delete of nothing leaves a removal stamped now, and a
+ *      second one stamps no earlier; only the boolean `turnOn: true` beside `doc` is the switch-on, which passes the
+ *      middleware and writes stamped after the removal; after it an ordinary upload writes; 30 days + 1 ms on, the
+ *      removal pruned, an ordinary upload writes again
  *   2. nobody else reads or changes it: another member reads their own; a body naming the owner (ownerPubkey,
  *      publicKey) is refused by the middleware; a query naming the owner changes nothing; the owner's key on another
  *      key's signature, no signature, a replayed request, a key with no row and a visitor's row are refused; an
  *      enterprise's copies are its keepers' alone: another member 403, a keeper of another enterprise 403, a made-up
  *      enterprise or a member's key in the path 404; a second keeper of the same enterprise shares them; the keeper's own
- *      and the enterprise's are apart
+ *      and the enterprise's are apart; one keeper's removal refuses another keeper's ordinary upload, and that keeper's
+ *      switch-on writes (test 5)
  *   3. the bounds: 64 KB as stored taken, a byte over refused in a sentence and nothing written (UTF-8 counted as bytes);
  *      a body far over refused unread; a document that is no JSON object; bad tool ids and the reserved `community:`;
- *      32 different tools, the 33rd refused, a deleted one still counting and its own place still its own
+ *      32 different tools, the 33rd refused, a deleted one still counting and its own place still its own switch-on's;
+ *      at the cap a delete of a tool never held writes nothing (test 2)
  *   4. the day budget: a change is one of the signer's day of signed writes, a read is not; a keeper's change for the
  *      enterprise counts on the enterprise's day
- *   5. a standby answers the read from its copy and refuses every change, 409 standby, writing nothing; the engine
- *      refuses underneath
+ *   5. a standby answers the read from its copy and refuses every change, an ordinary upload, a switch-on, a delete and a
+ *      delete of nothing alike, 409 standby, writing nothing; the engine refuses underneath (test 6)
  *   6. a closed account: a removal and a self-deletion take the owner's copies, each with a tombstone no earlier than its
  *      row, and the key is refused after; an enterprise closed has no tools to read or change, one wound up keeps them
- *      to read; a re-key moves the copies to the new key, and the old key reads nothing; a recovery onto a key that
- *      already holds a copy or a removal of a tool keeps the new key's, and the old key's removal goes, hiding nothing
+ *      to read; a re-key moves the copies to the new key, and the old key reads nothing; a removal under the old key
+ *      refuses the new key's ordinary upload, 410 (test 7); a recovery onto a key that already holds a copy or a removal
+ *      of a tool keeps the new key's, and the old key's removal goes, hiding nothing
  *   7. replication: a whole copy carries every row verbatim and a new standby holds them exactly; a delta carries a new
- *      copy and a delete's tombstone, and the standby follows both; a delete and a write again in one millisecond, and a
+ *      copy, a delete's tombstone and a delete of nothing's, and the standby follows them, answering the removal with no
+ *      row as the main server does (test 6); a delete and a write again in one millisecond, and a
  *      write then a delete, order on the standby as on the main server; a delete and then a re-key between two pulls,
  *      and the deleted copy comes back under neither key, its removal on the new key on both; a removal the standby
  *      already pulled, then a recovery (DESIGN-t04-node-copy-delete-fable.md §5 test 2): the new key reads it removed at
@@ -134,6 +142,8 @@ const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 180)}`;
 const own = (tool: string) => `/api/tools/${tool}`;
 const ent = (treasury: string, tool: string) => `/api/treasury/${treasury}/tools/${tool}`;
 const put = (id: Id, route: string, doc: unknown, opts: { keepDay?: boolean } = {}) => call('PUT', id, route, { doc }, opts);
+/** The member's switch-on (DESIGN-t04-late-put-fable.md §1): the one upload that writes over a removed copy. */
+const turnOn = (id: Id, route: string, doc: unknown) => call('PUT', id, route, { doc, turnOn: true });
 
 // ── what is kept, read straight from the database ─────────────────────────────────────────────────
 interface Row { public_key: string; tool: string; body: string; updated_at: string }
@@ -208,7 +218,7 @@ async function main(): Promise<void> {
     assert(stamps.every((s, i) => typeof s === 'string' && (i === 0 ? s > (r1?.updated_at ?? '') : s > stamps[i - 1])),
         `replaced whole each time, and each stamp after the one before, however fast (${stamps.map(s => s?.slice(17)).join(', ')})`);
     assert(same(JSON.parse(rowOf(ann.pk, 'things')?.body ?? 'null'), { ...doc2, i: 3 }) && rowsOf(ann.pk).length === 1, 'the last writer wins, one row');
-    const sameMs = attempt(() => { const t = Date.now() + 60_000; return [store.writeToolState(ann.pk, 'notes', { v: 1 }, t).updatedAt, store.writeToolState(ann.pk, 'notes', { v: 2 }, t).updatedAt]; });
+    const sameMs = attempt(() => { const t = Date.now() + 60_000; return [store.writeToolState(ann.pk, 'notes', { v: 1 }, {}, t).updatedAt, store.writeToolState(ann.pk, 'notes', { v: 2 }, {}, t).updatedAt]; });
     assert(!!sameMs && sameMs[1] > sameMs[0], `two writes in one millisecond still order (${sameMs?.join(' < ')})`);
     attempt(() => store.deleteToolState(ann.pk, 'notes', Date.now() + 120_000));
     const before = rowOf(ann.pk, 'things');
@@ -221,28 +231,80 @@ async function main(): Promise<void> {
     assert(g2.status === 200 && g2.body?.doc === null && g2.body?.updatedAt === null && g2.body?.deletedAt === t1
         && /private/.test(g2.headers.get('cache-control') ?? '') && /no-store/.test(g2.headers.get('cache-control') ?? ''),
         `gone: the read says none, deletedAt matches tombstone, private and no-store (${show(g2)})`);
+
+    // Off means gone (scratch/tools/DESIGN-t04-late-put-fable.md §1): an ordinary upload, the one a phone's open or a PUT it
+    // let go at the 30 s limit sends, never writes over a copy its owner removed. Only the switch-on, { doc, turnOn: true }, does.
+    const late = await put(ann, own('things'), { v: 3, late: true });
+    const gLate = await call('GET', ann, own('things'));
+    assert(late.status === 410 && late.body?.code === 'tool_copy_off' && late.body?.deletedAt === t1 && typeof t1 === 'string' && /\.$/.test(late.body?.error ?? '')
+        && /no-store/.test(late.headers.get('cache-control') ?? ''),
+        `an ordinary upload over the removed copy: 410 tool_copy_off, in a sentence, with the removal's time (${show(late)})`);
+    assert(rowOf(ann.pk, 'things') === undefined && tombOf(ann.pk, 'things') === t1 && gLate.body?.doc === null && gLate.body?.deletedAt === t1,
+        `and nothing written, no stamp moved: the read still says removed (${show(gLate)})`);
     const tombsBefore = tombsOf(ann.pk);
     const d2 = await call('DELETE', ann, own('things'));
-    const d3 = await call('DELETE', ann, own('garden'));
-    assert(d2.status === 200 && d2.body?.removed === false && d3.body?.removed === false && tombsOf(ann.pk) === tombsBefore && tombOf(ann.pk, 'garden') === null,
-        `a delete of nothing answers removed: false and writes nothing (${show(d2)}; ${tombsOf(ann.pk)} tombstones)`);
-    const w2 = await put(ann, own('things'), doc2);
-    assert(w2.status === 200 && (w2.body?.updatedAt ?? '') > (tombOf(ann.pk, 'things') ?? ''), `written again after its delete, stamped after the tombstone (${w2.body?.updatedAt})`);
-    const gWrittenAgain = await call('GET', ann, own('things'));
-    assert(gWrittenAgain.status === 200 && same(gWrittenAgain.body?.doc, doc2) && gWrittenAgain.body?.deletedAt === null,
-        `written again: a copy and deletedAt: null (${show(gWrittenAgain)})`);
+    const t2 = tombOf(ann.pk, 'things');
+    assert(d2.status === 200 && d2.body?.removed === false && !!t1 && !!t2 && t2 >= t1 && tombsOf(ann.pk) === tombsBefore,
+        `a second delete of the removed copy answers removed: false, its removal stamped no earlier than the first (${t1} → ${t2})`);
 
-    // pruneTombstones at 30 days + 1 ms clears the tombstone, so deletedAt answers null again
+    // A delete of a tool with no copy leaves a removal too, so the first upload a phone let go cannot land after it.
+    const atBefore = new Date().toISOString();
+    const d3 = await call('DELETE', ann, own('seeds'));
+    const atAfter = new Date().toISOString();
+    const tSeeds = tombOf(ann.pk, 'seeds');
+    const gSeeds = await call('GET', ann, own('seeds'));
+    assert(d3.status === 200 && d3.body?.removed === false && !!tSeeds && tSeeds >= atBefore && tSeeds <= atAfter && rowOf(ann.pk, 'seeds') === undefined
+        && gSeeds.status === 200 && gSeeds.body?.doc === null && gSeeds.body?.deletedAt === tSeeds && tombsOf(ann.pk) === tombsBefore + 1,
+        `a delete of nothing answers removed: false and leaves a removal stamped now, which the read answers (${show(d3)}; ${show(gSeeds)})`);
+    const d4 = await call('DELETE', ann, own('seeds'));
+    const tSeeds2 = tombOf(ann.pk, 'seeds');
+    attempt(() => store.deleteToolState(ann.pk, 'seeds', Date.parse(tSeeds2 ?? '') - 60_000));
+    assert(d4.status === 200 && d4.body?.removed === false && !!tSeeds && !!tSeeds2 && tSeeds2 >= tSeeds && tombOf(ann.pk, 'seeds') === tSeeds2
+        && tombsOf(ann.pk) === tombsBefore + 1,
+        `a second delete of nothing stamps no earlier than the first, even with an earlier clock, one removal a tool (${tSeeds} → ${tSeeds2} → ${tombOf(ann.pk, 'seeds')})`);
+    const lateSeeds = await put(ann, own('seeds'), { v: 1 });
+    assert(lateSeeds.status === 410 && lateSeeds.body?.code === 'tool_copy_off' && lateSeeds.body?.deletedAt === tSeeds2 && rowOf(ann.pk, 'seeds') === undefined,
+        `and the first ordinary upload after it: 410, nothing written (${show(lateSeeds)})`);
+    // Only the boolean true beside doc is a switch-on: anything else, or a turnOn inside the document, is ordinary. Each is
+    // answered by the store, not the middleware's spoof check: a turnOn field passes it.
+    const notOn: Res[] = [];
+    for (const body of [{ doc: { v: 1 }, turnOn: 'yes' }, { doc: { v: 1 }, turnOn: 1 }, { doc: { v: 1 }, turnOn: 'true' }, { doc: { v: 1 }, turnOn: false },
+        { doc: { v: 1 }, turnOn: null }, { doc: { v: 1 }, turnOn: [true] }, { doc: { v: 1, turnOn: true } }]) notOn.push(await call('PUT', ann, own('seeds'), body));
+    assert(notOn.every(r => r.status === 410 && r.body?.code === 'tool_copy_off') && rowOf(ann.pk, 'seeds') === undefined && tombOf(ann.pk, 'seeds') === tSeeds2,
+        `turnOn 'yes', 1, 'true', false, null, [true] and one inside the document are ordinary: 410, nothing written (${notOn.map(r => r.status).join(', ')})`);
+    const onSeeds = await call('PUT', ann, own('seeds'), { doc: { v: 2 }, turnOn: true });
+    assert(onSeeds.status === 200 && (onSeeds.body?.updatedAt ?? '') > (tSeeds2 ?? '') && rowOf(ann.pk, 'seeds')?.body === '{"v":2}' && tombOf(ann.pk, 'seeds') === tSeeds2,
+        `the switch-on over a delete of nothing: 200, stamped after the removal (${show(onSeeds)})`);
+    attempt(() => store.deleteToolState(ann.pk, 'seeds'));
+
+    const on = await call('PUT', ann, own('things'), { doc: doc2, turnOn: true });
+    assert(on.status === 200 && on.body?.success === true && (on.body?.updatedAt ?? '') > (t2 ?? '') && tombOf(ann.pk, 'things') === t2,
+        `the switch-on writes again after the delete: 200, stamped after the removal, which stays, outranked (${show(on)})`);
+    const gWrittenAgain = await call('GET', ann, own('things'));
+    assert(gWrittenAgain.status === 200 && same(gWrittenAgain.body?.doc, doc2) && gWrittenAgain.body?.deletedAt === null && gWrittenAgain.body?.updatedAt === on.body?.updatedAt,
+        `written again: a copy and deletedAt: null (${show(gWrittenAgain)})`);
+    const overRow = await put(ann, own('things'), { ...doc2, after: 'on' });
+    assert(overRow.status === 200 && (overRow.body?.updatedAt ?? '') > (on.body?.updatedAt ?? '') && same(JSON.parse(rowOf(ann.pk, 'things')?.body ?? 'null'), { ...doc2, after: 'on' }),
+        `and an ordinary upload over that copy writes, as before the removal (${show(overRow)})`);
+
+    // pruneTombstones at 30 days + 1 ms clears the tombstone, so deletedAt answers null again, and an ordinary upload
+    // writes again (DESIGN-t04-late-put-fable.md §4 residual 6, pinned)
     await put(ann, own('prune-test'), { v: 1 });
     await call('DELETE', ann, own('prune-test'));
     const tPrune = tombOf(ann.pk, 'prune-test');
     const gBeforePrune = await call('GET', ann, own('prune-test'));
     assert(gBeforePrune.status === 200 && gBeforePrune.body?.doc === null && gBeforePrune.body?.deletedAt === tPrune && typeof tPrune === 'string',
         `deleted tool has deletedAt equal to tombstone before prune (${gBeforePrune.body?.deletedAt})`);
+    const beforePrune = await put(ann, own('prune-test'), { v: 2 });
+    assert(beforePrune.status === 410 && rowOf(ann.pk, 'prune-test') === undefined, `within the 30 days an ordinary upload is refused (${show(beforePrune)})`);
     pruneTombstones(Date.now() + 30 * 86_400_000 + 1);
     const gAfterPrune = await call('GET', ann, own('prune-test'));
     assert(gAfterPrune.status === 200 && gAfterPrune.body?.doc === null && gAfterPrune.body?.deletedAt === null,
         `pruneTombstones at 30 days + 1 ms: deletedAt is null (${show(gAfterPrune)})`);
+    const afterPrune = await put(ann, own('prune-test'), { v: 3 });
+    assert(afterPrune.status === 200 && rowOf(ann.pk, 'prune-test')?.body === '{"v":3}',
+        `and after them an ordinary upload writes again (${show(afterPrune)})`);
+    attempt(() => store.deleteToolState(ann.pk, 'prune-test'));
     assert(feedCount() === feedBefore, 'nothing in the activity feed');
 
     // ── 2. nobody else ──────────────────────────────────────────────────────────────────────────
@@ -301,6 +363,24 @@ async function main(): Promise<void> {
     const keeperGetDeleted = await call('GET', ann, ent(shop, 'catalog'));
     assert(delEnt.status === 200 && keeperGetDeleted.status === 200 && keeperGetDeleted.body?.doc === null && keeperGetDeleted.body?.deletedAt === tEnt && typeof tEnt === 'string',
         `an enterprise GET by a keeper answers deletedAt matching its tombstone (${keeperGetDeleted.body?.deletedAt})`);
+    // Off means gone for an enterprise's copy too (DESIGN-t04-late-put-fable.md §2): one keeper switches it off, and another
+    // keeper's phone's ordinary upload is refused; that keeper's own switch-on writes. Each keeper's own copies are apart.
+    await put(bo, own('orders'), { v: 'bo' });
+    await put(ann, ent(shop, 'orders'), { v: 1 });
+    const offEnt = await call('DELETE', ann, ent(shop, 'orders'));
+    const tOrders = tombOf(shop, 'orders');
+    const lateEnt = await put(bo, ent(shop, 'orders'), { v: 2 });
+    const afterLateEnt = rowOf(shop, 'orders');
+    assert(offEnt.status === 200 && offEnt.body?.removed === true && lateEnt.status === 410 && lateEnt.body?.code === 'tool_copy_off'
+        && lateEnt.body?.deletedAt === tOrders && typeof tOrders === 'string' && afterLateEnt === undefined && tombOf(shop, 'orders') === tOrders,
+        `one keeper switches the enterprise's copy off: another keeper's ordinary upload is refused, 410, nothing written (${show(lateEnt)})`);
+    const onEnt = await call('PUT', bo, ent(shop, 'orders'), { doc: { v: 3 }, turnOn: true });
+    assert(onEnt.status === 200 && (onEnt.body?.updatedAt ?? '') > (tOrders ?? '') && rowOf(shop, 'orders')?.body === '{"v":3}',
+        `and that keeper's switch-on writes, stamped after the removal (${show(onEnt)})`);
+    const boOrders = await put(bo, own('orders'), { v: 'bo2' });
+    assert(boOrders.status === 200 && rowOf(bo.pk, 'orders')?.body === '{"v":"bo2"}' && tombOf(bo.pk, 'orders') === null
+        && rowOf(ann.pk, 'orders') === undefined && tombOf(ann.pk, 'orders') === null,
+        `the keepers' own copies untouched: the removal is the enterprise's alone (${show(boOrders)})`);
     const notKeeper = [await call('GET', dee, ent(shop, 'stock')), await put(dee, ent(shop, 'stock'), { v: 9 }), await call('DELETE', dee, ent(shop, 'stock')), await call('GET', dee, ent(shop, 'catalog'))];
     assert(notKeeper.every(r => r.status === 403 && /not a keeper of this enterprise/.test(r.body?.error ?? '')),
         `another member: 403, not a keeper of this enterprise (${notKeeper.map(r => r.status).join(', ')})`);
@@ -362,12 +442,27 @@ async function main(): Promise<void> {
         `one more is refused in a sentence (${show(past)})`);
     await call('DELETE', eve, own('t5'));
     const afterDelete = await put(eve, own('one-more'), { v: 1 });
-    const backAgain = await put(eve, own('t5'), { v: 2 });
+    const lateT5 = await put(eve, own('t5'), { v: 2 });
+    const backAgain = await call('PUT', eve, own('t5'), { doc: { v: 2 }, turnOn: true });
     const update = await put(eve, own('t6'), { v: 2 });
-    assert(afterDelete.status === 409 && backAgain.status === 200 && update.status === 200 && rowsOf(eve.pk).length === MAX,
-        `a deleted one still counts for its 30 days, and keeps its own place (${afterDelete.status}, ${backAgain.status}, ${update.status})`);
-    for (let round = 0; round < 3; round++) for (const t of ['t7', 't8']) { await call('DELETE', eve, own(t)); await put(eve, own(t), { v: round }); }
+    assert(afterDelete.status === 409 && lateT5.status === 410 && backAgain.status === 200 && update.status === 200 && rowsOf(eve.pk).length === MAX,
+        `a deleted one still counts for its 30 days, and keeps its own place for the switch-on (${afterDelete.status}, ${lateT5.status}, ${backAgain.status}, ${update.status})`);
+    for (let round = 0; round < 3; round++) for (const t of ['t7', 't8']) { await call('DELETE', eve, own(t)); await call('PUT', eve, own(t), { doc: { v: round }, turnOn: true }); }
     assert(tombsOf(eve.pk) <= MAX && rowsOf(eve.pk).length === MAX, `delete and write again leaves one tombstone a tool at most (${tombsOf(eve.pk)})`);
+    // At the cap (DESIGN-t04-late-put-fable.md §4 residual 5): a delete of a tool she never held writes nothing, and that tool
+    // is still refused, either kind of upload. A tool of hers is still hers: its removal, again, is kept.
+    const tombsAtCap = tombsOf(eve.pk);
+    const nothingAtCap = await call('DELETE', eve, own('never-held'));
+    const stillPast = [await put(eve, own('never-held'), { v: 1 }), await call('PUT', eve, own('never-held'), { doc: { v: 1 }, turnOn: true })];
+    assert(nothingAtCap.status === 200 && nothingAtCap.body?.removed === false && tombOf(eve.pk, 'never-held') === null && tombsOf(eve.pk) === tombsAtCap
+        && stillPast.every(r => r.status === 409 && r.body?.code === 'tool_copies_max') && rowOf(eve.pk, 'never-held') === undefined,
+        `at the cap a delete of a tool never held writes nothing, and its upload is still 409 tool_copies_max (${show(nothingAtCap)}; ${stillPast.map(r => r.status).join(', ')})`);
+    await call('DELETE', eve, own('t9'));
+    const t9 = tombOf(eve.pk, 't9');
+    const t9Again = await call('DELETE', eve, own('t9'));
+    const t9On = await call('PUT', eve, own('t9'), { doc: { v: 2 }, turnOn: true });
+    assert(t9Again.status === 200 && t9Again.body?.removed === false && !!t9 && (tombOf(eve.pk, 't9') ?? '') >= t9 && t9On.status === 200 && rowsOf(eve.pk).length === MAX,
+        `at the cap, a delete of nothing of a tool of hers keeps its removal, and her switch-on takes its place (${t9} → ${tombOf(eve.pk, 't9')}; ${show(t9On)})`);
 
     // ── 4. the day budget ───────────────────────────────────────────────────────────────────────
     console.log('\n── 4. the day budget ──');
@@ -393,16 +488,20 @@ async function main(): Promise<void> {
     setNodeRole('backup');
     const sRead = await call('GET', ann, own('things'));
     const sEnt = await call('GET', bo, ent(shop, 'stock'));
-    const sChanges = [await put(ann, own('things'), { v: 99 }), await call('DELETE', ann, own('things')), await put(ann, own('fresh'), { v: 1 }),
-        await put(bo, ent(shop, 'stock'), { v: 99 }), await call('DELETE', bo, ent(shop, 'stock'))];
-    const engineRefuses = [() => store.writeToolState(ann.pk, 'things', { v: 98 }), () => store.deleteToolState(ann.pk, 'things')].map(fn => {
+    const sChanges = [await put(ann, own('things'), { v: 99 }), await turnOn(ann, own('things'), { v: 99 }), await call('DELETE', ann, own('things')),
+        await put(ann, own('fresh'), { v: 1 }), await turnOn(ann, own('fresh'), { v: 1 }), await call('DELETE', ann, own('never-here')),
+        await put(bo, ent(shop, 'stock'), { v: 99 }), await turnOn(bo, ent(shop, 'stock'), { v: 99 }), await call('DELETE', bo, ent(shop, 'stock')),
+        await call('DELETE', bo, ent(shop, 'never-here'))];
+    const engineRefuses = [() => store.writeToolState(ann.pk, 'things', { v: 98 }), () => store.writeToolState(ann.pk, 'things', { v: 98 }, { turnOn: true }),
+        () => store.deleteToolState(ann.pk, 'things'), () => store.deleteToolState(ann.pk, 'never-here')].map(fn => {
         try { fn(); return 'wrote'; } catch (e: any) { return e?.code ?? e?.message; }
     });
     setNodeRole('primary');
     assert(sRead.status === 200 && sRead.body?.doc?.v === 7 && sEnt.status === 200 && sEnt.body?.doc?.v === 2, `the reads, from its copy (${show(sRead)}; ${show(sEnt)})`);
-    assert(sChanges.every(r => r.status === 409 && r.body?.code === 'standby'), `every change: 409 standby (${sChanges.map(r => r.status).join(', ')})`);
+    assert(sChanges.every(r => r.status === 409 && r.body?.code === 'standby'),
+        `every change, an ordinary upload, a switch-on, a delete and a delete of nothing: 409 standby (${sChanges.map(r => r.status).join(', ')})`);
     assert(engineRefuses.every(c => c === 'standby'), `and the engine refuses underneath (${engineRefuses.join(', ')})`);
-    assert(JSON.stringify(everyRow()) === snapshot && tombsAll() === tombsBeforeStandby, 'nothing written');
+    assert(JSON.stringify(everyRow()) === snapshot && tombsAll() === tombsBeforeStandby && tombOf(ann.pk, 'never-here') === null, 'nothing written');
 
     // ── 6. closed accounts, closed enterprises, a re-key ────────────────────────────────────────
     console.log('\n── 6. a closed account, a closed enterprise, a re-key ──');
@@ -434,13 +533,16 @@ async function main(): Promise<void> {
             `an enterprise ${status}: no tools to read or change (${r.map(x => x.status).join(', ')})`);
     }
     db.prepare("UPDATE members SET status = 'completed' WHERE public_key = ?").run(closedShop);
-    const woundUp = [await call('GET', bo, ent(closedShop, 'stock')), await put(bo, ent(closedShop, 'stock'), { v: 2 }), await call('DELETE', bo, ent(closedShop, 'stock'))];
+    const woundUp = [await call('GET', bo, ent(closedShop, 'stock')), await put(bo, ent(closedShop, 'stock'), { v: 2 }), await call('DELETE', bo, ent(closedShop, 'stock')),
+        await turnOn(bo, ent(closedShop, 'stock'), { v: 2 })];
     assert(woundUp[0].status === 200 && woundUp[0].body?.doc?.v === 1 && woundUp[1].status === 403 && woundUp[2].status === 403
+        && woundUp[3].status === 403 && woundUp[3].body?.code === 'enterprise_closed'
         && /wound up/.test(woundUp[1].body?.error ?? '') && rowOf(closedShop, 'stock') !== undefined,
-        `one wound up keeps its copies to read, and none changes (${woundUp.map(show).join(' | ')})`);
+        `one wound up keeps its copies to read, and none changes, a switch-on neither (${woundUp.map(show).join(' | ')})`);
     db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(bo.pk);
     const suspendedKeeper = await call('GET', bo, ent(shop, 'stock'));
-    const suspendedOwn = [await call('GET', bo, own('things')), await put(bo, own('things'), { v: 3 })];
+    // Bo's own copy of things was removed after section 2's write: his switch-on keeps one again.
+    const suspendedOwn = [await call('GET', bo, own('things')), await turnOn(bo, own('things'), { v: 3 })];
     db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(bo.pk);
     assert(suspendedKeeper.status === 403 && suspendedOwn.every(r => r.status === 200),
         `a suspended keeper touches none of the enterprise's; a suspended member keeps their own (${show(suspendedKeeper)}; ${suspendedOwn.map(r => r.status).join(', ')})`);
@@ -465,6 +567,26 @@ async function main(): Promise<void> {
         && newReadDel.body?.deletedAt === tDelNew && typeof tDelNew === 'string',
         `after a re-key the new key's GET answers deletedAt (${newReadDel.body?.deletedAt})`);
     assert(oldReadDel.status === 403 && oldReadDel.body?.code === 'key_invalidated', `and the old key still reads nothing (${show(oldReadDel)})`);
+
+    // Off means gone across a re-key (DESIGN-t04-late-put-fable.md §2 "The standby"): Ivy removes a copy under her old key
+    // and is re-keyed. The removal moved with her copies (#2299), so her new key's ordinary upload is refused as the old
+    // key's would have been, and only her switch-on keeps a copy again.
+    const ivy = member('Ivy');
+    await put(ivy, own('things'), { v: 1 });
+    await call('DELETE', ivy, own('things'));
+    const tIvy = tombOf(ivy.pk, 'things');
+    const ivyNew = newId('IvyNew');
+    const ivyMoved = attempt(() => { const code = issueRekeyCode(ivy.pk, owner.pk).code; return completeRekey(ivy.pk, ivyNew.pk, code, owner.pk); });
+    const ivyLate = await put(ivyNew, own('things'), { v: 2 });
+    const ivyOld = await put(ivy, own('things'), { v: 2 });
+    assert(ivyMoved?.success === true && ivyLate.status === 410 && ivyLate.body?.code === 'tool_copy_off' && ivyLate.body?.deletedAt === tIvy
+        && typeof tIvy === 'string' && rowOf(ivyNew.pk, 'things') === undefined && tombOf(ivyNew.pk, 'things') === tIvy,
+        `re-keyed after a removal: the new key's ordinary upload is refused, 410, nothing written (${show(ivyLate)})`);
+    assert(ivyOld.status === 403 && ivyOld.body?.code === 'key_invalidated' && rowOf(ivy.pk, 'things') === undefined,
+        `and the old key refused as before (${show(ivyOld)})`);
+    const ivyOn = await turnOn(ivyNew, own('things'), { v: 3 });
+    assert(ivyOn.status === 200 && (ivyOn.body?.updatedAt ?? '') > (tIvy ?? '') && rowOf(ivyNew.pk, 'things')?.body === '{"v":3}',
+        `and her switch-on on the new key writes, stamped after the removal (${show(ivyOn)})`);
 
     // A recovery onto a key that already holds a copy, or a removal, of a tool the old key removed. No route makes one (the
     // new key is no member until the move), so the engine writes them: the new key's is kept, even a copy older than the
@@ -513,43 +635,51 @@ async function main(): Promise<void> {
     const standbyRead = await call('GET', ann, own('things'));
     assert(standbyRead.status === 200 && standbyRead.body?.doc?.v === 7, `and answers its owner from them (${show(standbyRead)})`);
 
-    // A delta: a new copy, a change, a delete.
+    // A delta: a new copy (garden, removed in section 4, switched on again), a change, a delete, and a delete of a tool
+    // with no copy, which leaves a removal and no row (DESIGN-t04-late-put-fable.md §1 item 3).
     const since = new Date().toISOString();
     await sleep(5);
     const keptRows = everyRow();
-    await put(ann, own('garden'), { v: 1, beds: 3 });
+    await turnOn(ann, own('garden'), { v: 1, beds: 3 });
     await put(ann, own('things'), { v: 8 });
     await call('DELETE', bo, ent(shop, 'stock'));
+    await call('DELETE', ann, own('never-kept'));
     const afterMain = everyRow();
     const delta: any = await exportSyncState(nodeId, since);
     const dRows: any[] = delta.plainTables?.member_tool_state ?? [];
     const dTomb = (delta.tombstones ?? []).find((t: any) => t.tableName === 'member_tool_state' && t.rowKey === `${shop}|stock`);
+    const dNothing = (delta.tombstones ?? []).find((t: any) => t.tableName === 'member_tool_state' && t.rowKey === `${ann.pk}|never-kept`);
     assert(same(dRows.map((r: any) => r.tool).sort(), ['garden', 'things']) && !!dTomb,
         `a delta carries the new copy, the changed one and the delete's tombstone, nothing older (${dRows.map((r: any) => r.tool).join(', ')})`);
+    assert(!!dNothing && dNothing.deletedAt === tombOf(ann.pk, 'never-kept') && !dRows.some((r: any) => r.tool === 'never-kept'),
+        `and the removal a delete of nothing left, with no row (${dNothing?.deletedAt})`);
     // The standby as it was before the delta.
     db.transaction(() => {
         db.prepare('DELETE FROM member_tool_state').run();
         const ins = db.prepare('INSERT INTO member_tool_state (public_key, tool, body, updated_at) VALUES (?, ?, ?, ?)');
         for (const r of keptRows) ins.run(r.public_key, r.tool, r.body, r.updated_at);
-        db.prepare("DELETE FROM tombstones WHERE table_name = 'member_tool_state' AND row_key = ?").run(`${shop}|stock`);
+        db.prepare("DELETE FROM tombstones WHERE table_name = 'member_tool_state' AND row_key IN (?, ?)").run(`${shop}|stock`, `${ann.pk}|never-kept`);
     })();
     const deltaCopy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(delta));
     setNodeRole('backup');
     importError = '';
     try { await importRemoteState(deltaCopy); } catch (e: any) { importError = e?.message || String(e); }
     const sStandbyEnt = await call('GET', bo, ent(shop, 'stock'));
+    const sStandbyNothing = await call('GET', ann, own('never-kept'));
     setNodeRole('primary');
     assert(sStandbyEnt.status === 200 && sStandbyEnt.body?.doc === null && sStandbyEnt.body?.deletedAt === dTomb.deletedAt && typeof dTomb.deletedAt === 'string',
         `the standby answers the same deletedAt after the delta (${show(sStandbyEnt)})`);
+    assert(sStandbyNothing.status === 200 && sStandbyNothing.body?.doc === null && sStandbyNothing.body?.deletedAt === dNothing?.deletedAt && typeof dNothing?.deletedAt === 'string',
+        `and the removal with no row: the standby's read answers its deletedAt (${show(sStandbyNothing)})`);
     assert(importError === '' && same(everyRow(), afterMain) && rowOf(shop, 'stock') === undefined,
         `the standby follows: the new copy and the change in, the deleted one gone (${importError || `${everyRow().length} rows`})`);
 
     // In one millisecond: Bo deletes a copy and writes it again; Ann writes one (stamped past the clock) and deletes it.
     const ms = Date.now() + 10 * 60_000;
-    attempt(() => store.writeToolState(bo.pk, 'jobs', { v: 1 }, ms - 1));
+    attempt(() => store.writeToolState(bo.pk, 'jobs', { v: 1 }, {}, ms - 1));
     const since2 = new Date(Date.now() - 1).toISOString();
-    attempt(() => { store.deleteToolState(bo.pk, 'jobs', ms); store.writeToolState(bo.pk, 'jobs', { v: 2 }, ms); });
-    attempt(() => { store.writeToolState(ann.pk, 'costs', { v: 1 }, ms); store.writeToolState(ann.pk, 'costs', { v: 2 }, ms); store.deleteToolState(ann.pk, 'costs', ms); });
+    attempt(() => { store.deleteToolState(bo.pk, 'jobs', ms); store.writeToolState(bo.pk, 'jobs', { v: 2 }, { turnOn: true }, ms); });
+    attempt(() => { store.writeToolState(ann.pk, 'costs', { v: 1 }, {}, ms); store.writeToolState(ann.pk, 'costs', { v: 2 }, {}, ms); store.deleteToolState(ann.pk, 'costs', ms); });
     const boJobs = rowOf(bo.pk, 'jobs');
     assert(!!boJobs && boJobs.updated_at > (tombOf(bo.pk, 'jobs') ?? '') && (tombOf(ann.pk, 'costs') ?? '') >= new Date(ms + 1).toISOString() && rowOf(ann.pk, 'costs') === undefined,
         `on the main server: the copy written again is stamped after its tombstone, and the delete after the copy it took (${boJobs?.updated_at} > ${tombOf(bo.pk, 'jobs')}; ${tombOf(ann.pk, 'costs')})`);
@@ -618,7 +748,7 @@ async function main(): Promise<void> {
     await put(gus, own('back'), { v: 1 });
     await call('DELETE', gus, own('gone'));
     await call('DELETE', gus, own('back'));
-    await put(gus, own('back'), { v: 2 });
+    await turnOn(gus, own('back'), { v: 2 });
     await put(gus, ent(mill, 'stock'), { v: 1 });
     await put(gus, ent(mill, 'catalog'), { v: 1 });
     await call('DELETE', gus, ent(mill, 'catalog'));

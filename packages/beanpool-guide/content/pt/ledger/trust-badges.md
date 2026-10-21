@@ -3,7 +3,7 @@ slug: trust-badges
 title: Emblemas
 summary: Recém-chegado, Morador, Guardião e Ancião. O que significam e por que não desbloqueiam nada.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: d954cfcd237a4685
+source-hash: a6cc3bb74fc395bb
 ---
 
 ## O que são
@@ -17,7 +17,7 @@ Seu emblema de confiança mostra quanta confiança você construiu:
 
 Um membro que ainda não negociou exibe **🔑 FUNDADOR** em suas publicações.
 
-A confiança vem de um aval ao entrar, de trocas concluídas e da confiança concedida por um administrador. Em uma comunidade que confirma seus membros, a linha de crédito que um membro confirmado recebe também conta.
+A confiança vem de um aval ao entrar, de trocas concluídas e da confiança concedida por um administrador. Em uma comunidade que confirma seus membros, ser confirmado proporciona a você um limite de crédito maior, não um emblema superior: seu emblema conta apenas o que você realizou, portanto nunca mostra que você foi confirmado.
 
 ## Eles não liberam nada
 

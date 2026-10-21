@@ -3424,5 +3424,75 @@
   "Recurring listing (stays active after purchase)": "Anúncio recorrente (permanece ativo após a contratação)",
   "Posting…": "Publicando…",
   "Publish Listing": "Publicar anúncio",
-  "Translated by machine: some words may be wrong.": "Traduzido por máquina: algumas palavras podem estar erradas."
+  "Translated by machine: some words may be wrong.": "Traduzido por máquina: algumas palavras podem estar erradas.",
+  "About this tool": "Sobre esta ferramenta",
+  "Ask to borrow this?": "Pedir isto emprestado?",
+  "Asked to borrow": "Empréstimo solicitado",
+  "Check your connection, then try again.": "Verifique sua conexão e tente novamente.",
+  "For example": "Por exemplo",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Grátis para pegar emprestado. Nada fica retido: quem empresta diz sim primeiro.",
+  "How it's going": "Como vão as coisas",
+  "How you deal": "Como você negocia",
+  "I already do this": "Já faço isso",
+  "I'm starting out": "Estou começando",
+  "It couldn't be removed. Try again.": "Não foi possível remover. Tente novamente.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Guardado neste navegador, apenas para você. Nada dele sai deste navegador, e sair da conta aqui o remove.",
+  "No tools in this version of the app yet.": "Nenhuma ferramenta nesta versão do app ainda.",
+  "Nothing is held until the lender says yes.": "Nada fica retido até que quem empresta diga sim.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Nada fica retido até que quem empresta diga sim. Depois, a taxa vai para uma Carteira de Confiança temporária e, assim que o item for devolvido, quem emprestou a recebe líquida com desconto da taxa de transação de 1,5% {owned} para financiar o Fundo de Bens comuns.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Nada fica retido até que quem empresta diga sim. Depois, {total} B vão para uma Carteira de Confiança e, assim que o item for devolvido, quem emprestou recebe {net} B (com desconto da taxa de transação de 1,5% {owned} para financiar o Fundo de Bens comuns).",
+  "On your Home": "No seu Início",
+  "Open {tool}": "Abrir {tool}",
+  "Options for {tool}": "Opções para {tool}",
+  "Read in English": "Ler em inglês",
+  "Read the guide": "Ler o guia",
+  "Refresh the page to load the newest version your community has.": "Atualize a página para carregar a versão mais recente da sua comunidade.",
+  "Remove my data": "Remover meus dados",
+  "Remove my data from this browser": "Remover meus dados deste navegador",
+  "Removed from this browser.": "Removido deste navegador.",
+  "Show translation": "Mostrar tradução",
+  "Start": "Começar",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Remove os dados de {tool} desta comunidade deste navegador. A mesma ferramenta em outra comunidade mantém os seus próprios. Isso não pode ser desfeito.",
+  "Things you can do on your own, that make your community stronger.": "Coisas que você pode fazer por conta própria, que fortalecem sua comunidade.",
+  "This page is in English for now.": "Esta página está em inglês por enquanto.",
+  "This page is newer in English.": "Esta página é mais recente em inglês.",
+  "This screen stopped working": "Esta tela parou de funcionar",
+  "This tool didn't load": "Esta ferramenta não carregou",
+  "This tool isn't in this version of the app": "Esta ferramenta não está nesta versão do app",
+  "What this tool keeps is safe. Go back and open it again.": "O que esta ferramenta guarda está seguro. Volte e abra novamente.",
+  "What you have": "O que você tem",
+  "Where it is kept": "Onde fica guardado",
+  "Withdraw request": "Retirar pedido",
+  "Yes, remove it": "Sim, remover",
+  "for {n} day|for {n} days": {
+    "one": "por {n} dia",
+    "other": "por {n} dias"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "por {n} semana",
+    "other": "por {n} semanas"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} dia",
+    "other": "{n} dias"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} mês",
+    "other": "{n} meses"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} semana",
+    "other": "{n} semanas"
+  },
+  "📦 Ask to borrow": "📦 Pedir emprestado",
+  "Asked to join": "Pediu para entrar",
+  "Invited": "Convite enviado",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Boas-vindas. Desde o primeiro dia você pode explorar, trocar, receber créditos e convidar outras pessoas — e sua linha de crédito já está aberta.",
+  "from {n} trust|from {n} trust": {
+    "one": "a partir de {n} de confiança",
+    "other": "a partir de {n} de confiança"
+  },
+  "{name}, already in the group": "{name}, já está no grupo",
+  "{name}, already invited": "{name}, já tem convite",
+  "{name}, asked to join": "{name}, pediu para entrar"
 }

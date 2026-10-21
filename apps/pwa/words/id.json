@@ -2,10 +2,10 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "«{name}» sudah dipakai di komunitas ini. Pilih nama lain.",
@@ -3308,5 +3308,69 @@
   "Recurring listing (stays active after purchase)": "Listing berulang (tetap aktif setelah pembelian)",
   "Posting…": "Memposting…",
   "Publish Listing": "Terbitkan Listing",
-  "Translated by machine: some words may be wrong.": "Terjemahan mesin: beberapa kata mungkin salah."
+  "Translated by machine: some words may be wrong.": "Terjemahan mesin: beberapa kata mungkin salah.",
+  "About this tool": "Tentang alat ini",
+  "Ask to borrow this?": "Minta pinjam ini?",
+  "Asked to borrow": "Sudah meminta pinjam",
+  "Check your connection, then try again.": "Periksa koneksi Anda, lalu coba lagi.",
+  "For example": "Misalnya",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Gratis dipinjam. Tidak ada yang ditahan: pemberi pinjaman harus setuju terlebih dahulu.",
+  "How it's going": "Perkembangannya",
+  "How you deal": "Caramu bertransaksi",
+  "I already do this": "Saya sudah melakukan ini",
+  "I'm starting out": "Saya baru mulai",
+  "It couldn't be removed. Try again.": "Data tidak dapat dihapus. Coba lagi.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Disimpan di browser ini, hanya untuk Anda. Tidak ada data yang keluar dari browser ini, dan keluar dari akun di sini akan menghapusnya.",
+  "No tools in this version of the app yet.": "Belum ada alat dalam versi aplikasi ini.",
+  "Nothing is held until the lender says yes.": "Tidak ada yang ditahan sampai pemberi pinjaman setuju.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Tidak ada yang ditahan sampai pemberi pinjaman setuju. Kemudian biaya masuk ke Trust Wallet sementara, dan setelah barang kembali, pemberi pinjaman menerimanya bersih setelah dipotong biaya transaksi 1,5% {owned} untuk mendanai Commons Pool.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Tidak ada yang ditahan sampai pemberi pinjaman setuju. Kemudian {total} B masuk ke Trust Wallet, dan setelah barang kembali, pemberi pinjaman menerima {net} B (bersih setelah dipotong biaya transaksi 1,5% {owned} untuk mendanai Commons Pool).",
+  "On your Home": "Di Beranda Anda",
+  "Open {tool}": "Buka {tool}",
+  "Options for {tool}": "Opsi untuk {tool}",
+  "Read in English": "Baca dalam bahasa Inggris",
+  "Read the guide": "Baca panduannya",
+  "Refresh the page to load the newest version your community has.": "Muat ulang halaman untuk memuat versi terbaru yang dimiliki komunitas Anda.",
+  "Remove my data": "Hapus data saya",
+  "Remove my data from this browser": "Hapus data saya dari browser ini",
+  "Removed from this browser.": "Dihapus dari browser ini.",
+  "Show translation": "Tampilkan terjemahan",
+  "Start": "Mulai",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Menghapus data komunitas ini untuk {tool} dari browser ini. Alat yang sama di komunitas lain tetap menyimpan datanya sendiri. Tindakan ini tidak dapat dibatalkan.",
+  "Things you can do on your own, that make your community stronger.": "Hal yang dapat kamu lakukan sendiri, yang membuat komunitasmu lebih kuat.",
+  "This page is in English for now.": "Halaman ini sementara dalam bahasa Inggris.",
+  "This page is newer in English.": "Halaman ini lebih baru dalam bahasa Inggris.",
+  "This screen stopped working": "Layar ini berhenti berfungsi",
+  "This tool didn't load": "Alat ini gagal dimuat",
+  "This tool isn't in this version of the app": "Alat ini tidak ada dalam versi aplikasi ini",
+  "What this tool keeps is safe. Go back and open it again.": "Data yang disimpan alat ini aman. Kembali dan buka lagi.",
+  "What you have": "Apa yang kamu miliki",
+  "Where it is kept": "Di mana data disimpan",
+  "Withdraw request": "Tarik permintaan",
+  "Yes, remove it": "Ya, hapus",
+  "for {n} day|for {n} days": {
+    "other": "selama {n} hari"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "selama {n} minggu"
+  },
+  "{n} day|{n} days": {
+    "other": "{n} hari"
+  },
+  "{n} month|{n} months": {
+    "other": "{n} bulan"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n} minggu"
+  },
+  "📦 Ask to borrow": "📦 Minta pinjam",
+  "Asked to join": "Meminta bergabung",
+  "Invited": "Diundang",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Selamat datang. Sejak hari pertama Anda dapat menelusuri, bertransaksi, menerima kredit, dan mengundang orang lain — dan jalur kredit Anda sudah terbuka.",
+  "from {n} trust|from {n} trust": {
+    "other": "dari {n} kepercayaan"
+  },
+  "{name}, already in the group": "{name}, sudah berada di grup",
+  "{name}, already invited": "{name}, sudah diundang",
+  "{name}, asked to join": "{name}, meminta bergabung"
 }

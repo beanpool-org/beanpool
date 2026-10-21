@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "Kinuha na ang «{name}» sa komunidad na ito. Pumili ng ibang pangalan.",
@@ -3423,5 +3423,75 @@
   "Recurring listing (stays active after purchase)": "Umuulit na listing (nananatiling aktibo pagkatapos bilhin)",
   "Posting…": "Nagpo-post…",
   "Publish Listing": "I-publish ang Listing",
-  "Translated by machine: some words may be wrong.": "Isinalin ng makina: maaaring may maling salita."
+  "Translated by machine: some words may be wrong.": "Isinalin ng makina: maaaring may maling salita.",
+  "About this tool": "Tungkol sa tool na ito",
+  "Ask to borrow this?": "Humiling na hiramin ito?",
+  "Asked to borrow": "Humiling na humiram",
+  "Check your connection, then try again.": "Suriin ang iyong koneksyon, saka subukan muli.",
+  "For example": "Halimbawa",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Libreng hiramin. Walang hinahawakan: kailangang pumayag muna ang nagpapahiram.",
+  "How it's going": "Kumusta na ito",
+  "How you deal": "Kung paano ka nakikipagtransaksyon",
+  "I already do this": "Ginagawa ko na ito",
+  "I'm starting out": "Nagsisimula pa lang ako",
+  "It couldn't be removed. Try again.": "Hindi ito maalis. Subukan muli.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Nasa browser na ito, para sa iyo lamang. Walang anuman dito ang aalis sa browser na ito, at aalisin ito kapag nag-sign out ka rito.",
+  "No tools in this version of the app yet.": "Wala pang mga tool sa bersyong ito ng app.",
+  "Nothing is held until the lender says yes.": "Walang hinahawakan hangga't hindi pumapayag ang nagpapahiram.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Walang hinahawakan hangga't hindi pumapayag ang nagpapahiram. Pagkatapos, mapupunta ang bayad sa pansamantalang Trust Wallet, at kapag naibalik na ito, matatanggap ito ng nagpapahiram bawas ang 1.5% bayad sa transaksyon {owned} para pondohan ang Commons Pool.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Walang hinahawakan hangga't hindi pumapayag ang nagpapahiram. Pagkatapos, mapupunta ang {total} B sa Trust Wallet, at kapag naibalik na ito, matatanggap ng nagpapahiram ang {net} B (bawas ang 1.5% bayad sa transaksyon {owned} para pondohan ang Commons Pool).",
+  "On your Home": "Sa iyong Home",
+  "Open {tool}": "Buksan ang {tool}",
+  "Options for {tool}": "Mga opsyon para sa {tool}",
+  "Read in English": "Basahin sa Ingles",
+  "Read the guide": "Basahin ang gabay",
+  "Refresh the page to load the newest version your community has.": "I-refresh ang page para i-load ang pinakabagong bersyon na mayroon ang iyong komunidad.",
+  "Remove my data": "Alisin ang aking data",
+  "Remove my data from this browser": "Alisin ang aking data sa browser na ito",
+  "Removed from this browser.": "Naalis na sa browser na ito.",
+  "Show translation": "Ipakita ang salin",
+  "Start": "Magsimula",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Inaalis ang data ng komunidad na ito para sa {tool} sa browser na ito. Ang parehong tool sa ibang komunidad ay magpapanatili ng sarili nito. Hindi na ito mababawi.",
+  "Things you can do on your own, that make your community stronger.": "Mga bagay na magagawa mo nang mag-isa, na nagpapalakas sa iyong komunidad.",
+  "This page is in English for now.": "Nasa Ingles muna ang pahinang ito.",
+  "This page is newer in English.": "Mas bago ang pahinang ito sa Ingles.",
+  "This screen stopped working": "Huminto sa paggana ang screen na ito",
+  "This tool didn't load": "Hindi nag-load ang tool na ito",
+  "This tool isn't in this version of the app": "Wala ang tool na ito sa bersyong ito ng app",
+  "What this tool keeps is safe. Go back and open it again.": "Ligtas ang itinatago ng tool na ito. Bumalik at buksan itong muli.",
+  "What you have": "Kung ano ang mayroon ka",
+  "Where it is kept": "Kung saan ito itinatago",
+  "Withdraw request": "Bawiin ang kahilingan",
+  "Yes, remove it": "Oo, alisin ito",
+  "for {n} day|for {n} days": {
+    "one": "para sa {n} araw",
+    "other": "para sa {n} araw"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "para sa {n} linggo",
+    "other": "para sa {n} linggo"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} araw",
+    "other": "{n} araw"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} buwan",
+    "other": "{n} buwan"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} linggo",
+    "other": "{n} linggo"
+  },
+  "📦 Ask to borrow": "📦 Humiling na humiram",
+  "Asked to join": "Humiling na sumali",
+  "Invited": "Naimbita",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Maligayang pagdating. Mula sa unang araw maaari kang mag-browse, makipagkalakalan, tumanggap ng kredito at mag-imbita ng iba — at bukas na ang iyong credit line.",
+  "from {n} trust|from {n} trust": {
+    "one": "mula sa {n} tiwala",
+    "other": "mula sa {n} tiwala"
+  },
+  "{name}, already in the group": "{name}, nasa grupo na",
+  "{name}, already invited": "{name}, naimbita na",
+  "{name}, asked to join": "{name}, humiling na sumali"
 }

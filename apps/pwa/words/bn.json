@@ -2,10 +2,10 @@
   "_meta": {
     "language": "bn",
     "name": "Bengali",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "“{name}” এই কমিউনিটিতে আগেই নেওয়া হয়ে গেছে। অন্য একটি নাম বেছে নিন।",
@@ -3423,5 +3423,75 @@
   "Recurring listing (stays active after purchase)": "পুনরাবৃত্ত তালিকা (কেনার পরেও সক্রিয় থাকে)",
   "Posting…": "পোস্ট করা হচ্ছে…",
   "Publish Listing": "তালিকা প্রকাশ করুন",
-  "Translated by machine: some words may be wrong.": "মেশিনে অনুবাদ করা: কিছু শব্দ ভুল হতে পারে।"
+  "Translated by machine: some words may be wrong.": "মেশিনে অনুবাদ করা: কিছু শব্দ ভুল হতে পারে।",
+  "About this tool": "এই সরঞ্জাম সম্পর্কে",
+  "Ask to borrow this?": "এটি ধার নেওয়ার অনুরোধ করবেন?",
+  "Asked to borrow": "ধার নেওয়ার অনুরোধ করা হয়েছে",
+  "Check your connection, then try again.": "আপনার ইন্টারনেট সংযোগ পরীক্ষা করুন, তারপর আবার চেষ্টা করুন।",
+  "For example": "উদাহরণস্বরূপ",
+  "Free to borrow. Nothing is held: the lender says yes first.": "ধার নেওয়া বিনামূল্যে। কিছুই আটকে রাখা হয় না: ধারদাতা প্রথমে সম্মতি দেন।",
+  "How it's going": "কেমন চলছে",
+  "How you deal": "আপনি যেভাবে লেনদেন করেন",
+  "I already do this": "আমি ইতিমধ্যে এটি করি",
+  "I'm starting out": "আমি নতুন শুরু করছি",
+  "It couldn't be removed. Try again.": "এটি সরানো যায়নি। আবার চেষ্টা করুন।",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "শুধুমাত্র আপনার জন্য, এই ব্রাউজারে সংরক্ষিত। এর কিছুই এই ব্রাউজার থেকে বাইরে যায় না, এবং এখান থেকে সাইন আউট করলে এটি মুছে যায়।",
+  "No tools in this version of the app yet.": "অ্যাপের এই সংস্করণে এখনও কোনো সরঞ্জাম নেই।",
+  "Nothing is held until the lender says yes.": "ধারদাতা সম্মতি না দেওয়া পর্যন্ত কিছুই আটকে রাখা হয় না।",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "ধারদাতা সম্মতি না দেওয়া পর্যন্ত কিছুই আটকে রাখা হয় না। তারপর ফি একটি অস্থায়ী আস্থার ওয়ালেটে যায়, এবং এটি ফেরত আসার পর ধারদাতা যৌথ তহবিলের জন্য 1.5% লেনদেন ফি {owned} বাদ দিয়ে তা পাবেন।",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "ধারদাতা সম্মতি না দেওয়া পর্যন্ত কিছুই আটকে রাখা হয় না। তারপর ট্রাস্ট ওয়ালেটে {total} B যায়, এবং এটি ফেরত আসার পর ধারদাতা {net} B পাবেন (যৌথ তহবিলের জন্য 1.5% লেনদেন ফি {owned} বাদ দিয়ে)।",
+  "On your Home": "আপনার হোমে",
+  "Open {tool}": "{tool} খুলুন",
+  "Options for {tool}": "{tool}-এর বিকল্পসমূহ",
+  "Read in English": "ইংরেজিতে পড়ুন",
+  "Read the guide": "নির্দেশিকা পড়ুন",
+  "Refresh the page to load the newest version your community has.": "আপনার কমিউনিটির কাছে থাকা সবচেয়ে নতুন সংস্করণটি লোড করতে পৃষ্ঠাটি রিফ্রেশ করুন।",
+  "Remove my data": "আমার ডেটা সরিয়ে ফেলুন",
+  "Remove my data from this browser": "এই ব্রাউজার থেকে আমার ডেটা সরিয়ে ফেলুন",
+  "Removed from this browser.": "এই ব্রাউজার থেকে সরানো হয়েছে।",
+  "Show translation": "অনুবাদ দেখান",
+  "Start": "শুরু করুন",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "এই ব্রাউজার থেকে {tool}-এর জন্য এই কমিউনিটির ডেটা সরিয়ে ফেলে। অন্য কমিউনিটিতে থাকা একই সরঞ্জাম তার নিজস্ব ডেটা রাখে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যাবে না।",
+  "Things you can do on your own, that make your community stronger.": "আপনি নিজে নিজে যা করতে পারেন, যা আপনার কমিউনিটিকে আরও শক্তিশালী করে।",
+  "This page is in English for now.": "এই পাতাটি আপাতত ইংরেজিতে রয়েছে।",
+  "This page is newer in English.": "এই পাতাটি ইংরেজিতে আরও নতুন।",
+  "This screen stopped working": "এই স্ক্রিনটি কাজ করা বন্ধ করে দিয়েছে",
+  "This tool didn't load": "এই সরঞ্জামটি লোড হয়নি",
+  "This tool isn't in this version of the app": "এই সরঞ্জামটি অ্যাপের এই সংস্করণে নেই",
+  "What this tool keeps is safe. Go back and open it again.": "এই সরঞ্জাম যা সংরক্ষণ করে তা নিরাপদ রয়েছে। পেছনে যান এবং এটি আবার খুলুন।",
+  "What you have": "আপনার যা আছে",
+  "Where it is kept": "এটি যেখানে রাখা হয়",
+  "Withdraw request": "অনুরোধ প্রত্যাহার করুন",
+  "Yes, remove it": "হ্যাঁ, এটি সরিয়ে ফেলুন",
+  "for {n} day|for {n} days": {
+    "one": "{n} দিনের জন্য",
+    "other": "{n} দিনের জন্য"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} সপ্তাহের জন্য",
+    "other": "{n} সপ্তাহের জন্য"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} দিন",
+    "other": "{n} দিন"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} মাস",
+    "other": "{n} মাস"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} সপ্তাহ",
+    "other": "{n} সপ্তাহ"
+  },
+  "📦 Ask to borrow": "📦 ধার নেওয়ার অনুরোধ করুন",
+  "Asked to join": "যোগ দেওয়ার অনুরোধ করেছেন",
+  "Invited": "আমন্ত্রিত",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "স্বাগতম। প্রথম দিন থেকেই আপনি ব্রাউজ করতে, বাণিজ্য করতে, ক্রেডিট গ্রহণ করতে এবং অন্যদের আমন্ত্রণ জানাতে পারেন — আর আপনার ক্রেডিট সীমা ইতিমধ্যেই উন্মুক্ত।",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} আস্থা থেকে",
+    "other": "{n} আস্থা থেকে"
+  },
+  "{name}, already in the group": "{name}, ইতোমধ্যে গ্রুপে আছেন",
+  "{name}, already invited": "{name}, ইতোমধ্যে আমন্ত্রিত",
+  "{name}, asked to join": "{name}, যোগ দেওয়ার অনুরোধ করেছেন"
 }

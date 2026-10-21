@@ -3,7 +3,7 @@ slug: trust-badges
 title: Lencana percaya
 summary: Pendatang Baru, Warga, Pengelola, dan Tetua. Artinya, dan mengapa lencana tidak membuka hak istimewa.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: d954cfcd237a4685
+source-hash: a6cc3bb74fc395bb
 ---
 
 ## Apa itu lencana percaya
@@ -17,7 +17,7 @@ Lencana percayamu menunjukkan berapa banyak kepercayaan yang telah kamu bangun:
 
 Anggota yang belum pernah bertransaksi menampilkan **PENDIRI** pada postingan mereka.
 
-Kepercayaan berasal dari jaminan saat kamu bergabung, dari transaksi yang telah selesai, dan dari kepercayaan yang diberikan oleh admin. Di komunitas yang mengonfirmasi anggotanya, batas kredit yang didapatkan anggota terkonfirmasi juga ikut dihitung.
+Kepercayaan berasal dari jaminan saat kamu bergabung, dari transaksi yang telah selesai, dan dari kepercayaan yang diberikan oleh admin. Di komunitas yang mengonfirmasi anggotanya, menjadi anggota terkonfirmasi memberimu batas kredit yang lebih tinggi, bukan lencana yang lebih tinggi: lencanamu hanya menghitung apa yang telah kamu lakukan, jadi lencana tersebut tidak pernah menunjukkan bahwa kamu telah dikonfirmasi.
 
 ## Lencana bukan izin
 

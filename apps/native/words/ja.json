@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ja",
     "name": "Japanese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, settings and trust top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "豆",
@@ -5653,5 +5653,114 @@
   "Location unavailable": "位置情報を利用できません",
   "Tap the map to place the pin instead.": "代わりに地図をタップしてピンを配置してください。",
   "Photo not added": "写真が追加されませんでした",
-  "Could not open your photos.": "写真を開くことができませんでした。"
+  "Could not open your photos.": "写真を開くことができませんでした。",
+  "A few examples to start from, and a guide.": "参考となるいくつかの例とガイド。",
+  "A fixed number of Beans": "固定の豆",
+  "About this tool": "このツールについて",
+  "Allow notifications": "通知を許可",
+  "Ask to borrow this?": "これを借りる申請をしますか？",
+  "Asked to borrow": "借りる申請をしました",
+  "Beans per day": "1日あたりの豆",
+  "Beans per week": "1週間あたりの豆",
+  "Books: how it's going": "帳簿: 活動の状況",
+  "Fee": "利用料",
+  "Free": "無料",
+  "Free to borrow. Nothing is held: the lender says yes first.": "無料で借りられます。何も保留されません。まず貸し手が同意します。",
+  "Go on": "進む",
+  "Go on to post": "投稿へ進む",
+  "Go straight in and add what you keep.": "すぐに始めて、管理するものを追加しましょう。",
+  "I already do this": "すでに実践している",
+  "I already do this: go straight in and add what you keep.": "すでに実践している: すぐに始めて、管理するものを追加しましょう。",
+  "I'm starting out": "これから始める",
+  "I'm starting out: a few examples to start from, and a guide.": "これから始める: 参考となるいくつかの例とガイド。",
+  "It shows in the Market as an Offer.": "市場に「提供」として表示されます。",
+  "Keep a private copy on your community's server": "コミュニティのサーバーに非公開のコピーを保存",
+  "Kept on this phone only. Nothing in it leaves this phone.": "この端末にのみ保存されます。端末の外に送信されることはありません。",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "この端末に保存され、コミュニティのサーバーに非公開のコピーが保持されます。アプリを通じてあなただけが閲覧できます。そのサーバー上のあらゆるものと同様に、管理者は閲覧できる可能性があります。",
+  "List it in the Market": "市場に掲載",
+  "More tools": "その他のツール",
+  "Next you check it and tap Post. Nothing is posted before that.": "次に内容を確認して「投稿」をタップします。それまでは何も投稿されません。",
+  "No thanks": "結構です",
+  "No tools here yet. They come with updates of the app.": "ここにはまだツールがありません。アプリのアップデートとともに追加されます。",
+  "Nothing is held until the lender says yes.": "貸し手が同意するまで何も保留されません。",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "貸し手が同意するまで何も保留されません。同意後、利用料は一時的なトラストウォレットに預託され、返却されると貸し手はコモンズプール手数料1.5%{owned}を差し引いた額を受け取ります。",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "この端末でBeanPoolの通知がオフになっているため、リマインダーを表示できません。",
+  "Open {tool}": "{tool}を開く",
+  "Options for {tool}": "{tool}のオプション",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "このツールをホームに追加しますか？保存しているものがひと目でわかります。",
+  "Read in English": "英語で読む",
+  "Read the guide": "ガイドを読む",
+  "Reminders": "リマインダー",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "ツールがこの端末で設定したリマインダーです。端末の外に送信されることはありません。",
+  "Remove my data from this phone": "この端末からデータを削除",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "この端末上にある、このツールのコミュニティの一覧、写真、リマインダーを削除します。他のコミュニティの同じツールにはそれぞれのデータが保持されます。この操作は取り消せません。",
+  "Replace your unfinished post?": "作成途中の投稿を置き換えますか？",
+  "Show translation": "翻訳を表示",
+  "Some examples": "いくつかの例",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "このツールで問題が発生しました。この端末に保存されているデータは安全です。",
+  "Stock: what you have": "在庫: 持っているもの",
+  "Things you can do on your own": "一人でできること",
+  "Things you can do on your own, that make your community stronger.": "一人でできて、コミュニティをより強くすること。",
+  "This page is in English for now.": "このページは現在英語のみです。",
+  "This page is newer in English.": "このページの英語版はより新しく更新されています。",
+  "This tool isn't in this version of the app": "このツールはこのバージョンのアプリには含まれていません",
+  "Tool reminders": "ツールのリマインダー",
+  "Trade: how you deal": "取引: 取引のやり方",
+  "Update": "アップデート",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "使用するにはBeanPoolをアップデートしてください。現在のバージョンは設定の最下部に表示されています。",
+  "You have an unfinished post on the map. Going on replaces it.": "マップ上に作成途中の投稿があります。進むと置き換えられます。",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "other": "この提案のためにエスクローに{credits}クレジット（{n}日分）を預託しました。"
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "other": "この提案のためにエスクローに{credits}クレジット（{n}か月分）を預託しました。"
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "other": "この提案のためにエスクローに{credits}クレジット（{n}週間分）を預託しました。"
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "このお願いに応える対価として、{credits}クレジット（{n}日分）（手数料1.5%控除後の手取り{net}）{owned}の受け取りを申請しました。"
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "このお願いに応える対価として、{credits}クレジット（{n}か月分）（手数料1.5%控除後の手取り{net}）{owned}の受け取りを申請しました。"
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "このお願いに応える対価として、{credits}クレジット（{n}週間分）（手数料1.5%控除後の手取り{net}）{owned}の受け取りを申請しました。"
+  },
+  "Your community asks for a profile photo before you post.": "このコミュニティでは、投稿する前にプロフィール写真の設定が必要です。",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "コミュニティのサーバーはまだコピーを保持できないため、現在は本端末にのみ保存されます。",
+  "for {n} day|for {n} days": {
+    "other": "{n}日間"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "{n}週間"
+  },
+  "{n} month|{n} months": {
+    "other": "{n}か月"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n}週間"
+  },
+  "📦 Ask to borrow": "📦 借りる申請",
+  "Add a community by address": "アドレスでコミュニティを追加",
+  "COMMUNITY ADDRESS": "コミュニティのアドレス",
+  "COMMUNITY NAME (OPTIONAL)": "コミュニティ名（任意）",
+  "Clear this phone's copy and download again": "この端末のコピーを消去して再ダウンロード",
+  "Community name (optional)": "コミュニティ名（任意）",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "アドレスを入力してコミュニティに接続します。端末はこのリストに保存し、そのコミュニティに切り替えます。",
+  "Have an invite code for this community?": "このコミュニティの招待コードをお持ちですか？",
+  "Invited": "招待済み",
+  "Reached at **{trust}** trust": "信用**{trust}**で到達",
+  "Reached at **{trust}** trust (up to {upTo})": "信用**{trust}**で到達（最大{upTo}）",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "このコミュニティを運営していますか？オーナーや管理者には、設定の上部に「管理」項目が表示されます。",
+  "Saved communities": "保存済みコミュニティ",
+  "Switch to this community": "このコミュニティに切り替える",
+  "Switch, forget or refresh the communities on this phone": "この端末のコミュニティの切り替え、削除、更新",
+  "Switching...": "切り替え中...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "この端末が参加しているコミュニティです。鍵と12個の単語はどれでも同じです。利用するには目的のコミュニティに切り替えてください。",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "ようこそ。初日から閲覧、取引、クレジットの受け取り、他の人の招待ができます — 信用枠はすでに開設されています。",
+  "from {n} trust|from {n} trust": {
+    "other": "信用{n}から"
+  },
+  "{name}, already invited": "{name}（招待済み）"
 }

@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, lending and tools 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "콩",
@@ -5653,5 +5653,114 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "노드가 실행되면 설정 앱에서 커뮤니티 이름을 짓고 첫 멤버들을 초대하세요. 그 멤버들이 다른 사람들을 초대하게 돼요. 거기서 '위치 공개'를 켜면 소식을 받기로 한 근처 사람들에게 알림이 가요.",
   "How to run a node, on beanpool.org": "노드 운영 방법 (beanpool.org)",
   "Copy my community's details": "내 커뮤니티 정보 복사",
-  "Copied. Paste them into your node's settings app.": "복사되었어요. 노드의 설정 앱에 붙여넣으세요."
+  "Copied. Paste them into your node's settings app.": "복사되었어요. 노드의 설정 앱에 붙여넣으세요.",
+  "A few examples to start from, and a guide.": "시작할 때 참고할 몇 가지 예시와 안내서예요.",
+  "A fixed number of Beans": "고정된 콩 수량",
+  "About this tool": "이 도구 정보",
+  "Allow notifications": "알림 허용",
+  "Ask to borrow this?": "대여를 요청할까요?",
+  "Asked to borrow": "대여 요청함",
+  "Beans per day": "하루당 콩",
+  "Beans per week": "주당 콩",
+  "Books: how it's going": "장부: 진행 상황",
+  "Fee": "이용료",
+  "Free": "무료",
+  "Free to borrow. Nothing is held: the lender says yes first.": "무료 대여예요. 아무것도 예치되지 않으며, 빌려주는 사람이 먼저 수락해야 해요.",
+  "Go on": "계속 진행",
+  "Go on to post": "게시글 작성으로 이동",
+  "Go straight in and add what you keep.": "바로 시작해서 관리하는 항목을 추가하세요.",
+  "I already do this": "이미 이렇게 하고 있어요",
+  "I already do this: go straight in and add what you keep.": "이미 이렇게 하고 있어요: 바로 시작해서 관리하는 항목을 추가하세요.",
+  "I'm starting out": "처음 시작해요",
+  "I'm starting out: a few examples to start from, and a guide.": "처음 시작해요: 시작할 때 참고할 몇 가지 예시와 안내서예요.",
+  "It shows in the Market as an Offer.": "장터에 제공 글로 표시돼요.",
+  "Keep a private copy on your community's server": "내 커뮤니티 서버에 비공개 사본 보관",
+  "Kept on this phone only. Nothing in it leaves this phone.": "이 휴대폰에만 보관돼요. 어떤 내용도 이 휴대폰 밖으로 나가지 않아요.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "이 휴대폰에 보관되며, 앱을 통해 나만 읽을 수 있는 비공개 사본이 내 커뮤니티 서버에 저장돼요. 그 서버의 모든 정보와 마찬가지로 서버 운영자는 볼 수 있어요.",
+  "List it in the Market": "장터에 등록하기",
+  "More tools": "더 많은 도구",
+  "Next you check it and tap Post. Nothing is posted before that.": "다음 단계에서 내용을 확인하고 등록을 누르세요. 그전에는 아무것도 게시되지 않아요.",
+  "No thanks": "괜찮아요",
+  "No tools here yet. They come with updates of the app.": "아직 여기에 도구가 없어요. 앱 업데이트와 함께 제공돼요.",
+  "Nothing is held until the lender says yes.": "빌려주는 사람이 수락할 때까지는 아무것도 예치되지 않아요.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "빌려주는 사람이 수락할 때까지는 아무것도 예치되지 않아요. 수락하면 대여료가 임시 신뢰 지갑에 들어가며, 물건이 반납되면 빌려준 사람은 커먼즈 풀을 지원하기 위한 거래 수수료 1.5%{owned}를 제외한 금액을 받게 돼요.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "이 휴대폰에서 BeanPool 알림이 꺼져 있어 알림을 표시할 수 없어요.",
+  "Open {tool}": "{tool} 열기",
+  "Options for {tool}": "{tool} 옵션",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "이 도구를 홈에 추가할까요? 보관 중인 항목을 한눈에 볼 수 있어요.",
+  "Read in English": "영어로 읽기",
+  "Read the guide": "안내서 읽기",
+  "Reminders": "알림",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "도구가 이 휴대폰에 설정한 알림이에요. 알림 관련 정보는 이 기기 밖으로 나가지 않아요.",
+  "Remove my data from this phone": "이 휴대폰에서 내 데이터 삭제",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "이 휴대폰에서 이 도구에 대한 이 커뮤니티의 목록, 사진, 알림을 삭제해요. 다른 커뮤니티의 동일한 도구 데이터는 그대로 유지돼요. 이는 되돌릴 수 없어요.",
+  "Replace your unfinished post?": "작성 중인 게시글을 바꿀까요?",
+  "Show translation": "번역 보기",
+  "Some examples": "몇 가지 예시",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "이 도구에서 오류가 발생했어요. 이 휴대폰에 저장된 내용은 안전해요.",
+  "Stock: what you have": "재고: 내가 가진 것",
+  "Things you can do on your own": "혼자서도 할 수 있는 일",
+  "Things you can do on your own, that make your community stronger.": "혼자서도 할 수 있고 커뮤니티를 더 튼튼하게 만드는 일이에요.",
+  "This page is in English for now.": "이 페이지는 현재 영어로만 제공돼요.",
+  "This page is newer in English.": "이 페이지는 영어 원문이 더 최신이에요.",
+  "This tool isn't in this version of the app": "현재 앱 버전에는 이 도구가 없어요",
+  "Tool reminders": "도구 알림",
+  "Trade: how you deal": "거래: 거래하는 방법",
+  "Update": "업데이트",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "이 도구를 사용하려면 BeanPool을 업데이트하세요. 현재 버전은 설정 하단에 표시돼요.",
+  "You have an unfinished post on the map. Going on replaces it.": "지도에 작성 중인 게시글이 있어요. 계속 진행하면 기존 글이 바뀌어요.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "other": "이 제공을 위해 신뢰 지갑에 {credits} 크레딧({n}일)을 예치했어요."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "other": "이 제공을 위해 신뢰 지갑에 {credits} 크레딧({n}개월)을 예치했어요."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "other": "이 제공을 위해 신뢰 지갑에 {credits} 크레딧({n}주)을 예치했어요."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "이 요청을 이행하고 {credits} 크레딧({n}일)을 받기로 요청했어요(거래 수수료 1.5% 차감 후 실지급 {net}){owned}."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "이 요청을 이행하고 {credits} 크레딧({n}개월)을 받기로 요청했어요(거래 수수료 1.5% 차감 후 실지급 {net}){owned}."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "이 요청을 이행하고 {credits} 크레딧({n}주)을 받기로 요청했어요(거래 수수료 1.5% 차감 후 실지급 {net}){owned}."
+  },
+  "Your community asks for a profile photo before you post.": "글을 올리기 전에 커뮤니티에서 프로필 사진을 요청해요.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "내 커뮤니티 서버가 아직 사본을 보관할 수 없으므로, 현재는 이 휴대폰에만 저장돼요.",
+  "for {n} day|for {n} days": {
+    "other": "{n}일 동안"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "{n}주 동안"
+  },
+  "{n} month|{n} months": {
+    "other": "{n}개월"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n}주"
+  },
+  "📦 Ask to borrow": "📦 대여 요청",
+  "Add a community by address": "주소로 커뮤니티 추가",
+  "COMMUNITY ADDRESS": "커뮤니티 주소",
+  "COMMUNITY NAME (OPTIONAL)": "커뮤니티 이름 (선택 사항)",
+  "Clear this phone's copy and download again": "이 휴대폰의 사본을 지우고 다시 다운로드",
+  "Community name (optional)": "커뮤니티 이름 (선택 사항)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "주소를 입력하여 커뮤니티에 연결하세요. 이 휴대폰의 목록에 저장되고 해당 커뮤니티로 전환돼요.",
+  "Have an invite code for this community?": "이 커뮤니티의 초대 코드가 있으신가요?",
+  "Invited": "초대됨",
+  "Reached at **{trust}** trust": "신뢰 **{trust}**에서 달성",
+  "Reached at **{trust}** trust (up to {upTo})": "신뢰 **{trust}**에서 달성 (최대 {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "이 커뮤니티를 운영하시나요? 소유자와 관리자에게는 설정 상단에 관리 항목이 보여요.",
+  "Saved communities": "저장된 커뮤니티",
+  "Switch to this community": "이 커뮤니티로 전환",
+  "Switch, forget or refresh the communities on this phone": "이 휴대폰의 커뮤니티 전환, 삭제 또는 새로고침",
+  "Switching...": "전환 중...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "이 휴대폰이 참여한 커뮤니티예요. 각 커뮤니티에서 키와 12개 단어는 동일하며, 사용할 커뮤니티로 전환해 이용하세요.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "환영합니다. 첫날부터 둘러보고, 거래하고, 크레딧을 받고, 다른 사람을 초대할 수 있어요 — 신용 한도도 이미 열려 있습니다.",
+  "from {n} trust|from {n} trust": {
+    "other": "신뢰 {n}부터"
+  },
+  "{name}, already invited": "{name}, 이미 초대됨"
 }

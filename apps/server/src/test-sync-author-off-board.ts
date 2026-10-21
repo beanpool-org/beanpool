@@ -732,7 +732,7 @@ async function main() {
         `Nell's next delta carries the orchard's listings as they are, as a keeper's phone holds them (${nellDelta.filter(r => r.authorPublicKey === shut).map(r => `${r.title} ${r.status}`).join(', ') || 'none of them'})`);
     // Binding her again with a pledge changes no one's view: nothing is stamped.
     const nellStanding = standing(shut);
-    se.adminAssignTreasuryOperator(shut, nell.pubKeyHex, 'admin', 0);
+    se.adminAssignTreasuryOperator(shut, nell.pubKeyHex, 'admin');
     assert(standing(shut) === nellStanding, `binding a keeper the orchard already has stamps nothing (${nellStanding} → ${standing(shut)})`);
 
     // And unbinds her (over HTTP): her next delta takes them off again.

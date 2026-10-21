@@ -275,7 +275,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
         setPhase(wordsDoor ? 'choose' : 'signIn');
     }
 
-    /** "Create an account with 12 secret words": the name next, while the work goes on. No sign-in, so no copy, and no lock. */
+    /** "Join with this account" (the 12 words): the name next, while the work goes on. No sign-in, so no copy, and no lock. */
     function chooseWords() {
         // The first tap at a door a link opened: the work starts now (at Join otherwise, if the key wasn't read yet).
         if (heldForTap && key) startWork(doorUrl, key.identity, 'words');
@@ -543,6 +543,7 @@ function OpenDoor({ door, thenParam, fromParam: fromRoute }: { door: DoorNode; t
                                 busy={doorWork.busy}
                                 wordsProblem={doorWork.state('words')?.phase === 'failed' ? phoneDoorLineWords(DOOR_WORK_MESSAGES.solverUnavailable) : null}
                                 signInNote={keeper.choose}
+                                account="existing"
                             />
                         </>
                     )}

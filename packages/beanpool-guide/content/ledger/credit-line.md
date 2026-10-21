@@ -45,7 +45,7 @@ The line under the bar tells you, for example "Post an offer to open your credit
 
 ## In a known community
 
-Some communities have admins who know every member by name. If yours has turned on **the known floor**, a member an admin has confirmed gets a credit line straight away: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for.
+Some communities have admins who know every member by name. A member an admin has confirmed gets a credit line straight away, **the known floor**: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for. The known floor is on in every community unless its owner switched it off.
 
 - One live Offer lets you use all of it. With no Offers, you can't use it.
 - Trust you earn by trading adds to it, up to your community's cap (2,000 Beans unless it chose more, up to 5,000).

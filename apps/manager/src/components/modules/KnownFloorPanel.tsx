@@ -130,9 +130,9 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
                     Nobody else&apos;s limit changes. Lowering it never takes Beans from anyone: a member below their new limit can still
                     receive, and can spend again once they climb back.
                 </p>
-                {door === 'open' && (
+                {door === 'members' && (
                     <p data-testid="known-floor-mixed-note" className="text-xs text-nature-300 m-0 mt-2 leading-relaxed break-words">
-                        {t('Mixed community: anyone can join; members your admins know start higher.')}
+                        {t('A mixed community: anyone a member invites can join, and members your admins confirm start with a higher limit.')}
                     </p>
                 )}
             </div>

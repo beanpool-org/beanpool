@@ -83,20 +83,20 @@ describe('KnownFloorPanel', () => {
     });
 
     describe('mixed community note', () => {
-        it('shows the note when the door lets anyone in (door is open)', async () => {
-            mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'open' } });
+        it('shows the note when the door is members (invite door)', async () => {
+            mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'members' } });
             render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
             expect(await screen.findByTestId('known-floor-mixed-note')).toHaveTextContent(
-                'Mixed community: anyone can join; members your admins know start higher.'
+                'A mixed community: anyone a member invites can join, and members your admins confirm start with a higher limit.'
             );
         });
 
-        it('hides the note when the door is members (invite only)', async () => {
-            mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'members' } });
+        it('hides the note when the door is open (global profile / no beans)', async () => {
+            mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'open' } });
             render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
             await screen.findByTestId('known-floor-panel');
             expect(screen.queryByTestId('known-floor-mixed-note')).toBeNull();
-            expect(screen.queryByText(/anyone can join/i)).toBeNull();
+            expect(screen.queryByText(/mixed community/i)).toBeNull();
         });
 
         it('hides the note when the door is admins (only admins invite)', async () => {
@@ -104,7 +104,7 @@ describe('KnownFloorPanel', () => {
             render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
             await screen.findByTestId('known-floor-panel');
             expect(screen.queryByTestId('known-floor-mixed-note')).toBeNull();
-            expect(screen.queryByText(/anyone can join/i)).toBeNull();
+            expect(screen.queryByText(/mixed community/i)).toBeNull();
         });
     });
 });

@@ -1128,13 +1128,18 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
             const wideClipped = [];
             const wideGlobeClipped = [];
             const wideSizeBad = [];
+            const desktopLinkTooShort = [];
+            const desktopLinkBeforeMinGap = [];
+            const desktopLinkShortenedAt100 = [];
+            const wideLinkTooShort = [];
+            const wideLinkBeforeMinGap = [];
 
             for (const item of items) {
-                // Wide script pass for desktop ☰ row (1024, 1080, 1200, 1280 px, 100% text)
+                // Wide script pass for desktop ☰ row (1024, 1080, 1100, 1200, 1280 px, 100% text)
                 await pWide.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
                 const hasMenu = await pWide.evaluate(() => !!document.querySelector('.nav-inner.has-menu'));
                 if (hasMenu) {
-                    for (const width of [1024, 1080, 1200, 1280]) {
+                    for (const width of [1024, 1080, 1100, 1200, 1280]) {
                         await pWide.setViewportSize({ width, height: 800 });
                         const res = await pWide.evaluate(({ isRtl }) => {
                             const cta = document.querySelector('.nav-cta');
@@ -1148,6 +1153,50 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                             const globeOff = isRtl
                                 ? (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5)
                                 : (globeR.left < -0.5 || globeR.right > window.innerWidth + 0.5);
+
+                            const navLinks = document.querySelector('.nav-inner.has-menu .nav-links');
+                            let linkResults = [];
+                            let gap = 0;
+                            let gapRem = 0;
+                            if (navLinks) {
+                                const links = Array.from(navLinks.querySelectorAll(':scope > a:not(.nav-cta)'));
+                                gap = parseFloat(window.getComputedStyle(navLinks).gap) || 0;
+                                const rootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+                                gapRem = gap / rootFontSize;
+
+                                const span = document.createElement('span');
+                                span.style.font = window.getComputedStyle(links[0] || document.body).font;
+                                span.textContent = '…';
+                                span.style.visibility = 'hidden';
+                                document.body.appendChild(span);
+                                const ellipsisWidth = span.getBoundingClientRect().width;
+                                span.remove();
+
+                                linkResults = links.map(a => {
+                                    const text = a.textContent.trim();
+                                    const isShortened = a.scrollWidth > a.clientWidth + 0.5;
+                                    let visibleChars = text.length;
+                                    if (isShortened) {
+                                        const textNode = Array.from(a.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+                                        if (textNode) {
+                                            const range = document.createRange();
+                                            const availableWidth = a.clientWidth - ellipsisWidth;
+                                            visibleChars = 0;
+                                            for (let i = 1; i <= text.length; i++) {
+                                                range.setStart(textNode, 0);
+                                                range.setEnd(textNode, i);
+                                                if (range.getBoundingClientRect().width <= availableWidth + 0.5) {
+                                                    visibleChars = i;
+                                                } else {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    return { text, isShortened, visibleChars, scrollWidth: a.scrollWidth, clientWidth: a.clientWidth };
+                                });
+                            }
+
                             return {
                                 ctaOff,
                                 globeOff,
@@ -1156,7 +1205,10 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                                 ctaHeight: ctaR.height,
                                 globeRight: globeR.right,
                                 globeLeft: globeR.left,
-                                globeHeight: globeR.height
+                                globeHeight: globeR.height,
+                                gap,
+                                gapRem,
+                                linkResults
                             };
                         }, { isRtl: item.rtl });
 
@@ -1169,6 +1221,18 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                             }
                             if (width >= 1280 && res.ctaHeight < 43.5) {
                                 wideSizeBad.push({ page: item.url, width, target: 'cta', h: res.ctaHeight });
+                            }
+                            if (res.linkResults) {
+                                for (const l of res.linkResults) {
+                                    if (l.isShortened) {
+                                        if (l.visibleChars < 4) {
+                                            wideLinkTooShort.push({ page: item.url, lang: item.lang, width, text: l.text, visibleChars: l.visibleChars });
+                                        }
+                                        if (res.gapRem > 0.36) {
+                                            wideLinkBeforeMinGap.push({ page: item.url, lang: item.lang, width, text: l.text, gapRem: res.gapRem, gapPx: res.gap });
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1232,6 +1296,74 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
                         }
                     }
 
+                    // Check desktop ☰ row text link shortening and gap behaviour at 1024-1280 px
+                    if (hasMenu) {
+                        for (const width of [1024, 1080, 1100, 1200, 1280]) {
+                            await page.setViewportSize({ width, height: 800 });
+                            const resLinks = await page.evaluate(() => {
+                                const navLinks = document.querySelector('.nav-inner.has-menu .nav-links');
+                                if (!navLinks) return null;
+                                const links = Array.from(navLinks.querySelectorAll(':scope > a:not(.nav-cta)'));
+                                const gap = parseFloat(window.getComputedStyle(navLinks).gap) || 0;
+                                const rootFontSize = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+                                const gapRem = gap / rootFontSize;
+
+                                const span = document.createElement('span');
+                                span.style.font = window.getComputedStyle(links[0] || document.body).font;
+                                span.textContent = '…';
+                                span.style.visibility = 'hidden';
+                                document.body.appendChild(span);
+                                const ellipsisWidth = span.getBoundingClientRect().width;
+                                span.remove();
+
+                                const linkResults = links.map(a => {
+                                    const text = a.textContent.trim();
+                                    const isShortened = a.scrollWidth > a.clientWidth + 0.5;
+                                    let visibleChars = text.length;
+                                    if (isShortened) {
+                                        const textNode = Array.from(a.childNodes).find(n => n.nodeType === Node.TEXT_NODE);
+                                        if (textNode) {
+                                            const range = document.createRange();
+                                            const availableWidth = a.clientWidth - ellipsisWidth;
+                                            visibleChars = 0;
+                                            for (let i = 1; i <= text.length; i++) {
+                                                range.setStart(textNode, 0);
+                                                range.setEnd(textNode, i);
+                                                if (range.getBoundingClientRect().width <= availableWidth + 0.5) {
+                                                    visibleChars = i;
+                                                } else {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    return { text, isShortened, visibleChars, scrollWidth: a.scrollWidth, clientWidth: a.clientWidth };
+                                });
+
+                                return { gap, gapRem, linkResults };
+                            });
+
+                            if (resLinks && resLinks.linkResults) {
+                                for (const l of resLinks.linkResults) {
+                                    if (scale === 1.0) {
+                                        if (l.isShortened) {
+                                            desktopLinkShortenedAt100.push({ page: item.url, lang: item.lang, width, text: l.text });
+                                        }
+                                    } else {
+                                        if (l.isShortened) {
+                                            if (l.visibleChars < 4) {
+                                                desktopLinkTooShort.push({ page: item.url, lang: item.lang, width, text: l.text, visibleChars: l.visibleChars, scrollW: l.scrollWidth, clientW: l.clientWidth });
+                                            }
+                                            if (resLinks.gapRem > 0.36) {
+                                                desktopLinkBeforeMinGap.push({ page: item.url, lang: item.lang, width, text: l.text, gapRem: resLinks.gapRem, gapPx: resLinks.gap });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Reachability at 320x568 and 360x640 (locale en-US, no banner)
                     for (const vp of [{ width: 320, height: 568 }, { width: 360, height: 640 }]) {
                         await page.setViewportSize(vp);
@@ -1262,7 +1394,20 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
             await ctx100.close();
             await ctx130.close();
             await ctxWide.close();
-            return { clipped, wrapped, phoneHeaderBad, unreachable, wideClipped, wideGlobeClipped, wideSizeBad };
+            return {
+                clipped,
+                wrapped,
+                phoneHeaderBad,
+                unreachable,
+                wideClipped,
+                wideGlobeClipped,
+                wideSizeBad,
+                desktopLinkTooShort,
+                desktopLinkBeforeMinGap,
+                desktopLinkShortenedAt100,
+                wideLinkTooShort,
+                wideLinkBeforeMinGap
+            };
         };
 
         const NUM_WORKERS = 6;
@@ -1277,6 +1422,11 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
         const allWideClipped = results.flatMap(r => r.wideClipped);
         const allWideGlobeClipped = results.flatMap(r => r.wideGlobeClipped);
         const allWideSizeBad = results.flatMap(r => r.wideSizeBad);
+        const allDesktopLinkTooShort = results.flatMap(r => r.desktopLinkTooShort);
+        const allDesktopLinkBeforeMinGap = results.flatMap(r => r.desktopLinkBeforeMinGap);
+        const allDesktopLinkShortenedAt100 = results.flatMap(r => r.desktopLinkShortenedAt100);
+        const allWideLinkTooShort = results.flatMap(r => r.wideLinkTooShort);
+        const allWideLinkBeforeMinGap = results.flatMap(r => r.wideLinkBeforeMinGap);
 
         // Banner reachability check with pt-BR locale
         const bannerUnreachable = [];
@@ -1475,11 +1625,18 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
 
         const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length
             + noMenuCtaSizeBad.length + noMenuGlobeSizeBad.length + noMenuPaddingBad.length + noMenuClipped.length + noMenuWrapped.length
-            + noMenuLinkGapBad.length + allWideClipped.length + allWideGlobeClipped.length + allWideSizeBad.length;
+            + noMenuLinkGapBad.length + allWideClipped.length + allWideGlobeClipped.length + allWideSizeBad.length
+            + allDesktopLinkTooShort.length + allDesktopLinkBeforeMinGap.length + allDesktopLinkShortenedAt100.length
+            + allWideLinkTooShort.length + allWideLinkBeforeMinGap.length;
         assert.equal(totalFailures, 0,
             `Failing counts:\n` +
             `  - Clipped CTAs: ${allClipped.length}\n` +
             `  - Wrapped CTAs: ${allWrapped.length}\n` +
+            `  - Desktop ☰ text links < 4 chars before ellipsis (130% text): ${allDesktopLinkTooShort.length}\n` +
+            `  - Desktop ☰ text links shortened before min gap (130% text): ${allDesktopLinkBeforeMinGap.length}\n` +
+            `  - Desktop ☰ text links shortened at 100% text: ${allDesktopLinkShortenedAt100.length}\n` +
+            `  - Wide-text desktop ☰ links < 4 chars before ellipsis: ${allWideLinkTooShort.length}\n` +
+            `  - Wide-text desktop ☰ links shortened before min gap: ${allWideLinkBeforeMinGap.length}\n` +
             `  - Wide-text desktop ☰ clipped CTAs: ${allWideClipped.length}\n` +
             `  - Wide-text desktop ☰ clipped 🌐 buttons: ${allWideGlobeClipped.length}\n` +
             `  - Wide-text desktop ☰ controls < 44px: ${allWideSizeBad.length}\n` +
@@ -1493,6 +1650,11 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
             `  - No-menu wrapped CTAs: ${noMenuWrapped.length}\n` +
             `  - No-menu text links closer than 12px: ${noMenuLinkGapBad.length}` +
             (noMenuLinkGapBad.length ? ` (e.g. ${noMenuLinkGapBad.slice(0, 3).map(g => `${g.page} @ ${g.width}px ${g.scale * 100}%: ${g.gap.toFixed(1)}px`).join('; ')})` : '') + `\n\n` +
+            (allDesktopLinkTooShort.length ? `Desktop ☰ <4 chars samples (130% text):\n  ` + allDesktopLinkTooShort.slice(0, 10).map(s => `${s.page} @ ${s.width}px (${s.text} -> ${s.visibleChars} chars before "…", scrollW: ${s.scrollW.toFixed(1)}, clientW: ${s.clientW.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
+            (allDesktopLinkBeforeMinGap.length ? `Desktop ☰ shortened before min gap samples (130% text):\n  ` + allDesktopLinkBeforeMinGap.slice(0, 10).map(s => `${s.page} @ ${s.width}px (${s.text}, gap: ${s.gapPx}px / ${s.gapRem}rem)`).join('\n  ') + '\n\n' : '') +
+            (allDesktopLinkShortenedAt100.length ? `Desktop ☰ shortened at 100% text samples:\n  ` + allDesktopLinkShortenedAt100.slice(0, 10).map(s => `${s.page} @ ${s.width}px (${s.text})`).join('\n  ') + '\n\n' : '') +
+            (allWideLinkTooShort.length ? `Wide-text desktop ☰ <4 chars samples:\n  ` + allWideLinkTooShort.slice(0, 10).map(s => `${s.page} @ ${s.width}px (${s.text} -> ${s.visibleChars} chars)`).join('\n  ') + '\n\n' : '') +
+            (allWideLinkBeforeMinGap.length ? `Wide-text desktop ☰ shortened before min gap samples:\n  ` + allWideLinkBeforeMinGap.slice(0, 10).map(s => `${s.page} @ ${s.width}px (${s.text}, gap: ${s.gapPx}px / ${s.gapRem}rem)`).join('\n  ') + '\n\n' : '') +
             (allWideClipped.length ? `Wide-text desktop ☰ clipped CTA samples:\n  ` + allWideClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (right: ${c.right.toFixed(1)}, left: ${c.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
             (allWideGlobeClipped.length ? `Wide-text desktop ☰ clipped 🌐 samples:\n  ` + allWideGlobeClipped.slice(0, 10).map(g => `${g.page} @ ${g.width}px (right: ${g.right.toFixed(1)}, left: ${g.left.toFixed(1)})`).join('\n  ') + '\n\n' : '') +
             (allWideSizeBad.length ? `Wide-text desktop ☰ size bad samples:\n  ` + allWideSizeBad.slice(0, 5).map(s => `${s.page} @ ${s.width}px: ${s.target} height ${s.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +

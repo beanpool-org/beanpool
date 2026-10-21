@@ -1897,8 +1897,17 @@ footer {
 }
 
 @media (max-width: 480px) {
+    .desktop-lang-menu {
+        position: static;
+    }
     .desktop-lang-menu .lang-dropdown {
+        right: 1rem;
+        left: auto;
         width: min(240px, calc(100vw - 2rem));
+    }
+    body[dir="rtl"] .desktop-lang-menu .lang-dropdown {
+        left: 1rem;
+        right: auto;
     }
 }
 /* 1023px, not 768px: below 1024 the full desktop row no longer fits on one line, so the menu takes over */
@@ -2292,6 +2301,12 @@ body[dir="rtl"] .nav-menu-panel,
 body[dir="rtl"] .desktop-lang-menu .lang-dropdown {
     right: auto;
     left: 0;
+}
+@media (max-width: 480px) {
+    body[dir="rtl"] .desktop-lang-menu .lang-dropdown {
+        left: 1rem;
+        right: auto;
+    }
 }
 body[dir="rtl"] .footer-inner {
     text-align: right;

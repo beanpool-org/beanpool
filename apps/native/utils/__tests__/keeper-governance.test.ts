@@ -33,6 +33,9 @@ describe('pending keeper changes (answers A and M)', () => {
     it('says what the change is, in beans', () => {
         expect(keeperChangeTitle(ADD)).toBe('Adding Lee as a keeper, backing 20 beans');
         expect(keeperChangeTitle({ ...ADD, pledgedBacking: 0 })).toBe('Adding Lee as a keeper');
+        // A keeper other than the lead is sent the named part only, and the words say so (no known part reads as missing).
+        expect(keeperChangeTitle({ ...ADD, namedBackingOnly: true })).toBe('Adding Lee as a keeper, with 20 beans of named backing');
+        expect(keeperChangeTitle({ ...ADD, pledgedBacking: 0, namedBackingOnly: true })).toBe('Adding Lee as a keeper');
         expect(keeperChangeTitle(REMOVE)).toBe('Removing Ana as a keeper');
         expect(keeperChangeBody(ADD)).toContain('one objection cancels it');
     });
@@ -111,7 +114,8 @@ describe('a project says leader and collaborators, never keeper (group decisions
     const P = keeperWords('bounded');
     it('confirmations, objection window and succession', () => {
         const texts = [
-            keeperChangeTitle(ADD, P), keeperChangeBody(ADD, P), keeperChangeTitle(REMOVE, P), keeperChangeBody(REMOVE, P),
+            keeperChangeTitle(ADD, P), keeperChangeTitle({ ...ADD, namedBackingOnly: true }, P), keeperChangeBody(ADD, P),
+            keeperChangeTitle(REMOVE, P), keeperChangeBody(REMOVE, P),
             stepDownConfirmText('jun', KEEPERS, P), removeKeeperConfirmText(JUNIOR, P),
             approvedApplicantText(ADD.appliesAt, NOW, P),
             successionTallyText({ votesCount: 1, noVotesCount: 0, requiredVotes: 2, totalEligible: 3 } as any, P),

@@ -3483,5 +3483,15 @@
     "one": "{n} هفته",
     "other": "{n} هفته"
   },
-  "📦 Ask to borrow": "📦 درخواست امانت"
+  "📦 Ask to borrow": "📦 درخواست امانت",
+  "Asked to join": "درخواست پیوستن داده",
+  "Invited": "دعوت‌شده",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "خوش آمدید. از روز اول می‌توانید در بازار جستجو کنید، معامله کنید، اعتبار بگیرید و دیگران را دعوت نمایید — و خط اعتباری شما از قبل باز است.",
+  "from {n} trust|from {n} trust": {
+    "one": "از {n} اعتماد",
+    "other": "از {n} اعتماد"
+  },
+  "{name}, already in the group": "{name}، از قبل در گروه است",
+  "{name}, already invited": "{name}، از قبل دعوت شده است",
+  "{name}, asked to join": "{name}، درخواست پیوستن داده است"
 }

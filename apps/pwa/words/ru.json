@@ -3723,5 +3723,17 @@
     "many": "{n} недель",
     "other": "{n} недели"
   },
-  "📦 Ask to borrow": "📦 Попросить одолжить"
+  "📦 Ask to borrow": "📦 Попросить одолжить",
+  "Asked to join": "Запрос на вступление",
+  "Invited": "Приглашён",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Добро пожаловать. С первого дня вы можете просматривать предложения, обмениваться, получать кредиты и приглашать других — а ваша кредитная линия уже открыта.",
+  "from {n} trust|from {n} trust": {
+    "one": "от {n} доверия",
+    "few": "от {n} доверия",
+    "many": "от {n} доверия",
+    "other": "от {n} доверия"
+  },
+  "{name}, already in the group": "{name}, уже в группе",
+  "{name}, already invited": "{name}, приглашение уже отправлено",
+  "{name}, asked to join": "{name}, запрос на вступление"
 }

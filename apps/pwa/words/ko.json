@@ -3363,5 +3363,14 @@
   "{n} week|{n} weeks": {
     "other": "{n}주"
   },
-  "📦 Ask to borrow": "📦 대여 요청"
+  "📦 Ask to borrow": "📦 대여 요청",
+  "Asked to join": "참여 신청함",
+  "Invited": "초대됨",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "환영합니다. 첫날부터 둘러보고, 거래하고, 크레딧을 받고, 다른 사람을 초대할 수 있어요 — 신용 한도도 이미 열려 있습니다.",
+  "from {n} trust|from {n} trust": {
+    "other": "신뢰 {n}부터"
+  },
+  "{name}, already in the group": "{name}, 이미 그룹에 참여 중",
+  "{name}, already invited": "{name}, 이미 초대됨",
+  "{name}, asked to join": "{name}, 참여 신청함"
 }

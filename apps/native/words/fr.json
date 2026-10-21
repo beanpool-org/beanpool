@@ -5975,5 +5975,27 @@
     "one": "{n} semaine",
     "other": "{n} semaines"
   },
-  "📦 Ask to borrow": "📦 Demander à emprunter"
+  "📦 Ask to borrow": "📦 Demander à emprunter",
+  "Add a community by address": "Ajouter une communauté par adresse",
+  "COMMUNITY ADDRESS": "ADRESSE DE LA COMMUNAUTÉ",
+  "COMMUNITY NAME (OPTIONAL)": "NOM DE LA COMMUNAUTÉ (FACULTATIF)",
+  "Clear this phone's copy and download again": "Effacer la copie de ce téléphone et retélécharger",
+  "Community name (optional)": "Nom de la communauté (facultatif)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Connectez-vous à une communauté en saisissant son adresse. Votre téléphone l'enregistrera dans cette liste et basculera vers elle.",
+  "Have an invite code for this community?": "Vous avez un code d'invitation pour cette communauté ?",
+  "Invited": "Invité",
+  "Reached at **{trust}** trust": "Atteint à **{trust}** de confiance",
+  "Reached at **{trust}** trust (up to {upTo})": "Atteint à **{trust}** de confiance (jusqu'à {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Vous gérez cette communauté ? Les propriétaires et administrateurs voient une ligne Gérer en haut des Paramètres.",
+  "Saved communities": "Communautés enregistrées",
+  "Switch to this community": "Basculer vers cette communauté",
+  "Switch, forget or refresh the communities on this phone": "Basculer, oublier ou actualiser les communautés sur ce téléphone",
+  "Switching...": "Bascule en cours...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Les communautés que ce téléphone a rejointes. Votre clé et vos 12 mots sont identiques dans chacune ; basculez vers l'une d'elles pour l'utiliser.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Bienvenue. Dès le premier jour, vous pouvez explorer, échanger, recevoir des crédits et inviter des proches — et votre ligne de crédit est déjà ouverte.",
+  "from {n} trust|from {n} trust": {
+    "one": "dès {n} de confiance",
+    "other": "dès {n} de confiance"
+  },
+  "{name}, already invited": "{name}, déjà invité"
 }

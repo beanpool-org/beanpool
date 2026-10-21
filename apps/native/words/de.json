@@ -5975,5 +5975,27 @@
     "one": "{n} Woche",
     "other": "{n} Wochen"
   },
-  "📦 Ask to borrow": "📦 Ausleihe anfragen"
+  "📦 Ask to borrow": "📦 Ausleihe anfragen",
+  "Add a community by address": "Community per Adresse hinzufügen",
+  "Clear this phone's copy and download again": "Kopie dieses Telefons löschen und erneut herunterladen",
+  "COMMUNITY ADDRESS": "COMMUNITY-ADRESSE",
+  "COMMUNITY NAME (OPTIONAL)": "COMMUNITY-NAME (OPTIONAL)",
+  "Community name (optional)": "Community-Name (optional)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Verbinde dich mit einer Community, indem du ihre Adresse eingibst. Dein Telefon speichert sie in dieser Liste und wechselt zu ihr.",
+  "Have an invite code for this community?": "Hast du einen Einladungscode für diese Community?",
+  "Invited": "Eingeladen",
+  "Reached at **{trust}** trust": "Erreicht bei **{trust}** Vertrauen",
+  "Reached at **{trust}** trust (up to {upTo})": "Erreicht bei **{trust}** Vertrauen (bis zu {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Betreibst du diese Community? Eigentümer und Admins sehen eine Zeile „Verwalten“ oben in den Einstellungen.",
+  "Saved communities": "Gespeicherte Communities",
+  "Switch to this community": "Zu dieser Community wechseln",
+  "Switch, forget or refresh the communities on this phone": "Communities auf diesem Telefon wechseln, vergessen oder aktualisieren",
+  "Switching...": "Wird gewechselt...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Die Communities, denen dieses Telefon beigetreten ist. Dein Schlüssel und deine 12 Wörter sind in jeder dieselben; wechsle zu einer, um sie zu nutzen.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Willkommen. Ab Tag eins kannst du stöbern, handeln, Guthaben empfangen und andere einladen – und dein Kreditrahmen ist bereits eröffnet.",
+  "from {n} trust|from {n} trust": {
+    "one": "ab {n} Vertrauen",
+    "other": "ab {n} Vertrauen"
+  },
+  "{name}, already invited": "{name}, bereits eingeladen"
 }

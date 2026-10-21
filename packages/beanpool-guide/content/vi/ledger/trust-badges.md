@@ -3,7 +3,7 @@ slug: trust-badges
 title: Huy hiệu tin cậy
 summary: Người mới, Cư dân, Quản lý và Trưởng bối. Ý nghĩa của chúng và lý do chúng không mở khóa quyền hạn nào.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: d954cfcd237a4685
+source-hash: a6cc3bb74fc395bb
 ---
 
 ## Huy hiệu tin cậy là gì
@@ -17,7 +17,7 @@ Huy hiệu tin cậy thể hiện mức độ tin cậy bạn đã gây dựng �
 
 Thành viên chưa từng giao dịch sẽ hiển thị nhãn **Sáng lập** trên các bài đăng của họ.
 
-Điểm tin cậy đến từ sự bảo lãnh khi bạn tham gia, từ các giao dịch đã hoàn tất, và từ sự tin cậy do quản trị viên cấp. Trong cộng đồng có xác nhận thành viên, hạn mức tín dụng mà một thành viên được xác nhận nhận được cũng được tính vào.
+Điểm tin cậy đến từ sự bảo lãnh khi bạn tham gia, từ các giao dịch đã hoàn tất, và từ sự tin cậy do quản trị viên cấp. Trong một cộng đồng có xác nhận thành viên, việc được xác nhận mang lại cho bạn hạn mức tín dụng cao hơn chứ không phải huy hiệu cao hơn: huy hiệu của bạn chỉ tính những gì bạn đã làm, vì vậy nó không bao giờ hiển thị rằng bạn đã được xác nhận.
 
 ## Chúng không khóa quyền hạn nào
 

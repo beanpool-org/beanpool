@@ -3,7 +3,7 @@ slug: how-it-works
 title: Comment marche BeanPool
 summary: Haricots, échanges, offres et demandes, et crédit, en mots simples.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Les haricots
@@ -16,7 +16,7 @@ Un repère simple : 40 haricots représentent environ une heure de temps donnée
 
 ## Offres et Demandes
 
-Une **Offre** est quelque chose que vous pouvez faire ou donner : du pain, un trajet en voiture, une heure de jardinage, une réparation.
+Une **Offre** est quelque chose que vous pouvez faire ou donner : du pain, un trajet, une heure de jardinage, une réparation.
 
 Une **Demande** est quelque chose que vous recherchez.
 
@@ -70,13 +70,13 @@ Certaines communautés confirment l'identité de leurs membres. Là-bas, un memb
 
 ## Badges de mérite
 
-Votre confiance prend la forme d'un badge. Les badges sont Arrivant, Résident, Pilier et Doyen. La confiance derrière votre badge additionne trois éléments : le point de départ d'un parrainage, la confiance gagnée en échangeant et toute confiance accordée par un administrateur. Un administrateur peut donner un badge directement à un membre, sans échanges. Dans une communauté qui confirme ses membres, la ligne de crédit obtenue par un membre confirmé compte également.
+Votre confiance prend la forme d'un badge. Les badges sont Arrivant, Résident, Pilier et Doyen. La confiance derrière votre badge additionne trois éléments : le point de départ d'un parrainage, la confiance gagnée en échangeant et toute confiance accordée par un administrateur. Un administrateur peut donner un badge directement à un membre, sans échanges. Dans une communauté qui confirme ses membres, un membre confirmé bénéficie d'une limite de crédit plus élevée, pas d'un badge plus élevé : son badge ne compte que ce qu'il a accompli.
 
-- Résident à partir de 200 de confiance.
-- Pilier à partir de 600 de confiance.
-- Doyen à partir de 1 400 de confiance.
+- Résident dès 200 de confiance.
+- Pilier dès 600 de confiance.
+- Doyen dès 1 400 de confiance.
 
-Un badge est une reconnaissance, rien de plus. Il ne bloque rien. Tout le monde peut échanger, inviter et voter, quel que soit son badge.
+Un badge est une reconnaissance, rien de plus. Il ne débloque rien. Tout le monde peut échanger, inviter et voter, quel que soit son badge.
 
 ## Frais et les Communs
 

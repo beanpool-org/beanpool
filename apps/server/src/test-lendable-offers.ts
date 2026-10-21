@@ -13,7 +13,8 @@
  *      every reader; a second request and a one-step accept are refused in the loan's words.
  *   4. A fee per day × days, with 1.5% to the Commons; a fee per day for the days the borrower confirms; one fee pays what
  *      it holds whatever days are confirmed.
- *   5. Two borrowers race for one lendable: one wins, the other is told it's out; those waiting are closed and told.
+ *   5. Two borrowers ask for one lendable: the lender's yes to one closes the other's request and tells them it's out; a
+ *      waiting borrower who tries to take it in one step changes nothing; two yeses at once lend it once.
  *   6. A loan longer than the lender's longest, or shorter than a day, is refused.
  *   7. A cancel, by either side, puts it back; so does each ruling (release, refund, split); a pruned lender's stays down.
  *   8. The terms hold while it is asked for or out; they change once it's back; lending turned off is a one-off Offer.
@@ -24,7 +25,11 @@
  *  12. The visitor's shape: the terms, never when it's due back.
  *  13. A lendable out on loan is still one of its lender's live Offers (the offer covenant): a lender whose only Offer is
  *      out keeps their credit line and can spend within it; a one-off Offer taken by its deal stops counting, as before.
- *  14. A standby copy carries the four columns, by plain assignment.
+ *  14. Ask first (Marty, 2026-10-21): a one-step accept of a lendable Offer, Free or priced, from any app or the API, is
+ *      refused in plain words with a code before anything is held, and the Offer stays on the board; the ask still works.
+ *      A member the lender has blocked asks as anyone does: their request waits, the lender is not pushed, and nothing they
+ *      are sent says "blocked". An ordinary Offer, one-off or repeatable, is still taken in one step.
+ *  15. A standby copy carries the four columns, by plain assignment.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-lendable-offers.ts
  */
@@ -44,7 +49,7 @@ import {
 import { startHttpsServer } from './https-server.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
-import { LOAN_OUT_ERROR, LOAN_TOO_SHORT_ERROR, loanTooLongError } from './engine/escrow.js';
+import { LEND_ASK_FIRST_CODE, LEND_ASK_FIRST_ERROR, LOAN_OUT_ERROR, LOAN_TOO_SHORT_ERROR, loanTooLongError } from './engine/escrow.js';
 import { LEND_OFFERS_ONLY, LEND_PRICE_TYPE_REFUSED, LEND_TERMS_FROZEN, PRICE_FROZEN_ERROR } from './engine/posts.js';
 import {
     LENDABLE_NOT_A_FLAG, LEND_MAX_DAYS_REFUSED, REPLACEMENT_VALUE_NOT_WORDS, REPLACEMENT_VALUE_TOO_LONG,
@@ -393,20 +398,29 @@ async function main(): Promise<void> {
     const t5b = pushMark();
     const bobTakes = await take(bob, wheelbarrow, 2);
     await settle();
-    assert(bobTakes.status === 200 && txRow(waitC.body.transaction.id).status === 'rejected' && txRow(waitB.body.transaction.id).status === 'rejected'
+    assert(bobTakes.status === 409 && bobTakes.body?.code === LEND_ASK_FIRST_CODE && backOnBoard(wheelbarrow)
+        && txRow(waitC.body.transaction.id).status === 'requested' && txRow(waitB.body.transaction.id).status === 'requested'
+        && !toldSince(cy, t5b).some(OUT_ON_LOAN('Wheelbarrow')) && !toldSince(dave, t5b).some(n => n.title === '🛒 Offer Accepted'),
+        `Bob, who is waiting, tries to take it in one step: refused, and nothing changes: both requests wait, nobody is told (${brief(bobTakes)})`);
+    const yesBob = await agree(dave, waitB.body.transaction.id);
+    await settle();
+    assert(yesBob.status === 200 && txRow(waitB.body.transaction.id).status === 'pending' && txRow(waitC.body.transaction.id).status === 'rejected'
         && toldSince(cy, t5b).filter(OUT_ON_LOAN('Wheelbarrow')).length === 1 && !toldSince(bob, t5b).some(OUT_ON_LOAN('Wheelbarrow')),
-        `Bob takes it in one step: Cy, who was waiting, is told it's out; Bob, whose own request it closes, isn't (${brief(bobTakes)})`);
-    await returned(bob, bobTakes.body.transaction.id);
+        `Dave says yes to Bob: Cy, who was waiting, is told it's out; Bob, whose request it is, isn't (${brief(yesBob)})`);
+    await returned(bob, waitB.body.transaction.id);
     assert(backOnBoard(wheelbarrow), 'back again');
     const r5 = { bob: bal(bob.pk), cy: bal(cy.pk) };
-    const raced = await Promise.all([take(bob, ladder, 2), take(cy, ladder, 2)]);
+    const raceB = await ask(bob, ladder, 2);
+    const raceC = await ask(cy, ladder, 2);
+    const raced = await Promise.all([agree(dave, raceB.body.transaction.id), agree(dave, raceC.body.transaction.id)]);
     const winners = raced.filter(r => r.status === 200);
     const losers = raced.filter(r => r.status !== 200);
     const winner = winners[0]?.body?.transaction?.buyerPublicKey as string | undefined;
+    const loserAsk = winner === bob.pk ? raceC : raceB;
     const openDeals = (db.prepare("SELECT COUNT(*) AS n FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'").get(ladder) as { n: number }).n;
-    assert(winners.length === 1 && losers.length === 1 && losers[0].status === 409 && losers[0].body?.error === LOAN_OUT_ERROR
-        && openDeals === 1 && postRow(ladder).accepted_by === winner,
-        `Bob and Cy take the ladder at once: one gets it, the other is told it's out (${raced.map(brief).join(' / ')})`);
+    assert(raceB.status === 200 && raceC.status === 200 && winners.length === 1 && losers.length === 1 && losers[0].status === 400
+        && txRow(loserAsk.body.transaction.id).status === 'rejected' && openDeals === 1 && postRow(ladder).accepted_by === winner,
+        `Dave says yes to Bob and Cy at once: one gets the ladder, the other's request was closed by the first yes (${raced.map(brief).join(' / ')})`);
     const loserPk = winner === bob.pk ? cy.pk : bob.pk;
     assert(bal(winner!) === r4((winner === bob.pk ? r5.bob : r5.cy) - 10) && bal(loserPk) === (loserPk === bob.pk ? r5.bob : r5.cy),
         'only the winner\'s 10 Beans are held');
@@ -422,8 +436,10 @@ async function main(): Promise<void> {
     const weeks = await ask(alice, tent, 2);
     const oneWeek = await ask(alice, tent, 1);
     const noDays = await ask(cy, drill);
-    assert(tooLong.status === 400 && tooLong.body?.error === loanTooLongError(7) && tooLongTake.status === 400 && tooLongTake.body?.error === loanTooLongError(7),
-        `8 days of a drill lent for up to 7 is refused, asked or taken (${brief(tooLong)})`);
+    assert(tooLong.status === 400 && tooLong.body?.error === loanTooLongError(7),
+        `8 days of a drill lent for up to 7 is refused when asked for (${brief(tooLong)})`);
+    assert(tooLongTake.status === 409 && tooLongTake.body?.code === LEND_ASK_FIRST_CODE,
+        `taken in one step, it is refused before its days are read: a loan is asked for (${brief(tooLongTake)})`);
     assert(tooShort.status === 400 && tooShort.body?.error === LOAN_TOO_SHORT_ERROR, `half a day is refused (${brief(tooShort)})`);
     assert(weeks.status === 400 && weeks.body?.error === loanTooLongError(7) && oneWeek.status === 200 && oneWeek.body.transaction.credits === 7,
         `2 weeks of a tent lent for up to 7 days is refused; 1 week is 7 Beans (${brief(weeks)} / ${brief(oneWeek)})`);
@@ -596,16 +612,16 @@ async function main(): Promise<void> {
     const listed = getBalance(fen.pk);
     assert(postRow(fenLadder)?.lendable === 1 && listed.liveOffers === 1 && listed.usableFloor === -100 && hasLiveOffer(fen.pk),
         `Fen's only Offer is a Free ladder to lend: one live Offer, a credit line of 100 (${JSON.stringify({ live: listed.liveOffers, usable: listed.usableFloor })})`);
-    const fenLoan = await take(cy, fenLadder);
+    const fenLoan = await lend(fen, cy, fenLadder);
     const lent = getBalance(fen.pk);
-    assert(fenLoan.status === 200 && postRow(fenLadder).status === 'pending' && lent.liveOffers === 1 && lent.usableFloor === -100 && hasLiveOffer(fen.pk),
-        `Cy takes the ladder in one step: it is out, and still Fen's live Offer, so Fen keeps the line (${brief(fenLoan)}; ${JSON.stringify({ live: lent.liveOffers, usable: lent.usableFloor })})`);
+    assert(postRow(fenLadder).status === 'pending' && postRow(fenLadder).accepted_by === cy.pk && lent.liveOffers === 1 && lent.usableFloor === -100 && hasLiveOffer(fen.pk),
+        `Cy borrows the ladder (asked, and Fen says yes): it is out, and still Fen's live Offer, so Fen keeps the line (${JSON.stringify({ live: lent.liveOffers, usable: lent.usableFloor })})`);
     const hedge = (await offer(alice, { title: 'Hedge trimming', credits: 5 })).body?.post?.id as string;
     const spent = await take(fen, hedge);
     assert(spent.status === 200 && bal(fen.pk) === -5,
         `while it is out, Fen spends within the line: 5 Beans held for Alice's hedge trimming (${brief(spent)}; balance ${bal(fen.pk)})`);
     ledgerAddsUp('a lender spending on credit while their only Offer is out');
-    const fenBack = await returned(cy, fenLoan.body?.transaction?.id);
+    const fenBack = await returned(cy, fenLoan);
     assert(fenBack.status === 200 && backOnBoard(fenLadder) && getBalance(fen.pk).liveOffers === 1,
         `Cy returns it: back on the board, still one live Offer (${brief(fenBack)})`);
     await callOff(fen, spent.body?.transaction?.id);
@@ -618,8 +634,88 @@ async function main(): Promise<void> {
     await callOff(cy, bikeTaken.body?.transaction?.id);
     ledgerAddsUp('the offer covenant');
 
-    // ── 14. A standby copy ───────────────────────────────────────────────────────────────────────────────────────────
-    console.log('\n— 14. A standby copy');
+    // ── 14. Ask first ────────────────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n— 14. Ask first');
+    const gil = makeMember('Gil', 100);      // lends
+    const hal = makeMember('Hal', 100);
+    const ivy = makeMember('Ivy', 100);      // blocked by Gil
+    const saw = (await offer(gil, { title: 'Hand saw', lendable: true })).body?.post?.id as string;
+    const poleSaw = (await offer(gil, { title: 'Pole saw', lendable: true, credits: 8 })).body?.post?.id as string;
+    const mower = (await offer(gil, { title: 'Lawn mower', lendable: true, credits: 6, priceType: 'daily', lendMaxDays: 5 })).body?.post?.id as string;
+    const dealsOn = (postId: string): number => (db.prepare('SELECT COUNT(*) AS n FROM marketplace_transactions WHERE post_id = ?').get(postId) as { n: number }).n;
+    const escrows = (): number => (db.prepare("SELECT COUNT(*) AS n FROM accounts WHERE public_key LIKE 'escrow_%'").get() as { n: number }).n;
+    const askFirst = (r: { status: number; body: any }) => r.status === 409 && r.body?.error === LEND_ASK_FIRST_ERROR && r.body?.code === LEND_ASK_FIRST_CODE;
+    assert(!!saw && !!poleSaw && !!mower && backOnBoard(saw) && backOnBoard(poleSaw) && backOnBoard(mower), 'Gil lends a Free saw, a pole saw for 8 Beans and a mower at 6 Beans a day');
+
+    const e14 = escrows();
+    const b14 = { gil: bal(gil.pk), hal: bal(hal.pk), cy: bal(cy.pk), commons: commons() };
+    const t14 = pushMark();
+    const freeTake = await take(hal, saw, 2);
+    const freeNoDays = await take(hal, saw);
+    await settle();
+    assert(askFirst(freeTake) && askFirst(freeNoDays),
+        `Hal takes the Free saw in one step, with days or without (an app that predates lending): refused, in plain words with a code (${brief(freeTake)} / ${brief(freeNoDays)})`);
+    assert(backOnBoard(saw) && dealsOn(saw) === 0 && escrows() === e14 && toldSince(gil, t14).length === 0,
+        'nothing is held, no deal is opened, the saw is still on the board, and Gil is not pushed');
+    const pricedTake = await take(hal, mower, 2);
+    const oneFeeTake = await take(hal, poleSaw);
+    const bothAtOnce = await Promise.all([take(hal, poleSaw), take(cy, poleSaw)]);
+    assert(askFirst(pricedTake) && askFirst(oneFeeTake) && bothAtOnce.every(askFirst),
+        `a priced one is refused too, per day or one fee, and two takes at once are both refused (${[pricedTake, oneFeeTake, ...bothAtOnce].map(brief).join(' / ')})`);
+    assert(bal(hal.pk) === b14.hal && bal(cy.pk) === b14.cy && bal(gil.pk) === b14.gil && commons() === b14.commons
+        && dealsOn(mower) === 0 && dealsOn(poleSaw) === 0 && escrows() === e14 && backOnBoard(mower) && backOnBoard(poleSaw),
+        'no balance moves, no deal or escrow is opened, and both are still on the board');
+    ledgerAddsUp('one-step accepts of lendable Offers refused');
+
+    const t14b = pushMark();
+    const asked14 = await ask(hal, mower, 2);
+    await settle();
+    assert(asked14.status === 200 && asked14.body.transaction.status === 'requested' && asked14.body.transaction.credits === 12 && bal(hal.pk) === b14.hal
+        && toldSince(gil, t14b).filter(n => n.title === '📩 New Request').length === 1,
+        `Hal asks to borrow the mower for 2 days: a request for 12 Beans, nothing held yet, and Gil is pushed (${brief(asked14)})`);
+    const yes14 = await agree(gil, asked14.body.transaction.id);
+    assert(yes14.status === 200 && postRow(mower).status === 'pending' && postRow(mower).accepted_by === hal.pk && bal(hal.pk) === r4(b14.hal - 12),
+        `Gil says yes: the mower is out to Hal, and his 12 Beans are held (${brief(yes14)})`);
+    const back14 = await returned(hal, asked14.body.transaction.id);
+    assert(back14.status === 200 && backOnBoard(mower) && bal(gil.pk) === r4(b14.gil + 12 - 0.18) && commons() === r4(b14.commons + 0.18),
+        `returned: Gil is paid 12 Beans less 1.5% to the Commons, and the mower is back on the board (${brief(back14)})`);
+    ledgerAddsUp('a loan asked for and agreed');
+
+    const blocks = await signed('/api/blocks', gil, { targetPubkey: ivy.pk });
+    assert(blocks.status === 200, `Gil blocks Ivy (${brief(blocks)})`);
+    const b14i = bal(ivy.pk);
+    const t14c = pushMark();
+    const ivyTakes = await take(ivy, saw, 2);
+    const ivyAsks = await ask(ivy, saw, 2);
+    await settle();
+    assert(askFirst(ivyTakes), `Ivy, whom Gil has blocked, taking the saw in one step is told what anyone is (${brief(ivyTakes)})`);
+    assert(ivyAsks.status === 200 && ivyAsks.body.transaction.status === 'requested' && txRow(ivyAsks.body.transaction.id).status === 'requested'
+        && bal(ivy.pk) === b14i && backOnBoard(saw),
+        `her request is taken as anyone's, and waits: nothing held, the saw still on the board (${brief(ivyAsks)})`);
+    assert(toldSince(gil, t14c).length === 0, `Gil is not pushed about it (${JSON.stringify(toldSince(gil, t14c))})`);
+    const ivyDeals = await signedGet(`/api/marketplace/transactions?publicKey=${ivy.pk}`, ivy);
+    const ivyRow = (Array.isArray(ivyDeals.body) ? ivyDeals.body : []).find((t: any) => t.id === ivyAsks.body.transaction.id);
+    const ivyWords = JSON.stringify([ivyTakes.body, ivyAsks.body, ivyDeals.body, toldSince(ivy, t14c)]);
+    assert(ivyRow?.status === 'requested' && !/block/i.test(ivyWords),
+        `in her deals it waits as a request, and nothing she is answered or sent says she is blocked (${ivyRow?.status})`);
+    await signed('/api/marketplace/transactions/cancel-request', ivy, { transactionId: ivyAsks.body.transaction.id, buyerPublicKey: ivy.pk });
+
+    const bread = (await offer(gil, { title: 'Sourdough loaf', credits: 4 })).body?.post?.id as string;
+    const gilJobs = (db.prepare("SELECT id FROM posts WHERE author_pubkey = ? AND title = 'Gil odd jobs'").get(gil.pk) as { id: string }).id;
+    const hb = bal(hal.pk);
+    const breadTaken = await take(hal, bread);
+    assert(breadTaken.status === 200 && breadTaken.body.transaction.status === 'pending' && bal(hal.pk) === r4(hb - 4) && postRow(bread).status === 'pending',
+        `an ordinary one-off Offer is still taken in one step: 4 Beans held, the loaf off the board (${brief(breadTaken)})`);
+    const jobsTaken = await take(hal, gilJobs);
+    assert(jobsTaken.status === 200 && jobsTaken.body.transaction.status === 'pending' && postRow(gilJobs).status === 'active' && postRow(gilJobs).repeatable === 1,
+        `and a repeatable one, which stays on the board (${brief(jobsTaken)})`);
+    await callOff(hal, breadTaken.body.transaction.id);
+    await callOff(hal, jobsTaken.body.transaction.id);
+    assert(bal(hal.pk) === hb && postRow(bread).status === 'active', 'both called off, Hal\'s Beans are back and the loaf is back on the board');
+    ledgerAddsUp('ordinary one-step accepts');
+
+    // ── 15. A standby copy ───────────────────────────────────────────────────────────────────────────────────────────
+    console.log('\n— 15. A standby copy');
     const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
     pinMainServerForTests(`/ip4/127.0.0.1/tcp/4043/p2p/${nodeId}`);

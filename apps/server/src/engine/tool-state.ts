@@ -100,6 +100,12 @@ export function readToolState(owner: string, tool: string): ToolState | null {
     return { tool, doc, updatedAt: row.updated_at, bytes: Buffer.byteLength(row.body, 'utf8') };
 }
 
+/** The deleted_at of the tombstone for this tool's copy, or null when none is kept. */
+export function toolStateDeletedAt(owner: string, tool: string): string | null {
+    assertToolId(tool);
+    return stampOf('SELECT deleted_at AS at FROM tombstones WHERE table_name = ? AND row_key = ?', TABLE, rowKey(owner, tool));
+}
+
 /** A stamp of this table: its row's, or its tombstone's, or null. */
 function stampOf(sql: string, ...args: unknown[]): string | null {
     return (db.prepare(sql).get(...args) as { at: string | null } | undefined)?.at ?? null;

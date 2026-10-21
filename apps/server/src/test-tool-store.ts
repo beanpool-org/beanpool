@@ -52,7 +52,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
-import { db } from './db/db.js';
+import { db, pruneTombstones } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit, gatewayAdmitDayBudget } from './gateway-rate-limit.js';
@@ -152,6 +152,7 @@ async function main(): Promise<void> {
     BASE = `https://localhost:${port}`;
     // Absent on a tree without it: every check that needs it fails, and the rest still run.
     const store: any = await import('./engine/tool-state.js').catch(() => null);
+    assert(typeof store?.toolStateDeletedAt === 'function', 'store exports toolStateDeletedAt');
 
     owner = newId('Olive');
     seedGenesisMember(owner.pk, 'Olive');
@@ -181,8 +182,9 @@ async function main(): Promise<void> {
     console.log('── 1. the owner\'s own copy ──');
     const feedBefore = feedCount();
     const none = await call('GET', ann, own('things'));
-    assert(none.status === 200 && none.body?.tool === 'things' && none.body?.doc === null && none.body?.updatedAt === null && none.body?.max === 65_536,
-        `none kept yet: 200, doc and updatedAt null, and the bound (${show(none)})`);
+    assert(none.status === 200 && none.body?.tool === 'things' && none.body?.doc === null && none.body?.updatedAt === null
+        && none.body?.deletedAt === null && none.body?.max === 65_536,
+        `none kept yet: 200, doc, updatedAt and deletedAt null, and the bound (${show(none)})`);
     const doc1 = { v: 1, things: [{ id: 't1', name: 'Drill', note: 'Lent to Steve since 3 Oct' }], ownerPubkey: bo.pk, unicode: 'ñ 🌱 漢' };
     const w1 = await put(ann, own('things'), doc1);
     const r1 = rowOf(ann.pk, 'things');
@@ -192,8 +194,8 @@ async function main(): Promise<void> {
     assert(!!r1 && r1.public_key === ann.pk && same(JSON.parse(r1.body), doc1),
         "stored under the signer's key, the document whole (a key inside it is the document's, never read as an identity)");
     const g1 = await call('GET', ann, own('things'));
-    assert(g1.status === 200 && same(g1.body?.doc, doc1) && g1.body?.updatedAt === r1?.updated_at && g1.body?.bytes === w1.body?.bytes,
-        `read back whole, with the same stamp (${show(g1)})`);
+    assert(g1.status === 200 && same(g1.body?.doc, doc1) && g1.body?.updatedAt === r1?.updated_at && g1.body?.deletedAt === null && g1.body?.bytes === w1.body?.bytes,
+        `read back whole, with the same stamp and deletedAt null (${show(g1)})`);
     assert(/private/.test(g1.headers.get('cache-control') ?? '') && /no-store/.test(g1.headers.get('cache-control') ?? '')
         && /no-store/.test(w1.headers.get('cache-control') ?? ''), `private and no-store (${g1.headers.get('cache-control')})`);
     const doc2 = { v: 2, things: [] };
@@ -212,7 +214,9 @@ async function main(): Promise<void> {
         `deleted (${show(d1)})`);
     assert(!!t1 && !!before && t1 >= before.updated_at, `with a tombstone no earlier than the row, so a standby deletes it too (${t1} ≥ ${before?.updated_at})`);
     const g2 = await call('GET', ann, own('things'));
-    assert(g2.status === 200 && g2.body?.doc === null && g2.body?.updatedAt === null, `gone: the read says none (${show(g2)})`);
+    assert(g2.status === 200 && g2.body?.doc === null && g2.body?.updatedAt === null && g2.body?.deletedAt === t1
+        && /private/.test(g2.headers.get('cache-control') ?? '') && /no-store/.test(g2.headers.get('cache-control') ?? ''),
+        `gone: the read says none, deletedAt matches tombstone, private and no-store (${show(g2)})`);
     const tombsBefore = tombsOf(ann.pk);
     const d2 = await call('DELETE', ann, own('things'));
     const d3 = await call('DELETE', ann, own('garden'));
@@ -220,13 +224,31 @@ async function main(): Promise<void> {
         `a delete of nothing answers removed: false and writes nothing (${show(d2)}; ${tombsOf(ann.pk)} tombstones)`);
     const w2 = await put(ann, own('things'), doc2);
     assert(w2.status === 200 && (w2.body?.updatedAt ?? '') > (tombOf(ann.pk, 'things') ?? ''), `written again after its delete, stamped after the tombstone (${w2.body?.updatedAt})`);
+    const gWrittenAgain = await call('GET', ann, own('things'));
+    assert(gWrittenAgain.status === 200 && same(gWrittenAgain.body?.doc, doc2) && gWrittenAgain.body?.deletedAt === null,
+        `written again: a copy and deletedAt: null (${show(gWrittenAgain)})`);
+
+    // pruneTombstones at 30 days + 1 ms clears the tombstone, so deletedAt answers null again
+    await put(ann, own('prune-test'), { v: 1 });
+    await call('DELETE', ann, own('prune-test'));
+    const tPrune = tombOf(ann.pk, 'prune-test');
+    const gBeforePrune = await call('GET', ann, own('prune-test'));
+    assert(gBeforePrune.status === 200 && gBeforePrune.body?.doc === null && gBeforePrune.body?.deletedAt === tPrune && typeof tPrune === 'string',
+        `deleted tool has deletedAt equal to tombstone before prune (${gBeforePrune.body?.deletedAt})`);
+    pruneTombstones(Date.now() + 30 * 86_400_000 + 1);
+    const gAfterPrune = await call('GET', ann, own('prune-test'));
+    assert(gAfterPrune.status === 200 && gAfterPrune.body?.doc === null && gAfterPrune.body?.deletedAt === null,
+        `pruneTombstones at 30 days + 1 ms: deletedAt is null (${show(gAfterPrune)})`);
     assert(feedCount() === feedBefore, 'nothing in the activity feed');
 
     // ── 2. nobody else ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. nobody else reads or changes it ──');
     const annRow = rowOf(ann.pk, 'things');
     const boRead = await call('GET', bo, own('things'));
-    assert(boRead.status === 200 && boRead.body?.doc === null, `another member reads their own, which is none (${show(boRead)})`);
+    assert(boRead.status === 200 && boRead.body?.doc === null && boRead.body?.deletedAt === null, `another member reads their own, which is none (${show(boRead)})`);
+    const boNotes = await call('GET', bo, own('notes'));
+    assert(boNotes.status === 200 && boNotes.body?.doc === null && boNotes.body?.deletedAt === null && tombOf(ann.pk, 'notes') !== null,
+        `another member never learns about Ann's deleted tool: deletedAt is null (${show(boNotes)})`);
     const boQuery = await call('GET', bo, `${own('things')}?owner=${ann.pk}&publicKey=${ann.pk}`);
     assert(boQuery.status === 200 && boQuery.body?.doc === null, `a query naming the owner reads the signer's own all the same (${show(boQuery)})`);
     const spoofs = [
@@ -266,10 +288,16 @@ async function main(): Promise<void> {
     assert(sw.status === 200 && same(JSON.parse(rowOf(shop, 'stock')?.body ?? 'null'), shopDoc) && rowOf(ann.pk, 'stock') === undefined,
         `a keeper keeps the enterprise's copy, under the enterprise's key, not her own (${show(sw)})`);
     const boKeeps = await call('GET', bo, ent(shop, 'stock'));
-    assert(boKeeps.status === 200 && same(boKeeps.body?.doc, shopDoc), `a second keeper of it reads the same copy (${show(boKeeps)})`);
+    assert(boKeeps.status === 200 && same(boKeeps.body?.doc, shopDoc) && boKeeps.body?.deletedAt === null, `a second keeper of it reads the same copy (${show(boKeeps)})`);
     const annOwn = await call('GET', ann, own('stock'));
     assert(annOwn.status === 200 && annOwn.body?.doc === null, "the keeper's own copies and the enterprise's are apart");
-    const notKeeper = [await call('GET', dee, ent(shop, 'stock')), await put(dee, ent(shop, 'stock'), { v: 9 }), await call('DELETE', dee, ent(shop, 'stock'))];
+    await put(ann, ent(shop, 'catalog'), { v: 1 });
+    const delEnt = await call('DELETE', bo, ent(shop, 'catalog'));
+    const tEnt = tombOf(shop, 'catalog');
+    const keeperGetDeleted = await call('GET', ann, ent(shop, 'catalog'));
+    assert(delEnt.status === 200 && keeperGetDeleted.status === 200 && keeperGetDeleted.body?.doc === null && keeperGetDeleted.body?.deletedAt === tEnt && typeof tEnt === 'string',
+        `an enterprise GET by a keeper answers deletedAt matching its tombstone (${keeperGetDeleted.body?.deletedAt})`);
+    const notKeeper = [await call('GET', dee, ent(shop, 'stock')), await put(dee, ent(shop, 'stock'), { v: 9 }), await call('DELETE', dee, ent(shop, 'stock')), await call('GET', dee, ent(shop, 'catalog'))];
     assert(notKeeper.every(r => r.status === 403 && /not a keeper of this enterprise/.test(r.body?.error ?? '')),
         `another member: 403, not a keeper of this enterprise (${notKeeper.map(r => r.status).join(', ')})`);
     const otherKeeper = [await call('GET', cy, ent(shop, 'stock')), await put(cy, ent(shop, 'stock'), { v: 9 }), await call('DELETE', cy, ent(shop, 'stock'))];
@@ -423,8 +451,16 @@ async function main(): Promise<void> {
         `her copies are hers on the new key, each whole (${eveBefore.length} → ${rowsOf(eveNew.pk).length})`);
     const newRead = await call('GET', eveNew, own('t2'));
     const oldRead = await call('GET', eve, own('t2'));
-    assert(newRead.status === 200 && newRead.body?.doc?.v === 'rekey', `she reads them on her new key (${show(newRead)})`);
+    assert(newRead.status === 200 && newRead.body?.doc?.v === 'rekey' && newRead.body?.deletedAt === null, `she reads them on her new key with deletedAt null (${show(newRead)})`);
     assert(oldRead.status === 403 && oldRead.body?.code === 'key_invalidated', `the old key reads nothing (${show(oldRead)})`);
+    const dEveNew = await call('DELETE', eveNew, own('t2'));
+    const tDelNew = tombOf(eveNew.pk, 't2');
+    const newReadDel = await call('GET', eveNew, own('t2'));
+    const oldReadDel = await call('GET', eve, own('t2'));
+    assert(dEveNew.status === 200 && dEveNew.body?.removed === true && newReadDel.status === 200 && newReadDel.body?.doc === null
+        && newReadDel.body?.deletedAt === tDelNew && typeof tDelNew === 'string',
+        `after a re-key the new key's GET answers deletedAt (${newReadDel.body?.deletedAt})`);
+    assert(oldReadDel.status === 403 && oldReadDel.body?.code === 'key_invalidated', `and the old key still reads nothing (${show(oldReadDel)})`);
 
     // ── 7. replication ──────────────────────────────────────────────────────────────────────────
     console.log('\n── 7. replication: a standby holds every copy ──');
@@ -473,7 +509,10 @@ async function main(): Promise<void> {
     setNodeRole('backup');
     importError = '';
     try { await importRemoteState(deltaCopy); } catch (e: any) { importError = e?.message || String(e); }
+    const sStandbyEnt = await call('GET', bo, ent(shop, 'stock'));
     setNodeRole('primary');
+    assert(sStandbyEnt.status === 200 && sStandbyEnt.body?.doc === null && sStandbyEnt.body?.deletedAt === dTomb.deletedAt && typeof dTomb.deletedAt === 'string',
+        `the standby answers the same deletedAt after the delta (${show(sStandbyEnt)})`);
     assert(importError === '' && same(everyRow(), afterMain) && rowOf(shop, 'stock') === undefined,
         `the standby follows: the new copy and the change in, the deleted one gone (${importError || `${everyRow().length} rows`})`);
 

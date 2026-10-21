@@ -2,10 +2,10 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, pwa tools top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "«{name}» bu toplulukta zaten alınmış. Başka bir ad seçin.",
@@ -3425,5 +3425,65 @@
   "Recurring listing (stays active after purchase)": "Yinelenen ilan (satın almadan sonra aktif kalır)",
   "Posting…": "Paylaşılıyor…",
   "Publish Listing": "İlanı Yayınla",
-  "Translated by machine: some words may be wrong.": "Makine çevirisi: bazı sözcükler yanlış olabilir."
+  "Translated by machine: some words may be wrong.": "Makine çevirisi: bazı sözcükler yanlış olabilir.",
+  "About this tool": "Bu araç hakkında",
+  "Ask to borrow this?": "Bunu ödünç almak istiyor musun?",
+  "Asked to borrow": "Ödünç istendi",
+  "Check your connection, then try again.": "Bağlantını kontrol et ve tekrar dene.",
+  "For example": "Örneğin",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Ödünç alması ücretsizdir. Hiçbir şey tutulmaz: önce ödünç veren evet der.",
+  "How it's going": "Gidişat",
+  "How you deal": "Nasıl anlaştığın",
+  "I already do this": "Bunu zaten yapıyorum",
+  "I'm starting out": "Yeni başlıyorum",
+  "It couldn't be removed. Try again.": "Kaldırılamadı. Tekrar dene.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Yalnızca senin için bu tarayıcıda tutulur. Hiçbir verisi bu tarayıcıdan dışarı çıkmaz ve buradan çıkış yapıldığında kaldırılır.",
+  "No tools in this version of the app yet.": "Uygulamanın bu sürümünde henüz araç yok.",
+  "Nothing is held until the lender says yes.": "Ödünç veren evet diyene kadar hiçbir şey tutulmaz.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Ödünç veren evet diyene kadar hiçbir şey tutulmaz. Ardından ücret geçici bir Emanet Cüzdanına aktarılır ve geri verildiğinde ödünç veren kişi, Ortak Alan Havuzunu finanse etmek için %1.5 işlem ücreti {owned} düşülmüş olarak bunu alır.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Ödünç veren evet diyene kadar hiçbir şey tutulmaz. Ardından {total} B bir Emanet Cüzdanına aktarılır ve geri verildiğinde ödünç veren kişi {net} B (Ortak Alan Havuzunu finanse etmek için %1.5 işlem ücreti {owned} düşülmüş olarak) alır.",
+  "On your Home": "Ana Sayfanda",
+  "Open {tool}": "{tool} aç",
+  "Options for {tool}": "{tool} seçenekleri",
+  "Read in English": "İngilizce oku",
+  "Read the guide": "Rehberi oku",
+  "Refresh the page to load the newest version your community has.": "Topluluğundaki en yeni sürümü yüklemek için sayfayı yenile.",
+  "Remove my data": "Verilerimi kaldır",
+  "Remove my data from this browser": "Verilerimi bu tarayıcıdan kaldır",
+  "Removed from this browser.": "Bu tarayıcıdan kaldırıldı.",
+  "Show translation": "Çeviriyi göster",
+  "Start": "Başla",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Bu tarayıcıdan bu topluluğun {tool} verilerini siler. Aynı aracın başka bir topluluktaki kopyası korunur. Bu işlem geri alınamaz.",
+  "Things you can do on your own, that make your community stronger.": "Kendi başına yapabileceğin ve topluluğunu güçlendiren şeyler.",
+  "This page is in English for now.": "Bu sayfa şimdilik İngilizce.",
+  "This page is newer in English.": "Bu sayfanın İngilizce hali daha yeni.",
+  "This screen stopped working": "Bu ekran çalışmayı durdurdu",
+  "This tool didn't load": "Bu araç yüklenemedi",
+  "This tool isn't in this version of the app": "Bu araç uygulamanın bu sürümünde yok",
+  "What this tool keeps is safe. Go back and open it again.": "Bu aracın tuttukları güvende. Geri dönüp tekrar aç.",
+  "What you have": "Elindekiler",
+  "Where it is kept": "Nerede tutulduğu",
+  "Withdraw request": "Talebi geri çek",
+  "Yes, remove it": "Evet, kaldır",
+  "for {n} day|for {n} days": {
+    "one": "{n} gün için",
+    "other": "{n} gün için"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} hafta için",
+    "other": "{n} hafta için"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} gün",
+    "other": "{n} gün"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} ay",
+    "other": "{n} ay"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} hafta",
+    "other": "{n} hafta"
+  },
+  "📦 Ask to borrow": "📦 Ödünç iste"
 }

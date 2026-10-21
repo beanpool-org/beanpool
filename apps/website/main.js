@@ -833,14 +833,17 @@ document.querySelectorAll('.nav-menu a').forEach(a => {
 });
 
 // ======================== LANGUAGE SELECTOR ========================
-// Keyboard accessibility: Escape closes open language menus and returns focus to the button.
+// Keyboard accessibility: Escape closes open language menus and returns focus to the button if focused within.
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         const openMenus = document.querySelectorAll('.lang-menu[open]');
         openMenus.forEach(menu => {
+            const hadFocus = menu.contains(document.activeElement);
             menu.open = false;
-            const summary = menu.querySelector('summary');
-            if (summary) summary.focus();
+            if (hadFocus) {
+                const summary = menu.querySelector('summary');
+                if (summary) summary.focus();
+            }
         });
     }
 });

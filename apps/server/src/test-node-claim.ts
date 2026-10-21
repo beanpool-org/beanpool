@@ -57,7 +57,7 @@ async function runChild(): Promise<void> {
     const { initAdminPassword } = await import('./config/local-config.js');
     const { initTls } = await import('./services/tls.js');
     const { initStateEngine } = await import('./state-engine.js');
-    const { initClaimCode } = await import('./claim-code.js');
+    const { initClaimCode, setClaimLogClockForTests } = await import('./claim-code.js');
     const { startHttpsServer } = await import('./https-server.js');
 
     await ensureGenesis();
@@ -67,7 +67,22 @@ async function runChild(): Promise<void> {
     initClaimCode();
     const port = await startHttpsServer(0);
     process.stdout.write('@@ ' + JSON.stringify({ ready: true, port }) + '\n');
-    process.stdin.on('data', () => { /* the parent only closes it */ });
+    let lineBuf = '';
+    process.stdin.on('data', (d) => {
+        lineBuf += d.toString();
+        const lines = lineBuf.split('\n');
+        lineBuf = lines.pop() ?? '';
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+                const msg = JSON.parse(line);
+                if (msg.cmd === 'clock') {
+                    setClaimLogClockForTests(typeof msg.at === 'number' ? () => msg.at : null);
+                    if (msg.id) process.stdout.write('@@ ' + JSON.stringify({ reply: msg.id, ok: true }) + '\n');
+                }
+            } catch { /* ignore non-command lines */ }
+        }
+    });
     process.stdin.on('end', () => process.exit(0));
 }
 
@@ -77,7 +92,12 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-interface Boot { port: number; output: () => string; stop: () => Promise<void> }
+interface Boot {
+    port: number;
+    output: () => string;
+    stop: () => Promise<void>;
+    send: (cmd: string, args?: Record<string, unknown>) => Promise<any>;
+}
 
 async function boot(dataDir: string, env: Record<string, string> = {}): Promise<Boot> {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -94,20 +114,57 @@ async function boot(dataDir: string, env: Record<string, string> = {}): Promise<
         env: childEnv as NodeJS.ProcessEnv, stdio: ['pipe', 'pipe', 'pipe'],
     });
     let out = '';
-    proc.stdout!.on('data', (d) => { out += d.toString(); });
+    let seq = 0;
+    const waiting = new Map<number, (m: any) => void>();
+    const onLine = (line: string) => {
+        if (!line.startsWith('@@ ')) return;
+        try {
+            const msg = JSON.parse(line.slice(3));
+            if (typeof msg.reply === 'number') waiting.get(msg.reply)?.(msg);
+        } catch { /* ignore */ }
+    };
+    let lineBuf = '';
+    proc.stdout!.on('data', (d) => {
+        const str = d.toString();
+        out += str;
+        lineBuf += str;
+        const lines = lineBuf.split('\n');
+        lineBuf = lines.pop() ?? '';
+        for (const line of lines) onLine(line);
+    });
     proc.stderr!.on('data', (d) => { out += d.toString(); });
-    const exited = new Promise<number | null>((resolve) => proc.on('exit', (code) => resolve(code)));
+    const exited = new Promise<number | null>((resolve) => proc.on('exit', (code) => {
+        if (lineBuf) onLine(lineBuf);
+        for (const [, cb] of waiting) cb({ error: `node exited (${code}) while waiting for reply:\n${out.slice(-500)}` });
+        waiting.clear();
+        resolve(code);
+    }));
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => proc.kill('SIGKILL'), 60_000);
         exited.then((code) => { clearTimeout(timer); reject(new Error(`node exited (${code}) before it served:\n${out}`)); });
         const poll = setInterval(() => {
             const line = out.split('\n').find((l) => l.startsWith('@@ '));
             if (!line) return;
+            const parsed = JSON.parse(line.slice(3));
+            if (!parsed.ready) return;
             clearInterval(poll);
             clearTimeout(timer);
             resolve({
-                port: JSON.parse(line.slice(3)).port,
+                port: parsed.port,
                 output: () => out,
+                send: (cmd: string, args: Record<string, unknown> = {}) => new Promise((res, rej) => {
+                    const id = ++seq;
+                    const timeoutTimer = setTimeout(() => {
+                        waiting.delete(id);
+                        rej(new Error(`send('${cmd}') timed out after 30s; last output:\n${out.slice(-500)}`));
+                    }, 30_000);
+                    waiting.set(id, (m) => {
+                        clearTimeout(timeoutTimer);
+                        waiting.delete(id);
+                        if (m.error) rej(new Error(m.error)); else res(m.result ?? m);
+                    });
+                    proc.stdin!.write(JSON.stringify({ id, cmd, ...args }) + '\n');
+                }),
                 stop: async () => {
                     proc.stdin!.end();
                     const t = setTimeout(() => proc.kill('SIGKILL'), 10_000);
@@ -123,13 +180,15 @@ async function boot(dataDir: string, env: Record<string, string> = {}): Promise<
 /** Every request body this suite sent, for K. */
 const sent: string[] = [];
 
+const testAgent = new https.Agent({ maxSockets: 30, keepAlive: true });
+
 /** An HTTPS request to the node with a chosen Host header. */
 function request(b: Boot, method: string, route: string, body?: unknown, headers: Record<string, string> = {}): Promise<{ status: number; json: any; headers: Record<string, any> }> {
     const data = body === undefined ? undefined : JSON.stringify(body);
     sent.push(`${method} ${route} ${JSON.stringify(headers)} ${data ?? ''}`);
     return new Promise((resolve, reject) => {
         const req = https.request({
-            host: '127.0.0.1', port: b.port, path: route, method, rejectUnauthorized: false,
+            host: '127.0.0.1', port: b.port, path: route, method, rejectUnauthorized: false, agent: testAgent,
             headers: { ...(data ? { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(data)) } : {}), ...headers },
         }, (res) => {
             let text = '';
@@ -364,33 +423,51 @@ async function main(): Promise<void> {
 
     console.log('\nH. A flood of wrong proofs never delays a right one');
     const dirH = path.join(root, 'h');
-    // The wrong-proof SECURITY line's node-wide budget (claim-code.ts claimLogAdmit), its minute scaled to 2 s.
-    const h = await boot(dirH, { ...env, NODE_ENV: 'test', CLAIM_LOG_WINDOW_MS: '2000' });
+    // The wrong-proof SECURITY line's node-wide budget (claim-code.ts claimLogAdmit), driven deterministically.
+    const h = await boot(dirH, { ...env, NODE_ENV: 'test' });
+    const t0 = 1_700_000_000_000;
+    await h.send('clock', { at: t0 });
     const infoH = await claimInfo(h);
     const codeH = readCode(dirH);
     codes.push(codeH);
     const SOURCES = 60, EACH = 3, LOG_BUDGET = 20;
-    const flood: Promise<{ status: number }>[] = [];
-    for (let i = 0; i < SOURCES; i++) {
-        for (let j = 0; j < EACH; j++) flood.push(claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), `198.51.${100 + i}.1`));
+    const flood1: Promise<{ status: number }>[] = [];
+    for (let i = 0; i < LOG_BUDGET; i++) {
+        for (let j = 0; j < EACH; j++) flood1.push(claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), `198.51.${100 + i}.1`));
     }
-    const statuses = (await Promise.all(flood)).map((x) => x.status);
+    const r1 = await Promise.all(flood1);
+    const flood2: Promise<{ status: number }>[] = [];
+    for (let i = LOG_BUDGET; i < SOURCES; i++) {
+        for (let j = 0; j < EACH; j++) flood2.push(claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), `198.51.${100 + i}.1`));
+    }
+    const r2 = await Promise.all(flood2);
+    const statuses = [...r1, ...r2].map((x) => x.status);
     const count = (s: number) => statuses.filter((x) => x === s).length;
     assert(count(403) === SOURCES && count(429) === SOURCES * (EACH - 1),
         `H1. ${SOURCES * EACH} wrong proofs from ${SOURCES} sources: each source's first is 403, the rest 429 (403×${count(403)}, 429×${count(429)})`);
-    const t0 = Date.now();
-    r = await claim(h, claimBody(alice, codeH, infoH.salt, infoH.codeId), '198.51.100.1');
-    const ms = Date.now() - t0;
-    assert(r.status === 200 && r.json.role === 'owner', `H2. then the right proof, from a source the brake holds, claims at once (${r.status}, ${ms} ms)`);
-    assert(ms < 2000, `H3. without waiting for any brake (${ms} ms)`);
     const wrongLines = (out: string) => out.split('\n').filter((x) => /A wrong claim proof was refused/.test(x)).length;
     assert(wrongLines(h.output()) === LOG_BUDGET,
         `H4. ${SOURCES} wrong proofs from ${SOURCES} sources wrote the budget's ${LOG_BUDGET} SECURITY lines, no more (${wrongLines(h.output())})`);
-    assert(/CLAIMED/.test(h.output()), 'H5. the right claim is logged whatever the budget');
-    await new Promise((res) => setTimeout(res, 2500));
-    const more = h.output().split('\n').filter((x) => /more wrong claim proofs/.test(x));
-    assert(more.length === 1 && more[0].includes(String(SOURCES - LOG_BUDGET)),
+    await h.send('clock', { at: t0 + 60_000 });
+    await claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), '198.51.200.1');
+    const waitSummary = async (timeoutMs = 4000): Promise<string[]> => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            const lines = h.output().split('\n').filter((x) => /more wrong claim proofs/.test(x));
+            if (lines.length > 0) return lines;
+            await new Promise((res) => setTimeout(res, 25));
+        }
+        return h.output().split('\n').filter((x) => /more wrong claim proofs/.test(x));
+    };
+    const more = await waitSummary();
+    assert(more.length === 1 && more[0].includes(`and ${SOURCES - LOG_BUDGET} more wrong claim proofs were refused`),
         `H6. and one summary line for the rest, once the minute is over (${more.length}: ${more[0] ?? ''})`);
+    const tStart = Date.now();
+    r = await claim(h, claimBody(alice, codeH, infoH.salt, infoH.codeId), '198.51.100.1');
+    const ms = Date.now() - tStart;
+    assert(r.status === 200 && r.json.role === 'owner', `H2. then the right proof, from a source the brake holds, claims at once (${r.status}, ${ms} ms)`);
+    assert(ms < 2000, `H3. without waiting for any brake (${ms} ms)`);
+    assert(/CLAIMED/.test(h.output()), 'H5. the right claim is logged whatever the budget');
     await h.stop();
 
     console.log('\nL. A stranger sharing the installer\'s address cannot hold the claim shut');

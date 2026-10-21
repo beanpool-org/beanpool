@@ -1059,7 +1059,7 @@ test('mobile width (320px) desktop-lang-menu on pages without phone menu stays w
     }
 });
 
-test('nav-cta is never clipped and does not wrap where main did not, and ☰ panel links are reachable at 320x568', { timeout: 180_000 }, async () => {
+test('nav-cta is never clipped and does not wrap where main did not, ☰ panel links are reachable with and without banner, and phone header is unchanged', { timeout: 240_000 }, async () => {
     const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
 
     const server = http.createServer((req, res) => {
@@ -1086,88 +1086,229 @@ test('nav-cta is never clipped and does not wrap where main did not, and ☰ pan
             }
         }
 
-        const WIDTHS = [320, 346, 360, 390, 430, 768, 1024, 1280, 1366, 1440];
+        const WIDTHS = [320, 346, 360, 390, 430, 481, 540, 768, 769, 900, 1024, 1280, 1366, 1440];
         const MAIN_WRAPPED_LANGS = new Set(['pt', 'ru', 'uk', 'de']);
 
         const runWorker = async (items) => {
-            const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+            const ctx100 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            const ctx130 = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            await ctx100.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            });
+            await ctx130.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+                const el = document.documentElement;
+                if (el) el.style.fontSize = '130%';
+                const observer = new MutationObserver(() => {
+                    if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
+                        document.documentElement.style.fontSize = '130%';
+                    }
+                });
+                observer.observe(document, { childList: true, subtree: true });
+            });
+
+            const p100 = await ctx100.newPage();
+            const p130 = await ctx130.newPage();
+
             const clipped = [];
             const wrapped = [];
+            const phoneHeaderBad = [];
             const unreachable = [];
 
             for (const item of items) {
-                await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
-                for (const width of WIDTHS) {
-                    await page.setViewportSize({ width, height: 800 });
-                    const res = await page.evaluate((isRtl) => {
-                        const cta = document.querySelector('.nav-cta');
-                        if (!cta) return null;
-                        const rect = cta.getBoundingClientRect();
-                        const range = document.createRange();
-                        range.selectNodeContents(cta);
-                        const rects = range.getClientRects();
-                        const isClipped = isRtl
-                            ? (rect.left < -0.5 || rect.right > window.innerWidth + 0.5)
-                            : (rect.right > window.innerWidth + 0.5);
-                        const isWrapped = rects.length > 1 || rect.height > 50;
-                        return {
-                            isClipped,
-                            isWrapped,
-                            left: rect.left,
-                            right: rect.right,
-                            height: rect.height,
-                            lineCount: rects.length
-                        };
-                    }, item.rtl);
+                for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
+                    await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
 
-                    if (res) {
-                        if (res.isClipped) clipped.push({ page: item.url, width, right: res.right, left: res.left });
-                        if (res.isWrapped && !MAIN_WRAPPED_LANGS.has(item.lang)) wrapped.push({ page: item.url, width, height: res.height, lineCount: res.lineCount });
-                    }
-                }
+                    for (const width of WIDTHS) {
+                        await page.setViewportSize({ width, height: 800 });
+                        const res = await page.evaluate(({ isRtl, sc }) => {
+                            const cta = document.querySelector('.nav-cta');
+                            if (!cta) return null;
+                            const rect = cta.getBoundingClientRect();
+                            const range = document.createRange();
+                            range.selectNodeContents(cta);
+                            const rects = range.getClientRects();
+                            const isClipped = isRtl
+                                ? (rect.left < -0.5 || rect.right > window.innerWidth + 0.5)
+                                : (rect.right > window.innerWidth + 0.5);
+                            const isWrapped = rects.length > 1 || (sc === 1.3 ? rect.height > 75 : rect.height > 50);
+                            return {
+                                isClipped,
+                                isWrapped,
+                                left: rect.left,
+                                right: rect.right,
+                                height: rect.height,
+                                lineCount: rects.length
+                            };
+                        }, { isRtl: item.rtl, sc: scale });
 
-                // Reachability at 320x568 for pages with .nav-menu
-                await page.setViewportSize({ width: 320, height: 568 });
-                const hasNavMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
-                if (hasNavMenu) {
-                    const summary = page.locator('.nav-menu > summary');
-                    await summary.click();
-                    await page.waitForTimeout(20);
-                    const unreach = await page.evaluate(() => {
-                        const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
-                        const bad = [];
-                        for (const link of links) {
-                            link.scrollIntoView();
-                            const r = link.getBoundingClientRect();
-                            if (r.bottom > window.innerHeight + 1 || r.top < -1) {
-                                bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                        if (res) {
+                            if (res.isClipped && (scale === 1.0 || width <= 480)) {
+                                clipped.push({ page: item.url, width, scale, right: res.right, left: res.left });
+                            }
+                            const isNewWrap = width > 480 ? res.isWrapped : (scale === 1.0 && !MAIN_WRAPPED_LANGS.has(item.lang) && res.isWrapped);
+                            if (isNewWrap) {
+                                wrapped.push({ page: item.url, width, scale, height: res.height, lineCount: res.lineCount });
                             }
                         }
-                        return bad;
-                    });
-                    if (unreach.length > 0) unreachable.push({ page: item.url, badLinks: unreach });
-                    await summary.click();
+
+                        // Check phone header at <= 1023px
+                        if (width <= 1023) {
+                            const hCheck = await page.evaluate((sc) => {
+                                const nav = document.querySelector('.nav-inner.has-menu');
+                                const img = document.querySelector('.nav-inner.has-menu .logo img');
+                                if (!nav || !img) return null;
+                                const navStyle = window.getComputedStyle(nav);
+                                const imgStyle = window.getComputedStyle(img);
+                                const padL = parseFloat(navStyle.paddingLeft);
+                                const padR = parseFloat(navStyle.paddingRight);
+                                const beanW = parseFloat(imgStyle.width);
+                                const expectedPad = sc === 1.3 ? 20.8 : 16.0;
+                                const expectedBean = 40.0;
+                                if (Math.abs(padL - expectedPad) > 0.5 || Math.abs(padR - expectedPad) > 0.5 || Math.abs(beanW - expectedBean) > 0.5) {
+                                    return { padL, padR, expectedPad, beanW, expectedBean };
+                                }
+                                return null;
+                            }, scale);
+                            if (hCheck) phoneHeaderBad.push({ page: item.url, width, scale, ...hCheck });
+                        }
+                    }
+
+                    // Reachability at 320x568 and 360x640 (locale en-US, no banner)
+                    for (const vp of [{ width: 320, height: 568 }, { width: 360, height: 640 }]) {
+                        await page.setViewportSize(vp);
+                        const hasNavMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
+                        if (hasNavMenu) {
+                            const summary = page.locator('.nav-menu > summary');
+                            await summary.click();
+                            await page.waitForTimeout(10);
+                            const unreach = await page.evaluate(() => {
+                                const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
+                                const bad = [];
+                                for (const link of links) {
+                                    link.scrollIntoView();
+                                    const r = link.getBoundingClientRect();
+                                    if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                        bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                                    }
+                                }
+                                return bad;
+                            });
+                            if (unreach.length > 0) unreachable.push({ page: item.url, viewport: `${vp.width}x${vp.height}`, scale, banner: false, badLinks: unreach });
+                            await summary.click();
+                        }
+                    }
                 }
             }
-            await page.close();
-            return { clipped, wrapped, unreachable };
+
+            await ctx100.close();
+            await ctx130.close();
+            return { clipped, wrapped, phoneHeaderBad, unreachable };
         };
 
-        const NUM_WORKERS = 4;
+        const NUM_WORKERS = 6;
         const chunks = Array.from({ length: NUM_WORKERS }, () => []);
         allPages.forEach((p, i) => chunks[i % NUM_WORKERS].push(p));
 
         const results = await Promise.all(chunks.map(runWorker));
         const allClipped = results.flatMap(r => r.clipped);
         const allWrapped = results.flatMap(r => r.wrapped);
+        const allPhoneHeaderBad = results.flatMap(r => r.phoneHeaderBad);
         const allUnreachable = results.flatMap(r => r.unreachable);
 
-        assert.equal(allClipped.length, 0, `Found ${allClipped.length} clipped CTAs across pages and widths:\n  ` +
-            allClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (right: ${c.right})`).join('\n  '));
-        assert.equal(allWrapped.length, 0, `Found ${allWrapped.length} wrapped CTAs where main did not wrap:\n  ` +
-            allWrapped.slice(0, 10).map(w => `${w.page} @ ${w.width}px`).join('\n  '));
-        assert.equal(allUnreachable.length, 0, `Found ${allUnreachable.length} pages with unreachable ☰ panel links at 320x568:\n  ` +
-            allUnreachable.slice(0, 10).map(u => `${u.page}: ${u.badLinks.map(b => b.text).join(', ')}`).join('\n  '));
+        // Banner reachability check with pt-BR locale
+        const bannerUnreachable = [];
+        for (const scale of [1.0, 1.3]) {
+            const ctxPt = await browser.newContext({ viewport: { width: 360, height: 640 }, locale: 'pt-BR' });
+            await ctxPt.addInitScript((s) => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+                if (s === 1.3) {
+                    const el = document.documentElement;
+                    if (el) el.style.fontSize = '130%';
+                    const observer = new MutationObserver(() => {
+                        if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
+                            document.documentElement.style.fontSize = '130%';
+                        }
+                    });
+                    observer.observe(document, { childList: true, subtree: true });
+                }
+            }, scale);
+
+            const page = await ctxPt.newPage();
+            for (const enPage of ['index.html', 'help.html', 'rules.html', 'safety.html']) {
+                await page.goto(`http://127.0.0.1:${port}/${enPage}`, { waitUntil: 'load' });
+                for (const vp of [{ width: 360, height: 640 }, { width: 320, height: 568 }]) {
+                    await page.setViewportSize(vp);
+                    await page.waitForTimeout(20);
+                    const hasMenu = await page.evaluate(() => !!document.querySelector('.nav-menu'));
+                    if (hasMenu) {
+                        await page.locator('.nav-menu > summary').click();
+                        await page.waitForTimeout(20);
+                        // 1. check with lang menu closed
+                        let unreach = await page.evaluate(() => {
+                            const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
+                            const bad = [];
+                            for (const link of links) {
+                                link.scrollIntoView();
+                                const r = link.getBoundingClientRect();
+                                if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                    bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                                }
+                            }
+                            return bad;
+                        });
+                        if (unreach.length > 0) {
+                            bannerUnreachable.push({ page: enPage, viewport: `${vp.width}x${vp.height}`, scale, langMenuOpen: false, badLinks: unreach });
+                        }
+
+                        // 2. check with lang menu open
+                        const hasPhoneLang = await page.evaluate(() => !!document.querySelector('.phone-lang-menu > summary'));
+                        if (hasPhoneLang) {
+                            await page.locator('.phone-lang-menu > summary').click();
+                            await page.waitForTimeout(20);
+                            unreach = await page.evaluate(() => {
+                                const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
+                                const bad = [];
+                                for (const link of links) {
+                                    link.scrollIntoView();
+                                    const r = link.getBoundingClientRect();
+                                    if (r.bottom > window.innerHeight + 1 || r.top < -1) {
+                                        bad.push({ text: link.textContent.trim(), top: r.top, bottom: r.bottom });
+                                    }
+                                }
+                                return bad;
+                            });
+                            if (unreach.length > 0) {
+                                bannerUnreachable.push({ page: enPage, viewport: `${vp.width}x${vp.height}`, scale, langMenuOpen: true, badLinks: unreach });
+                            }
+                            await page.locator('.phone-lang-menu > summary').click();
+                        }
+                        await page.locator('.nav-menu > summary').click();
+                    }
+                }
+            }
+            await ctxPt.close();
+        }
+
+        const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length;
+        assert.equal(totalFailures, 0,
+            `Failing counts:\n` +
+            `  - Clipped CTAs: ${allClipped.length}\n` +
+            `  - Wrapped CTAs: ${allWrapped.length}\n` +
+            `  - Phone header mismatches: ${allPhoneHeaderBad.length}\n` +
+            `  - Unreachable panel links without banner: ${allUnreachable.length}\n` +
+            `  - Unreachable panel links with banner: ${bannerUnreachable.length}\n\n` +
+            (allClipped.length ? `Clipped samples:\n  ` + allClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text, right: ${c.right})`).join('\n  ') + '\n\n' : '') +
+            (allWrapped.length ? `Wrapped samples:\n  ` + allWrapped.slice(0, 10).map(w => `${w.page} @ ${w.width}px (${w.scale * 100}% text)`).join('\n  ') + '\n\n' : '') +
+            (allPhoneHeaderBad.length ? `Phone header samples:\n  ` + allPhoneHeaderBad.slice(0, 5).map(h => `${h.page} @ ${h.width}px (${h.scale * 100}%): pad=${h.padL}px (exp ${h.expectedPad}px), bean=${h.beanW}px (exp ${h.expectedBean}px)`).join('\n  ') + '\n\n' : '') +
+            (bannerUnreachable.length ? `Banner unreachable samples:\n  ` + bannerUnreachable.slice(0, 5).map(b => `${b.page} @ ${b.viewport} (${b.scale * 100}%, open:${b.langMenuOpen}): ${b.badLinks.map(l => l.text).join(', ')}`).join('\n  ') : '')
+        );
     } finally {
         if (browser) await browser.close();
         server.close();

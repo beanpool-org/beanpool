@@ -5774,5 +5774,13 @@
   "Look around first, then join with this account": "먼저 둘러본 다음 이 계정으로 가입하기",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "전 세계 사람들을 만나고 가까운 커뮤니티를 찾아보세요. 먼저 게스트로 둘러본 다음 상단의 ‘참여’를 눌러 이 휴대폰의 계정으로 가입하세요: 키와 12개 단어는 그대로 유지되며 다른 커뮤니티에도 아무런 영향을 주지 않아요.",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "확인되면 제공 글을 올려 두는 동안 한도가 커뮤니티의 확인된 최소 한도인 최대 {amount}만큼 늘어납니다.",
-  "Uses the key and 12 words already on this phone. No new account is made.": "이 휴대폰에 이미 있는 키와 12개 단어를 사용합니다. 새 계정은 생성되지 않습니다."
+  "Uses the key and 12 words already on this phone. No new account is made.": "이 휴대폰에 이미 있는 키와 12개 단어를 사용합니다. 새 계정은 생성되지 않습니다.",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "운영자가 이 도구의 서버 사본을 꺼서 이 휴대폰에만 보관돼요. 설정에서 다시 켤 수 있어요.",
+  "Asked to join": "참여 신청함",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "내 커뮤니티 서버에 연결할 수 없어 변경된 내용이 없어요. 온라인 상태일 때 다시 시도하세요.",
+  "One phone at a time: the copy you changed last is the one kept.": "한 번에 휴대폰 한 대만: 마지막으로 변경한 사본이 유지돼요.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "이 휴대폰에서 이 도구에 대한 내 데이터와 내 커뮤니티 서버에 있는 사본을 삭제해요. 회원님 계정으로 로그인된 다른 휴대폰은 가지고 있는 내용을 유지하고 전송을 중단해요. 다른 커뮤니티의 동일한 도구 데이터는 그대로 유지돼요. 이는 되돌릴 수 없어요.",
+  "You can edit a message for 15 minutes after sending it.": "메시지는 보낸 후 15분 동안 수정할 수 있어요.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "내 커뮤니티 서버가 더 이상 이 도구의 사본을 보관하지 않아 이 휴대폰에만 보관돼요. 설정에서 사본을 다시 켤 수 있어요.",
+  "{name}, asked to join": "{name}, 참여 신청함"
 }

@@ -3,7 +3,7 @@ slug: credit-line
 title: Sua linha de crédito
 summary: Até quanto você pode ficar abaixo de zero e como esse valor aumenta.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## O que é
@@ -46,7 +46,7 @@ A linha abaixo da barra informa você, por exemplo: "Publique uma Oferta para ab
 
 ## Em uma comunidade de membros conhecidos
 
-Algumas comunidades têm administradores que conhecem cada membro pelo nome. Se a sua ativou **o piso conhecido**, um membro confirmado por um administrador recebe uma linha de crédito imediatamente: 1.000 feijões, a menos que a sua comunidade tenha escolhido outro valor. Isso equivale a cerca de 25 horas de trabalho confiadas pela comunidade a você. Isso eleva o seu limite, não o seu nível: seu emblema de confiança continua contando apenas o que você realizou.
+Algumas comunidades têm administradores que conhecem cada membro pelo nome. Um membro confirmado por um administrador recebe uma linha de crédito imediatamente, **o piso conhecido**: 1.000 feijões, a menos que a sua comunidade tenha escolhido outro valor. Isso equivale a cerca de 25 horas de trabalho confiadas pela comunidade a você. Isso eleva o seu limite, não o seu nível: seu emblema de confiança continua contando apenas o que você realizou. O piso conhecido está ativado em todas as comunidades com feijões, a menos que o proprietário o tenha desativado.
 
 - Uma Oferta ativa permite que você use todo esse valor. Sem nenhuma Oferta, você não pode usá-lo.
 - A confiança obtida ao negociar se soma a isso, até o teto da sua comunidade (2.000 feijões, a menos que tenha escolhido mais, até 5.000).
@@ -55,7 +55,7 @@ Algumas comunidades têm administradores que conhecem cada membro pelo nome. Se 
 
 ## Uma comunidade mista
 
-Em algumas comunidades, qualquer membro pode convidar pessoas, portanto os administradores não conhecem todo mundo. Se a sua comunidade tiver ativado **o piso conhecido**, os administradores podem confirmar os membros que conhecem, e esses membros começam com um limite maior. Todos os demais começam no zero, e o limite de todos cresce da mesma forma a partir daí, conforme negociam e constroem confiança.
+Em algumas comunidades, qualquer membro pode convidar pessoas, portanto os administradores não conhecem todo mundo. Os administradores podem confirmar os membros que conhecem, e esses membros começam com um limite maior, **o piso conhecido**, a menos que o proprietário da comunidade o tenha desativado. Todos os demais começam no zero, e o limite de todos cresce da mesma forma a partir daí, conforme negociam e constroem confiança.
 
 ## Congelada pelos administradores
 

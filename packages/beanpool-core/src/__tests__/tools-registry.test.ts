@@ -225,3 +225,44 @@ describe('the sync rule (reconcile): the six cases, and both changed', () => {
         expect(reconcile({ body: '{}', updatedAt: T3, syncedAt: T3 }, node(T1)).do).toBe('take');
     });
 });
+
+describe('the delete rule (the copy switched off elsewhere): DESIGN-t04-node-copy-delete-fable.md §5, tests 3 and 4', () => {
+    const T1 = '2026-10-20T01:00:00.000Z';
+    const T2 = '2026-10-20T02:00:00.000Z';
+    const T3 = '2026-10-20T03:00:00.000Z';
+    const deleted = { kind: 'deleted' as const, deletedAt: T2 };
+    const synced = { body: '{"v":1}', updatedAt: T1, syncedAt: T1 };
+    const changedSince = { body: '{"v":1,"x":1}', updatedAt: T3, syncedAt: T1 };
+    const neverSynced = { body: '{"v":1}', updatedAt: T1, syncedAt: null };
+    const node = (updatedAt: string) => ({ kind: 'copy' as const, body: `{"v":1,"at":"${updatedAt}"}`, updatedAt });
+
+    it('3. deleted: switch off whatever the device holds, a change made after the delete included (no time compared); on: put', () => {
+        for (const local of [null, synced, changedSince, neverSynced]) {
+            expect(reconcile(local, deleted), JSON.stringify(local)).toEqual({ do: 'switch-off', why: 'node-removed' });
+            expect(reconcile(local, deleted, 'open'), JSON.stringify(local)).toEqual({ do: 'switch-off', why: 'node-removed' });
+            expect(reconcile(local, deleted, 'turn-on'), JSON.stringify(local)).toEqual({ do: 'put', why: 'turn-on' });
+        }
+    });
+
+    it('4. none: a device that once synced switches off; one that never did gives its copy; with none, nothing; on: put for all three', () => {
+        const none = { kind: 'none' as const };
+        expect(reconcile(synced, none)).toEqual({ do: 'switch-off', why: 'node-removed' });
+        expect(reconcile(changedSince, none)).toEqual({ do: 'switch-off', why: 'node-removed' });
+        expect(reconcile(neverSynced, none)).toEqual({ do: 'put', why: 'no-copy' });
+        expect(reconcile(null, none)).toEqual({ do: 'nothing', why: 'first-open' });
+        for (const local of [synced, neverSynced, null]) expect(reconcile(local, none, 'turn-on')).toEqual({ do: 'put', why: 'turn-on' });
+    });
+
+    it('4. offline, older-node and a copy: as before for both intents, and never a switch-off', () => {
+        const remotes = [{ kind: 'offline' as const }, { kind: 'older-node' as const }, node(T1), node(T2)];
+        for (const local of [null, synced, changedSince, neverSynced]) {
+            for (const remote of remotes) {
+                const open = reconcile(local, remote, 'open');
+                expect(reconcile(local, remote, 'turn-on'), `${JSON.stringify(local)} ${remote.kind}`).toEqual(open);
+                expect(open.do).not.toBe('switch-off');
+            }
+        }
+        expect(reconcile(synced, node(T1), 'turn-on')).toEqual({ do: 'nothing', why: 'equal' });
+        expect(reconcile(null, node(T2), 'turn-on')).toMatchObject({ do: 'take', why: 'first-open' });
+    });
+});

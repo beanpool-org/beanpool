@@ -10,7 +10,7 @@ import {
     type ToolHost, type ToolHostBase, type ToolHostGrants, type ToolManifest, type ToolNeedDraft, type ToolOfferDraft, type ToolPermission,
 } from '@beanpool/core';
 import { MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
-import { readToolRecord, removeToolRecord, writeToolRecord } from './store';
+import { keepToolDoc, readToolRecord, removeToolRecord } from './store';
 
 /** What App gives the host: who the owner is, the node, and its doors. */
 export interface WebHostContext {
@@ -21,6 +21,8 @@ export interface WebHostContext {
     /** The composer, opened prefilled; the member taps Post. */
     openComposer(draft: ComposerDraft): void;
     now?(): number;
+    /** Whether the private copy on the node is on for this tool here (its setting, on a server that keeps copies). */
+    nodeCopy?: boolean;
 }
 
 /** A document over its byte bound: set() refuses it whole, and the tool shows its own sentence. Nothing is written. */
@@ -74,23 +76,31 @@ export type ToolDocState<D> =
 
 /**
  * The tool's one document for `owner`, from the store: loading, then ready (its empty one when nothing is kept).
- * `set` writes it whole and refuses one over the bound; `remove` takes this browser's copy away and leaves the empty one.
+ * `set` writes it whole (its last sync with the node kept, tools/store.ts keepToolDoc) and refuses one over the bound,
+ * then `afterWrite` (the node copy's sync); `reload` reads it again (after the node's copy was taken); `remove` takes this
+ * browser's copy away and leaves the empty one.
  */
-export function useToolDoc<D>(m: ToolManifest<D> | undefined, owner: string | null) {
+export function useToolDoc<D>(m: ToolManifest<D> | undefined, owner: string | null, afterWrite?: () => void) {
     const [state, setState] = useState<ToolDocState<D>>({ status: 'loading' });
     const current = useRef<D | null>(null);
+    // Which read is the current one: a read for another tool or owner, or after the page closed, is dropped.
+    const generation = useRef(0);
     const id = m?.id ?? null;
+    const load = useCallback(async (): Promise<void> => {
+        if (!m || !owner) return;
+        const g = generation.current;
+        const rec = await readToolRecord(owner, m.id);
+        if (g !== generation.current) return;
+        const doc = readDoc(m, rec?.body ?? null);
+        current.current = doc;
+        setState({ status: 'ready', doc, updatedAt: rec?.updatedAt ?? null });
+    }, [id, owner, m]);
     useEffect(() => {
         if (!m || !owner) return;
-        let cancelled = false;
+        generation.current++;
         setState({ status: 'loading' });
-        readToolRecord(owner, m.id).then((rec) => {
-            if (cancelled) return;
-            const doc = readDoc(m, rec?.body ?? null);
-            current.current = doc;
-            setState({ status: 'ready', doc, updatedAt: rec?.updatedAt ?? null });
-        });
-        return () => { cancelled = true; };
+        void load();
+        return () => { generation.current++; };
     }, [id, owner]);
 
     const set = useCallback(async (next: D): Promise<void> => {
@@ -101,9 +111,10 @@ export function useToolDoc<D>(m: ToolManifest<D> | undefined, owner: string | nu
         const updatedAt = new Date().toISOString();
         current.current = next;
         setState({ status: 'ready', doc: next, updatedAt });
-        const kept = await writeToolRecord(owner, m.id, { body: JSON.stringify(next), updatedAt, syncedAt: null });
+        const kept = await keepToolDoc(owner, m.id, JSON.stringify(next), updatedAt);
         if (!kept) throw new ToolDocNotKept();
-    }, [id, owner, m]);
+        afterWrite?.();
+    }, [id, owner, m, afterWrite]);
 
     const remove = useCallback(async (): Promise<boolean> => {
         if (!m || !owner) return false;
@@ -117,7 +128,7 @@ export function useToolDoc<D>(m: ToolManifest<D> | undefined, owner: string | nu
     }, [id, owner, m]);
 
     const get = useCallback((): D => current.current ?? (m ? m.doc.empty() : (null as D)), [m]);
-    return { state, get, set, remove };
+    return { state, get, set, remove, reload: load };
 }
 
 /** What the composer is opened with: an Offer or a Need, its fields held to the composer's own. */
@@ -161,6 +172,7 @@ function webGrants(ctx: WebHostContext): Partial<ToolHostGrants> {
     return {
         offerDoor: (draft: ToolOfferDraft) => ctx.openComposer(composerDraft('offer', draft)),
         needDoor: (draft: ToolNeedDraft) => ctx.openComposer(composerDraft('need', draft)),
+        nodeCopy: { on: ctx.nodeCopy ?? false },
     };
 }
 

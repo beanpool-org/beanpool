@@ -21,7 +21,10 @@ route, the primitives) is T0.2 and the web's is T0.3. Until they land, a tool's 
 A tool imports React, `@beanpool/core`, its own folder and the template's host and primitives, and nothing else (the
 eslint fence). It talks to the app only through `host`, which has exactly the functions its permissions grant
 (`narrowHost` in `packages/beanpool-core/src/tools/host.ts`). Its data is one JSON document with `v` at the top, at most
-64 KB, kept on the phone with a private copy on the community's server; photos stay files on the phone.
+64 KB, kept on the phone (or in the browser); photos stay files on the phone. A tool whose permissions include
+`node-copy` also has a private copy on the community's server, on by default and switched off by the member in the
+tool's Settings (`apps/*/tools/node-copy.ts`, the rule in `packages/beanpool-core/src/tools/reconcile.ts`); without that
+permission nothing of it leaves the device.
 
 ## Adding a tool
 

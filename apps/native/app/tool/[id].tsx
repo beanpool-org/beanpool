@@ -11,12 +11,16 @@
  * Each `navigate` pushes another of these routes, so a tool can have several screens open at once (a record over its
  * list): they share its document and its settings ({@link openScreens}), and none of them writes back what another
  * changed. The host is keyed by the screen, so "Remove my data" on a later screen goes back to the first in place.
+ *
+ * For a tool that asks for `node-copy` (slice T0.4, tools/node-copy.ts): its first screen's open reconciles the phone's
+ * copy with the server's, a write is followed five seconds later by one sync, the toggle is a round trip the setting
+ * waits for, and Remove my data takes the server's copy first, or nothing at all.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { t, type AnyToolScreenProps, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
+import { t, type AnyToolScreenProps, type ToolCopyOutcome, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
 import { useIdentity } from '../IdentityContext';
 import { useTheme } from '../ThemeContext';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -27,13 +31,19 @@ import { getMemberProfile } from '../../utils/db';
 import { phoneTool } from '../../tools/index';
 import { hostFor, phoneHost, ungrantedPermissions, type PhoneHostContext } from '../../tools/builder';
 import { openOfferComposer, unfinishedPostHere, type ToolListFee } from '../../tools/doors';
-import { readToolDoc, readToolSettings, reminderOn, removeToolDataHere, writeToolDoc, writeToolSettings, communityKey, type ToolSettings } from '../../tools/store';
+import {
+    patchToolSettings, readToolDoc, readToolSettings, reminderOn, removeToolDataHere, writeToolDoc, writeToolSettings, communityKey, type ToolSettings,
+} from '../../tools/store';
+import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
 import { scheduleToolReminders } from '../../tools/reminders';
-import { ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, isEmptyDoc, safeLine } from '../../tools/frame';
+import {
+    ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, copyFailedLine, isEmptyDoc, removeQuestion, safeLine,
+    type ToolCopyNote,
+} from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
 
 /** What every open screen of one tool, for one owner, shares. */
-interface SharedState { doc: unknown; stored: boolean; settings: ToolSettings }
+interface SharedState { doc: unknown; stored: boolean; settings: ToolSettings; copyNote: ToolCopyNote }
 type Hear = (next: Partial<SharedState>) => void;
 /**
  * The open screens of each tool, by owner and tool: a write on one is every other's at once (§1.6: one writer, last write
@@ -41,8 +51,8 @@ type Hear = (next: Partial<SharedState>) => void;
  * write would put back what the pushed one had changed, or schedule a reminder its Settings had turned off.
  */
 const openScreens = new Map<string, Set<Hear>>();
-function tellOpenScreens(key: string, from: Hear, next: Partial<SharedState>) {
-    for (const hear of openScreens.get(key) ?? []) if (hear !== from) hear(next);
+function tellOpenScreens(key: string, from: Hear | null, next: Partial<SharedState>) {
+    for (const hear of [...(openScreens.get(key) ?? [])]) if (hear !== from) hear(next);
 }
 
 /** The route's params as the tool sees them: every one but the route's own `id` and `screen`. */
@@ -90,18 +100,27 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const [listChecks, setListChecks] = useState({ photo: false, unfinished: false });
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [notificationsAllowed, setNotificationsAllowed] = useState<boolean | null>(null);
+    const [copyNote, setCopyNote] = useState<ToolCopyNote>(null);
+    const [copyRound, setCopyRound] = useState<{ busy: boolean; failed: 'failed' | 'older-node' | null }>({ busy: false, failed: null });
     const docRef = useRef<unknown>(undefined);
     const settingsRef = useRef<ToolSettings>({});
+    const copyNoteRef = useRef<ToolCopyNote>(null);
+    /** Whether this is the tool's first open screen (the one whose open reconciles with the server), and whether it has. */
+    const firstOfTool = useRef(false);
+    const reconciled = useRef(false);
     const shareKey = `${owner}\n${manifest.id}`;
-    // What another open screen of this tool wrote (only state setters and refs: the same for every drawing).
+    // What another open screen of this tool wrote, or the node copy brought (only state setters and refs: the same for
+    // every drawing).
     const hear = useRef<Hear>((next) => {
         if ('doc' in next) { docRef.current = next.doc; setDoc(next.doc); }
         if (next.stored !== undefined) setStored(next.stored);
         if (next.settings) { settingsRef.current = next.settings; setSettings(next.settings); }
+        if (next.copyNote !== undefined) { copyNoteRef.current = next.copyNote; setCopyNote(next.copyNote); }
     }).current;
     useEffect(() => {
         let open = openScreens.get(shareKey);
         if (!open) openScreens.set(shareKey, open = new Set());
+        firstOfTool.current = open.size === 0;
         open.add(hear);
         return () => {
             open.delete(hear);
@@ -144,9 +163,54 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         settingsRef.current = next;
         setSettings(next);
         tellOpenScreens(shareKey, hear, { settings: next });
-        await writeToolSettings(owner, manifest.id, next, url).catch(() => {});
+        // Everything but the node copy's setting, which only the server's answer moves (tools/node-copy.ts).
+        const rest: ToolSettings = { ...next };
+        delete rest.nodeCopy;
+        await patchToolSettings(owner, manifest.id, rest, url).catch(() => {});
         reschedule(docRef.current, next);
     }, [owner, manifest.id, reschedule, shareKey, hear, url]);
+
+    const copy: PhoneToolCopy = useMemo(() => ({ manifest, owner: { kind: 'member', publicKey: owner }, url }), [manifest, owner, url]);
+
+    /**
+     * What a sync with the server did, told to every open screen of the tool (none open: the store already has it): the
+     * server's copy taken (the document drawn again, its reminders from it), the copy switched off elsewhere (the
+     * setting off and the line once), or a server that keeps no copies yet.
+     */
+    const heardCopy = useCallback((outcome: ToolCopyOutcome) => {
+        if (outcome === 'taken') {
+            void readToolDoc(owner, manifest).then((read) => {
+                tellOpenScreens(shareKey, null, { doc: read.doc, stored: read.stored });
+                reschedule(read.doc, settingsRef.current);
+            }).catch(() => {});
+        } else if (outcome === 'switched-off') {
+            tellOpenScreens(shareKey, null, { settings: { ...settingsRef.current, nodeCopy: false }, copyNote: 'removed' });
+        } else if (outcome === 'older-node') {
+            tellOpenScreens(shareKey, null, { copyNote: 'older-node' });
+        }
+    }, [owner, manifest, shareKey, reschedule]);
+
+    // The tool's open: once, from its first screen, after the phone's copy and settings are read.
+    useEffect(() => {
+        if (!owner || settings === null || reconciled.current) return;
+        reconciled.current = true;
+        if (!keepsNodeCopy(manifest) || !firstOfTool.current) return;
+        void openToolCopy(copy).then(heardCopy).catch(() => {});
+    }, [owner, settings, manifest, copy, heardCopy]);
+
+    /** The toggle: the setting follows the server's answer; with none, the switch stays and its line says why. */
+    const switchCopy = useCallback(async (on: boolean) => {
+        setCopyRound({ busy: true, failed: null });
+        const done = await switchToolCopy(copy, on).catch(() => 'failed' as const);
+        if (done === 'on' || done === 'off') {
+            setCopyRound({ busy: false, failed: null });
+            tellOpenScreens(shareKey, null, { settings: { ...settingsRef.current, nodeCopy: done === 'on' }, copyNote: null });
+            // Switching on may have taken the server's copy: the document as the phone holds it now.
+            if (done === 'on') heardCopy('taken');
+        } else {
+            setCopyRound({ busy: false, failed: done });
+        }
+    }, [copy, shareKey, heardCopy]);
 
     const openListSheet = useCallback((draft: ToolOfferDraft) => {
         void (async () => {
@@ -174,6 +238,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 setStored(true);
                 tellOpenScreens(shareKey, hear, { doc: next, stored: true });
                 reschedule(next, settingsRef.current);
+                if (copyNoteRef.current !== 'older-node') toolCopyAfterWrite(copy, heardCopy);
             },
         },
         navigate: (screen: string, p?: Record<string, string>) => {
@@ -181,34 +246,46 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         },
         now: () => Date.now(),
         openListSheet,
-    }), [manifest, owner, identity?.callsign, url, nodeProfile, reschedule, openListSheet, shareKey, hear]);
+        nodeCopy: keepsNodeCopy(manifest) && settings?.nodeCopy !== false && copyNote !== 'older-node',
+    }), [manifest, owner, identity?.callsign, url, nodeProfile, reschedule, openListSheet, shareKey, hear, copy, heardCopy, settings?.nodeCopy, copyNote]);
 
     const ungranted = useMemo(() => ungrantedPermissions(manifest, phoneHost(ctx)), [manifest, ctx]);
     const host = useMemo(() => hostFor(manifest, ctx), [manifest, ctx]);
 
     const remove = useCallback(() => {
-        Alert.alert(t('Remove my data from this phone'), t("Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone."), [
+        Alert.alert(t('Remove my data from this phone'), removeQuestion(manifest, settingsRef.current), [
             { text: t('Cancel'), style: 'cancel' },
             {
                 text: t('Remove'), style: 'destructive', onPress: () => {
-                    void removeToolDataHere(owner, manifest.id, url).then(() => {
+                    void (async () => {
+                        // The server's copy first: if it can't go, nothing goes, so nothing removed comes back on the next open.
+                        if (!await removeToolCopyFirst(copy).catch(() => false)) {
+                            Alert.alert(t('Remove my data from this phone'), copyFailedLine());
+                            return;
+                        }
+                        await removeToolDataHere(owner, manifest.id, url);
+                        // The one setting kept: the copy off, so Settings says what is true.
+                        const left: ToolSettings = keepsNodeCopy(manifest) ? { nodeCopy: false } : {};
+                        if (keepsNodeCopy(manifest)) await writeToolSettings(owner, manifest.id, left, url);
                         const empty = manifest.doc.empty();
                         docRef.current = empty;
-                        settingsRef.current = {};
+                        settingsRef.current = left;
+                        copyNoteRef.current = null;
                         setDoc(empty);
                         setStored(false);
-                        setSettings({});
+                        setSettings(left);
+                        setCopyNote(null);
                         setSettingsOpen(false);
-                        tellOpenScreens(shareKey, hear, { doc: empty, stored: false, settings: {} });
+                        tellOpenScreens(shareKey, hear, { doc: empty, stored: false, settings: left, copyNote: null });
                         // On a later screen (a record), back to the first, where the doors are: what it showed has gone.
                         if (screenName !== manifest.screens[0]) {
                             router.setParams({ screen: manifest.screens[0], ...Object.fromEntries(Object.keys(params).map((k) => [k, undefined])) });
                         }
-                    }).catch((e) => console.warn('[Tools] Could not remove the tool\'s data', e instanceof Error ? e.message : e));
+                    })().catch((e) => console.warn('[Tools] Could not remove the tool\'s data', e instanceof Error ? e.message : e));
                 },
             },
         ]);
-    }, [owner, manifest, shareKey, hear, screenName, params, url]);
+    }, [owner, manifest, shareKey, hear, screenName, params, url, copy]);
 
     const about = useCallback(() => {
         Alert.alert(t(manifest.name), t(manifest.line));
@@ -256,8 +333,10 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 manifest={manifest}
                 state={row ? t(row.key, row.values) : null}
                 settings={settings}
+                copyNote={copyNote}
+                ownerKind={ctx.owner.kind}
                 colors={colors}
-                onSettings={() => setSettingsOpen(true)}
+                onSettings={() => { setCopyRound((r) => (r.busy ? r : { busy: false, failed: null })); setSettingsOpen(true); }}
                 onAbout={about}
                 onRemove={remove}
             >
@@ -284,9 +363,13 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 visible={settingsOpen}
                 manifest={manifest}
                 settings={settings}
+                copyNote={copyNote}
+                ownerKind={ctx.owner.kind}
+                copy={copyRound}
                 notificationsAllowed={notificationsAllowed}
                 colors={colors}
                 onChange={(next) => { void saveSettings(next); }}
+                onNodeCopy={(on) => { void switchCopy(on); }}
                 onAllowNotifications={() => { void allowNotifications(); }}
                 onRemove={remove}
                 onClose={() => setSettingsOpen(false)}

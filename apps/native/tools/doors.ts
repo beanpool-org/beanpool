@@ -3,9 +3,11 @@
  * sheet) and `needDoor` do, and how a picked photo is kept. Only the host and its sheets call these; the eslint fence
  * refuses a tool any import of this file, so a tool reaches them only through the functions its permissions grant.
  *
- * A door writes the map composer's own draft (map.tsx `OFFER_DRAFT_KEY`, read there, never changed here) and opens the
- * composer with `?newPost=<type>`; the composer offers to continue the draft, and nothing is posted until the member taps
- * Post there. The map files are not edited.
+ * A door writes the map composer's own draft (map.tsx `OFFER_DRAFT_KEY`, read there, never changed here), marked as the
+ * tool's, and opens the composer with `?newPost=<type>`; the composer opens it prefilled without asking "Unfinished post?"
+ * (utils/compose-options.ts decideDraftOpen, while the draft is a minute old at most), and nothing is posted until the
+ * member taps Post there. map.tsx was edited once for that, by #2291 (its openComposer asks decideDraftOpen); nothing here
+ * edits the map files.
  */
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,7 +41,9 @@ export interface ToolListFee {
 /**
  * The map composer's own draft (map.tsx persistDraft's shape) from a tool's: its title and words as the tool wrote them,
  * the fee as the List sheet set it (0 where Beans are off), the tool's photos as the composer keeps them (data URIs), no
- * pin. The fields a server slice adds (lendable, shop, availableFrom…) are dropped until that slice lands.
+ * pin, and `savedAt` now. With `tool`, it also carries the tool's marker, `source: 'tool'` and `tool: <id>`, so the
+ * composer opens it without asking while it is fresh (utils/compose-options.ts decideDraftOpen), and clears the marker
+ * once it has. The fields a server slice adds (lendable, shop, availableFrom…) are dropped until that slice lands.
  */
 export function composerDraft(
     type: 'offer' | 'need', draft: ToolOfferDraft | ToolNeedDraft, anchorUrl: string | null, photos: readonly string[], fee: ToolListFee | null, now: number,

@@ -245,3 +245,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `getTlsStatus` and `setOwnAddress` in `apps/manager/src/lib/node-client.ts` were untested directly.
 **Learning:** Testing `getTlsStatus` and `setOwnAddress` verified status response parsing, 403/404 null status fallback, network exception error throwing, and fresh proof error propagation on POST refusal.
 **Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.
+
+## 2026-10-21 - [manager tests] node-client automation token, auth failure, and read limits helpers unit tests
+**Gap:** `isAutomationToken`, `passwordField`, `isAuthFailure`, and `nodeReadLimits` in `apps/manager/src/lib/node-client.ts` were untested directly.
+**Learning:** Testing `nodeReadLimits` with Vitest fake timers (`vi.useFakeTimers()`) verifies timeout promise rejection and `AbortSignal` state propagation when reads exceed `answerMs`.
+**Action:** Continue identifying helper utilities in `apps/manager/src/lib/` for unit test coverage.

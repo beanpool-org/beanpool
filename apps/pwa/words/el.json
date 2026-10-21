@@ -3483,5 +3483,15 @@
     "one": "{n} εβδομάδα",
     "other": "{n} εβδομάδες"
   },
-  "📦 Ask to borrow": "📦 Αίτημα δανεισμού"
+  "📦 Ask to borrow": "📦 Αίτημα δανεισμού",
+  "Asked to join": "Αίτημα συμμετοχής",
+  "Invited": "Προσκλήθηκε",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Καλώς ήρθατε. Από την πρώτη μέρα μπορείτε να περιηγηθείτε, να συναλλαχθείτε, να λάβετε πιστώσεις και να προσκαλέσετε άλλους — και το πιστωτικό σας όριο είναι ήδη ανοιχτό.",
+  "from {n} trust|from {n} trust": {
+    "one": "από {n} εμπιστοσύνη",
+    "other": "από {n} εμπιστοσύνη"
+  },
+  "{name}, already in the group": "{name}, ήδη στην ομάδα",
+  "{name}, already invited": "{name}, έχει ήδη προσκληθεί",
+  "{name}, asked to join": "{name}, ζήτησε συμμετοχή"
 }

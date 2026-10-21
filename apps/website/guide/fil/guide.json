@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "fil",
-  "hash": "8b9b1b47ba7104c66f42b28deea70d475a86aba84f7e1cba96adbbd867543f8c",
+  "hash": "79676305a5e4a4d1ab411e0175124fae3031b8e29cdb07727e3252f3e0e375b7",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "Pagsali sa BeanPool",
       "summary": "Dalawang paraan: isang komunidad, gamit ang imbitasyon ng miyembro, o ang pandaigdigang komunidad kapag bukas, gamit ang 12 lihim na salita o isang sign-in. Paghiling na sumali sa komunidad, at paano mag-imbita ng iba.",
       "help": "Sumali sa komunidad gamit ang imbitasyon ng miyembro, o sa pandaigdigang komunidad gamit ang 12 lihim na salita o isang sign-in.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -1294,7 +1294,7 @@
         },
         {
           "type": "p",
-          "text": "**May account ka na ba?** Sumali sa pandaigdigang komunidad gamit ito, hindi gamit ang pangalawa. I-tap ang bean sa itaas sa kaliwa at, sa ilalim ng **Iyong mga komunidad**, i-tap ang **Pandaigdigang komunidad**: laging naroroon ito, at kapag maaari kang sumali rito sinasabi ng ikalawang linya nito ang **Sumali gamit ang account na ito: 12 salita o sign-in** (o **…: isang sign-in**). Kung bumibisita ka sa pandaigdigang komunidad bilang bisita, i-tap ang **Sumali** sa itaas, sa tabi ng **?**, pagkatapos ay **Sumali gamit ang 12 salita o sign-in** (**Sumali gamit ang sign-in** kung saan tumatanggap lamang ng mga sign-in ang isang komunidad). Kung sinasabi ng app ang **Hindi ka pa miyembro rito** tungkol sa pandaigdigang komunidad, i-tap ang **Sumali gamit ang account na ito**. Sa telepono, binubuksan din ng link na beanpool.org/global ang **Sumali sa pandaigdigang komunidad** gamit din ang iyong account (tingnan ang \"Mula sa website, sa isang telepono\", sa itaas). Sumali ka gamit ang iyong 12 salita o mag-sign in nang isang beses, suriin ang iyong pangalan at i-tap ang **Sumali**. Ang iyong susi at ang iyong 12 salita ay mananatiling pareho, at walang magbabago sa iba mo pang mga komunidad. Tingnan ang \"Mahigit sa isang komunidad\"."
+          "text": "**May account ka na ba?** Sumali sa pandaigdigang komunidad gamit ito, hindi gamit ang pangalawa. I-tap ang bean sa itaas sa kaliwa at, sa ilalim ng **Iyong mga komunidad**, i-tap ang **Pandaigdigang komunidad**: laging naroroon ito, at kapag maaari kang sumali rito sinasabi ng ikalawang linya nito ang **Maglibot muna, pagkatapos ay sumali gamit ang account na ito**. Binubuksan muna ng app ang pandaigdigang komunidad bilang bisita, para makapaglibot ka bago ka sumali. Pagkatapos, o tuwing bumibisita ka rito bilang bisita, i-tap ang **Sumali** sa itaas, sa tabi ng **?**, pagkatapos ay **Sumali gamit ang 12 salita o sign-in** (**Sumali gamit ang sign-in** kung saan tumatanggap lamang ng mga sign-in ang isang komunidad). Kung sinasabi ng app ang **Hindi ka pa miyembro rito** tungkol sa pandaigdigang komunidad, i-tap ang **Sumali gamit ang account na ito**. Sa telepono, binubuksan din ng link na beanpool.org/global ang **Sumali sa pandaigdigang komunidad** gamit din ang iyong account (tingnan ang \"Mula sa website, sa isang telepono\", sa itaas). Sumali ka gamit ang iyong 12 salita o mag-sign in nang isang beses, suriin ang iyong pangalan at i-tap ang **Sumali**. Ang iyong susi at ang iyong 12 salita ay mananatiling pareho, at walang magbabago sa iba mo pang mga komunidad. Tingnan ang \"Mahigit sa isang komunidad\"."
         },
         {
           "type": "p",
@@ -2474,8 +2474,8 @@
       "slug": "communities",
       "title": "Mahigit sa isang komunidad",
       "summary": "Maging kabilang sa ilang komunidad gamit ang iisang account, lumipat sa pagitan nila, sundan ang iyong komunidad sa bagong address, at tingnan ang ipinapakita ng pandaigdigang komunidad.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2493,7 +2493,7 @@
         },
         {
           "type": "p",
-          "text": "May hawak na isang account ang iyong telepono: isang pangalan, isang susi, isang hanay ng 12 salita sa Ingles. Maaari mo itong gamitin upang sumali sa mahigit sa isang komunidad. Ang bawat komunidad ay nagtatabi ng sarili nitong munggo, mga transaksyon at mga post."
+          "text": "May hawak na isang account ang iyong telepono: isang pangalan, isang susi, isang hanay ng 12 salita. Maaari mo itong gamitin upang sumali sa mahigit sa isang komunidad. Ang bawat komunidad ay nagtatabi ng sarili nitong munggo, mga transaksyon at mga post."
         },
         {
           "type": "h2",
@@ -2510,7 +2510,7 @@
         },
         {
           "type": "p",
-          "text": "Kasama mo ang iyong susi, ang iyong 12 salita sa Ingles at ang iyong pangalan. Ang iyong mga post, chat at kalakalan ay nananatili sa bawat komunidad. Susunod mong susuriin ang iyong pangalan at larawan para sa bagong komunidad. Ang isang sign-in na nagpoprotekta sa iyong account ay itinatabi ng bawat komunidad, kaya humihiling ang app na protektahan mo rin ang iyong account sa bago: i-tap ang **Protektahan ito**, o **Mamaya**."
+          "text": "Kasama mo ang iyong susi, ang iyong 12 salita at ang iyong pangalan. Ang iyong mga post, chat at kalakalan ay nananatili sa bawat komunidad. Susunod mong susuriin ang iyong pangalan at larawan para sa bagong komunidad. Ang isang sign-in na nagpoprotekta sa iyong account ay itinatabi ng bawat komunidad, kaya humihiling ang app na protektahan mo rin ang iyong account sa bago: i-tap ang **Protektahan ito**, o **Mamaya**."
         },
         {
           "type": "h2",
@@ -2518,24 +2518,25 @@
         },
         {
           "type": "p",
-          "text": "Hindi nangangailangan ng imbitasyon ang pandaigdigang komunidad, at sasali ka rito gamit ang account na mayroon ka na: ang parehong susi at ang parehong 12 salita sa Ingles. Iniaalok ito ng app kapag bukas ang pandaigdigang komunidad at hindi pa nito nasasabi sa app na ang account na ito ay miyembro na roon."
+          "text": "Hindi nangangailangan ng imbitasyon ang pandaigdigang komunidad, at sasali ka rito gamit ang account na mayroon ka na: ang parehong susi at ang parehong 12 salita. Iniaalok ito ng app kapag bukas ang pandaigdigang komunidad at hindi pa nito nasasabi sa app na ang account na ito ay miyembro na roon."
         },
         {
           "type": "p",
-          "text": "Sa ilalim ng **Your communities** ay palaging may hanay para sa **Pandaigdigang komunidad**. Sinasabi ng ikalawang linya nito kung nasaan ka: ang address nito kapag ikaw ay miyembro (i-tap ito upang lumipat dito), **Sumali gamit ang account na ito: 12 salita o sign-in** (**Sumali gamit ang account na ito: sign-in** kung saan hindi tinatanggap ng komunidad ang 12 salita) kapag maaari kang sumali rito, o kung bakit hindi mo magawa sa ngayon: **Sinusuri…**, **Hindi ito maabot ngayon** (na may **Tap to try again.** habang hindi pa naitatabi ng teleponong ito ang pandaigdigang komunidad), **Hindi tumatanggap ng bagong miyembro ngayon.**, **Nasa pribadong preview ang komunidad na ito. Humingi ng imbitasyon sa may-ari nito.**, o **Isinara ang account mo roon.** Kapag hindi maabot ang pandaigdigang komunidad at nakakonekta ka sa isang komunidad kung saan ikaw ay miyembro, sinasabi ng isang linya sa ilalim nito na **Hindi apektado ang sarili mong komunidad.** Walang iba pa sa telepono ang umaasa rito."
+          "text": "Sa ilalim ng **Your communities** ay palaging may hanay para sa **Pandaigdigang komunidad**. Sinasabi ng ikalawang linya nito kung nasaan ka: ang address nito kapag ikaw ay miyembro (i-tap ito upang lumipat dito), **Maglibot muna, pagkatapos ay sumali gamit ang account na ito** kapag maaari kang sumali rito (habang bumibisita ka rito bilang bisita: **Sumali gamit ang account na ito: 12 salita o sign-in**, o **Sumali gamit ang account na ito: sign-in** kung saan hindi tinatanggap ng komunidad ang 12 salita), o kung bakit hindi mo magawa sa ngayon: **Sinusuri…**, **Hindi ito maabot ngayon** (na may **Tap to try again.** habang hindi pa naitatabi ng teleponong ito ang pandaigdigang komunidad), **Hindi tumatanggap ng bagong miyembro ngayon.**, **Nasa pribadong preview ang komunidad na ito. Humingi ng imbitasyon sa may-ari nito.**, o **Isinara ang account mo roon.** Kapag hindi maabot ang pandaigdigang komunidad at nakakonekta ka sa isang komunidad kung saan ikaw ay miyembro, sinasabi ng isang linya sa ilalim nito na **Hindi apektado ang sarili mong komunidad.** Walang iba pa sa telepono ang umaasa rito."
         },
         {
           "type": "ul",
           "items": [
-            "I-tap ang bean sa itaas sa kaliwa. Sa sheet ng **BeanPool**, sa ilalim ng **Your communities**, i-tap ang **Pandaigdigang komunidad** (sinasabi ng ikalawang linya nito ang **Sumali gamit ang account na ito**). Nasa **Mga Setting** din ito, sa ilalim ng **Advanced / Subsystem**. Kung bumibisita ka sa pandaigdigang komunidad bilang bisita, i-tap ang **Sumali** sa itaas, sa tabi ng **?**, pagkatapos ay **Join with 12 words or a sign-in** (**Join with a sign-in** kung saan tumatanggap lamang ng mga sign-in ang komunidad). Kung ipinapakita ng app ang **Hindi ka pa miyembro rito** para sa pandaigdigang komunidad, i-tap ang **Sumali gamit ang account na ito**.",
-            "Piliin kung paano sasali: **Gumawa ng account gamit ang 12 lihim na salita**, na gumagamit ng 12 salita na mayroon na ang iyong account (walang sign-in, kaya walang lock ng telepono), o **O mag-sign in** nang isang beses gamit ang Google, Apple (sa iPhone) o Facebook. Para sa isang sign-in, humihingi muna ang app ng lock ng iyong telepono, dahil ang sign-in na ito ay nagiging paraan din pabalik sa iyong account.",
+            "I-tap ang bean sa itaas sa kaliwa. Sa sheet ng **BeanPool**, sa ilalim ng **Your communities**, i-tap ang **Pandaigdigang komunidad** (sinasabi ng ikalawang linya nito ang **Maglibot muna, pagkatapos ay sumali gamit ang account na ito**). Binubuksan ng app ang pandaigdigang komunidad bilang bisita, tulad ng ginagawa ng website: maglilibot ka muna, at ang tuldok sa bean ay nagpapakita na isa kang bisita. Nasa **Mga Setting** din ito, sa ilalim ng **Mga naka-save na komunidad**: **🌍 Maglibot sa pandaigdigang komunidad**. Walang sinasalihan at walang nagagawang account sa pamamagitan lamang ng paglibot.",
+            "Kapag handa ka na, i-tap ang **Sumali** sa itaas, sa tabi ng **?**, pagkatapos ay **Join with 12 words or a sign-in** (**Join with a sign-in** kung saan tumatanggap lamang ng mga sign-in ang komunidad). Kung ipinapakita ng app ang **Hindi ka pa miyembro rito** para sa pandaigdigang komunidad, i-tap ang **Sumali gamit ang account na ito**.",
+            "Piliin kung paano sasali: **Sumali gamit ang account na ito**, na gumagamit ng susi at 12 salita na nasa teleponong ito na (walang sign-in, kaya walang lock ng telepono), o, sa ilalim ng **Magdagdag din ng sign-in**, mag-sign in nang isang beses gamit ang Google, Apple (sa iPhone) o Facebook. Para sa isang sign-in, humihingi muna ang app ng lock ng iyong telepono, dahil ang sign-in na ito ay nagiging paraan din pabalik sa iyong account.",
             "Suriin ang pangalang makikita ng mga tao roon, at i-tap ang **Sumali**. Kung mayroon nang ganoong pangalan ang iba, nagmumungkahi ang app ng iba.",
-            "Pagkatapos ay piliin ang iyong larawan para sa pandaigdigang komunidad, gaya ng para sa anumang bagong komunidad, at pagkatapos ay humigit-kumulang kung nasaan ka (**Humigit-kumulang nasaan ka?**; maaari mong i-tap ang **Laktawan muna**): ipinapakita sa iyo ng pandaigdigang komunidad ang mga listing na malapit dito. Tingnan ang \"Pagsali sa BeanPool\"."
+            "Pagkatapos ay piliin ang iyong larawan para sa pandaigdigang komunidad, gaya ng para sa anumang bagong komunidad, at pagkatapos ay humigit-kumulang kung nasaan ka (**Saan ka humigit-kumulang?**; maaari mong i-tap ang **Laktawan muna**): ipinapakita sa iyo ng pandaigdigang komunidad ang mga listing na malapit dito. Tingnan ang \"Pagsali sa BeanPool\"."
           ]
         },
         {
           "type": "p",
-          "text": "Walang magbabago sa iba mo pang mga komunidad, at mananatiling pareho ang iyong 12 salita sa Ingles. Ang isang sign-in ay nagiging paraan din pabalik sa parehong account: ang isang nakakandadong kopya nito ay itinatabi para sa sign-in na iyon, kaya kung mawala mo ang iyong telepono, ibinabalik nito ang account na ito, hindi ang bago. Tingnan ang \"Pagbawi sa iyong account\". Ang isang sign-in na ini-link mo sa iyong account noon ay patuloy na gumagana. Kung sumali ka gamit ang 12 salita at walang sign-in na nagtatago ng kopya ng iyong account, ipinapakita ng app ang card na **May isang paraan pabalik ang iyong account**, tulad ng para sa sinumang sumasali gamit ang 12 salita (tingnan ang \"Pagsali sa BeanPool\")."
+          "text": "Walang magbabago sa iba mo pang mga komunidad, at mananatiling pareho ang iyong 12 salita. Ang isang sign-in ay nagiging paraan din pabalik sa parehong account: ang isang nakakandadong kopya nito ay itinatabi para sa sign-in na iyon, kaya kung mawala mo ang iyong telepono, ibinabalik nito ang account na ito, hindi ang bago. Tingnan ang \"Pagbawi sa iyong account\". Ang isang sign-in na ini-link mo sa iyong account noon ay patuloy na gumagana. Kung sumali ka gamit ang 12 salita at walang sign-in na nagtatago ng kopya ng iyong account, ipinapakita ng app ang card na **May isang paraan pabalik ang iyong account**, tulad ng para sa sinumang sumasali gamit ang 12 salita (tingnan ang \"Pagsali sa BeanPool\")."
         },
         {
           "type": "p",
@@ -2605,7 +2606,7 @@
         },
         {
           "type": "p",
-          "text": "Maaari ka ring lumipat sa **Mga Setting**, sa ilalim ng **System**, pagkatapos ay **Advanced / Subsystem**. Nakalista roon ang iyong mga komunidad. Ang ginagamit mo ay minarkahan bilang aktibo. I-tap ang **Lumipat sa Town** sa isa pa upang lumipat dito."
+          "text": "Maaari ka ring lumipat sa **Mga Setting**, sa ilalim ng **System**, pagkatapos ay **Mga naka-save na komunidad**. Nakalista roon ang iyong mga komunidad. Ang ginagamit mo ay minarkahan bilang aktibo. I-tap ang **Switch to this community** sa isa pa upang lumipat dito."
         },
         {
           "type": "h2",
@@ -2631,7 +2632,7 @@
         {
           "type": "ul",
           "items": [
-            "Sa **Advanced / Subsystem**, i-tap ang **Kalimutan** sa isang komunidad na hindi mo ginagamit sa ngayon. Inaalis nito ito at ang na-save na data nito mula sa teleponong ito.",
+            "Sa **Mga naka-save na komunidad**, i-tap ang **Kalimutan** sa isang komunidad na hindi mo ginagamit sa ngayon. Inaalis nito ito at ang na-save na data nito mula sa teleponong ito.",
             "Sa sheet ng **BeanPool**, sa ilalim ng **Your communities**, ang pagpindot at pagpigil sa isang komunidad at pag-tap sa **Alisin** ay nag-aalis lamang nito sa listahan. Nananatili ang data nito sa telepono."
           ]
         },
@@ -5875,8 +5876,8 @@
       "slug": "credit-line",
       "title": "Iyong credit line",
       "summary": "Kung gaano kababa sa zero ang puwede mong abutin, at paano ito lumalago.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5964,7 @@
         },
         {
           "type": "p",
-          "text": "Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Kung binuksan ng iyong komunidad ang **kilalang floor**, ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad. Itinataas nito ang iyong limitasyon, hindi ang iyong antas: binibilang pa rin ng iyong trust badge kung ano lamang ang iyong nagawa na."
+          "text": "Ang ilang komunidad ay may mga admin na kilala ang bawat miyembro sa pangalan. Ang isang miyembrong kinumpirma ng isang admin ay makakakuha agad ng credit line, **ang kilalang floor**: 1,000 Munggo maliban kung pumili ang iyong komunidad ng ibang halaga. Iyon ay humigit-kumulang 25 oras ng trabaho na ipinagkakatiwala sa iyo ng komunidad. Itinataas nito ang iyong limitasyon, hindi ang iyong antas: binibilang pa rin ng iyong trust badge kung ano lamang ang iyong nagawa na. Naka-on ang kilalang floor sa bawat komunidad na may Munggo maliban kung ini-off ito ng may-ari nito."
         },
         {
           "type": "ul",
@@ -5980,7 +5981,7 @@
         },
         {
           "type": "p",
-          "text": "Sa ilang komunidad kahit sinong miyembro ay maaaring mag-imbita ng mga tao, kaya hindi kilala ng mga admin ang lahat. Kung binuksan ng komunidad mo ang **kilalang floor**, maaaring kumpirmahin ng mga admin ang mga miyembrong kilala nila, at ang mga miyembrong iyon ay magsisimula sa mas mataas na limitasyon. Ang lahat ng iba pa ay magsisimula sa zero, at ang limitasyon ng bawat isa ay lalago sa parehong paraan pagkatapos noon habang sila ay nakikipagkalakalan at bumubuo ng tiwala."
+          "text": "Sa ilang komunidad kahit sinong miyembro ay maaaring mag-imbita ng mga tao, kaya hindi kilala ng mga admin ang lahat. Maaaring kumpirmahin ng mga admin ang mga miyembrong kilala nila, at ang mga miyembrong iyon ay magsisimula sa mas mataas na limitasyon, **ang kilalang floor**, maliban kung ini-off ito ng may-ari ng komunidad mo. Ang lahat ng iba pa ay magsisimula sa zero, at ang limitasyon ng bawat isa ay lalago sa parehong paraan pagkatapos noon habang sila ay nakikipagkalakalan at bumubuo ng tiwala."
         },
         {
           "type": "h2",
@@ -6485,8 +6486,8 @@
       "slug": "what-the-admins-can-see",
       "title": "Makikita ng mga admin",
       "summary": "Sa komunidad na ang mga admin ay nagtatabi ng listahan ng mga pangalan: ano ang hawak nito tungkol sa iyo, sino ang makakabasa nito, ano ang itinatago ng server ng iyong komunidad, at ano ang ibig sabihin ng pagiging kumpirmado.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6539,7 +6540,7 @@
           "type": "ul",
           "items": [
             "Ang isang kumpirmasyon ay walang dalang pangalan. Itinatala ng server kung aling account, aling entry, at aling admin, hindi kailanman kung sino ka.",
-            "Hindi ito isang badge ng tiwala, at sa ngayon ay wala itong binabago sa app.",
+            "Hindi ito isang trust badge. Nagbibigay din ito sa iyo ng credit line kaagad, ang kilalang floor, maliban kung ini-off ito ng may-ari ng komunidad mo: tingnan ang \"Iyong credit line\".",
             "Kung inimbita ka ng isang admin ayon sa pangalan, ang pagsali gamit ang kanilang imbitasyon ay nagkumpirma sa iyo laban sa iyong entry, ng admin na iyon. Ang ibig sabihin ng \"Kumpirmado\" ay sinasabi lamang ng isang admin na ang account na ito ay ang tao sa entry na iyon.",
             "Kung papalitan mo ang isang nawalang telepono at lumipat ang iyong account sa isang bagong susi, lilipat din ang iyong kumpirmasyon kasama nito.",
             "Kung aalis ka o buburahin mo ang iyong account, magtatapos ang iyong kumpirmasyon. Mananatili ang iyong entry sa listahan ng mga admin hanggang sa burahin ito ng isang admin: hilingin sa kanila na gawin ito.",

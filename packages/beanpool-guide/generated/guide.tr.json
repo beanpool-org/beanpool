@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "tr",
-  "hash": "12d44f38b007b309bc76b5593f796de165d52d69b1c22216e5a9ee5919c622fe",
+  "hash": "7f5143f825041a8c029784ba53a676996097fc107d8752f1619c44cf9442d68c",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "BeanPool'a katılma",
       "summary": "Giriş için iki yol: bir üyenin davetiyle yerel topluluğa katılmak veya açık olduğunda 12 gizli kelime ya da tek bir girişle küresel topluluğa katılmak. Katılım isteme ve başkalarını davet etme.",
       "help": "Bir üyenin davetiyle bir topluluğa katılın veya 12 gizli kelime ya da tek girişle küresel topluluğa katılın.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -1294,7 +1294,7 @@
         },
         {
           "type": "p",
-          "text": "**Zaten bir hesabınız var mı?** İkinci bir hesapla değil, onunla küresel topluluğa katılın. Sol üstteki fasulyeye dokunun ve **Topluluklarınız** altında **Küresel topluluk** seçeneğine dokunun: her zaman oradadır ve katılabileceğinizde ikinci satırında **Bu hesapla katıl: 12 sözcük veya oturum açma** (veya **…: oturum açma**) yazar. Küresel topluluğu misafir olarak ziyaret ediyorsanız, üstteki **?** işaretinin yanındaki **Katıl**'a dokunun, ardından **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Girişle katılın**). Uygulama küresel topluluk hakkında **Henüz burada üye değilsin** derse, **Bu hesapla katıl** seçeneğine dokunun. Bir telefonda, beanpool.org/global bağlantısı da hesabınızla **Küresel topluluğa katılın** ekranını açar (yukarıdaki \"Web sitesinden, bir telefonda\" bölümüne bakın). 12 kelimenizle katılırsınız veya bir kez giriş yaparsınız, adınızı kontrol edip **Katıl**'a dokunursunuz. Anahtarınız ve 12 kelimeniz aynı kalır ve diğer topluluklarınızda hiçbir şey değişmez. \"Birden fazla topluluk\" bölümüne bakın."
+          "text": "**Zaten bir hesabınız var mı?** İkinci bir hesapla değil, onunla küresel topluluğa katılın. Sol üstteki fasulyeye dokunun ve **Topluluklarınız** altında **Küresel topluluk** seçeneğine dokunun: her zaman oradadır ve katılabileceğinizde ikinci satırında **Bu hesapla katıl: 12 sözcük veya oturum açma** (veya **…: oturum açma**) yazar. Küresel topluluğu misafir olarak ziyaret ediyorsanız, üstteki **?** işaretinin yanındaki **Katıl**'a dokunun, ardından **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Bir girişle katılın**). Uygulama küresel topluluk hakkında **Henüz burada üye değilsin** derse, **Bu hesapla katıl** seçeneğine dokunun. Bir telefonda, beanpool.org/global bağlantısı da hesabınızla **Küresel topluluğa katılın** ekranını açar (yukarıdaki \"Web sitesinden, bir telefonda\" bölümüne bakın). 12 kelimenizle katılırsınız veya bir kez giriş yaparsınız, adınızı kontrol edip **Katıl**'a dokunursunuz. Anahtarınız ve 12 kelimeniz aynı kalır ve diğer topluluklarınızda hiçbir şey değişmez. \"Birden fazla topluluk\" bölümüne bakın."
         },
         {
           "type": "p",
@@ -2474,8 +2474,8 @@
       "slug": "communities",
       "title": "Birden fazla topluluk",
       "summary": "Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2522,13 +2522,14 @@
         },
         {
           "type": "p",
-          "text": "**Topluluklarınız** altında her zaman **Küresel topluluk** için bir satır bulunur. İkinci satırı durumunuzu belirtir: üye olduğunuzda adresi (geçiş yapmak için dokunun), katılabileceğinizde **Bu hesapla katıl: 12 sözcük veya oturum açma** (topluluğun 12 kelimeyi kabul etmediği yerlerde **Bu hesapla katıl: oturum açma**) ya da şu anda neden katılamadığınızı söyler: **Kontrol ediliyor…**, **Şu anda ulaşılamıyor** (bu telefon küresel topluluğu kaydetmemişken **Yeniden denemek için dokunun.** ile birlikte), **Şu anda yeni üye almıyor.**, **Bu topluluk özel önizlemede. Sahibinden bir davet iste.** veya **Oradaki hesabınız kapatıldı.** Küresel topluluğa ulaşılamadığında ve üyesi olduğunuz bir topluluğa bağlı olduğunuzda, altındaki bir satır **Kendi topluluğun bundan etkilenmez.** der. Telefondaki başka hiçbir şey buna bağlı değildir."
+          "text": "**Topluluklarınız** altında her zaman **Küresel topluluk** için bir satır bulunur. İkinci satırı durumunuzu belirtir: üye olduğunuzda adresi (geçiş yapmak için dokunun), katılabileceğinizde **Önce etrafa göz at, sonra bu hesapla katıl** (misafir olarak ziyaret ederken: **Bu hesapla katıl: 12 sözcük veya oturum açma** veya topluluğun 12 kelimeyi kabul etmediği yerlerde **Bu hesapla katıl: oturum açma**) ya da şu anda neden katılamadığınızı söyler: **Kontrol ediliyor…**, **Şu anda ulaşılamıyor** (bu telefon küresel topluluğu kaydetmemişken **Yeniden denemek için dokun.** ile birlikte), **Şu anda yeni üye almıyor.**, **Bu topluluk özel önizlemede. Sahibinden bir davet iste.** veya **Oradaki hesabınız kapatıldı.** Küresel topluluğa ulaşılamadığında ve üyesi olduğunuz bir topluluğa bağlı olduğunuzda, altındaki bir satır **Kendi topluluğun bundan etkilenmez.** der. Telefondaki başka hiçbir şey buna bağlı değildir."
         },
         {
           "type": "ul",
           "items": [
-            "Sol üstteki fasulyeye dokunun. **BeanPool** sayfasında, **Topluluklarınız** altında **Küresel topluluk**'a dokunun (ikinci satırında **Bu hesapla katıl** yazar). Ayrıca **Ayarlar**'da **Gelişmiş / Alt Sistem** altındadır. Küresel topluluğu misafir olarak ziyaret ediyorsanız, üstteki **?** işaretinin yanındaki **Katıl**'a dokunun, ardından **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Girişle katılın**). Uygulama küresel topluluk için **Henüz burada üye değilsin** gösteriyorsa, **Bu hesapla katıl**'a dokunun.",
-            "Nasıl katılacağınızı seçin: hesabınızın halihazırda sahip olduğu 12 kelimeyi kullanan **12 gizli kelimeyle hesap oluşturun** (giriş yok, bu nedenle telefon kilidi yok) veya Google, Apple (iPhone'da) ya da Facebook ile bir kez **Veya giriş yapın**. Bir oturum açma yöntemi için uygulama önce telefonunuzun kilidini ister, çünkü bu oturum açma yöntemi hesabınıza bir geri dönüş yolu da olur.",
+            "Sol üstteki fasulyeye dokunun. **BeanPool** sayfasında, **Topluluklarınız** altında **Küresel topluluk**'a dokunun (ikinci satırında **Önce etrafa göz at, sonra bu hesapla katıl** yazar). Uygulama, web sitesinin yaptığı gibi küresel topluluğu misafir olarak açar: önce etrafa göz atarsınız ve fasulyedeki nokta misafir olduğunuzu gösterir. Ayrıca **Ayarlar**'da **Kayıtlı topluluklar** altındadır: **Küresel topluluğa göz at**. Bakmakla hiçbir yere katılınmaz ve hiçbir hesap oluşturulmaz.",
+            "Hazır olduğunuzda üstteki **?** işaretinin yanındaki **Katıl**'a dokunun, ardından **12 kelime veya bir girişle katılın** seçeneğine dokunun (bir topluluğun yalnızca girişleri kabul ettiği yerlerde **Bir girişle katılın**). Uygulama küresel topluluk için **Henüz burada üye değilsin** gösteriyorsa, **Bu hesapla katıl**'a dokunun.",
+            "Nasıl katılacağınızı seçin: bu telefonda zaten bulunan anahtarı ve 12 kelimeyi kullanan **Bu hesapla katıl** (giriş yok, bu nedenle telefon kilidi yok) veya **Ayrıca bir giriş ekleyin** altında Google, Apple (iPhone'da) ya da Facebook ile bir kez giriş yapın. Bir oturum açma yöntemi için uygulama önce telefonunuzun kilidini ister, çünkü bu oturum açma yöntemi hesabınıza bir geri dönüş yolu da olur.",
             "Oradaki insanların göreceği adı kontrol edin ve **Katıl**'a dokunun. Birisi bu ada zaten sahipse uygulama başkalarını önerir.",
             "Ardından herhangi bir yeni toplulukta olduğu gibi küresel topluluk için fotoğrafınızı seçin ve sonra kabaca nerede olduğunuzu belirleyin (**Kabaca neredesiniz?**; **Şimdilik atla**'ya dokunabilirsiniz): küresel topluluk size yakındaki ilanları gösterir. \"BeanPool'a katılma\" bölümüne bakın."
           ]
@@ -2605,7 +2606,7 @@
         },
         {
           "type": "p",
-          "text": "Ayrıca **Ayarlar**'da **Sistem**, ardından **Gelişmiş / Alt Sistem** altında geçiş yapabilirsiniz. Topluluklarınız orada listelenir. Kullandığınız topluluk etkin olarak işaretlenir. Başka birine geçmek için üzerindeki **Kasabaya Geç** seçeneğine dokunun."
+          "text": "Ayrıca **Ayarlar**'da **Sistem**, ardından **Kayıtlı topluluklar** altında geçiş yapabilirsiniz. Topluluklarınız orada listelenir. Kullandığınız topluluk etkin olarak işaretlenir. Başka birine geçmek için üzerindeki **Bu topluluğa geç** seçeneğine dokunun."
         },
         {
           "type": "h2",
@@ -2631,7 +2632,7 @@
         {
           "type": "ul",
           "items": [
-            "**Gelişmiş / Alt Sistem**'de şu anda kullanmadığınız bir toplulukta **Unut** seçeneğine dokunun. Bu, onu ve kayıtlı verilerini bu telefondan kaldırır.",
+            "**Kayıtlı topluluklar**'da şu anda kullanmadığınız bir toplulukta **Unut** seçeneğine dokunun. Bu, onu ve kayıtlı verilerini bu telefondan kaldırır.",
             "**BeanPool** sayfasında, **Topluluklarınız** altında bir topluluğa basılı tutup **Kaldır**'a dokunmak onu yalnızca listeden çıkarır. Verileri telefonda kalır."
           ]
         },
@@ -5875,8 +5876,8 @@
       "slug": "credit-line",
       "title": "Kredi limitiniz",
       "summary": "Sıfırın ne kadar altına inebileceğiniz ve bu limitin nasıl büyüdüğü.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5964,7 @@
         },
         {
           "type": "p",
-          "text": "Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Sizinki **bilinen taban**ı açtıysa, bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır. Limitinizi yükseltir, seviyenizi değil: güven rozetiniz yalnızca yaptıklarınızı saymaya devam eder."
+          "text": "Bazı topluluklarda her üyeyi adıyla tanıyan yöneticiler bulunur. Bir yöneticinin teyit ettiği üye doğrudan bir kredi limiti alır, **bilinen taban**: topluluğunuz başka bir miktar seçmedikçe 1.000 Fasulye. Bu, topluluğun size güvendiği yaklaşık 25 saatlik çalışmadır. Limitinizi yükseltir, seviyenizi değil: güven rozetiniz yalnızca yaptıklarınızı saymaya devam eder. Bilinen taban, sahibi kapatmadıkça Fasulyesi olan her toplulukta açıktır."
         },
         {
           "type": "ul",
@@ -5980,7 +5981,7 @@
         },
         {
           "type": "p",
-          "text": "Bazı topluluklarda herhangi bir üye insanları davet edebilir, bu nedenle yöneticiler herkesi tanımaz. Sizinki **bilinen taban**ı açtıysa, yöneticiler tanıdıkları üyeleri teyit edebilir ve bu üyeler daha yüksek bir limitle başlar. Geri kalan herkes sıfırdan başlar ve sonrasında herkesin limiti takas yaptıkça ve güven inşa ettikçe aynı şekilde büyür."
+          "text": "Bazı topluluklarda herhangi bir üye insanları davet edebilir, bu nedenle yöneticiler herkesi tanımaz. Yöneticiler tanıdıkları üyeleri teyit edebilir ve bu üyeler, topluluğunuzun sahibi kapatmadıkça daha yüksek bir limitle, **bilinen taban**la başlar. Geri kalan herkes sıfırdan başlar ve sonrasında herkesin limiti takas yaptıkça ve güven inşa ettikçe aynı şekilde büyür."
         },
         {
           "type": "h2",
@@ -6485,8 +6486,8 @@
       "slug": "what-the-admins-can-see",
       "title": "Yöneticilerin görebildikleri",
       "summary": "Yöneticilerin isim listesi tuttuğu bir toplulukta: sizin hakkınızda neleri içerdiği, kimlerin okuyabileceği, sunucunun neleri tuttuğu ve onaylanmanın anlamı.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6539,7 +6540,7 @@
           "type": "ul",
           "items": [
             "Bir onay hiçbir isim taşımaz. Sunucu hangi hesabı, hangi kaydı ve hangi yöneticiyi kaydeder; asla kim olduğunuzu kaydetmez.",
-            "Bu bir güven rozeti değildir ve şimdilik uygulamada başka hiçbir şeyi değiştirmez.",
+            "Bu bir güven rozeti değildir. Ayrıca topluluğunuzun sahibi kapatmadıkça size doğrudan bir kredi limiti, bilinen tabanı verir: \"Kredi limitiniz\" bölümüne bakın.",
             "Bir yönetici sizi adınızla davet ettiyse, onun davetiyle katılmak o yönetici tarafından kaydınıza karşı sizi onaylamıştır. \"Onaylandı\" yalnızca bir yöneticinin bu hesabın o kayıttaki kişi olduğunu söylediği anlamına gelir.",
             "Kayıp bir telefonu değiştirirseniz ve hesabınız yeni bir anahtara taşınırsa onayınız da onunla birlikte taşınır.",
             "Ayrılırsanız veya hesabınızı silerseniz onayınız sona erer. Bir yönetici silene kadar kaydınız yöneticilerin listesinde kalır: silmelerini isteyin.",

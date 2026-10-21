@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "fr",
-  "hash": "09fd65b7d9bb2225176389dcd46930afa25cdfeebfa5ed37339d2072721e2805",
+  "hash": "f803340cf55846887b0a8b736fb36ab98d13d66e24ccb706c4e4e360bd14a1ee",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "Rejoindre BeanPool",
       "summary": "Deux façons d'entrer : une communauté sur invitation d'un membre, ou la communauté globale si elle est ouverte, avec 12 mots secrets ou un compte. Demander l'accès et inviter d'autres personnes.",
       "help": "Rejoignez une communauté sur invitation d'un membre, ou la communauté globale avec 12 mots secrets ou un compte.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -2474,8 +2474,8 @@
       "slug": "communities",
       "title": "Plusieurs communautés",
       "summary": "Appartenir à plusieurs communautés avec un seul compte, basculer entre elles, suivre votre communauté vers une nouvelle adresse et voir ce que montre la communauté globale.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2522,20 +2522,21 @@
         },
         {
           "type": "p",
-          "text": "Sous **Vos communautés**, il y a toujours une ligne pour la **Communauté mondiale**. Sa deuxième ligne indique votre situation : son adresse lorsque vous êtes membre (touchez-la pour basculer dessus), **Rejoindre avec ce compte : 12 mots ou une connexion** (**Rejoindre avec ce compte : une connexion** là où la communauté n'accepte pas les 12 mots) quand vous pouvez la rejoindre, ou pourquoi vous ne le pouvez pas pour le moment : **Vérification…**, **Impossible de la joindre pour le moment** (avec **Touchez pour réessayer.** tant que ce téléphone n'a pas enregistré la communauté globale), **N'accepte pas de nouveaux membres pour le moment.**, **Cette communauté est en avant-première privée. Demandez une invitation à son propriétaire.**, ou **L'accès de votre compte y a été fermé.** Lorsque la communauté globale est inaccessible et que vous êtes connecté à une communauté dont vous êtes membre, une ligne en dessous indique **Votre propre communauté n'est pas touchée.** Rien d'autre sur le téléphone n'en dépend."
+          "text": "Sous **Vos communautés**, il y a toujours une ligne pour la **Communauté mondiale**. Sa deuxième ligne indique votre situation : son adresse lorsque vous êtes membre (touchez-la pour basculer dessus), **Explorez d'abord, puis rejoignez avec ce compte** quand vous pouvez la rejoindre (pendant que vous la visitez en tant qu'invité : **Rejoindre avec ce compte : 12 mots ou une connexion**, ou **Rejoindre avec ce compte : une connexion** là où la communauté n'accepte pas les 12 mots), ou pourquoi vous ne le pouvez pas pour le moment : **Vérification…**, **Impossible de la joindre pour le moment** (avec **Touchez pour réessayer.** tant que ce téléphone n'a pas enregistré la communauté globale), **N'accepte pas de nouveaux membres pour le moment.**, **Cette communauté est en avant-première privée. Demandez une invitation à son propriétaire.**, ou **L'accès de votre compte y a été fermé.** Lorsque la communauté globale est inaccessible et que vous êtes connecté à une communauté dont vous êtes membre, une ligne en dessous indique **Votre propre communauté n'est pas touchée.** Rien d'autre sur le téléphone n'en dépend."
         },
         {
           "type": "ul",
           "items": [
-            "Touchez le haricot en haut à gauche. Dans le volet **BeanPool**, sous **Vos communautés**, touchez **Communauté mondiale** (sa deuxième ligne indique **Rejoindre avec ce compte**). C'est également accessible dans les **Paramètres**, sous **Avancé / Sous-système**. Si vous visitez la communauté globale en tant qu'invité, touchez **Rejoindre** en haut, à côté du **?**, puis **Rejoindre avec 12 mots ou une connexion** (**Rejoindre avec une connexion** là où une communauté n'accepte que les connexions). Si l'application affiche **Vous n'êtes pas encore membre ici** pour la communauté globale, touchez **Rejoindre avec ce compte**.",
-            "Choisissez comment rejoindre : **Créer un compte avec 12 mots secrets**, qui utilise les 12 mots que votre compte possède déjà (pas de connexion, donc pas de verrouillage du téléphone), ou **Ou se connecter** une fois avec Google, Apple (sur un iPhone) ou Facebook. Pour une connexion, l'application demande d'abord le verrouillage de votre téléphone, car cette connexion devient également un moyen de récupération pour votre compte.",
+            "Touchez le haricot en haut à gauche. Dans le volet **BeanPool**, sous **Vos communautés**, touchez **Communauté mondiale** (sa deuxième ligne indique **Explorez d'abord, puis rejoignez avec ce compte**). L'application ouvre la communauté globale en tant qu'invité, comme le fait le site web : vous commencez par explorer, et le point sur le haricot indique que vous êtes un invité. C'est également dans les **Paramètres**, sous **Communautés enregistrées** : **Explorer la communauté globale**. Le fait d'explorer ne vous fait rejoindre aucune communauté et ne crée aucun compte.",
+            "Lorsque vous êtes prêt, touchez **Rejoindre** en haut, à côté du **?**, puis **Rejoindre avec 12 mots ou une connexion** (**Rejoindre avec une connexion** là où une communauté n'accepte que les connexions). Si l'application affiche **Vous n'êtes pas encore membre ici** pour la communauté globale, touchez **Rejoindre avec ce compte**.",
+            "Choisissez comment rejoindre : **Rejoindre avec ce compte**, qui utilise la clé et les 12 mots déjà présents sur ce téléphone (pas de connexion, donc pas de verrouillage du téléphone), ou, sous **Ajouter aussi une connexion**, connectez-vous une fois avec Google, Apple (sur un iPhone) ou Facebook. Pour une connexion, l'application demande d'abord le verrouillage de votre téléphone, car cette connexion devient également un moyen de récupération pour votre compte.",
             "Vérifiez le nom que les personnes verront là-bas, et touchez **Rejoindre**. Si quelqu'un porte déjà ce nom, l'application en suggère d'autres.",
-            "Choisissez ensuite votre photo pour la communauté globale, comme pour toute nouvelle communauté, puis approximativement où vous vous situez (**Où vous situez-vous environ ?** ; vous pouvez toucher **Ignorer pour l'instant**) : la communauté globale vous montre les annonces proches de ce lieu. Voir « Rejoindre BeanPool »."
+            "Choisissez ensuite votre photo pour la communauté globale, comme pour toute nouvelle communauté, puis approximativement où vous vous situez (**Où êtes-vous à peu près ?** ; vous pouvez toucher **Ignorer pour l'instant**) : la communauté globale vous montre les annonces proches de ce lieu. Voir « Rejoindre BeanPool »."
           ]
         },
         {
           "type": "p",
-          "text": "Rien ne change dans vos autres communautés, et vos 12 mots restent les mêmes. Une connexion devient également un moyen de retour vers ce même compte : une copie verrouillée de celui-ci est conservée pour cette connexion, de sorte que si vous perdez votre téléphone, elle restaure ce compte, et non un nouveau. Voir « Récupérer votre compte ». Une connexion que vous aviez associée à votre compte auparavant continue de fonctionner. Si vous rejoignez avec 12 mots et qu'aucune connexion ne conserve de copie de votre compte, l'application affiche la carte **Votre compte a un seul moyen de récupération**, comme pour toute personne qui rejoint avec 12 mots (voir « Rejoindre BeanPool »)."
+          "text": "Rien ne change dans vos autres communautés, et vos 12 mots restent les mêmes. Une connexion devient également un moyen de récupération pour ce même compte : une copie verrouillée de celui-ci est conservée pour cette connexion, de sorte que si vous perdez votre téléphone, elle restaure ce compte, et non un nouveau. Voir « Récupérer votre compte ». Une connexion que vous aviez associée à votre compte auparavant continue de fonctionner. Si vous rejoignez avec 12 mots et qu'aucune connexion ne conserve de copie de votre compte, l'application affiche la carte **Votre compte a un seul moyen de récupération**, comme pour toute personne qui rejoint avec 12 mots (voir « Rejoindre BeanPool »)."
         },
         {
           "type": "p",
@@ -2578,7 +2579,7 @@
         },
         {
           "type": "p",
-          "text": "Sans zone définie, votre téléphone conserve plutôt les 100 annonces les plus récentes du monde entier, et une ligne au-dessus du Marché indique : **Vous voyez les annonces les plus récentes du monde entier. Définissez votre zone pour voir ce qui est près de chez vous.** Touchez-la pour en définir une. Vous pouvez toujours publier, envoyer des messages et rechercher comme avant."
+          "text": "Sans zone définie, votre téléphone conserve plutôt les 100 annonces les plus récentes du monde entier, et une ligne au-dessus du Marché indique **Vous voyez les annonces les plus récentes du monde entier. Définissez votre zone pour voir ce qui est près de chez vous.** Touchez-la pour en définir une. Vous pouvez toujours publier, envoyer des messages et rechercher comme avant."
         },
         {
           "type": "p",
@@ -2605,7 +2606,7 @@
         },
         {
           "type": "p",
-          "text": "Vous pouvez également basculer dans les **Paramètres**, sous **SYSTÈME**, puis **Avancé / Sous-système**. Vos communautés y sont listées. Celle que vous utilisez est marquée comme active. Touchez **Passer à la ville** sur une autre pour y basculer."
+          "text": "Vous pouvez également basculer dans les **Paramètres**, sous **Système**, puis **Communautés enregistrées**. Vos communautés y sont listées. Celle que vous utilisez est marquée comme active. Touchez **Basculer vers cette communauté** sur une autre pour y basculer."
         },
         {
           "type": "h2",
@@ -2631,7 +2632,7 @@
         {
           "type": "ul",
           "items": [
-            "Dans **Avancé / Sous-système**, touchez **Oublier** sur une communauté que vous n'utilisez pas actuellement. Cela retire la communauté et ses données enregistrées de ce téléphone.",
+            "Dans **Communautés enregistrées**, touchez **Oublier** sur une communauté que vous n'utilisez pas actuellement. Cela retire la communauté et ses données enregistrées de ce téléphone.",
             "Dans le volet **BeanPool**, sous **Vos communautés**, appuyer longuement sur une communauté et toucher **Retirer** la retire seulement de la liste. Ses données restent sur le téléphone."
           ]
         },
@@ -5875,8 +5876,8 @@
       "slug": "credit-line",
       "title": "Votre ligne de crédit",
       "summary": "Jusqu'où descendre sous zéro et comment elle augmente.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5964,7 @@
         },
         {
           "type": "p",
-          "text": "Certaines communautés ont des administrateurs qui connaissent chaque membre par son nom. Si la vôtre a activé **le plancher de confiance connu**, un membre confirmé par un administrateur bénéficie immédiatement d'une ligne de crédit : 1 000 haricots, sauf si votre communauté a choisi un autre montant. Cela représente environ 25 heures de travail pour lesquelles la communauté vous accorde sa confiance. Cela augmente votre limite, pas votre niveau : votre badge de confiance ne compte toujours que ce que vous avez accompli."
+          "text": "Certaines communautés ont des administrateurs qui connaissent chaque membre par son nom. Un membre confirmé par un administrateur bénéficie immédiatement d'une ligne de crédit, **le plancher connu** : 1 000 haricots, sauf si votre communauté a choisi un autre montant. Cela représente environ 25 heures de travail pour lesquelles la communauté vous accorde sa confiance. Cela augmente votre limite, pas votre niveau : votre badge de confiance ne compte toujours que ce que vous avez accompli. Le plancher connu est activé dans chaque communauté avec des haricots, à moins que son propriétaire ne l'ait désactivé."
         },
         {
           "type": "ul",
@@ -5980,7 +5981,7 @@
         },
         {
           "type": "p",
-          "text": "Dans certaines communautés, chaque membre peut inviter des personnes, les administrateurs ne connaissent donc pas tout le monde. Si la vôtre a activé **le plancher de confiance connu**, les administrateurs peuvent confirmer les membres qu'ils connaissent, et ces membres débutent avec une limite plus élevée. Tous les autres commencent à zéro, et la limite de chacun augmente ensuite de la même manière au fil des échanges et de la confiance bâtie."
+          "text": "Dans certaines communautés, chaque membre peut inviter des personnes, les administrateurs ne connaissent donc pas tout le monde. Les administrateurs peuvent confirmer les membres qu'ils connaissent, et ces membres débutent avec une limite plus élevée, **le plancher connu**, à moins que le propriétaire de votre communauté ne l'ait désactivé. Tous les autres commencent à zéro, et la limite de chacun augmente ensuite de la même manière au fil des échanges et de la confiance bâtie."
         },
         {
           "type": "h2",
@@ -6485,8 +6486,8 @@
       "slug": "what-the-admins-can-see",
       "title": "Ce que voient les admins",
       "summary": "Dans une communauté où les administrateurs tiennent un registre de noms : ce qu'il contient sur vous, qui peut le lire, ce que garde le serveur et ce que signifie être confirmé.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6539,7 +6540,7 @@
           "type": "ul",
           "items": [
             "Une confirmation ne mentionne aucun nom. Le serveur consigne quel compte, quelle entrée et quel administrateur, jamais qui vous êtes.",
-            "Il ne s'agit pas d'un badge de confiance, et pour l'instant cela ne modifie rien d'autre dans l'application.",
+            "Il ne s'agit pas d'un badge de confiance. Cela vous donne également une ligne de crédit immédiatement, le plancher connu, à moins que le propriétaire de votre communauté ne l'ait désactivé : voir « Votre ligne de crédit ».",
             "Si un administrateur vous a invité nominativement, vous inscrire avec son invitation vous a confirmé sur votre fiche, par cet administrateur. « Confirmé » signifie uniquement qu'un administrateur certifie que ce compte est bien la personne désignée sur cette entrée.",
             "Si vous remplacez un téléphone perdu et que votre compte adopte une nouvelle clé, votre confirmation suit automatiquement.",
             "Si vous quittez la communauté ou supprimez votre compte, votre confirmation prend fin. Votre entrée reste sur la liste des administrateurs jusqu'à ce qu'un administrateur la supprime : demandez-leur de le faire.",

@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 4,
+  "version": 5,
   "language": "de",
-  "hash": "9ed9ba1df28de61dae0545f0bf1a7ec810e7ce54234aaafa95420058d3808945",
+  "hash": "39d577186b4a38a62fa68f4164a95412b59dd898ec84fd5e3d8b0c8b18f04d3a",
   "sections": [
     {
       "id": "about",
@@ -1189,8 +1189,8 @@
       "title": "BeanPool beitreten",
       "summary": "Zwei Wege: eine Community mit Einladung oder die globale Community mit 12 geheimen Wörtern oder einem Login. Beitritt anfragen und andere einladen.",
       "help": "Tritt einer Community per Einladung bei oder der globalen Community mit 12 geheimen Wörtern oder einem Login.",
-      "sourceHash": "f78397c8a8d66d56",
-      "source-hash": "f78397c8a8d66d56",
+      "sourceHash": "5a1feb7390e4c3fb",
+      "source-hash": "5a1feb7390e4c3fb",
       "section": "getting-started",
       "related": [
         "home",
@@ -1215,7 +1215,7 @@
         },
         {
           "type": "p",
-          "text": "Keine Einladung, aber eine Community in deiner Nähe? Tritt der globalen Community bei und bitte dann diese Community um Aufnahme: Jedes ihrer Mitglieder kann dich hereinlassen, oder in einer Community, in der nur die Admins einladen, deren Admins. Siehe „Community in der Nähe finden“."
+          "text": "Keine Einladung, aber eine Community in deiner Nähe? Tritt der globalen Community bei und bitte dann diese Community um Aufnahme: Jedes ihrer Mitglieder kann dich hereinlassen, oder in einer Community, in der nur die Admins einladen, deren Admins. Siehe „Community in deiner Nähe finden“."
         },
         {
           "type": "p",
@@ -1270,7 +1270,7 @@
         },
         {
           "type": "p",
-          "text": "**Von der Website auf einem Smartphone.** Auf beanpool.org/global öffnet **In der BeanPool-App öffnen** die App direkt an diesem Zugang: die beiden obigen Wege auf einem Telefon, das noch kein Konto hat, oder **Der globalen Gemeinschaft beitreten** mit dem Konto, das das Telefon bereits hat (siehe „Hast du bereits ein Konto?“ unten). Wenn dieses Konto dort bereits Mitglied ist, öffnet sich stattdessen die **BeanPool**-Ansicht, wo **Globale Community** unter **DEINE COMMUNITIES** dorthin wechselt. Wenn die globale Community dieses Konto geschlossen hat, öffnet sich die App einfach normal. Auf Android öffnet sich Google Play, wenn die App nicht installiert ist; nach der Installation gelangt BeanPool beim ersten Öffnen direkt zu diesem Einstieg. Auf einem iPhone öffnet sich der App Store; tippe nach der Installation auf **BeanPool weltweit entdecken**. Der Link öffnet nur einen Bildschirm: Niemand tritt bei, bis du tippst. Wenn er die **BeanPool**-Ansicht öffnet, prüft diese wie gewohnt, ob das Konto dieses Telefons Mitglied jeder dort aufgeführten Community ist. Eine Einladung hat Vorrang: Wenn dir eine gesendet wurde, öffnet die App stattdessen die Einladung, und wenn du mitten im Beitrittsprozess warst, setzt sie diesen fort."
+          "text": "**Von der Website auf einem Smartphone.** Auf beanpool.org/global öffnet **In der BeanPool-App öffnen** die App direkt an diesem Zugang: die beiden obigen Wege auf einem Telefon, das noch kein Konto hat, oder **Der globalen Gemeinschaft beitreten** mit dem Konto, das das Telefon bereits hat (siehe „Hast du bereits ein Konto?“ unten). Wenn dieses Konto dort bereits Mitglied ist, öffnet sich stattdessen die **BeanPool**-Ansicht, wo **Globale Gemeinschaft** unter **DEINE COMMUNITIES** dorthin wechselt. Wenn die globale Community dieses Konto geschlossen hat, öffnet sich die App einfach normal. Auf Android öffnet sich Google Play, wenn die App nicht installiert ist; nach der Installation gelangt BeanPool beim ersten Öffnen direkt zu diesem Einstieg. Auf einem iPhone öffnet sich der App Store; tippe nach der Installation auf **BeanPool weltweit entdecken**. Der Link öffnet nur einen Bildschirm: Niemand tritt bei, bis du tippst. Wenn er die **BeanPool**-Ansicht öffnet, prüft diese wie gewohnt, ob das Konto dieses Telefons Mitglied jeder dort aufgeführten Community ist. Eine Einladung hat Vorrang: Wenn dir eine gesendet wurde, öffnet die App stattdessen die Einladung, und wenn du mitten im Beitrittsprozess warst, setzt sie diesen fort."
         },
         {
           "type": "p",
@@ -1294,7 +1294,7 @@
         },
         {
           "type": "p",
-          "text": "**Hast du bereits ein Konto?** Tritt der globalen Community damit bei, nicht mit einem zweiten. Tippe oben links auf die Bohne und unter **DEINE COMMUNITIES** auf **Globale Community**: Sie ist immer da, und wenn du beitreten kannst, lautet ihre zweite Zeile **Mit diesem Konto beitreten: 12 Wörter oder eine Anmeldung** (oder **…: eine Anmeldung**). Wenn du die globale Community als Gast besuchst, tippe oben neben dem **?** auf **Teilnehmen** und dann auf **Mit 12 Wörtern oder einer Anmeldung beitreten** (**Mit einer Anmeldung beitreten**, wo eine Community nur Anmeldungen akzeptiert). Wenn die App über die globale Community meldet: **Du bist hier noch kein Mitglied**, tippe auf **Mit diesem Konto beitreten**. Auf einem Smartphone öffnet der Link beanpool.org/global **Der globalen Gemeinschaft beitreten** ebenfalls mit deinem Konto (siehe „Von der Website auf einem Smartphone“ oben). Du trittst mit deinen 12 Wörtern bei oder meldest dich einmal an, prüfst deinen Namen und tippst auf **Teilnehmen**. Dein Schlüssel und deine 12 Wörter bleiben gleich, und in deinen anderen Communitys ändert sich nichts. Siehe „Mehr als eine Community“."
+          "text": "**Hast du bereits ein Konto?** Tritt der globalen Community damit bei, nicht mit einem zweiten. Tippe oben links auf die Bohne und unter **DEINE COMMUNITIES** auf **Globale Gemeinschaft**: Sie ist immer da, und wenn du beitreten kannst, besagt ihre zweite Zeile **Zuerst umsehen, dann mit diesem Konto beitreten**. Die App öffnet die globale Community zuerst als Gast, sodass du dich vor dem Beitritt umsehen kannst. Tippe dann, oder wann immer du sie als Gast besuchst, oben neben dem **?** auf **Teilnehmen**, dann auf **Mit 12 Wörtern oder einer Anmeldung beitreten** (**Mit einer Anmeldung beitreten**, wo eine Community nur Anmeldungen annimmt). Wenn die App über die globale Community meldet: **Du bist hier noch kein Mitglied**, tippe auf **Mit diesem Konto beitreten**. Auf einem Smartphone öffnet der Link beanpool.org/global **Der globalen Gemeinschaft beitreten** ebenfalls mit deinem Konto (siehe oben „Von der Website auf einem Smartphone“). Du trittst mit deinen 12 Wörtern bei oder meldest dich einmal an, prüfst deinen Namen und tippst auf **Teilnehmen**. Dein Schlüssel und deine 12 Wörter bleiben gleich, und in deinen anderen Communities ändert sich nichts. Siehe „Mehrere Communitys“."
         },
         {
           "type": "p",
@@ -1313,7 +1313,7 @@
           "items": [
             "**Dein Foto:** Wähle ein Foto oder eines der vorgefertigten Bilder, oder überspringe dies und füge später eines über dein Profil hinzu. Manche Communitys verlangen ein Bild vor deinem ersten Beitrag. Menschen handeln leichter mit einem Gesicht oder Bild, das sie wiedererkennen.",
             "Nach einer Einladung führt dich **← Zurück** auf **Dein Foto** zurück zu deinem Namen, um ihn zu ändern. Es ist immer noch dasselbe Konto: Tippe auf **Weiter** und du fährst mit dem neuen Namen zu **Dein Foto** und **Sicherheitskopie** fort. Wenn jemand ihn bereits hat, schlägt die App andere vor. In der globalen Community gibt es hier kein **← Zurück**: Du bist bereits beigetreten.",
-            "**Dein Gebiet** (in einem Webbrowser in der globalen Community und in der Smartphone-App, wenn du der globalen Community mit einem bestehenden Konto beitrittst): **Wo bist du ungefähr?** Die globale Community zeigt dir Angebote in deiner Nähe: die nächsten 500 Einträge im Umkreis von 250 km. Tippe auf **Meinen Standort verwenden** oder **Ort oder Vorort eingeben**. Dein Gebiet wird auf etwa 10 km gerundet, niemals auf deinen genauen Standort: Dein Smartphone oder Browser rundet es vor dem Senden. Andere Mitglieder sehen, wie weit du entfernt bist, und eine von dir erstellte Umfrage wird in deinem Gebiet angezeigt. **Jetzt überspringen** sendet nichts und fragt nichts ab; du gelangst trotzdem hinein und siehst die neuesten weltweiten Einträge, bis du es einstellst. Du kannst es jederzeit in den **Einstellungen** unter **Dein Gebiet** ändern oder löschen.",
+            "**Dein Gebiet** (in einem Webbrowser in der globalen Community und in der Smartphone-App, wenn du der globalen Community mit einem bestehenden Konto beitrittst): **Ungefähr wo bist du?** Die globale Community zeigt dir Angebote in deiner Nähe: die nächsten 500 Einträge im Umkreis von 250 km. Tippe auf **Meinen Standort verwenden** oder **Ort oder Stadtteil eingeben**. Deine Gegend wird auf etwa 10 km gerundet, niemals auf deinen genauen Standort: Dein Smartphone oder Browser rundet es vor dem Senden. Andere Mitglieder sehen, wie weit du entfernt bist, und eine von dir erstellte Umfrage wird in deinem Gebiet angezeigt. **Vorerst überspringen** sendet nichts und fragt nichts ab; du gelangst trotzdem hinein und siehst die neuesten weltweiten Einträge, bis du es einstellst. Du kannst es jederzeit in den **Einstellungen** unter **Deine Gegend** ändern oder löschen.",
             "**Sicherheitskopie:** Die App zeigt deine 12 Wörter. Schreibe sie auf Papier auf und bewahre sie sicher auf. Das Kontrollkästchen **Ich habe diese Wörter gesichert** (in einem Webbrowser **Ich habe diese Wörter an einem sicheren Ort aufgeschrieben**) dient als Erinnerung. Nichts hindert dich daran, es zu überspringen, aber lies bald „Deine 12 Wörter“. Wenn du der globalen Community in der Smartphone-App mit einer Anmeldung beigetreten bist, zeigt dieser Schritt deine Anmeldung, die dein Konto schützt, und deine Wörter sind mit einem Fingertipp unter **Lieber 12 Wörter aufschreiben?** erreichbar. Wenn du mit 12 Wörtern beigetreten bist, heißt es zuerst, dass diese 12 Wörter dein Konto sind, und es wird **Eine Anmeldung als zweiten Weg zurück hinzufügen** angeboten: Auch das kannst du überspringen.",
             "**So funktioniert's:** Eine kurze Tour. Tippe auf **Los geht's!**, um zu beginnen."
           ]
@@ -1409,7 +1409,7 @@
         },
         {
           "type": "p",
-          "text": "Jedes Mitglied kann antworten. In einer Community, in der nur die Admins einladen, sehen nur deren Eigentümer und Admins die Anfragen und antworten darauf. Siehe „Community in der Nähe finden“."
+          "text": "Jedes Mitglied kann antworten. In einer Community, in der nur die Admins einladen, sehen nur deren Eigentümer und Admins die Anfragen und antworten darauf. Siehe „Community in deiner Nähe finden“."
         }
       ]
     },
@@ -2474,8 +2474,8 @@
       "slug": "communities",
       "title": "Mehrere Communitys",
       "summary": "Mit einem Konto zu mehreren Communitys gehören, wechseln, einer Community zu einer neuen Adresse folgen und die globale Ansicht nutzen.",
-      "sourceHash": "b123b0f66fb01c9d",
-      "source-hash": "b123b0f66fb01c9d",
+      "sourceHash": "fe1d603a6bf1c424",
+      "source-hash": "fe1d603a6bf1c424",
       "section": "getting-started",
       "related": [
         "joining",
@@ -2493,7 +2493,7 @@
         },
         {
           "type": "p",
-          "text": "Dein Smartphone hält ein einziges Konto: ein Name, ein Schlüssel, ein Satz aus 12 Wörtern (es sind englische Wörter). Du kannst es nutzen, um mehreren Communitys beizutreten. Jede Community verwaltet ihre eigenen Bohnen, Handelsgeschäfte und Beiträge."
+          "text": "Dein Telefon hält ein einziges Konto: ein Name, ein Schlüssel, ein Satz aus 12 Wörtern. Du kannst es nutzen, um mehreren Communitys beizutreten. Jede Community verwaltet ihre eigenen Bohnen, Handelsgeschäfte und Beiträge."
         },
         {
           "type": "h2",
@@ -2502,7 +2502,7 @@
         {
           "type": "ul",
           "items": [
-            "Eine Community lässt dich mit einer Einladung von einem ihrer Mitglieder herein. Keine Einladung? Aus der globalen Community heraus kannst du eine Community in deiner Nähe um Beitritt bitten: Siehe „Community in der Nähe finden“.",
+            "Eine Community lässt dich mit einer Einladung von einem ihrer Mitglieder herein. Keine Einladung? Aus der globalen Community heraus kannst du eine Community in deiner Nähe um Aufnahme bitten: Siehe „Community in deiner Nähe finden“.",
             "Tippe auf das Einladungssymbol (eine Person mit einem Plus) oben rechts auf dem Bildschirm, um **Einladungen** zu öffnen.",
             "Füge unter **Anderer Community beitreten** den Einladungslink oder Code ein. Wenn du nur einen Code hast, trage zusätzlich die Adresse der Community ein.",
             "Tippe auf **Community beitreten**."
@@ -2522,20 +2522,21 @@
         },
         {
           "type": "p",
-          "text": "Unter **DEINE COMMUNITIES** gibt es immer eine Zeile für die **Globale Community**. Ihre zweite Zeile gibt deinen aktuellen Status an: ihre Adresse, wenn du Mitglied bist (tippe darauf, um zu ihr zu wechseln), **Mit diesem Konto beitreten: 12 Wörter oder eine Anmeldung** (**Mit diesem Konto beitreten: eine Anmeldung**, wo die Community keine 12 Wörter akzeptiert), wenn du beitreten kannst, oder warum es gerade nicht geht: **Wird geprüft…**, **Gerade nicht erreichbar** (mit **Tippe, um es noch einmal zu versuchen.**, solange dieses Telefon die globale Community noch nicht gespeichert hat), **Nimmt gerade keine neuen Mitglieder auf.**, **Diese Community befindet sich in einer privaten Vorschau. Frage ihren Eigentümer nach einer Einladung.** oder **Dein Konto dort wurde geschlossen.** Wenn die globale Community nicht erreichbar ist und du mit einer Community verbunden bist, in der du Mitglied bist, informiert eine Zeile darunter: **Deine eigene Gemeinschaft ist nicht betroffen.** Nichts anderes auf dem Smartphone hängt davon ab."
+          "text": "Unter **DEINE COMMUNITIES** gibt es immer eine Zeile für die **Globale Gemeinschaft**. Ihre zweite Zeile gibt deinen aktuellen Status an: ihre Adresse, wenn du Mitglied bist (tippe darauf, um zu ihr zu wechseln), **Zuerst umsehen, dann mit diesem Konto beitreten**, wenn du ihr beitreten kannst (während du sie als Gast besuchst: **Mit diesem Konto beitreten: 12 Wörter oder eine Anmeldung** oder **Mit diesem Konto beitreten: eine Anmeldung**, wo die Community die 12 Wörter nicht annimmt), oder warum es gerade nicht geht: **Prüfe gerade…**, **Gerade nicht erreichbar** (mit **Tippe, um es noch einmal zu versuchen.**, solange dieses Telefon die globale Community noch nicht gespeichert hat), **Nimmt gerade keine neuen Mitglieder auf.**, **Diese Community ist in einer privaten Vorschau. Frag ihren Betreiber nach einer Einladung.** oder **Dein Konto dort wurde geschlossen.** Wenn die globale Community nicht erreichbar ist und du mit einer Community verbunden bist, in der du Mitglied bist, informiert eine Zeile darunter: **Deine eigene Gemeinschaft ist nicht betroffen.** Nichts anderes auf dem Telefon hängt davon ab."
         },
         {
           "type": "ul",
           "items": [
-            "Tippe oben links auf die Bohne. Tippe in der **BeanPool**-Ansicht unter **DEINE COMMUNITIES** auf **Globale Community** (ihre zweite Zeile besagt **Mit diesem Konto beitreten**). Sie befindet sich auch in den **Einstellungen** unter **Erweitert / Subsystem**. Wenn du die globale Community als Gast besuchst, tippe oben neben dem **?** auf **Teilnehmen**, dann auf **Mit 12 Wörtern oder einer Anmeldung beitreten** (**Mit einer Anmeldung beitreten**, wo eine Community nur Anmeldungen annimmt). Wenn die App **Du bist hier noch kein Mitglied** für die globale Community anzeigt, tippe auf **Mit diesem Konto beitreten**.",
-            "Wähle, wie du beitreten möchtest: **Ein Konto mit 12 geheimen Wörtern erstellen**, was die 12 Wörter verwendet, die dein Konto bereits hat (keine Anmeldung, also keine Telefonsperre), oder **Oder anmelden** einmalig mit Google, Apple (auf einem iPhone) oder Facebook. Bei einer Anmeldung bittet die App zuerst um die Bildschirmsperre deines Telefons, weil diese Anmeldung auch ein Weg zurück in dein Konto wird.",
+            "Tippe oben links auf die Bohne. Tippe im **BeanPool**-Fenster unter **DEINE COMMUNITIES** auf **Globale Gemeinschaft** (ihre zweite Zeile besagt **Zuerst umsehen, dann mit diesem Konto beitreten**). Die App öffnet die globale Community als Gast, genau wie die Website: Du siehst dich zuerst um, und der Punkt auf der Bohne zeigt, dass du Gast bist. Du findest sie auch in den **Einstellungen** unter **Gespeicherte Communities**: **In der globalen Community umsehen**. Durch das Umschauen trittst du nirgendwo bei und es wird kein Konto erstellt.",
+            "Wenn du bereit bist, tippe oben neben dem **?** auf **Teilnehmen**, dann auf **Mit 12 Wörtern oder einer Anmeldung beitreten** (**Mit einer Anmeldung beitreten**, wo eine Community nur Anmeldungen annimmt). Wenn die App **Du bist hier noch kein Mitglied** für die globale Community anzeigt, tippe auf **Mit diesem Konto beitreten**.",
+            "Wähle, wie du beitreten möchtest: **Mit diesem Konto beitreten**, was den Schlüssel und die 12 Wörter verwendet, die sich bereits auf diesem Telefon befinden (keine Anmeldung, also keine Telefonsperre), oder melde dich unter **Auch eine Anmeldung hinzufügen** einmalig mit Google, Apple (auf einem iPhone) oder Facebook an. Bei einer Anmeldung bittet die App zuerst um die Sperre deines Telefons, weil diese Anmeldung auch ein Weg zurück in dein Konto wird.",
             "Überprüfe den Namen, den die Personen dort sehen werden, und tippe auf **Teilnehmen**. Wenn jemand bereits diesen Namen hat, schlägt die App andere vor.",
-            "Wähle dann dein Foto für die globale Community, wie für jede neue Community, und danach ungefähr deinen Aufenthaltsort (**Wo bist du ungefähr?**; du kannst auf **Jetzt überspringen** tippen): Die globale Community zeigt dir Angebote in deiner Nähe. Siehe „BeanPool beitreten“."
+            "Wähle dann dein Foto für die globale Community, wie für jede neue Community, und danach ungefähr deinen Aufenthaltsort (**Ungefähr wo bist du?**; du kannst auf **Vorerst überspringen** tippen): Die globale Community zeigt dir die Angebote in deiner Nähe. Siehe „BeanPool beitreten“."
           ]
         },
         {
           "type": "p",
-          "text": "In deinen anderen Communitys ändert sich nichts, und deine 12 Wörter bleiben unverändert. Eine Anmeldung wird auch zu einem Weg zurück in dasselbe Konto: Eine gesperrte Kopie davon wird für diese Anmeldung aufbewahrt, sodass sie bei Verlust deines Smartphones dieses Konto wiederherstellt und kein neues. Siehe „Dein Konto wiederherstellen“. Eine Anmeldung, die du zuvor mit deinem Konto verknüpft hast, funktioniert weiterhin. Wenn du mit 12 Wörtern beitrittst und keine Anmeldung eine Kopie deines Kontos aufbewahrt, zeigt die App die Karte **Dein Konto hat einen Weg zurück** an, genau wie bei jedem, der mit 12 Wörtern beitritt (siehe „BeanPool beitreten“)."
+          "text": "In deinen anderen Communitys ändert sich nichts, und deine 12 Wörter bleiben unverändert. Eine Anmeldung wird auch zu einem Weg zurück in dasselbe Konto: Eine gesperrte Kopie davon wird für diese Anmeldung aufbewahrt, sodass sie bei Verlust deines Telefons dieses Konto wiederherstellt und kein neues. Siehe „Dein Konto wiederherstellen“. Eine Anmeldung, die du zuvor mit deinem Konto verknüpft hast, funktioniert weiterhin. Wenn du mit 12 Wörtern beitrittst und keine Anmeldung eine Kopie deines Kontos aufbewahrt, zeigt die App die Karte **Dein Konto hat einen Weg zurück** an, genau wie bei jedem, der mit 12 Wörtern beitritt (siehe „BeanPool beitreten“)."
         },
         {
           "type": "p",
@@ -2551,18 +2552,18 @@
         },
         {
           "type": "p",
-          "text": "Die globale Community enthält Angebote von überall her — weit mehr, als ein Smartphone speichern muss. Dein Telefon behält daher diejenigen in deiner Nähe:"
+          "text": "Die globale Community enthält Angebote von überall her, weit mehr, als ein Telefon speichern muss. Dein Telefon behält daher diejenigen in deiner Nähe:"
         },
         {
           "type": "ul",
           "items": [
-            "die nächsten 500 Einträge im Umkreis von 250 km deines Gebiets, dem ungefähren Ort, den du beim Beitritt angegeben hast. Siehe „Dein Gebiet“;",
-            "deine eigenen Angebote und alle Einträge, bei denen du einen laufenden Deal oder eine Unterhaltung führst, ganz gleich, wo sie sich befinden."
+            "die nächsten 500 Angebote im Umkreis von 250 km deiner Gegend, dem ungefähren Ort, den du beim Beitritt angegeben hast. Siehe „Deine Gegend“;",
+            "deine eigenen Angebote und alle Angebote, bei denen du einen laufenden Deal oder eine Unterhaltung führst, ganz gleich, wo sie sich befinden."
           ]
         },
         {
           "type": "p",
-          "text": "Die Liste des Markts und die Karte auf deinem Smartphone zeigen das, was dein Telefon speichert. Neue Einträge in der Nähe deines Gebiets treffen ein, sobald sie veröffentlicht werden. Wenn du dein Gebiet änderst, tauscht dein Telefon die Einträge gegen die in der Nähe des neuen Gebiets aus."
+          "text": "Die Liste des Marktplatzes und die Karte auf deinem Telefon zeigen das, was dein Telefon speichert. Neue Angebote in der Nähe deiner Gegend treffen ein, sobald sie veröffentlicht werden. Wenn du deine Gegend änderst, tauscht dein Telefon die Angebote gegen die in der Nähe der neuen Gegend aus."
         },
         {
           "type": "p",
@@ -2571,22 +2572,22 @@
         {
           "type": "ul",
           "items": [
-            "Die **Suche** im Markt fragt bei der Community nach, sodass sie Angebote von überall findet, nicht nur in deiner Nähe. Ohne Internetverbindung durchsucht sie das, was sich bereits auf deinem Telefon befindet.",
-            "**Ein Eintrag, den du öffnest**, aus einer Nachricht, einem Link oder der Startseite, wird von der Community geladen, wo auch immer er sich befindet. Wenn die Community ihn nicht mehr hat, heißt es **Beitrag nicht gefunden**.",
-            "**Die Karte** zeigt nur, was dein Telefon speichert; weit entfernt von deinem Gebiet hat sie daher wenige oder gar keine Stecknadeln. Durchsuche den Markt, um dort Dinge zu finden."
+            "Die **Suche** im Marktplatz fragt bei der Community nach, sodass sie Angebote von überall findet, nicht nur in deiner Nähe. Ohne Verbindung durchsucht sie das, was sich bereits auf deinem Telefon befindet.",
+            "**Ein Angebot, das du öffnest**, aus einer Nachricht, einem Link oder der Startseite, wird von der Community geladen, wo auch immer es sich befindet. Wenn die Community es nicht mehr hat, heißt es **Beitrag nicht gefunden**.",
+            "**Die Karte** zeigt nur, was dein Telefon speichert; weit entfernt von deiner Gegend hat sie daher wenige oder gar keine Stecknadeln. Durchsuche den Marktplatz, um dort Dinge zu finden."
           ]
         },
         {
           "type": "p",
-          "text": "Ohne angegebenes Gebiet speichert dein Telefon stattdessen die neuesten 100 Einträge von überall her, und eine Zeile über dem Markt besagt: **Du siehst die neuesten Angebote weltweit. Lege dein Gebiet fest, um Angebote in deiner Nähe zu sehen.** Tippe darauf, um eines festzulegen. Du kannst weiterhin wie gewohnt Beiträge verfassen, Nachrichten senden und suchen."
+          "text": "Ohne Gegend speichert dein Telefon stattdessen die neuesten 100 Angebote von überall her, und eine Zeile über dem Marktplatz besagt: **Du siehst die neuesten Einträge weltweit. Lege deine Gegend fest, um zu sehen, was in deiner Nähe ist.** Tippe darauf, um eine festzulegen. Du kannst weiterhin wie gewohnt Beiträge verfassen, Nachrichten senden und suchen."
         },
         {
           "type": "p",
-          "text": "Eine Umfrage hat keinen eigenen Ort, daher wird sie im Gebiet des Mitglieds angezeigt, das sie erstellt hat: Die Umfragen, die du siehst, stammen größtenteils aus deiner Nähe."
+          "text": "Eine Umfrage hat keinen eigenen Ort, daher wird sie in der Gegend des Mitglieds angezeigt, das sie erstellt hat: Die Umfragen, die du siehst, stammen größtenteils aus deiner Nähe."
         },
         {
           "type": "p",
-          "text": "In der Web-App fragen der Markt und die Karte die Community jedes Mal neu ab: nach Einträgen in der Nähe deines Gebiets oder eines von dir gewählten Ortes, oder andernfalls nach den neuesten von überall her. Siehe „Dinge in der Nähe finden“."
+          "text": "In der Web-App fragen der Marktplatz und die Karte die Community jedes Mal neu ab: nach Angeboten in der Nähe deiner Gegend oder eines von dir gewählten Ortes, oder andernfalls nach den neuesten von überall her. Siehe „Dinge in deiner Nähe finden“."
         },
         {
           "type": "p",
@@ -2599,13 +2600,13 @@
         {
           "type": "ul",
           "items": [
-            "Tippe oben links auf die Bohne. Die **BeanPool**-Ansicht öffnet sich, mit **DEINE COMMUNITIES** nahe dem oberen Rand.",
+            "Tippe oben links auf die Bohne. Das **BeanPool**-Fenster öffnet sich, mit **DEINE COMMUNITIES** nahe dem oberen Rand.",
             "Tippe auf die gewünschte Community."
           ]
         },
         {
           "type": "p",
-          "text": "Du kannst auch in den **Einstellungen** unter **System**, dann **Erweitert / Subsystem** wechseln. Deine Communitys sind dort aufgelistet. Die gerade genutzte ist als aktiv markiert. Tippe bei einer anderen auf **Zu Town wechseln**, um zu ihr zu wechseln."
+          "text": "Du kannst auch in den **Einstellungen** unter **System**, dann **Gespeicherte Communities** wechseln. Deine Communitys sind dort aufgelistet. Die gerade genutzte ist als aktiv markiert. Tippe bei einer anderen auf **Zu dieser Community wechseln**, um zu ihr zu wechseln."
         },
         {
           "type": "h2",
@@ -2613,26 +2614,26 @@
         },
         {
           "type": "p",
-          "text": "Eine Community kann an eine neue Adresse umziehen: beispielsweise von der Nummer ihres Servers (wie etwa 203.0.113.5) zu einem Namen. Auf dem Smartphone zeigt die Startseite dann ganz oben eine Karte an: **Diese Community ist auch unter beans.example.org erreichbar. Diese Adresse ab jetzt nutzen?** Sie erscheint erst, nachdem dein Telefon beim Server der Community überprüft hat, dass die neue Adresse dieselbe Community ist."
+          "text": "Eine Community kann an eine neue Adresse umziehen: beispielsweise von der Nummer ihres Servers (wie etwa 203.0.113.5) zu einem Namen. Auf dem Telefon zeigt die Startseite dann ganz oben eine Karte an: **Diese Community ist auch unter beans.example.org erreichbar. Diese Adresse ab jetzt nutzen?** Sie erscheint erst, nachdem dein Telefon beim Server der Community überprüft hat, dass die neue Adresse dieselbe Community ist."
         },
         {
           "type": "ul",
           "items": [
-            "Tippe auf **Neue Adresse verwenden**. Dein Smartphone wechselt dorthin mit allem, was es für diese Community aufbewahrt, einschließlich deiner Nachrichten, und öffnet die Community erneut, genau wie beim Wechseln.",
-            "Tippe auf **Nicht jetzt**, und die Karte fragt in 7 Tagen erneut nach. Dein Smartphone zieht niemals von selbst um.",
+            "Tippe auf **Neue Adresse verwenden**. Dein Telefon wechselt dorthin mit allem, was es für diese Community aufbewahrt, einschließlich deiner Nachrichten, und öffnet die Community erneut, genau wie beim Wechseln.",
+            "Tippe auf **Nicht jetzt**, und die Karte fragt in 7 Tagen erneut nach. Dein Telefon zieht niemals von selbst um.",
             "Wenn die neue Adresse als andere Community antwortet, meldet die App: **Dieses Telefon bleibt wie es ist** und behält die bisherige Adresse. Kann die Überprüfung nicht durchgeführt werden, heißt es: **Es wurde nichts geändert. Bitte versuche es bald erneut.**",
-            "Wenn die alte Adresse nicht mehr antwortet, bevor dein Telefon von der neuen erfahren hat, kann nichts deinem Smartphone mitteilen, wohin die Community gezogen ist. Frage ihre Eigentümer nach der neuen Adresse, tippe dann auf die Bohne, danach auf **Community hinzufügen** und gib sie dort ein."
+            "Wenn die alte Adresse nicht mehr antwortet, bevor dein Telefon von der neuen erfahren hat, kann nichts deinem Telefon mitteilen, wohin die Community gezogen ist. Frage ihre Eigentümer nach der neuen Adresse, tippe dann auf die Bohne, danach auf **Community hinzufügen** und gib sie dort ein."
           ]
         },
         {
           "type": "h2",
-          "text": "Eine Community auf diesem Smartphone vergessen"
+          "text": "Eine Community auf diesem Telefon vergessen"
         },
         {
           "type": "ul",
           "items": [
-            "Tippe in **Erweitert / Subsystem** bei einer Community, die du gerade nicht nutzt, auf **Vergessen**. Dies entfernt sie und ihre gespeicherten Daten von diesem Smartphone.",
-            "In der **BeanPool**-Ansicht unter **DEINE COMMUNITIES** entfernt langes Drücken auf eine Community und anschließendes Tippen auf **Entfernen** diese lediglich aus der Liste. Ihre Daten verbleiben auf dem Smartphone."
+            "Tippe in **Gespeicherte Communities** bei einer Community, die du gerade nicht nutzt, auf **Vergessen**. Dies entfernt sie und ihre gespeicherten Daten von diesem Telefon.",
+            "Im **BeanPool**-Fenster unter **DEINE COMMUNITIES** nimmt langes Drücken auf eine Community und anschließendes Tippen auf **Entfernen** diese nur aus der Liste. Ihre Daten verbleiben auf dem Telefon."
           ]
         },
         {
@@ -2641,7 +2642,7 @@
         },
         {
           "type": "p",
-          "text": "Um dein Konto in einer Community zu löschen, öffne sie und nutze **Konto endgültig löschen** in den Einstellungen. Das Smartphone behält deinen Schlüssel für deine anderen Communitys. Siehe „Dein Konto verlassen oder löschen“."
+          "text": "Um dein Konto in einer Community zu löschen, öffne sie und nutze **Konto endgültig löschen** in den Einstellungen. Das Telefon behält deinen Schlüssel für deine anderen Communitys. Siehe „Dein Konto verlassen oder löschen“."
         },
         {
           "type": "h2",
@@ -2649,7 +2650,7 @@
         },
         {
           "type": "p",
-          "text": "Wenn du eine Community ohne Einladung hinzufügst, bist du dort Gast. Eine **Teilnehmen**-Schaltfläche erscheint oben neben dem **?**. Ein Gast sieht sehr wenig, bis er sich mit einer Einladung registriert. In der globalen Community, die keine Einladungen nutzt, tritt ein Gast stattdessen mit seinen 12 Wörtern oder einer Anmeldung bei: Siehe oben „Der globalen Community über dein Konto beitreten“."
+          "text": "Wenn du eine Community ohne Einladung hinzufügst, bist du dort Gast. Eine **Teilnehmen**-Schaltfläche erscheint oben neben dem **?**. Ein Gast sieht sehr wenig, bis er sich mit einer Einladung registriert. In der globalen Community, die keine Einladungen hat, tritt ein Gast stattdessen mit seinen 12 Wörtern oder einer Anmeldung bei: siehe oben „Der globalen Community über dein Konto beitreten“."
         }
       ]
     },
@@ -5875,8 +5876,8 @@
       "slug": "credit-line",
       "title": "Dein Kreditrahmen",
       "summary": "Wie weit du ins Minus gehen kannst und wie dieser Rahmen wächst.",
-      "sourceHash": "30c343cb535ac79a",
-      "source-hash": "30c343cb535ac79a",
+      "sourceHash": "d966829d85d430b1",
+      "source-hash": "d966829d85d430b1",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5963,7 +5964,7 @@
         },
         {
           "type": "p",
-          "text": "Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Hat deine Community **den bekannten Kreditrahmen** aktiviert, erhält ein von einem Admin bestätigtes Mitglied sofort einen Kreditrahmen: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut. Es erhöht dein Limit, nicht deine Stufe: Dein Vertrauensabzeichen zählt weiterhin nur das, was du selbst getan hast."
+          "text": "Einige Communitys haben Admins, die jedes Mitglied namentlich kennen. Ein Mitglied, das ein Admin bestätigt hat, erhält sofort einen Kreditrahmen, **den bekannten Kreditrahmen**: 1.000 Bohnen, sofern deine Community keinen anderen Betrag gewählt hat. Das entspricht etwa 25 Stunden Arbeit, die die Community dir im Voraus vertraut. Es erhöht dein Limit, nicht deine Stufe: Dein Vertrauensabzeichen zählt weiterhin nur das, was du selbst getan hast. Der bekannte Kreditrahmen ist in jeder Community mit Bohnen aktiviert, es sei denn, ihr Eigentümer hat ihn abgeschaltet."
         },
         {
           "type": "ul",
@@ -5973,6 +5974,14 @@
             "Ein Admin kann ein geringeres Limit für dich festlegen, beispielsweise solange du neu bist. Das zieht dir niemals Bohnen ab: Wenn du bereits darunter liegst, pausieren Ausgaben, bis du wieder darüber bist.",
             "Wenn du Schulden aus einem früheren Konto abarbeitest, gehen die Bohnen, die du über 0 hinaus erhältst, an das Gemeingut, bis sie beglichen sind. Dein Buch zeigt an, wie viel noch übrig ist. Du kannst auch einen Teil oder die gesamten Schulden selbst unter **Buch → An das Gemeingut zahlen** begleichen: Dein Rückzahlungscode ist dort bereits eingetragen (oder gib den ein, den ein Admin dir mitteilt). Was du mit dem Code bezahlst, wird sofort von den Schulden abgezogen, und wenn nichts mehr offen ist, sind die Schulden beglichen: Weder durch eine Zahlung noch von dem, was du erhältst, wird mehr einbehalten. Eine Zahlung ohne den Code geht an das Gemeingut, wird jedoch nicht von deinen Schulden abgezogen, und die App weist darauf hin: Damit sie angerechnet wird, bitte einen Admin unter Angabe der Referenz, sie auf deine Schulden anzurechnen. Bis dies geschieht, werden die Schulden weiterhin abgearbeitet: Wenn du das nächste Mal Bohnen erhältst, wird der verbleibende Betrag von dem einbehalten, was du über 0 hältst. Der Betrag in der Nachricht des Admins war der Betrag, der beim Teilen offen war: Ist jetzt weniger offen, verweigert dein Server eine höhere Zahlung, nennt den offenen Betrag und es wird nichts gezahlt. Wenn die App meldet, dass eine Zahlung möglicherweise durchgegangen ist, tippe auf demselben Bildschirm auf **Erneut versuchen**: Dieselbe Zahlung wird niemals doppelt ausgeführt. Wenn du diesen Bildschirm verlassen hast, prüfe dein Buch, bevor du erneut zahlst."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Eine gemischte Community"
+        },
+        {
+          "type": "p",
+          "text": "In manchen Communitys kann jedes Mitglied Personen einladen, sodass die Admins nicht jeden kennen. Die Admins können die Mitglieder bestätigen, die sie kennen, und diese Mitglieder starten mit einem höheren Limit, **dem bekannten Kreditrahmen**, es sei denn, der Eigentümer deiner Community hat ihn abgeschaltet. Alle anderen starten bei null, und das Limit jedes Mitglieds wächst danach auf dieselbe Weise, wenn sie handeln und Vertrauen aufbauen."
         },
         {
           "type": "h2",
@@ -6477,8 +6486,8 @@
       "slug": "what-the-admins-can-see",
       "title": "Was die Admins sehen",
       "summary": "In einer Community mit Namensliste: was über dich gespeichert wird, wer es lesen darf, was der Server behält und was bestätigt bedeutet.",
-      "sourceHash": "61fa5ecae00a414b",
-      "source-hash": "61fa5ecae00a414b",
+      "sourceHash": "88d60b236e7653ab",
+      "source-hash": "88d60b236e7653ab",
       "section": "settings",
       "related": [
         "privacy",
@@ -6531,7 +6540,7 @@
           "type": "ul",
           "items": [
             "Eine Bestätigung enthält keinen Namen. Der Server speichert, welches Konto, welcher Eintrag und welcher Admin beteiligt sind – niemals, wer du bist.",
-            "Es ist kein Vertrauensabzeichen und ändert vorerst nichts weiter in der App.",
+            "Es ist kein Vertrauensabzeichen. Es gibt dir auch sofort einen Kreditrahmen, den bekannten Kreditrahmen, es sei denn, der Eigentümer deiner Community hat ihn abgeschaltet: Siehe „Dein Kreditrahmen“.",
             "Wenn ein Admin dich mit Namen eingeladen hat, hat der Beitritt über diese Einladung dich durch diesen Admin mit deinem Eintrag bestätigt. „Bestätigt“ bedeutet lediglich, dass ein Admin erklärt, dieses Konto gehöre zu der Person in jenem Eintrag.",
             "Wenn du ein verlorenes Telefon ersetzt und dein Konto auf einen neuen Schlüssel umzieht, zieht deine Bestätigung mit um.",
             "Wenn du die Community verlässt oder dein Konto löschst, erlischt deine Bestätigung. Dein Eintrag bleibt auf der Liste der Admins, bis ein Admin ihn löscht: Bitte ihn darum.",

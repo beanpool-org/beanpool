@@ -5975,5 +5975,27 @@
     "one": "{n} hafta",
     "other": "{n} hafta"
   },
-  "📦 Ask to borrow": "📦 Ödünç iste"
+  "📦 Ask to borrow": "📦 Ödünç iste",
+  "Add a community by address": "Adresle bir topluluk ekleyin",
+  "COMMUNITY ADDRESS": "TOPLULUK ADRESİ",
+  "COMMUNITY NAME (OPTIONAL)": "TOPLULUK ADI (İSTEĞE BAĞLI)",
+  "Clear this phone's copy and download again": "Bu telefondaki kopyayı temizle ve yeniden indir",
+  "Community name (optional)": "Topluluk adı (isteğe bağlı)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Adresini yazarak bir topluluğa bağlanın. Telefonunuz bunu bu listeye kaydedecek ve bu topluluğa geçecektir.",
+  "Have an invite code for this community?": "Bu topluluk için bir davet kodunuz var mı?",
+  "Invited": "Davet edildi",
+  "Reached at **{trust}** trust": "**{trust}** güvende ulaşılır",
+  "Reached at **{trust}** trust (up to {upTo})": "**{trust}** güvende ulaşılır (en fazla {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Bu topluluğu siz mi yönetiyorsunuz? Sahipler ve yöneticiler, Ayarlar'ın en üstünde bir Yönet satırı görür.",
+  "Saved communities": "Kayıtlı topluluklar",
+  "Switch to this community": "Bu topluluğa geç",
+  "Switch, forget or refresh the communities on this phone": "Bu telefondaki topluluklar arasında geçiş yapın, unutun veya yenileyin",
+  "Switching...": "Geçiş yapılıyor...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Bu telefonun katıldığı topluluklar. Anahtarınız ve 12 kelimeniz her birinde aynıdır; kullanmak için birine geçiş yapın.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Hoş geldiniz. İlk günden itibaren göz atabilir, takas yapabilir, kredi alabilir ve başkalarını davet edebilirsiniz — ve kredi limitiniz zaten açık.",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} güvenden itibaren",
+    "other": "{n} güvenden itibaren"
+  },
+  "{name}, already invited": "{name}, zaten davet edildi"
 }

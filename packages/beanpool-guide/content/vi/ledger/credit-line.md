@@ -3,7 +3,7 @@ slug: credit-line
 title: Hạn mức tín dụng
 summary: Mức âm tối đa bạn có thể chi tiêu và cách hạn mức này tăng lên.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 64ce3e39f9617713
+source-hash: 30c343cb535ac79a
 ---
 
 ## Hạn mức tín dụng là gì
@@ -46,12 +46,16 @@ Dòng chữ bên dưới thanh trượt sẽ cho bạn biết điều này, ví 
 
 ## Trong cộng đồng quy định
 
-Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn.
+Một số cộng đồng có quản trị viên biết rõ từng thành viên theo tên. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, một thành viên được quản trị viên xác nhận sẽ nhận được hạn mức tín dụng ngay lập tức: 1.000 Đậu trừ khi cộng đồng của bạn chọn một con số khác. Con số đó tương đương khoảng 25 giờ lao động mà cộng đồng đang tin tưởng giao cho bạn. Điều này giúp nâng hạn mức của bạn, không phải cấp độ của bạn: huy hiệu tin cậy của bạn vẫn chỉ tính những gì bạn đã làm.
 
 - Một Lời đề nghị đang mở cho phép bạn sử dụng toàn bộ hạn mức đó. Nếu không có Lời đề nghị nào, bạn không thể sử dụng.
 - Mức độ tin cậy bạn tích lũy qua giao dịch sẽ cộng thêm vào hạn mức, lên đến mức trần của cộng đồng bạn (2.000 Đậu trừ khi cộng đồng chọn mức cao hơn, lên đến 5.000).
 - Quản trị viên có thể đặt giới hạn nhỏ hơn cho bạn, ví dụ khi bạn là người mới. Điều đó không bao giờ lấy đi Đậu của bạn: nếu bạn đã ở dưới mức đó, việc chi tiêu sẽ tạm dừng cho đến khi số dư của bạn trở lại phía trên mức đó.
 - Nếu bạn đang trả nợ từ một tài khoản trước đó, số Đậu bạn nhận được trên mức 0 sẽ chuyển vào Commons cho đến khi trả hết nợ. Sổ cái của bạn sẽ cho biết còn lại bao nhiêu. Bạn cũng có thể tự mình trả một phần hoặc toàn bộ số nợ trong mục **Sổ cái → Trả cho Commons**: mã hoàn trả của bạn đã được điền sẵn ở đó (hoặc nhập mã do quản trị viên cung cấp cho bạn). Những gì bạn thanh toán kèm theo mã sẽ trừ ngay vào khoản nợ, và khi không còn nợ thì khoản nợ được giải quyết xong: không bị trừ thêm gì nữa, qua thanh toán hay từ số đậu bạn nhận được. Khoản thanh toán không kèm mã sẽ chuyển vào Commons nhưng không trừ vào khoản nợ của bạn, và ứng dụng sẽ thông báo điều đó: để được tính nợ, hãy nhờ quản trị viên ghi nhận khoản đó vào nợ của bạn cùng với mã tham chiếu. Cho đến khi họ thực hiện, khoản nợ vẫn tiếp tục được trả dần: lần tiếp theo bạn nhận được Đậu, phần còn lại sẽ được trích từ số đậu bạn nắm giữ trên mức 0. Số tiền trong tin nhắn của quản trị viên là số nợ còn lại tại thời điểm họ chia sẻ: nếu hiện tại số nợ còn ít hơn, máy chủ của bạn sẽ từ chối khoản thanh toán lớn hơn và thông báo số tiền còn lại, và không có gì bị trừ. Nếu ứng dụng báo một khoản thanh toán có thể đã được xử lý, hãy nhấn **Thử lại** trên cùng màn hình đó: một khoản thanh toán không bao giờ bị trừ hai lần. Nếu bạn đã rời khỏi màn hình đó, hãy kiểm tra Sổ cái trước khi thanh toán lại.
+
+## Cộng đồng kết hợp
+
+Trong một số cộng đồng, bất kỳ thành viên nào cũng có thể mời người khác, nên quản trị viên không biết tất cả mọi người. Nếu cộng đồng của bạn đã bật **mức sàn quy định**, quản trị viên có thể xác nhận những thành viên mà họ biết, và những thành viên đó sẽ bắt đầu với hạn mức cao hơn. Mọi người khác bắt đầu từ số 0, và sau đó hạn mức của mọi người đều tăng theo cùng một cách khi họ giao dịch và xây dựng lòng tin cậy.
 
 ## Bị quản trị viên đóng băng
 
@@ -60,7 +64,7 @@ Quản trị viên cộng đồng có thể đóng băng hạn mức tín dụng
 - Nếu họ đóng băng toàn bộ, hoặc phần được xác nhận là tất cả hạn mức bạn có, Sổ cái sẽ báo **Hạn mức tín dụng của bạn đã bị đóng băng**: bạn không thể chi tiêu xuống mức âm trong thời gian này, nhưng bạn vẫn có thể bán và nhận Đậu, cũng như chi tiêu số đậu bạn đang có trên mức 0. Nếu bạn đang ở mức âm khi họ đóng băng, Sổ cái cũng cho biết bạn đang âm bao nhiêu Đậu: việc bán hàng hoặc nhận Đậu sẽ nâng số dư của bạn lên, và khi bạn đạt trên mức 0, bạn có thể chi tiêu số đậu bạn nắm giữ.
 - Nếu họ đóng băng phần được xác nhận và bạn cũng có tín dụng từ việc bảo lãnh, từ giao dịch hoặc từ một khoản tài trợ, thanh trượt vẫn giữ nguyên, kèm theo ghi chú bên dưới rằng phần được xác nhận đã bị đóng băng và phần còn lại vẫn hoạt động như trước. Nếu bạn ở dưới mức còn lại, Sổ cái cũng sẽ báo **Tạm dừng chi tiêu** (bên dưới).
 
-Cấp độ của bạn không thay đổi: đó là cấp độ mà hạn mức tín dụng mang lại cho bạn khi không bị đóng băng, ngay cả khi các quản trị viên đã đặt hạn mức của bạn thấp hơn hoặc cao hơn mức chung của cộng đồng, trên hồ sơ cũng như trên các tin đăng của bạn. Để hỏi lý do hoặc đề nghị mở lại hạn mức, hãy liên hệ với một trong các quản trị viên.
+Cấp độ của bạn không thay đổi, trên hồ sơ cũng như trên các tin đăng của bạn: cấp độ này tính những gì bạn đã làm (lời bảo lãnh, các giao dịch của bạn và điểm tin cậy do quản trị viên cấp cho bạn), không bao giờ tính phần hạn mức đến từ việc được xác nhận, hay bất kỳ số tiền nào mà quản trị viên đặt cho phần đó. Để hỏi lý do hoặc đề nghị mở lại hạn mức, hãy liên hệ với một trong các quản trị viên.
 
 ## Tạm dừng chi tiêu
 

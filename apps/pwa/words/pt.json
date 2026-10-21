@@ -3484,5 +3484,15 @@
     "one": "{n} semana",
     "other": "{n} semanas"
   },
-  "📦 Ask to borrow": "📦 Pedir emprestado"
+  "📦 Ask to borrow": "📦 Pedir emprestado",
+  "Asked to join": "Pediu para entrar",
+  "Invited": "Convite enviado",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Boas-vindas. Desde o primeiro dia você pode explorar, trocar, receber créditos e convidar outras pessoas — e sua linha de crédito já está aberta.",
+  "from {n} trust|from {n} trust": {
+    "one": "a partir de {n} de confiança",
+    "other": "a partir de {n} de confiança"
+  },
+  "{name}, already in the group": "{name}, já está no grupo",
+  "{name}, already invited": "{name}, já tem convite",
+  "{name}, asked to join": "{name}, pediu para entrar"
 }

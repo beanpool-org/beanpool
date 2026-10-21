@@ -3483,5 +3483,15 @@
     "one": "{n} வாரம்",
     "other": "{n} வாரங்கள்"
   },
-  "📦 Ask to borrow": "📦 இரவல் கேட்க"
+  "📦 Ask to borrow": "📦 இரவல் கேட்க",
+  "Asked to join": "இணையக் கோரியவர்",
+  "Invited": "அழைக்கப்பட்டவர்",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "வரவேற்கிறோம். முதல் நாளிலிருந்தே நீங்கள் உலாவலாம், வர்த்தகம் செய்யலாம், வரவுகளைப் பெறலாம் மற்றும் பிறரை அழைக்கலாம் — மேலும் உங்கள் கடன் வரம்பு ஏற்கனவே திறக்கப்பட்டுள்ளது.",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} நம்பிக்கையிலிருந்து",
+    "other": "{n} நம்பிக்கையிலிருந்து"
+  },
+  "{name}, already in the group": "{name}, ஏற்கனவே குழுவில் உள்ளார்",
+  "{name}, already invited": "{name}, ஏற்கனவே அழைக்கப்பட்டுள்ளார்",
+  "{name}, asked to join": "{name}, இணையக் கோரியுள்ளார்"
 }

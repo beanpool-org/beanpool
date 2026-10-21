@@ -5975,5 +5975,27 @@
     "one": "{n} வாரம்",
     "other": "{n} வாரங்கள்"
   },
-  "📦 Ask to borrow": "📦 இரவல் கேட்க"
+  "📦 Ask to borrow": "📦 இரவல் கேட்க",
+  "Add a community by address": "முகவரி மூலம் ஒரு சமூகத்தைச் சேர்க்கவும்",
+  "COMMUNITY ADDRESS": "சமூக முகவரி",
+  "COMMUNITY NAME (OPTIONAL)": "சமூகத்தின் பெயர் (விருப்பத்தேர்வு)",
+  "Clear this phone's copy and download again": "இந்தத் தொலைபேசியின் பிரதியை அழித்து மீண்டும் பதிவிறக்கவும்",
+  "Community name (optional)": "சமூகத்தின் பெயர் (விருப்பத்தேர்வு)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "அதன் முகவரியைத் தட்டச்சு செய்து ஒரு சமூகத்துடன் இணையுங்கள். உங்கள் தொலைபேசி அதை இந்தப் பட்டியலில் சேமித்து அதற்கு மாறும்.",
+  "Have an invite code for this community?": "இந்தச் சமூகத்திற்கான அழைப்புக் குறியீடு உங்களிடம் உள்ளதா?",
+  "Invited": "அழைக்கப்பட்டவர்",
+  "Reached at **{trust}** trust": "**{trust}** நம்பிக்கையில் அடையப்பட்டது",
+  "Reached at **{trust}** trust (up to {upTo})": "**{trust}** நம்பிக்கையில் அடையப்பட்டது ({upTo} வரை)",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "இந்தச் சமூகத்தை நடத்துகிறீர்களா? உரிமையாளர்களும் நிர்வாகிகளும் அமைப்புகளின் மேலே 'நிர்வகி' என்ற வரியைக் காண்பார்கள்.",
+  "Saved communities": "சேமிக்கப்பட்ட சமூகங்கள்",
+  "Switch to this community": "இந்தச் சமூகத்திற்கு மாறவும்",
+  "Switch, forget or refresh the communities on this phone": "இந்தத் தொலைபேசியில் உள்ள சமூகங்களை மாற்றவும், மறக்கவும் அல்லது புதுப்பிக்கவும்",
+  "Switching...": "மாறுகிறது...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "இந்தத் தொலைபேசி இணைந்துள்ள சமூகங்கள். ஒவ்வொன்றிலும் உங்கள் சாவியும் 12 சொற்களும் ஒன்றே; அதைப் பயன்படுத்த ஒன்றிற்கு மாறவும்.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "வரவேற்கிறோம். முதல் நாளிலிருந்தே நீங்கள் உலாவலாம், வர்த்தகம் செய்யலாம், வரவுகளைப் பெறலாம் மற்றும் பிறரை அழைக்கலாம் — மேலும் உங்கள் கடன் வரம்பு ஏற்கனவே திறக்கப்பட்டுள்ளது.",
+  "from {n} trust|from {n} trust": {
+    "one": "{n} நம்பிக்கையிலிருந்து",
+    "other": "{n} நம்பிக்கையிலிருந்து"
+  },
+  "{name}, already invited": "{name}, ஏற்கனவே அழைக்கப்பட்டுள்ளார்"
 }

@@ -5741,5 +5741,26 @@
   "{n} week|{n} weeks": {
     "other": "{n} minggu"
   },
-  "📦 Ask to borrow": "📦 Minta pinjam"
+  "📦 Ask to borrow": "📦 Minta pinjam",
+  "Add a community by address": "Tambah komunitas lewat alamat",
+  "COMMUNITY ADDRESS": "ALAMAT KOMUNITAS",
+  "COMMUNITY NAME (OPTIONAL)": "NAMA KOMUNITAS (OPSIONAL)",
+  "Clear this phone's copy and download again": "Hapus salinan ponsel ini dan unduh lagi",
+  "Community name (optional)": "Nama komunitas (opsional)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Hubungkan ke komunitas dengan mengetik alamatnya. Ponsel Anda akan menyimpannya ke daftar ini dan beralih ke sana.",
+  "Have an invite code for this community?": "Punya kode undangan untuk komunitas ini?",
+  "Invited": "Diundang",
+  "Reached at **{trust}** trust": "Dicapai pada **{trust}** kepercayaan",
+  "Reached at **{trust}** trust (up to {upTo})": "Dicapai pada **{trust}** kepercayaan (hingga {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Mengelola komunitas ini? Pemilik dan admin melihat baris Kelola di bagian atas Pengaturan.",
+  "Saved communities": "Komunitas tersimpan",
+  "Switch to this community": "Beralih ke komunitas ini",
+  "Switch, forget or refresh the communities on this phone": "Beralih, lupakan, atau segarkan komunitas di ponsel ini",
+  "Switching...": "Beralih...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Komunitas yang telah diikuti ponsel ini. Kunci dan 12 kata Anda sama di setiap komunitas; beralihlah ke salah satunya untuk menggunakannya.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Selamat datang. Sejak hari pertama Anda dapat menelusuri, bertransaksi, menerima kredit, dan mengundang orang lain — dan jalur kredit Anda sudah terbuka.",
+  "from {n} trust|from {n} trust": {
+    "other": "dari {n} kepercayaan"
+  },
+  "{name}, already invited": "{name}, sudah diundang"
 }

@@ -5975,5 +5975,27 @@
     "one": "{n} semana",
     "other": "{n} semanas"
   },
-  "📦 Ask to borrow": "📦 Pedir prestado"
+  "📦 Ask to borrow": "📦 Pedir prestado",
+  "Add a community by address": "Añadir una comunidad por dirección",
+  "COMMUNITY ADDRESS": "DIRECCIÓN DE LA COMUNIDAD",
+  "COMMUNITY NAME (OPTIONAL)": "NOMBRE DE LA COMUNIDAD (OPCIONAL)",
+  "Clear this phone's copy and download again": "Borrar la copia de este teléfono y descargar de nuevo",
+  "Community name (optional)": "Nombre de la comunidad (opcional)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Conéctate a una comunidad escribiendo su dirección. Tu teléfono la guardará en esta lista y cambiará a ella.",
+  "Have an invite code for this community?": "¿Tienes un código de invitación para esta comunidad?",
+  "Invited": "Con invitación",
+  "Reached at **{trust}** trust": "Se alcanza con **{trust}** de confianza",
+  "Reached at **{trust}** trust (up to {upTo})": "Se alcanza con **{trust}** de confianza (hasta {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "¿Administras esta comunidad? Los propietarios y administradores ven una fila Administrar en la parte superior de Ajustes.",
+  "Saved communities": "Comunidades guardadas",
+  "Switch to this community": "Cambiar a esta comunidad",
+  "Switch, forget or refresh the communities on this phone": "Cambiar, olvidar o actualizar las comunidades en este teléfono",
+  "Switching...": "Cambiando...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Las comunidades a las que se ha unido este teléfono. Tu clave y tus 12 palabras son las mismas en cada una; cambia a una para usarla.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Te damos la bienvenida. Desde el primer día puedes explorar, intercambiar, recibir créditos e invitar a otros — y tu línea de crédito ya está abierta.",
+  "from {n} trust|from {n} trust": {
+    "one": "desde {n} de confianza",
+    "other": "desde {n} de confianza"
+  },
+  "{name}, already invited": "{name}, ya con invitación"
 }

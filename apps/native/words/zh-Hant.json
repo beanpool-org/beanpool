@@ -5741,5 +5741,26 @@
   "{n} week|{n} weeks": {
     "other": "{n} 週"
   },
-  "📦 Ask to borrow": "📦 請求借用"
+  "📦 Ask to borrow": "📦 請求借用",
+  "Add a community by address": "透過位址新增社群",
+  "COMMUNITY ADDRESS": "社群位址",
+  "COMMUNITY NAME (OPTIONAL)": "社群名稱（選填）",
+  "Clear this phone's copy and download again": "清除此手機上的複本並重新下載",
+  "Community name (optional)": "社群名稱（選填）",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "輸入位址以連線至社群。你的手機會將其儲存至此清單並切換至該社群。",
+  "Have an invite code for this community?": "有此社群的邀請碼嗎？",
+  "Invited": "已邀請",
+  "Reached at **{trust}** trust": "達到 **{trust}** 信任分",
+  "Reached at **{trust}** trust (up to {upTo})": "達到 **{trust}** 信任分（最高 {upTo}）",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "營運此社群？所有者與管理員會在「設定」頂端看到「管理」列。",
+  "Saved communities": "已儲存的社群",
+  "Switch to this community": "切換至此社群",
+  "Switch, forget or refresh the communities on this phone": "切換、忘記或重新整理此手機上的社群",
+  "Switching...": "正在切換…",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "此手機已加入的社群。你的金鑰與 12 個助記詞在每個社群中都相同；切換至其中一個即可使用。",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "歡迎。從第一天起，你就可以瀏覽、交易、接收信用額度並邀請他人 — 而且你的信用額度已經開啟。",
+  "from {n} trust|from {n} trust": {
+    "other": "從 {n} 信任分起"
+  },
+  "{name}, already invited": "{name}，已邀請"
 }

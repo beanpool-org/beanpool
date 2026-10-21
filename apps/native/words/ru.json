@@ -6443,5 +6443,29 @@
     "many": "{n} недель",
     "other": "{n} недели"
   },
-  "📦 Ask to borrow": "📦 Попросить одолжить"
+  "📦 Ask to borrow": "📦 Попросить одолжить",
+  "Add a community by address": "Добавить сообщество по адресу",
+  "COMMUNITY ADDRESS": "АДРЕС СООБЩЕСТВА",
+  "COMMUNITY NAME (OPTIONAL)": "НАЗВАНИЕ СООБЩЕСТВА (НЕОБЯЗАТЕЛЬНО)",
+  "Clear this phone's copy and download again": "Очистить копию на телефоне и скачать заново",
+  "Community name (optional)": "Название сообщества (необязательно)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Подключитесь к сообществу, указав его адрес. Телефон сохранит его в этот список и переключится на него.",
+  "Have an invite code for this community?": "Есть код приглашения в это сообщество?",
+  "Invited": "Приглашён",
+  "Reached at **{trust}** trust": "Достигается при **{trust}** доверия",
+  "Reached at **{trust}** trust (up to {upTo})": "Достигается при **{trust}** доверия (до {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Управляете этим сообществом? Владельцы и администраторы видят строку «Управление» вверху Настроек.",
+  "Saved communities": "Сохранённые сообщества",
+  "Switch to this community": "Переключиться на это сообщество",
+  "Switch, forget or refresh the communities on this phone": "Переключайтесь, забывайте или обновляйте сообщества на этом телефоне",
+  "Switching...": "Переключение...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Сообщества, к которым присоединился этот телефон. Ваш ключ и 12 слов одинаковы в каждом из них; переключитесь на нужное, чтобы использовать его.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Добро пожаловать. С первого дня вы можете просматривать предложения, обмениваться, получать кредиты и приглашать других — а ваша кредитная линия уже открыта.",
+  "from {n} trust|from {n} trust": {
+    "one": "от {n} доверия",
+    "few": "от {n} доверия",
+    "many": "от {n} доверия",
+    "other": "от {n} доверия"
+  },
+  "{name}, already invited": "{name}, приглашение уже отправлено"
 }

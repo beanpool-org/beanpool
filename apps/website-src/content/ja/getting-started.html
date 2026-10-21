@@ -1,0 +1,159 @@
+<!-- source-hash: 4ad64dc454d69949 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スタートガイド — BeanPoolへの3つの入り口</title>
+    <meta name="description" content="グローバルコミュニティでBeanPoolを試す方法、近くのコミュニティを探すか始める方法、招待で参加する方法、そして12個の単語と最初の取引について説明します。">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The doors land on these headings (#global, #invite…): below the fixed bar, 74 px tall on a phone, 88 px wide */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content p strong { color: var(--text-primary); }
+        .rules-content p { overflow-wrap: anywhere; }
+        .rules-content .guide-links { font-size: 0.95rem; margin-top: -0.5rem; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPoolアイコン" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">仕組み</a>
+                <a href="rules.html">ルール</a>
+                <a href="index.html#features">できること</a>
+                <a href="help.html">ヘルプ</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">チュートリアル</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTubeでチュートリアル動画を見る（@beanpool）">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Redditコミュニティに参加する（r/beanpool）">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHubで見る">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">使ってみる</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="メニューを開く"><span aria-hidden="true">☰</span> メニュー</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta" aria-current="page">使ってみる</a>
+                    <a href="index.html#how-it-works">仕組み</a>
+                    <a href="rules.html">ルール</a>
+                    <a href="index.html#features">できること</a>
+                    <a href="help.html">ヘルプ</a>
+                    <a href="guide/index.html">メンバーズガイド</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTubeでチュートリアルを見る</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Redditのr/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHubのソースコード</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>スタートガイド</h1>
+        <p class="lede">参加方法は3つあります。ご自身の現在の状況に合ったものをお選びください。どの場合でも作成されるアカウントは同じであり、複数のコミュニティに所属することもできます。</p>
+
+        <!-- OPEN-GLOBAL: when global's private preview is off, the heading becomes "Try it now on the global community" and the
+             two paragraphs below become this one:
+             The global community is people from everywhere. You need no invite: open <strong>global.beanpool.org</strong> in a browser and tap <strong>Join</strong>, or install the app and tap <strong>Explore BeanPool worldwide</strong> on the first screen. Create an account with <strong>12 secret words</strong> (no Google, Apple or Facebook account needed), or sign in once with Google, Apple or Facebook; that sign-in also becomes a way back if you lose your phone. Tell it roughly where you are, to about 10 km, or skip that. Then you can see what people near you offer, post something free or for swap, message people, and ask a community near you to let you in. Beans, trades, the Commons and its Decisions are switched off there: they belong to a local community. The app shows you each of them with an example community, so you know what a local community offers before you join or start one. -->
+        <h2 id="global"><span class="num">1.</span>世界中どこからでも試す：グローバルコミュニティ</h2>
+        <p>グローバルコミュニティは世界中の人々が集まる場であり、招待は不要になる予定です。私たちが米国でレンタルしているサーバー上でBeanPoolが運営しています。現在は初期メンバーが試用中の限定プレビュー期間であり、オーナーまたは管理者が招待した人のみが参加できます。それ以外の人が<strong>global.beanpool.org</strong>を開くと、「このコミュニティは限定プレビュー中です。オーナーに招待を依頼してください。」という一文が表示されます。まもなく全員に一般公開されます。公開後は、ブラウザまたはアプリから<strong>12個の秘密の単語</strong>、あるいはGoogle、Apple、Facebookのサインインを使って参加し、近くの人が提供しているものを確認したり、無料や物々交換の投稿をしたり、メッセージを送ったり、近くのコミュニティに参加申請したりできるようになります。豆、取引、コモンズ、そしてその決定はローカルコミュニティに属する機能です。グローバルコミュニティではサンプルコミュニティを通じてそれぞれの機能を紹介しているため、ローカルコミュニティへの参加や開設の前にどのような体験ができるかを把握できます。</p>
+        <p>一般公開までの間は、<a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a>または<a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a>からアプリを入手し、<a href="index.html#find-or-start">マップ</a>で稼働中のコミュニティを確認するか、自分で立ち上げるか（パート2）、または招待を使って参加してください（パート3）。</p>
+        <p class="guide-links">ガイド：<a href="guide/joining.html">BeanPoolへの参加</a>、<a href="guide/web-app.html">WebブラウザでのBeanPoolの利用</a>。</p>
+
+        <h2 id="find"><span class="num">2.</span>コミュニティを探す・始める</h2>
+        <!-- OPEN-GLOBAL: when global's private preview is off, the paragraph below goes back to starting:
+             On the global community, <strong>Find your community</strong> on Home lists the communities nearest you. Tap <strong>Ask to join</strong>, write a few words about yourself, and any member of that community can let you in with one tap, and if no answer comes in 30 days you can ask again. Nothing near you? <strong>Tell me when one starts here</strong> watches your area. Or start one: every community … (the rest unchanged) -->
+        <p>現在は<a href="index.html#find-or-start">マップ</a>で稼働中のコミュニティを確認し、メンバーからの招待によって参加できます（パート3）。参加申請機能は、グローバルコミュニティの一般公開に合わせて利用可能になります（パート1）。そこでは「ホーム」の<strong>コミュニティを探す</strong>に最寄りのコミュニティが表示されます。<strong>参加を申請</strong>をタップして自己紹介を一言添えて送信すると、そのコミュニティのメンバーなら誰でも1タップであなたを迎え入れることができます（30日間返答がない場合は再申請が可能です）。近くにコミュニティがありませんか？<strong>ここで始まったら通知</strong>であなたの地域を見守ることができます。あるいは自分で立ち上げることもできます。すべてのコミュニティは専用の小さなサーバー（自宅の常時稼働する予備のPCや月額数ドルのレンタルサーバーなど）上で動作し、地域の誰かが管理します。アプリの<strong>コミュニティを始める</strong>画面で手順が案内されるほか、ホームページの<a href="index.html#run-a-node">あなたのコミュニティでBeanPoolを運営する</a>にも手順が記載されています。</p>
+        <p class="guide-links">ガイド：<a href="guide/finding-a-community.html">近くのコミュニティを探す</a>。</p>
+
+        <h2 id="invite"><span class="num">3.</span>招待を受け取りましたか？</h2>
+        <p>招待はリンク、QRコード、または<strong>INV-</strong>や<strong>BP-</strong>で始まるコードの形式です。1回限り有効で、有効期限は30日間です。アプリをインストールし、<strong>招待で参加する</strong>（Webアプリでは<strong>はじめての方はこちら</strong>）をタップし、リンクまたはコードを貼り付け、他の人に表示される名前（最大20文字）を設定します。コードのみをお持ちの場合は、コミュニティの名前またはアドレスも入力してください（招待してくれた人に確認できます）。</p>
+        <p class="guide-links">ガイド：<a href="guide/joining.html">BeanPoolへの参加</a>。</p>
+
+        <h2 id="words"><span class="num">4.</span>あなたの12個の単語</h2>
+        <p>アカウントはスマートフォン内、またはブラウザのWebアプリ内に保持される鍵です。パスワードはありません。アプリは<strong>バックアップ</strong>で12個の単語（英語）を表示します。紙に書き留めて大切に保管してください。新しい端末でアカウントを復元する際に必要となります。スマートフォンアプリやグローバルコミュニティでは、Google、Apple、Facebookのサインインを第2の復元手段として追加できます。その場合、そのサインイン用に暗号化された鍵のコピーが保持されます。BeanPoolのキー保管庫（ヴォールト）を使用するスマートフォンアプリは、アイスランドの小さなサーバーに保管します。古いバージョンのスマートフォンアプリはコミュニティのサーバーに保管し、グローバルコミュニティのWebアプリは私たちが運営するそのサーバーに保管します。コピーを保管している者（保管先の運営者）は誰でもそれを開くことができ、保管庫からの復元には、自身の別の端末で本人確認を行わない限り1日の待機時間が発生します。自分以外の誰もアクセスできないようにしたい場合は、12個の単語のみを使用してください。</p>
+        <p class="guide-links">ガイド：<a href="guide/your-12-words.html">あなたの12個の単語</a>。</p>
+
+        <h2 id="trade"><span class="num">5.</span>初めての取引</h2>
+        <p>ローカルコミュニティでは、まず<strong>提供</strong>を投稿します。街までの相乗り、卵、1時間の庭仕事などです。豆での価格に合意し、仕事が完了するまで豆は預かり状態（エスクロー）となり、その後に売り手に渡り、お互いを評価します。最初の取引が完了すると信用枠が開設されます。信用枠は小さく始まり、より多くの人と取引するにつれて拡大します。掲載し続けている提供の数によって利用できる上限が決まります（提供1件で最大200豆、5件で最大2000豆）。バッジ（新規、住民、世話人、長老）は実績を示すものであり、何かを制限したり解除したりするものではありません。</p>
+        <p class="guide-links">ガイド：<a href="guide/a-deal-step-by-step.html">取引の手順</a>、<a href="guide/credit-line.html">信用枠</a>、数値の詳細は<a href="rules.html#4">ルール</a>。</p>
+
+        <h2 id="6"><span class="num">6.</span>ヘルプ</h2>
+        <p>動画チュートリアルを見たい場合や、ノードの立ち上げで困ったときは、BeanPoolコミュニティにつながりましょう：</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1.25rem;">
+            <div class="feature-card feature-card-brand brand-youtube glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper youtube-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </div>
+                    <span class="brand-badge youtube-badge">▶ 動画ガイド</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">YouTubeチュートリアル</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">参加方法、12個の単語、取引についての短い解説動画です。</p>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-youtube" style="margin-top: 0.5rem;">YouTubeで見る →</a>
+            </div>
+            <div class="feature-card feature-card-brand brand-reddit glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper reddit-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </div>
+                    <span class="brand-badge reddit-badge">💬 r/beanpool</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Redditディスカッション</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">ディスカッションへの参加、質問、提供の共有、他のノード運営者との交流ができます。</p>
+                <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-reddit" style="margin-top: 0.5rem;">r/beanpoolに参加 →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPoolアイコン" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>豆を使ってご近所さんと取引できる無料アプリ。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">ヘルプセンター</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">仕組み</a>
+                    <a href="getting-started.html">スタートガイド</a>
+                    <a href="rules.html">ルール</a>
+                    <a href="safety.html">児童の安全</a>
+                    <a href="privacy.html">プライバシーポリシー</a>
+                    <a href="terms.html">利用規約</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>MITライセンスに基づくオープンソース。コミュニティによって、コミュニティのために<img src="bean.png" alt="愛" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />を込めて制作。タイムゾーン境界データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

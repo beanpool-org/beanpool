@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Les règles — Comment fonctionne BeanPool</title>
+    <meta name="description" content="Les règles simples de BeanPool : comment fonctionnent les soldes, le crédit, les offres, les frais, la fédération keynésienne, les entreprises communautaires et la gouvernance.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/rules">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/rules">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/rules">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/rules">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/rules">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/rules">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/rules">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/rules">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/rules">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/rules">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/rules">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/rules">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/rules">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/rules">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/rules">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/rules">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/rules">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/rules">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/rules">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/rules">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/rules">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/rules">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/rules">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/rules">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/rules">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/rules">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Icône BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Comment ça marche</a>
+                <a href="rules.html">Les règles</a>
+                <a href="index.html#features">Fonctionnalités</a>
+                <a href="help.html">Aide</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriels</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Regarder les tutoriels vidéo sur YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Rejoindre la communauté Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Voir sur GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Démarrer</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Ouvrir le menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Démarrer</a>
+                    <a href="index.html#how-it-works">Comment ça marche</a>
+                    <a href="rules.html" aria-current="page">Les règles</a>
+                    <a href="index.html#features">Fonctionnalités</a>
+                    <a href="help.html">Aide</a>
+                    <a href="../guide/index.html">Guide des membres</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriels sur YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool sur Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Code source sur GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Les règles — Comment fonctionne BeanPool</h1>
+        <p class="lede">BeanPool est un espace d'échange communautaire où tout le monde commence à zéro. Vous gagnez des haricots en aidant les autres et vous les dépensez lorsque d'autres vous aident. Aucun argent ne change de mains, et il n'y a aucun intermédiaire d'entreprise — seulement ces règles simples.</p>
+
+        <div class="callout amber">En résumé : <strong>gagnez votre ligne de crédit en échangeant, maintenez une ou deux offres actives pour l'utiliser, et laissez circuler les haricots.</strong> L'objectif est zéro — donner à peu près autant que vous recevez.</div>
+
+        <h2 id="1"><span class="num">1.</span>Les haricots et votre solde</h2>
+        <p>Les haricots mesurent la valeur que vous avez apportée et reçue (approximativement le temps passé). <strong style="color:var(--text-primary)">L'objectif est zéro</strong> — cela signifie que vous avez donné à peu près autant que vous avez reçu.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Solde positif</strong> — vous avez donné plus que vous n'avez reçu. La communauté a une dette morale envers vous.</li>
+            <li><strong style="color:var(--text-primary)">Solde négatif</strong> — la communauté vous a accordé du crédit. Vous lui rendez la pareille en rendant service.</li>
+            <li>Sur la plupart des communautés, le découvert maximal possible est de <strong>−2000 haricots</strong>. Une communauté qui confirme l'identité réelle de ses membres peut fixer sa propre limite, jusqu'à −5000, et attribuer aux membres confirmés une ligne de départ.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Premiers pas</h2>
+        <p>Vous rejoignez sur invitation. Dès le premier jour, vous pouvez explorer et recevoir des haricots. Une fois que vous détenez des haricots (en les gagnant ou en recevant un don), vous pouvez les dépenser. Pour dépenser à crédit, vous devez publier au moins une <strong style="color:var(--text-primary)">Offre</strong> (voir §4 et §5). Les nouveaux membres commencent avec <strong style="color:var(--text-primary)">aucune ligne de crédit</strong> — vous ne pouvez dépenser que les haricots que vous possédez réellement jusqu'à ce que votre ligne soit activée par votre premier échange conclu (ou si un garant ou un administrateur vous accorde une ligne de départ — voir §3 et §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Votre ligne de crédit se gagne par les échanges</h2>
+        <p>Votre ligne de crédit vous permet de passer légèrement en négatif — en dépensant avant d'avoir compensé par un service. Elle est <strong style="color:var(--text-primary)">gagnée, pas donnée</strong> :</p>
+        <ul>
+            <li>La confiance provient des <strong style="color:var(--text-primary)">échanges finalisés sur le marché</strong> — jamais des dons. Elle grandit lentement au début : un échange de 100 haricots fait gagner environ 37 haricots de ligne de crédit. Un administrateur ou un garant désigné peut également accorder une ligne de départ ; l'attribution d'un administrateur apparaît sous forme de badge.</li>
+            <li>Échanger avec <strong style="color:var(--text-primary)">de nombreuses personnes différentes</strong> renforce la confiance bien plus vite que des échanges répétés avec une seule personne.</li>
+            <li>Votre confiance fixe votre <em>plafond</em> de crédit — le niveau maximal de votre découvert, de 0 jusqu'à −2000 sur la plupart des communautés (voir §1).</li>
+            <li>Votre plancher s'ouvre après votre <strong style="color:var(--text-primary)">premier échange réel</strong>, et s'étend à chaque échange suivant (ou un garant de la communauté peut vous attribuer un plancher de départ — voir §9). Aucun parrainage n'est obligatoire.</li>
+        </ul>
+        <div class="callout">Les niveaux de confiance — <strong>Arrivant → Résident → Pilier → Doyen</strong> — sont des badges de reconnaissance. Les badges que vous gagnez ne restreignent rien en eux-mêmes ; une ligne de crédit plus profonde découle de vrais échanges. Un administrateur peut également attribuer un badge à un membre, avec la ligne de crédit initiale associée à ce badge.</div>
+
+        <h2 id="4"><span class="num">4.</span>Réciprocité : pour utiliser le crédit, vous devez maintenir des offres actives</h2>
+        <p>Gagner de la confiance établit votre <strong style="color:var(--text-primary)">limite</strong> de crédit (jusqu'où vous pouvez potentiellement descendre). Mais pour <strong style="color:var(--text-primary)">puiser</strong> effectivement dans ce crédit, vous devez maintenir des Offres actives publiées. Cela garantit que toute personne en solde négatif montre activement à la communauté comment elle prévoit de contribuer.</p>
+        
+        <p>Le nombre d'offres actives que vous maintenez détermine la part de crédit <strong style="color:var(--text-primary)">accessible</strong> :</p>
+        <table>
+            <thead><tr><th>Offres actives</th><th>Ligne de crédit accessible</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — dépense des haricots détenus uniquement</td></tr>
+                <tr><td class="num-col">1</td><td>Jusqu'à −200 haricots</td></tr>
+                <tr><td class="num-col">2</td><td>Jusqu'à −500 haricots</td></tr>
+                <tr><td class="num-col">3</td><td>Jusqu'à −1000 haricots</td></tr>
+                <tr><td class="num-col">4</td><td>Jusqu'à −1500 haricots</td></tr>
+                <tr><td class="num-col">5</td><td>Jusqu'à −2000 haricots <em>(le plafond habituel)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Votre limite de dépense réelle correspond au montant le <strong style="color:var(--text-primary)">plus bas</strong> entre ce que vous avez acquis et ce que vos offres actives rendent accessible.</p>
+        <p><em>Par exemple : si vous avez acquis une limite de −600 par vos échanges, maintenir 2 offres actives en rend −500 utilisables. Maintenir une 3e offre rend utilisable la totalité de votre limite de −600 (vous n'avez jamais besoin d'une 4e ou 5e offre car votre limite acquise est déjà atteinte).</em></p>
+        <div class="callout">
+            <strong>La pause de dépense (gel préventif) :</strong><br>
+            Si le nombre de vos offres actives descend sous le seuil requis pour votre dette actuelle (par exemple si l'une de vos offres se vend et se termine, ou si vous en suspendez une), votre <strong>possibilité de dépenser à crédit est mise en pause</strong>. C'est un filet de sécurité, pas une pénalité : rien ne vous est retiré. Vous pouvez toujours recevoir des haricots, continuer à vendre et explorer le marché. Votre ligne de crédit se réactive d'elle-même dès que votre solde rentre dans ce que couvrent vos offres actives : publiez une autre offre, ou recevez des haricots.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Offres (vos annonces)</h2>
+        <ul>
+            <li>Conservez autant d'offres que vous voulez — y compris des offres récurrentes — et passez chacune d'elles en <strong style="color:var(--text-primary)">Active ou Suspendue</strong> quand vous le souhaitez. Seules les offres <em>Actives</em> comptent pour votre ligne de crédit.</li>
+            <li><strong style="color:var(--text-primary)">Donner avant de recevoir :</strong> dans une communauté utilisant des haricots, vous devez avoir publié au moins une offre avant de pouvoir déposer une Demande ou acheter auprès d'autres membres. Là où il n'y a pas de haricots, comme sur la communauté globale, votre première publication peut être une Demande.</li>
+            <li>Solde positif ? Suspendez tout si vous le souhaitez — les offres ne sont nécessaires que pour passer en solde négatif.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Frais et fonds communautaire</h2>
+        <p>Deux petites contributions, qui alimentent toutes deux les <strong style="color:var(--text-primary)">Communs de la communauté</strong> — un fonds partagé que votre communauté vote de dépenser dans des projets locaux. Rien n'est perdu au profit d'une entreprise extérieure.</p>
+        <p><strong style="color:var(--text-primary)">a) Frais de marché — 1,5 % sur les échanges conclus.</strong> Lorsqu'une transaction sur le marché est finalisée, le vendeur reçoit 1,5 % de moins que le prix convenu et la différence va aux Communs. <strong style="color:var(--text-primary)">Les dons (envois directs entre membres) sont gratuits</strong> — tout comme les remboursements et les opérations système.</p>
+        <p><strong style="color:var(--text-primary)">b) Contribution de circulation sur les soldes positifs — mensuelle, et uniquement sur la part dépassant 200.</strong> Comme des tranches d'imposition progressives, chaque tranche n'est prélevée que sur la portion de votre solde située dans cette tranche :</p>
+        <table>
+            <thead><tr><th>Tranche de solde</th><th>Taux de circulation mensuel</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Gratuit</span> zone verte</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1 %</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1,5 %</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2 %</td></tr>
+                <tr><td class="num-col">2000+</td><td>2,5 %</td></tr>
+            </tbody>
+        </table>
+        <p>Cela encourage doucement les haricots à <strong style="color:var(--text-primary)">circuler plutôt qu'à s'accumuler</strong>. <strong style="color:var(--text-primary)">Les soldes négatifs ne supportent jamais de contribution de circulation</strong> — vous portez déjà du crédit pour la communauté. Notez que la zone gratuite de +200 reflète la première tranche de crédit de −200, de sorte que le système est parfaitement symétrique autour de zéro.</p>
+
+        <h2 id="7"><span class="num">7.</span>Dons (envoyer des haricots)</h2>
+        <ul>
+            <li>Vous ne pouvez <strong style="color:var(--text-primary)">donner que des haricots que vous détenez réellement</strong> — un don ne fait jamais passer en solde négatif et n'utilise jamais votre ligne de crédit.</li>
+            <li>Vous pouvez envoyer des dons dès que vous avez conclu au moins un échange réel (cela évite que de tout nouveaux comptes ne fassent circuler immédiatement des haricots avant de disparaître).</li>
+            <li>Les dons ne font pas monter la confiance du bénéficiaire, et sont <strong style="color:var(--text-primary)">gratuits</strong> — aucun frais (vous ne pouvez donner que des haricots que vous possédez déjà).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Comment se règlent les échanges</h2>
+        <p>Les échanges sur le marché sont conservés en toute sécurité sous <strong style="color:var(--text-primary)">séquestre</strong> (conservés en fiducie par le système) jusqu'à ce que le service soit rendu, puis remis au vendeur (déduction faite des frais de 1,5 %). Si une transaction est annulée, l'acheteur est intégralement remboursé.</p>
+
+        <h2 id="9"><span class="num">9.</span>Parrainage (un coup de pouce optionnel)</h2>
+        <p>Un <strong style="color:var(--text-primary)">garant</strong> de confiance, désigné par la communauté, peut attribuer à un nouvel arrivant un <strong style="color:var(--text-primary)">plancher de départ de 25, 50 ou 100 haricots</strong> afin qu'il puisse commencer à utiliser du crédit avant de l'avoir acquis. Ces planchers sont généralement accordés — à la seule discrétion du garant — à des personnes dont les annonces et les contributions lui semblent particulièrement engageantes et constructives. C'est facultatif dans tous les cas : personne n'a besoin d'un parrainage pour participer, puisque vous ouvrez également votre ligne de crédit simplement en échangeant (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Compensation intercommunautaire fédérée</h2>
+        <p>Les communautés n'ont pas vocation à vivre isolées. Grâce aux <strong style="color:var(--text-primary)">Connecteurs d'échange fédérés</strong> (inspirés de l'union de compensation de Keynes), des serveurs communautaires indépendants peuvent compenser des échanges avec un serveur voisin de pair à pair, sans monnaie fiduciaire ni réserves bancaires. Les haricots ne quittent jamais leur communauté d'origine — chaque paire de serveurs tient un registre de liaison de ce qu'ils se doivent mutuellement en travail, et chaque côté fixe sa propre limite sur cette avance. La compensation s'effectue entre paires de communautés, chaque gestionnaire l'active délibérément, et cela reste récent : elle est développée, avec ses écrans dans l'application web, et n'a été testée qu'entre deux de nos propres communautés de test, jamais entre des communautés réelles.</p>
+
+        <h2 id="11"><span class="num">11.</span>Identité cryptographique et garde des clés</h2>
+        <p>Votre compte est protégé par une paire de clés cryptographiques Ed25519 générée sur votre appareil. BeanPool offre une garde flexible adaptée à vos besoins :</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Pleine souveraineté :</strong> Sur les applications mobiles, votre clé privée est conservée dans le stockage sécurisé de l'appareil (iOS Keychain / Android Keystore) ; sur l'application web, elle est conservée dans le stockage propre du navigateur. Elle ne quitte l'appareil que sous forme d'une copie chiffrée pour la récupération par connexion, ou lorsque vous copiez votre compte sur un autre de vos appareils. Conservez votre sauvegarde de 12 mots hors ligne.</li>
+            <li><strong style="color:var(--text-primary)">Récupération :</strong> Votre phrase de 12 mots restaure votre compte sur n'importe quel appareil. Vous pouvez également associer une connexion Google, Apple ou Facebook. Une copie chiffrée de votre clé est alors conservée pour celle-ci : les applications mobiles qui utilisent le coffre-fort de clés de BeanPool la gardent là-bas, sur un petit serveur en Islande ; les versions plus anciennes de l'application mobile la gardent sur le serveur de votre communauté ; l'application web sur la communauté globale la garde sur le serveur de cette communauté, que nous administrons. L'entité qui conserve la copie peut l'ouvrir. Une restauration depuis le coffre-fort attend 24 heures, sauf si l'un de vos propres appareils la confirme. Si vous perdez votre appareil, vos 12 mots et votre connexion, un administrateur de votre communauté peut transférer votre compte vers un nouveau téléphone grâce à un code à usage unique, en votre présence ; votre historique reste préservé. Pensez donc à noter ces mots.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Limites et sécurité</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Plafond de découvert à −2000</strong> sur la plupart des communautés (voir §1). Il n'y a pas de limite quotidienne au montant de haricots que vous dépensez — votre plancher constitue la seule limite. Il existe une limite de fréquence : 100 paiements, 30 personnes que vous n'avez jamais payées auparavant et 100 requêtes sur le marché par période de 24 heures.</li>
+            <li>La confiance avec un même partenaire est plafonnée, ainsi personne ne peut gonfler artificiellement sa réputation en multipliant les transactions dans les deux sens avec un complice.</li>
+            <li><strong style="color:var(--text-primary)">Le mode vacances</strong> masque vos offres et suspend les demandes entrantes pendant votre absence.</li>
+            <li>Les membres peuvent signaler les comportements inappropriés ; les administrateurs de la communauté peuvent les exclure.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Entreprises communautaires et gouvernance</h2>
+        <p>Les entreprises communautaires (comme une matériauthèque d'outils partagés, un poulailler collectif ou un dépôt de bois de chauffage) et les projets délimités sont des initiatives partagées sous gestion collective. Elles fonctionnent selon des règles claires, appliquées par le code (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">le modèle de gouvernance des Communs</a>) :</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Un objet, deux cycles de vie (§2.1) :</strong> Une entreprise pérenne perdure et échange ; une entreprise délimitée (un projet) a un objectif et une date de fin, clôturant son compte et reversant le reliquat aux Communs lorsqu'elle se termine.</li>
+            <li><strong style="color:var(--text-primary)">Planchers acquis et promesses de soutien des gestionnaires (Règles 1–3) :</strong> Une nouvelle entreprise démarre sans découvert non acquis : son plancher de crédit est garanti par des promesses explicites issues de la réputation d'échange acquise par ses gestionnaires (somme directe, sans multiplicateur synthétique). S'engager en soutien ne touche ni ne réduit jamais le plancher de crédit personnel du foyer d'un gestionnaire. Les entreprises plus anciennes conservent le plancher initial qu'elles avaient avant les promesses.</li>
+            <li><strong style="color:var(--text-primary)">Responsabilité limitée (Règle 4) :</strong> L'entreprise est en défaut, pas le foyer du gestionnaire. Si une entreprise est en défaut, ses dépenses sont suspendues, mais les planchers personnels de ses gestionnaires restent protégés.</li>
+            <li><strong style="color:var(--text-primary)">Le crédit achète les intrants, les bénéfices rémunèrent les personnes (Règle 5) :</strong> Une entreprise peut recourir au crédit jusqu'à son plancher utilisable pour acheter des fournitures ou des services auprès de voisins extérieurs. Elle ne peut <em>jamais</em> recourir au crédit pour rémunérer ses propres gestionnaires — les gestionnaires ne sont rémunérés que tant que <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Rémunération des gestionnaires plafonnée par l'excédent acquis (Règle 6) :</strong> Les versements aux gestionnaires sont strictement plafonnés par l'excédent réel des échanges (recettes des ventes moins rémunérations des gestionnaires). Les subventions, promesses et dons ne peuvent jamais être convertis en salaires de gestionnaires.</li>
+            <li><strong style="color:var(--text-primary)">Reversements automatiques du fonds de roulement (Règle 7) :</strong> Une entreprise peut fixer un plafond de fonds de roulement. L'excédent acquis au-delà de ce plafond est automatiquement reversé au fonds des Communs de la communauté pour éviter la thésaurisation. Les subventions et les dons ne sont jamais reversés.</li>
+            <li><strong style="color:var(--text-primary)">Règle d'approbation à deux personnes :</strong> Les gestionnaires ne peuvent pas valider leurs propres paiements ni leurs offres personnelles sur les besoins de l'entreprise — un autre gestionnaire doit valider.</li>
+            <li><strong style="color:var(--text-primary)">Sondages et Décisions (§3) :</strong> Les questions informelles sont des <em>Sondages</em> dans le fil du marché : un vote chacun, comptabilisé, n'engageant à rien. La gouvernance contraignante (subventions du fonds, effacements de dette, changements de rôles, et suspension, gel ou exclusion d'un membre) passe par des <em>Décisions</em> dans l'onglet Communs, avec une période de vote de 7 jours. Une Décision est adoptée à 60 % des voix (66 % pour exclure un membre ; plus de la moitié pour lever une suspension ou un gel, ou réintégrer un membre) dès lors qu'assez de membres ont voté : 30 % des membres actifs au cours des 30 derniers jours, au moins 3 (25 % pour l'exclusion d'un membre). Elle s'applique ensuite d'elle-même. Les subventions du fonds utilisent le vote quadratique basé sur la réputation d'échange acquise — les haricots disponibles ne peuvent pas acheter de votes.</li>
+            <li><strong style="color:var(--text-primary)">Vocabulaire établi (§9) :</strong> Quatre niveaux, quatre termes distincts : nœud → <em>propriétaire / administrateur</em> · entreprise → <em>gestionnaire principal / gestionnaire</em> · groupe → <em>coordinateur</em> · niveau de confiance → <em>Pilier</em>.</li>
+        </ul>
+        <div class="callout amber">En résumé : <strong>gagnez votre ligne de crédit en échangeant, maintenez une ou deux offres actives pour l'utiliser, et laissez circuler les haricots.</strong> L'objectif est zéro — donner à peu près autant que vous recevez.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Icône BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Le crédit mutuel pour les communautés, géré par les communautés.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Centre d'aide</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Comment ça marche</a>
+                    <a href="getting-started.html">Démarrer</a>
+                    <a href="rules.html">Les règles</a>
+                    <a href="safety.html">Protection des mineurs</a>
+                    <a href="../privacy.html">Politique de confidentialité</a>
+                    <a href="../terms.html">Conditions d'utilisation</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../rules.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/rules.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/rules.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/rules.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/rules.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="rules.html" hreflang="fr" lang="fr" aria-current="page">Français</a>
+                    <a href="../ar/rules.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/rules.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/rules.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/rules.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/rules.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/rules.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/rules.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/rules.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/rules.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/rules.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/rules.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/rules.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/rules.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/rules.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/rules.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/rules.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/rules.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/rules.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/rules.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source sous licence MIT. Fait avec <img src="../bean.png" alt="amour" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> par les communautés, pour les communautés. Limites de fuseaux horaires © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">les contributeurs d'OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

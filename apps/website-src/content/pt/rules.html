@@ -1,0 +1,219 @@
+<!-- source-hash: b6cb7426f4ee45f1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>As regras — Como o BeanPool funciona</title>
+    <meta name="description" content="As regras simples do BeanPool: como funcionam saldos, crédito, ofertas, taxas, federação keynesiana, empreendimentos comunitários e governança.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Ícone do BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Como funciona</a>
+                <a href="rules.html">As regras</a>
+                <a href="index.html#features">Recursos</a>
+                <a href="help.html">Ajuda</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriais</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Assista a tutoriais em vídeo no YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Participe da comunidade no Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Ver no GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Primeiros passos</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Abrir menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Primeiros passos</a>
+                    <a href="index.html#how-it-works">Como funciona</a>
+                    <a href="rules.html" aria-current="page">As regras</a>
+                    <a href="index.html#features">Recursos</a>
+                    <a href="help.html">Ajuda</a>
+                    <a href="guide/index.html">Guia dos membros</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriais no YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool no Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Código-fonte no GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>As regras — Como o BeanPool funciona</h1>
+        <p class="lede">O BeanPool é uma rede de troca comunitária onde todos começam do zero. Você ganha Feijões ajudando os outros e os gasta quando outras pessoas ajudam você. Nenhum dinheiro muda de mãos e não há intermediários corporativos — apenas estas regras simples.</p>
+
+        <div class="callout amber">Em resumo: <strong>conquiste sua linha de crédito negociando, mantenha uma ou duas ofertas ativas para utilizá-la e deixe os Feijões circularem.</strong> Zero é o objetivo — doe na mesma medida em que recebe.</div>
+
+        <h2 id="1"><span class="num">1.</span>Feijões e seu saldo</h2>
+        <p>Os Feijões medem o valor que você ofereceu e recebeu (aproximadamente, tempo). <strong style="color:var(--text-primary)">Zero é o objetivo</strong> — significa que você doou na mesma medida em que recebeu.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Saldo positivo</strong> — você doou mais do que recebeu. A comunidade deve a você.</li>
+            <li><strong style="color:var(--text-primary)">Saldo negativo</strong> — a comunidade concedeu crédito a você. Você retribui ajudando outros.</li>
+            <li>Na maioria das comunidades, o saldo negativo máximo permitido é <strong>−2000 Feijões</strong>. Uma comunidade que confirma seus membros por nome real pode definir seu próprio limite, até −5000, e conceder aos membros confirmados uma linha de crédito inicial.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Primeiros passos</h2>
+        <p>Você entra por convite. Desde o primeiro dia, pode navegar e receber Feijões. Assim que tiver Feijões (ganhando-os ou recebendo um presente), você pode gastá-los. Para gastar no crédito, você precisa publicar pelo menos uma <strong style="color:var(--text-primary)">Oferta</strong> (veja §4 e §5). Novos membros começam <strong style="color:var(--text-primary)">sem linha de crédito</strong> — você só pode gastar Feijões que realmente possui até que sua linha seja ativada pela sua primeira troca concluída (ou se alguém autorizado a recomendar ou um administrador conceder uma linha inicial — veja §3 e §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Sua linha de crédito é conquistada negociando</h2>
+        <p>Sua linha de crédito permite que você fique com saldo ligeiramente negativo — gastando antes de retribuir. Ela é <strong style="color:var(--text-primary)">conquistada, não concedida</strong>:</p>
+        <ul>
+            <li>A confiança vem de <strong style="color:var(--text-primary)">trocas concluídas no mercado</strong> — nunca de presentes. Ela cresce aos poucos no início: uma troca de 100 Feijões gera cerca de 37 Feijões de linha de crédito. Um administrador ou uma pessoa nomeada para recomendar também pode conceder uma linha inicial; a concessão de um administrador aparece como distintivo.</li>
+            <li>Trocar com <strong style="color:var(--text-primary)">muitas pessoas diferentes</strong> constrói confiança muito mais rápido do que trocas repetidas com uma única pessoa.</li>
+            <li>Sua confiança define seu <em>limite</em> de crédito — o piso até onde seu saldo pode ir, de 0 até −2000 na maioria das comunidades (veja §1).</li>
+            <li>Seu piso de crédito abre após sua <strong style="color:var(--text-primary)">primeira troca real</strong> e cresce a cada troca seguinte (ou uma recomendação da comunidade pode conceder um piso inicial — veja §9). Nenhuma recomendação é obrigatória.</li>
+        </ul>
+        <div class="callout">Níveis de confiança — <strong>Recém-chegado → Morador → Guardião → Ancião</strong> — são distintivos de reconhecimento. Os distintivos conquistados não bloqueiam nem liberam recursos por si sós; uma linha de crédito maior vem de trocas reais. Um administrador também pode conceder um distintivo a alguém e, com ele, a linha de crédito inicial correspondente.</div>
+
+        <h2 id="4"><span class="num">4.</span>Reciprocidade: para usar o crédito, você precisa manter ofertas ativas</h2>
+        <p>Conquistar confiança define seu <strong style="color:var(--text-primary)">limite</strong> de crédito (até onde você pode ir). Mas para realmente <strong style="color:var(--text-primary)">utilizar</strong> esse crédito, você precisa manter Ofertas ativas publicadas. Isso garante que qualquer pessoa com saldo negativo esteja mostrando ativamente à comunidade como planeja contribuir.</p>
+        
+        <p>O número de ofertas ativas que você mantém publicadas determina quanto crédito fica <strong style="color:var(--text-primary)">disponível para uso</strong>:</p>
+        <table>
+            <thead><tr><th>Ofertas ativas</th><th>Linha de crédito disponível</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — gaste apenas Feijões em conta</td></tr>
+                <tr><td class="num-col">1</td><td>Até −200 Feijões</td></tr>
+                <tr><td class="num-col">2</td><td>Até −500 Feijões</td></tr>
+                <tr><td class="num-col">3</td><td>Até −1000 Feijões</td></tr>
+                <tr><td class="num-col">4</td><td>Até −1500 Feijões</td></tr>
+                <tr><td class="num-col">5</td><td>Até −2000 Feijões <em>(o teto padrão)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Seu limite de gastos real é o <strong style="color:var(--text-primary)">menor</strong> valor entre o que você conquistou e o que suas ofertas ativas disponibilizam.</p>
+        <p><em>Por exemplo: se você conquistou um limite de −600 por meio de trocas, manter 2 ofertas ativas disponibiliza −500 desse limite. Manter uma 3ª oferta disponibiliza seu limite total de −600 (você nunca precisa de uma 4ª ou 5ª oferta porque seu limite conquistado já foi alcançado).</em></p>
+        <div class="callout">
+            <strong>Pausa de gastos (Congelamento temporário):</strong><br>
+            Se você ficar abaixo do número de ofertas ativas exigido para o seu saldo negativo atual (por exemplo, se uma de suas ofertas for vendida e concluída, ou se pausar uma), sua <strong>capacidade de gastar no crédito é pausada</strong>. Esta é uma rede de segurança, não uma punição: nada é retirado de você. Você ainda pode receber Feijões, continuar vendendo e navegar. Sua linha de crédito é reativada automaticamente assim que seu saldo voltar para o intervalo coberto por suas ofertas ativas: publique outra oferta ou receba Feijões.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Ofertas (seus anúncios)</h2>
+        <ul>
+            <li>Mantenha quantas ofertas quiser — incluindo recorrentes — e alterne cada uma entre <strong style="color:var(--text-primary)">Ativa ou Pausada</strong> sempre que desejar. Apenas ofertas <em>Ativas</em> contam para sua linha de crédito.</li>
+            <li><strong style="color:var(--text-primary)">Doe antes de receber:</strong> em uma comunidade com Feijões, você precisa ter publicado pelo menos uma oferta antes de poder publicar um Pedido ou comprar de outras pessoas. Onde não há Feijões, como na comunidade global, sua primeira publicação pode ser um Pedido.</li>
+            <li>Saldo positivo? Pause tudo se quiser — ofertas só são exigidas para ficar com saldo negativo.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Taxas e o fundo da comunidade</h2>
+        <p>Duas pequenas cobranças, e ambas vão para os <strong style="color:var(--text-primary)">Bens comuns da comunidade</strong> — um fundo compartilhado que sua comunidade decide como gastar em projetos locais por meio de votação. Nada se perde para corporações.</p>
+        <p><strong style="color:var(--text-primary)">a) Taxa do mercado — 1,5% sobre trocas concluídas.</strong> Quando uma venda no mercado é liquidada, quem vende recebe 1,5% a menos que o valor combinado e a diferença vai para os Bens comuns. <strong style="color:var(--text-primary)">Presentes (envios diretos entre membros) são gratuitos</strong> — assim como reembolsos e movimentações do sistema.</p>
+        <p><strong style="color:var(--text-primary)">b) Taxa de circulação sobre saldos positivos — mensal, e apenas sobre a parcela acima de 200.</strong> Assim como faixas progressivas de imposto, cada faixa é cobrada apenas sobre a fração do saldo dentro dela:</p>
+        <table>
+            <thead><tr><th>Faixa de saldo</th><th>Taxa mensal de circulação</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Gratuito</span> zona verde</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1,5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2,5%</td></tr>
+            </tbody>
+        </table>
+        <p>Isso estimula suavemente os Feijões a <strong style="color:var(--text-primary)">circularem em vez de se acumularem</strong>. <strong style="color:var(--text-primary)">Saldos negativos nunca pagam taxa de circulação</strong> — você já está sustentando crédito para a comunidade. Observe que a zona livre de +200 espelha a primeira faixa de crédito de −200, tornando o sistema simétrico em torno do zero.</p>
+
+        <h2 id="7"><span class="num">7.</span>Presentes (enviar Feijões)</h2>
+        <ul>
+            <li>Você só pode <strong style="color:var(--text-primary)">presentear com Feijões que realmente possui</strong> — um presente nunca deixa o saldo negativo e nunca usa sua linha de crédito.</li>
+            <li>Você pode enviar depois de concluir pelo menos uma troca real (isso evita que contas recém-criadas repassem Feijões e desapareçam imediatamente).</li>
+            <li>Presentes não geram confiança para quem recebe e são <strong style="color:var(--text-primary)">gratuitos</strong> — sem taxa (você só pode presentear com Feijões que já possui).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Como as trocas são liquidadas</h2>
+        <p>As trocas no mercado ficam retidas em segurança em <strong style="color:var(--text-primary)">custódia</strong> (mantidas pelo sistema) até que o acordo seja concluído, sendo então liberadas para quem vendeu (descontada a taxa de 1,5%). Se um acordo for cancelado, quem comprou é reembolsado integralmente.</p>
+
+        <h2 id="9"><span class="num">9.</span>Recomendação (um ponto de partida opcional)</h2>
+        <p>Uma pessoa de confiança indicada pela comunidade para <strong style="color:var(--text-primary)">recomendações</strong> pode conceder a um recém-chegado um <strong style="color:var(--text-primary)">piso inicial de 25, 50 ou 100 Feijões</strong> para que ele possa começar a usar crédito antes de conquistá-lo. Essas concessões são normalmente atribuídas — a critério exclusivo de quem recomenda — a pessoas cujas publicações e contribuições sejam genuinamente inspiradoras e participativas. É opcional em qualquer caso: ninguém precisa de recomendação para participar, já que sua linha de crédito também se abre simplesmente negociando (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Compensação federada entre comunidades</h2>
+        <p>As comunidades não precisam existir isoladas. Por meio de <strong style="color:var(--text-primary)">Conectores de Trocas Federadas</strong> (inspirados na união de compensação de Keynes), nós comunitários independentes podem compensar trocas com nós vizinhos de ponto a ponto, sem moeda fiduciária ou reservas bancárias. Os Feijões nunca saem de sua comunidade de origem — cada par de nós mantém um registro de ponte sobre o que devem um ao outro em trabalho, e cada lado define seu próprio limite para esse saldo. A compensação ocorre entre pares de comunidades, cada operador a ativa deliberadamente e o recurso ainda está em estágio inicial: já está construído, com suas telas no app web, e foi testado apenas entre duas de nossas comunidades de teste, nunca entre nós reais em produção.</p>
+
+        <h2 id="11"><span class="num">11.</span>Identidade criptográfica e custódia de chaves</h2>
+        <p>Sua conta é protegida por um par de chaves criptográficas Ed25519 gerado no seu dispositivo. O BeanPool oferece custódia flexível para atender às suas necessidades:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Total autossoberania:</strong> Nos aplicativos para celular, sua chave privada é mantida no armazenamento seguro do aparelho (iOS Keychain / Android Keystore); no app web, ela fica no armazenamento do próprio navegador. Ela só sai do dispositivo como uma cópia criptografada para recuperação por login, ou quando você copia sua conta para outro aparelho seu. Guarde o backup das suas 12 palavras fora da internet.</li>
+            <li><strong style="color:var(--text-primary)">Recuperação:</strong> Sua frase de 12 palavras restaura sua conta em qualquer dispositivo. Você também pode vincular um login do Google, Apple ou Facebook. Uma cópia criptografada da sua chave é guardada para esse login: aplicativos móveis que usam o cofre de chaves do BeanPool a mantêm lá, em um pequeno servidor na Islândia; versões mais antigas do app para celular a mantêm no nó da sua comunidade; o app web na comunidade global a mantém no servidor daquela comunidade, que nós gerenciamos. Quem guarda a cópia pode acessá-la. Uma restauração a partir do cofre aguarda 24 horas, a menos que um dos seus próprios dispositivos a aprove. Se você perder seu aparelho, suas 12 palavras e seu login, um administrador da sua comunidade pode transferir sua conta para um celular novo com um código de uso único, na sua frente; seu histórico permanece. Por isso, anote as palavras.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Limites e segurança</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Teto de piso de −2000</strong> na maioria das comunidades (veja §1). Não há limite diário para a quantidade de Feijões gastos — seu piso é o limite. Há um limite de frequência: 100 pagamentos, 30 pessoas para quem você nunca pagou antes e 100 solicitações de mercado em qualquer período de 24 horas.</li>
+            <li>A confiança com qualquer parceiro individual possui um teto, para que ninguém possa inflar sua reputação trocando repetidamente com um cúmplice.</li>
+            <li>O <strong style="color:var(--text-primary)">Modo férias</strong> oculta suas ofertas e pausa pedidos recebidos enquanto você estiver ausente.</li>
+            <li>Os membros podem denunciar e sinalizar comportamentos inadequados; os administradores da comunidade podem remover os infratores.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Empreendimentos comunitários e governança</h2>
+        <p>Empreendimentos comunitários (como uma biblioteca comunitária de ferramentas, uma criação coletiva de galinhas ou um depósito de lenha) e projetos delimitados são iniciativas compartilhadas sob gestão coletiva. Eles operam sob regras claras aplicadas por código (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">o modelo de governança dos Bens comuns</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Um objeto, dois ciclos de vida (§2.1):</strong> Um empreendimento contínuo permanece ativo e negociando; um empreendimento delimitado (um projeto) tem meta e data de término, encerrando sua conta e devolvendo o saldo restante aos Bens comuns quando finalizado.</li>
+            <li><strong style="color:var(--text-primary)">Pisos conquistados e compromissos de custódios (Regras 1–3):</strong> Um novo empreendimento começa sem limite a descoberto não conquistado: seu piso de crédito é respaldado por compromissos explícitos do histórico de trocas conquistado por seus custódios (soma simples, sem multiplicador sintético). Assumir um compromisso de apoio nunca afeta nem reduz o piso de crédito pessoal do domicílio de um custódio. Empreendimentos mais antigos mantêm o piso inicial que tinham antes do sistema de compromissos.</li>
+            <li><strong style="color:var(--text-primary)">Responsabilidade limitada (Regra 4):</strong> Quem falha é o empreendimento, não a família do custódio. Se um empreendimento entrar em inadimplência, seus gastos são congelados, mas os pisos pessoais de seus custódios ficam protegidos.</li>
+            <li><strong style="color:var(--text-primary)">Crédito compra insumos, o lucro remunera pessoas (Regra 5):</strong> Um empreendimento pode recorrer ao crédito até seu piso utilizável para comprar suprimentos ou serviços de vizinhos externos. Ele <em>nunca</em> pode recorrer ao crédito para pagar seus próprios custódios — os custódios são pagos apenas enquanto <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Remuneração de custódios limitada pelo excedente auferido (Regra 6):</strong> Os pagamentos aos custódios são rigorosamente limitados pelo excedente real de trocas (receita de vendas menos pagamentos anteriores a custódios). Repasses, garantias e presentes nunca podem ser convertidos em remuneração de custódios.</li>
+            <li><strong style="color:var(--text-primary)">Recolhimento automático de capital de giro (Regra 7):</strong> Um empreendimento pode definir um teto de capital de giro. O excedente auferido que ultrapassar esse teto é recolhido automaticamente de volta ao fundo de Bens comuns da comunidade para evitar acúmulo excessivo. Repasses e presentes nunca são recolhidos.</li>
+            <li><strong style="color:var(--text-primary)">Regra de aprovação por duas pessoas:</strong> Custódios não podem aprovar seus próprios pagamentos nem propostas pessoais para pedidos do empreendimento — outro custódio precisa aprovar.</li>
+            <li><strong style="color:var(--text-primary)">Enquetes vs. Decisões (§3):</strong> Perguntas informais são <em>Enquetes</em> no feed do mercado: um voto cada, contabilizados, sem efeito vinculante. A governança vinculante (repasses do fundo, perdão de dívidas, mudanças de função e suspensão, congelamento ou remoção de membros) ocorre por meio de <em>Decisões</em> na aba Bens comuns, com janela de votação de 7 dias. Uma Decisão é aprovada com 60% dos votos (66% para remover um membro; mais da metade para levantar uma suspensão ou um congelamento, ou para reintegrar um membro) desde que membros suficientes tenham votado: 30% dos ativos nos últimos 30 dias, no mínimo 3 (25% para remoção de membro). Em seguida, ela é executada automaticamente. Repasses do fundo usam votação quadrática baseada no histórico de trocas conquistado — Feijões líquidos não podem comprar votos.</li>
+            <li><strong style="color:var(--text-primary)">Vocabulário consolidado (§9):</strong> Quatro níveis, quatro termos distintos: nó → <em>proprietário / admin</em> · empreendimento → <em>custódio principal / custódio</em> · grupo → <em>coordenador</em> · nível de confiança → <em>Guardião</em>.</li>
+        </ul>
+        <div class="callout amber">Em resumo: <strong>conquiste sua linha de crédito negociando, mantenha uma ou duas ofertas ativas para utilizá-la e deixe os Feijões circularem.</strong> Zero é o objetivo — doe na mesma medida em que recebe.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Ícone do BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Crédito mútuo para comunidades, administrado por comunidades.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Central de ajuda</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Como funciona</a>
+                    <a href="getting-started.html">Primeiros passos</a>
+                    <a href="rules.html">As regras</a>
+                    <a href="safety.html">Proteção Infantil</a>
+                    <a href="privacy.html">Política de Privacidade</a>
+                    <a href="terms.html">Termos de Serviço</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Código aberto sob licença MIT. Feito com <img src="bean.png" alt="amor" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> por comunidades, para comunidades. Limites de fusos horários © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores do OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

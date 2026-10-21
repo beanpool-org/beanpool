@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ekonomi Pasca-Ekstraksi — BeanPool</title>
+    <meta name="description" content="Arti dari ekonomi pasca-ekstraksi, dan mekanisme khusus yang digunakan BeanPool untuk mewujudkannya: kredit bersama tanpa bunga, sirkulasi alih-alih penimbunan, Sarana Bersama yang diputuskan anggota, serta federasi yang tidak menguras kota yang lebih kecil.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/post-extraction">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/post-extraction">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/post-extraction">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/post-extraction">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/post-extraction">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/post-extraction">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/post-extraction">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/post-extraction">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/post-extraction">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/post-extraction">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/post-extraction">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/post-extraction">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/post-extraction">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/post-extraction">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/post-extraction">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/post-extraction">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/post-extraction">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/post-extraction">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/post-extraction">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/post-extraction">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/post-extraction">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/post-extraction">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/post-extraction">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/post-extraction">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/post-extraction">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/post-extraction">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Ikon BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Cara Kerja</a>
+                <a href="rules.html">Aturan</a>
+                <a href="index.html#features">Fitur</a>
+                <a href="help.html">Bantuan</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tonton Video Tutorial di YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Gabung ke Komunitas Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Lihat di GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Mulai</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Buka menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Mulai</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="rules.html">Aturan</a>
+                    <a href="index.html#features">Features</a>
+                    <a href="help.html">Help</a>
+                    <a href="../guide/index.html">Panduan anggota</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial di YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool di Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Kode Sumber di GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>Ekonomi Pasca-Ekstraksi</h1>
+
+        <p class="lede">Sebagian besar alat yang digunakan komunitas untuk bertransaksi dirancang untuk mengambil keuntungan potongan. Bukan karena niat jahat — melainkan secara struktural. Sebagian persentase masuk ke pemroses pembayaran, bunga masuk ke bank, perhatian masuk ke pengiklan, dan data disalurkan ke suatu tempat yang tidak pernah dipilih oleh siapa pun di komunitas. <strong>BeanPool dibangun untuk menutup celah-celah kebocoran tersebut.</strong></p>
+
+        <div class="pe-define">
+            <p><strong>Pasca-ekstraksi</strong> berarti infrastruktur yang memungkinkan komunitas menciptakan dan mempertahankan nilai yang mereka hasilkan, alih-alih direbut oleh pihak perantara. Ini bukan sekadar slogan tentang berbuat baik. Ini adalah batasan tegas bagaimana perangkat lunak boleh dibangun — dan hal-hal yang melanggarnya tidak akan pernah digabungkan ke kode utama.</p>
+        </div>
+
+        <h2>Seperti apa sebenarnya bentuk ekstraksi itu</h2>
+        <p>Perlu dibuat secara konkret, karena "ekstraksi" biasanya dibiarkan abstrak. Saat seorang tetangga membayar tetangga lainnya melalui platform konvensional, nilai meninggalkan komunitas melalui beberapa pintu sekaligus:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ Ke mana nilai menghilang</h4>
+                <ul>
+                    <li><strong>Biaya transaksi</strong> ke pemroses pembayaran yang berkantor pusat di tempat lain.</li>
+                    <li><strong>Bunga</strong> atas kredit yang memungkinkan transaksi terjadi, dibayarkan ke bank.</li>
+                    <li><strong>Iklan</strong> — perhatian Anda dijual kepada penawar tertinggi.</li>
+                    <li><strong>Data</strong> — hubungan dan transaksi Anda menjadi aset milik pihak lain.</li>
+                    <li><strong>Rente platform</strong> — begitu semua orang menggunakannya, biaya dinaikkan, karena meninggalkan platform berarti meninggalkan tetangga Anda.</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ Yang kami lakukan sebagai gantinya</h4>
+                <ul>
+                    <li>Kredit <strong>diciptakan oleh transaksi itu sendiri</strong>, sehingga tidak ada pemberi pinjaman yang harus dibayar.</li>
+                    <li>Biaya kecil yang ada dialirkan ke <strong>lumbung Sarana Bersama yang diputuskan penggunaannya oleh komunitas Anda</strong>.</li>
+                    <li><strong>Tanpa iklan.</strong> Tidak ada pengiklan, jadi tidak ada alasan untuk memanipulasi perhatian Anda.</li>
+                    <li><strong>Tanpa pemanenan data.</strong> Kunci privat Anda tetap berada di perangkat Anda. Jika Anda menautkan akun masuk untuk memulihkannya, salinan terkunci disimpan untuk akun masuk tersebut: di brankas kunci BeanPool, atau di server komunitas, tergantung aplikasinya. Siapa pun yang menyimpannya dapat membukanya. Pesan langsung dan obrolan grup dienkripsi ujung ke ujung.</li>
+                    <li><strong>Tanpa penguncian platform (lock-in).</strong> Protokol ini bersifat sumber terbuka dan komunitas Anda menjalankan nodenya sendiri.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">Untuk memperjelas secara jujur: <strong>BeanPool bukannya tanpa biaya sama sekali.</strong> Ada sedikit biaya sirkulasi pada saldo besar yang mengendap, dan biaya kecil pada transaksi. Perbedaannya bukanlah uang itu lenyap — melainkan <strong>ke mana uang itu pergi</strong>. Semuanya masuk ke lumbung Sarana Bersama, dan komunitas melakukan pemungutan suara untuk memutuskan bagaimana membelanjakannya. Tidak ada yang dibayarkan kepada pemegang saham, karena memang tidak ada.</div>
+
+        <h2>Kami tidak menciptakan kritik ini sendirian</h2>
+        <p>Pola di atas telah dipelajari dengan saksama, dan diberi nama berkali-kali, oleh orang-orang yang telah mendedikasikan waktu bertahun-tahun untuk menelitinya. Kami sepakat bahwa analisis tersebut tepat; perbedaan kami adalah bahwa kami mencoba membangun jalan keluar alih-alih sekadar menjabarkan perangkapnya. Jika Anda ingin membaca argumen lengkapnya daripada ringkasan kami, berikut adalah rujukan awal yang tepat.</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Platform Capitalism <span>— Nick Srnicek, 2016</span></h4>
+                <p>Memandang platform sebagai model bisnis alih-alih sekadar teknologi: memosisikan diri di antara dua kelompok yang perlu saling terhubung, lalu mengambil bagian dari setiap interaksi. Karena nilai platform tumbuh seiring bertambahnya jumlah pengguna, keluar dari platform menjadi semakin sulit ketika potongan biaya semakin besar.</p>
+            </div>
+            <div class="pe-book">
+                <h4>The Age of Surveillance Capitalism <span>— Shoshana Zuboff, 2019</span></h4>
+                <p>Menggambarkan bentuk ekstraksi kedua yang berjalan beriringan dengan yang pertama. Pengalaman manusia sehari-hari diperlakukan sebagai bahan mentah tanpa pemilik, diolah menjadi prediksi tentang apa yang akan dilakukan orang selanjutnya, dan dijual kepada siapa saja yang diuntungkan dari informasi tersebut. Orang yang datanya diambil bukanlah pelanggannya.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Technofeudalism <span>— Yanis Varoufakis, 2023</span></h4>
+                <p>Bentuk argumen yang paling tajam. Apa yang dipungut oleh pemilik platform bukanlah keuntungan dari memproduksi sesuatu — melainkan <em>rente</em>, yang dipungut atas akses ke ruang yang mereka miliki. Poin Varoufakis adalah bahwa hal ini menjadikan tatanan tersebut lebih tua daripada kapitalisme: hubungan tuan tanah yang mengenakan pakaian perusahaan teknologi.</p>
+            </div>
+        </div>
+
+        <p>Ada istilah yang lebih sederhana untuk menggambarkan bagaimana tatanan tersebut dirasakan dari bawah — <strong>penyewa tanah digital (digital sharecropping)</strong>. Anda yang melakukan pekerjaan, di atas tanah yang bukan milik Anda, dan sang pemilik mengambil bagian dari semua yang Anda hasilkan. Istilah ini menggambarkan pengemudi, penjual, musisi, dan kurir dengan sama tepatnya, yang biasanya menjadi tanda bahwa deskripsi tersebut menyentuh realitas yang nyata.</p>
+
+        <p>Jawaban kami bukanlah menjadi tuan tanah yang lebih adil atau potongan biaya yang lebih kecil. Melainkan <strong>seharusnya tidak ada tanah yang disewakan sejak awal.</strong> Dua tetangga yang saling bertukar waktu kerja sore hari tidak perlu melewati ruang yang dimiliki oleh siapa pun. Jadi komunitas mengelola nodenya sendiri, protokolnya terbuka untuk dijalankan atau di-fork oleh siapa saja, dan satu-satunya biaya yang ada masuk ke Sarana Bersama komunitas itu sendiri. Tidak ada posisi di tengah bagi siapa pun untuk menjual akses — termasuk kami.</p>
+
+        <p class="pe-credit">Pintu masuk yang bagus, jika Anda lebih suka menonton daripada membaca: video Benn Jordan <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">“You Are Witnessing the Death of American Capitalism”</a>, yang mengulas bahasan ini dan merujuk ke ketiga buku di atas.</p>
+
+        <h2>Mekanisme</h2>
+        <p>Empat mekanisme pertama adalah bagian yang sudah berjalan di setiap komunitas saat ini. Mekanisme kelima, kliring antar-komunitas, sudah dibangun dan baru diuji coba di antara dua komunitas uji kami sendiri, belum di antara komunitas yang berjalan langsung. Semuanya dijelaskan secara lengkap di <a href="rules.html">Aturan</a>.</p>
+
+        <div class="pe-mech">
+            <h3>Uang yang diciptakan oleh komunitas itu sendiri</h3>
+            <p>BeanPool berjalan pada <strong>kredit bersama (mutual credit)</strong>. Saat Anda bekerja tiga jam untuk tetangga, tiga jam kredit tercipta pada saat itu juga — saldo positif Anda dan saldo negatif mereka, diciptakan bersama oleh transaksi tersebut. Tidak ada bank yang menerbitkannya. Tidak ada yang meminjamkannya kepada Anda. Tidak ada bunga, karena tidak ada pemberi pinjaman.</p>
+            <p>Inilah inti dari seluruh rancangan ini. Jika suplai uang harus dipinjam untuk diadakan, seseorang di luar komunitas memiliki klaim atas hasil kerja masa depannya. Jika komunitas menciptakannya melalui transaksi, tidak ada pihak luar yang memilikinya.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Nol adalah tujuannya, bukan saldo yang besar</h3>
+            <p>Saldo <strong>nol</strong> berarti Anda telah memberi kurang lebih sebanyak yang Anda terima. Itulah kondisi yang sehat, dan itu adalah sasaran yang benar-benar berbeda dari yang ditetapkan oleh sebagian besar sistem ekonomi. Tidak ada penghargaan untuk menumpuk kacang, dan tidak ada cara untuk mengubahnya menjadi klaim atas siapa pun di luar komunitas.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Sirkulasi alih-alih penimbunan</h3>
+            <p>Saldo besar yang mengendap secara perlahan berkurang seiring waktu, dengan tarif progresif. Efeknya adalah menjaga kacang tetap bergerak — dibelanjakan kepada tetangga, dialokasikan untuk proyek lokal — daripada diam tak bergerak. Sistem ekonomi di mana alat tukarnya berhenti bergerak adalah sistem yang telah berhenti berfungsi.</p>
+            <p>Yang terpenting, apa yang dikurangi tidak dimusnahkan dan tidak diambil sebagai keuntungan: <strong>kacang tersebut berpindah ke lumbung Sarana Bersama.</strong> Saldo negatif tidak pernah dikenakan biaya. Seseorang dalam saldo negatif telah memanfaatkan kredit yang diberikan komunitas kepadanya, dan membebankan biaya pada orang yang sudah tertinggal justru akan memperdalam defisit alih-alih membuat kacang bergerak — kebalikan dari tujuannya.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Sarana Bersama yang berupa siklus, bukan tempat pembuangan</h3>
+            <p>Lumbung Sarana Bersama menampung apa yang dikumpulkan dari biaya sirkulasi dan transaksi, dan apa yang ditampungnya dialokasikan ke dua tujuan: menyerap utang yang ditinggalkan ketika seorang anggota pergi atau dihapus saat dalam kondisi saldo negatif, dan mendanai usaha serta proyek yang disetujui anggota melalui <strong>Keputusan</strong> yang berjalan otomatis — alat untuk kebun bersama, peralatan untuk ruang kerja bersama, apa pun yang diusulkan dan disetujui melalui pemungutan suara. Komunitas menentukan apa yang dibangun oleh surplusnya sendiri.</p>
+            <p>Ini adalah siklus tertutup secara rancangan: nilai dihasilkan secara lokal, dimiliki secara kolektif, dan dibelanjakan kembali ke dalam komunitas yang sama.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Federasi yang tidak menguras kota yang lebih kecil</h3>
+            <p>Ketika komunitas saling bertransaksi, ekstraksi dapat muncul kembali dalam bentuk yang lebih samar — kota yang lebih makmur perlahan-lahan menguras kota yang lebih kecil. Ini adalah masalah yang coba dipecahkan oleh John Maynard Keynes di Bretton Woods, dan kliring antar-komunitas di BeanPool dibangun berdasarkan jawaban beliau.</p>
+            <p><strong>Kacang tidak pernah melintasi batas wilayah.</strong> Transaksi antara dua komunitas diselesaikan melalui sepasang buku kas jembatan, masing-masing disimpan oleh setiap node, yang mencatat apa yang diutangkan masing-masing pihak dalam bentuk pekerjaan. Setiap pihak menetapkan batasnya sendiri seberapa jauh hal itu dapat berjalan — sehingga komunitas tetangga hanya bisa berutang kepada Anda sejumlah yang telah Anda tentukan sebelumnya.</p>
+            <p>Dua hal mengalir dari prinsip ini, dan itulah alasan mengapa ini bukan sekadar batas pengeluaran biasa. <strong>Pelunasan atas apa yang Anda utangkan tidak pernah diblokir</strong> — batas plafon membatasi arah perpanjangan kredit, bukan arah pelunasannya. Dan komunitas yang memiliki surplus tidak tinggal diam: <strong>semakin banyak piutang yang dimiliki sebuah kota, semakin banyak pekerjaan yang dapat ditugaskannya kepada kota yang berutang</strong>, mengubah ketidakseimbangan kembali menjadi transaksi nyata daripada membiarkannya mengendap sebagai utang.</p>
+            <div class="pe-worked">
+                <strong>Mengapa rancangannya harus bekerja seperti ini.</strong> Setiap kacang positif memiliki pasangan negatif yang dipegang oleh anggota tertentu, yang menyelesaikannya dengan bekerja. Jika +50 milik seorang anggota berpindah begitu saja ke kota lain, tetangga yang berada di posisi −50 tidak dapat lagi menghasilkannya kembali dari perputaran lokal — mitra dari utangnya telah pergi. Ulangi hal tersebut pada banyak pengunjung, dan sirkulasi komunitas yang lebih kecil akan menyusut secara permanen. Bukan karena penipuan; melainkan melalui transfer yang semuanya tampak sah.
+            </div>
+            <p class="pe-edges">Batasannya secara tegas adalah: komunitas yang mengalami defisit <em>tidak pernah</em> dikenakan biaya karena berada dalam posisi defisit — argumen Keynes, dan juga argumen kami, adalah bahwa tekanan seharusnya hanya jatuh kepada pihak yang memiliki kemampuan untuk bertindak. Satu instrumen yang tersisa, yaitu biaya atas surplus yang sengaja dibiarkan mengendap, telah dirancang dan sengaja belum dibangun sampai memenuhi uji keadilan yang sama. Kliring berjalan di antara pasangan komunitas alih-alih di seluruh jaringan yang lebih luas, dan operator masing-masing komunitas mengaktifkannya atas pilihan sendiri.</p>
+        </div>
+
+        <h2>Komitmen yang mendasari hal ini</h2>
+        <p>Inilah nilai-nilai dasar yang menjadi tolok ukur setiap kontribusi pada BeanPool. Nilai-nilai ini dipublikasikan dalam <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">panduan kontributor</a> proyek, dan ditegakkan secara nyata: karya yang bertentangan dengannya akan ditolak, sebaik apa pun kode programnya.</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>Pasca-ekstraksi</h4>
+                <p>Kami membangun infrastruktur yang memungkinkan komunitas menciptakan dan mempertahankan nilai, alih-alih direbut oleh pihak perantara. Kontribusi yang membawa dinamika ekstraktif — efek jaringan yang menguntungkan satu pihak pengendali, penguncian kepemilikan eksklusif (proprietary lock-in), monetisasi berbasis pengawasan — tidak akan diterima.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Subsidiaritas</h4>
+                <p>Komunitas lokal harus dapat menjalankan node mereka sendiri, membuat keputusan tata kelola mereka sendiri, dan beroperasi secara independen. Kontribusi yang mendorong pengambilan keputusan ke otoritas global yang lebih tinggi, atau yang membuat operasi lokal menjadi tidak praktis, bertentangan dengan tujuan protokol.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Keterbacaan</h4>
+                <p>Protokol harus dapat dipahami oleh komunitas yang dilayaninya — bukan hanya oleh insinyur perangkat lunak. Spesifikasi ditulis dalam bahasa yang lugas dan mudah dipahami sebisa mungkin, dengan rincian teknis disusun di bawahnya.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Persetujuan dan privasi</h4>
+                <p>Tidak boleh ada fitur yang membiarkan data berpindah tanpa persetujuan eksplisit, dapat dicabut, dan dapat diaudit dari pihak pemilik data tersebut. Fitur yang melanggar privasi tidak akan digabungkan, terlepas dari keanggunan teknisnya.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Regenerasi</h4>
+                <p>Kami mengukur keberhasilan dari apakah komunitas, ekologi, dan sarana bersama menjadi lebih sehat berkat BeanPool — bukan dari metrik pertumbuhan atau harga token.</p>
+            </div>
+        </div>
+
+        <h2>Cara memeriksa kesungguhan kami</h2>
+        <p>Klaim semacam ini hanya bernilai sejauh kemampuannya untuk diverifikasi, sehingga:</p>
+        <ul class="pe-check">
+            <li>Seluruh protokol bersifat <strong>sumber terbuka di bawah lisensi MIT</strong> — <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">baca kode programnya</a>, termasuk setiap aturan yang dijelaskan pada halaman ini.</li>
+            <li>Aturan ekonomi dituliskan dalam bahasa lugas di <a href="rules.html">Aturan</a> — saldo, kredit, biaya, dan ke mana masing-masing disalurkan.</li>
+            <li>Komunitas Anda dapat <strong>menjalankan nodenya sendiri</strong>. Jika kami sampai menjadi perantara, Anda dapat keluar dan membawa komunitas Anda bersama Anda.</li>
+            <li><strong>Tidak ada token dan tidak ada investor</strong>. Kacang adalah kredit bersama untuk transaksi nyata, dan tidak pernah diperdagangkan di bursa.</li>
+        </ul>
+
+        <div class="callout">Singkatnya: <strong>sebuah ekonomi disebut pasca-ekstraksi ketika nilai yang diciptakan komunitas tidak memiliki tempat untuk bocor keluar.</strong> Bukan karena semua orang berbudi luhur, melainkan karena memang tidak ada celah pintu keluar dalam rancangannya.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Ikon BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Kredit bersama untuk komunitas, dijalankan oleh komunitas.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Pusat Bantuan</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="getting-started.html">Memulai</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="post-extraction.html">Pasca-Ekstraksi</a>
+                    <a href="safety.html">Keselamatan Anak</a>
+                    <a href="../privacy.html">Kebijakan Privasi</a>
+                    <a href="../terms.html">Ketentuan Layanan</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../post-extraction.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/post-extraction.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/post-extraction.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/post-extraction.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/post-extraction.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/post-extraction.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/post-extraction.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="post-extraction.html" hreflang="id" lang="id" aria-current="page">Bahasa Indonesia</a>
+                    <a href="../ru/post-extraction.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/post-extraction.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/post-extraction.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/post-extraction.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/post-extraction.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/post-extraction.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/post-extraction.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/post-extraction.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/post-extraction.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/post-extraction.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/post-extraction.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/post-extraction.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/post-extraction.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/post-extraction.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/post-extraction.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/post-extraction.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/post-extraction.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Sumber terbuka di bawah lisensi MIT. Dibuat dengan <img src="../bean.png" alt="cinta" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> oleh komunitas, untuk komunitas. Batas zona waktu © kontributor <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

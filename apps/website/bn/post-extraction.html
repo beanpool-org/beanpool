@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>শোষণ-পরবর্তী অর্থনীতি — BeanPool</title>
+    <meta name="description" content="শোষণ-পরবর্তী অর্থনীতির অর্থ কী, এবং এটি গড়ে তোলার জন্য BeanPool যে সুনির্দিষ্ট পদ্ধতিগুলি ব্যবহার করে: সুদবিহীন পারস্পরিক ক্রেডিট, মজুদের বদলে প্রচলন, সদস্যদের ভোটে পরিচালিত যৌথ তহবিল, এবং এমন ফেডারেশন যা ছোট শহরকে নিঃস্ব করে না।">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/post-extraction">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/post-extraction">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/post-extraction">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/post-extraction">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/post-extraction">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/post-extraction">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/post-extraction">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/post-extraction">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/post-extraction">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/post-extraction">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/post-extraction">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/post-extraction">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/post-extraction">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/post-extraction">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/post-extraction">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/post-extraction">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/post-extraction">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/post-extraction">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/post-extraction">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/post-extraction">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/post-extraction">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/post-extraction">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/post-extraction">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/post-extraction">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/post-extraction">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/post-extraction">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool আইকন" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">এটি যেভাবে কাজ করে</a>
+                <a href="rules.html">নিয়মাবলী</a>
+                <a href="index.html#features">বৈশিষ্ট্যসমূহ</a>
+                <a href="help.html">সহায়তা</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">টিউটোরিয়াল</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube-এ ভিডিও টিউটোরিয়াল দেখুন (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit কমিউনিটিতে যোগ দিন (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub-এ দেখুন">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">শুরু করুন</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="মেনু খুলুন"><span aria-hidden="true">☰</span> মেনু</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">শুরু করুন</a>
+                    <a href="index.html#how-it-works">এটি যেভাবে কাজ করে</a>
+                    <a href="rules.html">নিয়মাবলী</a>
+                    <a href="index.html#features">বৈশিষ্ট্যসমূহ</a>
+                    <a href="help.html">সহায়তা</a>
+                    <a href="../guide/index.html">সদস্যদের নির্দেশিকা</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube-এ টিউটোরিয়াল</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit-এ r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub-এ সোর্স কোড</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>শোষণ-পরবর্তী অর্থনীতি</h1>
+
+        <p class="lede">একটি সম্প্রদায় বাণিজ্যের জন্য যে সরঞ্জামগুলি ব্যবহার করে তার বেশিরভাগই একটি অংশ কেটে নেওয়ার জন্য তৈরি করা হয়। কোনো বিদ্বেষ থেকে নয় — কেবল কাঠামোগতভাবে। একটি শতাংশ পেমেন্ট প্রসেসরের কাছে যায়, সুদ ব্যাংকে যায়, মনোযোগ বিজ্ঞাপনে যায় এবং ডেটা এমন কোথাও যায় যা সম্প্রদায়ের কেউ বেছে নেয়নি। <strong>BeanPool তৈরি করা হয়েছে সেই নির্গমন পথগুলি বন্ধ করার জন্য।</strong></p>
+
+        <div class="pe-define">
+            <p><strong>শোষণ-পরবর্তী</strong> বলতে এমন অবকাঠামো বোঝায় যা সম্প্রদায়গুলিকে তাদের উৎপাদিত মূল্য মধ্যস্বত্বভোগীদের হাতে তুলে দেওয়ার বদলে নিজেরা তৈরি ও ধরে রাখার সুযোগ দেয়। এটি কেবল ভালো সাজার কোনো স্লোগান নয়। এটি সফটওয়্যার কীভাবে তৈরি করা যাবে তার ওপর একটি বাধ্যবাধকতা — এবং যা এটি লঙ্ঘন করবে তা কখনো অন্তর্ভুক্ত করা হবে না।</p>
+        </div>
+
+        <h2>শোষণ বাস্তবে দেখতে কেমন</h2>
+        <p>সুনির্দিষ্ট হওয়া প্রয়োজন, কারণ "শোষণ" সাধারণত অস্পষ্ট রাখা হয়। যখন একজন প্রতিবেশী একটি প্রচলিত প্ল্যাটফর্মের মাধ্যমে অন্য প্রতিবেশীকে অর্থ প্রদান করেন, তখন মূল্য একসাথে একাধিক পথ দিয়ে সম্প্রদায় থেকে বেরিয়ে যায়:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ যেভাবে মূল্য বের হয়ে যায়</h4>
+                <ul>
+                    <li>অন্য কোথাও সদর দপ্তর থাকা প্রসেসরকে <strong>লেনদেন ফি</strong> প্রদান।</li>
+                    <li>যে ক্রেডিটের কারণে বাণিজ্য সম্ভব হয়েছিল তার জন্য ব্যাংকে <strong>সুদ</strong> প্রদান।</li>
+                    <li><strong>বিজ্ঞাপন</strong> — যে সর্বোচ্চ দর হাঁকে তার কাছে আপনার মনোযোগ বিক্রি।</li>
+                    <li><strong>ডেটা</strong> — আপনার সম্পর্ক এবং কেনাকাটা অন্যের সম্পদে পরিণত হওয়া।</li>
+                    <li><strong>প্ল্যাটফর্ম খাজনা</strong> — একবার সবাই এতে যুক্ত হয়ে গেলে খরচ বেড়ে যায়, কারণ প্ল্যাটফর্ম ত্যাগ করার অর্থ প্রতিবেশীদের ছেড়ে যাওয়া।</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ পরিবর্তে আমরা যা করি</h4>
+                <ul>
+                    <li>ক্রেডিট <strong>বাণিজ্যের দ্বারাই নিজে থেকেই তৈরি হয়</strong>, তাই অর্থ পরিশোধ করার মতো কোনো ঋণদাতা নেই।</li>
+                    <li>বিদ্যমান সামান্য ফি একটি <strong>যৌথ তহবিলের পুলে যায় যা ব্যয় করতে আপনার সম্প্রদায় ভোট দেয়</strong>।</li>
+                    <li><strong>কোনো বিজ্ঞাপন নেই।</strong> কোনো বিজ্ঞাপনদাতা নেই, তাই আপনার মনোযোগকে লক্ষ্য করার মতো কিছু নেই।</li>
+                    <li><strong>ডেটা সংগ্রহ নেই।</strong> আপনার প্রাইভেট কী আপনার ডিভাইসেই থাকে। আপনি এটি ফিরে পাওয়ার জন্য একটি সাইন-ইন লিঙ্ক করলে, এর জন্য একটি সুরক্ষিত কপি রাখা হয়: অ্যাপের ওপর নির্ভর করে BeanPool-এর কী ভল্টে বা সম্প্রদায়ের সার্ভারে। যিনি এটি সংরক্ষণ করেন তিনিই এটি খুলতে পারেন। সরাসরি বার্তা এবং গ্রুপ চ্যাট এন্ড-টু-এন্ড এনক্রিপ্ট করা থাকে।</li>
+                    <li><strong>কোনো বাধ্যবাধকতা নেই।</strong> প্রোটোকলটি ওপেন সোর্স এবং আপনার সম্প্রদায় তার নিজস্ব নোড চালায়।</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">সততার অংশটি স্পষ্ট করতে: <strong>BeanPool সম্পূর্ণ খরচহীন নয়।</strong> বড় অলস ব্যালেন্সের ওপর একটি ছোট প্রচলন চার্জ রয়েছে এবং বাণিজ্যের ওপর একটি ছোট চার্জ রয়েছে। পার্থক্য এই নয় যে অর্থটি অদৃশ্য হয়ে যায় — পার্থক্য হলো <strong>এটি কোথায় যায়</strong>। এটি যৌথ তহবিলের পুলে যায় এবং সম্প্রদায় এটি কীভাবে ব্যয় করবে তা ভোটের মাধ্যমে ঠিক করে। কোনো শেয়ারহোল্ডারকে কিছুই দেওয়া হয় না, কারণ এমন কেউ নেই।</div>
+
+        <h2>আমরা এই সমালোচনা উদ্ভাবন করিনি</h2>
+        <p>উপরের ধরনটি বহু বছর ধরে নিষ্ঠার সাথে কাজ করা ব্যক্তিদের দ্বারা সতর্কতার সাথে পর্যালোচনা করা হয়েছে এবং বারবার নামকরণ করা হয়েছে। আমরা মনে করি বিশ্লেষণটি সঠিক; আমাদের পার্থক্য হলো আমরা কেবল ফাঁদটির বর্ণনা না দিয়ে তা থেকে বের হওয়ার পথ তৈরি করার চেষ্টা করছি। আপনি যদি আমাদের সংক্ষিপ্ত বিবরণের বদলে সম্পূর্ণ যুক্তিটি জানতে চান, তবে এখান থেকেই শুরু করা যেতে পারে।</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Platform Capitalism <span>— নিক সার্নিসেক, ২০১৬</span></h4>
+                <p>প্ল্যাটফর্মকে প্রযুক্তির চেয়ে একটি ব্যবসায়িক মডেল হিসেবে বিবেচনা করে: পরস্পরের সাথে যোগাযোগ প্রয়োজন এমন দুটি দলের মাঝে নিজেকে স্থাপন করুন, তারপর প্রতিটি সংযোগের একটি অংশ কেটে নিন। প্ল্যাটফর্মের মূল্য যেহেতু ব্যবহারকারীর সংখ্যার সাথে বাড়ে, তাই অংশ কাটার পরিমাণ বাড়লেও প্ল্যাটফর্ম ছেড়ে যাওয়া কঠিন হয়ে পড়ে।</p>
+            </div>
+            <div class="pe-book">
+                <h4>The Age of Surveillance Capitalism <span>— শশানা জুবফ, ২০১৯</span></h4>
+                <p>প্রথমটির পাশাপাশি চলমান দ্বিতীয় একটি শোষণের বর্ণনা দেয়। সাধারণ মানুষের অভিজ্ঞতাকে দাবিহীন কাঁচামাল হিসেবে বিবেচনা করা হয়, মানুষ ভবিষ্যতে কী করবে সে সম্পর্কে অনুমানে রূপান্তরিত করা হয় এবং এটি জেনে যারা লাভবান হয় তাদের কাছে বিক্রি করা হয়। যে ব্যক্তির কাছ থেকে ডেটা এসেছে তিনি এখানে গ্রাহক নন।</p>
+            </div>
+            <div class="pe-book">
+                <h4>Technofeudalism <span>— ইয়ানিস ভারুফাকিস, ২০২৩</span></h4>
+                <p>যুক্তির সবচেয়ে তীক্ষ্ণ রূপ। একজন প্ল্যাটফর্মের মালিক যা সংগ্রহ করেন তা কোনো কিছু উৎপাদনের মুনাফা নয় — তা হলো <em>খাজনা</em>, তাদের মালিকানাধীন স্থানে প্রবেশের জন্য আরোপিত মূল্য। ভারুফাকিসের মূল বক্তব্য হলো এটি এই ব্যবস্থাকে পুঁজিবাদের চেয়ে নতুন নয় বরং আরও পুরনো করে তোলে: প্রযুক্তি কোম্পানির পোশাকে এক ধরনের জমিদারি সম্পর্ক।</p>
+            </div>
+        </div>
+
+        <p>নিচ থেকে এই ব্যবস্থাটি কেমন অনুভূত হয় তার জন্য একটি সহজ শব্দগুচ্ছ রয়েছে — <strong>ডিজিটাল বর্গা চাষ</strong>। আপনি কাজ করেন এমন জমিতে যার মালিক আপনি নন, এবং মালিক আপনার ফলানো ফসলের একটি অংশ নিয়ে নেয়। এটি চালক, বিক্রেতা, সংগীতশিল্পী এবং ডেলিভারি কর্মী সবাইকে সমানভাবে বর্ণনা করে, যা সাধারণত প্রমাণ করে যে এই বর্ণনাটি বাস্তব সত্যের কাছাকাছি।</p>
+
+        <p>আমাদের উত্তর কোনো অধিকতর ন্যায়পরায়ণ জমিদার বা কম অংশ কাটা নয়। আমাদের বক্তব্য হলো <strong>প্রথমত ভাড়া নেওয়ার মতো কোনো জমিই থাকা উচিত নয়।</strong> এক বিকালের কাজ বিনিময়কারী দুই প্রতিবেশীকে কারও মালিকানাধীন স্থানের মধ্য দিয়ে যেতে হবে না। তাই সম্প্রদায় নোড পরিচালনা করে, প্রোটোকলটি যে কারও চালানো বা পরিবর্তন করার জন্য উন্মুক্ত, এবং একমাত্র বিদ্যমান চার্জ সম্প্রদায়ের নিজস্ব যৌথ তহবিলে যায়। প্রবেশাধিকার বিক্রি করার মতো মাঝখানে কারও কোনো স্থান নেই — আমাদেরও নয়।</p>
+
+        <p class="pe-credit">পড়ার চেয়ে দেখতে পছন্দ করলে জানার একটি ভালো উপায়: বেন জর্ডানের <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">“You Are Witnessing the Death of American Capitalism”</a>, যা এই ক্ষেত্রটিকে তুলে ধরে এবং উপরের তিনটি বইয়েরই উল্লেখ করে।</p>
+
+        <h2>পদ্ধতিসমূহ</h2>
+        <p>প্রথম চারটি আজ প্রতিটি সম্প্রদায়ের কার্যকর অংশ। পঞ্চমটি, অর্থাৎ সম্প্রদায়গুলির মধ্যে ক্লিয়ারিং, তৈরি করা হয়েছে এবং কেবল আমাদের নিজস্ব দুটি পরীক্ষামূলক সম্প্রদায়ের মধ্যে চেষ্টা করা হয়েছে, সরাসরি চলমান সম্প্রদায়গুলির মধ্যে এখনও নয়। এগুলি <a href="rules.html">নিয়মাবলীতে</a> বিশদভাবে বর্ণনা করা হয়েছে।</p>
+
+        <div class="pe-mech">
+            <h3>অর্থ যা সম্প্রদায় নিজেই তৈরি করে</h3>
+            <p>BeanPool <strong>পারস্পরিক ক্রেডিটে</strong> চলে। আপনি যখন একজন প্রতিবেশীর জন্য তিন ঘণ্টা কাজ করেন, তখন সেই মুহূর্তে তিন ঘণ্টার ক্রেডিট অস্তিত্বে আসে — আপনার পজিটিভ ব্যালেন্স এবং তাঁর নেগেটিভ ব্যালেন্স, বাণিজ্যের মাধ্যমে একসাথে তৈরি হয়। কোনো ব্যাংক এটি ইস্যু করেনি। কেউ এটি আপনাকে ধার দেয়নি। কোনো সুদ নেই, কারণ কোনো ঋণদাতা নেই।</p>
+            <p>এটিই পুরো নকশার মূল ভিত্তি। অর্থ সরবরাহ যদি ঋণ নিয়ে তৈরি করতে হয়, তবে সম্প্রদায়ের বাইরের কেউ এর ভবিষ্যৎ কাজের ওপর অধিকার দাবি করে। কিন্তু সম্প্রদায় যদি বাণিজ্যের মাধ্যমে তা তৈরি করে, তবে কারও কোনো দাবি থাকে না।</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>শূন্যই হলো লক্ষ্য, বড় ব্যালেন্স নয়</h3>
+            <p><strong>শূন্য</strong> ব্যালেন্সের অর্থ হলো আপনি যা নিয়েছেন প্রায় ততটাই দিয়েছেন। এটিই স্বাস্থ্যকর অবস্থা, এবং এটি বেশিরভাগ অর্থনীতির নির্ধারিত লক্ষ্য থেকে সম্পূর্ণ ভিন্ন একটি লক্ষ্য। শিম জমা করার জন্য কোনো পুরস্কার নেই, এবং সম্প্রদায়ের বাইরের কারও ওপর সেগুলি দাবির রূপান্তর করার কোনো উপায় নেই।</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>মজুদের বদলে প্রচলন</h3>
+            <p>বড় অলস ব্যালেন্স সময়ের সাথে সাথে একটি প্রগতিশীল হারে মৃদুভাবে কমে যায়। এর উদ্দেশ্য হলো শিমকে স্থির না রেখে সচল রাখা — প্রতিবেশীদের সাথে ব্যয় করা, স্থানীয় প্রকল্পে বিনিয়োগ করা। এমন একটি অর্থনীতি যেখানে বিনিময়ের মাধ্যম সচল থাকা বন্ধ হয়ে যায়, তা অকার্যকর হয়ে পড়ে।</p>
+            <p>সবচেয়ে গুরুত্বপূর্ণ বিষয় হলো, যা কমানো হয় তা ধ্বংস হয় না এবং মুনাফা হিসেবে নেওয়া হয় না: <strong>এটি যৌথ তহবিলের পুলে স্থানান্তরিত হয়।</strong> নেগেটিভ ব্যালেন্সের ওপর কখনোই চার্জ ধার্য করা হয় না। যিনি নেগেটিভে আছেন তিনি সম্প্রদায় প্রদত্ত ক্রেডিট ব্যবহার করেছেন, এবং ইতিমধ্যেই পিছিয়ে থাকা ব্যক্তির ওপর চার্জ ধার্য করলে শিম সচল হওয়ার বদলে গর্ত আরও গভীর হতো — যা মূল উদ্দেশ্যের সম্পূর্ণ বিপরীত।</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>যৌথ তহবিল যা একটি চক্র, কোনো নির্গমন কূপ নয়</h3>
+            <p>প্রচলন এবং বাণিজ্যিক চার্জ থেকে যা সংগৃহীত হয় তা যৌথ তহবিলের পুল ধারণ করে, এবং এটি দুটি জায়গায় যায়: কোনো সদস্য ঋণ থাকা অবস্থায় সম্প্রদায় ত্যাগ করলে বা অপসারিত হলে রেখে যাওয়া ঋণ পূরণ করা, এবং স্বয়ংক্রিয়ভাবে কার্যকর হওয়া <strong>সিদ্ধান্তসমূহ</strong>-এর মাধ্যমে সদস্যরা যে উদ্যোগ ও প্রকল্পগুলি অনুমোদন করেন সেগুলিতে অর্থায়ন করা — যেমন যৌথ বাগানের সরঞ্জাম, কোনো কর্মক্ষেত্রের উপকরণ, বা প্রস্তাবিত ও ভোটে পাস হওয়া যেকোনো কিছু। সম্প্রদায় নিজেই সিদ্ধান্ত নেয় যে তার নিজস্ব উদ্বৃত্ত দিয়ে কী গড়ে তোলা হবে।</p>
+            <p>এটি কাঠামোগতভাবেই একটি আবদ্ধ চক্র: মূল্য স্থানীয়ভাবে উৎপন্ন হয়, যৌথভাবে ধারণ করা হয় এবং পুনরায় একই সম্প্রদায়ে ব্যয় করা হয়।</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>ফেডারেশন যা ছোট শহরকে নিঃস্ব করে না</h3>
+            <p>যখন সম্প্রদায়গুলি একে অপরের সাথে বাণিজ্য করে, তখন শোষণ আরও সূক্ষ্ম রূপে পুনরায় দেখা দিতে পারে — ধনী শহরটি নিঃশব্দে ছোট শহরটিকে নিঃস্ব করে ফেলতে পারে। জন মেনার্ড কেইনস ব্রেটন উডসে এই সমস্যারই সমাধান করতে চেয়েছিলেন, এবং BeanPool-এর আন্তঃ-কমিউনিটি ক্লিয়ারিং তাঁর উত্তরের ওপর ভিত্তি করেই তৈরি।</p>
+            <p><strong>শিম কখনোই সীমানা অতিক্রম করে না।</strong> দুটি সম্প্রদায়ের মধ্যে একটি বাণিজ্য প্রতিটি নোড দ্বারা ধারণ করা এক জোড়া সেতু খতিয়ানের মাধ্যমে নিষ্পত্তি হয়, যা কাজের দিক থেকে একে অপরের কাছে কী পরিমাণ ঋণী তা রেকর্ড করে। প্রতিটি পক্ষ এটি কতদূর চলতে পারে তার নিজস্ব সীমা নির্ধারণ করে — যাতে একটি প্রতিবেশী সম্প্রদায় আপনার কাছে কেবল ততটুকুই ঋণ রাখতে পারে যা আপনি আগে থেকেই বেছে নিয়েছিলেন।</p>
+            <p>এর থেকে দুটি বিষয় অনুসৃত হয়, এবং সেগুলিই এই কারণে কেবল ব্যয়ের সীমা নয়। <strong>আপনি যা ঋণী তা নিষ্পত্তি করা কখনোই বাধাগ্রস্ত হয় না</strong> — সর্বোচ্চ সীমাটি ক্রেডিট প্রসারিত করার দিকটিকে নিয়ন্ত্রণ করে, কিন্তু এটি নিষ্পত্তি করার দিকটিকে কখনোই নয়। এবং উদ্বৃত্ত থাকা কোনো সম্প্রদায় কেবল তার ওপর বসে থাকে না: <strong>একটি শহর যত বেশি ঋণ পাবে, ঋণী শহরের কাছ থেকে সে তত বেশি কাজের নির্দেশ দিতে পারবে</strong>, যা ভারসাম্যহীনতাকে ঋণ হিসেবে ফেলে না রেখে আবার বাণিজ্যে রূপান্তরিত করে।</p>
+            <div class="pe-worked">
+                <strong>কেন এই নকশাকে এভাবেই কাজ করতে হবে।</strong> প্রতিটি পজিটিভ শিমের একটি বিপরীত নেগেটিভ থাকে যা নির্দিষ্ট কোনো সদস্য ধারণ করেন, যিনি উপার্জনের মাধ্যমে তা পরিশোধ করেন। কোনো সদস্যের +৫০ যদি অন্য শহরে চলে যায়, তবে −৫০-এ থাকা প্রতিবেশী স্থানীয় প্রচলন থেকে তা আর ফেরত অর্জন করতে পারবেন না — তাঁর ঋণের বিপরীত অংশটি হারিয়ে গেছে। অনেক পরিদর্শকের ক্ষেত্রে এটি ঘটলে ছোট সম্প্রদায়ের প্রচলন স্থায়ীভাবে সংকুচিত হয়। কোনো প্রতারণার মাধ্যমে নয়; এমন স্থানান্তরের মাধ্যমে যা আপাতদৃষ্টিতে পুরোপুরি সঠিক মনে হয়েছিল।
+            </div>
+            <p class="pe-edges">সীমারেখাগুলি যেখানে রয়েছে, স্পষ্টভাবে বললে: ঘাটতিতে থাকা কোনো সম্প্রদায়ের ওপর ঘাটতির জন্য <em>কখনোই</em> চার্জ ধার্য করা হয় না — কেইনসের এবং আমাদের যুক্তি হলো চাপ কেবল এমন কারও ওপর পড়া উচিত যাঁর তা সমাধানের ক্ষমতা রয়েছে। অবশিষ্ট একটি পদক্ষেপ, যা হলো ইচ্ছাকৃতভাবে অলস রাখা উদ্বৃত্তের ওপর চার্জ, তা সুনির্দিষ্ট এবং ইচ্ছাকৃতভাবেই এখনও তৈরি করা হয়নি যতক্ষণ না এটি সেই একই ন্যায়পরায়ণতার পরীক্ষায় উত্তীর্ণ হতে পারে। ক্লিয়ারিং একটি বিস্তৃত নেটওয়ার্কের বদলে জোড়া সম্প্রদায়ের মধ্যে চলে এবং প্রতিটি সম্প্রদায়ের অপারেটর নিজস্ব পছন্দে এটি চালু করেন।</p>
+        </div>
+
+        <h2>যেসব অঙ্গীকারের ওপর এটি প্রতিষ্ঠিত</h2>
+        <p>এগুলি হলো সেই মৌলিক মূল্যবোধ যার ভিত্তিতে BeanPool-এ প্রতিটি অবদান মূল্যায়ন করা হয়। এগুলি প্রকল্পের <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">অবদানকারী নির্দেশিকায়</a> প্রকাশিত হয়েছে এবং এগুলির কার্যকর প্রয়োগ রয়েছে: কোড যতই ভালো হোক না কেন, এগুলির সাথে সাংঘর্ষিক কোনো কাজ প্রত্যাখ্যান করা হয়।</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>শোষণ-পরবর্তী</h4>
+                <p>আমরা এমন অবকাঠামো তৈরি করি যা সম্প্রদায়গুলিকে মধ্যস্বত্বভোগীদের হাতে মূল্য তুলে দেওয়ার বদলে নিজেরা তৈরি ও ধরে রাখার সুযোগ দেয়। শোষণমূলক গতিশীলতা প্রবর্তনকারী অবদান — একক নিয়ন্ত্রণকারী পক্ষকে সুবিধা দেয় এমন নেটওয়ার্ক প্রভাব, মালিকানাধীন বাধ্যবাধকতা, নজরদারি-ভিত্তিক নগদীকরণ — গ্রহণযোগ্য নয়।</p>
+            </div>
+            <div class="pe-value">
+                <h4>সাবসিডিয়ারিটি (অধস্তনতা)</h4>
+                <p>স্থানীয় সম্প্রদায়গুলির নিজেদের নোড চালানো, নিজস্ব পরিচালনার সিদ্ধান্ত নেওয়া এবং স্বাধীনভাবে কাজ করার সক্ষমতা থাকা উচিত। যে অবদান সিদ্ধান্ত গ্রহণকে কোনো বৈশ্বিক কর্তৃপক্ষের ওপর চাপিয়ে দেয় বা স্থানীয় পরিচালনাকে অবাস্তব করে তোলে, তা প্রোটোকলের লক্ষ্যের পরিপন্থী।</p>
+            </div>
+            <div class="pe-value">
+                <h4>স্পষ্টতা ও সহজবোধ্যতা</h4>
+                <p>প্রোটোকলটি যে সম্প্রদায়ের সেবা করে তাদের কাছে বোধগম্য হওয়া উচিত — কেবল সফটওয়্যার ইঞ্জিনিয়ারদের কাছে নয়। যেখানে সম্ভব স্পেসিফিকেশন সহজ ভাষায় লেখা হয়, যার নিচে প্রযুক্তিগত বিবরণ সাজানো থাকে।</p>
+            </div>
+            <div class="pe-value">
+                <h4>সম্মতি এবং গোপনীয়তা</h4>
+                <p>কোনো ফিচারেই এমন ডেটা স্থানান্তর অনুমোদিত হওয়া উচিত নয় যা যার ডেটা তার স্পষ্ট, প্রত্যাহারযোগ্য এবং নিরীক্ষাযোগ্য সম্মতি ছাড়া ঘটে। গোপনীয়তা লঙ্ঘনকারী বৈশিষ্ট্যগুলি তাদের প্রযুক্তিগত উৎকর্ষ নির্বিশেষে কখনো অন্তর্ভুক্ত করা হবে না।</p>
+            </div>
+            <div class="pe-value">
+                <h4>পুনরুজ্জীবন</h4>
+                <p>আমরা সাফল্য পরিমাপ করি BeanPool-এর কারণে সম্প্রদায়, বাস্তুতন্ত্র এবং যৌথ তহবিল আরও স্বাস্থ্যকর হচ্ছে কিনা তা দিয়ে — প্রবৃদ্ধির পরিসংখ্যান বা টোকেনের মূল্য দিয়ে নয়।</p>
+            </div>
+        </div>
+
+        <h2>আমাদের আন্তরিকতা কীভাবে যাচাই করবেন</h2>
+        <p>এই ধরনের দাবির মূল্য কেবল তখনই থাকে যখন তা যাচাই করার ক্ষমতা থাকে, তাই:</p>
+        <ul class="pe-check">
+            <li>পুরো প্রোটোকলটি <strong>MIT লাইসেন্সের অধীনে ওপেন সোর্স</strong> — এই পৃষ্ঠায় বর্ণিত প্রতিটি নিয়মসহ <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">কোডটি পড়ুন</a>।</li>
+            <li>অর্থনৈতিক নিয়মাবলী সহজ ভাষায় <a href="rules.html">নিয়মাবলীতে</a> লেখা রয়েছে — ব্যালেন্স, ক্রেডিট, চার্জ এবং প্রতিটির গন্তব্য।</li>
+            <li>আপনার সম্প্রদায় <strong>তার নিজস্ব নোড পরিচালনা করতে পারে</strong>। আমরা যদি কখনো মধ্যস্বত্বভোগী হয়ে উঠি, তবে আপনি আপনার সম্প্রদায়কে সাথে নিয়ে এটি ছেড়ে চলে যেতে পারেন।</li>
+            <li>কোনো <strong>টোকেন নেই এবং কোনো বিনিয়োগকারী নেই</strong>। শিম হলো প্রকৃত বাণিজ্যের জন্য পারস্পরিক ক্রেডিট এবং এটি কখনোই কোনো এক্সচেঞ্জে লেনদেন হয় না।</li>
+        </ul>
+
+        <div class="callout">সংক্ষেপে: <strong>একটি অর্থনীতি তখন শোষণ-পরবর্তী হয় যখন একটি সম্প্রদায়ের তৈরি মূল্যের কোনো বের হয়ে যাওয়ার পথ থাকে না।</strong> সবাই সাধু বলে নয়, বরং নকশার মধ্যেই কোনো নির্গমন পথ নেই বলে।</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="BeanPool Icon" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>সম্প্রদায়ের জন্য পারস্পরিক ক্রেডিট, সম্প্রদায় দ্বারাই পরিচালিত।</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">সহায়তা কেন্দ্র</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">এটি যেভাবে কাজ করে</a>
+                    <a href="getting-started.html">শুরু করার নির্দেশিকা</a>
+                    <a href="rules.html">নিয়মাবলী</a>
+                    <a href="post-extraction.html">শোষণ-পরবর্তী</a>
+                    <a href="safety.html">শিশু নিরাপত্তা</a>
+                    <a href="../privacy.html">গোপনীয়তা নীতি</a>
+                    <a href="../terms.html">সেবার শর্তাবলী</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../post-extraction.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/post-extraction.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/post-extraction.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/post-extraction.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="post-extraction.html" hreflang="bn" lang="bn" aria-current="page">বাংলা</a>
+                    <a href="../fr/post-extraction.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/post-extraction.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/post-extraction.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/post-extraction.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/post-extraction.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/post-extraction.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/post-extraction.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/post-extraction.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/post-extraction.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/post-extraction.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/post-extraction.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/post-extraction.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/post-extraction.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/post-extraction.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/post-extraction.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/post-extraction.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/post-extraction.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/post-extraction.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/post-extraction.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/post-extraction.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT লাইসেন্সের অধীনে ওপেন সোর্স। সম্প্রদায়ের দ্বারা সম্প্রদায়ের জন্য <img src="../bean.png" alt="ভালোবাসা" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> দিয়ে তৈরি। সময় অঞ্চলের সীমানা © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap অবদানকারীগণ</a> (ODbL)।</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

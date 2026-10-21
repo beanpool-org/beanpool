@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quy tắc — Cách thức BeanPool hoạt động</title>
+    <meta name="description" content="Các quy tắc đơn giản của BeanPool: cách thức hoạt động của số dư, tín dụng, lời đề nghị, phí, liên đoàn Keynesian, doanh nghiệp cộng đồng và quản trị.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/rules">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/rules">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/rules">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/rules">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/rules">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/rules">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/rules">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/rules">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/rules">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/rules">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/rules">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/rules">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/rules">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/rules">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/rules">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/rules">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/rules">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/rules">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/rules">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/rules">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/rules">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/rules">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/rules">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/rules">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/rules">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/rules">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Biểu tượng BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Cách hoạt động</a>
+                <a href="rules.html">Quy tắc</a>
+                <a href="index.html#features">Tính năng</a>
+                <a href="help.html">Trợ giúp</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Hướng dẫn</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Xem video hướng dẫn trên YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Tham gia cộng đồng Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Xem trên GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Bắt đầu</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Mở menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Bắt đầu</a>
+                    <a href="index.html#how-it-works">Cách hoạt động</a>
+                    <a href="rules.html" aria-current="page">Quy tắc</a>
+                    <a href="index.html#features">Tính năng</a>
+                    <a href="help.html">Trợ giúp</a>
+                    <a href="../guide/index.html">Cẩm nang thành viên</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Hướng dẫn trên YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool trên Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Mã nguồn trên GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Quy tắc — Cách thức BeanPool hoạt động</h1>
+        <p class="lede">BeanPool là một cộng đồng trao đổi nơi mọi người đều bắt đầu từ số 0. Bạn kiếm được Đậu bằng cách giúp đỡ người khác và sử dụng chúng khi người khác giúp đỡ bạn. Không dùng tiền mặt và không có doanh nghiệp trung gian — chỉ có những quy tắc đơn giản này.</p>
+
+        <div class="callout amber">Tóm lại: <strong>tạo dựng hạn mức tín dụng bằng cách giao dịch, duy trì một hoặc hai lời đề nghị đang hoạt động để sử dụng hạn mức, và để Đậu được luân chuyển.</strong> Mục tiêu là điểm 0 — cho đi tương đương những gì bạn nhận về.</div>
+
+        <h2 id="1"><span class="num">1.</span>Đậu &amp; số dư của bạn</h2>
+        <p>Đậu đo lường giá trị bạn đã cho đi và nhận lại (ước chừng theo thời gian). <strong style="color:var(--text-primary)">Mục tiêu là điểm 0</strong> — điều đó có nghĩa là bạn đã cho đi tương đương những gì bạn nhận về.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Số dư dương</strong> — bạn đã cho đi nhiều hơn nhận về. Cộng đồng nợ bạn.</li>
+            <li><strong style="color:var(--text-primary)">Số dư âm</strong> — cộng đồng đã cấp tín dụng cho bạn. Bạn đáp lại bằng cách cho đi.</li>
+            <li>Trên hầu hết các cộng đồng, mức âm tối đa mà một người có thể đạt tới là <strong>−2000 Đậu</strong>. Cộng đồng xác nhận thành viên bằng tên thật có thể tự đặt ra hạn mức riêng, lên tới −5000, và cấp cho thành viên đã xác nhận một hạn mức khởi điểm.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Bắt đầu</h2>
+        <p>Bạn tham gia bằng lời mời. Ngay từ ngày đầu tiên, bạn có thể xem các tin đăng và nhận Đậu. Khi đã sở hữu Đậu (bằng cách kiếm được hoặc nhận quà tặng), bạn có thể chi tiêu. Để chi tiêu theo hạn mức tín dụng, bạn phải đăng ít nhất một <strong style="color:var(--text-primary)">Lời đề nghị</strong> (xem §4 và §5). Thành viên mới bắt đầu với <strong style="color:var(--text-primary)">không có hạn mức tín dụng</strong> — bạn chỉ có thể chi tiêu số Đậu thực tế đang có cho đến khi hạn mức được kích hoạt sau giao dịch hoàn tất đầu tiên (hoặc nếu người bảo lãnh hay quản trị viên cấp cho bạn hạn mức khởi điểm — xem §3 và §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Hạn mức tín dụng được tạo dựng qua giao dịch</h2>
+        <p>Hạn mức tín dụng cho phép bạn để số dư âm một chút — chi tiêu trước khi đáp lại. Hạn mức này <strong style="color:var(--text-primary)">do tự tạo dựng, không phải được ban phát</strong>:</p>
+        <ul>
+            <li>Sự tin cậy đến từ <strong style="color:var(--text-primary)">các giao dịch hoàn tất trên Chợ</strong> — không bao giờ đến từ quà tặng. Ban đầu hạn mức tăng chậm: một giao dịch 100 Đậu tạo ra khoảng 37 Đậu hạn mức tín dụng. Quản trị viên hoặc người bảo lãnh được chỉ định cũng có thể cấp cho ai đó một hạn mức khởi đầu; khoản cấp của quản trị viên sẽ hiển thị dưới dạng huy hiệu của họ.</li>
+            <li>Giao dịch với <strong style="color:var(--text-primary)">nhiều người khác nhau</strong> xây dựng sự tin cậy nhanh hơn nhiều so với việc giao dịch lặp đi lặp lại với một người.</li>
+            <li>Mức độ tin cậy quyết định <em>hạn mức</em> tín dụng của bạn — mức sàn có thể xuống sâu đến đâu, từ 0 xuống tới −2000 trên hầu hết các cộng đồng (xem §1).</li>
+            <li>Mức sàn mở ra sau <strong style="color:var(--text-primary)">giao dịch thực tế đầu tiên</strong> của bạn và tăng dần sau mỗi giao dịch tiếp theo (hoặc người bảo lãnh cộng đồng có thể cấp cho bạn mức sàn khởi điểm — xem §9). Không bắt buộc phải có người bảo lãnh.</li>
+        </ul>
+        <div class="callout">Các cấp độ tin cậy — <strong>Người mới → Cư dân → Quản lý → Trưởng bối</strong> — là huy hiệu ghi nhận. Bản thân các huy hiệu bạn đạt được không dùng để mở khóa bất cứ thứ gì; hạn mức tín dụng sâu hơn đến từ giao dịch thực tế. Quản trị viên cũng có thể cấp huy hiệu cho ai đó, cùng với hạn mức tín dụng khởi điểm của huy hiệu đó.</div>
+
+        <h2 id="4"><span class="num">4.</span>Tính tương hỗ: Để sử dụng tín dụng, bạn phải duy trì các lời đề nghị đang hoạt động</h2>
+        <p>Tạo dựng sự tin cậy sẽ quyết định <strong style="color:var(--text-primary)">hạn mức</strong> tín dụng của bạn (bạn có thể chạm mức âm sâu đến đâu). Nhưng để thực sự <strong style="color:var(--text-primary)">sử dụng</strong> khoản tín dụng đó, bạn phải duy trì các Lời đề nghị đang hoạt động. Điều này đảm bảo rằng bất kỳ ai mang số dư âm đều đang chủ động thể hiện cho cộng đồng thấy kế hoạch đóng góp của mình.</p>
+        
+        <p>Số lượng lời đề nghị đang hoạt động mà bạn duy trì sẽ quyết định lượng tín dụng <strong style="color:var(--text-primary)">khả dụng</strong>:</p>
+        <table>
+            <thead><tr><th>Lời đề nghị đang hoạt động</th><th>Hạn mức tín dụng khả dụng</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — chỉ chi tiêu số Đậu đang có</td></tr>
+                <tr><td class="num-col">1</td><td>Xuống tới −200 Đậu</td></tr>
+                <tr><td class="num-col">2</td><td>Xuống tới −500 Đậu</td></tr>
+                <tr><td class="num-col">3</td><td>Xuống tới −1000 Đậu</td></tr>
+                <tr><td class="num-col">4</td><td>Xuống tới −1500 Đậu</td></tr>
+                <tr><td class="num-col">5</td><td>Xuống tới −2000 Đậu <em>(mức trần thông thường)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Hạn mức chi tiêu thực tế của bạn là mức <strong style="color:var(--text-primary)">nhỏ hơn</strong> giữa mức bạn đã tạo dựng được và mức mà các lời đề nghị đang hoạt động cho phép sử dụng.</p>
+        <p><em>Ví dụ: Nếu bạn đã tạo dựng được hạn mức −600 qua các giao dịch, việc duy trì 2 lời đề nghị đang hoạt động cho phép bạn dùng −500 trong số đó. Duy trì lời đề nghị thứ 3 sẽ cho phép dùng toàn bộ hạn mức −600 của bạn (bạn không bao giờ cần lời đề nghị thứ 4 hay thứ 5 vì đã đạt mức trần bạn tạo dựng được).</em></p>
+        <div class="callout">
+            <strong>Tạm dừng chi tiêu (Đóng băng):</strong><br>
+            Nếu số lời đề nghị đang hoạt động giảm xuống dưới mức cần thiết cho số dư âm hiện tại của bạn (ví dụ: một trong các lời đề nghị của bạn được bán và hoàn tất, hoặc bạn tạm dừng một lời đề nghị), <strong>khả năng chi tiêu theo tín dụng của bạn sẽ tạm dừng</strong>. Đây là một cơ chế an toàn, không phải hình phạt: không ai tước đoạt bất cứ thứ gì của bạn. Bạn vẫn có thể nhận Đậu, tiếp tục bán và xem các tin đăng. Hạn mức tín dụng của bạn sẽ tự động hoạt động trở lại khi số dư quay về trong phạm vi mà các lời đề nghị đang hoạt động đáp ứng: hãy đăng thêm lời đề nghị khác, hoặc nhận Đậu.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Lời đề nghị (tin đăng của bạn)</h2>
+        <ul>
+            <li>Duy trì bao nhiêu lời đề nghị tùy ý — bao gồm cả lời đề nghị định kỳ — và chuyển đổi từng lời đề nghị sang <strong style="color:var(--text-primary)">Đang hoạt động hoặc Đã tạm dừng</strong> bất cứ khi nào bạn muốn. Chỉ các lời đề nghị <em>Đang hoạt động</em> mới được tính vào hạn mức tín dụng của bạn.</li>
+            <li><strong style="color:var(--text-primary)">Cho đi trước khi nhận lại:</strong> trong cộng đồng có Đậu, bạn phải đăng ít nhất một lời đề nghị trước khi có thể đăng Nhu cầu hoặc mua từ người khác. Nơi không có Đậu, như trên cộng đồng toàn cầu, bài đăng đầu tiên của bạn có thể là một Nhu cầu.</li>
+            <li>Số dư dương? Tạm dừng tất cả nếu bạn muốn — lời đề nghị chỉ bắt buộc khi bạn muốn chi tiêu vào số dư âm.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Các khoản phí &amp; quỹ cộng đồng</h2>
+        <p>Hai khoản phí nhỏ, và cả hai đều chuyển vào <strong style="color:var(--text-primary)">Commons Cộng đồng</strong> — quỹ chung do cộng đồng của bạn biểu quyết chi tiêu cho các dự án địa phương. Không có gì bị mất vào tay một doanh nghiệp nào.</p>
+        <p><strong style="color:var(--text-primary)">a) Phí chợ — 1,5% đối với các giao dịch hoàn tất.</strong> Khi giao dịch bán trên chợ được quyết toán, người bán nhận thực tế ít hơn 1,5% so với giá bán và phần chênh lệch chuyển vào quỹ Commons. <strong style="color:var(--text-primary)">Quà tặng (gửi trực tiếp giữa các thành viên) hoàn toàn miễn phí</strong> — cũng như các khoản hoàn tiền và chuyển đổi hệ thống.</p>
+        <p><strong style="color:var(--text-primary)">b) Phí lưu thông đối với số dư dương — hàng tháng, và chỉ áp dụng cho phần vượt trên 200.</strong> Tương tự như các bậc lũy tiến, mỗi khung chỉ tính phí trên phần số dư nằm trong khung đó:</p>
+        <table>
+            <thead><tr><th>Khung số dư</th><th>Tỷ lệ phí lưu thông hàng tháng</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Miễn phí</span> vùng an toàn</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1,5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2,5%</td></tr>
+            </tbody>
+        </table>
+        <p>Điều này khích lệ Đậu <strong style="color:var(--text-primary)">được luân chuyển thay vì tích trữ</strong>. <strong style="color:var(--text-primary)">Số dư âm không bao giờ chịu phí lưu thông</strong> — bạn vốn đã gánh vác tín dụng cho cộng đồng. Lưu ý vùng miễn phí +200 tương ứng đối xứng với khung tín dụng −200 đầu tiên, do đó hệ thống đối xứng qua mốc 0.</p>
+
+        <h2 id="7"><span class="num">7.</span>Quà tặng (gửi Đậu)</h2>
+        <ul>
+            <li>Bạn <strong style="color:var(--text-primary)">chỉ có thể tặng số Đậu thực tế đang có</strong> — quà tặng không bao giờ làm số dư âm và không bao giờ sử dụng hạn mức tín dụng của bạn.</li>
+            <li>Bạn có thể gửi sau khi đã hoàn thành ít nhất một giao dịch thực tế (điều này ngăn các tài khoản mới tạo chuyển ngay số Đậu rồi biến mất).</li>
+            <li>Quà tặng không tạo dựng mức độ tin cậy cho người nhận và hoàn toàn <strong style="color:var(--text-primary)">miễn phí</strong> — không mất phí (bạn chỉ có thể tặng số Đậu bạn đã có sẵn).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Cách thức quyết toán giao dịch</h2>
+        <p>Các giao dịch trên Chợ được giữ an toàn trong <strong style="color:var(--text-primary)">tài khoản ký quỹ</strong> (hệ thống giữ trung gian an toàn) cho đến khi thỏa thuận hoàn tất, sau đó chuyển cho người bán (trừ đi 1,5% phí). Nếu thỏa thuận bị hủy, người mua được hoàn trả đầy đủ.</p>
+
+        <h2 id="9"><span class="num">9.</span>Bảo lãnh (bước khởi đầu tùy chọn)</h2>
+        <p>Một <strong style="color:var(--text-primary)">người bảo lãnh</strong> đáng tin cậy được cộng đồng chỉ định có thể cấp cho người mới một <strong style="color:var(--text-primary)">mức sàn khởi điểm 25, 50 hoặc 100 Đậu</strong> để họ có thể bắt đầu sử dụng tín dụng trước khi tạo dựng được. Quyền này thường được trao — hoàn toàn theo quyết định của người bảo lãnh — cho những người có bài đăng và đóng góp thực sự thu hút và truyền cảm hứng. Điều này là hoàn toàn tùy chọn: không ai bắt buộc phải có người bảo lãnh mới được tham gia, vì bạn cũng có thể mở hạn mức tín dụng đơn giản bằng cách giao dịch (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Thanh toán bù trừ liên cộng đồng liên kết</h2>
+        <p>Các cộng đồng không cần phải tồn tại biệt lập. Thông qua <strong style="color:var(--text-primary)">Cổng kết nối Giao dịch Liên kết</strong> (lấy cảm hứng từ liên minh bù trừ của Keynes), các máy chủ cộng đồng độc lập có thể thanh toán bù trừ giao dịch ngang hàng với máy chủ láng giềng mà không cần tiền pháp định hay dự trữ ngân hàng. Đậu không bao giờ rời khỏi cộng đồng gốc — mỗi cặp máy chủ duy trì một sổ cái kết nối ghi nhận những gì họ nợ nhau bằng sức lao động, và mỗi bên tự đặt ra giới hạn mức nợ có thể đạt tới. Việc bù trừ diễn ra giữa từng cặp cộng đồng, do từng người vận hành chủ động bật, và hiện vẫn đang trong giai đoạn đầu: tính năng đã được xây dựng cùng các màn hình trong ứng dụng web, và mới chỉ thử nghiệm giữa hai cộng đồng thử nghiệm của chúng tôi chứ chưa triển khai giữa các cộng đồng thực tế.</p>
+
+        <h2 id="11"><span class="num">11.</span>Định danh mật mã &amp; Lưu ký khóa</h2>
+        <p>Tài khoản của bạn được bảo vệ bởi cặp khóa mật mã Ed25519 được tạo trên thiết bị của bạn. BeanPool cung cấp các phương thức lưu ký linh hoạt phù hợp với nhu cầu của bạn:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Toàn quyền tự quyết:</strong> Trên các ứng dụng điện thoại, khóa riêng của bạn được lưu trong bộ nhớ an toàn của thiết bị (iOS Keychain / Android Keystore); trong ứng dụng web, khóa được lưu trong bộ nhớ riêng của trình duyệt. Khóa chỉ rời khỏi thiết bị dưới dạng bản sao mã hóa để khôi phục qua đăng nhập, hoặc khi bạn sao chép tài khoản sang một thiết bị khác của mình. Hãy lưu giữ bản sao lưu 12 từ ngoại tuyến.</li>
+            <li><strong style="color:var(--text-primary)">Khôi phục:</strong> Cụm 12 từ khôi phục tài khoản của bạn trên bất kỳ thiết bị nào. Bạn cũng có thể liên kết đăng nhập bằng Google, Apple hoặc Facebook. Một bản sao khóa được khóa mã hóa sau đó sẽ được lưu trữ tương ứng: các ứng dụng điện thoại sử dụng kho khóa bảo mật của BeanPool sẽ lưu trữ tại đó, trên một máy chủ nhỏ ở Iceland; các phiên bản ứng dụng điện thoại cũ hơn sẽ lưu trên máy chủ cộng đồng của bạn; ứng dụng web trên cộng đồng toàn cầu sẽ lưu trên máy chủ của cộng đồng đó do chúng tôi vận hành. Bất kỳ ai giữ bản sao đều có thể mở khóa. Việc khôi phục từ kho khóa bảo mật sẽ phải chờ 24 giờ trừ khi một trong các thiết bị của chính bạn phê duyệt. Nếu bạn mất thiết bị, mất 12 từ và mất cả thông tin đăng nhập, quản trị viên cộng đồng có thể chuyển tài khoản của bạn sang điện thoại mới bằng mã dùng một lần ngay trước mặt bạn; lịch sử của bạn vẫn được giữ nguyên. Vì vậy, hãy ghi lại 12 từ này.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Hạn mức &amp; sự an toàn</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Trần mức sàn −2000</strong> trên hầu hết các cộng đồng (xem §1). Không có giới hạn hàng ngày về số Đậu bạn chi tiêu — mức sàn của bạn là ranh giới. Có giới hạn về tần suất: 100 khoản thanh toán, 30 người bạn chưa từng thanh toán trước đây và 100 yêu cầu trên chợ trong mỗi 24 giờ.</li>
+            <li>Mức độ tin cậy với bất kỳ đối tác đơn lẻ nào đều bị giới hạn trần, do đó không ai có thể thổi phồng uy tín bằng cách giao dịch qua lại với một đồng phạm.</li>
+            <li><strong style="color:var(--text-primary)">Chế độ nghỉ lễ</strong> sẽ ẩn các lời đề nghị của bạn và tạm dừng các yêu cầu đến trong thời gian bạn đi vắng.</li>
+            <li>Thành viên có thể báo cáo và gắn cờ những đối tượng xấu; quản trị viên cộng đồng có thể loại bỏ họ.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Doanh nghiệp cộng đồng &amp; Quản trị</h2>
+        <p>Doanh nghiệp cộng đồng (chẳng hạn như thư viện dụng cụ cộng đồng, đàn gà lấy trứng hoặc kho củi) và các dự án có thời hạn là những sáng kiến chung dưới sự quản lý tập thể. Chúng hoạt động theo các quy tắc rõ ràng, được thực thi bằng mã nguồn (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">mô hình quản trị Commons</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Một đối tượng, hai vòng đời (§2.1):</strong> Doanh nghiệp duy trì lâu dài sẽ tiếp tục tồn tại và giao dịch; doanh nghiệp có thời hạn (dự án) có mục tiêu và ngày kết thúc, sẽ tất toán tài khoản và hoàn trả phần còn lại vào Commons khi hoàn thành.</li>
+            <li><strong style="color:var(--text-primary)">Mức sàn tạo dựng &amp; cam kết của người quản lý (Quy tắc 1–3):</strong> Doanh nghiệp mới bắt đầu mà không có thấu chi chưa tạo dựng: mức sàn tín dụng của doanh nghiệp được bảo chứng bởi các cam kết rõ ràng từ uy tín giao dịch đã tạo dựng của những người quản lý (cộng dồn trực tiếp, không dùng hệ số nhân ảo). Việc cam kết bảo chứng không bao giờ đụng đến hoặc làm giảm mức sàn tín dụng hộ gia đình cá nhân của người quản lý. Các doanh nghiệp cũ hơn giữ nguyên mức sàn khởi điểm mà họ có trước khi có cam kết.</li>
+            <li><strong style="color:var(--text-primary)">Trách nhiệm hữu hạn (Quy tắc 4):</strong> Doanh nghiệp chịu rủi ro, không phải hộ gia đình của người quản lý. Nếu doanh nghiệp vỡ nợ, hoạt động chi tiêu của doanh nghiệp sẽ bị đóng băng, nhưng mức sàn cá nhân của những người quản lý vẫn được bảo vệ.</li>
+            <li><strong style="color:var(--text-primary)">Tín dụng mua vật tư đầu vào, lợi nhuận chi trả con người (Quy tắc 5):</strong> Doanh nghiệp có thể sử dụng tín dụng xuống tới mức sàn khả dụng để mua vật tư hoặc dịch vụ từ những người hàng xóm bên ngoài. Doanh nghiệp <em>không bao giờ</em> được dùng tín dụng để trả cho những người quản lý của mình — người quản lý chỉ được trả công khi <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Thù lao người quản lý bị giới hạn bởi thặng dư tạo dựng (Quy tắc 6):</strong> Các khoản chi trả cho người quản lý bị giới hạn nghiêm ngặt bởi thặng dư giao dịch thực tế (doanh thu bán hàng trừ đi các khoản chi trả cho người quản lý). Các khoản tài trợ, cam kết và quà tặng không bao giờ có thể chuyển thành tiền công của người quản lý.</li>
+            <li><strong style="color:var(--text-primary)">Tự động thu hồi vốn lưu động (Quy tắc 7):</strong> Doanh nghiệp có thể đặt mức trần vốn lưu động. Phần thặng dư tạo dựng vượt mức trần sẽ tự động được thu hồi về quỹ Commons Cộng đồng để ngăn ngừa tích trữ. Các khoản tài trợ và quà tặng không bao giờ bị thu hồi.</li>
+            <li><strong style="color:var(--text-primary)">Quy tắc phê duyệt hai người:</strong> Người quản lý không thể tự phê duyệt các khoản thanh toán cho chính mình hoặc các đề xuất cá nhân cho nhu cầu của doanh nghiệp — phải có một người quản lý khác phê duyệt.</li>
+            <li><strong style="color:var(--text-primary)">Thăm dò so với Quyết định (§3):</strong> Các câu hỏi không chính thức là <em>Thăm dò</em> trên bảng tin Chợ: mỗi người một phiếu, được kiểm đếm, không có tính ràng buộc. Hoạt động quản trị có tính ràng buộc (khoản tài trợ từ quỹ, xóa nợ, thay đổi vai trò, và đình chỉ, đóng băng hoặc loại bỏ thành viên) diễn ra thông qua <em>Quyết định</em> trong tab Commons, với thời hạn biểu quyết 7 ngày. Một Quyết định được thông qua với 60% số phiếu thuận (66% để loại bỏ một thành viên; hơn một nửa để dỡ bỏ lệnh đình chỉ, đóng băng hoặc đưa thành viên quay lại) khi có đủ số thành viên tham gia biểu quyết: 30% số người hoạt động trong 30 ngày qua, tối thiểu 3 người (25% đối với việc loại bỏ thành viên). Sau đó quyết định sẽ tự động thực thi. Các khoản tài trợ từ quỹ áp dụng cơ chế bỏ phiếu bậc hai (quadratic voting) dựa trên uy tín giao dịch đã tạo dựng — số Đậu khả dụng không thể mua được phiếu bầu.</li>
+            <li><strong style="color:var(--text-primary)">Thuật ngữ chuẩn hóa (§9):</strong> Bốn cấp độ, bốn từ ngữ riêng biệt: máy chủ → <em>chủ sở hữu / quản trị viên</em> · doanh nghiệp → <em>người quản lý chính / người quản lý</em> · nhóm → <em>người điều phối</em> · cấp độ tin cậy → <em>Quản lý</em>.</li>
+        </ul>
+        <div class="callout amber">Tóm lại: <strong>tạo dựng hạn mức tín dụng bằng cách giao dịch, duy trì một hoặc hai lời đề nghị đang hoạt động để sử dụng hạn mức, và để Đậu được luân chuyển.</strong> Mục tiêu là điểm 0 — cho đi tương đương những gì bạn nhận về.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Biểu tượng BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Tín dụng tương hỗ cho cộng đồng, do cộng đồng tự vận hành.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Trung tâm trợ giúp</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Cách hoạt động</a>
+                    <a href="getting-started.html">Bắt đầu</a>
+                    <a href="rules.html">Quy tắc</a>
+                    <a href="safety.html">An toàn cho trẻ em</a>
+                    <a href="../privacy.html">Chính sách quyền riêng tư</a>
+                    <a href="../terms.html">Điều khoản dịch vụ</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../rules.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/rules.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/rules.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/rules.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/rules.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/rules.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/rules.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/rules.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/rules.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/rules.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/rules.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/rules.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/rules.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/rules.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/rules.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/rules.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/rules.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/rules.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/rules.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/rules.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="rules.html" hreflang="vi" lang="vi" aria-current="page">Tiếng Việt</a>
+                    <a href="../el/rules.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/rules.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/rules.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/rules.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Mã nguồn mở theo giấy phép MIT. Được tạo nên với <img src="../bean.png" alt="tình yêu" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> bởi các cộng đồng, vì các cộng đồng. Ranh giới múi giờ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Những người đóng góp cho OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

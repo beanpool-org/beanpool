@@ -1,0 +1,291 @@
+<!-- source-hash: 85100d10c15dfef1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L'economia post-estrazione — BeanPool</title>
+    <meta name="description" content="Cosa significa un'economia post-estrazione e i meccanismi specifici che BeanPool usa per costruirla: credito reciproco senza interessi, circolazione anziché accumulo, Beni comuni gestiti tramite voto dei membri e una federazione che non prosciuga i centri più piccoli.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Icona BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Come funziona</a>
+                <a href="rules.html">Le Regole</a>
+                <a href="index.html#features">Funzionalità</a>
+                <a href="help.html">Aiuto</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Guarda i video tutorial su YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Partecipa alla community su Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Visualizza su GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Inizia</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Apri menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Inizia</a>
+                    <a href="index.html#how-it-works">Come funziona</a>
+                    <a href="rules.html">Le Regole</a>
+                    <a href="index.html#features">Funzionalità</a>
+                    <a href="help.html">Aiuto</a>
+                    <a href="guide/index.html">Guida per i membri</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial su YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool su Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Codice sorgente su GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>L'economia post-estrazione</h1>
+
+        <p class="lede">La maggior parte degli strumenti che una comunità usa per commerciare è progettata per trattenere una percentuale. Non per malafede &mdash; ma per via della loro stessa struttura. Una percentuale va a un gestore dei pagamenti, gli interessi vanno a una banca, l'attenzione va a un inserzionista pubblicitario e i dati finiscono dove nessuno nella comunità ha mai scelto di mandarli. <strong>BeanPool è stato creato per eliminare queste vie di fuga.</strong></p>
+
+        <div class="pe-define">
+            <p><strong>Post-estrazione</strong> indica un'infrastruttura che permette alle comunità di creare e trattenere il valore che producono, anziché lasciarlo catturare da intermediari. Non è uno slogan su quanto si è gentili. È un vincolo su come il software deve essere costruito &mdash; e ciò che lo violerebbe non viene approvato nel codice.</p>
+        </div>
+
+        <h2>Come si presenta concretamente l'estrazione</h2>
+        <p>Vale la pena essere concreti, perché il termine "estrazione" viene spesso lasciato vago. Quando una persona paga un vicino attraverso una piattaforma convenzionale, il valore lascia la comunità attraverso diverse porte contemporaneamente:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ Da dove fugge il valore</h4>
+                <ul>
+                    <li><strong>Commissioni sulle transazioni</strong> a un gestore dei pagamenti con sede altrove.</li>
+                    <li><strong>Interessi</strong> sul credito che ha reso possibile lo scambio, pagati a una banca.</li>
+                    <li><strong>Pubblicità</strong> &mdash; la tua attenzione venduta al miglior offerente.</li>
+                    <li><strong>Dati</strong> &mdash; le tue relazioni e i tuoi acquisti diventano una risorsa patrimoniale di qualcun altro.</li>
+                    <li><strong>Rendita di piattaforma</strong> &mdash; una volta che tutti la usano, il prezzo sale, perché andarsene significherebbe separarsi dai propri vicini.</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ Cosa facciamo noi al suo posto</h4>
+                <ul>
+                    <li>Il credito è <strong>creato dallo scambio stesso</strong>, quindi non c'è alcun creditore da remunerare.</li>
+                    <li>Le piccole commissioni esistenti confluiscono in un <strong>fondo dei Beni comuni che la tua comunità decide come spendere tramite voto</strong>.</li>
+                    <li><strong>Niente pubblicità.</strong> Non ci sono inserzionisti, quindi non c'è alcun motivo per ottimizzare o monetizzare la tua attenzione.</li>
+                    <li><strong>Nessuna raccolta dati.</strong> La tua chiave privata resta sul tuo dispositivo. Se colleghi un accesso per recuperarla, ne viene conservata una copia protetta: nella cassaforte delle chiavi di BeanPool o sul server di una comunità, a seconda dell'app. Chiunque la conservi può aprirla. I messaggi diretti e le chat di gruppo sono protetti da crittografia end-to-end.</li>
+                    <li><strong>Nessun vincolo di dipendenza (lock-in).</strong> Il protocollo è open source e la tua comunità gestisce il proprio nodo.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">Per essere del tutto trasparenti: <strong>BeanPool non è privo di costi.</strong> C'è un piccolo contributo di circolazione sui grandi saldi inattivi e una piccola commissione sugli scambi. La differenza non è che il denaro svanisce &mdash; è <strong>dove va a finire</strong>. Va al fondo dei Beni comuni, e la comunità vota su come spenderlo. Nulla viene versato agli azionisti, perché non ce ne sono.</div>
+
+        <h2>Non abbiamo inventato noi questa critica</h2>
+        <p>La dinamica sopra descritta è stata studiata a fondo e denominata più volte da persone che vi hanno dedicato anni di lavoro. Riteniamo che la loro analisi sia corretta; ciò in cui ci differenziamo è che stiamo cercando di costruire la via d'uscita invece di limitarci a descrivere la trappola. Se desideri approfondire l'argomentazione completa invece della nostra sintesi, questi sono i punti di partenza ideali.</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Platform Capitalism <span>— Nick Srnicek, 2016</span></h4>
+                <p>Analizza la piattaforma come modello di business anziché come semplice tecnologia: posizionarsi tra due gruppi che hanno bisogno di mettersi in contatto, per poi trattenere una quota di ogni connessione. Poiché il valore della piattaforma cresce con il numero di partecipanti, andarsene diventa sempre più difficile mentre la trattenuta diventa sempre più grande.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Il capitalismo della sorveglianza <span>— Shoshana Zuboff, 2019</span></h4>
+                <p>Descrive una seconda forma di estrazione che opera parallelamente alla prima. L'esperienza umana ordinaria viene trattata come materia prima non rivendicata, trasformata in previsioni su ciò che le persone faranno in seguito e venduta a chiunque tragga vantaggio dal saperlo. La persona da cui provengono i dati non è il cliente.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Technofeudalism <span>— Yanis Varoufakis, 2023</span></h4>
+                <p>La versione più incisiva della tesi. Ciò che il proprietario di una piattaforma riscuote non è il profitto derivante dalla produzione di qualcosa &mdash; è una <em>rendita</em>, imposta per accedere a uno spazio di sua proprietà. La riflessione di Varoufakis evidenzia che questo assetto è più antico del capitalismo, non più recente: una relazione feudale da proprietario terriero travestita da azienda tecnologica.</p>
+            </div>
+        </div>
+
+        <p>C'è un'espressione più semplice per spiegare come si vive questa condizione dal basso &mdash; <strong>mezzadria digitale</strong>. Svolgi il lavoro su una terra che non ti appartiene, e il proprietario trattiene una parte di tutto ciò che coltivi. Descrive con la stessa precisione l'autista, il venditore, il musicista e il fattorino, il che dimostra come questa descrizione colpisca nel segno una realtà tangibile.</p>
+
+        <p>La nostra risposta non è un padrone più generoso o una trattenuta più bassa. È che <strong>non dovrebbe esserci alcuna terra da affittare in primo luogo.</strong> Due vicini che scambiano il lavoro di un pomeriggio non hanno bisogno di transitare per uno spazio di proprietà di terzi. Così la comunità possiede il nodo, il protocollo è aperto affinché chiunque possa eseguirlo o farne un fork, e l'unica commissione esistente va ai Beni comuni della comunità stessa. Non esiste alcuna posizione intermedia da cui qualcuno possa vendere l'accesso &mdash; noi compresi.</p>
+
+        <p class="pe-credit">Un ottimo punto di partenza, se preferisci guardare invece di leggere: il video di Benn Jordan <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">“You Are Witnessing the Death of American Capitalism”</a>, che affronta questi temi e rimanda a tutti e tre i libri citati sopra.</p>
+
+        <h2>I meccanismi</h2>
+        <p>I primi quattro sono elementi già funzionanti in ogni comunità oggi. Il quinto, la compensazione tra comunità, è implementato ed è stato sperimentato solo tra due delle nostre comunità di test, non ancora tra comunità reali attive. Sono descritti nel dettaglio nelle <a href="rules.html">Regole</a>.</p>
+
+        <div class="pe-mech">
+            <h3>Denaro che la comunità crea da sé</h3>
+            <p>BeanPool funziona sul <strong>credito reciproco</strong>. Quando svolgi tre ore di lavoro per un vicino, tre ore di credito nascono esattamente in quell'istante &mdash; il tuo saldo positivo e il suo saldo negativo, creati insieme dallo scambio. Nessuna banca lo ha emesso. Nessuno te lo ha prestato. Non ci sono interessi, perché non c'è alcun prestatore.</p>
+            <p>Questo è il fondamento dell'intero impianto. Se la massa monetaria deve essere presa in prestito per esistere, qualcuno all'esterno della comunità detiene una pretesa sul suo lavoro futuro. Se la comunità la crea scambiando, nessuno detiene tale pretesa.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Lo zero è l'obiettivo, non un grande saldo</h3>
+            <p>Un saldo pari a <strong>zero</strong> significa che hai dato all'incirca quanto hai ricevuto. Questo è lo stato di equilibrio sano, ed è un traguardo profondamente diverso da quello fissato dalla maggior parte dei sistemi economici. Non ci sono premi per chi accumula fagioli, e non c'è modo di convertirli in una pretesa verso chiunque si trovi al di fuori della comunità.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Circolazione anziché accumulo</h3>
+            <p>I grandi saldi inattivi si riducono delicatamente nel tempo, con un'aliquota progressiva. L'effetto è di mantenere i fagioli in movimento &mdash; spesi con i vicini, investiti in progetti locali &mdash; anziché lasciarli fermi. Un'economia in cui il mezzo di scambio smette di circolare è un'economia che ha smesso di funzionare.</p>
+            <p>Aspetto fondamentale: ciò che viene ridotto non viene distrutto né trattenuto come profitto: <strong>confluisce nel fondo dei Beni comuni.</strong> I saldi negativi non pagano mai alcuna commissione. Chi è in negativo ha attinto al credito che la comunità gli ha concesso, e tassare una persona già in debito allargherebbe la voragine anziché stimolare la circolazione dei fagioli &mdash; esattamente l'opposto dell'obiettivo.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Beni comuni come circuito virtuoso, non come pozzo a perdere</h3>
+            <p>Il fondo dei Beni comuni raccoglie ciò che le commissioni di circolazione e di scambio generano, e le sue risorse hanno due destinazioni: assorbire il debito lasciato da un membro che abbandona o viene rimosso mentre è in debito, e finanziare imprese e progetti che i membri approvano tramite <strong>Decisioni</strong> ad esecuzione automatica &mdash; attrezzi per un orto condiviso, attrezzature per un laboratorio, qualunque proposta venga votata e approvata. La comunità decide cosa realizzare con il proprio surplus.</p>
+            <p>È un circuito chiuso per costruzione: il valore viene generato localmente, custodito collettivamente e reinvestito all'interno della stessa comunità.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Una federazione che non prosciuga i centri più piccoli</h3>
+            <p>Quando le comunità scambiano tra loro, l'estrazione può ripresentarsi in una forma più sottile &mdash; la cittadina più ricca che prosciuga silenziosamente quella più piccola. Questo è il problema che John Maynard Keynes si prefisse di risolvere a Bretton Woods, e la compensazione tra comunità di BeanPool si basa sulla sua risposta.</p>
+            <p><strong>I fagioli non varcano mai il confine.</strong> Uno scambio tra due comunità si regola attraverso una coppia di mastri ponte, uno custodito da ciascun nodo, che registrano ciò che ciascuna deve all'altra in termini di lavoro. Ciascuna parte stabilisce il proprio limite massimo a tale debito &mdash; così una comunità vicina può doverti solo una somma che hai stabilito tu in anticipo.</p>
+            <p>Ne conseguono due aspetti, ed essi sono il motivo per cui non si tratta di un semplice limite di spesa. <strong>La compensazione di quanto dovuto non viene mai bloccata</strong> &mdash; il tetto massimo frena la direzione che estende il credito, mai quella che lo estingue. E una comunità che detiene un surplus non vi si siede sopra: <strong>più una comunità vanta crediti, più lavoro può commissionare alla comunità debitrice</strong>, trasformando un disequilibrio in nuovo scambio anziché lasciarlo come debito stagnante.</p>
+            <div class="pe-worked">
+                <strong>Perché il sistema deve funzionare necessariamente così.</strong> A ogni fagiolo positivo corrisponde un negativo detenuto da un membro specifico, che lo estingue lavorando. Se il +50 di un membro migrasse semplicemente verso un'altra città, il vicino fermo a −50 non potrebbe più recuperarlo dalla circolazione locale &mdash; la controparte del suo debito è andata via. Ripetendo questo fenomeno su molti visitatori, la circolazione della comunità più piccola si ridurrebbe permanentemente. Non per frode, ma attraverso trasferimenti all'apparenza del tutto regolari.
+            </div>
+            <p class="pe-edges">Per essere del tutto trasparenti sui limiti attuali: una comunità in disavanzo non viene <em>mai</em> penalizzata per essere in deficit &mdash; la tesi di Keynes, e la nostra, è che la pressione debba gravare solo su chi ha il potere concreto di agire. L'unica leva rimanente, una commissione su un surplus deliberatamente lasciato inattivo, è specificata e intenzionalmente non ancora implementata, finché non supererà questo stesso criterio di equità. La compensazione opera tra coppie di comunità anziché su una rete allargata, e il gestore di ciascuna comunità la attiva per scelta autonoma.</p>
+        </div>
+
+        <h2>Gli impegni su cui tutto questo si fonda</h2>
+        <p>Questi sono i valori fondanti su cui viene valutato ogni contributo apportato a BeanPool. Sono pubblicati nella <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">guida per i collaboratori</a> del progetto e hanno un peso reale: i lavori in contrasto con essi vengono respinti, a prescindere dalla qualità del codice.</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>Post-estrazione</h4>
+                <p>Costruiamo infrastrutture che consentano alle comunità di creare e trattenere valore anziché lasciarlo catturare da intermediari. I contributi che introducono dinamiche estrattive &mdash; effetti di rete a vantaggio di una singola entità di controllo, dipendenze proprietarie, monetizzazione basata sulla sorveglianza &mdash; non sono benvenuti.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Sussidiarietà</h4>
+                <p>Le comunità locali devono poter gestire i propri nodi, prendere le proprie decisioni di governance e operare in modo autonomo. I contributi che spingono il processo decisionale verso l'alto a un'autorità globale, o che rendono impraticabile la gestione locale, contrastano con gli obiettivi del protocollo.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Chiarezza e comprensibilità</h4>
+                <p>Il protocollo deve risultare comprensibile per le comunità a cui si rivolge &mdash; non solo per gli ingegneri informatici. Le specifiche sono scritte in un linguaggio semplice laddove possibile, con i dettagli tecnici strutturati a un livello sottostante.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Consenso e privacy</h4>
+                <p>Nessuna funzionalità deve consentire il trasferimento di dati senza il consenso esplicito, revocabile e verificabile della parte a cui appartengono. Le funzionalità che violano la privacy non saranno integrate, indipendentemente dalla loro eleganza tecnica.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Rigenerazione</h4>
+                <p>Misuriamo il successo verificando se le comunità, gli ecosistemi e i beni comuni risultino più sani grazie a BeanPool &mdash; non attraverso metriche di crescita o il prezzo di un token.</p>
+            </div>
+        </div>
+
+        <h2>Come verificare che facciamo sul serio</h2>
+        <p>Una promessa come questa vale solo nella misura in cui è possibile verificarla, pertanto:</p>
+        <ul class="pe-check">
+            <li>L'intero protocollo è <strong>open source sotto licenza MIT</strong> &mdash; <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">leggi il codice</a>, compresa ogni regola descritta in questa pagina.</li>
+            <li>Le regole economiche sono descritte in un linguaggio chiaro e accessibile nelle <a href="rules.html">Regole</a> &mdash; saldi, crediti, commissioni e la destinazione di ciascuno.</li>
+            <li>La tua comunità può <strong>gestire il proprio nodo</strong>. Se dovessimo mai trasformarci in un intermediario, potresti andartene portando con te la tua comunità.</li>
+            <li>Non ci sono <strong>né token né investitori</strong>. I fagioli sono credito reciproco per scambi reali e non vengono mai negoziati su un mercato finanziario.</li>
+        </ul>
+
+        <div class="callout">In breve: <strong>un'economia è post-estrazione quando il valore creato da una comunità non ha alcuna via di fuga verso l'esterno.</strong> Non perché tutti siano virtuosi, ma perché il sistema non prevede porte per farlo uscire.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Icona BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Credito reciproco per le comunità, gestito dalle comunità.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Centro assistenza</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Come funziona</a>
+                    <a href="getting-started.html">Per iniziare</a>
+                    <a href="rules.html">Le Regole</a>
+                    <a href="post-extraction.html">Post-estrazione</a>
+                    <a href="safety.html">Sicurezza dei minori</a>
+                    <a href="privacy.html">Informativa sulla privacy</a>
+                    <a href="terms.html">Termini di servizio</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source sotto licenza MIT. Creato con <img src="bean.png" alt="amore" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> dalle comunità, per le comunità. Confini dei fusi orari © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Contributori di OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

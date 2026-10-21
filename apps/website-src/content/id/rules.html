@@ -1,0 +1,219 @@
+<!-- source-hash: b6cb7426f4ee45f1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aturan — Cara Kerja BeanPool</title>
+    <meta name="description" content="Aturan sederhana BeanPool: cara kerja saldo, kredit, penawaran, biaya, federasi Keynesian, usaha komunitas, dan tata kelola.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Ikon BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Cara Kerja</a>
+                <a href="rules.html">Aturan</a>
+                <a href="index.html#features">Fitur</a>
+                <a href="help.html">Bantuan</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tonton Video Tutorial di YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Gabung ke Komunitas Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Lihat di GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Mulai</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Buka menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Mulai</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="rules.html" aria-current="page">Aturan</a>
+                    <a href="index.html#features">Features</a>
+                    <a href="help.html">Bantuan</a>
+                    <a href="guide/index.html">Panduan anggota</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial di YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool di Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Kode Sumber di GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Aturan — Cara Kerja BeanPool</h1>
+        <p class="lede">BeanPool adalah pertukaran komunitas di mana setiap orang mulai dari nol. Anda mendapatkan kacang dengan membantu orang lain dan membelanjakannya saat orang lain membantu Anda. Tidak ada uang yang berpindah tangan, dan tidak ada perantara korporasi — hanya aturan sederhana ini.</p>
+
+        <div class="callout amber">Singkatnya: <strong>bangun batas kredit Anda melalui transaksi, pasang satu atau dua penawaran aktif untuk menggunakannya, dan biarkan kacang mengalir.</strong> Nol adalah tujuannya — memberi kurang lebih sebanyak yang Anda terima.</div>
+
+        <h2 id="1"><span class="num">1.</span>Kacang &amp; saldo Anda</h2>
+        <p>Kacang mengukur nilai yang telah Anda berikan dan terima (secara garis besar, waktu). <strong style="color:var(--text-primary)">Nol adalah tujuannya</strong> — artinya Anda telah memberi kurang lebih sebanyak yang Anda terima.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Saldo positif</strong> — Anda telah memberi lebih banyak daripada yang Anda terima. Komunitas berutang kepada Anda.</li>
+            <li><strong style="color:var(--text-primary)">Saldo negatif</strong> — komunitas telah memberikan kredit kepada Anda. Anda membalasnya dengan memberi bantuan.</li>
+            <li>Di sebagian besar komunitas batas terdalam yang dapat dicapai siapa pun adalah <strong>−2000 kacang</strong>. Komunitas yang mengonfirmasi anggotanya dengan nama asli dapat menetapkan batasnya sendiri, hingga −5000, dan memberikan batas kredit awal kepada anggota yang terkonfirmasi.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Memulai</h2>
+        <p>Anda bergabung melalui undangan. Sejak hari pertama Anda dapat melihat-lihat dan menerima kacang. Begitu Anda memiliki kacang (dengan menghasilkannya atau menerima hadiah), Anda dapat membelanjakannya. Untuk membelanjakan dengan kredit, Anda harus memasang setidaknya satu <strong style="color:var(--text-primary)">Penawaran</strong> (lihat §4 dan §5). Anggota baru mulai dengan <strong style="color:var(--text-primary)">tanpa batas kredit</strong> — Anda hanya dapat membelanjakan kacang yang benar-benar Anda miliki sampai batas Anda diaktifkan oleh transaksi pertama Anda yang selesai (atau jika seorang penjamin atau admin memberi Anda batas awal — lihat §3 dan §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Batas kredit Anda dibangun melalui transaksi</h2>
+        <p>Batas kredit memungkinkan Anda berada sedikit di angka negatif — berbelanja sebelum Anda menghasilkannya kembali. Batas ini <strong style="color:var(--text-primary)">dibangun, bukan diberikan</strong>:</p>
+        <ul>
+            <li>Kepercayaan berasal dari <strong style="color:var(--text-primary)">transaksi pasar yang selesai</strong> — bukan dari hadiah. Batas ini tumbuh perlahan pada awalnya: transaksi 100 Kacang menghasilkan sekitar 37 Kacang batas kredit. Admin atau penjamin yang ditunjuk juga dapat memberi seseorang batas awal; hibah dari admin ditampilkan sebagai lencana mereka.</li>
+            <li>Bertransaksi dengan <strong style="color:var(--text-primary)">banyak orang berbeda</strong> membangun kepercayaan jauh lebih cepat daripada transaksi berulang kali dengan satu orang yang sama.</li>
+            <li>Tingkat kepercayaan Anda menentukan <em>batas</em> kredit Anda — seberapa dalam batas bawah Anda, dari 0 turun hingga −2000 di sebagian besar komunitas (lihat §1).</li>
+            <li>Batas bawah Anda terbuka setelah <strong style="color:var(--text-primary)">transaksi nyata pertama</strong> Anda, dan bertambah dengan setiap transaksi setelahnya (atau penjamin komunitas dapat memberi Anda batas bawah pemula — lihat §9). Jaminan tidak diwajibkan.</li>
+        </ul>
+        <div class="callout">Tingkat kepercayaan — <strong>Pendatang Baru → Warga → Pengelola → Tetua</strong> — adalah lencana pengakuan. Lencana yang Anda peroleh tidak membuka akses atau mengunci apa pun dengan sendirinya; batas kredit yang lebih besar berasal dari transaksi nyata. Admin juga dapat memberi seseorang lencana, beserta batas kredit awal untuk lencana tersebut.</div>
+
+        <h2 id="4"><span class="num">4.</span>Resiprositas: Untuk menggunakan kredit, Anda harus mempertahankan penawaran aktif</h2>
+        <p>Membangun kepercayaan menetapkan <strong style="color:var(--text-primary)">batas</strong> kredit Anda (seberapa dalam Anda berpotensi menggunakannya). Namun untuk benar-benar <strong style="color:var(--text-primary)">menarik</strong> kredit tersebut, Anda harus tetap memasang Penawaran aktif. Hal ini memastikan siapa pun yang memiliki saldo negatif secara aktif menunjukkan kepada komunitas bagaimana rencana mereka untuk berkontribusi.</p>
+        
+        <p>Jumlah penawaran aktif yang Anda pasang menentukan berapa banyak kredit yang <strong style="color:var(--text-primary)">dapat digunakan</strong>:</p>
+        <table>
+            <thead><tr><th>Penawaran aktif</th><th>Batas kredit yang dapat digunakan</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — hanya membelanjakan kacang yang dimiliki</td></tr>
+                <tr><td class="num-col">1</td><td>Hingga −200 Kacang</td></tr>
+                <tr><td class="num-col">2</td><td>Hingga −500 Kacang</td></tr>
+                <tr><td class="num-col">3</td><td>Hingga −1000 Kacang</td></tr>
+                <tr><td class="num-col">4</td><td>Hingga −1500 Kacang</td></tr>
+                <tr><td class="num-col">5</td><td>Hingga −2000 Kacang <em>(batas umum)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Batas pengeluaran Anda sebenarnya adalah nilai yang <strong style="color:var(--text-primary)">lebih kecil</strong> antara apa yang telah Anda hasilkan dan apa yang dibuka oleh penawaran aktif Anda.</p>
+        <p><em>Contoh: Jika Anda telah memperoleh batas −600 melalui transaksi, mempertahankan 2 penawaran aktif membuka −500 dari batas tersebut. Mempertahankan penawaran ke-3 membuka batas penuh −600 Anda (Anda tidak memerlukan penawaran ke-4 atau ke-5 karena batas yang Anda bangun sudah tercapai).</em></p>
+        <div class="callout">
+            <strong>Jeda Pengeluaran (Pembekuan):</strong><br>
+            Jika jumlah penawaran aktif Anda turun di bawah yang diperlukan untuk saldo negatif Anda saat ini (misalnya, jika salah satu penawaran Anda terjual dan selesai, atau Anda menjeda salah satunya), <strong>kemampuan Anda untuk berbelanja dengan kredit dijeda</strong>. Ini adalah jaring pengaman, bukan penalti: tidak ada yang diambil dari Anda. Anda tetap dapat menerima kacang, terus menjual, dan melihat-lihat. Batas kredit Anda melanjutkan aktif dengan sendirinya begitu saldo Anda kembali dalam cakupan penawaran aktif Anda: pasang penawaran lain, atau terima kacang.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Penawaran (daftar barang &amp; jasa Anda)</h2>
+        <ul>
+            <li>Pasang penawaran sebanyak yang Anda suka — termasuk yang berulang — dan alihkan status masing-masing menjadi <strong style="color:var(--text-primary)">Aktif atau Dijeda</strong> kapan pun Anda mau. Hanya penawaran <em>Aktif</em> yang dihitung ke batas kredit Anda.</li>
+            <li><strong style="color:var(--text-primary)">Memberi sebelum menerima:</strong> di komunitas yang menggunakan Kacang, Anda harus sudah memasang setidaknya satu penawaran sebelum dapat memasang Permintaan atau membeli dari orang lain. Di tempat yang tidak menggunakan Kacang, seperti di komunitas global, kiriman pertama Anda bisa berupa Permintaan.</li>
+            <li>Saldo positif? Jeda semuanya jika Anda mau — penawaran hanya diperlukan untuk menggunakan saldo negatif.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Biaya &amp; lumbung komunitas</h2>
+        <p>Dua biaya kecil, dan keduanya disalurkan ke <strong style="color:var(--text-primary)">Sarana Bersama Komunitas</strong> — lumbung bersama yang diputuskan penggunaannya oleh komunitas untuk proyek-proyek lokal. Tidak ada yang hilang untuk korporasi.</p>
+        <p><strong style="color:var(--text-primary)">a) Biaya pasar — 1,5% pada transaksi yang selesai.</strong> Saat transaksi pasar diselesaikan, penjual menerima bersih 1,5% lebih sedikit dari harga dan selisihnya disalurkan ke Sarana Bersama. <strong style="color:var(--text-primary)">Hadiah (pengiriman langsung antar anggota) gratis</strong> — begitu pula pengembalian dana dan pemindahan sistem.</p>
+        <p><strong style="color:var(--text-primary)">b) Biaya sirkulasi pada saldo positif — bulanan, dan hanya pada bagian di atas 200.</strong> Seperti lapisan pajak progresif, setiap kelompok dikenakan hanya pada potongan saldo Anda di dalamnya:</p>
+        <table>
+            <thead><tr><th>Rentang saldo</th><th>Tarif sirkulasi bulanan</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Gratis</span> zona hijau</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
+            </tbody>
+        </table>
+        <p>Hal ini secara wajar mendorong kacang untuk <strong style="color:var(--text-primary)">bersirkulasi daripada menumpuk</strong>. <strong style="color:var(--text-primary)">Saldo negatif tidak pernah dikenakan biaya sirkulasi</strong> — Anda sudah menanggung kredit untuk komunitas. Perhatikan bahwa zona bebas +200 mencerminkan rentang kredit −200 pertama, sehingga sistemnya simetris di sekitar nol.</p>
+
+        <h2 id="7"><span class="num">7.</span>Hadiah (mengirim kacang)</h2>
+        <ul>
+            <li>Anda <strong style="color:var(--text-primary)">hanya dapat menghadiahkan kacang yang benar-benar Anda miliki</strong> — hadiah tidak pernah membuat saldo menjadi negatif dan tidak pernah menggunakan batas kredit Anda.</li>
+            <li>Anda dapat mengirim setelah menyelesaikan setidaknya satu transaksi nyata (ini mencegah akun baru langsung meneruskan kacang lalu menghilang).</li>
+            <li>Hadiah tidak membangun kepercayaan bagi penerima, dan sifatnya <strong style="color:var(--text-primary)">gratis</strong> — tanpa biaya (Anda hanya dapat menghadiahkan kacang yang sudah Anda miliki).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Cara penyelesaian transaksi</h2>
+        <p>Transaksi pasar disimpan dengan aman dalam <strong style="color:var(--text-primary)">escrow</strong> (dititipkan dalam kepercayaan oleh sistem) hingga transaksi selesai, lalu dilepaskan ke penjual (dikurangi biaya 1,5%). Jika transaksi dibatalkan, pembeli mendapatkan pengembalian dana penuh.</p>
+
+        <h2 id="9"><span class="num">9.</span>Penjaminan (langkah awal opsional)</h2>
+        <p>Seorang <strong style="color:var(--text-primary)">penjamin</strong> tepercaya yang ditunjuk oleh komunitas dapat memberi pendatang baru <strong style="color:var(--text-primary)">batas awal 25, 50, atau 100 kacang</strong> sehingga mereka dapat mulai menggunakan kredit sebelum mereka menghasilkannya. Ini biasanya diberikan — sepenuhnya atas kebijaksanaan penjamin — kepada orang-orang yang kiriman dan kontribusinya dinilai penjamin benar-benar menarik dan menginspirasi. Ini bersifat opsional: tidak ada yang memerlukan penjaminan untuk ikut serta, karena Anda juga membuka batas kredit cukup dengan bertransaksi (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Kliring Antar-Komunitas Terfederasi</h2>
+        <p>Komunitas tidak harus berdiri sendiri-sendiri. Melalui <strong style="color:var(--text-primary)">Konektor Perdagangan Terfederasi</strong> (terinspirasi dari serikat kliring Keynes), node komunitas independen dapat menyelesaikan transaksi dengan node tetangga secara peer-to-peer, tanpa mata uang fiat atau cadangan bank. Kacang tidak pernah meninggalkan komunitas asalnya — setiap pasang node mencatat buku kas jembatan dari apa yang mereka utangkan satu sama lain dalam pekerjaan, dan setiap pihak menetapkan batasnya sendiri seberapa jauh hal itu dapat berjalan. Kliring berlangsung di antara pasangan komunitas, setiap operator menyalakannya secara sengaja, dan ini masih tahap awal: fitur ini sudah dibangun, dengan antarmukanya di aplikasi web, dan baru diuji coba di antara dua komunitas uji kami sendiri, belum pernah di antara komunitas yang berjalan langsung.</p>
+
+        <h2 id="11"><span class="num">11.</span>Identitas Kriptografis &amp; Pengelolaan Kunci</h2>
+        <p>Akun Anda dilindungi oleh pasangan kunci kriptografis Ed25519 yang dibuat di perangkat Anda. BeanPool menawarkan pengelolaan yang fleksibel sesuai kebutuhan Anda:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Kedaulatan Mandiri Penuh:</strong> Pada aplikasi ponsel, kunci privat Anda disimpan di penyimpanan aman perangkat (iOS Keychain / Android Keystore); di aplikasi web kunci disimpan di penyimpanan peramban sendiri. Kunci hanya keluar dari perangkat sebagai salinan terkunci untuk pemulihan akun masuk, atau saat Anda menyalin akun Anda ke perangkat Anda yang lain. Simpan cadangan frasa 12 kata Anda secara luring (kata-kata tersebut tetap dalam bahasa Inggris).</li>
+            <li><strong style="color:var(--text-primary)">Pemulihan:</strong> Frasa 12 katamu memulihkan akun Anda di perangkat apa pun. Anda juga dapat menautkan akun masuk Google, Apple, atau Facebook. Salinan terkunci dari kunci Anda kemudian disimpan untuk akun masuk tersebut: aplikasi ponsel yang menggunakan brankas kunci BeanPool menyimpannya di sana, pada server kecil di Islandia; versi aplikasi ponsel yang lebih lama menyimpannya di node komunitas Anda; aplikasi web di komunitas global menyimpannya di server komunitas tersebut, yang kami jalankan. Siapa pun yang menyimpan salinan dapat membukanya. Pemulihan dari brankas menunggu 24 jam kecuali salah satu perangkat Anda sendiri menyetujuinya. Jika Anda kehilangan perangkat, 12 katamu, dan akun masuk Anda, admin komunitas Anda dapat memindahkan akun Anda ke ponsel baru dengan kode sekali pakai, di hadapan Anda; riwayat Anda tetap ada. Jadi catatlah kata-kata tersebut.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Batas &amp; keselamatan</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Batas bawah −2000</strong> di sebagian besar komunitas (lihat §1). Tidak ada batas harian berapa banyak kacang yang Anda belanjakan — batas bawah Anda adalah batasnya. Ada batasan seberapa sering: 100 pembayaran, 30 orang yang belum pernah Anda bayar sebelumnya, dan 100 permintaan pasar dalam kurun waktu 24 jam.</li>
+            <li>Kepercayaan dengan satu mitra tertentu dibatasi, sehingga tidak ada yang dapat melipatgandakan reputasinya dengan bertransaksi bolak-balik dengan satu rekanan saja.</li>
+            <li><strong style="color:var(--text-primary)">Mode liburan</strong> menyembunyikan penawaran Anda dan menjeda permintaan masuk saat Anda bepergian.</li>
+            <li>Anggota dapat melaporkan dan menandai pihak yang bermasalah; admin komunitas dapat menghapusnya.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Usaha Komunitas &amp; Tata Kelola</h2>
+        <p>Usaha komunitas (seperti perpustakaan alat komunitas, ternak ayam petelur, atau gudang kayu bakar) dan proyek berbatas waktu adalah inisiatif bersama di bawah pengelolaan kolektif. Semua beroperasi di bawah aturan yang jelas dan ditegakkan oleh kode program (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">model tata kelola Sarana Bersama</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Satu objek, dua siklus hidup (§2.1):</strong> Usaha berkelanjutan terus berjalan dan bertransaksi; usaha berbatas waktu (sebuah proyek) memiliki target dan tanggal berakhir, menutup akunnya dan mengembalikan apa yang tersisa ke Sarana Bersama saat selesai.</li>
+            <li><strong style="color:var(--text-primary)">Batas yang dibangun &amp; komitmen pengurus (Aturan 1–3):</strong> Usaha baru dimulai tanpa penarikan lebih tanpa dasar: batas kreditnya didukung oleh komitmen eksplisit dari reputasi transaksi yang diperoleh para pengurusnya (penjumlahan langsung, tanpa pengganda buatan). Memberikan komitmen dukungan tidak pernah menyentuh atau mengurangi batas kredit rumah tangga pribadi seorang pengurus. Usaha yang lebih lama mempertahankan batas awal yang mereka miliki sebelum adanya komitmen.</li>
+            <li><strong style="color:var(--text-primary)">Tanggung jawab terbatas (Aturan 4):</strong> Usaha yang gagal, bukan rumah tangga pengurus. Jika sebuah usaha mengalami gagal bayar, pengeluarannya dibekukan, tetapi batas pribadi pengurusnya tetap terlindungi.</li>
+            <li><strong style="color:var(--text-primary)">Kredit membeli bahan baku, laba membayar orang (Aturan 5):</strong> Usaha dapat memanfaatkan kredit hingga batas yang dapat digunakan untuk membeli pasokan atau layanan dari pihak luar. Usaha <em>tidak pernah</em> boleh memanfaatkan kredit untuk membayar pengurusnya sendiri — pengurus hanya dibayar selama <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Gaji pengurus dibatasi oleh surplus yang diperoleh (Aturan 6):</strong> Pembayaran kepada pengurus dibatasi secara ketat oleh surplus transaksi nyata (pendapatan penjualan dikurangi pembayaran pengurus). Hibah, komitmen, dan hadiah tidak pernah dapat diubah menjadi upah pengurus.</li>
+            <li><strong style="color:var(--text-primary)">Penyisihan modal kerja otomatis (Aturan 7):</strong> Sebuah usaha dapat menetapkan plafon modal kerja. Surplus yang diperoleh di atas plafon tersebut otomatis dialirkan kembali ke lumbung Sarana Bersama Komunitas untuk mencegah penimbunan. Hibah dan hadiah tidak pernah disisihkan.</li>
+            <li><strong style="color:var(--text-primary)">Aturan persetujuan dua orang:</strong> Pengurus tidak dapat menyetujui pembayaran mereka sendiri atau penawaran pribadi untuk kebutuhan usaha — pengurus lain harus menyetujuinya.</li>
+            <li><strong style="color:var(--text-primary)">Jajak Pendapat vs Keputusan (§3):</strong> Pertanyaan informal adalah <em>Jajak Pendapat</em> di umpan pasar: masing-masing satu suara, dihitung, tidak mengikat. Tata kelola yang mengikat (hibah lumbung, penghapusan utang, pergantian peran, serta penangguhan, pembekuan, atau penghapusan anggota) berjalan melalui <em>Keputusan</em> di tab Sarana Bersama, dengan jendela pemungutan suara 7 hari. Sebuah Keputusan disetujui dengan 60% suara (66% untuk menghapus anggota; lebih dari setengah untuk mencabut penangguhan atau pembekuan, atau memulihkan anggota) setelah cukup banyak anggota yang memilih: 30% dari mereka yang aktif dalam 30 hari terakhir, setidaknya 3 orang (25% untuk menghapus anggota). Kemudian keputusan itu berjalan dengan sendirinya. Hibah lumbung menggunakan pemungutan suara kuadratik berdasarkan reputasi transaksi yang diperoleh — kacang likuid tidak dapat membeli suara.</li>
+            <li><strong style="color:var(--text-primary)">Kosakata baku (§9):</strong> Empat tingkatan, empat kata berbeda: node → <em>pemilik / admin</em> · usaha → <em>pengurus utama / pengurus</em> · grup → <em>koordinator</em> · tingkat kepercayaan → <em>Pengelola</em>.</li>
+        </ul>
+        <div class="callout amber">Singkatnya: <strong>bangun batas kredit Anda melalui transaksi, pasang satu atau dua penawaran aktif untuk menggunakannya, dan biarkan kacang mengalir.</strong> Nol adalah tujuannya — memberi kurang lebih sebanyak yang Anda terima.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Ikon BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Kredit bersama untuk komunitas, dijalankan oleh komunitas.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Pusat Bantuan</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="getting-started.html">Memulai</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="safety.html">Keselamatan Anak</a>
+                    <a href="privacy.html">Kebijakan Privasi</a>
+                    <a href="terms.html">Ketentuan Layanan</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Sumber terbuka di bawah lisensi MIT. Dibuat dengan <img src="bean.png" alt="cinta" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> oleh komunitas, untuk komunitas. Batas zona waktu © kontributor <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

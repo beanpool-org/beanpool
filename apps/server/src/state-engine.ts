@@ -737,6 +737,7 @@ export function initStateEngine(): void {
     if (accounts.length > 0) {
         ledger.loadState(accounts);
     }
+    reportBackingFigureDriftAtBoot();
 
     // A2-1: register the balance-mutation hook so any raw-SQL balance change in
     // db.ts (crowdfund pledge/refund) re-syncs the in-memory ledger from the DB,
@@ -3269,15 +3270,10 @@ export function liveOfferCount(publicKey: string): number {
  * (docs/the-commons.md §2.6) and its own trust profile (earned/granted credit).
  */
 export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor: number; totalBacking: number; hasBacking: boolean } {
-    const backingRow = db.prepare(`
-        SELECT COALESCE(SUM(o.backing), 0) as totalBacking,
-               COUNT(CASE WHEN o.backing > 0 THEN 1 END) as hasBacking,
-               COUNT(*) as totalKeepers
-        FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ?
-          AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
-    `).get(enterprisePubkey) as any;
+    // The keepers' backing is their pledge rows, read as the engine's floor, the release covenant and an unbinding's lock
+    // read them: the earned rows here, the known rows once in knownShare below. Never treasury_operators.backing: that is
+    // the figure a keeper pledged as they joined, known part included, which no release, top-up or re-assignment keeps up
+    // (backingFigureDrift). Read here, a released pledge kept its floor and a known pledge counted twice (#2309).
     const pledgeRow = db.prepare(`
         SELECT COALESCE(SUM(p.amount), 0) as total
         FROM enterprise_pledges p
@@ -3285,10 +3281,8 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
         WHERE p.enterprise = ? AND p.released_at IS NULL AND p.id NOT LIKE 'known:%'
           AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
     `).get(enterprisePubkey) as any;
-    const pledgeBacking = Number(pledgeRow?.total || 0);
-    const operatorBacking = backingRow?.totalBacking != null ? Number(backingRow.totalBacking) : 0;
-    const totalBacking = Math.max(operatorBacking, pledgeBacking);
-    const hasExplicitBacking = (backingRow?.hasBacking ?? 0) > 0 || pledgeBacking > 0;
+    const totalBacking = Number(pledgeRow?.total || 0);
+    const hasExplicitBacking = totalBacking > 0;
 
     const memberRow = db.prepare("SELECT earned_credit, legacy_credit_floor, status, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (memberRow?.status === 'completed' || memberRow?.credit_frozen === 1) {
@@ -3310,6 +3304,42 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
     }
 
     return { floor: 0, totalBacking: 0, hasBacking: false };
+}
+
+/**
+ * The enterprises whose spend floor came down when it stopped reading treasury_operators.backing: their active, unfrozen
+ * keepers' joining figures add up to more than those keepers' earned pledges standing now (a release since, or a known
+ * part, which the floor counts once among the known pledges), as getEnterpriseUnderlyingFloor took the larger of the two.
+ * `frozen`: how many of them now owe more than that floor lets them, so they are spend-frozen until they earn it back,
+ * as when a keeper's pledge is released. Nothing is rewritten and no Bean moves: the figure stays what each keeper
+ * pledged as they joined. Counts only, never who (reportBackingFigureDriftAtBoot).
+ */
+export function backingFigureDrift(): { enterprises: number; frozen: number } {
+    const rows = db.prepare(`
+        SELECT o.treasury_pubkey AS pk
+        FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+        GROUP BY o.treasury_pubkey
+        HAVING COALESCE(SUM(o.backing), 0) > (
+            SELECT COALESCE(SUM(p.amount), 0) FROM enterprise_pledges p
+            JOIN members k ON k.public_key = p.keeper
+            WHERE p.enterprise = o.treasury_pubkey AND p.released_at IS NULL AND p.id NOT LIKE 'known:%'
+              AND k.status = 'active' AND COALESCE(k.credit_frozen, 0) = 0)
+    `).all() as { pk: string }[];
+    return { enterprises: rows.length, frozen: rows.filter(r => getBalance(r.pk).frozen).length };
+}
+
+/** Says at boot how many enterprises' spend floors now read their pledges alone (backingFigureDrift). Never throws. */
+function reportBackingFigureDriftAtBoot(): void {
+    try {
+        const { enterprises, frozen } = backingFigureDrift();
+        if (enterprises > 0) {
+            console.log(`[Boot] Enterprise spend floors read their keepers' pledges only: ${enterprises} enterprise(s) had a joining figure above what is pledged now, ${frozen} of them owe more than their pledges allow (spend-frozen, nothing moved)`);
+        }
+    } catch (e) {
+        console.error('[Boot] Could not count enterprises whose joining figures are above their pledges:', e);
+    }
 }
 
 /** The keepers' known pledges to this enterprise, as its floor counts them (engine enterpriseKnownShareOf). */
@@ -3547,7 +3577,7 @@ export function getEnterpriseFloor(enterprisePubkey: string): engine.EnterpriseF
     return engine.getEnterpriseFloor(db, enterprisePubkey);
 }
 
-export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin', backing = 0): { ok: true } {
+export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey: string, grantedBy = 'admin'): { ok: true } {
     // A visitor's row keeps nothing, as a key with no row keeps nothing (getActingMember).
     const member = getActingMember(memberPubkey);
     if (!member) throw new Error('Member not found');
@@ -3556,12 +3586,12 @@ export function adminAssignTreasuryOperator(treasuryPubkey: string, memberPubkey
     if (!t?.is_treasury) throw new Error('Not a treasury');
 
     db.transaction(() => {
-        const had = !!db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(treasuryPubkey, memberPubkey);
-        db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
-                    VALUES (?, ?, 'keeper', ?, ?)
-                    ON CONFLICT(treasury_pubkey, member_pubkey) DO UPDATE SET backing = excluded.backing`).run(treasuryPubkey, memberPubkey, grantedBy, backing);
-        // Only a new binding changes who reads its listings as they are; a new pledge alone changes nobody's.
-        if (!had) engine.keepersChanged(db, treasuryPubkey);
+        // A binding with no backing: a keeper backs an enterprise only by a pledge (pledgeEnterpriseBacking), the rows
+        // every floor reads. Assigning someone already bound leaves their binding, and the figure they joined with, as it is.
+        const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
+                    VALUES (?, ?, 'keeper', ?)`).run(treasuryPubkey, memberPubkey, grantedBy);
+        // Only a new binding changes who reads its listings as they are.
+        if (bound.changes > 0) engine.keepersChanged(db, treasuryPubkey);
         db.prepare("UPDATE members SET can_operate = 1 WHERE public_key = ?").run(memberPubkey);
     })();
     clearEnterpriseFloorCache(treasuryPubkey);
@@ -4275,6 +4305,8 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
     // The operator switch is raised only for a first binding. For anyone who already keeps an
     // enterprise the switch belongs to the admin, and a lead keeper's approval must not change it.
     const hadBinding = !!db.prepare("SELECT 1 FROM treasury_operators WHERE member_pubkey = ?").get(memberPubkey);
+    // `backing` records the figure they pledged as they joined, earned and known together, for the keepers list. The pledge
+    // itself is the rows written below, which every floor reads; nothing keeps this figure up after a release or a top-up.
     db.prepare(`
         INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by, backing)
         VALUES (?, ?, 'keeper', ?, ?)

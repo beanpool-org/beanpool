@@ -65,6 +65,7 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { localFetch } from './keepalive-test-fetch.js';
+import { pruneAuthAttempts } from './auth-rate-limit.js';
 
 const IS_CHILD = process.argv[2] === '--child';
 
@@ -591,7 +592,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
     const { hash, salt } = hashPassword(MAIN_PW);
     updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
-    const tfa = turnOn2faForTests(MAIN_PW);
+    let tfa = turnOn2faForTests(MAIN_PW);
     const owner = crypto.randomBytes(32).toString('hex');
     const admin = crypto.randomBytes(32).toString('hex');
     seedGenesisMember(owner, 'Olive');
@@ -735,7 +736,7 @@ async function main(): Promise<void> {
         }
     }
     const signIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
-    const tfaSession: string = signIn.json?.tfaSessionToken;
+    let tfaSession: string = signIn.json?.tfaSessionToken;
     assert(signIn.status === 200 && typeof tfaSession === 'string', `setup: the password and a code sign in, with a 2FA session (${signIn.status})`);
     const earlier2fa = (): Record<string, string> => ({ 'X-Admin-Password': MAIN_PW, 'X-Admin-2FA-Session': tfaSession });
 
@@ -821,7 +822,16 @@ async function main(): Promise<void> {
                 const h = headers();
                 const body = proven && m !== 'GET' ? { ...bait, code: tfa.code() } : bait;
                 const q = m === 'GET' || m === 'DELETE' ? `?name=${encodeURIComponent(name)}&path=${encodeURIComponent(`restore-points/${name}`)}` : '';
-                await call(m, fill(p) + q, h, body);
+                if (p === '/api/local/admin/2fa/disable') {
+                    pruneAuthAttempts(Date.now() + 61_000);
+                }
+                const res = await call(m, fill(p) + q, h, body);
+                if (p === '/api/local/admin/2fa/disable') {
+                    console.log(`measure 2fa/disable: who="${who}", status=${res.status}, body=${JSON.stringify(res.json)}`);
+                    if (who === 'an owner key session (phone, just unlocked)') {
+                        assert(res.status === 200, `5. 2fa/disable with owner phone session must return 200 (got ${res.status} ${res.text})`);
+                    }
+                }
                 sent++;
                 const now = JSON.stringify(treeOf(pointsDir));
                 if (now !== JSON.stringify(before) && changedAfter.length < 5) changedAfter.push(`${who}: ${m} ${p}`);
@@ -837,6 +847,13 @@ async function main(): Promise<void> {
             `5. the restore point is byte for byte as it was (${changedAfter.join(' | ') || 'no request changed it'})`);
         assert(pinChangedAfter.length === 0, `5. (case 19 g) data/standby-main.json is byte for byte as it was after every request: no route writes or removes it (${pinChangedAfter.join(' | ') || 'none changed it'})`);
         unpinMainServerForTests(dataDir!);
+        // Section 5's proven sweep of 2fa/disable turned 2FA off on the live server.
+        // Re-enable 2FA and refresh the 2FA session so sections 6 and 8 run with 2FA on as designed.
+        tfa = turnOn2faForTests(MAIN_PW);
+        pruneAuthAttempts(Date.now() + 61_000);
+        const reSignIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
+        tfaSession = reSignIn.json?.tfaSessionToken;
+        assert(reSignIn.status === 200 && typeof tfaSession === 'string', `setup: 2FA re-enabled for sections 6 and 8 (${reSignIn.status})`);
     }
 
     // ── 6. Retention ──

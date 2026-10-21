@@ -658,7 +658,11 @@ export function LedgerPage({ identity, onNavigate, isMember, preview = false, wa
                             </span>
                         </div>
 
-                        <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{t(sel.blurb)}</p>
+                        <p className="text-[13px] text-nature-700 dark:text-nature-300 leading-relaxed mb-4">{selCurrent && selLevel === 0 && floor < 0
+                            // Your own Newcomer level with your credit line already open (a vouch, or the admins' confirmation): not
+                            // the blurb's 'your first completed trade … opens your credit line' right above a floor below zero.
+                            ? t("Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.")
+                            : t(sel.blurb)}</p>
 
                         {/* Credit floor — show YOUR actual floor when viewing your own tier; what earns it in trust otherwise */}
                         <div className="flex items-start gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">

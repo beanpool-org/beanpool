@@ -230,6 +230,9 @@ describe('the Ledger in English', () => {
         expect(within(detail).getByText('-1000')).toBeInTheDocument();
         expect(screen.queryByText('Floor starts at')).toBeNull();
         expect(screen.queryByText('Floor from this tier')).toBeNull();
+        // Their line is open already: no 'your first completed trade … opens your credit line' above it
+        expect(within(detail).getByText(/and your credit line is already open\.$/)).toBeInTheDocument();
+        expect(within(detail).queryByText(/opens your credit line/)).toBeNull();
 
         const shelf = screen.getByTestId('levels-shelf');
         const buttons = within(shelf).getAllByRole('button');

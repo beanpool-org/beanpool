@@ -445,6 +445,9 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(text()).toContain('-1000');
         expect(text()).not.toContain('Floor starts at');
         expect(text()).not.toContain('Floor from this tier');
+        // Their line is open already: no 'your first completed trade … opens your credit line' above it
+        expect(text()).toContain('and your credit line is already open.');
+        expect(text()).not.toContain('opens your credit line');
 
         // Tap Resident shelf button
         const residentBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Resident'));

@@ -662,7 +662,11 @@ export default function LedgerScreen() {
                     </View>
                 </View>
 
-                <Text style={styles.detailBlurb}>{t(sel.blurb)}</Text>
+                <Text style={styles.detailBlurb}>{selCurrent && selLevel === 0 && balanceState.floor < 0
+                    // Your own Newcomer level with your credit line already open (a vouch, or the admins' confirmation): not
+                    // the blurb's 'your first completed trade … opens your credit line' right above a floor below zero.
+                    ? t("Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.")
+                    : t(sel.blurb)}</Text>
 
                 {/* Credit floor — show YOUR actual floor when this is your tier; what earns it in trust otherwise */}
                 <View style={styles.detailFloorRow}>

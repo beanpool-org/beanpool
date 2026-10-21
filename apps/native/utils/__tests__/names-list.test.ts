@@ -54,7 +54,7 @@ import { lightColors, darkColors } from '../../constants/colors';
 import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, removeOldKeyAndOpen, unkeptRemovalsOf, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
-    confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
+    confirmMember, deleteNamesEntry, confirmableMembers, confirmationLimit, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
     planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, mergeNamesPins, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, firstSentence, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny, fetchHealthExceptions, UNREACHABLE,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
@@ -2723,6 +2723,15 @@ describe('confirming, in words', () => {
         expect(confirmableMembers(members, list, me, 2).map((m) => m.callsign)).toEqual(['bo']);
         expect(confirmableMembers(members, list, me, 1).map((m) => m.callsign)).toEqual(['Ada', 'bo']);
         expect(confirmableMembers(members, { ...list, confirmations: [row({ status: 'revoked', revokedAt: 'x' })] }, me, 2).map((m) => m.callsign)).toEqual(['bo', 'Mel']);
+    });
+
+    it("what a confirmation gives: the community's known floor, nothing with the dial off, nothing a node doesn't say", () => {
+        const settings = (knownFloor?: number | null) => ({ settings: { twoAdminsToConfirm: false, namesShownToMembers: false, ...(knownFloor === undefined ? {} : { knownFloor }) } });
+        expect(confirmationLimit(settings(1000))).toBe(1000);
+        expect(confirmationLimit(settings(null))).toBeNull();
+        expect(confirmationLimit(settings(0))).toBeNull();
+        expect(confirmationLimit(settings())).toBeNull();
+        expect(confirmationLimit(null)).toBeNull();
     });
 
     it('a second admin, not the first, seconds; any admin revokes a live one; a revoked one does nothing', () => {

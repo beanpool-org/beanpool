@@ -289,6 +289,12 @@ async function main(): Promise<void> {
     require_(fresh.status === 200 && fresh.body.current === null && fresh.body.generations.length === 0 && fresh.body.shares.length === 0
         && fresh.body.settings.twoAdminsToConfirm === false && fresh.body.settings.namesShownToMembers === false && fresh.body.communityId === COMMUNITY,
         `2. as it ships: no key history, one admin confirms, real names to members off (${show(fresh)})`);
+    // What a confirmation gives a member, for the Confirm screen's words: the known floor, the dial on by default.
+    assert(fresh.body.settings.knownFloor === 1000, `2. a confirmation here gives the known floor, 1,000 Beans (${JSON.stringify(fresh.body.settings)})`);
+    db.prepare("INSERT INTO node_config (key, value) VALUES ('confirmation', 'off')").run();
+    const dialOff = await state(owen);
+    assert(dialOff.status === 200 && dialOff.body.settings.knownFloor === null, `2. and nothing with the owner's dial off (${JSON.stringify(dialOff.body?.settings)})`);
+    db.prepare("DELETE FROM node_config WHERE key = 'confirmation'").run();
     assert(JSON.stringify(fresh.body.admins.map((a: any) => a.callsign)) === JSON.stringify(['Owen', 'Ada', 'Abe', 'Bea']), `2. the admins are the owner and the three admins, not the moderator (${JSON.stringify(fresh.body.admins.map((a: any) => a.callsign))})`);
     // A1 (server side): a statement whose signature isn't its maker's.
     const g1 = makeNamesGeneration({ communityId: COMMUNITY, n: 1, parentId: null, drops: [] }, owenP.signer);

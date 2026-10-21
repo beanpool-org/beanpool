@@ -95,6 +95,9 @@ describe('MemberKnownFloorPanel', () => {
         renderPanel();
         expect(await screen.findByText(/Not confirmed on the names list yet, so Kim has no known floor/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Freeze' })).toBeNull();
+        // What confirming them does, in plain words (the dial is on by default, so this shows for every unconfirmed member).
+        expect(screen.getByTestId('member-known-floor')).toHaveTextContent(
+            'Confirm them on the names list, in the app, and they start with a limit of 1,000 Beans: your community’s known floor.');
     });
 
     it('lowers after a confirmation, sending whole Beans', async () => {

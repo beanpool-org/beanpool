@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useId, useState } from 'react';
 import { buildAdminHeaders, passwordField, resolveNodeApiUrl } from '../../lib/node-client';
+import { t } from '../../lib/fresh-proof';
 
 /**
  * Member detail → "Known floor" (community modes slice 4; apps/server config/known-floor.ts).
@@ -146,6 +147,11 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
                     Not confirmed on the names list yet, so {name} has no known floor.
                     {line.exception ? ` When they are, theirs is: ${describeKnownFloorLine(line.exception, line.knownFloor).toLowerCase()}.` : ''}
                 </p>
+                {!line.exception && (
+                    <p className="m-0 text-nature-300 leading-relaxed break-words">
+                        {t('Confirm them on the names list, in the app, and they start with a limit of {knownFloor} Beans: your community’s known floor.', { knownFloor: line.knownFloor.toLocaleString('en') })}
+                    </p>
+                )}
             </div>
         );
     }

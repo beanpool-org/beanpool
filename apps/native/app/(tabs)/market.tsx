@@ -1795,6 +1795,7 @@ export default function MarketScreen() {
                                 style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%', opacity: guestVisit.visiting ? 0.5 : 1 }}
                                 onPress={() => { void guestVisit.visit(); }}
                                 disabled={guestVisit.visiting}
+                                accessibilityState={{ disabled: guestVisit.visiting, busy: guestVisit.visiting }}
                                 testID="members-only-look-around"
                             >
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14, textAlign: 'center' }}>{t('🌍 Look around the global community')}</Text>

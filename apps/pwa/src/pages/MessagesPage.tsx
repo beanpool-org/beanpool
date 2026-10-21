@@ -2243,12 +2243,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         {editClosed && (
                                             activeEditNoticeId === msg.id ? (
                                                 <span
+                                                    role="status"
+                                                    tabIndex={-1}
+                                                    ref={(el) => { el?.focus(); }}
                                                     style={{
                                                         fontSize: '0.75rem',
                                                         lineHeight: 1.3,
                                                         padding: '4px 6px',
                                                         color: isMe ? 'var(--bp-accent-on)' : 'var(--text-muted)',
                                                         whiteSpace: 'normal',
+                                                        outline: 'none',
                                                     }}
                                                 >
                                                     {t('You can edit a message for 15 minutes after sending it.')}

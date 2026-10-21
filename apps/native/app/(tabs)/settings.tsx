@@ -2569,6 +2569,8 @@ export default function SettingsScreen() {
                                         onPress={() => { void guestVisit.visit(); }}
                                         disabled={guestVisit.visiting}
                                         accessibilityRole="button"
+                                        accessibilityLabel={guestVisit.visiting ? t('Loading') : t('🌍 Look around the global community')}
+                                        accessibilityState={{ disabled: guestVisit.visiting, busy: guestVisit.visiting }}
                                         testID="settings-global-visit"
                                     >
                                         {guestVisit.visiting ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('🌍 Look around the global community')}</Text>}

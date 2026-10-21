@@ -225,7 +225,11 @@ export default function BeanPoolSheet() {
                 delayLongPress={500}
                 disabled={!globalTap || communities.switching || guestVisit.visiting}
                 accessibilityRole="button"
-                accessibilityState={{ selected: isCurrent, disabled: !globalTap }}
+                accessibilityState={{
+                    selected: isCurrent,
+                    disabled: !globalTap || communities.switching || guestVisit.visiting,
+                    busy: guestVisit.visiting || communities.switching,
+                }}
                 // The saved row is read as the saved rows beside it: the name it shows, then a member's connection (what the
                 // dot's colour says) or what its line says, and in use; a switch to the one in use does nothing.
                 accessibilityLabel={saved

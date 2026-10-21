@@ -3894,6 +3894,74 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
 }
 
 /**
+ * The one entry an enterprise's pledge list folds every known pledge into (engine known-floor.ts KNOWN_PLEDGE_PREFIX), for a
+ * reader who is no owner or admin of the node. A known pledge is drawn from a confirmed keeper's known grant, so naming it
+ * names a keeper the admins confirmed, and a confirmation stays private (Marty, 2026-10-21: "Hide the names").
+ */
+export const KNOWN_BACKING_ENTRY_ID = 'known';
+
+/**
+ * Who reads an enterprise's backing: the signer, if any, and whether they are an owner or admin of the node (a signer
+ * isAdminPubkey passes, or the admin routes' own sign-in, which has no member key).
+ */
+export type BackingReader = { pubkey?: string; nodeAdmin: boolean };
+
+export function backingReaderOf(pubkey: string | undefined): BackingReader {
+    return { pubkey, nodeAdmin: !!pubkey && isAdminPubkey(pubkey) };
+}
+
+/**
+ * The active pledges backing an enterprise, as `reader` may read them. An owner or admin of the node reads every pledge
+ * as getEnterprisePledges lists it: they decided the confirmations. Anyone else reads each keeper's own (earned) pledges
+ * named as today, and every known pledge folded into one entry last: id `known`, kind `known`, their sum, and no keeper,
+ * name, photo or date (a known pledge is written as its keeper joins, so its date would match their row in the keepers list).
+ */
+export function getEnterprisePledgesForReader(enterprisePubkey: string, reader: BackingReader): Array<{
+    id: string;
+    kind?: 'known';
+    keeper: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string | null;
+}> {
+    const pledges = getEnterprisePledges(enterprisePubkey);
+    if (reader.nodeAdmin) return pledges;
+    const isKnown = (p: { id: string }) => p.id.startsWith(engine.KNOWN_PLEDGE_PREFIX);
+    const known = pledges.filter(isKnown);
+    const named = pledges.filter(p => !isKnown(p));
+    if (known.length === 0) return named;
+    const amount = Math.round(known.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
+    return [...named, { id: KNOWN_BACKING_ENTRY_ID, kind: 'known', keeper: '', callsign: '', avatarUrl: null, amount, pledgedAt: null }];
+}
+
+/**
+ * Who keeps this enterprise, as `reader` may read it. A keeper's `backing` is what they pledged as they joined, earned and
+ * known together (bindApprovedKeeper), so beside the named pledges it would show whose part is known. An owner or admin of
+ * the node, and the keeper on their own row, read it as treasuryKeepers gives it. To anyone else every keeper's backing is
+ * their named pledges standing now, the ones getEnterprisePledgesForReader names; never their known part.
+ */
+export function treasuryKeepersForReader(treasuryPubkey: string, reader: BackingReader): ReturnType<typeof treasuryKeepers> {
+    const keepers = treasuryKeepers(treasuryPubkey);
+    if (reader.nodeAdmin) return keepers;
+    const named = new Map((db.prepare(`
+        SELECT keeper, SUM(amount) AS total FROM enterprise_pledges
+        WHERE enterprise = ? AND released_at IS NULL AND id NOT LIKE 'known:%'
+        GROUP BY keeper
+    `).all(treasuryPubkey) as { keeper: string; total: number }[]).map(r => [r.keeper, Math.round(Number(r.total) * 100) / 100]));
+    return keepers.map(k => k.publicKey === reader.pubkey ? k : { ...k, backing: named.get(k.publicKey) ?? 0 });
+}
+
+/**
+ * An enterprise's pledges changed. It reaches every member socket, so it names the enterprise only: with the keeper whose
+ * pledge it was, a member who re-reads would see the folded total move and that keeper's named pledges stay, and so whose
+ * known part it was (getEnterprisePledgesForReader). No app reads more of it than its type.
+ */
+function broadcastPledgesChanged(enterprisePubkey: string): void {
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey });
+}
+
+/**
  * List active pledges made by a keeper.
  */
 export function getKeeperPledges(keeperPubkey: string): Array<{
@@ -3986,7 +4054,7 @@ export function pledgeEnterpriseBacking(
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     return res;
 }
 
@@ -4037,10 +4105,20 @@ export function releaseEnterpriseBacking(
         const knownRemaining = Math.max(0, knownPledge - toRelease);
         const nowIso = new Date().toISOString();
 
-        db.prepare(
-            "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
-        ).run(nowIso, keeperPubkey, enterprisePubkey);
-        insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
+        if (toRelease <= knownPledge) {
+            // Inside the known part, only the known rows are written again: the keeper's named (earned) rows keep their ids
+            // and dates. Re-dated beside a fold that moves, they would tie the move to this keeper, and so say whose known
+            // part it was (getEnterprisePledgesForReader). The sums are the ones the branch below leaves.
+            db.prepare(
+                "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL AND id LIKE 'known:%'"
+            ).run(nowIso, keeperPubkey, enterprisePubkey);
+            insertPledgeRows(keeperPubkey, enterprisePubkey, 0, knownRemaining, nowIso);
+        } else {
+            db.prepare(
+                "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+            ).run(nowIso, keeperPubkey, enterprisePubkey);
+            insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
+        }
 
         // The covenant, on what is pledged after the release (earned pledges + known pledges as the floor counts them);
         // refused, the transaction writes nothing.
@@ -4063,7 +4141,7 @@ export function releaseEnterpriseBacking(
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     return res;
 }
 
@@ -4077,7 +4155,10 @@ export interface KeeperJoinRequest {
     memberPubkey: string;
     callsign?: string;
     avatarUrl?: string | null;
+    /** What they pledge as they join, earned and known together; who else reads it whole, keeperPledgeForReader. */
     pledgedBacking: number;
+    /** Set by keeperRequestForReader: true when pledgedBacking is the pledge's named part only. */
+    namedBackingOnly?: boolean;
     status: 'pending' | 'approved' | 'declined' | 'cancelled';
     createdAt: string;
     decidedAt?: string | null;
@@ -4367,7 +4448,7 @@ function broadcastKeeperBound(enterprisePubkey: string, memberPubkey: string): v
     clearEnterpriseFloorCache(enterprisePubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: memberPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     broadcast({ type: 'enterprise_keeper_approved', enterprisePubkey, memberPubkey });
 }
 
@@ -4468,7 +4549,10 @@ export interface KeeperChangeInfo {
     memberPubkey: string;
     memberCallsign: string;
     requestId: string | null;
+    /** An addition's pledge, earned and known together, as for a request (keeperPledgeForReader); 0 on a removal. */
     pledgedBacking: number;
+    /** Set by keeperChangeForReader: true when pledgedBacking is the pledge's named part only. */
+    namedBackingOnly?: boolean;
     proposedBy: string;
     proposedByCallsign: string | null;
     status: 'pending' | 'applied' | 'objected' | 'failed';
@@ -4523,6 +4607,67 @@ export function getKeeperChanges(enterprisePubkey: string, status?: KeeperChange
         ? db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? AND c.status = ? ORDER BY c.created_at DESC`).all(enterprisePubkey, status)
         : db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? ORDER BY c.created_at DESC`).all(enterprisePubkey);
     return (rows as any[]).map(toKeeperChangeInfo);
+}
+
+/**
+ * The earned part of the pledge a keeper's join bound, released since or not: bindApprovedKeeper writes it as plain-id
+ * rows beside any known row, all under one pledged_at no earlier than the moment the join was approved (`boundFrom`).
+ */
+function boundNamedPledge(enterprisePubkey: string, memberPubkey: string, boundFrom: string | null, pledged: number): number {
+    if (!boundFrom || pledged <= 0) return 0;
+    const first = db.prepare('SELECT MIN(pledged_at) AS at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at >= ?')
+        .get(enterprisePubkey, memberPubkey, boundFrom) as { at: string | null } | undefined;
+    if (!first?.at) return 0;
+    const row = db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at = ? AND id NOT LIKE 'known:%'")
+        .get(enterprisePubkey, memberPubkey, first.at) as { total: number };
+    return Math.min(pledged, Number(row.total));
+}
+
+/**
+ * The part of a keeper's join pledge `reader` may read (Marty, 2026-10-21: hide it). Its known part is drawn from a known
+ * grant, which says the admins confirmed them, and a confirmation stays private: the whole figure beside the named pledges
+ * the enterprise lists would give it by subtracting. So it goes whole to an owner or admin of the node, to the member
+ * themselves, and, while the join is open, to the lead or sole keeper who decides it. Anyone else, the other keepers in
+ * the objection window and the lead once it has closed, reads its named part: on an open join what their earned credit
+ * covers now (splitNewPledge's earned-first split), once bound what the binding pledged by name, and 0 for one closed
+ * unbound.
+ */
+function keeperPledgeForReader(
+    j: { enterprisePubkey: string; memberPubkey: string; pledged: number; open: boolean; boundFrom: string | null },
+    reader: BackingReader,
+): { pledgedBacking: number; namedBackingOnly: boolean } {
+    if (reader.nodeAdmin || reader.pubkey === j.memberPubkey
+        || (j.open && !!reader.pubkey && isLeadOrSoleKeeperOrAdmin(j.enterprisePubkey, reader.pubkey))) {
+        return { pledgedBacking: j.pledged, namedBackingOnly: false };
+    }
+    const named = j.open
+        ? Math.min(j.pledged, earnedPledgeRoom(j.memberPubkey))
+        : boundNamedPledge(j.enterprisePubkey, j.memberPubkey, j.boundFrom, j.pledged);
+    return { pledgedBacking: Math.round(named * 100) / 100, namedBackingOnly: true };
+}
+
+/** A keeper change as `reader` may read it: an addition's pledge by keeperPledgeForReader. */
+export function keeperChangeForReader(c: KeeperChangeInfo, reader: BackingReader): KeeperChangeInfo {
+    if (c.kind !== 'add') return { ...c, namedBackingOnly: false };
+    return {
+        ...c,
+        ...keeperPledgeForReader({
+            enterprisePubkey: c.enterprisePubkey, memberPubkey: c.memberPubkey, pledged: c.pledgedBacking,
+            open: c.status === 'pending', boundFrom: c.status === 'applied' ? c.resolvedAt : null,
+        }, reader),
+    };
+}
+
+/** A keeper request as `reader` may read it: its pledge by keeperPledgeForReader, and its pending change likewise. */
+export function keeperRequestForReader(r: KeeperJoinRequest, reader: BackingReader): KeeperJoinRequest {
+    return {
+        ...r,
+        ...keeperPledgeForReader({
+            enterprisePubkey: r.enterprisePubkey, memberPubkey: r.memberPubkey, pledged: r.pledgedBacking,
+            open: r.status === 'pending', boundFrom: r.status === 'approved' ? r.decidedAt ?? null : null,
+        }, reader),
+        pendingChange: r.pendingChange ? keeperChangeForReader(r.pendingChange, reader) : r.pendingChange,
+    };
 }
 
 /**
@@ -4687,7 +4832,7 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
             clearEnterpriseFloorCache(c.enterprise_pubkey);
             broadcast({ type: 'profile_updated', publicKey: c.member_pubkey });
             broadcast({ type: 'profile_updated', publicKey: c.enterprise_pubkey });
-            broadcast({ type: 'enterprise_pledge_updated', enterprise: c.enterprise_pubkey, keeper: c.member_pubkey });
+            broadcastPledgesChanged(c.enterprise_pubkey);
         }
     }
     // To the people who heard of the request (keeperRequestRecipients: the member, the lead or sole keeper, node admins), never every socket.
@@ -4820,7 +4965,7 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
     if (result.promoted) broadcast({ type: 'profile_updated', publicKey: result.promoted });
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: memberPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     broadcast({ type: 'enterprise_keeper_stepped_down', enterprisePubkey, memberPubkey, promoted: result.promoted, paused: result.paused });
     return { ok: true, promoted: result.promoted, paused: result.paused, releasedBacking: pledge };
 }

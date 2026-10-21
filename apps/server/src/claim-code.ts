@@ -273,13 +273,6 @@ let claimLogClock: () => number = () => Date.now();
 /** Test seam: drives the budget's clock deterministically. */
 export function setClaimLogClockForTests(clock: (() => number) | null): void {
     claimLogClock = clock ?? (() => Date.now());
-    if (clock !== null && logUnwritten > 0) {
-        const now = claimLogClock();
-        const windowMs = claimLogWindowMs();
-        if (now - logWindowStart >= windowMs) {
-            writeClaimLogSummary();
-        }
-    }
 }
 
 function claimLogWindowMs(): number {

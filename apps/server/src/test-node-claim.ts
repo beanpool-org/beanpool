@@ -431,11 +431,18 @@ async function main(): Promise<void> {
     const codeH = readCode(dirH);
     codes.push(codeH);
     const SOURCES = 60, EACH = 3, LOG_BUDGET = 20;
-    const flood: Promise<{ status: number }>[] = [];
-    for (let i = 0; i < SOURCES; i++) {
-        for (let j = 0; j < EACH; j++) flood.push(claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), `198.51.${100 + i}.1`));
+    const flood1: Promise<{ status: number }>[] = [];
+    for (let i = 0; i < LOG_BUDGET; i++) {
+        for (let j = 0; j < EACH; j++) flood1.push(claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), `198.51.${100 + i}.1`));
     }
-    const statuses = (await Promise.all(flood)).map((x) => x.status);
+    const r1 = await Promise.all(flood1);
+    await h.send('clock', { at: t0 + 60_000 - 300 });
+    const flood2: Promise<{ status: number }>[] = [];
+    for (let i = LOG_BUDGET; i < SOURCES; i++) {
+        for (let j = 0; j < EACH; j++) flood2.push(claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), `198.51.${100 + i}.1`));
+    }
+    const r2 = await Promise.all(flood2);
+    const statuses = [...r1, ...r2].map((x) => x.status);
     const count = (s: number) => statuses.filter((x) => x === s).length;
     assert(count(403) === SOURCES && count(429) === SOURCES * (EACH - 1),
         `H1. ${SOURCES * EACH} wrong proofs from ${SOURCES} sources: each source's first is 403, the rest 429 (403×${count(403)}, 429×${count(429)})`);
@@ -448,8 +455,16 @@ async function main(): Promise<void> {
     assert(wrongLines(h.output()) === LOG_BUDGET,
         `H4. ${SOURCES} wrong proofs from ${SOURCES} sources wrote the budget's ${LOG_BUDGET} SECURITY lines, no more (${wrongLines(h.output())})`);
     assert(/CLAIMED/.test(h.output()), 'H5. the right claim is logged whatever the budget');
-    await h.send('clock', { at: t0 + 61_000 });
-    const more = h.output().split('\n').filter((x) => /more wrong claim proofs/.test(x));
+    const waitSummary = async (timeoutMs = 3000): Promise<string[]> => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            const lines = h.output().split('\n').filter((x) => /more wrong claim proofs/.test(x));
+            if (lines.length > 0) return lines;
+            await new Promise((res) => setTimeout(res, 25));
+        }
+        return h.output().split('\n').filter((x) => /more wrong claim proofs/.test(x));
+    };
+    const more = await waitSummary();
     assert(more.length === 1 && more[0].includes(String(SOURCES - LOG_BUDGET)),
         `H6. and one summary line for the rest, once the minute is over (${more.length}: ${more[0] ?? ''})`);
     await h.stop();

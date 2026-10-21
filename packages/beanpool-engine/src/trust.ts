@@ -804,47 +804,48 @@ export function clearEnterpriseFloorCache(db?: Db, enterprisePubkey?: string): v
 }
 
 /**
- * Enterprise Derived Credit Floor (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4).
- * The credit floor derives from its keepers — the plain sum of each keeper's explicit
- * backing pledge of their own earned credit, capped by CREDIT_FLOOR_CAP.
- *
- * Grandfathering: existing enterprises keep their fixed line as a legacy floor until
- * keepers' pledges reach or exceed it, at which point the legacy floor is auto-cleared.
- *
- * O(1) reads via an in-memory cache WeakMap per DB handle.
+ * The keepers' earned pledges to an enterprise: the active rows of active, unfrozen keepers, never the known rows (those
+ * count through enterpriseKnownShareOf). `exceptKeeper` leaves one keeper's out. 0 where the table is missing.
  */
-export function getEnterpriseFloor(db: Db, enterprisePubkey: string): EnterpriseFloorInfo {
-    let cache = enterpriseFloorCache.get(db);
-    if (!cache) {
-        cache = new Map();
-        enterpriseFloorCache.set(db, cache);
-    }
-    const cached = cache.get(enterprisePubkey);
-    if (cached) return cached;
-
-    const memberRow = db.prepare(
-        "SELECT COALESCE(credit_frozen, 0) as credit_frozen, legacy_credit_floor FROM members WHERE public_key = ?"
-    ).get(enterprisePubkey) as any;
-
-    const isCreditFrozen = memberRow?.credit_frozen === 1;
-
-    let derivedAllowance = 0;
+export function enterpriseEarnedPledges(db: Db, enterprisePubkey: string, exceptKeeper?: string): number {
     try {
-        const pledgeRow = db.prepare(`
+        const row = db.prepare(`
             SELECT COALESCE(SUM(p.amount), 0) as total
             FROM enterprise_pledges p
             JOIN members m ON m.public_key = p.keeper
             WHERE p.enterprise = ?
+              AND p.keeper != ?
               AND p.released_at IS NULL
               AND p.id NOT LIKE 'known:%'
               AND m.status = 'active'
               AND COALESCE(m.credit_frozen, 0) = 0
-        `).get(enterprisePubkey) as any;
-        derivedAllowance = Number(pledgeRow?.total || 0);
+        `).get(enterprisePubkey, exceptKeeper ?? '') as any;
+        return Number(row?.total || 0);
     } catch {
-        derivedAllowance = 0;
+        return 0;
     }
+}
 
+/**
+ * An enterprise's limit, the one rule every reader takes: its floor here (the badge, tier and enterprise page), the spend
+ * check (state-engine getEnterpriseUnderlyingFloor), the release covenant and an unbinding's lock (docs/the-commons.md §2.4,
+ * §6 Slice 4). It is the bigger of its opening line or its keepers' pledges, never both (Marty, 21 Oct): the line
+ * (members.legacy_credit_floor) is a starting limit until keepers pledge, and their pledges take over; once their earned
+ * pledges reach it, it is cleared. The pledges are the earned rows plus the known rows as the known floor counts them
+ * (known-floor.ts), all under the community's cap. The enterprise's own members.earned_credit, which createTreasury sets
+ * to its opening line, is no part of it: the spend check once added it, and so stacked the line on the pledges (#2313).
+ *
+ * `exceptKeeper`: as if that keeper's pledges were gone (what the others would still back if they left). Read fresh every
+ * time, and blind to a freeze or a wind-up, which readEnterpriseFloor takes to 0.
+ */
+export function enterpriseAllowance(db: Db, enterprisePubkey: string, exceptKeeper?: string): {
+    allowance: number;
+    derivedAllowance: number;
+    legacyFloor: number;
+    knownShare: number;
+} {
+    const derivedAllowance = enterpriseEarnedPledges(db, enterprisePubkey, exceptKeeper);
+    const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     let legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
 
     // Auto-clear legacy floor once keepers' derived pledges reach or exceed it (Slice 4).
@@ -855,14 +856,49 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
 
     // The known floor (slice 4): the keepers' known pledges (known-floor.ts, recorded and locked like any pledge) and the
     // community's cap, only with the confirmation dial on; off, both are main's (share 0, cap CREDIT_FLOOR_CAP).
-    const knownShare = enterpriseKnownShareOf(db, enterprisePubkey);
-    const allowance = isCreditFrozen
-        ? 0
-        : Math.min(creditCap(db), Math.max(legacyFloor, derivedAllowance + knownShare));
+    const knownShare = enterpriseKnownShareOf(db, enterprisePubkey, exceptKeeper);
+    const allowance = Math.min(creditCap(db), Math.max(legacyFloor, derivedAllowance + knownShare));
+    return { allowance, derivedAllowance, legacyFloor, knownShare };
+}
 
-    const floor = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - allowance;
-    const activated = allowance > 0;
+/**
+ * An enterprise's floor from enterpriseAllowance, read fresh: what the spend check holds it to. 0 while it is
+ * credit-frozen or wound up.
+ */
+export function readEnterpriseFloor(db: Db, enterprisePubkey: string): EnterpriseFloorInfo & { knownShare: number } {
+    const memberRow = db.prepare(
+        "SELECT COALESCE(credit_frozen, 0) as credit_frozen, status FROM members WHERE public_key = ?"
+    ).get(enterprisePubkey) as any;
+    const { allowance: limit, derivedAllowance, legacyFloor, knownShare } = enterpriseAllowance(db, enterprisePubkey);
+    const allowance = memberRow?.credit_frozen === 1 || memberRow?.status === 'completed' ? 0 : limit;
+    return {
+        allowance,
+        floor: PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - allowance,
+        derivedAllowance,
+        legacyFloor,
+        activated: allowance > 0,
+        knownShare,
+    };
+}
 
+/**
+ * Enterprise Derived Credit Floor (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4): readEnterpriseFloor, kept.
+ *
+ * Grandfathering: existing enterprises keep their fixed line as a legacy floor until
+ * keepers' pledges reach or exceed it, at which point the legacy floor is auto-cleared (enterpriseAllowance).
+ *
+ * O(1) reads via an in-memory cache WeakMap per DB handle. The spend check never reads the cache: readEnterpriseFloor.
+ */
+export function getEnterpriseFloor(db: Db, enterprisePubkey: string): EnterpriseFloorInfo {
+    let cache = enterpriseFloorCache.get(db);
+    if (!cache) {
+        cache = new Map();
+        enterpriseFloorCache.set(db, cache);
+    }
+    const cached = cache.get(enterprisePubkey);
+    if (cached) return cached;
+
+    const { allowance, floor, derivedAllowance, legacyFloor, activated } = readEnterpriseFloor(db, enterprisePubkey);
     const result: EnterpriseFloorInfo = {
         allowance,
         floor,

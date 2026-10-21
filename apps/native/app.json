@@ -18,18 +18,7 @@
       "buildNumber": "236",
       "associatedDomains": [
         "applinks:beanpool.org",
-        "applinks:*.beanpool.org",
-        "applinks:mullum.beanpool.org",
-        "applinks:bris.beanpool.org",
-        "applinks:test.beanpool.org",
-        "applinks:review.beanpool.org",
-        "applinks:melb.beanpool.org",
-        "applinks:castlemaine.beanpool.org",
-        "applinks:gippsland.beanpool.org",
-        "applinks:eastgippy.beanpool.org",
-        "applinks:bindarrabi.beanpool.org",
-        "applinks:yarravalley.beanpool.org",
-        "applinks:global.beanpool.org"
+        "applinks:*.beanpool.org"
       ],
       "infoPlist": {
         "UISupportedInterfaceOrientations": [
@@ -79,71 +68,6 @@
           "data": [
             {
               "scheme": "https",
-              "host": "mullum.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "bris.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "test.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "review.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "melb.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "castlemaine.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "gippsland.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "eastgippy.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "bindarrabi.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "yarravalley.beanpool.org",
-              "path": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "global.beanpool.org",
-              "path": "/"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
               "host": "beanpool.org",
               "pathPrefix": "/auth/"
             }
@@ -169,6 +93,7 @@
           ]
         },
         {
+          "autoVerify": true,
           "action": "VIEW",
           "data": [
             {

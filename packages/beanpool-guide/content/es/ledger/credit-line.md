@@ -3,7 +3,7 @@ slug: credit-line
 title: Tu línea de crédito
 summary: Hasta cuánto puedes tener saldo negativo y cómo se incrementa.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 64ce3e39f9617713
+source-hash: 30c343cb535ac79a
 ---
 
 ## Qué es
@@ -46,12 +46,16 @@ La línea debajo de la barra te lo indica, por ejemplo "Publica una oferta para 
 
 ## En una comunidad conocida
 
-Algunas comunidades tienen administradores que conocen a cada miembro por su nombre. Si la tuya ha activado **el límite mínimo conocido**, un miembro confirmado por un administrador obtiene una línea de crédito de inmediato: 1,000 frijoles, a menos que tu comunidad haya elegido otra cantidad. Eso equivale a unas 25 horas de trabajo por las que la comunidad confía en ti.
+Algunas comunidades tienen administradores que conocen a cada miembro por su nombre. Si la tuya ha activado **el límite mínimo conocido**, un miembro confirmado por un administrador obtiene una línea de crédito de inmediato: 1,000 frijoles, a menos que tu comunidad haya elegido otra cantidad. Eso equivale a unas 25 horas de trabajo por las que la comunidad confía en ti. Aumenta tu límite, no tu nivel: tu insignia de confianza sigue contando solo lo que has hecho.
 
 - Una Oferta activa te permite usarla toda. Sin Ofertas, no puedes usarla.
 - La confianza que ganas intercambiando se suma a ella, hasta el tope de tu comunidad (2,000 frijoles a menos que haya elegido más, hasta 5,000).
 - Un administrador puede establecer un límite menor para ti, por ejemplo mientras eres nuevo. Eso nunca te quita frijoles: si ya estás por debajo de él, los gastos se pausan hasta que vuelvas a estar por encima.
 - Si estás saldando una deuda de una cuenta anterior, los frijoles que recibas por encima de 0 van a los Bienes comunes hasta que se pague. Tu Registro indica cuánto queda. También puedes pagar parte o la totalidad tú mismo en **Registro → Pagar a Bienes comunes**: tu código de reembolso ya está completado allí (o introduce el que te dé un administrador). Lo que pagues con el código se descuenta de la deuda de inmediato, y cuando no queda nada la deuda está saldada: no se descuenta nada más, ni mediante un pago ni de lo que recibas. Un pago sin el código va a los Bienes comunes pero no se descuenta de tu deuda, y la app lo indica: para que cuente, pídele a un administrador que lo aplique a tu deuda con su referencia. Hasta que lo haga, la deuda aún se sigue saldando: la próxima vez que recibas frijoles, lo que quede se tomará de lo que tengas por encima de 0. El monto en el mensaje del administrador es lo que quedaba cuando lo compartió: si ahora queda menos, tu servidor rechaza un pago mayor e indica cuánto queda, y no se paga nada. Si la app indica que un pago puede haberse procesado, toca **Reintentar** en la misma pantalla: el mismo pago nunca se cobra dos veces. Si saliste de esa pantalla, revisa tu Registro antes de volver a pagar.
+
+## Una comunidad mixta
+
+En algunas comunidades cualquier miembro puede invitar a personas, por lo que los administradores no conocen a todos. Si la tuya ha activado **el límite mínimo conocido**, los administradores pueden confirmar a los miembros que sí conocen, y esos miembros comienzan con un límite más alto. Todos los demás comienzan en cero, y el límite de todos crece de la misma manera a partir de ahí a medida que intercambian y generan confianza.
 
 ## Congelada por los administradores
 
@@ -60,7 +64,7 @@ Los administradores de tu comunidad pueden congelar la línea de crédito de un 
 - Si congelan toda ella, o la parte confirmada es toda la línea que tienes, el Registro dice **Tu línea de crédito está congelada**: no puedes gastar en débito mientras dure, pero aún puedes vender y recibir frijoles, y gastar lo que tengas por encima de cero. Si estabas en débito cuando la congelaron, el Registro también indica cuántos frijoles tienes en débito: vender o recibir frijoles te devuelve a saldo positivo, y una vez que estés por encima de cero puedes gastar lo que tengas.
 - Si congelan la parte confirmada y también tienes crédito de un aval, de intercambios o de un subsidio, la barra se mantiene, con una nota debajo indicando que la parte confirmada está congelada y el resto funciona como antes. Si estás por debajo de lo que queda, el Registro también dice **Gastos pausados** (más abajo).
 
-Tu nivel no cambia: es el que te otorga tu línea de crédito cuando no está congelada, incluso si los administradores hubieran fijado tu línea por debajo o por encima de la de la comunidad, tanto en tu perfil como en tus publicaciones. Para preguntar por qué, o para que se vuelva a abrir, consulta a uno de los administradores.
+Tu nivel no cambia, tanto en tu perfil como en tus publicaciones: cuenta lo que has hecho (un aval, tus intercambios y cualquier confianza que te haya otorgado un administrador), nunca la parte de tu línea que proviene de estar confirmado ni cualquier monto que los administradores hayan fijado para ella. Para preguntar por qué, o para que se vuelva a abrir, consulta a uno de los administradores.
 
 ## Gastos pausados
 

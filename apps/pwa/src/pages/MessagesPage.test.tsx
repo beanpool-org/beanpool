@@ -1230,6 +1230,74 @@ describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)
         expect(screen.getByTestId('group-chat-notice').textContent).toContain('This community\'s node is older and can read this group\'s chat.');
         vi.unstubAllGlobals();
     });
+
+    describe('15-minute edit window explanation', () => {
+        it('shows the explanation when own DM message is 16 minutes old, with no edit button', async () => {
+            mockMessagesByConv = {
+                'conv-1': [{
+                    id: 'msg-old', conversationId: 'conv-1', authorPubkey: 'my-pubkey',
+                    ciphertext: 'past window text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('past window text');
+
+            expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+            expect(screen.getByText('You can edit a message for 15 minutes after sending it.')).toBeInTheDocument();
+        });
+
+        it('shows the pencil edit button and no explanation when own DM message is 14 minutes old', async () => {
+            mockMessagesByConv = {
+                'conv-1': [{
+                    id: 'msg-fresh', conversationId: 'conv-1', authorPubkey: 'my-pubkey',
+                    ciphertext: 'within window text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 14 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('within window text');
+
+            expect(screen.getByRole('button', { name: 'Edit message' })).toBeInTheDocument();
+            expect(screen.queryByText('You can edit a message for 15 minutes after sending it.')).toBeNull();
+        });
+
+        it('shows no explanation and no edit button for someone else\'s message at 16 minutes old', async () => {
+            mockMessagesByConv = {
+                'conv-1': [{
+                    id: 'msg-peer-old', conversationId: 'conv-1', authorPubkey: 'peer-pubkey',
+                    ciphertext: 'peer old text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+            await screen.findByText('peer old text');
+
+            expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+            expect(screen.queryByText('You can edit a message for 15 minutes after sending it.')).toBeNull();
+        });
+
+        it('shows the explanation when own group chat message is 16 minutes old', async () => {
+            mockConversations = [{
+                id: 'group-1', type: 'group_thread' as any, name: 'Garden crew',
+                participants: ['my-pubkey', 'peer-pubkey'], createdBy: 'my-pubkey',
+                unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+            } as Conversation];
+            mockConversationDetails = { 'group-1': mockConversations[0] };
+            mockMessagesByConv = {
+                'group-1': [{
+                    id: 'msg-group-old', conversationId: 'group-1', authorPubkey: 'my-pubkey',
+                    ciphertext: 'group past window text', nonce: '00000',
+                    timestamp: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+                } as ApiMessage],
+            };
+            render(<MessagesPage identity={mockIdentity} openConversationId="group-1" />);
+            await screen.findByText('group past window text');
+
+            expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+            expect(screen.getByText('You can edit a message for 15 minutes after sending it.')).toBeInTheDocument();
+        });
+    });
 });
 
 describe('MessagesPage: links in a message stay plain text (G11-e: a new account is not handed clickable links)', () => {

@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { buildRosterView, leadPubkeyOf, rosterHeading } from '../group-roster';
+import { buildRosterView, leadPubkeyOf, rosterHeading, splitRosterKeys } from '../group-roster';
 import type { GroupItem, GroupMemberItem } from '../db';
 
 const LEAD = 'pk-marty';
@@ -147,6 +147,14 @@ describe('the group roster and its lead convenor', () => {
         const view = buildRosterView(group(), withPending, LEAD);
         expect(view.rows.map(r => r.member.memberPubkey)).not.toContain('pk-asker');
         expect(view.handOverCandidates.map(c => c.memberPubkey)).not.toContain('pk-asker');
+    });
+
+    it('splitRosterKeys returns pendingKeys containing the asker', () => {
+        const withPending = [...roster, member('pk-asker', 'member', { status: 'pending_approval' })];
+        const { memberKeys, invitedKeys, pendingKeys } = splitRosterKeys(withPending) as any;
+        expect(memberKeys).not.toContain('pk-asker');
+        expect(invitedKeys).not.toContain('pk-asker');
+        expect(pendingKeys).toEqual(new Set(['pk-asker']));
     });
 
     it('falls back to convenorPubkey, and marks nobody when the server named no lead', () => {

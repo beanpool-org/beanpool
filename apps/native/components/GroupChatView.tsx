@@ -105,19 +105,8 @@ function headerDetail(memberCount: number | null, muted: boolean): string | null
     return muted ? t('muted', undefined, 'chat') : null;
 }
 
-/**
- * Splits a group's roster rows into active member keys and invited keys (damo-1021).
- * Active members count toward the group and are "In the group"; invited members are "Invited".
- */
-export function splitRosterKeys(members: readonly { memberPubkey: string; status: string }[]): {
-    memberKeys: Set<string>;
-    invitedKeys: Set<string>;
-} {
-    return {
-        memberKeys: new Set(members.filter(m => m.status === 'active').map(m => m.memberPubkey)),
-        invitedKeys: new Set(members.filter(m => m.status === 'invited').map(m => m.memberPubkey)),
-    };
-}
+import { splitRosterKeys } from '../utils/group-roster';
+export { splitRosterKeys };
 
 /**
  * A message this phone is still sending, or could not send. The node holds nothing for it yet, so it lives

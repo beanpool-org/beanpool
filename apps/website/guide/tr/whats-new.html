@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yenilikler — BeanPool members' guide</title>
+    <meta name="description" content="Uygulamada nelerin değiştiğine dair sade açıklamalar.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">BeanPool Hakkında</a></p>
+        <h1>Yenilikler</h1>
+        <p class="lede">Uygulamada nelerin değiştiğine dair sade açıklamalar.</p>
+        <h2>Küresel topluluk, yakınınızda</h2>
+        <p>Bunları, küresel topluluğun sunucusu güncellendiğinde alırsınız. Telefonda güncel bir uygulama gerekir.</p>
+        <ul>
+            <li><strong>Ücretsiz, sınırlarla birlikte.</strong> Küresel toplulukta bir ilan, en son değiştirildikten 90 gün sonra fotoğraflarıyla birlikte arşivlenir. Tekrar kaydetmek onu yayında tutar. Sınırların hepsi tek bir sayfadadır. &quot;Küresel topluluğun sınırları&quot; bölümüne bakın.</li>
+            <li><strong>Yakınınızdaki ilanlar.</strong> Küresel toplulukta her yerden ilanlar bulunur. Telefonunuz artık bölgenizin 250 km içindeki en yakın 500 ilanı ve nerede olurlarsa olsunlar kendi ilanlarınız ile devam eden bir takasınız veya sohbetiniz olan tüm ilanları saklar. Pazar'ın araması her yerden ilanları bulmaya devam eder. &quot;Birden fazla topluluk&quot; bölümüne bakın.</li>
+            <li><strong>Bölgeniz.</strong> Web uygulamasında küresel topluluğa katılmanın fotoğrafınızdan sonra bir adımı daha vardır: <strong>Yaklaşık olarak neredesiniz?</strong> Telefonda, zaten sahip olduğunuz bir hesapla katıldığınızda sorulur; yeni bir telefon hesabı bunu daha sonra Ayarlar'da <strong>Bölgeniz</strong> altından belirler. Bu adımda <strong>Konumumu kullan</strong>, <strong>Bir kasaba veya semt yaz</strong> veya <strong>Şimdilik atla</strong> seçeneğine dokunun. Yaklaşık 10 km'lik bir alan olarak tutulur, tam konumunuz asla tutulmaz. Ayarlar'da <strong>Bölgeniz</strong> altından değiştirin veya temizleyin. &quot;Bölgeniz&quot; bölümüne bakın.</li>
+            <li><strong>Bölge yoksa sorun yok.</strong> Bir bölge olmadan her yerden en yeni ilanları görürsünüz ve Pazar'ın üzerindeki bir satır bunu belirtir. Telefonda bölgenizi belirlemek için bu satıra dokunun.</li>
+            <li><strong>Yakınınızdaki yeni ilanlar.</strong> Paylaşıldıkça gelirler. Uzaktakiler artık telefonunuza ulaşmaz.</li>
+            <li><strong>Web uygulamasında</strong> Pazar ve Harita bölgenizden veya <strong>Mesafe</strong> ile seçtiğiniz bir yerden başlar: en yakın olan ilk sırada, her ilanın ne kadar uzakta olduğu belirtilir. &quot;Yakınınızdakileri bulma&quot; bölümüne bakın.</li>
+            <li><strong>Anketlerin</strong> kendilerine ait bir konumları yoktur, bu nedenle her anket onu oluşturan üyenin bölgesinde gösterilir.</li>
+            <li><strong>Kasabanızı yazın.</strong> Küresel toplulukta Ana Sayfa'daki <strong>Topluluğunu bul</strong> artık konumunuza ihtiyaç duymaz: <strong>veya kasabanı yaz</strong> seçeneğine dokunup kasabanızı seçin. Yalnızca yaklaşık bir nokta tutulur. &quot;Yakınınızda bir topluluk bulma&quot; bölümüne bakın.</li>
+            <li><strong>Fiyatsız paylaşım.</strong> Küresel toplulukta ilan formu fiyat sormaz; çünkü Fasulyeler yerel topluluklarda geçerlidir. Web uygulamasında <strong>Teklif Paylaş</strong> ve <strong>İhtiyaç Paylaş</strong> artık fiyatsız çalışır. Yerel bir topluluk hâlâ fiyat ister.</li>
+        </ul>
+        <h2>Ana Sayfa</h2>
+        <ul>
+            <li><strong>Yeni bir Ana Sayfa sekmesi.</strong> Uygulama artık Ana Sayfa'da açılır: size neyin ihtiyaç duyduğunu, etrafınızda nelerin yeni olduğunu ve bundan sonra ne yapabileceğinizi yanıtlayan bir pano. Pazar artık kendi sekmesindedir ve Nabız Ana Sayfa'da bir karttır. Kartlarınızı siz seçersiniz: <strong>Kart ekle</strong> Ana Sayfa'ya bir kart koyar, her karttaki <strong>…</strong> onu taşır veya kaldırır ve <strong>Ana Sayfayı düzenle</strong> telefonda ve web uygulamasında yeniden sıralamak veya kaldırmak için hepsini listeler.</li>
+            <li><strong>Başlarken.</strong> Yeni bir üyenin Ana Sayfası tek bir kartla başlar: <strong>Başlarken</strong>. Bir dakikalık tur için <strong>Göz at</strong>'a veya <strong>Atla</strong>'ya dokunun; her zamanki kartlarınız görünür. Her ekranın üst kısmında o ekranın yardımını açan bir <strong>?</strong> bulunur.</li>
+            <li><strong>Ana Sayfa'da kayıtlı bir arama.</strong> &quot;Yumurta&quot; gibi kelimeleri ve teklif mi, ihtiyaç mı yoksa her ikisini mi istediğinizi, bir kategoriyi ve bir mesafeyi seçin. Kart, eşleşen ilk dört ilanı gösterir; bunlar Pazar aramasının bulduğu ilanlarla aynıdır ve <strong>Daha fazla gör</strong>, Pazar'ı arama kutusunda kelimelerinizle açar. Güncel bir uygulama ve topluluğunuzun sunucusunun güncellenmesi gerekir.</li>
+            <li><strong>Pazar'dan bir aramayı kaydetme.</strong> Pazar'ın aramasında kelimeler varken telefonda ve web uygulamasında <strong>Bu aramayı Ana Sayfaya kaydet</strong> görünür. Ana Sayfa'yı kelimeleriniz, <strong>Teklifler</strong> veya <strong>İhtiyaçlar</strong>, kategori ve mesafe doldurulmuş olarak açar. <strong>Ana Sayfaya Ekle</strong>'ye dokunun. Kayıtlı bir arama eşleşen en yeni ilanları ilk olarak gösterir; küresel toplulukta en yakın olanı ilk olarak gösterir. Teklifler ve İhtiyaçlar içindir, bu nedenle Etkinlikler veya Anketler altında gösterilmez.</li>
+            <li><strong>Ana Sayfa'da güneş ve ay.</strong> Bu geceki ay ile bugünkü gün doğumu ve gün batımı; topluluğunuzun yeri veya bölgeniz için telefonunuzda ya da tarayıcınızda kendi saatinize göre hesaplanır. Topluluğunuzun sunucusundan hiçbir şey istemez. Güncel bir uygulama gerekir; topluluğunuzun sunucusu güncellenene kadar bölgenizi kullanır.</li>
+        </ul>
+        <h2>Varsayılan olarak gizlilik</h2>
+        <p>Bu değişiklikler topluluğunuzun sunucusunda yer alır. Topluluğunuzun sunucusu güncellendiğinde bunları alırsınız. Anket seçeneği güncel bir uygulama gerektirir.</p>
+        <ul>
+            <li><strong>Bakiyeniz ve takaslarınız sizindir.</strong> Topluluğunuzdaki başka hiç kimse bakiyenizi veya geçmişinizi okuyamaz. Bir takas, topluluk etkinliğinde de yalnızca ilgili iki kişiyi gösterir. Bir üyenin çıkarılmasına ilişkin bir oylama, o üyenin bakiyesini yalnızca oy kullanabilen kişilere gösterir, başka hiçbir yerde göstermez.</li>
+            <li><strong>İlanlar üyelere özeldir.</strong> Katılmamış biri topluluğunuzun ilanlarını veya fotoğraflarını göremez. Bunun yerine herkesin göz atabileceği küresel topluluğa giden yol gösterilir.</li>
+            <li><strong>Anonim anketler.</strong> Anketler, anketi başlatan kişi onu bir <strong>Açık oylama</strong> yapmadığı sürece yalnızca toplamları gösterir.</li>
+            <li><strong>Girişimlerin defterleri.</strong> Herkes bir girişimin tutarlarını görmeye devam eder. Kime ödendiğini ve notu yalnızca sorumluları ve o üye görür.</li>
+            <li><strong>Yorumu kimin yazdığı.</strong> Topluluğunuzdaki herkes bir değerlendirmenin yıldızlarını ve kelimelerini okuyabilir. Yalnızca takastaki iki kişi değerlendirmeyi kimin yazdığını ve hangi takasla ilgili olduğunu görebilir.</li>
+            <li><strong>Çocuk güvenliği.</strong> Telefonda ve web uygulamasında her bildirme ekranı artık bir neden olarak <strong>Çocuk güvenliği</strong> seçeneğini sunar. Bir çocuğun risk altında olabileceği durumlarda bunu seçin: topluluğunuzun sunucusunu yürüten kişilere anında haber verilir ve ilk olarak bunu incelerler. &quot;Sorun bildirme&quot; bölümüne bakın.</li>
+        </ul>
+        <h2>Günlük sınırlar</h2>
+        <p>Bunlar topluluğunuzun sunucusunda yer alır. Topluluğunuzun sunucusu güncellendiğinde bunları alırsınız.</p>
+        <ul>
+            <li><strong>Kimse bir topluluğu mesaj veya işlemle boğamaz.</strong> Bir hesap günde en fazla 5.000 değişiklik yapabilir: gönderiler, mesajlar, düzenlemeler ve benzerleri. Bunun içinde günde en fazla 100 yeni gönderi, 5 yeni grup, 3 yeni girişim, 20 davet ve Nabız'da 50 bağlantı yer alır. Normal şekilde BeanPool kullanan hiç kimse bu sınırlara yaklaşmaz. Bir sınıra ulaşırsanız uygulama hangisine ulaştığınızı ve ne zaman devam edebileceğinizi belirtir.</li>
+            <li><strong>Mesajlar.</strong> Doğrudan mesajlar dahil herhangi bir sohbette dakikada en fazla 30 mesaj. Çok uzun bir mesaj reddedilir: parçalar halinde gönderin. Fotoğraflar sayılmaz.</li>
+            <li><strong>Yeni kişiler.</strong> Günde topluluğunuzun dışından 20 kişiyle sohbet başlatabilirsiniz. Üyelere mesaj göndermek ve yanıt vermek sınırlı değildir.</li>
+            <li><strong>Davetler.</strong> Henüz kimsenin kullanmadığı 50 davetiniz olabilir. Kimsenin kullanmadığı bir davet 30 gün sonra silinir.</li>
+            <li><strong>Ödemeler.</strong> Günde en fazla 100 ödeme ve daha önce hiç ödeme yapmadığınız en fazla 30 kişi. En fazla 100 takas talebi, kabulü veya onayı ve yapılan ya da değiştirilen 20 taahhüt. Ödeme almak hiçbir zaman sınırlı değildir.</li>
+            <li><strong>Projeler ve girişimler</strong> bir üyenin on katı kadar kendi sınırlarına sahiptir. Bir sorumlunun bir girişim için yaptığı işlemler girişimin sınırından sayılır, sorumlunun kendi sınırından sayılmaz; yürütme işlemleri hariç: sorumlular, duraklatma, tasfiye etme ve takasları tamamlama veya reddetme. Bir girişim o günkü sınırını tükettiğinde, bir sorumlunun onun için yaptığı bu tür işlemler sorumlunun kendi sınırından sayılır; böylece hiçbir sorumlu gününü tüketip diğerlerini durduramaz. Bir sorumlu, birlikte yürüttüğü tüm girişimler için günde bir girişimlik işlem yapabilir.</li>
+            <li><strong>Arkadaşlar.</strong> Günde en fazla 100 kişiyi arkadaş olarak ekleyebilirsiniz. Birini eklemek ona haber verir.</li>
+        </ul>
+        <h2>Sürüm 1.2.38</h2>
+        <p>Bu değişikliklerin bazıları topluluğunuzun sunucusunda yer alır. Topluluğunuzun sunucusu güncellendiğinde bunları alırsınız.</p>
+        <h3>Yeni</h3>
+        <ul>
+            <li><strong>Bu BeanPool kılavuzu.</strong> BeanPool'un nasıl çalıştığına, kurallara, yaygın sorulara ve yeniliklere dair rehberler. Bağlantı olmadan da çalışırlar. Ayarlar'da <strong>BeanPool</strong>: <strong>Yardım ve işleyiş</strong> altından açın. Herhangi bir ekranın üst kısmındaki <strong>?</strong> işareti o ekranın yardımını açar.</li>
+            <li><strong>Açık veya koyu tema.</strong> Uygulama açık temayla başlar. Koyu yapmak veya telefonunuzu takip etmesini sağlamak için Ayarlar → Görünüm bölümüne gidin: Telefonla aynı, Açık veya Koyu.</li>
+            <li><strong>Rozetler.</strong> Her ekran artık topluluğunuzun sunucusuyla aynı güven seviyelerini kullanır: 200 güvenden itibaren Sakin, 600'den itibaren Rehber, 1.400'den itibaren Kıdemli. Bazı ekranlar daha önce yanlış rozeti gösteriyordu. Yeni Gelen rozetinin okunması artık daha kolaydır.</li>
+        </ul>
+        <h3>Oylama</h3>
+        <ul>
+            <li><strong>Gizli oylama.</strong> Uygulama artık bir Kararda nasıl oy kullandığınızı yöneticiler dahil hiç kimseye göstermez. Kendi oyunuzu görebilirsiniz.</li>
+            <li><strong>Kimler oy kullanabilir.</strong> Yalnızca bir Karar açılmadan önce katılmış olan üyeler o Kararda oy kullanabilir.</li>
+            <li><strong>Katılım oranı.</strong> Katılım oranı artık son 30 gün içinde uygulamada bir şey yapmış olan üyeleri sayar.</li>
+            <li><strong>Acil askıya alma.</strong> Bir yönetici birini askıya aldığında hemen 7 günlük bir oylama açılır: &quot;Bu askıya alma korunsun mu?&quot;. Kabul edilmezse askıya alma kendiliğinden kalkar. Küresel toplulukta oylama yoktur: askıya alma 7 gün sürer ve ardından kendiliğinden kalkar ya da bir yönetici daha önce kaldırırsa daha erken kalkar.</li>
+            <li><strong>Söz kredileri.</strong> Ortak fasulye oylamalarında gösterilen söz kredileri geçerli olanlardır. Bu tür her oylamada bunları eksiksiz olarak alırsınız.</li>
+            <li><strong>Daha az Karar türü.</strong> Kararlar artık güven rozetlerini değiştiremez. Eski &quot;oylama turları&quot; kalktı.</li>
+        </ul>
+        <h3>Girişimler</h3>
+        <ul>
+            <li>Baş sorumlu bir sorumlu eklediğinde veya çıkardığında, diğer sorumluların itiraz etmek için 3 günü vardır.</li>
+            <li>Bir sorumlu tek sorumlu olmadığı sürece veya taahhüdü girişimin borcunu karşılamak için hâlâ gerekmediği sürece görevden çekilebilir.</li>
+            <li>Yeni bir lider seçmenin artık 14 günlük bir sınırı vardır ve sorumlular Hayır oyu verebilir.</li>
+            <li>Lider ayrılırsa, en uzun süredir hizmet veren sorumlu hemen görevi devralır.</li>
+        </ul>
+        <h3>Gruplar</h3>
+        <ul>
+            <li><strong>Her grubun bir sohbeti vardır.</strong> Sohbet sekmesinde artık üç düğme bulunur: <strong>Mesajlar</strong>, <strong>Gruplar</strong> ve <strong>Kişiler</strong>. <strong>Gruplar</strong>; gruplarınızı, yürüttüğünüz girişimleri ve katılacağınız etkinlikleri en son mesajları ve okunmamış mesaj sayılarıyla birlikte listeler.</li>
+            <li><strong>Grup kurmanın tek yolu.</strong> Sohbet'teki <strong>Yeni grup</strong> ve Ortak Alan'daki <strong>+</strong> simgesi sizin için <strong>Sosyal Çevre</strong> seçilmiş olarak aynı formu açar. Grubu oluşturduktan sonra kimi davet etmek istediğinizi soran sohbetine ulaşırsınız.</li>
+            <li><strong>Davetler.</strong> Koordinatörler sohbetin menüsünden kişileri davet edebilir. Bir davet kimin gönderdiğini gösterir ve <strong>Gruba katıl</strong> sizi doğrudan sohbete götürür.</li>
+            <li><strong>Bir sohbeti sessize alma</strong>: 8 saatliğine, Bir haftalığına veya Her zaman. Bir grupta @bahsetmeleri yine de iletilir.</li>
+            <li><strong>Her sohbet için tek bir başlık</strong>: en üstte grubun, girişimin veya etkinliğin adı yer alır. Grubu, girişimi veya etkinliği görmek için bu başlığa dokunun.</li>
+            <li>Sohbet'teki eski grup sohbetleri mesajlarıyla birlikte kaldırıldı.</li>
+            <li>Artık her grubun bir <strong>baş koordinatörü</strong> vardır — başlangıçta grubu kim kurduysa odur. Herhangi bir koordinatör üyelerle ve gönderilerle ilgilenmeye devam eder, ancak yalnızca lider bir koordinatörü çıkarabilir veya rolünü düşürebilir ve hiç kimse lideri çıkaramaz. Lider, liderliği başkasına devredebilir. Lider 30 gün boyunca sessiz kalırsa, grup üye listesinin üzerindeki grup ekranında yeni bir lider seçebilir. &quot;Kurallar ve karar alma süreci&quot; bölümüne bakın.</li>
+            <li><strong>Bir grupta oylamalar.</strong> Bir grubun üyeleri yeni bir koordinatör veya yeni bir lider gibi grubun kendi meseleleri hakkında oy kullanabilir: grubu açın ve <strong>Kararlar</strong> altına bakın.</li>
+            <li><strong>Sessiz bir grup için yeni bir lider seçme.</strong> Yalnızca lideri sessiz kalmadan önce grupta bulunan kişiler oy kullanabilir. Bundan sonra katılan veya koordinatör yapılan kişilerin söz hakkı yoktur; böylece yeni hesaplar lideri sessiz kalmış bir grubu ele geçiremez.</li>
+        </ul>
+        <h3>Güvenlik</h3>
+        <ul>
+            <li>Yalnızca bir mülk sahibi, bir mülk sahibinin veya yöneticinin rolünü geri verebilir ya da alabilir.</li>
+            <li>Bir yönetici, parçası olduğu takılmış bir takası çözemez.</li>
+            <li>Grup ve etkinlik sohbetleri bir kişinin ne sıklıkla paylaşım yapabileceğini sınırlar.</li>
+            <li><strong>İki kişi arasındaki sohbetler her zaman kilitlidir.</strong> Uygulama eskiden diğer kişinin anahtarını bulamazsa mesajı kilit olmadan gönderirdi. Artık göndermez: kelimeleriniz mesaj kutusunda kalır ve birazdan tekrar gönderebilirsiniz. Topluluğunuzun sunucusu iki kişi arasında kilitli olmayan bir mesajı reddeder.</li>
+        </ul>
+        <h3>Düzeltmeler</h3>
+        <ul>
+            <li>Haritanın yeniden tek bir konum bulma düğmesi vardır.</li>
+            <li>Pazar akışının koyu modda okunması artık daha kolaydır.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Ana Sayfa</strong><span>Ana Sayfa nedir, telefonda ve web uygulamasında hangi kartları gösterir, nasıl eklenir, taşınır veya kaldırılır, ilgi alanları seçimi ve çıkışta gizlilik.</span></a></li>
+            <li><a href="the-bean.html"><strong>Bu kılavuz</strong><span>Bu kılavuzu nerede bulacağınız, içinde nasıl arama yapacağınız ve nasıl güncel kaldığı.</span></a></li>
+            <li><a href="how-it-works.html"><strong>BeanPool nasıl çalışır</strong><span>Fasulye, takas, teklifler, ihtiyaçlar ve kredi hakkında sade açıklamalar.</span></a></li>
+            <li><a href="rules.html"><strong>Kurallar ve karar alma süreci</strong><span>Oylama, katılım, gizli oylama, kimlerin oy verebileceği, askıya alma, üye çıkarma, sorumlular ve kolaylaştırıcılar.</span></a></li>
+            <li><a href="faq.html"><strong>Sorular</strong><span>Üyelerin en çok sorduğu sorulara kısa ve net yanıtlar.</span></a></li>
+            <li><a href="communities.html"><strong>Birden fazla topluluk</strong><span>Tek bir hesapla birden fazla topluluğa üye olma, aralarında geçiş yapma, topluluğunuzu yeni bir adrese taşıma ve küresel topluluğun size neler gösterdiği.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 3.</p>
+    </main>
+</body>
+</html>

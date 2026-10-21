@@ -485,12 +485,12 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         expect(tooWide(ptHeader, COLUMN.pageHeader)).toEqual([]);
         expect(cut(ptHeader)).toEqual([]);
         const toggle = host.querySelector('[data-testid="guide-toggle-english"]');
-        expect(toggle?.textContent).toBe('Read in English');
+        expect(toggle?.textContent).toBe('Ler em inglês');
 
         // Toggle to English
         await act(async () => { (toggle as HTMLElement).click(); });
         await settle();
-        expect(toggle?.textContent).toBe('Show translation');
+        expect(toggle?.textContent).toBe('Mostrar tradução');
         expect(host.querySelector('[data-testid="guide-draft-note"]')).toBeNull();
         const englishLines = page.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).map((t) => splitBold(t).map((s) => s.text).join(''));
         expect(Array.from(host.querySelectorAll('[lang="en"]')).map((e) => e.textContent)).toEqual(englishLines);
@@ -498,7 +498,7 @@ describe('the three page states in the mobile app: current, behind with toggle, 
         // Toggle back to Portuguese
         await act(async () => { (toggle as HTMLElement).click(); });
         await settle();
-        expect(toggle?.textContent).toBe('Read in English');
+        expect(toggle?.textContent).toBe('Ler em inglês');
         expect(host.textContent).toContain('Corpo traduzido antigo.');
         expect(host.querySelector('[data-testid="guide-draft-note"]')?.textContent).toBe('Traduzido por máquina: algumas palavras podem estar erradas.');
     });

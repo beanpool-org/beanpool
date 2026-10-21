@@ -2,10 +2,10 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "maharagwe",
@@ -5877,5 +5877,103 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Pindi seva yako inapofanya kazi, unaipa jumuiya yako jina katika programu yake ya mipangilio, unawaalika wanachama wa kwanza, na wao wanawaalika wengine. Washa \"chapisha eneo\" hapo, na watu walio karibu nawe walioomba kujulishwa watasikia kulihusu.",
   "How to run a node, on beanpool.org": "Jinsi ya kuendesha seva, kwenye beanpool.org",
   "Copy my community's details": "Nakili maelezo ya jumuiya yangu",
-  "Copied. Paste them into your node's settings app.": "Yamenakiliwa. Yabandike kwenye programu ya mipangilio ya seva yako."
+  "Copied. Paste them into your node's settings app.": "Yamenakiliwa. Yabandike kwenye programu ya mipangilio ya seva yako.",
+  "A few examples to start from, and a guide.": "Mifano michache ya kuanzia, na mwongozo.",
+  "A fixed number of Beans": "Idadi isiyobadilika ya Maharagwe",
+  "About this tool": "Kuhusu zana hii",
+  "Allow notifications": "Ruhusu arifa",
+  "Ask to borrow this?": "Omba kuazima hiki?",
+  "Asked to borrow": "Umeomba kuazima",
+  "Beans per day": "Maharagwe kwa siku",
+  "Beans per week": "Maharagwe kwa wiki",
+  "Books: how it's going": "Hesabu: jinsi mambo yanavyoenda",
+  "Fee": "Ada",
+  "Free": "Bure",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Bure kuazima. Hakuna kinachozuiliwa: mkopeshaji anakubali kwanza.",
+  "Go on": "Endelea",
+  "Go on to post": "Endelea ili kuchapisha",
+  "Go straight in and add what you keep.": "Ingia moja kwa moja na uongeze unachoweka.",
+  "I already do this": "Tayari ninafanya hili",
+  "I already do this: go straight in and add what you keep.": "Tayari ninafanya hili: ingia moja kwa moja na uongeze unachoweka.",
+  "I'm starting out": "Ndiyo ninaanza",
+  "I'm starting out: a few examples to start from, and a guide.": "Ndiyo ninaanza: mifano michache ya kuanzia, na mwongozo.",
+  "It shows in the Market as an Offer.": "Inaonyeshwa Sokoni kama Ofa.",
+  "Keep a private copy on your community's server": "Weka nakala ya faragha kwenye seva ya jumuiya yako",
+  "Kept on this phone only. Nothing in it leaves this phone.": "Imewekwa kwenye simu hii pekee. Hakuna chochote ndani yake kinachoondoka kwenye simu hii.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Imewekwa kwenye simu hii, ikiwa na nakala ya faragha kwenye seva ya jumuiya yako ambayo wewe tu unaweza kuisoma kupitia programu. Kama kila kitu kwenye seva hiyo, mwendeshaji wake anaweza.",
+  "List it in the Market": "Iorodheshe Sokoni",
+  "More tools": "Zana zaidi",
+  "Next you check it and tap Post. Nothing is posted before that.": "Kisha unaikagua na kugusa Chapisha. Hakuna kinachochapishwa kabla ya hapo.",
+  "No thanks": "Hapana asante",
+  "No tools here yet. They come with updates of the app.": "Bado hakuna zana hapa. Huja na masasisho ya programu.",
+  "Nothing is held until the lender says yes.": "Hakuna kinachozuiliwa hadi mkopeshaji akubali.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Hakuna kinachozuiliwa hadi mkopeshaji akubali. Kisha ada huenda kwenye Mkoba wa Amana wa muda, na ikirudishwa mkopeshaji huipokea ukiondoa ada ya muamala ya 1.5% {owned} ili kufadhili Hazina ya Pamoja.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "Arifa zimezimwa kwa BeanPool kwenye simu hii, kwa hivyo vikumbusho haviwezi kuonekana.",
+  "Open {tool}": "Fungua {tool}",
+  "Options for {tool}": "Chaguo za {tool}",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "Uweke zana hii kwenye Nyumbani yako? Inaonyesha inachoweka kwa muhtasari.",
+  "Read in English": "Soma kwa Kiingereza",
+  "Read the guide": "Soma mwongozo",
+  "Reminders": "Vikumbusho",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "Vikumbusho ambavyo zana zako zimeweka kwenye simu hii. Hakuna chochote kuvihusu kinachoondoka humu.",
+  "Remove my data from this phone": "Ondoa data yangu kwenye simu hii",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "Huondoa orodha ya jumuiya hii, picha na vikumbusho vya zana hii kwenye simu hii. Zana hiyo hiyo katika jumuiya nyingine huweka zake. Hili haliwezi kutenduliwa.",
+  "Replace your unfinished post?": "Badilisha tangazo lako ambalo halijakamilika?",
+  "Show translation": "Onyesha tafsiri",
+  "Some examples": "Mifano michache",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "Kuna hitilafu iliyotokea katika zana hii. Inachoweka kwenye simu hii kiko salama.",
+  "Stock: what you have": "Bidhaa: ulichonacho",
+  "Things you can do on your own": "Mambo unayoweza kufanya peke yako",
+  "Things you can do on your own, that make your community stronger.": "Mambo unayoweza kufanya peke yako, yanayoifanya jumuiya yako kuwa imara zaidi.",
+  "This page is in English for now.": "Ukurasa huu uko kwa Kiingereza kwa sasa.",
+  "This page is newer in English.": "Ukurasa huu ni mpya zaidi kwa Kiingereza.",
+  "This tool isn't in this version of the app": "Zana hii haipo katika toleo hili la programu",
+  "Tool reminders": "Vikumbusho vya zana",
+  "Trade: how you deal": "Biashara: jinsi unavyofanya biashara",
+  "Update": "Sasisha",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "Sasisha BeanPool ili kuitumia. Toleo lako linaonyeshwa chini ya Mipangilio.",
+  "You have an unfinished post on the map. Going on replaces it.": "Una tangazo ambalo halijakamilika kwenye ramani. Kuendelea kutalibadilisha.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "Umetoa {credits} mikopo (siku {n}) kwa Mkoba wa Amana kwa ajili ya ofa hii.",
+    "other": "Umetoa {credits} mikopo (siku {n}) kwa Mkoba wa Amana kwa ajili ya ofa hii."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "Umetoa {credits} mikopo (mwezi {n}) kwa Mkoba wa Amana kwa ajili ya ofa hii.",
+    "other": "Umetoa {credits} mikopo (miezi {n}) kwa Mkoba wa Amana kwa ajili ya ofa hii."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "Umetoa {credits} mikopo (wiki {n}) kwa Mkoba wa Amana kwa ajili ya ofa hii.",
+    "other": "Umetoa {credits} mikopo (wiki {n}) kwa Mkoba wa Amana kwa ajili ya ofa hii."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Umeomba kupata {credits} mikopo (siku {n}) ({net} halisi baada ya ada ya muamala ya 1.5%) {owned} kwa kutimiza hitaji hili.",
+    "other": "Umeomba kupata {credits} mikopo (siku {n}) ({net} halisi baada ya ada ya muamala ya 1.5%) {owned} kwa kutimiza hitaji hili."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Umeomba kupata {credits} mikopo (mwezi {n}) ({net} halisi baada ya ada ya muamala ya 1.5%) {owned} kwa kutimiza hitaji hili.",
+    "other": "Umeomba kupata {credits} mikopo (miezi {n}) ({net} halisi baada ya ada ya muamala ya 1.5%) {owned} kwa kutimiza hitaji hili."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Umeomba kupata {credits} mikopo (wiki {n}) ({net} halisi baada ya ada ya muamala ya 1.5%) {owned} kwa kutimiza hitaji hili.",
+    "other": "Umeomba kupata {credits} mikopo (wiki {n}) ({net} halisi baada ya ada ya muamala ya 1.5%) {owned} kwa kutimiza hitaji hili."
+  },
+  "Your community asks for a profile photo before you post.": "Jumuiya yako inaomba picha ya wasifu kabla hujachapisha.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "Seva ya jumuiya yako haiwezi kuweka nakala bado, kwa hivyo kwa sasa inabaki kwenye simu hii pekee.",
+  "for {n} day|for {n} days": {
+    "one": "kwa siku {n}",
+    "other": "kwa siku {n}"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "kwa wiki {n}",
+    "other": "kwa wiki {n}"
+  },
+  "{n} month|{n} months": {
+    "one": "mwezi {n}",
+    "other": "miezi {n}"
+  },
+  "{n} week|{n} weeks": {
+    "one": "wiki {n}",
+    "other": "wiki {n}"
+  },
+  "📦 Ask to borrow": "📦 Omba kuazima"
 }

@@ -5877,5 +5877,103 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "একবার আপনার নোড চালু হলে, আপনি এর সেটিংস অ্যাপে আপনার কমিউনিটির নাম দেন, প্রথম সদস্যদের আমন্ত্রণ জানান এবং তারা বাকিদের আমন্ত্রণ জানান। সেখানে \"লোকেশন প্রকাশ করুন\" চালু করুন, এবং আপনার কাছাকাছি যারা জানতে চেয়েছিল তারা এটি সম্পর্কে জানতে পারবে।",
   "How to run a node, on beanpool.org": "beanpool.org-এ কীভাবে একটি নোড চালাতে হয়",
   "Copy my community's details": "আমার কমিউনিটির বিবরণ কপি করুন",
-  "Copied. Paste them into your node's settings app.": "কপি করা হয়েছে। আপনার নোডের সেটিংস অ্যাপে এগুলো পেস্ট করুন।"
+  "Copied. Paste them into your node's settings app.": "কপি করা হয়েছে। আপনার নোডের সেটিংস অ্যাপে এগুলো পেস্ট করুন।",
+  "A few examples to start from, and a guide.": "শুরু করার জন্য কয়েকটি উদাহরণ এবং একটি নির্দেশিকা।",
+  "A fixed number of Beans": "নির্দিষ্ট পরিমাণের শিম",
+  "About this tool": "এই সরঞ্জাম সম্পর্কে",
+  "Allow notifications": "বিজ্ঞপ্তির অনুমতি দিন",
+  "Ask to borrow this?": "এটি ধার নেওয়ার অনুরোধ করবেন?",
+  "Asked to borrow": "ধার নেওয়ার অনুরোধ করা হয়েছে",
+  "Beans per day": "প্রতিদিন শিম",
+  "Beans per week": "প্রতি সপ্তাহে শিম",
+  "Books: how it's going": "হিসাব-নিকাশ: কেমন চলছে",
+  "Fee": "ফি",
+  "Free": "বিনামূল্যে",
+  "Free to borrow. Nothing is held: the lender says yes first.": "ধার নেওয়া বিনামূল্যে। কিছুই আটকে রাখা হয় না: ধারদাতা প্রথমে সম্মতি দেন।",
+  "Go on": "এগিয়ে যান",
+  "Go on to post": "পোস্ট করতে এগিয়ে যান",
+  "Go straight in and add what you keep.": "সরাসরি ভেতরে যান এবং আপনার সংরক্ষিত বিষয়গুলো যোগ করুন।",
+  "I already do this": "আমি ইতিমধ্যে এটি করি",
+  "I already do this: go straight in and add what you keep.": "আমি ইতিমধ্যে এটি করি: সরাসরি ভেতরে যান এবং আপনার সংরক্ষিত বিষয়গুলো যোগ করুন।",
+  "I'm starting out": "আমি নতুন শুরু করছি",
+  "I'm starting out: a few examples to start from, and a guide.": "আমি নতুন শুরু করছি: শুরু করার জন্য কয়েকটি উদাহরণ এবং একটি নির্দেশিকা।",
+  "It shows in the Market as an Offer.": "এটি বাজারে একটি প্রস্তাব হিসেবে দেখানো হয়।",
+  "Keep a private copy on your community's server": "আপনার কমিউনিটির সার্ভারে একটি ব্যক্তিগত অনুলিপি রাখুন",
+  "Kept on this phone only. Nothing in it leaves this phone.": "শুধুমাত্র এই ফোনে সংরক্ষিত। এর কিছুই এই ফোন থেকে বাইরে যায় না।",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "এই ফোনে সংরক্ষিত, আপনার কমিউনিটির সার্ভারে একটি ব্যক্তিগত অনুলিপি সহ যা অ্যাপের মাধ্যমে শুধুমাত্র আপনি পড়তে পারেন। সেই সার্ভারের সবকিছুর মতো, এর অপারেটরও তা পড়তে পারেন।",
+  "List it in the Market": "বাজারে এটি তালিকাভুক্ত করুন",
+  "More tools": "আরও সরঞ্জাম",
+  "Next you check it and tap Post. Nothing is posted before that.": "এরপর আপনি এটি দেখে নিয়ে পোস্টে ট্যাপ করুন। তার আগে কিছুই পোস্ট করা হয় না।",
+  "No thanks": "না, ধন্যবাদ",
+  "No tools here yet. They come with updates of the app.": "এখানে এখনও কোনো সরঞ্জাম নেই। অ্যাপের আপডেটের সাথে সেগুলো আসবে।",
+  "Nothing is held until the lender says yes.": "ধারদাতা সম্মতি না দেওয়া পর্যন্ত কিছুই আটকে রাখা হয় না।",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "ধারদাতা সম্মতি না দেওয়া পর্যন্ত কিছুই আটকে রাখা হয় না। তারপর ফি একটি অস্থায়ী আস্থার ওয়ালেটে যায়, এবং এটি ফেরত আসার পর ধারদাতা যৌথ তহবিলের জন্য 1.5% লেনদেন ফি {owned} বাদ দিয়ে তা পাবেন।",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "এই ফোনে BeanPool-এর বিজ্ঞপ্তি বন্ধ রয়েছে, তাই অনুস্মারকগুলো দেখানো যাচ্ছে না।",
+  "Open {tool}": "{tool} খুলুন",
+  "Options for {tool}": "{tool}-এর বিকল্পসমূহ",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "এই সরঞ্জামটি কি আপনার হোমে রাখবেন? এটি কী সংরক্ষণ করে তা একনজরে দেখায়।",
+  "Read in English": "ইংরেজিতে পড়ুন",
+  "Read the guide": "নির্দেশিকা পড়ুন",
+  "Reminders": "অনুস্মারক",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "এই ফোনে আপনার সরঞ্জামগুলোর সেট করা অনুস্মারক। এগুলোর কোনো তথ্যই ফোনের বাইরে যায় না।",
+  "Remove my data from this phone": "এই ফোন থেকে আমার ডেটা সরিয়ে ফেলুন",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "এই ফোনে এই সরঞ্জামের জন্য এই কমিউনিটির তালিকা, ছবি এবং অনুস্মারকগুলো সরিয়ে ফেলে। অন্য কমিউনিটিতে থাকা একই সরঞ্জাম তার নিজস্ব ডেটা রাখে। এটি পূর্বাবস্থায় ফিরিয়ে আনা যাবে না।",
+  "Replace your unfinished post?": "আপনার অসমাপ্ত পোস্টটি কি প্রতিস্থাপন করবেন?",
+  "Show translation": "অনুবাদ দেখান",
+  "Some examples": "কয়েকটি উদাহরণ",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "এই সরঞ্জামে কোনো সমস্যা হয়েছে। এই ফোনে যা সংরক্ষিত আছে তা নিরাপদ রয়েছে।",
+  "Stock: what you have": "মজুত: আপনার যা আছে",
+  "Things you can do on your own": "আপনি নিজে নিজে যা করতে পারেন",
+  "Things you can do on your own, that make your community stronger.": "আপনি নিজে নিজে যা করতে পারেন, যা আপনার কমিউনিটিকে আরও শক্তিশালী করে।",
+  "This page is in English for now.": "এই পাতাটি আপাতত ইংরেজিতে রয়েছে।",
+  "This page is newer in English.": "এই পাতাটি ইংরেজিতে আরও নতুন।",
+  "This tool isn't in this version of the app": "এই সরঞ্জামটি অ্যাপের এই সংস্করণে নেই",
+  "Tool reminders": "সরঞ্জামের অনুস্মারক",
+  "Trade: how you deal": "বাণিজ্য: আপনি যেভাবে লেনদেন করেন",
+  "Update": "আপডেট করুন",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "এটি ব্যবহার করতে BeanPool আপডেট করুন। আপনার সংস্করণটি সেটিংসের নিচে দেখানো হয়েছে।",
+  "You have an unfinished post on the map. Going on replaces it.": "মানচিত্রে আপনার একটি অসমাপ্ত পোস্ট রয়েছে। এগিয়ে গেলে সেটি প্রতিস্থাপিত হবে।",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "আপনি এই প্রস্তাবের জন্য আস্থার ওয়ালেটে {credits} ক্রেডিট ({n} দিন) বরাদ্দ করেছেন।",
+    "other": "আপনি এই প্রস্তাবের জন্য আস্থার ওয়ালেটে {credits} ক্রেডিট ({n} দিন) বরাদ্দ করেছেন।"
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "আপনি এই প্রস্তাবের জন্য আস্থার ওয়ালেটে {credits} ক্রেডিট ({n} মাস) বরাদ্দ করেছেন।",
+    "other": "আপনি এই প্রস্তাবের জন্য আস্থার ওয়ালেটে {credits} ক্রেডিট ({n} মাস) বরাদ্দ করেছেন।"
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "আপনি এই প্রস্তাবের জন্য আস্থার ওয়ালেটে {credits} ক্রেডিট ({n} সপ্তাহ) বরাদ্দ করেছেন।",
+    "other": "আপনি এই প্রস্তাবের জন্য আস্থার ওয়ালেটে {credits} ক্রেডিট ({n} সপ্তাহ) বরাদ্দ করেছেন।"
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "এই প্রয়োজন মেটানোর জন্য আপনি {credits} ক্রেডিট ({n} দিন) (1.5% লেনদেন ফি বাদ দিয়ে নেট {net}) {owned} উপার্জনের অনুরোধ করেছেন।",
+    "other": "এই প্রয়োজন মেটানোর জন্য আপনি {credits} ক্রেডিট ({n} দিন) (1.5% লেনদেন ফি বাদ দিয়ে নেট {net}) {owned} উপার্জনের অনুরোধ করেছেন।"
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "এই প্রয়োজন মেটানোর জন্য আপনি {credits} ক্রেডিট ({n} মাস) (1.5% লেনদেন ফি বাদ দিয়ে নেট {net}) {owned} উপার্জনের অনুরোধ করেছেন।",
+    "other": "এই প্রয়োজন মেটানোর জন্য আপনি {credits} ক্রেডিট ({n} মাস) (1.5% লেনদেন ফি বাদ দিয়ে নেট {net}) {owned} উপার্জনের অনুরোধ করেছেন।"
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "এই প্রয়োজন মেটানোর জন্য আপনি {credits} ক্রেডিট ({n} সপ্তাহ) (1.5% লেনদেন ফি বাদ দিয়ে নেট {net}) {owned} উপার্জনের অনুরোধ করেছেন।",
+    "other": "এই প্রয়োজন মেটানোর জন্য আপনি {credits} ক্রেডিট ({n} সপ্তাহ) (1.5% লেনদেন ফি বাদ দিয়ে নেট {net}) {owned} উপার্জনের অনুরোধ করেছেন।"
+  },
+  "Your community asks for a profile photo before you post.": "পোস্ট করার আগে আপনার কমিউনিটি একটি প্রোফাইল ছবি দেওয়ার অনুরোধ করছে।",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "আপনার কমিউনিটির সার্ভার এখনও অনুলিপি রাখতে পারছে না, তাই আপাতত এটি শুধুমাত্র এই ফোনেই থাকবে।",
+  "for {n} day|for {n} days": {
+    "one": "{n} দিনের জন্য",
+    "other": "{n} দিনের জন্য"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} সপ্তাহের জন্য",
+    "other": "{n} সপ্তাহের জন্য"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} মাস",
+    "other": "{n} মাস"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} সপ্তাহ",
+    "other": "{n} সপ্তাহ"
+  },
+  "📦 Ask to borrow": "📦 ধার নেওয়ার অনুরোধ করুন"
 }

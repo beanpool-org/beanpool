@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fa",
     "name": "Persian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "«{name}» در این جامعه از قبل گرفته شده است. نام دیگری انتخاب کنید.",
@@ -3423,5 +3423,65 @@
   "Recurring listing (stays active after purchase)": "آگهی تکرارشونده (پس از خرید فعال می‌ماند)",
   "Posting…": "در حال ارسال…",
   "Publish Listing": "انتشار آگهی",
-  "Translated by machine: some words may be wrong.": "ترجمه ماشینی است: ممکن است برخی کلمه‌ها غلط باشند."
+  "Translated by machine: some words may be wrong.": "ترجمه ماشینی است: ممکن است برخی کلمه‌ها غلط باشند.",
+  "About this tool": "درباره این ابزار",
+  "Ask to borrow this?": "درخواست امانت گرفتن این مورد؟",
+  "Asked to borrow": "درخواست امانت داده شد",
+  "Check your connection, then try again.": "اتصال خود را بررسی کنید و دوباره امتحان کنید.",
+  "For example": "برای مثال",
+  "Free to borrow. Nothing is held: the lender says yes first.": "امانت گرفتن رایگان است. چیزی کسر نمی‌شود: ابتدا امانت‌دهنده موافقت می‌کند.",
+  "How it's going": "اوضاع چطور پیش می‌رود",
+  "How you deal": "نحوه معامله شما",
+  "I already do this": "قبلاً این کار را انجام می‌دهم",
+  "I'm starting out": "تازه شروع کرده‌ام",
+  "It couldn't be removed. Try again.": "حذف نشد. دوباره امتحان کنید.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "فقط برای شما، در این مرورگر نگهداری می‌شود. هیچ اطلاعاتی از آن از این مرورگر خارج نمی‌شود، و خروج از حساب در اینجا آن را حذف می‌کند.",
+  "No tools in this version of the app yet.": "هنوز در این نسخه از برنامه ابزاری وجود ندارد.",
+  "Nothing is held until the lender says yes.": "تا زمانی که امانت‌دهنده موافقت نکند، چیزی نگه داشته نمی‌شود.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "تا زمانی که امانت‌دهنده موافقت نکند، چیزی نگه داشته نمی‌شود. سپس کارمزد به یک کیف پول موقت امانت می‌رود، و پس از بازگرداندن، امانت‌دهنده آن را با کسر ۱.۵٪ کارمزد تراکنش {owned} برای تأمین صندوق مشترک دریافت می‌کند.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "تا زمانی که امانت‌دهنده موافقت نکند، چیزی نگه داشته نمی‌شود. سپس {total} B به یک کیف پول امانت می‌رود، و پس از بازگرداندن، امانت‌دهنده {net} B دریافت می‌کند (پس از کسر ۱.۵٪ کارمزد تراکنش {owned} برای تأمین صندوق مشترک).",
+  "On your Home": "در صفحه خانه شما",
+  "Open {tool}": "باز کردن {tool}",
+  "Options for {tool}": "گزینه‌های {tool}",
+  "Read in English": "خواندن به زبان انگلیسی",
+  "Read the guide": "خواندن راهنما",
+  "Refresh the page to load the newest version your community has.": "برای بارگذاری جدیدترین نسخه‌ای که جامعه‌تان دارد، صفحه را تازه‌سازی کنید.",
+  "Remove my data": "حذف داده‌های من",
+  "Remove my data from this browser": "حذف داده‌های من از این مرورگر",
+  "Removed from this browser.": "از این مرورگر حذف شد.",
+  "Show translation": "نمایش ترجمه",
+  "Start": "شروع",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "داده‌های این جامعه برای {tool} را از این مرورگر پاک می‌کند. همین ابزار در جامعه‌ای دیگر داده‌های خود را حفظ می‌کند. این عمل قابل بازگشت نیست.",
+  "Things you can do on your own, that make your community stronger.": "کارهایی که می‌توانید به‌تنهایی انجام دهید و جامعه‌تان را قوی‌تر می‌کنند.",
+  "This page is in English for now.": "این صفحه فعلاً به زبان انگلیسی است.",
+  "This page is newer in English.": "نسخه انگلیسی این صفحه جدیدتر است.",
+  "This screen stopped working": "این صفحه از کار افتاد",
+  "This tool didn't load": "این ابزار بارگذاری نشد",
+  "This tool isn't in this version of the app": "این ابزار در این نسخه از برنامه وجود ندارد",
+  "What this tool keeps is safe. Go back and open it again.": "آنچه این ابزار نگه می‌دارد امن است. بازگردید و دوباره آن را باز کنید.",
+  "What you have": "آنچه دارید",
+  "Where it is kept": "محل نگهداری آن",
+  "Withdraw request": "پس گرفتن درخواست",
+  "Yes, remove it": "بله، حذف شود",
+  "for {n} day|for {n} days": {
+    "one": "برای {n} روز",
+    "other": "برای {n} روز"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "برای {n} هفته",
+    "other": "برای {n} هفته"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} روز",
+    "other": "{n} روز"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} ماه",
+    "other": "{n} ماه"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} هفته",
+    "other": "{n} هفته"
+  },
+  "📦 Ask to borrow": "📦 درخواست امانت"
 }

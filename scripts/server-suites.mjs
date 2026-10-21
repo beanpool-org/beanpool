@@ -254,6 +254,7 @@ export const SUITES = [
     'test-standby-community-settings',
     'test-standby-names-list',
     'test-standby-known-consents',
+    'test-standby-known-pledge-once',
     'test-standby-listings-verbatim',
     'test-standby-standing',
     'test-standby-health',

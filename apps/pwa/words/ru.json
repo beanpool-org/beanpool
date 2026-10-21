@@ -3747,5 +3747,14 @@
     "few": "Добавление {name} хранителем с именной поддержкой в {n} боба",
     "many": "Добавление {name} хранителем с именной поддержкой в {n} бобов",
     "other": "Добавление {name} хранителем с именной поддержкой в {n} боба"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "Хранитель отключил копию этого инструмента на сервере, поэтому она хранится только в этом браузере. Вы можете снова включить её в Настройках.",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Не удалось связаться с сервером вашего сообщества, поэтому ничего не изменилось. Попробуйте снова, когда будете в сети.",
+  "Keep a private copy on your community's server": "Хранить приватную копию на сервере сообщества",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Хранится в этом браузере, с приватной копией на сервере вашего сообщества, которую только вы можете читать через приложение. Как и ко всему на этом сервере, оператор сервера может иметь доступ.",
+  "One device at a time: the copy you changed last is the one kept.": "Одно устройство за раз: сохраняется копия, которую вы изменили последней.",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "Удаляет данные {tool} для этого сообщества из этого браузера и их копию на сервере вашего сообщества. Другое устройство, на котором выполнен вход от вашего имени, сохранит то, что у него есть, и перестанет отправлять данные. Этот же инструмент в другом сообществе сохранит свои данные. Это действие нельзя отменить.",
+  "You can edit a message for 15 minutes after sending it.": "Вы можете отредактировать сообщение в течение 15 минут после отправки.",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "Сервер вашего сообщества пока не может хранить копию, поэтому она остаётся только в этом браузере.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "Сервер вашего сообщества больше не хранит копию этого инструмента, поэтому она хранится только в этом браузере. Вы можете снова включить копию в Настройках."
 }

@@ -313,12 +313,22 @@ async function child(): Promise<void> {
         };
         const signIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
         const tfaSession: string = signIn.json?.tfaSessionToken;
+        let clockOffsetMs = 0;
+        const realDateNow = Date.now;
+        Date.now = () => realDateNow() + clockOffsetMs;
+        const advancePastNextTotpStep = () => {
+            const stepMs = 30_000;
+            const current = Date.now();
+            const nextStepStart = (Math.floor(current / stepMs) + 1) * stepMs + 1000;
+            clockOffsetMs += (nextStepStart - current);
+        };
         const creds: Record<string, () => Record<string, string>> = {
             'the password with an earlier 2FA session': () => ({ 'X-Admin-Password': MAIN_PW, 'X-Admin-2FA-Session': tfaSession }),
             'a password session': () => ({ 'x-admin-session': createPasswordSession().sessionId }),
             "the owner's computer session": () => ({ 'x-admin-session': keySession(owner) }),
             'a fresh phone hand-off': () => ({ 'x-admin-session': keySession(owner, true) }),
             'the password with a current code': () => tfa.headers(),
+            'the password with a current code in a later 30-second step': () => { advancePastNextTotpStep(); return tfa.headers(); },
         };
         // Read from the files, by a handle of its own: a server that took the file has closed its own.
         const state = () => {
@@ -909,7 +919,14 @@ async function main(): Promise<void> {
             && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after?.points?.length === 0 && r.after?.leftovers?.length === 0;
         const said = (r: any) => `${r.answer?.status} ${String(r.answer?.error ?? (r.answer?.success ? 'restored' : '')).slice(0, 110)}`;
 
-        for (const who of ['the password with an earlier 2FA session', 'a password session', "the owner's computer session", 'a fresh phone hand-off', 'the password with a current code']) {
+        for (const who of [
+            'the password with an earlier 2FA session',
+            'a password session',
+            "the owner's computer session",
+            'a fresh phone hand-off',
+            'the password with a current code',
+            'the password with a current code in a later 30-second step',
+        ]) {
             const r = row('lived-in', `a:${who}`);
             assert(r.signIn === 200 && refusedOther(r), `S2b-a. a lived-in server, ${who}, the other community's file and its own right code: 409 otherCommunity (${said(r)})`);
             assert(nothingMoved(r), `S2b-a. …node_roles, libp2p_key, genesis.json and local-config.json as they were; no point, nothing left (${diffMoved(r)})`);

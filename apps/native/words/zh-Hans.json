@@ -5762,5 +5762,17 @@
   "from {n} trust|from {n} trust": {
     "other": "从 {n} 信任分起"
   },
-  "{name}, already invited": "{name}，已邀请"
+  "{name}, already invited": "{name}，已邀请",
+  "A way back in if you lose this phone. It's linked to this same account.": "丢失此手机时的一条找回途径。它与此同一账户关联。",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "other": "正在添加 {name} 为协作者，记名支持额度为 {n} 豆子"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "other": "正在添加 {name} 为管理者，记名支持额度为 {n} 豆子"
+  },
+  "Also add a sign-in": "同时添加登录方式",
+  "Look around first, then join with this account": "先随意看看，然后用这个账户加入",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "结识来自各地的人并寻找附近的社区。先以访客身份随意看看，然后点按顶部的“加入”以使用此手机上的账户加入：你的密钥和 12 个助记词保持不变，你的其他社区也不会受到任何影响。",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "一旦确认，只要他们保持发布一项“提供”，其限额最多可增加 {amount}：你所在社区的已知底线。",
+  "Uses the key and 12 words already on this phone. No new account is made.": "使用此手机上已有的密钥和 12 个助记词。不会创建新账户。"
 }

@@ -10,7 +10,8 @@
  *
  *  1. The main server M sets its community up: a name, place and contacts, a currency display, thresholds, directory
  *     choices with its contact email ON, its phone and member count OFF and a service area, a pricing source and
- *     seasonality, a snapshot schedule, only its admins inviting (the door, config/door.ts), and an accepted non-zero
+ *     seasonality, a snapshot schedule, only its admins inviting (the door, config/door.ts), the known floor's
+ *     confirmations switched off (on by default, so an 'off' row: config/known-floor.ts), and an accepted non-zero
  *     audit baseline (the test node's -9.82 kind).
  *  2. A standby S with settings of its own (its phone published, its email not) takes its first copy: it keeps M's
  *     record, and its own name, contacts, directory choices, thresholds, gateway and baseline stay its own.
@@ -480,6 +481,7 @@ async function main(): Promise<void> {
         // Keeping fewer than the default 7 asks the owner's fresh proof (#1984 confirmation N-2): Manage on the phone, just now.
         built('its snapshot schedule: one every 6 hours', await api(m, 'POST', '/api/local/admin/snapshots/config', { admin: await main.send('owner-phone-session'), body: { enabled: true, intervalHours: 6, keep: 3 } }));
         built('only its admins invite (the owner, with the password)', await A('/api/local/admin/node/config', { door: 'admins' }));
+        built("its owner switches the known floor's confirmations off", await A('/api/local/admin/known-floor', { confirmation: false }));
         // The listing promise's two ticks and a closing day (mothership A2, engine/directory-promise.ts): the community's word.
         built('its owners make the listing promise and say when it closes', await A('/api/local/admin/directory/promise', {
             reports: true, notice: true, closingOn: new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10) }));
@@ -488,6 +490,7 @@ async function main(): Promise<void> {
         built('the admin accepts it as the audit baseline', await A('/api/local/admin/ledger-rebaseline', { reason: 'Drift from an old bug, checked by hand' }));
         let mSettings: Settings = await main.send('settings');
         require_(mSettings.rows.door === 'admins', `M: only its admins invite (door ${j(mSettings.rows.door)})`);
+        require_(mSettings.rows.confirmation === 'off', `M: the dial is switched off, an 'off' row (${j(mSettings.rows.confirmation)})`);
         require_(mSettings.rows.ledger_audit_baseline && Math.abs(Number(mSettings.rows.ledger_audit_baseline) - 0.1) < 1e-9,
             `M: its accepted baseline is 0.1 (${mSettings.rows.ledger_audit_baseline})`);
 
@@ -522,6 +525,8 @@ async function main(): Promise<void> {
             `S keeps M's record, not installed: its name, its choice to publish its email and not its phone, its baseline (${j(kept1 && { installedAt: kept1.installedAt, name: kept1.record?.localConfig?.communityName, email: kept1.record?.directory?.publishContactEmail, phone: kept1.record?.directory?.publishContactPhone, baseline: kept1.record?.nodeConfig?.ledger_audit_baseline })})`);
         assert(kept1?.record?.nodeConfig?.door === 'admins' && sNow.rows.door === undefined,
             `the record S keeps says only admins invite, and S's own door is its own until it is promoted (${j({ kept: kept1?.record?.nodeConfig?.door, own: sNow.rows.door ?? null })})`);
+        assert(kept1?.record?.nodeConfig?.confirmation === 'off' && sNow.rows.confirmation === undefined,
+            `the record S keeps has M's 'off' row for the dial, and S's own dial is its own until it is promoted (${j({ kept: kept1?.record?.nodeConfig?.confirmation, own: sNow.rows.confirmation ?? null })})`);
 
         // ── 3. M changes its settings; a delta brings them ──
         console.log('\n— 3. the main server changes its settings; a delta brings them —');

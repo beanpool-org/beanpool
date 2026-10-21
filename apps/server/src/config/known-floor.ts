@@ -8,7 +8,9 @@
  * Beans back: a member below their new floor is spend-frozen (getBalance's `frozen`) until they climb back.
  *
  * The three settings are node_config rows (config/community-settings.ts carries them in every copy); the default removes
- * the row. A node with Beans off (the global profile) can't turn the dial on.
+ * the row. The dial's default is on (Marty, 21 Oct: "Yes, on by default"): the owner switching it off writes 'off', and
+ * switching it back on removes the row. With nobody confirmed, on changes nobody's limit. A node with Beans off (the global
+ * profile) reads the dial off whatever its row says (engine confirmationDialOn), and its owner can't switch it on.
  */
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
@@ -31,8 +33,8 @@ export interface KnownFloorLogLine { id: string; actor: string; action: string; 
 
 // Each write names its key (test-replication-manifest reads every node_config write); the default removes the row.
 function setDial(on: boolean): void {
-    if (!on) db.prepare('DELETE FROM node_config WHERE key = ?').run(CONFIRMATION_DIAL_KEY);
-    else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(CONFIRMATION_DIAL_KEY, 'on');
+    if (on) db.prepare('DELETE FROM node_config WHERE key = ?').run(CONFIRMATION_DIAL_KEY);
+    else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(CONFIRMATION_DIAL_KEY, 'off');
 }
 function setCap(cap: number): void {
     if (cap === CREDIT_CAP_DEFAULT) db.prepare('DELETE FROM node_config WHERE key = ?').run(CREDIT_CAP_KEY);

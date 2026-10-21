@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3';
 import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 import { prepared } from './statements.js';
-import { memberUsableKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf, isConfirmed, knownFloorException } from './known-floor.js';
+import { memberUsableKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf, enterpriseHasKnownPledge, isConfirmed, knownFloorException } from './known-floor.js';
 
 type Db = Database.Database;
 
@@ -908,8 +908,9 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
     };
 
     // With the dial on the known share moves with every confirmation and keeper binding, none of which clears this cache:
-    // read it fresh each time then.
-    if (!confirmationDialOn(db)) cache.set(enterprisePubkey, result);
+    // read it fresh each time then, while the enterprise has a known pledge. With none, its share is 0 until a pledge writes
+    // one, and every pledge clears its enterprise here; the cap changes only with the owner's settings, which clear it all.
+    if (!confirmationDialOn(db) || !enterpriseHasKnownPledge(db, enterprisePubkey)) cache.set(enterprisePubkey, result);
     return result;
 }
 

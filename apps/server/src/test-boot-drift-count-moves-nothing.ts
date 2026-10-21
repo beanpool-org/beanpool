@@ -16,7 +16,11 @@
  *  2. The second boots on it. Drift Co and Even Co still hold exactly 1,000, in memory and in their rows, after the
  *     demurrage flush; there is no `Circulation fee` row, the pot and the ledger's sum are unchanged, and the boot says no
  *     conservation warning. The count read Drift Co's account no more than Even Co's (the same last-read day in memory),
- *     and it still counts: 2 enterprises, 1 of them spend-frozen, as getBalance reads them once the boot is done.
+ *     and it still counts: 2 enterprises, 1 of them spend-frozen, as getBalance reads them once the boot is done. All of it
+ *     on the confirmation dial's default (on, no row).
+ *  3. A third boots with nothing changed: no line (the counts are said once per change, node_config backing_drift_said),
+ *     and still no Bean moved. Even Co's keeper then releases its pledge.
+ *  4. A fourth boots: the changed count is said, 3 enterprises, 1 of them spend-frozen.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-boot-drift-count-moves-nothing.ts
@@ -101,6 +105,12 @@ async function child(): Promise<void> {
             return storedRows(w);
         },
         stored: async (w: World) => storedRows(w),
+        /** Lee releases Even Co's pledge: its joining figure is then above its pledges too, so the count changes. */
+        'release-even': async (w: World) => {
+            const { db } = await import('./db/db.js');
+            db.prepare('UPDATE enterprise_pledges SET released_at = ? WHERE enterprise = ? AND released_at IS NULL').run(new Date().toISOString(), w.evenCo);
+            return true;
+        },
         /**
          * What the boot left: the in-memory accounts as the boot left them (read without getAccount, which would stamp
          * them), then the stored rows after the demurrage flush the 5-minute timer makes, the audit, and last the count and
@@ -120,7 +130,11 @@ async function child(): Promise<void> {
             const audit = se.runLedgerAudit();
             const drift = se.backingFigureDrift();
             const read = (pk: string) => { const b = se.getBalance(pk); return { balance: b.balance, frozen: b.frozen }; };
-            return { memory, rows, audit, drift, balances: { driftCo: read(w.driftCo), evenCo: read(w.evenCo), oweCo: read(w.oweCo) } };
+            // The confirmation dial as this node reads it: on by default, with no row (config/known-floor.ts).
+            const { db } = await import('./db/db.js');
+            const { confirmationDialOn, CONFIRMATION_DIAL_KEY } = await import('@beanpool/engine');
+            const dial = { on: confirmationDialOn(db), row: (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CONFIRMATION_DIAL_KEY) as { value: string } | undefined)?.value ?? null };
+            return { memory, rows, audit, drift, dial, balances: { driftCo: read(w.driftCo), evenCo: read(w.evenCo), oweCo: read(w.oweCo) } };
         },
     });
 }
@@ -193,6 +207,31 @@ async function main(): Promise<void> {
             `the count from stored rows agrees with getBalance once the boot is done: Owe Co spend-frozen, the others not (${j(after.drift)}; ${j(after.balances)})`);
         assert(after.balances.driftCo.balance === 1000 && after.balances.evenCo.balance === 1000,
             `and read through getBalance, both still hold 1,000 (${j(after.balances)})`);
+        assert(after.dial.on === true && after.dial.row === null,
+            `all of it on the confirmation dial's default, on with no row (${j(after.dial)})`);
+        await second.kill();
+        nodes.pop();
+
+        // ── 3. a restart with nothing changed says nothing ──
+        console.log('\n— 3. a third boot, nothing changed —');
+        const third = await spawnNode(SCRIPT, dataDir, env);
+        nodes.push(third);
+        assert(!/spend floors read their keepers' pledges only/.test(third.output()),
+            'the boot says the counts once per change: the same 2 and 1 again, no line');
+        const unchanged = await third.send('stored', w as unknown as Record<string, unknown>);
+        assert(unchanged.driftCo?.balance === 1000 && unchanged.evenCo?.balance === 1000 && unchanged.fees === 0,
+            `and still no Bean moved (${j(unchanged)})`);
+        await third.send('release-even', w as unknown as Record<string, unknown>);
+        await third.kill();
+        nodes.pop();
+
+        // ── 4. a changed count is said again ──
+        console.log('\n— 4. a fourth boot, after Even Co\'s pledge was released —');
+        const fourth = await spawnNode(SCRIPT, dataDir, env);
+        nodes.push(fourth);
+        const changed = /spend floors read their keepers' pledges only: (\d+) enterprise\(s\) had a joining figure above what is pledged now, (\d+) of them/.exec(fourth.output());
+        assert(changed?.[1] === '3' && changed?.[2] === '1',
+            `a changed count is said: 3 enterprises (Even Co too), 1 of them spend-frozen (${changed?.[0] ?? 'no line'})`);
     } finally {
         for (const n of nodes) await n.kill();
     }

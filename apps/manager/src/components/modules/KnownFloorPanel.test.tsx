@@ -64,6 +64,21 @@ describe('KnownFloorPanel', () => {
         expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({ confirmation: true, knownFloor: 3000, creditCap: 5000 });
     });
 
+    it('a community as it starts: the dial on, saying what a confirmation gives, and an owner switches it off', async () => {
+        const f = mockNode({ ok: true, body: { ...SETTINGS, confirmation: true } });
+        render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
+        const dial = await screen.findByLabelText(/Confirmed members get the known floor/);
+        expect(dial).toBeChecked();
+        expect(screen.getByTestId('known-floor-panel')).toHaveTextContent('On in every community with Beans unless an owner switches it off.');
+        expect(screen.getByTestId('known-floor-panel')).toHaveTextContent(
+            'confirm a member on the names list, in the app, and their limit grows by up to 1,000 Beans, your community’s known floor.');
+        fireEvent.click(dial);
+        fireEvent.click(screen.getByRole('button', { name: 'Save the known floor' }));
+        await screen.findByText('Saved.');
+        const post = f.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST');
+        expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({ confirmation: false });
+    });
+
     it('refuses a known floor above the cap before sending it', async () => {
         const f = mockNode();
         render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
@@ -87,7 +102,7 @@ describe('KnownFloorPanel', () => {
             mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'members' } });
             render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
             expect(await screen.findByTestId('known-floor-mixed-note')).toHaveTextContent(
-                'A mixed community: anyone a member invites can join, and once the known floor is on, members your admins confirm start with a higher limit.'
+                'A mixed community: anyone a member invites can join, and members your admins confirm start with a higher limit, unless an owner switches the known floor off.'
             );
         });
 

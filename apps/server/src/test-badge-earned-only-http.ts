@@ -34,7 +34,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
-import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
+import { setMemberPhoto, clearEnterpriseFloorCache, confirmationDialOn, CONFIRMATION_DIAL_KEY } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -130,9 +130,14 @@ async function main(): Promise<void> {
     const ada = makeMember('Ada');
     grantNodeRole(ada.pk, 'admin', 'SYSTEM');
     const vic = makeMember('Vic');          // the other member who reads everyone below
+    // The dial is on by default (Marty, 21 Oct): no row, and the owner's "on" writes none, so every check below runs on
+    // the default, never on a stored 'on'.
+    const dialRow = () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CONFIRMATION_DIAL_KEY) as { value: string } | undefined)?.value ?? null;
+    assert(confirmationDialOn(db) && dialRow() === null, `before the owner touches it, the dial reads on with no row (${dialRow()})`);
     const on = await call('POST', null, '/api/local/admin/known-floor', { confirmation: true }, owner);
     assert(on.status === 200 && on.body?.confirmation === true && on.body?.knownFloor === 1000,
         `the owner turns the dial on, the known floor at its default 1,000 (${show(on)})`);
+    assert(dialRow() === null, `and turning it on writes no row: the default (${dialRow()})`);
 
     const balanceOf = (who: Id) => call('GET', who, `/api/ledger/balance/${who.pk}`);
     const profileOf = (target: string) => call('POST', vic, '/api/trust/profile', { targetPubkey: target });

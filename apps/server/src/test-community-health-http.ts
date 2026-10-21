@@ -4,7 +4,8 @@
  *
  *   1. the totals: every owner and admin reads them (credit, debt, in debit, the Commons pot, this month's trades); a
  *      member, an unsigned request and a key that isn't a member's are refused
- *   2. the dial off: no exceptions at all (409 not_known), and nothing logged
+ *   2. the dial off (on by default, so the owner switches it off first): no exceptions at all (409 not_known), and
+ *      nothing logged
  *   3. the dial on: only a confirmed member who consented is an exception: past the debt line (50% of their floor), or in
  *      debit with no sale for 60 days; an unconfirmed member who consented, a confirmed one who didn't, a revoked one and a
  *      new one are not; the open debts of members who left are listed; no callsign or name on the wire
@@ -146,6 +147,12 @@ async function main(): Promise<void> {
     // ── 1. the totals ─────────────────────────────────────────────────────────────────────────────
     console.log('── 1. the totals ──');
     transfer('genesis', sam.pk, 50, 'seed Samwise', 'direct', true);
+    // The dial is on by default (Marty, 21 Oct: "Yes, on by default"): a fresh node is a known community, until its owner
+    // switches the dial off, as here for section 2.
+    const fresh = await health(ada);
+    assert(fresh.status === 200 && fresh.body?.known === true, `a fresh node is a known community: the dial is on by default (${show(fresh)})`);
+    const dialOff = await call('POST', null, '/api/local/admin/known-floor', { confirmation: false }, owner);
+    assert(dialOff.status === 200 && dialOff.body?.confirmation === false, `the owner switches the dial off (${show(dialOff)})`);
     const t0 = await health(ada);
     assert(t0.status === 200 && t0.body?.totals?.sumOfCredit >= 50 && typeof t0.body?.totals?.commonsPot === 'number'
         && t0.body?.totals?.tradesThisMonth === 0 && t0.body?.known === false,

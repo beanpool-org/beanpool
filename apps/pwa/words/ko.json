@@ -3372,5 +3372,11 @@
   },
   "{name}, already in the group": "{name}, 이미 그룹에 참여 중",
   "{name}, already invited": "{name}, 이미 초대됨",
-  "{name}, asked to join": "{name}, 참여 신청함"
+  "{name}, asked to join": "{name}, 참여 신청함",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "other": "{name}님을 {n} 콩의 기명 보증과 함께 협력자로 추가"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "other": "{name}님을 {n} 콩의 기명 보증과 함께 운영자로 추가"
+  }
 }

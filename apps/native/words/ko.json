@@ -5762,5 +5762,17 @@
   "from {n} trust|from {n} trust": {
     "other": "신뢰 {n}부터"
   },
-  "{name}, already invited": "{name}, 이미 초대됨"
+  "{name}, already invited": "{name}, 이미 초대됨",
+  "A way back in if you lose this phone. It's linked to this same account.": "휴대폰을 분실했을 때 복구할 수 있는 방법입니다. 동일한 이 계정과 연결됩니다.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "other": "{name}님을 {n} 콩의 기명 보증과 함께 협력자로 추가"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "other": "{name}님을 {n} 콩의 기명 보증과 함께 운영자로 추가"
+  },
+  "Also add a sign-in": "로그인도 추가",
+  "Look around first, then join with this account": "먼저 둘러본 다음 이 계정으로 가입하기",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "전 세계 사람들을 만나고 가까운 커뮤니티를 찾아보세요. 먼저 게스트로 둘러본 다음 상단의 ‘참여’를 눌러 이 휴대폰의 계정으로 가입하세요: 키와 12개 단어는 그대로 유지되며 다른 커뮤니티에도 아무런 영향을 주지 않아요.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "확인되면 제공 글을 올려 두는 동안 한도가 커뮤니티의 확인된 신용 한도인 최대 {amount}까지 늘어납니다.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "이 휴대폰에 이미 있는 키와 12개 단어를 사용합니다. 새 계정은 생성되지 않습니다."
 }

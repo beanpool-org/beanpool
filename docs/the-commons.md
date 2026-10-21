@@ -1024,6 +1024,16 @@ Smallest first. Each slice is independently useful — nothing here is a big-ban
   block a real feed purchase and strand a real flock. Set `legacy_credit_floor = 200` on existing
   enterprises, take `max(legacy, derived)`, and auto-clear the legacy value once derived ≥ 200.
   Same for Daily Pulse and BeanPool.
+- **The bigger of the two, never both** (Marty, 2026-10-21, #2313 residuals 1 and 2). An enterprise's limit is
+  `min(cap, max(legacy, earned pledges + known pledges as the known floor counts them))`, one computation
+  (engine `enterpriseAllowance`) that the spend check, the badge and enterprise page, the release covenant and an
+  unbinding's lock all read. The opening line is a starting limit until keepers pledge; pledges take over and never
+  stack on it. The enterprise's own `members.earned_credit` (which `createTreasury` sets to its opening line) is no
+  part of it: the spend check used to add it, so a 200 line with 100 pledged spent to −300 where the engine said −200.
+  An enterprise already deeper than its limit is spend-frozen; nothing is clawed back. **Only earned pledges clear
+  the line for good**, as every read-time clear already counted: a known pledge counts only with the confirmation
+  dial on, so a line it cleared would leave the enterprise with neither once the dial went off. A line a known pledge
+  cleared before is not restored; the boot counts them (`openingLinesClearedByKnownPledges`).
 - Drop the plaintext `treasury_privkey_*` rows. Nothing reads them; they are pure liability.
 
 **Slice 5 — Decisions**
@@ -1370,6 +1380,7 @@ Settled with Marty on 2026-09-14. Recorded here so they are not re-litigated.
 | Member re-keying across federation | **local atomic transfer; known limitation: peer nodes retain old key** — peer villages do not receive automated key rotation events; trades with other villages will need manual re-linking until cross-node key gossip is built (§10, PR #825) |
 | Enterprise map pins | **public, exactly like marketplace post pins** — anyone who opens the node's map sees them; the map routes stay on the public read list. Findability is the point; the picker says so plainly and keeps **Approximate** (~100 m) beside the warning to protect a home. A wound-up enterprise's location is cleared and never served (Marty, 2026-09-17, §2.2) |
 | Working-style archetypes | **a preference, never a label** — no public archetype labels anywhere, no per-type breakdown of a group or enterprise, and archetypes gate nothing (2026-09-17, §9.5) |
+| Enterprise limit with an opening line | **the bigger of the line or the pledges, never both**; only earned pledges clear the line; nothing clawed back, a line a known pledge cleared before is not restored (2026-10-21, §6 Slice 4) |
 
 ---
 

@@ -63,7 +63,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { getMember, isVisitorKey } from '@beanpool/engine';
+import { getMember, isVisitorKey, confirmationDialOn, knownFloor } from '@beanpool/engine';
 import {
     isNamesEntryCiphertext, isNamesEntryId, NAMES_LIMITS, isNamesCommunityId, readNamesGeneration, readNamesShare, namesStatementId,
     readNamesCopy, NAMES_COPY_MAX_BYTES,
@@ -775,7 +775,9 @@ export function namesState(actor: string) {
         // Nobody who is an admin now holds the current key: any admin's phone may make a new one.
         nobodyHoldsKey: !!current && holdersOfCurrent.length === 0,
         newKeyNeeded: newKeyNeeded(current),
-        settings: { twoAdminsToConfirm: twoAdminsToConfirm(), namesShownToMembers: false },
+        // `knownFloor`: the limit a confirmation gives a member here, for the Confirm screen's words: the community's known
+        // floor while the dial is on (on by default, config/known-floor.ts), null with it off.
+        settings: { twoAdminsToConfirm: twoAdminsToConfirm(), namesShownToMembers: false, knownFloor: confirmationDialOn(db) ? knownFloor(db) : null },
         counts: {
             ...counts, byKey,
             // Entries sealed under a key no admin here holds, as far as this server can tell.

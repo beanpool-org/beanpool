@@ -9,13 +9,15 @@
  * members sign their own requests. The standby pulls through its real puller (services/backup-puller.ts) from the main
  * server's real backup routes. Nothing leaves this machine.
  *
- *  1. On the main server M (the confirmation dial on), a confirmed Kai asks to join Kai Co pledging 500, all of it from
- *     his known grant, and the owner approves: Kai Co's floor is -500.
- *  2. A standby S takes its first copy: the binding (figure 500) and the known row of 500. S applies none of the
- *     community's settings while it is a standby (config/community-settings.ts), so no known part counts there, for Kai's
- *     own line or Kai Co's: both 0, where the figure alone made Kai Co -500 on origin/main.
+ *  1. On the main server M (the confirmation dial on by default: no row), a confirmed Kai asks to join Kai Co pledging
+ *     500, all of it from his known grant, and the owner approves: Kai Co's floor is -500.
+ *  2. A standby S, whose own owner switched its own dial off, takes its first copy: the binding (figure 500) and the known
+ *     row of 500. S applies none of the community's settings while it is a standby (config/community-settings.ts), so its
+ *     own dial stands and no known part counts there, for Kai's own line or Kai Co's: both 0, where the figure alone made
+ *     Kai Co -500 on origin/main.
  *     Booting on the copy, S counts Kai Co among the enterprises whose floor reads its pledges alone (backingFigureDrift).
- *  3. S installs the settings it kept, as a take-over does: Kai Co is -500 there, as on M, never -1,000.
+ *  3. S installs the settings it kept, as a take-over does: M's default (no row) takes the place of S's own 'off', so the
+ *     dial is on and Kai Co is -500 there, as on M, never -1,000.
  *  4. On M, Kai releases 200: -300. S's next copy follows: -300, never -800, though the figure still says 500.
  *
  * Run:
@@ -60,7 +62,7 @@ async function child(): Promise<void> {
             const { db } = await import('./db/db.js');
             const { setReplicationToken } = await import('./config/local-config.js');
             const { grantNodeRole } = await import('./engine/node-roles.js');
-            const { CONFIRMATION_DIAL_KEY, setMemberPhoto } = await import('@beanpool/engine');
+            const { setMemberPhoto } = await import('@beanpool/engine');
             const avatar = 'data:image/png;base64,iVBORw0KGgo=';
             seedGenesisMember(a.owner, 'Owen');
             grantNodeRole(a.owner, 'owner', 'owner:password');
@@ -73,7 +75,7 @@ async function child(): Promise<void> {
                 setMemberPhoto(db, pk, avatar);
             }
             for (let i = 0; i < 5; i++) createPost('offer', 'produce', `Kai Co goods ${i}`, 'Goods', 10, 'fixed', a.enterprise);
-            db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(CONFIRMATION_DIAL_KEY, 'on');
+            // The confirmation dial stays on its default, on, with no row (config/known-floor.ts).
             db.prepare(`INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 0)`)
                 .run(crypto.randomBytes(16).toString('hex'), a.kai, crypto.randomBytes(16).toString('hex'), a.owner);
             setReplicationToken(a.replicationToken);
@@ -81,6 +83,10 @@ async function child(): Promise<void> {
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { updateLocalConfig } = await import('./config/local-config.js');
+            const { db } = await import('./db/db.js');
+            const { CONFIRMATION_DIAL_KEY } = await import('@beanpool/engine');
+            // S's own owner switched its own dial off: a standby keeps its own until it installs the community's.
+            db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(CONFIRMATION_DIAL_KEY, 'off');
             pinMainServerForTests(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`);
             updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupReplicationToken: a.replicationToken });
             return true;
@@ -97,10 +103,11 @@ async function child(): Promise<void> {
         floors: async (a: { enterprise: string; kai: string }) => {
             const { db } = await import('./db/db.js');
             const { getEnterpriseUnderlyingFloor, getBalance } = await import('./state-engine.js');
-            const { getEnterpriseFloor, clearEnterpriseFloorCache, confirmationDialOn } = await import('@beanpool/engine');
+            const { getEnterpriseFloor, clearEnterpriseFloorCache, confirmationDialOn, CONFIRMATION_DIAL_KEY } = await import('@beanpool/engine');
             clearEnterpriseFloorCache(db, a.enterprise);
             return {
                 dial: confirmationDialOn(db),
+                dialRow: (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CONFIRMATION_DIAL_KEY) as { value: string } | undefined)?.value ?? null,
                 spend: getEnterpriseUnderlyingFloor(a.enterprise).floor,
                 engine: getEnterpriseFloor(db, a.enterprise).floor,
                 usable: getBalance(a.enterprise).usableFloor,
@@ -175,8 +182,8 @@ async function main(): Promise<void> {
         const approved = await signedCall(mBase, 'POST', `/api/enterprise/${enterprise}/keepers/requests/${asked.body.request.id}/approve`, owen, {});
         require_(approved.status === 200 && approved.body?.applied === true, `M: the owner approves him at once (${approved.status} ${j(approved.body)})`);
         const m1 = await main.send('floors', who);
-        assert(m1.dial === true && m1.spend === -500 && m1.engine === -500 && m1.usable === -500 && j(m1.pledges) === j(['known 500']) && m1.figure === 500,
-            `M: Kai Co's floor is -500, one known row of 500, the figure 500 (${j(m1)})`);
+        assert(m1.dial === true && m1.dialRow === null && m1.spend === -500 && m1.engine === -500 && m1.usable === -500 && j(m1.pledges) === j(['known 500']) && m1.figure === 500,
+            `M: on the default dial (no row), Kai Co's floor is -500, one known row of 500, the figure 500 (${j(m1)})`);
 
         // ── 2. S's first copy ──
         console.log('\n— 2. a standby takes its first copy —');
@@ -189,6 +196,7 @@ async function main(): Promise<void> {
         require_(first.ok === true, `S: its first copy lands (${j(first)})`);
         const s2 = await standby.send('floors', who);
         assert(j(s2.pledges) === j(['known 500']) && s2.figure === 500, `S holds the binding, figure 500, and the known row of 500 (${j(s2)})`);
+        assert(s2.dialRow === 'off', `S keeps its own dial through the copy: its own 'off' row (${j(s2.dialRow)})`);
         assert(s2.dial === false && s2.kaiOwn === 0 && s2.spend === 0 && s2.engine === 0,
             `S applies none of the community's settings yet: no known part counts there, Kai's own line 0 and Kai Co's 0 alike, never the figure's -500 (${j(s2)})`);
         // The copy swapped in at a restart, so S booted on it: its boot counts Kai Co (figure 500, no earned pledge), owing nothing.
@@ -201,8 +209,8 @@ async function main(): Promise<void> {
         const installed = await standby.send('install-settings');
         require_(installed.installed === true, `S installs the community's settings it kept (${j(installed)})`);
         const s3 = await standby.send('floors', who);
-        assert(s3.dial === true && s3.spend === -500 && s3.engine === -500 && s3.usable === -500 && s3.kaiOwn === -500,
-            `S: Kai Co reads -500, as on M, never -1,000; Kai's own line 500 (${j(s3)})`);
+        assert(s3.dial === true && s3.dialRow === null && s3.spend === -500 && s3.engine === -500 && s3.usable === -500 && s3.kaiOwn === -500,
+            `S: M's default dial (no row) replaces S's own 'off'; Kai Co reads -500, as on M, never -1,000; Kai's own line 500 (${j(s3)})`);
 
         // ── 4. a release on M, and S's next copy ──
         console.log('\n— 4. Kai releases 200 on M; the standby\'s next copy —');

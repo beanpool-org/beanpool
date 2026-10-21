@@ -23,7 +23,7 @@ import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
-import { memberRedirect } from '../utils/member-landing';
+import { guestRedirect, memberRedirect } from '../utils/member-landing';
 import { notRecognisedStays } from '../utils/mismatch-plan';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { DrawnInLanguage, LanguageProvider, useWords } from '../components/LanguageProvider';
@@ -714,6 +714,23 @@ function RootLayoutNav() {
                         // Fall through to the divert: node-mismatch is now escapable.
                     }
                     if (isComponentMounted.current) router.replace('/node-mismatch');
+                })();
+            } else if (root === 'welcome') {
+                // A chosen guest a switch bounced through Welcome, as every switch does, lands where that screen asked
+                // (utils/member-landing.ts guestRedirect; a guest visit to the global community asks for the tabs). Asked
+                // nothing, a guest stays: on welcome to use an invite for this community, say.
+                const publicKey = identity.publicKey;
+                void (async () => {
+                    try {
+                        const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
+                        if (!anchor) return;
+                        const { isGuestNode } = await import('../utils/nodes');
+                        if (!(await isGuestNode(anchor))) return;
+                    } catch {
+                        return;
+                    }
+                    const landing = guestRedirect(segments as string[], publicKey);
+                    if (landing && isComponentMounted.current) router.replace(landing);
                 })();
             }
             return;

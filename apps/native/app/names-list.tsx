@@ -38,7 +38,7 @@ import {
 import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthLog, fetchHealthSummary, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
-    deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
+    deleteNamesEntry, confirmableMembers, confirmationLimit, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
     inviteForNamesEntry, readBoundInvites, firstSentence,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
@@ -687,6 +687,8 @@ export default function NamesListScreen() {
     } else if (mode.kind === 'pick') {
         const candidates = confirmableMembers(members, list ?? { current: null, entries: [], confirmations: [] }, identity?.publicKey ?? '', state?.admins.length ?? 0)
             .filter((m) => !memberQuery.trim() || m.callsign.toLocaleLowerCase().includes(memberQuery.trim().toLocaleLowerCase()));
+        // What confirming does, in plain words: the known floor is on by default, so a confirmation gives a limit.
+        const givesLimit = mode.workOff ? null : confirmationLimit(state);
         body = (
             <>
                 <Text style={styles.body}>
@@ -695,6 +697,7 @@ export default function NamesListScreen() {
                         : t('Which member is this person? Confirm only someone you know is them.')}
                 </Text>
                 {mode.workOff ? <Text style={styles.hint}>{t('They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.', { amount: beansWords(leftOf(mode.workOff)) })}</Text> : null}
+                {givesLimit !== null ? <Text style={styles.hint}>{t('Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.', { amount: beansWords(givesLimit) })}</Text> : null}
                 <TextInput
                     style={styles.search} value={memberQuery} onChangeText={setMemberQuery} placeholder={t('Find a member')}
                     placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel={t('Find a member by name')}

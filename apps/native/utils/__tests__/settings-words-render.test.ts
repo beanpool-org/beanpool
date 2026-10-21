@@ -85,7 +85,7 @@ const params = vi.hoisted(() => ({ now: {} as Record<string, string> }));
 vi.mock('expo-router', async () => {
     const { useEffect: effect } = await import('react');
     return {
-        router: { push() {}, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
+        router: { push: (to: unknown) => { visits.pushed.push(to); }, navigate() {}, replace() {}, back() {}, setParams() {}, canGoBack: () => true },
         useFocusEffect: (cb: () => void | (() => void)) => effect(() => cb(), [cb]),
         useLocalSearchParams: () => params.now,
     };
@@ -253,6 +253,11 @@ vi.mock('../../services/pillar-sync', () => ({
     performSyncWhenFree: async () => ({ success: true }), forceResyncNotice: () => ({ title: 'Success', message: '' }), syncCursorKeysOf: () => [],
 }));
 vi.mock('../use-global-entry', () => ({ useGlobalEntry: () => 'join' }));
+// The guest visit (utils/use-global-guest-visit.ts): what Saved communities' global button starts, recorded.
+const visits = vi.hoisted(() => ({ n: 0, pushed: [] as unknown[] }));
+vi.mock('../use-global-guest-visit', () => ({
+    useGlobalGuestVisit: () => ({ visit: async () => { visits.n++; return { kind: 'guest' }; }, visiting: false }),
+}));
 
 import { pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { LanguageProvider, DrawnInLanguage } from '../../components/LanguageProvider';
@@ -282,6 +287,8 @@ beforeEach(() => {
     params.now = {};
     alerts.said.length = 0;
     alerts.buttons.length = 0;
+    visits.n = 0;
+    visits.pushed.length = 0;
     store.map.clear();
     store.map.set('beanpool_anchor_url', NODE);
     store.map.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile: 'local', features: { beans: true, escrow: true, nearbyListings: { radiusKm: 10, max: 500 } }, checkedAt: new Date().toISOString() } }));
@@ -480,7 +487,10 @@ describe('Settings in the pseudo-locale: every word on it came through t() (word
         expect(host.textContent).toContain(pseudoLocalise('Run this community? Owners and admins see a Manage row at the top of Settings.'));
         expect(host.textContent).toContain(pseudoLocalise('Add a community by address'));
         expect(host.textContent).toContain(pseudoLocalise('Connect to a community by typing its address. Your phone will save it to this list and switch to it.'));
-        expect(host.textContent).toContain(pseudoLocalise('🌍 Join the global community'));
+        // Guest view first (utils/global-guest-visit.ts): on another community, the global community opens as a guest.
+        expect(host.textContent).toContain(pseudoLocalise('Join the global community'));
+        expect(host.textContent).toContain(pseudoLocalise('Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.'));
+        expect(host.textContent).toContain(pseudoLocalise('🌍 Look around the global community'));
         expect(host.textContent).toContain(pseudoLocalise('Active Node'));
         expect(bypassing(), 'advanced').toEqual([]);
         await click(row("Clear this phone's copy and download again"), "Clear this phone's copy and download again");
@@ -682,5 +692,28 @@ describe('Settings follows a language picked on it', () => {
         expect(languageRow()?.textContent).not.toBe(before);
         expect(languageRow()?.textContent).toContain('Français');
         expect(host.textContent).toContain('Grows beans by the river');
+    });
+});
+
+describe('Saved communities: the global community, guest view first (Marty, 21 Oct 2026)', () => {
+    it('on another community: Look around opens the global community as a guest, never the door (fails on origin/main: the door)', async () => {
+        await renderIn('en');
+        await click(row('Saved communities', 'en'), 'Saved communities');
+        await settle();
+        expect(row('🌍 Join the global community', 'en')).toBeNull();
+        await click(host.querySelector('[data-testid="settings-global-visit"]'), 'Look around the global community');
+        expect(visits.n).toBe(1);
+        expect(visits.pushed).not.toContain('/join-global');
+    });
+
+    it('on the global community already, as a guest: the door itself, as before (the next step is joining)', async () => {
+        store.map.set('beanpool_anchor_url', 'https://global.beanpool.org');
+        await renderIn('en');
+        await click(row('Saved communities', 'en'), 'Saved communities');
+        await settle();
+        expect(host.querySelector('[data-testid="settings-global-visit"]')).toBeNull();
+        await click(row('🌍 Join the global community', 'en'), 'Join the global community');
+        expect(visits.pushed).toEqual(['/join-global']);
+        expect(visits.n).toBe(0);
     });
 });

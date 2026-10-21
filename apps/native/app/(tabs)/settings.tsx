@@ -73,6 +73,8 @@ import { ChatMemoryCard } from '../../components/ChatMemoryCard';
 import { CHAT_MEMORY_COPY } from '../../utils/chat-memory';
 import { communityName } from '../../utils/community-name';
 import { useGlobalEntry } from '../../utils/use-global-entry';
+import { useGlobalGuestVisit } from '../../utils/use-global-guest-visit';
+import { isGlobalInUse } from '../../utils/one-way-back';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { BlockedFriendRemove } from '../../components/BlockedFriendRemove';
@@ -993,6 +995,10 @@ export default function SettingsScreen() {
     // community by hand: offered when the one rule says `join` (utils/global-entry.ts): the door is open and the global
     // community itself has not said this key is a member. Never read from the saved list (DESIGN-global-entry §1, rule 1).
     const offerGlobal = useGlobalEntry(mode === 'advanced' && !!identity) === 'join';
+    // Guest view first (utils/global-guest-visit.ts): the button opens the global community as a guest, unless the phone is
+    // on it already (as a guest: the door is then the next step).
+    const guestVisit = useGlobalGuestVisit();
+    const onGlobalNow = isGlobalInUse(anchorUrl);
 
     React.useEffect(() => {
         if (mode === 'advanced') {
@@ -2545,10 +2551,30 @@ export default function SettingsScreen() {
                     {offerGlobal && (
                         <>
                             <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>{t("Join the global community")}</Text>
-                            <Text style={styles.infoText}>{t("Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.")}</Text>
-                            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => router.push('/join-global')} accessibilityRole="button">
-                                <Text style={styles.primaryBtnText}>{t("🌍 Join the global community")}</Text>
-                            </Pressable>
+                            {/* Guest view first, as the web opens its lobby (utils/global-guest-visit.ts): the global community
+                                opens as a guest, where the header's Join pill leads to the door. On it already as a guest:
+                                the door itself. */}
+                            {onGlobalNow ? (
+                                <>
+                                    <Text style={styles.infoText}>{t("Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.")}</Text>
+                                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => router.push('/join-global')} accessibilityRole="button">
+                                        <Text style={styles.primaryBtnText}>{t("🌍 Join the global community")}</Text>
+                                    </Pressable>
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={styles.infoText}>{t("Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.")}</Text>
+                                    <Pressable
+                                        style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, guestVisit.visiting && { opacity: 0.5 }]}
+                                        onPress={() => { void guestVisit.visit(); }}
+                                        disabled={guestVisit.visiting}
+                                        accessibilityRole="button"
+                                        testID="settings-global-visit"
+                                    >
+                                        {guestVisit.visiting ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>{t('🌍 Look around the global community')}</Text>}
+                                    </Pressable>
+                                </>
+                            )}
                             <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 24 }} />
                         </>
                     )}

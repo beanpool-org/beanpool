@@ -22,7 +22,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createContext, createElement as h, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { DEFAULT_MEMBER_LANDING, landNextOn, memberRedirect } from '../member-landing';
+import { DEFAULT_MEMBER_LANDING, guestRedirect, landNextOn, memberRedirect } from '../member-landing';
 
 type Route = 'welcome' | '(tabs)/index' | '(tabs)/settings';
 
@@ -233,6 +233,34 @@ describe('a landing is only for the account it was asked for (PR #1357 confirmat
     });
 });
 
+describe('guestRedirect: a chosen guest the root guard finds on welcome (PR #2320 review)', () => {
+    it('nothing asked: null, and the guest stays (on welcome to use an invite for that community, say)', () => {
+        expect(guestRedirect(['welcome'], 'key-A')).toBeNull();
+        expect(guestRedirect(['welcome'])).toBeNull();
+    });
+
+    it('a landing asked for is taken once, from welcome only; anywhere else it is kept', () => {
+        landNextOn('/(tabs)', 'key-A');
+        expect(guestRedirect(['(tabs)'], 'key-A')).toBeNull();
+        expect(guestRedirect(['node-mismatch'], 'key-A')).toBeNull();
+        expect(guestRedirect([], 'key-A')).toBeNull();
+        expect(guestRedirect(['welcome'], 'key-A')).toBe('/(tabs)');
+        expect(guestRedirect(['welcome'], 'key-A')).toBeNull();
+    });
+
+    it('only for the account it was asked for: another account drops it', () => {
+        landNextOn('/(tabs)', 'key-A');
+        expect(guestRedirect(['welcome'], 'key-B')).toBeNull();
+        expect(guestRedirect(['welcome'], 'key-A')).toBeNull();
+    });
+
+    it("one ask: a member's landing from welcome takes it, so none is left for a later guest", () => {
+        landNextOn('/(tabs)', 'key-A');
+        expect(memberRedirect(['welcome'], 'key-A')).toBe('/(tabs)');
+        expect(guestRedirect(['welcome'], 'key-A')).toBeNull();
+    });
+});
+
 describe('the model is the app', () => {
     const read = (p: string) => fs.readFileSync(path.resolve(__dirname, p), 'utf8');
 
@@ -264,5 +292,46 @@ describe('the model is the app', () => {
         expect(handler).toMatch(/\} else \{\n\s*router\.replace\('\/'\);\n\s*\}/);
         expect(handler).not.toMatch(/router\.\w+\('\/\(tabs\)\/settings'/);
         expect(handler.match(/router\.(replace|push|navigate)\(/g)).toEqual(['router.replace(']);
+    });
+
+    it("app/_layout.tsx's guard: a stranger it holds on welcome lands where guestRedirect says, and only a chosen guest", () => {
+        const layout = read('../../app/_layout.tsx');
+        const at = layout.indexOf("        if (recognition === 'stranger') {");
+        const branch = layout.slice(at, layout.indexOf("        if (recognition === 'member' && (root === 'node-mismatch'", at));
+        const welcome = branch.slice(branch.indexOf("} else if (root === 'welcome') {"));
+        expect(welcome).toMatch(new RegExp([
+            String.raw`\} else if \(root === 'welcome'\) \{`,
+            String.raw`(?:\s*//.*)*`,
+            String.raw`\s*const publicKey = identity\.publicKey;`,
+            String.raw`\s*void \(async \(\) => \{`,
+            String.raw`\s*try \{`,
+            String.raw`\s*const anchor = await AsyncStorage\.getItem\('beanpool_anchor_url'\);`,
+            String.raw`\s*if \(!anchor\) return;`,
+            String.raw`\s*const \{ isGuestNode \} = await import\('\.\./utils/nodes'\);`,
+            String.raw`\s*if \(!\(await isGuestNode\(anchor\)\)\) return;`,
+            String.raw`\s*\} catch \{`,
+            String.raw`\s*return;`,
+            String.raw`\s*\}`,
+            String.raw`\s*const landing = guestRedirect\(segments as string\[\], publicKey\);`,
+            String.raw`\s*if \(landing && isComponentMounted\.current\) router\.replace\(landing\);`,
+            String.raw`\s*\}\)\(\);`,
+            String.raw`\s*\}`,
+            String.raw`\s*return;`,
+        ].join('')));
+        // Off any other screen a stranger is diverted as before: the else is the welcome screen's alone.
+        expect(branch).toMatch(/if \(!notRecognisedStays\('stranger', segments as string\[\]\)\) \{/);
+        expect(branch.match(/guestRedirect\(/g)).toHaveLength(1);
+    });
+
+    it('a guest visit to the global community asks for the tabs, and asks recognition again, before its bounce through Welcome', () => {
+        const hook = read('../use-global-guest-visit.ts');
+        expect(hook).toMatch(new RegExp([
+            String.raw`if \(answer\.kind === 'member' \|\| answer\.kind === 'guest'\) \{`,
+            String.raw`\s*if \(answer\.kind === 'guest'\) landNextOn\('/\(tabs\)', identity\.publicKey\);`,
+            String.raw`\s*await recheck\(\)\.catch\(\(\) => 'unknown'\);`,
+            String.raw`[^]*?if \(router\.canDismiss\(\)\) router\.dismissAll\(\);`,
+            String.raw`\s*router\.replace\('/welcome'\);`,
+        ].join('')));
+        expect(hook.match(/landNextOn\(/g)).toHaveLength(1);
     });
 });

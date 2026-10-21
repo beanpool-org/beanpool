@@ -2371,6 +2371,8 @@ export interface KeeperChangeItem {
     memberCallsign: string;
     requestId: string | null;
     pledgedBacking: number;
+    /** True when pledgedBacking is the pledge's named part only, as a keeper other than the lead reads it. */
+    namedBackingOnly?: boolean;
     proposedBy: string;
     proposedByCallsign: string | null;
     status: 'pending' | 'applied' | 'objected' | 'failed';

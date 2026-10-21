@@ -699,6 +699,9 @@ export function initStateEngine(): void {
     // accounts, where the node has probation (the global profile; engine/probation.ts pollVotesFromNewOrWords; never on
     // an open vote, nor while a poll is open: @beanpool/engine pollOriginsMayShow). Read with the poll, never stored.
     installPollVoteOriginsAtBoot();
+    // The known floor's confirmation dial is on by default, and never where Beans are off (the global profile): the engine
+    // asks this when it reads the dial (engine known-floor.ts confirmationDialOn).
+    engine.configureKnownFloorBeans(() => getProfileSwitches().beans);
     // Where listings sync by area, each member's area in memory for the listing pushes (listingReach).
     if (getProfileSwitches().nearbyListings) loadMemberAreas();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
@@ -865,6 +868,9 @@ export function initStateEngine(): void {
     // in-memory ledger, and it sits after the Commons restore and the exemptions above all the same: a balance read before
     // them charged a treasury demurrage it is exempt from, and the restore then wrote over the pot's half (#2313).
     reportBackingFigureDriftAtBoot();
+    // How many enterprises lost their opening line to a known pledge before only earned pledges could clear it, counts
+    // only: stored rows, no balance read.
+    reportOpeningLinesClearedByKnownPledgesAtBoot();
 
     // Daily ledger conservation audit (also once shortly after boot)
     setTimeout(() => {
@@ -3269,44 +3275,19 @@ export function liveOfferCount(publicKey: string): number {
 }
 
 /**
- * Computes an enterprise's underlying credit floor based on keeper backing pledges
- * (docs/the-commons.md §2.6) and its own trust profile (earned/granted credit).
+ * An enterprise's underlying credit floor, the one the spend check holds it to (getBalance's floor, usableFloor): the
+ * engine's, read fresh (engine trust.ts readEnterpriseFloor), so the spend check, the badge and the enterprise page read
+ * one limit. That is the bigger of its opening line or its keepers' pledges, never both (Marty, 21 Oct; engine
+ * enterpriseAllowance). Two things were once read here that no other reader counted: treasury_operators.backing, the
+ * figure a keeper pledged as they joined (a released pledge kept its floor and a known pledge counted twice, #2309), and
+ * the enterprise's own members.earned_credit, which createTreasury sets to its opening line, so the line stacked on the
+ * pledges at spending (200 line + 100 pledged spent to -300 where the engine said -200). An enterprise that already owes
+ * more than this is spend-frozen; nothing is clawed back.
  */
 export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor: number; totalBacking: number; hasBacking: boolean } {
-    // The keepers' backing is their pledge rows, read as the engine's floor, the release covenant and an unbinding's lock
-    // read them: the earned rows here, the known rows once in knownShare below. Never treasury_operators.backing: that is
-    // the figure a keeper pledged as they joined, known part included, which no release, top-up or re-assignment keeps up
-    // (backingFigureDrift). Read here, a released pledge kept its floor and a known pledge counted twice (#2309).
-    const pledgeRow = db.prepare(`
-        SELECT COALESCE(SUM(p.amount), 0) as total
-        FROM enterprise_pledges p
-        JOIN members m ON m.public_key = p.keeper
-        WHERE p.enterprise = ? AND p.released_at IS NULL AND p.id NOT LIKE 'known:%'
-          AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
-    `).get(enterprisePubkey) as any;
-    const totalBacking = Number(pledgeRow?.total || 0);
-    const hasExplicitBacking = totalBacking > 0;
-
-    const memberRow = db.prepare("SELECT earned_credit, legacy_credit_floor, status, COALESCE(credit_frozen, 0) as credit_frozen FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-    if (memberRow?.status === 'completed' || memberRow?.credit_frozen === 1) {
-        return { floor: 0, totalBacking: 0, hasBacking: false };
-    }
-
-    const memberEarnedCredit = Number(memberRow?.earned_credit || 0);
-    let legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
-    if (legacyFloor > 0 && totalBacking >= legacyFloor) {
-        legacyFloor = 0;
-    }
-
-    // A confirmed keeper's known pledges (community modes slice 4, engine known-floor.ts); 0 with the confirmation dial off.
-    const knownShare = enterpriseKnownShareOf(enterprisePubkey);
-    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit + knownShare);
-    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0 || knownShare > 0) {
-        const allowance = Math.min(engine.creditCap(db), effectiveAllowance);
-        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 || knownShare > 0 };
-    }
-
-    return { floor: 0, totalBacking: 0, hasBacking: false };
+    const ef = engine.readEnterpriseFloor(db, enterprisePubkey);
+    if (ef.allowance <= 0) return { floor: 0, totalBacking: 0, hasBacking: false };
+    return { floor: ef.floor, totalBacking: ef.derivedAllowance, hasBacking: true };
 }
 
 /**
@@ -3343,15 +3324,81 @@ export function backingFigureDrift(): { enterprises: number; frozen: number } {
     return { enterprises: rows.length, frozen };
 }
 
-/** Says at boot how many enterprises' spend floors now read their pledges alone (backingFigureDrift). Never throws. */
+/** The counts the boot last said (backingFigureDrift), "<enterprises>/<frozen>"; no row is 0/0. Per server. */
+const BACKING_DRIFT_SAID_KEY = 'backing_drift_said';
+
+/**
+ * Says at boot how many enterprises' spend floors now read their pledges alone (backingFigureDrift), once per change of
+ * the counts, not at every boot: a keeper's known pledge keeps its enterprise counted for good (the joining figure holds
+ * the known part, which the pledges count among the known ones), so with the confirmation dial on by default the same line
+ * would come at every restart. Never throws.
+ */
 function reportBackingFigureDriftAtBoot(): void {
     try {
         const { enterprises, frozen } = backingFigureDrift();
+        const counts = `${enterprises}/${frozen}`;
+        const said = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(BACKING_DRIFT_SAID_KEY) as { value: string } | undefined)?.value ?? '0/0';
+        if (counts === said) return;
         if (enterprises > 0) {
             console.log(`[Boot] Enterprise spend floors read their keepers' pledges only: ${enterprises} enterprise(s) had a joining figure above what is pledged now, ${frozen} of them owe more than their pledges allow (spend-frozen, nothing moved)`);
         }
+        if (enterprises === 0) db.prepare('DELETE FROM node_config WHERE key = ?').run(BACKING_DRIFT_SAID_KEY);
+        else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(BACKING_DRIFT_SAID_KEY, counts);
     } catch (e) {
         console.error('[Boot] Could not count enterprises whose joining figures are above their pledges:', e);
+    }
+}
+
+/** The line every enterprise of before Slice 4 was given at least (db.ts, the grandfather migration). */
+const GRANDFATHERED_LINE_MIN = 200;
+
+/**
+ * The open enterprises whose opening line a known pledge cleared for good, before only earned pledges could clear it
+ * (clearOpeningLineOncePledged; Marty, 21 Oct). Nothing is restored: a line comes back only by a decision about it, so this
+ * counts them, never who (reportOpeningLinesClearedByKnownPledgesAtBoot).
+ *
+ * The line is gone (legacy_credit_floor NULL, and not by a wind-up) and the enterprise has had a known pledge. Its line on
+ * record is members.earned_credit, which createTreasury writes beside it. It counts in `enterprises` when its keepers'
+ * pledges, known ones included, once stood at that line or above while their earned pledges never did, read from the
+ * pledge rows' dates (a release keeps its row, dated). `maybe`: the same with the grandfathered 200 for the line, so an
+ * enterprise from before Slice 4 with a smaller line on record; one started with no line at all reads the same, so these
+ * may have had no line to lose. Reads stored rows only, and no balance.
+ */
+export function openingLinesClearedByKnownPledges(): { enterprises: number; maybe: number } {
+    const candidates = db.prepare(`
+        SELECT e.public_key AS pk, COALESCE(e.earned_credit, 0) AS line
+        FROM members e
+        WHERE e.is_treasury = 1 AND e.legacy_credit_floor IS NULL
+          AND e.status NOT IN ('completed', 'pruned', 'deleted')
+          AND EXISTS (SELECT 1 FROM enterprise_pledges k WHERE k.enterprise = e.public_key AND k.id LIKE 'known:%')
+    `).all() as { pk: string; line: number }[];
+    const pledgesOf = db.prepare('SELECT id, amount, pledged_at, released_at FROM enterprise_pledges WHERE enterprise = ?');
+    let enterprises = 0, maybe = 0;
+    for (const c of candidates) {
+        const rows = pledgesOf.all(c.pk) as { id: string; amount: number; pledged_at: string; released_at: string | null }[];
+        // The most ever pledged at once, all and earned only: a clear runs as a pledge is written, so at a pledge's date.
+        let allMost = 0, earnedMost = 0;
+        for (const at of new Set(rows.map(r => r.pledged_at))) {
+            const standing = rows.filter(r => r.pledged_at <= at && (r.released_at == null || r.released_at > at));
+            allMost = Math.max(allMost, standing.reduce((s, r) => s + Number(r.amount), 0));
+            earnedMost = Math.max(earnedMost, standing.filter(r => !r.id.startsWith(engine.KNOWN_PLEDGE_PREFIX)).reduce((s, r) => s + Number(r.amount), 0));
+        }
+        const clearedByKnown = (line: number) => line > 0 && allMost >= line && earnedMost < line;
+        if (clearedByKnown(Number(c.line))) enterprises++;
+        else if (clearedByKnown(Math.max(Number(c.line), GRANDFATHERED_LINE_MIN))) maybe++;
+    }
+    return { enterprises, maybe };
+}
+
+/** Says at boot how many enterprises lost their opening line to a known pledge (openingLinesClearedByKnownPledges). Never throws. */
+function reportOpeningLinesClearedByKnownPledgesAtBoot(): void {
+    try {
+        const { enterprises, maybe } = openingLinesClearedByKnownPledges();
+        if (enterprises > 0 || maybe > 0) {
+            console.log(`[Boot] Enterprise opening lines clear on earned pledges only now: ${enterprises} enterprise(s) lost their opening line to a known pledge before (${maybe} more may have, if they held the grandfathered ${GRANDFATHERED_LINE_MIN}); not restored, nothing moved`);
+        }
+    } catch (e) {
+        console.error('[Boot] Could not count enterprises whose opening line a known pledge cleared:', e);
     }
 }
 
@@ -3635,27 +3682,12 @@ export function adminRevokeTreasuryOperator(treasuryPubkey: string, memberPubkey
 }
 
 /**
- * The allowance the enterprise would still have from everyone else's pledges if this keeper's pledge went:
- * the other active, unfrozen keepers' pledges (or the legacy floor, whichever is larger), capped.
+ * The allowance the enterprise would still have from everyone else's pledges if this keeper's pledge went: the spend
+ * check's limit without them (engine enterpriseAllowance), the bigger of the legacy floor or the other active, unfrozen
+ * keepers' pledges, capped.
  */
 function allowanceWithoutKeeper(treasuryPubkey: string, memberPubkey: string): number {
-    const totalRow = db.prepare(`
-        SELECT COALESCE(SUM(p.amount), 0) as total
-        FROM enterprise_pledges p
-        JOIN members m ON m.public_key = p.keeper
-        WHERE p.enterprise = ?
-          AND p.keeper != ?
-          AND p.released_at IS NULL
-          AND p.id NOT LIKE 'known:%'
-          AND m.status = 'active'
-          AND COALESCE(m.credit_frozen, 0) = 0
-    `).get(treasuryPubkey, memberPubkey) as any;
-    const otherPledges = Number(totalRow?.total || 0);
-    const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
-    const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
-    // The other keepers' known share and the community's cap count as the spend check counts them (both main's with the dial off).
-    const othersKnown = engine.enterpriseKnownShareOf(db, treasuryPubkey, memberPubkey);
-    return Math.min(engine.creditCap(db), Math.max(legacyFloor, otherPledges + othersKnown));
+    return engine.enterpriseAllowance(db, treasuryPubkey, memberPubkey).allowance;
 }
 
 /**
@@ -3692,6 +3724,21 @@ function earnedPledgeRoom(keeperPubkey: string): number {
         "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id NOT LIKE 'known:%'"
     ).get(keeperPubkey) as any;
     return Math.max(0, earnedCredit - Number(row?.total || 0));
+}
+
+/**
+ * The persisted half of the opening line's auto-clear (Slice 4; engine enterpriseAllowance clears it as it reads): once the
+ * keepers' EARNED pledges reach the line, it is cleared for good. Known pledges never clear it (Marty, 21 Oct), as no
+ * read-time clear counts them: they count only with the confirmation dial on, so a line they cleared would leave the
+ * enterprise with neither once the dial went off. Runs inside the caller's transaction, after the pledge rows are written;
+ * true when it cleared the line.
+ */
+function clearOpeningLineOncePledged(enterprisePubkey: string): boolean {
+    const row = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+    const legacyFloor = Number(row?.legacy_credit_floor || 0);
+    if (legacyFloor <= 0 || engine.enterpriseEarnedPledges(db, enterprisePubkey) < legacyFloor) return false;
+    db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
+    return true;
 }
 
 /**
@@ -3894,6 +3941,74 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
 }
 
 /**
+ * The one entry an enterprise's pledge list folds every known pledge into (engine known-floor.ts KNOWN_PLEDGE_PREFIX), for a
+ * reader who is no owner or admin of the node. A known pledge is drawn from a confirmed keeper's known grant, so naming it
+ * names a keeper the admins confirmed, and a confirmation stays private (Marty, 2026-10-21: "Hide the names").
+ */
+export const KNOWN_BACKING_ENTRY_ID = 'known';
+
+/**
+ * Who reads an enterprise's backing: the signer, if any, and whether they are an owner or admin of the node (a signer
+ * isAdminPubkey passes, or the admin routes' own sign-in, which has no member key).
+ */
+export type BackingReader = { pubkey?: string; nodeAdmin: boolean };
+
+export function backingReaderOf(pubkey: string | undefined): BackingReader {
+    return { pubkey, nodeAdmin: !!pubkey && isAdminPubkey(pubkey) };
+}
+
+/**
+ * The active pledges backing an enterprise, as `reader` may read them. An owner or admin of the node reads every pledge
+ * as getEnterprisePledges lists it: they decided the confirmations. Anyone else reads each keeper's own (earned) pledges
+ * named as today, and every known pledge folded into one entry last: id `known`, kind `known`, their sum, and no keeper,
+ * name, photo or date (a known pledge is written as its keeper joins, so its date would match their row in the keepers list).
+ */
+export function getEnterprisePledgesForReader(enterprisePubkey: string, reader: BackingReader): Array<{
+    id: string;
+    kind?: 'known';
+    keeper: string;
+    callsign: string;
+    avatarUrl: string | null;
+    amount: number;
+    pledgedAt: string | null;
+}> {
+    const pledges = getEnterprisePledges(enterprisePubkey);
+    if (reader.nodeAdmin) return pledges;
+    const isKnown = (p: { id: string }) => p.id.startsWith(engine.KNOWN_PLEDGE_PREFIX);
+    const known = pledges.filter(isKnown);
+    const named = pledges.filter(p => !isKnown(p));
+    if (known.length === 0) return named;
+    const amount = Math.round(known.reduce((sum, p) => sum + p.amount, 0) * 100) / 100;
+    return [...named, { id: KNOWN_BACKING_ENTRY_ID, kind: 'known', keeper: '', callsign: '', avatarUrl: null, amount, pledgedAt: null }];
+}
+
+/**
+ * Who keeps this enterprise, as `reader` may read it. A keeper's `backing` is what they pledged as they joined, earned and
+ * known together (bindApprovedKeeper), so beside the named pledges it would show whose part is known. An owner or admin of
+ * the node, and the keeper on their own row, read it as treasuryKeepers gives it. To anyone else every keeper's backing is
+ * their named pledges standing now, the ones getEnterprisePledgesForReader names; never their known part.
+ */
+export function treasuryKeepersForReader(treasuryPubkey: string, reader: BackingReader): ReturnType<typeof treasuryKeepers> {
+    const keepers = treasuryKeepers(treasuryPubkey);
+    if (reader.nodeAdmin) return keepers;
+    const named = new Map((db.prepare(`
+        SELECT keeper, SUM(amount) AS total FROM enterprise_pledges
+        WHERE enterprise = ? AND released_at IS NULL AND id NOT LIKE 'known:%'
+        GROUP BY keeper
+    `).all(treasuryPubkey) as { keeper: string; total: number }[]).map(r => [r.keeper, Math.round(Number(r.total) * 100) / 100]));
+    return keepers.map(k => k.publicKey === reader.pubkey ? k : { ...k, backing: named.get(k.publicKey) ?? 0 });
+}
+
+/**
+ * An enterprise's pledges changed. It reaches every member socket, so it names the enterprise only: with the keeper whose
+ * pledge it was, a member who re-reads would see the folded total move and that keeper's named pledges stay, and so whose
+ * known part it was (getEnterprisePledgesForReader). No app reads more of it than its type.
+ */
+function broadcastPledgesChanged(enterprisePubkey: string): void {
+    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey });
+}
+
+/**
  * List active pledges made by a keeper.
  */
 export function getKeeperPledges(keeperPubkey: string): Array<{
@@ -3962,31 +4077,13 @@ export function pledgeEnterpriseBacking(
         const pledgeId = insertPledgeRows(keeperPubkey, enterprisePubkey, earnedPart, knownPart, pledgedAt);
         if (knownPart > 0) assertKeeperOwnDebtCovered(keeperPubkey);
 
-        // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
-        const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-        const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
-        if (legacyFloor > 0) {
-            const pledgeSumRow = db.prepare(`
-                SELECT COALESCE(SUM(p.amount), 0) as total
-                FROM enterprise_pledges p
-                JOIN members m ON m.public_key = p.keeper
-                WHERE p.enterprise = ?
-                  AND p.released_at IS NULL
-                  AND m.status = 'active'
-                  AND COALESCE(m.credit_frozen, 0) = 0
-            `).get(enterprisePubkey) as any;
-            const totalActiveDerived = Number(pledgeSumRow?.total || 0);
-            if (totalActiveDerived >= legacyFloor) {
-                db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
-                broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
-            }
-        }
+        if (clearOpeningLineOncePledged(enterprisePubkey)) broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
 
         return { id: pledgeId, enterprise: enterprisePubkey, keeper: keeperPubkey, amount: pledgeToAdd, pledgedAt };
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     return res;
 }
 
@@ -4001,7 +4098,7 @@ export function releaseEnterpriseBacking(
 ): { releasedAmount: number; remainingPledge: number } {
     assertPledgeWritable();
     const res = db.transaction(() => {
-        const t = db.prepare("SELECT is_treasury, legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
+        const t = db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
         if (!t?.is_treasury) throw new Error('Not an enterprise');
 
         const activeRow = db.prepare(
@@ -4030,31 +4127,30 @@ export function releaseEnterpriseBacking(
         const balance = getBalance(enterprisePubkey).balance;
         const deficit = Math.max(0, -balance);
 
-        const legacyFloor = Number(t.legacy_credit_floor || 0);
         const remainingPledge = currentKeeperPledge - toRelease;
         // The known part goes first (it gives the keeper their own known line back); the rest is pledged again as before.
         const knownPledge = activeKnownPledge(enterprisePubkey, keeperPubkey);
         const knownRemaining = Math.max(0, knownPledge - toRelease);
         const nowIso = new Date().toISOString();
 
-        db.prepare(
-            "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
-        ).run(nowIso, keeperPubkey, enterprisePubkey);
-        insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
+        if (toRelease <= knownPledge) {
+            // Inside the known part, only the known rows are written again: the keeper's named (earned) rows keep their ids
+            // and dates. Re-dated beside a fold that moves, they would tie the move to this keeper, and so say whose known
+            // part it was (getEnterprisePledgesForReader). The sums are the ones the branch below leaves.
+            db.prepare(
+                "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL AND id LIKE 'known:%'"
+            ).run(nowIso, keeperPubkey, enterprisePubkey);
+            insertPledgeRows(keeperPubkey, enterprisePubkey, 0, knownRemaining, nowIso);
+        } else {
+            db.prepare(
+                "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
+            ).run(nowIso, keeperPubkey, enterprisePubkey);
+            insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
+        }
 
-        // The covenant, on what is pledged after the release (earned pledges + known pledges as the floor counts them);
-        // refused, the transaction writes nothing.
-        const earnedRow = db.prepare(`
-            SELECT COALESCE(SUM(p.amount), 0) as total
-            FROM enterprise_pledges p
-            JOIN members m ON m.public_key = p.keeper
-            WHERE p.enterprise = ?
-              AND p.released_at IS NULL
-              AND p.id NOT LIKE 'known:%'
-              AND m.status = 'active'
-              AND COALESCE(m.credit_frozen, 0) = 0
-        `).get(enterprisePubkey) as any;
-        const newAllowance = Math.min(engine.creditCap(db), Math.max(legacyFloor, Number(earnedRow?.total || 0) + enterpriseKnownShareOf(enterprisePubkey)));
+        // The covenant, on the spend check's limit after the release (engine enterpriseAllowance: the legacy floor or the
+        // earned pledges + known pledges as the floor counts them, whichever is bigger); refused, the transaction writes nothing.
+        const newAllowance = engine.enterpriseAllowance(db, enterprisePubkey).allowance;
         if (newAllowance < deficit) {
             throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
         }
@@ -4063,7 +4159,7 @@ export function releaseEnterpriseBacking(
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: keeperPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     return res;
 }
 
@@ -4077,7 +4173,10 @@ export interface KeeperJoinRequest {
     memberPubkey: string;
     callsign?: string;
     avatarUrl?: string | null;
+    /** What they pledge as they join, earned and known together; who else reads it whole, keeperPledgeForReader. */
     pledgedBacking: number;
+    /** Set by keeperRequestForReader: true when pledgedBacking is the pledge's named part only. */
+    namedBackingOnly?: boolean;
     status: 'pending' | 'approved' | 'declined' | 'cancelled';
     createdAt: string;
     decidedAt?: string | null;
@@ -4343,23 +4442,7 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
         insertPledgeRows(memberPubkey, enterprisePubkey, earnedPart, knownPart, new Date().toISOString());
         if (knownPart > 0) assertKeeperOwnDebtCovered(memberPubkey, APPLICANT_STANDING_REFUSAL);
 
-        // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
-        const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
-        const legacyFloor = Number(legacyRow?.legacy_credit_floor || 0);
-        if (legacyFloor > 0) {
-            const pledgeSumRow = db.prepare(`
-                SELECT COALESCE(SUM(p.amount), 0) as total
-                FROM enterprise_pledges p
-                JOIN members m ON m.public_key = p.keeper
-                WHERE p.enterprise = ?
-                  AND p.released_at IS NULL
-                  AND m.status = 'active'
-                  AND COALESCE(m.credit_frozen, 0) = 0
-            `).get(enterprisePubkey) as any;
-            if (Number(pledgeSumRow?.total || 0) >= legacyFloor) {
-                db.prepare("UPDATE members SET legacy_credit_floor = NULL WHERE public_key = ?").run(enterprisePubkey);
-            }
-        }
+        clearOpeningLineOncePledged(enterprisePubkey);
     }
 }
 
@@ -4367,7 +4450,7 @@ function broadcastKeeperBound(enterprisePubkey: string, memberPubkey: string): v
     clearEnterpriseFloorCache(enterprisePubkey);
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: memberPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     broadcast({ type: 'enterprise_keeper_approved', enterprisePubkey, memberPubkey });
 }
 
@@ -4468,7 +4551,10 @@ export interface KeeperChangeInfo {
     memberPubkey: string;
     memberCallsign: string;
     requestId: string | null;
+    /** An addition's pledge, earned and known together, as for a request (keeperPledgeForReader); 0 on a removal. */
     pledgedBacking: number;
+    /** Set by keeperChangeForReader: true when pledgedBacking is the pledge's named part only. */
+    namedBackingOnly?: boolean;
     proposedBy: string;
     proposedByCallsign: string | null;
     status: 'pending' | 'applied' | 'objected' | 'failed';
@@ -4523,6 +4609,67 @@ export function getKeeperChanges(enterprisePubkey: string, status?: KeeperChange
         ? db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? AND c.status = ? ORDER BY c.created_at DESC`).all(enterprisePubkey, status)
         : db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? ORDER BY c.created_at DESC`).all(enterprisePubkey);
     return (rows as any[]).map(toKeeperChangeInfo);
+}
+
+/**
+ * The earned part of the pledge a keeper's join bound, released since or not: bindApprovedKeeper writes it as plain-id
+ * rows beside any known row, all under one pledged_at no earlier than the moment the join was approved (`boundFrom`).
+ */
+function boundNamedPledge(enterprisePubkey: string, memberPubkey: string, boundFrom: string | null, pledged: number): number {
+    if (!boundFrom || pledged <= 0) return 0;
+    const first = db.prepare('SELECT MIN(pledged_at) AS at FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at >= ?')
+        .get(enterprisePubkey, memberPubkey, boundFrom) as { at: string | null } | undefined;
+    if (!first?.at) return 0;
+    const row = db.prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE enterprise = ? AND keeper = ? AND pledged_at = ? AND id NOT LIKE 'known:%'")
+        .get(enterprisePubkey, memberPubkey, first.at) as { total: number };
+    return Math.min(pledged, Number(row.total));
+}
+
+/**
+ * The part of a keeper's join pledge `reader` may read (Marty, 2026-10-21: hide it). Its known part is drawn from a known
+ * grant, which says the admins confirmed them, and a confirmation stays private: the whole figure beside the named pledges
+ * the enterprise lists would give it by subtracting. So it goes whole to an owner or admin of the node, to the member
+ * themselves, and, while the join is open, to the lead or sole keeper who decides it. Anyone else, the other keepers in
+ * the objection window and the lead once it has closed, reads its named part: on an open join what their earned credit
+ * covers now (splitNewPledge's earned-first split), once bound what the binding pledged by name, and 0 for one closed
+ * unbound.
+ */
+function keeperPledgeForReader(
+    j: { enterprisePubkey: string; memberPubkey: string; pledged: number; open: boolean; boundFrom: string | null },
+    reader: BackingReader,
+): { pledgedBacking: number; namedBackingOnly: boolean } {
+    if (reader.nodeAdmin || reader.pubkey === j.memberPubkey
+        || (j.open && !!reader.pubkey && isLeadOrSoleKeeperOrAdmin(j.enterprisePubkey, reader.pubkey))) {
+        return { pledgedBacking: j.pledged, namedBackingOnly: false };
+    }
+    const named = j.open
+        ? Math.min(j.pledged, earnedPledgeRoom(j.memberPubkey))
+        : boundNamedPledge(j.enterprisePubkey, j.memberPubkey, j.boundFrom, j.pledged);
+    return { pledgedBacking: Math.round(named * 100) / 100, namedBackingOnly: true };
+}
+
+/** A keeper change as `reader` may read it: an addition's pledge by keeperPledgeForReader. */
+export function keeperChangeForReader(c: KeeperChangeInfo, reader: BackingReader): KeeperChangeInfo {
+    if (c.kind !== 'add') return { ...c, namedBackingOnly: false };
+    return {
+        ...c,
+        ...keeperPledgeForReader({
+            enterprisePubkey: c.enterprisePubkey, memberPubkey: c.memberPubkey, pledged: c.pledgedBacking,
+            open: c.status === 'pending', boundFrom: c.status === 'applied' ? c.resolvedAt : null,
+        }, reader),
+    };
+}
+
+/** A keeper request as `reader` may read it: its pledge by keeperPledgeForReader, and its pending change likewise. */
+export function keeperRequestForReader(r: KeeperJoinRequest, reader: BackingReader): KeeperJoinRequest {
+    return {
+        ...r,
+        ...keeperPledgeForReader({
+            enterprisePubkey: r.enterprisePubkey, memberPubkey: r.memberPubkey, pledged: r.pledgedBacking,
+            open: r.status === 'pending', boundFrom: r.status === 'approved' ? r.decidedAt ?? null : null,
+        }, reader),
+        pendingChange: r.pendingChange ? keeperChangeForReader(r.pendingChange, reader) : r.pendingChange,
+    };
 }
 
 /**
@@ -4687,7 +4834,7 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
             clearEnterpriseFloorCache(c.enterprise_pubkey);
             broadcast({ type: 'profile_updated', publicKey: c.member_pubkey });
             broadcast({ type: 'profile_updated', publicKey: c.enterprise_pubkey });
-            broadcast({ type: 'enterprise_pledge_updated', enterprise: c.enterprise_pubkey, keeper: c.member_pubkey });
+            broadcastPledgesChanged(c.enterprise_pubkey);
         }
     }
     // To the people who heard of the request (keeperRequestRecipients: the member, the lead or sole keeper, node admins), never every socket.
@@ -4820,7 +4967,7 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
     broadcast({ type: 'profile_updated', publicKey: memberPubkey });
     broadcast({ type: 'profile_updated', publicKey: enterprisePubkey });
     if (result.promoted) broadcast({ type: 'profile_updated', publicKey: result.promoted });
-    broadcast({ type: 'enterprise_pledge_updated', enterprise: enterprisePubkey, keeper: memberPubkey });
+    broadcastPledgesChanged(enterprisePubkey);
     broadcast({ type: 'enterprise_keeper_stepped_down', enterprisePubkey, memberPubkey, promoted: result.promoted, paused: result.paused });
     return { ok: true, promoted: result.promoted, paused: result.paused, releasedBacking: pledge };
 }

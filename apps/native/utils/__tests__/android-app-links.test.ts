@@ -78,7 +78,7 @@ describe('Android app links: invites still open the app', () => {
         expect(claimed(`https://${host}/?invite=BP-ABCD-1234`)).toBe(true);
     });
 
-    it('a node that is not in the list yet (unverified wildcard filter, as before)', () => {
+    it('a node that is not in any list (the wildcard filter)', () => {
         expect(claimed('https://newtown.beanpool.org/?invite=INV-ABCD-EFGH')).toBe(true);
     });
 
@@ -102,30 +102,27 @@ describe('Android app links: invites still open the app', () => {
     });
 });
 
-// The global node's invite and event links used to reach the app only through the unverified *.beanpool.org filter: a
-// browser or a chooser on Android 12+, never the app straight away. Its node serves /.well-known/assetlinks.json like every
-// other node (apps/server/src/routes/settings.ts, no host or profile check), so it can be verified like them.
-describe('Android app links: the global node is verified', () => {
-    it('global.beanpool.org is in a verified filter, with the same "/" path as every other node', () => {
-        expect(verifiedHosts()).toContain('global.beanpool.org');
-        expect(claimedVerified('https://global.beanpool.org/?invite=INV-ABCD-EFGH')).toBe(true);
-        expect(claimedVerified('https://global.beanpool.org/?post=6f1b0e2c-1111-4a2b-8c3d-000000000001')).toBe(true);
-        expect(claimedVerified('https://global.beanpool.org/settings')).toBe(false);
+// No community is named (21 Oct 2026). The app used to list each node's host in a verified filter, and the wildcard
+// filter was unverified. A paused node (yarravalley) lost its DNS and failed Play's domain check; on Android 11 and older
+// (this app runs from Android 8) one failing host turns verification off for EVERY host the app names, so every node's
+// invites went to the app picker on old phones. Communities can also live on any domain (no domain lock-in), which the app
+// can never list. So the app names only beanpool.org and *.beanpool.org; Android verifies the wildcard against beanpool.org's
+// /.well-known/assetlinks.json, and every node also serves its own. A community on its own domain opens in the browser,
+// and the app joins it by invite code or QR.
+describe('Android app links: every community under beanpool.org is verified through the wildcard', () => {
+    it('no filter names a single community host: only beanpool.org and *.beanpool.org', () => {
+        expect([...new Set(allHosts())].sort()).toEqual(['*.beanpool.org', 'beanpool.org']);
     });
-
-    it('…and it is an iOS associated domain too', () => {
-        expect(appJson.expo.ios.associatedDomains).toContain('applinks:global.beanpool.org');
+    it.each([...NODE_HOSTS, 'newtown.beanpool.org'])('%s invites and shared events reach the app through a verified filter', host => {
+        expect(claimedVerified(`https://${host}/?invite=INV-ABCD-EFGH`)).toBe(true);
+        expect(claimedVerified(`https://${host}/?post=6f1b0e2c-1111-4a2b-8c3d-000000000001`)).toBe(true);
+        expect(claimedVerified(`https://${host}/settings`)).toBe(false);
     });
-
-    // earth.beanpool.org is a Cloudflare 301 to global (utils/global-node-url.ts). Android fetches assetlinks.json with no
-    // redirects, so earth cannot be verified; and on Android 11 and older (this app runs from Android 8) one host that
-    // fails verification turns verification off for EVERY host the app names, so listing earth would send every node's
-    // invites to the browser on old phones. Add it, here and in app.json, only once Cloudflare serves earth's
-    // /.well-known/assetlinks.json itself, without the redirect. Until then earth links reach the app the old way.
-    it('earth.beanpool.org is not named by any filter while it is a redirect (it would break old Android for every host)', () => {
-        expect(allHosts()).not.toContain('earth.beanpool.org');
-        expect(claimedVerified('https://earth.beanpool.org/?invite=INV-ABCD-EFGH')).toBe(false);
-        expect(claimed('https://earth.beanpool.org/?invite=INV-ABCD-EFGH')).toBe(true);
+    it('iOS names the same two, and no single community', () => {
+        expect([...appJson.expo.ios.associatedDomains].sort()).toEqual(['applinks:*.beanpool.org', 'applinks:beanpool.org']);
+    });
+    it('a community on its own domain is not claimed (the app cannot know it at build time)', () => {
+        expect(claimed('https://beanpool.example.net/?invite=INV-ABCD-EFGH')).toBe(false);
     });
 });
 

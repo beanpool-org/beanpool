@@ -3310,5 +3310,60 @@
   "Recurring listing (stays active after purchase)": "周期性信息（购买后依然保持有效）",
   "Posting…": "正在发布…",
   "Publish Listing": "发布信息",
-  "Translated by machine: some words may be wrong.": "机器翻译:部分词语可能有误。"
+  "Translated by machine: some words may be wrong.": "机器翻译:部分词语可能有误。",
+  "About this tool": "关于此工具",
+  "Ask to borrow this?": "申请借用此物品？",
+  "Asked to borrow": "已申请借用",
+  "Check your connection, then try again.": "请检查网络连接，然后重试。",
+  "For example": "例如",
+  "Free to borrow. Nothing is held: the lender says yes first.": "免费借用。无需暂扣任何费用：出借方须先同意。",
+  "How it's going": "经营情况",
+  "How you deal": "你的交易方式",
+  "I already do this": "我已经在做",
+  "I'm starting out": "我刚刚开始",
+  "It couldn't be removed. Try again.": "未能移除。请重试。",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "保存在此浏览器中，仅供你使用。其中的任何内容都不会离开此浏览器，在此退出登录将予以移除。",
+  "No tools in this version of the app yet.": "此版本的应用中暂无工具。",
+  "Nothing is held until the lender says yes.": "在出借方同意之前，不会暂扣任何费用。",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "在出借方同意之前，不会暂扣任何费用。同意后费用将存入临时信任钱包，归还物品后出借方将收到扣除 1.5% 交易费 {owned} 后的费用，用于资助公共池。",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "在出借方同意之前，不会暂扣任何费用。同意后 {total} B 将存入托管钱包，归还物品后出借方将收到 {net} B（扣除 1.5% 交易费 {owned}，用于资助公共池）。",
+  "On your Home": "在首页上",
+  "Open {tool}": "打开 {tool}",
+  "Options for {tool}": "{tool} 的选项",
+  "Read in English": "阅读英文原文",
+  "Read the guide": "阅读指南",
+  "Refresh the page to load the newest version your community has.": "刷新页面以加载你所在社区的最新版本。",
+  "Remove my data": "移除我的数据",
+  "Remove my data from this browser": "从此浏览器中移除我的数据",
+  "Removed from this browser.": "已从此浏览器中移除。",
+  "Show translation": "显示译文",
+  "Start": "开始",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "从此浏览器中清除此社区的 {tool} 数据。另一社区中的同一工具将保留其自身数据。此操作无法撤销。",
+  "Things you can do on your own, that make your community stronger.": "你可以独立做的事情，让你的社区更强大。",
+  "This page is in English for now.": "此页面目前为英文。",
+  "This page is newer in English.": "此页面在英文版中有更新。",
+  "This screen stopped working": "此页面已停止运行",
+  "This tool didn't load": "未能加载此工具",
+  "This tool isn't in this version of the app": "当前应用版本中不包含此工具",
+  "What this tool keeps is safe. Go back and open it again.": "此工具保存的内容是安全的。返回并重新打开即可。",
+  "What you have": "你所拥有的",
+  "Where it is kept": "保存位置",
+  "Withdraw request": "撤回申请",
+  "Yes, remove it": "是的，移除它",
+  "for {n} day|for {n} days": {
+    "other": "借用 {n} 天"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "借用 {n} 周"
+  },
+  "{n} day|{n} days": {
+    "other": "{n} 天"
+  },
+  "{n} month|{n} months": {
+    "other": "{n} 个月"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n} 周"
+  },
+  "📦 Ask to borrow": "📦 申请借用"
 }

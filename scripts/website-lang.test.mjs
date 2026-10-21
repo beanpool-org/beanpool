@@ -31,6 +31,8 @@ import {
     TRANSLATED_PAGES,
     LEGAL_PAGES,
     ALL_PAGES,
+    CHOOSE_LANGUAGE_WORDS,
+    getLanguageLinks,
     checkWebsite,
     pageContentHash,
     renderTranslatedPage,
@@ -711,5 +713,286 @@ test('nothing under apps/website/ is a translation source', () => {
     for (const lang of GUIDE_LANGS) {
         assert.ok(!fs.existsSync(path.join(WEBSITE_DIR, 'content', lang)), `apps/website/content/${lang} must NOT exist`);
         assert.ok(fs.existsSync(path.join(CONTENT_DIR, lang)), `apps/website-src/content/${lang} exists`);
+    }
+});
+
+test('every generated and English page has top menu language buttons (desktop and phone) with accessible name', () => {
+    // English pages
+    for (const page of ALL_PAGES) {
+        const file = path.join(WEBSITE_DIR, page);
+        const html = fs.readFileSync(file, 'utf8');
+
+        // Check desktop lang button
+        assert.ok(html.includes('class="lang-menu desktop-lang-menu"'), `en/${page} has desktop-lang-menu`);
+        assert.ok(html.includes(`aria-label="${CHOOSE_LANGUAGE_WORDS.en}"`), `en/${page} desktop button has aria-label="${CHOOSE_LANGUAGE_WORDS.en}"`);
+
+        // Check phone lang button on pages with phone menu (.has-menu / .nav-menu)
+        if (html.includes('class="nav-menu"')) {
+            assert.ok(html.includes('class="lang-menu phone-lang-menu"'), `en/${page} has phone-lang-menu`);
+            assert.ok(html.includes(`aria-label="${CHOOSE_LANGUAGE_WORDS.en}"`), `en/${page} phone button has aria-label="${CHOOSE_LANGUAGE_WORDS.en}"`);
+        }
+    }
+
+    // Translated pages
+    for (const lang of GUIDE_LANGS) {
+        for (const page of TRANSLATED_PAGES) {
+            const file = path.join(WEBSITE_DIR, lang, page);
+            const html = fs.readFileSync(file, 'utf8');
+
+            const expectedLabel = CHOOSE_LANGUAGE_WORDS[lang];
+            assert.ok(html.includes('class="lang-menu desktop-lang-menu"'), `${lang}/${page} has desktop-lang-menu`);
+            assert.ok(html.includes(`aria-label="${expectedLabel}"`), `${lang}/${page} desktop button has aria-label="${expectedLabel}"`);
+
+            if (html.includes('class="nav-menu"')) {
+                assert.ok(html.includes('class="lang-menu phone-lang-menu"'), `${lang}/${page} has phone-lang-menu`);
+                assert.ok(html.includes(`aria-label="${expectedLabel}"`), `${lang}/${page} phone button has aria-label="${expectedLabel}"`);
+            }
+        }
+    }
+});
+
+test('language menu in top menu opens the same list of 25 languages with own names and marks aria-current="page"', () => {
+    for (const lang of LANGS) {
+        const pagesToTest = lang === 'en' ? ALL_PAGES : TRANSLATED_PAGES;
+        for (const page of pagesToTest) {
+            const file = lang === 'en' ? path.join(WEBSITE_DIR, page) : path.join(WEBSITE_DIR, lang, page);
+            const html = fs.readFileSync(file, 'utf8');
+
+            const expectedLinks = getLanguageLinks(page, lang);
+
+            // Check desktop menu links
+            const desktopMenuMatch = html.match(/<details\s+class="lang-menu\s+desktop-lang-menu">([\s\S]*?)<\/details>/i);
+            assert.ok(desktopMenuMatch, `desktop menu found in ${lang}/${page}`);
+            const desktopDropdown = desktopMenuMatch[1];
+
+            const menusToTest = [desktopDropdown];
+
+            // Check phone menu links if page has phone menu
+            const phoneMenuMatch = html.match(/<details\s+class="lang-menu\s+phone-lang-menu">([\s\S]*?)<\/details>/i);
+            if (html.includes('class="nav-menu"')) {
+                assert.ok(phoneMenuMatch, `phone menu found in ${lang}/${page}`);
+                menusToTest.push(phoneMenuMatch[1]);
+            }
+
+            for (const menuHtml of menusToTest) {
+                const links = [...menuHtml.matchAll(/<a\s+href="([^"]*)"\s+hreflang="([^"]*)"\s+lang="([^"]*)"(?:\s+aria-current="([^"]*)")?>([^<]*)<\/a>/gi)];
+                assert.equal(links.length, 25, `${lang}/${page} menu contains 25 language links`);
+
+                for (let i = 0; i < 25; i++) {
+                    const [, href, hreflang, langAttr, ariaCurrent, text] = links[i];
+                    const exp = expectedLinks[i];
+                    assert.equal(hreflang, exp.lang);
+                    assert.equal(langAttr, exp.lang);
+                    assert.equal(href, exp.href);
+                    assert.equal(text, exp.name);
+                    if (exp.isCurrent) {
+                        assert.equal(ariaCurrent, 'page', `current language ${exp.lang} marked with aria-current="page"`);
+                    } else {
+                        assert.equal(ariaCurrent, undefined, `non-current language ${exp.lang} does not have aria-current`);
+                    }
+                }
+            }
+        }
+    }
+});
+
+test('keyboard interaction: Escape key closes open language menus and focuses summary button', () => {
+    const mainJsText = fs.readFileSync(path.join(WEBSITE_DIR, 'main.js'), 'utf8');
+    const dom = new JSDOM(`<!DOCTYPE html><html><body>
+        <details class="lang-menu desktop-lang-menu" open>
+            <summary class="lang-btn" aria-label="Choose language">🌐</summary>
+            <div class="lang-dropdown">
+                <a href="/es/">Español</a>
+            </div>
+        </details>
+    </body></html>`, { runScripts: 'dangerously' });
+
+    dom.window.eval(mainJsText);
+
+    const details = dom.window.document.querySelector('.lang-menu');
+    const summary = dom.window.document.querySelector('.lang-btn');
+    assert.equal(details.open, true, 'menu is initially open');
+
+    // Dispatch Escape keydown
+    const event = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    dom.window.document.dispatchEvent(event);
+
+    assert.equal(details.open, false, 'menu is closed after Escape key');
+    assert.equal(dom.window.document.activeElement, summary, 'focus returned to summary button');
+});
+
+test('browser offer banner dismissal is remembered in localStorage and works without storage', () => {
+    const mainJsText = fs.readFileSync(path.join(WEBSITE_DIR, 'main.js'), 'utf8');
+
+    // Case 1: Dismiss button records dismissal in localStorage and suppresses banner on reload
+    const dom1 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom1.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(dom1.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    dom1.window.eval(mainJsText);
+
+    const banner1 = dom1.window.document.getElementById('read-in-banner');
+    assert.ok(banner1, 'banner shown initially');
+    const closeBtn = banner1.querySelector('.read-in-close');
+    closeBtn.click();
+
+    assert.equal(dom1.window.localStorage.getItem('beanpool_lang_banner_dismissed'), 'true', 'dismiss recorded in localStorage');
+    assert.equal(dom1.window.localStorage.getItem('beanpool_lang'), 'en', 'dismiss records en in localStorage');
+
+    // Next load with dismissal in localStorage but NO cookies:
+    const dom1Reload = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom1Reload.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(dom1Reload.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    dom1Reload.window.localStorage.setItem('beanpool_lang_banner_dismissed', 'true');
+    dom1Reload.window.eval(mainJsText);
+
+    assert.equal(dom1Reload.window.document.getElementById('read-in-banner'), null, 'banner suppressed on reload due to localStorage dismissal');
+
+    // Case 2: Clicking the recommendation link also marks dismissal in localStorage
+    const dom2 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom2.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(dom2.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    dom2.window.eval(mainJsText);
+
+    const banner2 = dom2.window.document.getElementById('read-in-banner');
+    assert.ok(banner2);
+    const langLink = banner2.querySelector('a');
+    langLink.click();
+    assert.equal(dom2.window.localStorage.getItem('beanpool_lang_banner_dismissed'), 'true', 'banner link click marks dismissal in localStorage');
+    assert.equal(dom2.window.localStorage.getItem('beanpool_lang'), 'es', 'banner link click records chosen language in localStorage');
+
+    // Case 3: When localStorage throws (SecurityError / disabled storage), banner still works without error
+    const dom3 = new JSDOM(`<!DOCTYPE html><html lang="en"><body><div id="navbar"></div></body></html>`, {
+        url: 'https://beanpool.org/rules.html',
+        runScripts: 'dangerously'
+    });
+    Object.defineProperty(dom3.window.navigator, 'language', { value: 'es-ES', configurable: true });
+    Object.defineProperty(dom3.window.navigator, 'languages', { value: ['es-ES', 'es'], configurable: true });
+    Object.defineProperty(dom3.window, 'localStorage', {
+        get() {
+            throw new Error('SecurityError: The operation is insecure.');
+        }
+    });
+
+    assert.doesNotThrow(() => {
+        dom3.window.eval(mainJsText);
+    }, 'main.js does not throw when localStorage throws');
+    const banner3 = dom3.window.document.getElementById('read-in-banner');
+    assert.ok(banner3, 'banner still renders when localStorage throws');
+    assert.doesNotThrow(() => {
+        banner3.querySelector('.read-in-close').click();
+    }, 'dismiss button does not throw when localStorage throws');
+});
+
+test('mobile width (320px and 360px with 1.3x text) with language menu open has no horizontal scroll and dropdown scrolls internally', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const browser = await chromium.launch({ headless: true });
+
+    try {
+        for (const width of [320, 360]) {
+            for (const testPage of ['index.html', 'ar/index.html']) {
+                const page = await browser.newPage({ viewport: { width, height: 640 } });
+                await page.goto(`http://127.0.0.1:${port}/${testPage}`, { waitUntil: 'load' });
+
+                // Apply 1.3x text scaling (simulating user font preference)
+                await page.evaluate(() => {
+                    document.documentElement.style.fontSize = '130%';
+                });
+
+                // Open the phone menu
+                await page.locator('.nav-menu > summary').click();
+                await page.waitForTimeout(50);
+
+                // Open the phone language menu
+                await page.locator('.phone-lang-menu summary').click();
+                await page.waitForTimeout(50);
+
+                const metrics = await page.evaluate(() => {
+                    const scrollW = document.documentElement.scrollWidth;
+                    const clientW = document.documentElement.clientWidth;
+                    const dropdown = document.querySelector('.phone-lang-menu .lang-dropdown');
+                    return {
+                        scrollW,
+                        clientW,
+                        hasOverflowX: scrollW > clientW,
+                        dropdownScrollH: dropdown ? dropdown.scrollHeight : 0,
+                        dropdownClientH: dropdown ? dropdown.clientHeight : 0,
+                        dropdownOverflowY: dropdown ? window.getComputedStyle(dropdown).overflowY : ''
+                    };
+                });
+
+                assert.ok(!metrics.hasOverflowX, `${testPage} at ${width}px 1.3x text has scrollWidth (${metrics.scrollW}) <= clientWidth (${metrics.clientW})`);
+                assert.ok(metrics.dropdownScrollH >= metrics.dropdownClientH, `${testPage} phone lang dropdown scrollHeight >= clientHeight`);
+                assert.equal(metrics.dropdownOverflowY, 'auto', `${testPage} phone lang dropdown has overflow-y: auto`);
+
+                await page.close();
+            }
+        }
+    } finally {
+        await browser.close();
+        server.close();
+    }
+});
+
+test('RTL desktop top language menu mirrors without horizontal overflow at 1280px in headless Chromium', async () => {
+    const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
+
+    const server = http.createServer((req, res) => {
+        let p = path.join(WEBSITE_DIR, decodeURIComponent(new URL(req.url, 'http://x').pathname));
+        if (fs.existsSync(p) && fs.statSync(p).isDirectory()) p = path.join(p, 'index.html');
+        if (!fs.existsSync(p)) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' });
+        fs.createReadStream(p).pipe(res);
+    });
+
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    const port = server.address().port;
+    const browser = await chromium.launch({ headless: true });
+
+    try {
+        const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+        await page.goto(`http://127.0.0.1:${port}/ar/index.html`, { waitUntil: 'load' });
+
+        // Open desktop language menu
+        await page.locator('.desktop-lang-menu summary').click();
+        await page.waitForTimeout(50);
+
+        const bounds = await page.evaluate(() => {
+            const dropdown = document.querySelector('.desktop-lang-menu .lang-dropdown');
+            const rect = dropdown.getBoundingClientRect();
+            return {
+                x: rect.x,
+                right: rect.right,
+                width: rect.width,
+                viewportWidth: window.innerWidth,
+                scrollWidth: document.documentElement.scrollWidth
+            };
+        });
+
+        assert.ok(bounds.x >= 0, `dropdown x (${bounds.x}) >= 0`);
+        assert.ok(bounds.right <= bounds.viewportWidth, `dropdown right (${bounds.right}) <= viewportWidth (${bounds.viewportWidth})`);
+        assert.ok(bounds.scrollWidth <= bounds.viewportWidth, `page scrollWidth (${bounds.scrollWidth}) <= viewportWidth`);
+    } finally {
+        await browser.close();
+        server.close();
     }
 });

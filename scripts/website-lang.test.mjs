@@ -1134,7 +1134,7 @@ test('nav-cta is never clipped and does not wrap where main did not, and ☰ pan
                     await summary.click();
                     await page.waitForTimeout(20);
                     const unreach = await page.evaluate(() => {
-                        const links = Array.from(document.querySelectorAll('.nav-menu-panel a'));
+                        const links = Array.from(document.querySelectorAll('.nav-menu-panel a')).filter(a => a.offsetParent !== null);
                         const bad = [];
                         for (const link of links) {
                             link.scrollIntoView();

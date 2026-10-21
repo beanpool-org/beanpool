@@ -5975,5 +5975,27 @@
     "one": "{n} هفته",
     "other": "{n} هفته"
   },
-  "📦 Ask to borrow": "📦 درخواست امانت"
+  "📦 Ask to borrow": "📦 درخواست امانت",
+  "Add a community by address": "افزودن جامعه با آدرس",
+  "COMMUNITY ADDRESS": "آدرس جامعه",
+  "COMMUNITY NAME (OPTIONAL)": "نام جامعه (اختیاری)",
+  "Clear this phone's copy and download again": "پاک کردن نسخه این تلفن و بارگیری دوباره",
+  "Community name (optional)": "نام جامعه (اختیاری)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "با تایپ آدرس یک جامعه به آن متصل شوید. تلفن شما آن را در این فهرست ذخیره کرده و به آن جابه‌جا می‌شود.",
+  "Have an invite code for this community?": "کد دعوتی برای این جامعه دارید؟",
+  "Invited": "دعوت‌شده",
+  "Reached at **{trust}** trust": "دستیابی در **{trust}** اعتماد",
+  "Reached at **{trust}** trust (up to {upTo})": "دستیابی در **{trust}** اعتماد (تا {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "این جامعه را اداره می‌کنید؟ مالکان و مدیران یک ردیف مدیریت در بالای تنظیمات می‌بینند.",
+  "Saved communities": "جوامع ذخیره‌شده",
+  "Switch to this community": "تغییر به این جامعه",
+  "Switch, forget or refresh the communities on this phone": "تغییر، فراموش کردن یا به‌روزرسانی جوامع در این تلفن",
+  "Switching...": "در حال تغییر...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "جوامعی که این تلفن به آن‌ها پیوسته است. کلید و ۱۲ کلمه شما در هر یک یکسان است؛ برای استفاده به یکی از آن‌ها تغییر دهید.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "خوش آمدید. از روز اول می‌توانید در بازار جستجو کنید، معامله کنید، اعتبار بگیرید و دیگران را دعوت نمایید — و خط اعتباری شما از قبل باز است.",
+  "from {n} trust|from {n} trust": {
+    "one": "از {n} اعتماد",
+    "other": "از {n} اعتماد"
+  },
+  "{name}, already invited": "{name}، از قبل دعوت شده است"
 }

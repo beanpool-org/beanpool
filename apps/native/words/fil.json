@@ -2,10 +2,10 @@
   "_meta": {
     "language": "fil",
     "name": "Filipino",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "munggo",
@@ -5895,5 +5895,103 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Kapag tumatakbo na ang iyong server, papangalanan mo ang iyong komunidad sa settings app nito, iimbitahan ang mga unang miyembro, at sila ang mag-iimbita sa iba pa. I-on ang \"ilathala ang lokasyon\" doon, at malalaman ito ng mga taong malapit sa iyo na humiling na masabihan.",
   "How to run a node, on beanpool.org": "Paano magpatakbo ng server, sa beanpool.org",
   "Copy my community's details": "Kopyahin ang mga detalye ng aking komunidad",
-  "Copied. Paste them into your node's settings app.": "Nakopya na. I-paste ang mga ito sa settings app ng iyong server."
+  "Copied. Paste them into your node's settings app.": "Nakopya na. I-paste ang mga ito sa settings app ng iyong server.",
+  "A few examples to start from, and a guide.": "Ilang halimbawa na mapagsisimulan, at isang gabay.",
+  "A fixed number of Beans": "Nakatakdang bilang ng munggo",
+  "About this tool": "Tungkol sa tool na ito",
+  "Allow notifications": "Payagan ang mga notification",
+  "Ask to borrow this?": "Humiling na hiramin ito?",
+  "Asked to borrow": "Humiling na humiram",
+  "Beans per day": "Munggo bawat araw",
+  "Beans per week": "Munggo bawat linggo",
+  "Books: how it's going": "Mga aklat: kumusta na ito",
+  "Fee": "Bayad",
+  "Free": "Libre",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Libreng hiramin. Walang hinahawakan: kailangang pumayag muna ang nagpapahiram.",
+  "Go on": "Magpatuloy",
+  "Go on to post": "Magpatuloy sa pag-post",
+  "Go straight in and add what you keep.": "Pumunta agad at idagdag ang iyong itinatago.",
+  "I already do this": "Ginagawa ko na ito",
+  "I already do this: go straight in and add what you keep.": "Ginagawa ko na ito: pumunta agad at idagdag ang iyong itinatago.",
+  "I'm starting out": "Nagsisimula pa lang ako",
+  "I'm starting out: a few examples to start from, and a guide.": "Nagsisimula pa lang ako: ilang halimbawa na mapagsisimulan, at isang gabay.",
+  "It shows in the Market as an Offer.": "Lalabas ito sa Merkado bilang Alok.",
+  "Keep a private copy on your community's server": "Magtago ng pribadong kopya sa server ng iyong komunidad",
+  "Kept on this phone only. Nothing in it leaves this phone.": "Nasa teleponong ito lang. Walang anuman dito ang aalis sa teleponong ito.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Nasa teleponong ito, na may pribadong kopya sa server ng iyong komunidad na ikaw lang ang makakabasa sa pamamagitan ng app. Tulad ng lahat sa server na iyon, mababasa rin ito ng operator nito.",
+  "List it in the Market": "Ilista ito sa Merkado",
+  "More tools": "Higit pang mga tool",
+  "Next you check it and tap Post. Nothing is posted before that.": "Susunod, susuriin mo ito at i-tap ang I-post. Walang mai-post bago iyon.",
+  "No thanks": "Hindi na muna",
+  "No tools here yet. They come with updates of the app.": "Wala pang mga tool dito. Darating ang mga ito kasama ng mga update ng app.",
+  "Nothing is held until the lender says yes.": "Walang hinahawakan hangga't hindi pumapayag ang nagpapahiram.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Walang hinahawakan hangga't hindi pumapayag ang nagpapahiram. Pagkatapos, mapupunta ang bayad sa pansamantalang Trust Wallet, at kapag naibalik na ito, matatanggap ito ng nagpapahiram bawas ang 1.5% bayad sa transaksyon {owned} para pondohan ang Commons Pool.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "Naka-off ang mga notification para sa BeanPool sa teleponong ito, kaya hindi maipapakita ang mga paalala.",
+  "Open {tool}": "Buksan ang {tool}",
+  "Options for {tool}": "Mga opsyon para sa {tool}",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "Ilalagay ba ang tool na ito sa iyong Home? Ipinapakita nito sa isang tingin ang itinatago nito.",
+  "Read in English": "Basahin sa Ingles",
+  "Read the guide": "Basahin ang gabay",
+  "Reminders": "Mga Paalala",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "Mga paalalang itinakda ng iyong mga tool sa teleponong ito. Walang anuman tungkol sa mga ito ang aalis dito.",
+  "Remove my data from this phone": "Alisin ang aking data sa teleponong ito",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "Inaalis ang listahan, mga larawan at mga paalala ng komunidad na ito para sa tool na ito sa teleponong ito. Ang parehong tool sa ibang komunidad ay magpapanatili ng sarili nito. Hindi na ito mababawi.",
+  "Replace your unfinished post?": "Palitan ang iyong hindi natapos na post?",
+  "Show translation": "Ipakita ang salin",
+  "Some examples": "Ilang halimbawa",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "May nagkaproblema sa tool na ito. Ligtas ang itinatago nito sa teleponong ito.",
+  "Stock: what you have": "Imbentaryo: kung ano ang mayroon ka",
+  "Things you can do on your own": "Mga bagay na magagawa mo nang mag-isa",
+  "Things you can do on your own, that make your community stronger.": "Mga bagay na magagawa mo nang mag-isa, na nagpapalakas sa iyong komunidad.",
+  "This page is in English for now.": "Nasa Ingles muna ang pahinang ito.",
+  "This page is newer in English.": "Mas bago ang pahinang ito sa Ingles.",
+  "This tool isn't in this version of the app": "Wala ang tool na ito sa bersyong ito ng app",
+  "Tool reminders": "Mga paalala sa tool",
+  "Trade: how you deal": "Kalakalan: kung paano ka nakikipagtransaksyon",
+  "Update": "I-update",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "I-update ang BeanPool para magamit ito. Ipinapakita ang iyong bersyon sa ibaba ng Mga Setting.",
+  "You have an unfinished post on the map. Going on replaces it.": "Mayroon kang hindi natapos na post sa mapa. Ang pagpapatuloy ay magpapalit dito.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "Naglaan ka ng {credits} kredito ({n} araw) sa Trust Wallet para sa alok na ito.",
+    "other": "Naglaan ka ng {credits} kredito ({n} araw) sa Trust Wallet para sa alok na ito."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "Naglaan ka ng {credits} kredito ({n} buwan) sa Trust Wallet para sa alok na ito.",
+    "other": "Naglaan ka ng {credits} kredito ({n} buwan) sa Trust Wallet para sa alok na ito."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "Naglaan ka ng {credits} kredito ({n} linggo) sa Trust Wallet para sa alok na ito.",
+    "other": "Naglaan ka ng {credits} kredito ({n} linggo) sa Trust Wallet para sa alok na ito."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Humiling kang kumita ng {credits} kredito ({n} araw) ({net} net pagkatapos ng 1.5% bayad sa transaksyon) {owned} para sa pagtupad ng kahilingang ito.",
+    "other": "Humiling kang kumita ng {credits} kredito ({n} araw) ({net} net pagkatapos ng 1.5% bayad sa transaksyon) {owned} para sa pagtupad ng kahilingang ito."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Humiling kang kumita ng {credits} kredito ({n} buwan) ({net} net pagkatapos ng 1.5% bayad sa transaksyon) {owned} para sa pagtupad ng kahilingang ito.",
+    "other": "Humiling kang kumita ng {credits} kredito ({n} buwan) ({net} net pagkatapos ng 1.5% bayad sa transaksyon) {owned} para sa pagtupad ng kahilingang ito."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Humiling kang kumita ng {credits} kredito ({n} linggo) ({net} net pagkatapos ng 1.5% bayad sa transaksyon) {owned} para sa pagtupad ng kahilingang ito.",
+    "other": "Humiling kang kumita ng {credits} kredito ({n} linggo) ({net} net pagkatapos ng 1.5% bayad sa transaksyon) {owned} para sa pagtupad ng kahilingang ito."
+  },
+  "Your community asks for a profile photo before you post.": "Humihiling ang iyong komunidad ng larawan sa profile bago ka mag-post.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "Hindi pa makapagtago ng kopya ang server ng iyong komunidad, kaya sa ngayon ay nananatili lang ito sa teleponong ito.",
+  "for {n} day|for {n} days": {
+    "one": "para sa {n} araw",
+    "other": "para sa {n} araw"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "para sa {n} linggo",
+    "other": "para sa {n} linggo"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} buwan",
+    "other": "{n} buwan"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} linggo",
+    "other": "{n} linggo"
+  },
+  "📦 Ask to borrow": "📦 Humiling na humiram"
 }

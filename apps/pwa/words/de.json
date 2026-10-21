@@ -2,10 +2,10 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
   },
   "\"{name}\" is already taken in this community. Choose another name.": "„{name}“ ist in dieser Gemeinschaft schon vergeben. Wähle einen anderen Namen.",
@@ -3423,5 +3423,65 @@
   "Recurring listing (stays active after purchase)": "Wiederkehrender Eintrag (bleibt nach Kauf aktiv)",
   "Posting…": "Wird veröffentlicht…",
   "Publish Listing": "Eintrag veröffentlichen",
-  "Translated by machine: some words may be wrong.": "Maschinell übersetzt: Manche Wörter können falsch sein."
+  "Translated by machine: some words may be wrong.": "Maschinell übersetzt: Manche Wörter können falsch sein.",
+  "About this tool": "Über dieses Werkzeug",
+  "Ask to borrow this?": "Anfragen, dies auszuleihen?",
+  "Asked to borrow": "Ausleihe angefragt",
+  "Check your connection, then try again.": "Prüfe deine Verbindung und versuche es dann erneut.",
+  "For example": "Zum Beispiel",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Kostenlos auszuleihen. Nichts wird einbehalten: Wer verleiht, stimmt zuerst zu.",
+  "How it's going": "Wie es läuft",
+  "How you deal": "Wie du handelst",
+  "I already do this": "Ich mache das schon",
+  "I'm starting out": "Ich fange gerade an",
+  "It couldn't be removed. Try again.": "Konnte nicht entfernt werden. Versuche es erneut.",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "Wird nur für dich in diesem Browser gespeichert. Nichts davon verlässt diesen Browser, und das Abmelden hier entfernt es.",
+  "No tools in this version of the app yet.": "In dieser Version der App gibt es noch keine Werkzeuge.",
+  "Nothing is held until the lender says yes.": "Nichts wird einbehalten, bis die verleihende Person zustimmt.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Nichts wird einbehalten, bis die verleihende Person zustimmt. Dann geht die Gebühr auf ein temporäres Treuhandkonto, und sobald es zurück ist, erhält die verleihende Person sie abzüglich 1.5% Transaktionsgebühr {owned} für den Gemeinschaftspool.",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "Nichts wird einbehalten, bis die verleihende Person zustimmt. Dann gehen {total} B auf ein Treuhandkonto, und sobald es zurück ist, erhält die verleihende Person {net} B (abzüglich 1.5% Transaktionsgebühr {owned} für den Gemeinschaftspool).",
+  "On your Home": "Auf deiner Startseite",
+  "Open {tool}": "{tool} öffnen",
+  "Options for {tool}": "Optionen für {tool}",
+  "Read in English": "Auf Englisch lesen",
+  "Read the guide": "Leitfaden lesen",
+  "Refresh the page to load the newest version your community has.": "Aktualisiere die Seite, um die neueste Version deiner Community zu laden.",
+  "Remove my data": "Meine Daten entfernen",
+  "Remove my data from this browser": "Meine Daten aus diesem Browser entfernen",
+  "Removed from this browser.": "Aus diesem Browser entfernt.",
+  "Show translation": "Übersetzung anzeigen",
+  "Start": "Starten",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "Entfernt die Daten dieser Community für {tool} aus diesem Browser. Dasselbe Werkzeug in einer anderen Community behält seine Daten. Dies kann nicht rückgängig gemacht werden.",
+  "Things you can do on your own, that make your community stronger.": "Dinge, die du selbst tun kannst und die deine Community stärken.",
+  "This page is in English for now.": "Diese Seite ist vorerst auf Englisch.",
+  "This page is newer in English.": "Diese Seite ist auf Englisch neuer.",
+  "This screen stopped working": "Dieser Bildschirm funktioniert nicht mehr",
+  "This tool didn't load": "Dieses Werkzeug wurde nicht geladen",
+  "This tool isn't in this version of the app": "Dieses Werkzeug ist in dieser Version der App nicht enthalten",
+  "What this tool keeps is safe. Go back and open it again.": "Was in diesem Werkzeug gespeichert ist, ist sicher. Gehe zurück und öffne es erneut.",
+  "What you have": "Was du hast",
+  "Where it is kept": "Wo es gespeichert wird",
+  "Withdraw request": "Anfrage zurückziehen",
+  "Yes, remove it": "Ja, entfernen",
+  "for {n} day|for {n} days": {
+    "one": "für {n} Tag",
+    "other": "für {n} Tage"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "für {n} Woche",
+    "other": "für {n} Wochen"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} Tag",
+    "other": "{n} Tage"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} Monat",
+    "other": "{n} Monate"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} Woche",
+    "other": "{n} Wochen"
+  },
+  "📦 Ask to borrow": "📦 Ausleihe anfragen"
 }

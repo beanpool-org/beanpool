@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/sw by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="sw">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mambo mapya — BeanPool members' guide</title>
+    <meta name="description" content="Kilichobadilika katika programu, kwa maneno rahisi.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#about">Kuhusu BeanPool</a></p>
+        <h1>Mambo mapya</h1>
+        <p class="lede">Kilichobadilika katika programu, kwa maneno rahisi.</p>
+        <h2>Jumuiya ya kimataifa, karibu nawe</h2>
+        <p>Unapata mambo haya seva ya jumuiya ya kimataifa inaposasishwa. Kwenye simu yanahitaji programu iliyosasishwa.</p>
+        <ul>
+            <li><strong>Bure, ikiwa na mipaka.</strong> Kwenye jumuiya ya kimataifa, tangazo huwekwa kwenye kumbukumbu baada ya siku 90 tangu lilipobadilishwa mara ya mwisho, pamoja na picha zake. Kulihifadhi tena hulifanya liendelee kuwepo. Mipaka yote ipo kwenye ukurasa mmoja. Tazama &quot;Mipaka ya jumuiya ya kimataifa&quot;.</li>
+            <li><strong>Matangazo yaliyo karibu nawe.</strong> Jumuiya ya kimataifa ina matangazo kutoka kila mahali. Simu yako sasa huweka 500 za karibu zaidi ndani ya km 250 kutoka eneo lako, pamoja na yako mwenyewe na tangazo lolote unalofanya biashara nalo au unalolizungumzia, popote yalipo. Utafutaji wa Sokoni bado hupata matangazo kutoka kila mahali. Tazama &quot;Zaidi ya jumuiya moja&quot;.</li>
+            <li><strong>Eneo lako.</strong> Kwenye programu ya wavuti, kujiunga na jumuiya ya kimataifa kuna hatua moja zaidi baada ya picha yako: <strong>Uko takriban wapi?</strong> Kwenye simu huulizwa unapojiunga kwa akaunti uliyo nayo tayari; akaunti mpya ya simu huliweka baadaye kwenye Mipangilio, chini ya <strong>Eneo lako</strong>. Katika hatua hiyo, gusa <strong>Tumia mahali nilipo</strong>, <strong>Andika mji au mtaa</strong>, au <strong>Ruka kwa sasa</strong>. Huhifadhiwa hadi takriban km 10, si mahali ulipo hasa. Libadilishe au lifute kwenye Mipangilio, chini ya <strong>Eneo lako</strong>. Tazama &quot;Eneo lako&quot;.</li>
+            <li><strong>Huna eneo, hakuna shida.</strong> Bila eneo unaona matangazo mapya zaidi kutoka kila mahali, na mstari ulio juu ya Soko unasema hivyo. Kwenye simu, uguse ili kuweka eneo lako.</li>
+            <li><strong>Matangazo mapya karibu nawe.</strong> Huingia yanapochapishwa. Yale ya mbali hayafiki tena kwenye simu yako.</li>
+            <li><strong>Kwenye programu ya wavuti</strong>, Soko na Ramani huanzia kwenye eneo lako, au mahali unapochagua kwa <strong>Umbali</strong>: yaliyo karibu kwanza, kila tangazo likionyesha umbali wake. Tazama &quot;Kupata vitu vilivyo karibu&quot;.</li>
+            <li><strong>Kura za maoni</strong> hazina mahali pake maalum, kwa hivyo kila moja huonyeshwa kwenye eneo la mwanachama aliyeiunda.</li>
+            <li><strong>Andika mji wako.</strong> Kwenye jumuiya ya kimataifa, <strong>Pata jumuiya yako</strong> kwenye Nyumbani haihitaji tena eneo lako: gusa <strong>au andika mji wako</strong> na uchague mji wako. Nukta ya makadirio tu ndiyo inayowekwa. Tazama &quot;Kupata jumuiya iliyo karibu nawe&quot;.</li>
+            <li><strong>Kuchapisha bila bei.</strong> Kwenye jumuiya ya kimataifa fomu ya chapisho haiombi bei, kwa sababu Maharagwe huishi katika jumuiya za eneo. Kwenye programu ya wavuti, <strong>Weka Ofa</strong> na <strong>Weka Uhitaji</strong> sasa hufanya kazi bila bei. Jumuiya ya eneo bado huomba bei.</li>
+        </ul>
+        <h2>Nyumbani</h2>
+        <ul>
+            <li><strong>Kichupo kipya cha Nyumbani.</strong> Programu sasa hufungukia kwenye Nyumbani: dashibodi inayojibu kinachokuhitaji, kilicho kipya karibu nawe, na kile unachoweza kufanya baadaye. Soko sasa lina kichupo chake chenyewe, na Mwenendo ni kadi kwenye Nyumbani. Unachagua kadi zako: <strong>Ongeza kadi</strong> huweka moja kwenye Nyumbani, <strong>…</strong> ya kila kadi huihamisha au kuiondoa, na <strong>Hariri nyumbani</strong> huziorodhesha zote ili kupanga upya au kuondoa, kwenye simu na katika programu ya wavuti.</li>
+            <li><strong>Kuanza.</strong> Nyumbani ya mwanachama mpya huanza na kadi moja, <strong>Kuanza</strong>. Gusa <strong>Angalia</strong> kwa muhtasari wa dakika moja, au <strong>Ruka</strong>, na kadi zako za kawaida zitaonekana. Kila skrini ina <strong>?</strong> juu ikiwa na usaidizi wake.</li>
+            <li><strong>Utafutaji uliohifadhiwa kwenye Nyumbani.</strong> Chagua maneno kama vile &quot;mayai&quot;, na iwapo unataka ofa, mahitaji au yote mawili, kategoria na umbali. Kadi huonyesha matangazo manne ya kwanza yanayolingana, yale yale ambayo utafutaji wa Sokoni hupata, na <strong>Ona zaidi</strong> hufungua Soko ikiwa na maneno yako katika utafutaji wake. Inahitaji programu iliyosasishwa na seva ya jumuiya yako kusasishwa.</li>
+            <li><strong>Hifadhi utafutaji kutoka Sokoni.</strong> Wakati kuna maneno katika utafutaji wa Sokoni, <strong>Hifadhi utafutaji huu kwenye Nyumbani</strong> huonekana, kwenye simu na katika programu ya wavuti. Inafungua Nyumbani ikiwa na maneno yako, <strong>Ofa</strong> au <strong>Mahitaji</strong>, kategoria na umbali ukiwa umejazwa. Gusa <strong>Weka kwenye Nyumbani</strong>. Utafutaji uliohifadhiwa huonyesha matokeo yake mapya zaidi kwanza; kwenye jumuiya ya kimataifa, yaliyo karibu zaidi kwanza. Ni kwa ajili ya Ofa na Mahitaji, kwa hivyo hauonekani chini ya Matukio au Kura za maoni.</li>
+            <li><strong>Jua na mwezi kwenye Nyumbani.</strong> Mwezi wa leo usiku na mawio na machweo ya leo, yakihesabiwa kwenye simu yako au katika kivinjari chako kwa mahali pa jumuiya yako au eneo lako, kwenye saa yako mwenyewe. Haiombi chochote kutoka kwa seva ya jumuiya yako. Inahitaji programu iliyosasishwa; hadi seva ya jumuiya yako itakaposasishwa, hutumia eneo lako.</li>
+        </ul>
+        <h2>Faragha kama msingi</h2>
+        <p>Mabadiliko haya yapo kwenye seva ya jumuiya yako. Unayapata seva ya jumuiya yako inaposasishwa. Chaguo la Kura ya maoni linahitaji programu iliyosasishwa.</p>
+        <ul>
+            <li><strong>Salio lako na biashara ni zako.</strong> Hakuna mtu mwingine yeyote katika jumuiya yako anayeweza kusoma salio lako au historia yako. Biashara huonyesha watu wake wawili pekee, kwenye shughuli za jumuiya pia. Kura ya kumwondoa mwanachama huonyesha salio la mwanachama huyo kwa watu wanaoweza kupiga kura humo, na si mahali pengine popote.</li>
+            <li><strong>Matangazo ni kwa ajili ya wanachama.</strong> Mtu ambaye hajajiunga hawezi kuona matangazo ya jumuiya yako au picha zake. Badala yake huonyeshwa njia ya kuelekea jumuiya ya kimataifa, ambako mtu yeyote anaweza kuangalia.</li>
+            <li><strong>Kura za maoni zisizotaja majina.</strong> Kura za maoni huonyesha jumla pekee, isipokuwa mtu anayeanzisha moja akiifanya kuwa <strong>Kura ya wazi</strong>.</li>
+            <li><strong>Hesabu za mashirika.</strong> Kila mtu bado huona kiasi cha shirika. Nani aliyelipa, na dokezo, huonekana tu kwa wasimamizi wake na mwanachama huyo.</li>
+            <li><strong>Nani aliyeandika tathmini.</strong> Kila mtu katika jumuiya yako anaweza kusoma nyota na maneno ya tathmini. Watu wawili pekee waliofanya biashara ndio wanaoweza kuona nani aliyeandika na ilikuwa kuhusu makubaliano gani.</li>
+            <li><strong>Usalama wa mtoto.</strong> Kila skrini ya ripoti, kwenye simu na katika programu ya wavuti, sasa inatoa <strong>Usalama wa mtoto</strong> kama sababu. Ichague ikiwa mtoto anaweza kuwa hatarini: watu wanaoendesha seva ya jumuiya yako huarifiwa mara moja na huiangalia kwanza. Tazama &quot;Kuripoti tatizo&quot;.</li>
+        </ul>
+        <h2>Mipaka ya kila siku</h2>
+        <p>Hii iko kwenye seva ya jumuiya yako. Unayapata seva ya jumuiya yako inaposasishwa.</p>
+        <ul>
+            <li><strong>Hakuna anayeweza kuijaza jumuiya kupita kiasi.</strong> Akaunti moja inaweza kufanya mabadiliko hadi 5,000 kwa siku: machapisho, jumbe, masahihisho na mfano wa hayo. Ndani ya hayo, hadi machapisho mapya 100, vikundi vipya 5, mashirika mapya 3, mialiko 20 na viungo 50 kwenye Mwenendo kwa siku. Hakuna mtu anayetumia BeanPool kawaida anayekaribia viwango hivi. Ukifikia kimoja, programu inasema ni kipi, na lini unaweza kuendelea.</li>
+            <li><strong>Jumbe.</strong> Hadi 30 kwa dakika katika gumzo lolote, jumbe za moja kwa moja pia. Ujumbe mrefu sana hukataliwa: utume kwa sehemu. Picha hazihesabiwi.</li>
+            <li><strong>Watu wapya.</strong> Unaweza kuanzisha mazungumzo na watu 20 kutoka nje ya jumuiya yako kwa siku. Kutuma ujumbe kwa wanachama, na kujibu, hakuna kikomo.</li>
+            <li><strong>Mialiko.</strong> Unaweza kuwa na 50 ambazo hakuna mtu aliyezitumia bado. Isipotumiwa na mtu yeyote hufutwa baada ya siku zake 30.</li>
+            <li><strong>Malipo.</strong> Hadi malipo 100 kwa siku, na hadi watu 30 ambao hujawahi kuwalipa hapo awali. Hadi makubaliano 100 yaliyoombwa, yaliyokubaliwa au kuidhinishwa, na ahadi 20 zilizotolewa au kubadilishwa. Kupokea hakuna kikomo kamwe.</li>
+            <li><strong>Miradi na mashirika</strong> yana mipaka yake yenyewe, mara kumi ya ile ya mwanachama. Kile ambacho msimamizi hufanya kwa ajili yake huhesabiwa dhidi yake, si dhidi ya ya msimamizi mwenyewe, isipokuwa kuiendesha: wasimamizi, kusitisha, kufunga, na kukamilisha au kukataa makubaliano yake. Shirika likiwa limetumia kikomo cha siku, kile ambacho msimamizi hufanya kwa ajili yake huhesabiwa dhidi ya ya msimamizi mwenyewe, ili msimamizi asitumie siku yake yote na kuwazuia wengine. Msimamizi anaweza kufanya kiwango cha thamani ya shirika moja kwa siku kwa mashirika yote anayoyasimamia kwa pamoja.</li>
+            <li><strong>Marafiki.</strong> Unaweza kuongeza hadi watu 100 kama marafiki kwa siku. Kumwongeza mtu humfahamisha.</li>
+        </ul>
+        <h2>Toleo la 1.2.38</h2>
+        <p>Baadhi ya mabadiliko haya yapo kwenye seva ya jumuiya yako. Unayapata seva ya jumuiya yako inaposasishwa.</p>
+        <h3>Mapya</h3>
+        <ul>
+            <li><strong>Ukurasa huu wa BeanPool.</strong> Miongozo ya jinsi BeanPool inavyofanya kazi, sheria, maswali ya kawaida na mambo mapya. Inafanya kazi bila mtandao. Ifungue kutoka Mipangilio, chini ya <strong>BeanPool</strong>: <strong>Usaidizi &amp; jinsi inavyofanya kazi</strong>. Alama ya <strong>?</strong> juu ya skrini yoyote hufungua usaidizi wa skrini hiyo.</li>
+            <li><strong>Mwanga au giza.</strong> Programu huanza ikiwa na mwanga. Ili kuifanya iwe giza, au kufuata simu yako, nenda kwenye Mipangilio → Mwonekano: Sawa na simu, Mwanga au Giza.</li>
+            <li><strong>Beji.</strong> Kila skrini sasa inatumia viwango vya uaminifu sawa na seva ya jumuiya yako: Mkazi kuanzia uaminifu 200, Msimamizi kuanzia 600, Mzee kuanzia 1,400. Baadhi ya skrini zilikuwa zikionyesha beji isiyo sahihi. Beji ya Mgeni ni rahisi zaidi kuisoma.</li>
+        </ul>
+        <h3>Upigaji kura</h3>
+        <ul>
+            <li><strong>Kura za siri.</strong> Programu haimwonyeshi mtu yeyote tena jinsi ulivyopiga kura kwenye Uamuzi, ikiwa ni pamoja na wasimamizi. Unaweza kuona kura yako mwenyewe.</li>
+            <li><strong>Nani anayeweza kupiga kura.</strong> Wanachama waliojiunga kabla ya Uamuzi kufunguliwa pekee ndio wanaoweza kuupigia kura.</li>
+            <li><strong>Kujitokeza kwa wapiga kura.</strong> Idadi ya waliojitokeza sasa inahesabu wanachama waliofanya jambo katika programu ndani ya siku 30 zilizopita.</li>
+            <li><strong>Usitishaji wa dharura.</strong> Msimamizi anapomsimamisha mtu, kura ya siku 7 hufunguliwa mara moja: &quot;Dumisha usitishaji huu?&quot;. Isipopita, usitishaji huondoka wenyewe. Kwenye jumuiya ya kimataifa hakuna kura: usitishaji hudumu kwa siku 7 kisha huondoka wenyewe, au mapema zaidi ikiwa msimamizi atauondoa.</li>
+            <li><strong>Mikopo ya sauti.</strong> Mikopo ya sauti inayoonyeshwa kwa kura za maharagwe ya Mali za Pamoja ndiyo inayohesabiwa. Unayapata kikamilifu katika kila kura kama hiyo.</li>
+            <li><strong>Aina chache za Maamuzi.</strong> Maamuzi hayawezi kubadilisha tena beji za uaminifu. &quot;Awamu za upigaji kura&quot; za zamani zimeondolewa.</li>
+        </ul>
+        <h3>Mashirika</h3>
+        <ul>
+            <li>Msimamizi mkuu anapoongeza au kumwondoa msimamizi, wasimamizi wengine wana siku 3 za kupinga.</li>
+            <li>Msimamizi anaweza kujiuzulu, isipokuwa akiwa ndiye msimamizi pekee, au wakati ahadi yake bado inahitajika kufidia deni la shirika.</li>
+            <li>Kuchagua kiongozi mkuu mpya sasa kuna kikomo cha siku 14, na wasimamizi wanaweza kupiga kura ya Hapana.</li>
+            <li>Kiongozi mkuu akiondoka, msimamizi aliyetumikia kwa muda mrefu zaidi anachukua nafasi mara moja.</li>
+        </ul>
+        <h3>Vikundi</h3>
+        <ul>
+            <li><strong>Kila kikundi kina gumzo.</strong> Mazungumzo sasa yana vitufe vitatu: <strong>Jumbe</strong>, <strong>Vikundi</strong> na <strong>Watu</strong>. <strong>Vikundi</strong> huorodhesha vikundi vyako, mashirika unayoyasimamia na matukio unayohudhuria, kila kimoja kikiwa na ujumbe wake wa hivi karibuni na idadi ya jumbe ambazo hazijasomwa.</li>
+            <li><strong>Njia moja ya kuanzisha kikundi.</strong> <strong>Kikundi kipya</strong> katika Mazungumzo na <strong>+</strong> katika Mali za Pamoja hufungua fomu ile ile, huku <strong>Mzunguko wa Kijamii</strong> ukiwa umechaguliwa kwa ajili yako. Baada ya kukiunda unaingia kwenye gumzo lake, linalouliza unataka kumwalika nani.</li>
+            <li><strong>Mialiko.</strong> Waratibu wanaweza kuwaalika watu kutoka kwenye menyu ya gumzo. Mwaliko huonyesha nani aliyeutuma, na <strong>Jiunge na kikundi</strong> hukupeleka moja kwa moja kwenye gumzo.</li>
+            <li><strong>Nyamazisha gumzo</strong>: Kwa saa 8, Kwa wiki moja au Kila wakati. Katika kikundi, kutaja kwa @ bado hupita.</li>
+            <li><strong>Kichwa kimoja kwa kila gumzo</strong>: jina la kikundi, shirika au tukio likiwa juu. Liguse ili kuona kikundi, shirika au tukio.</li>
+            <li>Mazungumzo ya zamani ya vikundi katika Mazungumzo yameondolewa, pamoja na jumbe zake.</li>
+            <li>Kila kikundi sasa kina <strong>mratibu mkuu</strong> — yeyote aliyekiumba, mwanzoni. Mratibu yeyote bado hushughulikia wanachama na machapisho, lakini mratibu mkuu pekee ndiye anayeweza kumwondoa au kumshusha cheo mratibu, na hakuna anayeweza kumwondoa mratibu mkuu. Mratibu mkuu anaweza kukabidhi uongozi kwa mtu mwingine. Mratibu mkuu akinyamaza kwa siku 30, kikundi kinaweza kuchagua mpya, kwenye skrini ya kikundi juu ya orodha. Tazama &quot;Sheria na jinsi maamuzi hufanywa&quot;.</li>
+            <li><strong>Kura katika kikundi.</strong> Wanachama wa kikundi wanaweza kupigia kura mambo ya kikundi chenyewe, kama vile mratibu mpya au kiongozi mkuu mpya: fungua kikundi na utazame chini ya <strong>Maamuzi</strong>.</li>
+            <li><strong>Kuchagua kiongozi mkuu mpya kwa kikundi kilichonyamaza.</strong> Watu waliokuwa katika kikundi kabla ya kiongozi mkuu kunyamaza pekee ndio wanaoweza kupiga kura. Watu waliojiunga, au kufanywa kuwa waratibu, baada ya hapo hawana kauli, ili akaunti mpya zisiweze kuchukua uongozi wa kikundi ambacho kiongozi mkuu wake amenyamaza.</li>
+        </ul>
+        <h3>Usalama</h3>
+        <ul>
+            <li>Mmiliki pekee ndiye anayeweza kurudisha au kuchukua nafasi ya mmiliki au msimamizi.</li>
+            <li>Msimamizi hawezi kusuluhisha biashara iliyokwama ambayo yeye ni sehemu yake.</li>
+            <li>Mazungumzo ya vikundi na matukio huweka kikomo cha kasi ya mtu mmoja kuchapisha.</li>
+            <li><strong>Gumzo kati ya watu wawili hufungwa daima.</strong> Programu ilikuwa ikituma ujumbe bila kufungwa ikiwa haikuweza kupata ufunguo wa mtu mwingine. Sasa haiutumi: maneno yako yanabaki kwenye kisanduku cha ujumbe, na unaweza kutuma tena baada ya muda mfupi. Seva ya jumuiya yako hukataa ujumbe kati ya watu wawili ambao haujafungwa.</li>
+        </ul>
+        <h3>Marekebisho</h3>
+        <ul>
+            <li>Ramani ina kitufe kimoja cha kutambua mahali tena.</li>
+            <li>Orodha ya Soko ni rahisi zaidi kuisoma katika hali ya giza.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="home.html"><strong>Nyumbani</strong><span>Nyumbani ni nini, kadi inazoonyesha kwenye simu na wavuti, jinsi ya kuongeza, kuhamisha au kuziondoa, kuchagua unachopenda, na faragha unapotoka.</span></a></li>
+            <li><a href="the-bean.html"><strong>Mwongozo huu</strong><span>Mahali pa kupata mwongozo huu, jinsi ya kuutafuta, na jinsi unavyobaki kuwa wa kisasa.</span></a></li>
+            <li><a href="how-it-works.html"><strong>Kazi ya BeanPool</strong><span>Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.</span></a></li>
+            <li><a href="rules.html"><strong>Sheria na jinsi maamuzi hufanywa</strong><span>Kupiga kura, mahudhurio, kura ya siri, nani anaweza kupiga kura, kusimamishwa, kuondoa mwanachama, wasimamizi, na wawezeshaji na wawezeshaji wakuu.</span></a></li>
+            <li><a href="faq.html"><strong>Maswali</strong><span>Majibu mafupi kwa maswali ambayo wanachama huuliza mara nyingi.</span></a></li>
+            <li><a href="communities.html"><strong>Zaidi ya jumuiya moja</strong><span>Kuwa wa jumuiya kadhaa kwa akaunti moja, kubadili kati yao, kufuata jumuiya yako kwenye anwani mpya, na kuona kile jumuiya ya kimataifa inakuonyesha.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 3.</p>
+    </main>
+</body>
+</html>

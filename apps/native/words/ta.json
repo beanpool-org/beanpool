@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ta",
     "name": "Tamil",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "பயறு",
@@ -5877,5 +5877,103 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "உங்கள் முனை இயங்கியதும், அதன் அமைப்புகள் செயலியில் உங்கள் சமூகத்திற்குப் பெயரிட்டு, முதல் உறுப்பினர்களை அழைக்கிறீர்கள், அவர்கள் மற்றவர்களை அழைக்கிறார்கள். அங்கே \"இருப்பிடத்தை வெளியிடு\" என்பதை இயக்கினால், தகவல் கோரிய அருகிலுள்ள மக்களுக்கு அது தெரிவிக்கப்படும்.",
   "How to run a node, on beanpool.org": "beanpool.org-இல் முனையை எவ்வாறு இயக்குவது",
   "Copy my community's details": "என் சமூகத்தின் விவரங்களை நகலெடு",
-  "Copied. Paste them into your node's settings app.": "நகலெடுக்கப்பட்டது. உங்கள் முனையின் அமைப்புகள் செயலியில் அவற்றை ஒட்டவும்."
+  "Copied. Paste them into your node's settings app.": "நகலெடுக்கப்பட்டது. உங்கள் முனையின் அமைப்புகள் செயலியில் அவற்றை ஒட்டவும்.",
+  "A few examples to start from, and a guide.": "தொடங்குவதற்குச் சில எடுத்துக்காட்டுகள், ஒரு வழிகாட்டி.",
+  "A fixed number of Beans": "நிலையான எண்ணிக்கையிலான பயறுகள்",
+  "About this tool": "இந்தக் கருவியைப் பற்றி",
+  "Allow notifications": "அறிவிப்புகளை அனுமதி",
+  "Ask to borrow this?": "இதை இரவல் வாங்கக் கேட்கவா?",
+  "Asked to borrow": "இரவல் கேட்கப்பட்டது",
+  "Beans per day": "நாளுக்குப் பயறுகள்",
+  "Beans per week": "வாரத்துக்குப் பயறுகள்",
+  "Books: how it's going": "கணக்குகள்: எவ்வாறு போகிறது",
+  "Fee": "கட்டணம்",
+  "Free": "இலவசம்",
+  "Free to borrow. Nothing is held: the lender says yes first.": "இரவல் பெற இலவசம். எதுவும் நிறுத்தி வைக்கப்படாது: முதலில் இரவல் தருபவர் ஒப்புக்கொள்ள வேண்டும்.",
+  "Go on": "தொடரவும்",
+  "Go on to post": "பதிவிடத் தொடரவும்",
+  "Go straight in and add what you keep.": "நேரடியாகச் சென்று நீங்கள் வைத்திருப்பவற்றைச் சேர்க்கவும்.",
+  "I already do this": "நான் ஏற்கனவே இதைச் செய்கிறேன்",
+  "I already do this: go straight in and add what you keep.": "நான் ஏற்கனவே இதைச் செய்கிறேன்: நேரடியாகச் சென்று நீங்கள் வைத்திருப்பவற்றைச் சேர்க்கவும்.",
+  "I'm starting out": "நான் இப்போதுதான் தொடங்குகிறேன்",
+  "I'm starting out: a few examples to start from, and a guide.": "நான் இப்போதுதான் தொடங்குகிறேன்: தொடங்குவதற்குச் சில எடுத்துக்காட்டுகள், ஒரு வழிகாட்டி.",
+  "It shows in the Market as an Offer.": "இது சந்தையில் ஒரு சலுகையாகக் காட்டப்படும்.",
+  "Keep a private copy on your community's server": "உங்கள் சமூகத்தின் சர்வரில் ஒரு தனிப்பட்ட நகலை வைத்திருங்கள்",
+  "Kept on this phone only. Nothing in it leaves this phone.": "இந்தத் தொலைபேசியில் மட்டுமே வைக்கப்பட்டுள்ளது. இதில் உள்ள எதுவும் இந்தத் தொலைபேசியை விட்டு வெளியேறாது.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "இந்தத் தொலைபேசியில் வைக்கப்படுகிறது, மேலும் உங்கள் சமூகத்தின் சர்வரில் ஒரு தனிப்பட்ட நகல் வைக்கப்படும், அதை நீங்கள் மட்டுமே பயன்பாட்டின் மூலம் படிக்க முடியும். அந்த சர்வரில் உள்ள எல்லாவற்றையும் போலவே, அதை இயக்குபவரும் படிக்க முடியும்.",
+  "List it in the Market": "இதைச் சந்தையில் பட்டியலிடவும்",
+  "More tools": "மேலும் கருவிகள்",
+  "Next you check it and tap Post. Nothing is posted before that.": "அடுத்து நீங்கள் அதைச் சரிபார்த்துவிட்டு 'பதிவிடு' என்பதைத் தட்டவும். அதற்கு முன் எதுவும் பதிவிடப்படாது.",
+  "No thanks": "வேண்டாம், நன்றி",
+  "No tools here yet. They come with updates of the app.": "இங்கே இன்னும் கருவிகள் இல்லை. அவை பயன்பாட்டின் புதுப்பிப்புகளுடன் வரும்.",
+  "Nothing is held until the lender says yes.": "இரவல் தருபவர் ஒப்புக்கொள்ளும் வரை எதுவும் நிறுத்தி வைக்கப்படாது.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "இரவல் தருபவர் ஒப்புக்கொள்ளும் வரை எதுவும் நிறுத்தி வைக்கப்படாது. பின்னர் கட்டணம் தற்காலிக பொறுப்புடைமைப் பணப்பைக்குச் செல்லும், அது திரும்பியதும் இரவல் தருபவர் பொதுத் தொகுப்புக்கு 1.5% பரிவர்த்தனை கட்டணம் {owned} போக அதைப் பெறுவார்.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "இந்தத் தொலைபேசியில் BeanPool-க்கான அறிவிப்புகள் முடக்கப்பட்டுள்ளன, எனவே நினைவூட்டல்களைக் காட்ட முடியாது.",
+  "Open {tool}": "{tool}-ஐத் திறக்கவும்",
+  "Options for {tool}": "{tool}-க்கான விருப்பங்கள்",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "இந்தக் கருவியை உங்கள் முகப்பில் வைக்கவா? அது வைத்திருப்பவற்றை ஒரே பார்வையில் காட்டும்.",
+  "Read in English": "ஆங்கிலத்தில் படிக்கவும்",
+  "Read the guide": "வழிகாட்டியைப் படிக்கவும்",
+  "Reminders": "நினைவூட்டல்கள்",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "உங்கள் கருவிகள் இந்தத் தொலைபேசியில் அமைக்கும் நினைவூட்டல்கள். அவற்றைப் பற்றிய எதுவும் இதை விட்டு வெளியேறாது.",
+  "Remove my data from this phone": "இந்தத் தொலைபேசியிலிருந்து என் தரவை அகற்று",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "இந்தத் தொலைபேசியில் இந்தக் கருவிக்கான இந்தச் சமூகத்தின் பட்டியல், புகைப்படங்கள் மற்றும் நினைவூட்டல்களை அகற்றும். மற்றொரு சமூகத்தில் உள்ள அதே கருவி அதன் சொந்தத் தரவை வைத்திருக்கும். இதைச் செயல்தவிர்க்க முடியாது.",
+  "Replace your unfinished post?": "உங்கள் முடிக்கப்படாத பதிவை மாற்றவா?",
+  "Show translation": "மொழிபெயர்ப்பைக் காட்டு",
+  "Some examples": "சில எடுத்துக்காட்டுகள்",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "இந்தக் கருவியில் ஏதோ தவறு நிகழ்ந்துவிட்டது. இந்தத் தொலைபேசியில் அது வைத்திருப்பவை பாதுகாப்பாக உள்ளன.",
+  "Stock: what you have": "இருப்பு: உங்களிடம் உள்ளவை",
+  "Things you can do on your own": "நீங்களாகவே செய்யக்கூடிய விஷயங்கள்",
+  "Things you can do on your own, that make your community stronger.": "உங்கள் சமூகத்தை மேலும் வலிமையாக்கும், நீங்களாகவே செய்யக்கூடிய விஷயங்கள்.",
+  "This page is in English for now.": "இப்போதைக்கு இந்தப் பக்கம் ஆங்கிலத்தில் உள்ளது.",
+  "This page is newer in English.": "இந்தப் பக்கம் ஆங்கிலத்தில் புதியதாக உள்ளது.",
+  "This tool isn't in this version of the app": "பயன்பாட்டின் இந்தப் பதிப்பில் இந்தக் கருவி இல்லை",
+  "Tool reminders": "கருவி நினைவூட்டல்கள்",
+  "Trade: how you deal": "பரிமாற்றம்: நீங்கள் எவ்வாறு பரிமாறுகிறீர்கள்",
+  "Update": "புதுப்பிக்கவும்",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "இதைப் பயன்படுத்த BeanPool-ஐப் புதுப்பிக்கவும். உங்கள் பதிப்பு அமைப்புகளின் கீழே காட்டப்பட்டுள்ளது.",
+  "You have an unfinished post on the map. Going on replaces it.": "வரைபடத்தில் உங்களிடம் முடிக்கப்படாத ஒரு பதிவு உள்ளது. தொடர்ந்தால் அது மாற்றப்படும்.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "இந்த சலுகைக்காக பொறுப்புடைமைப் பணப்பையில் {credits} வரவுகளை ({n} நாள்) ஒதுக்கியுள்ளீர்கள்.",
+    "other": "இந்த சலுகைக்காக பொறுப்புடைமைப் பணப்பையில் {credits} வரவுகளை ({n} நாட்கள்) ஒதுக்கியுள்ளீர்கள்."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "இந்த சலுகைக்காக பொறுப்புடைமைப் பணப்பையில் {credits} வரவுகளை ({n} மாதம்) ஒதுக்கியுள்ளீர்கள்.",
+    "other": "இந்த சலுகைக்காக பொறுப்புடைமைப் பணப்பையில் {credits} வரவுகளை ({n} மாதங்கள்) ஒதுக்கியுள்ளீர்கள்."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "இந்த சலுகைக்காக பொறுப்புடைமைப் பணப்பையில் {credits} வரவுகளை ({n} வாரம்) ஒதுக்கியுள்ளீர்கள்.",
+    "other": "இந்த சலுகைக்காக பொறுப்புடைமைப் பணப்பையில் {credits} வரவுகளை ({n} வாரங்கள்) ஒதுக்கியுள்ளீர்கள்."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "இந்தத் தேவையை நிறைவேற்றுவதற்காக {credits} வரவுகளை ({n} நாள்) (1.5% கட்டணம் போக நிகரமாக {net}) {owned} ஈட்டக் கோரியுள்ளீர்கள்.",
+    "other": "இந்தத் தேவையை நிறைவேற்றுவதற்காக {credits} வரவுகளை ({n} நாட்கள்) (1.5% கட்டணம் போக நிகரமாக {net}) {owned} ஈட்டக் கோரியுள்ளீர்கள்."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "இந்தத் தேவையை நிறைவேற்றுவதற்காக {credits} வரவுகளை ({n} மாதம்) (1.5% கட்டணம் போக நிகரமாக {net}) {owned} ஈட்டக் கோரியுள்ளீர்கள்.",
+    "other": "இந்தத் தேவையை நிறைவேற்றுவதற்காக {credits} வரவுகளை ({n} மாதங்கள்) (1.5% கட்டணம் போக நிகரமாக {net}) {owned} ஈட்டக் கோரியுள்ளீர்கள்."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "இந்தத் தேவையை நிறைவேற்றுவதற்காக {credits} வரவுகளை ({n} வாரம்) (1.5% கட்டணம் போக நிகரமாக {net}) {owned} ஈட்டக் கோரியுள்ளீர்கள்.",
+    "other": "இந்தத் தேவையை நிறைவேற்றுவதற்காக {credits} வரவுகளை ({n} வாரங்கள்) (1.5% கட்டணம் போக நிகரமாக {net}) {owned} ஈட்டக் கோரியுள்ளீர்கள்."
+  },
+  "Your community asks for a profile photo before you post.": "நீங்கள் இடுகையிடும் முன் உங்கள் சமூகம் ஒரு சுயவிவரப் புகைப்படத்தைக் கேட்கிறது.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "உங்கள் சமூகத்தின் சர்வரால் இன்னும் நகலை வைத்திருக்க முடியவில்லை, எனவே இப்போதைக்கு இது இந்தத் தொலைபேசியில் மட்டுமே இருக்கும்.",
+  "for {n} day|for {n} days": {
+    "one": "{n} நாளுக்கு",
+    "other": "{n} நாட்களுக்கு"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} வாரத்துக்கு",
+    "other": "{n} வாரங்களுக்கு"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} மாதம்",
+    "other": "{n} மாதங்கள்"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} வாரம்",
+    "other": "{n} வாரங்கள்"
+  },
+  "📦 Ask to borrow": "📦 இரவல் கேட்க"
 }

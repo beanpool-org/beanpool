@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ur",
     "name": "Urdu",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "پھلیاں",
@@ -5877,5 +5877,103 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "ایک بار جب آپ کا سرور چل پڑے، تو آپ اس کی سیٹنگز ایپ میں اپنی کمیونٹی کا نام رکھتے ہیں، پہلے اراکین کو مدعو کرتے ہیں، اور وہ باقی لوگوں کو مدعو کرتے ہیں۔ وہاں \"لوکیشن شائع کریں\" کو فعال کریں، اور آپ کے قریب وہ لوگ جنہوں نے مطلع کرنے کی درخواست کی تھی، اس کے بارے میں جان جائیں گے۔",
   "How to run a node, on beanpool.org": "beanpool.org پر سرور کیسے چلائیں",
   "Copy my community's details": "میری کمیونٹی کی تفصیلات کاپی کریں",
-  "Copied. Paste them into your node's settings app.": "کاپی ہو گیا۔ انہیں اپنے سرور کی سیٹنگز ایپ میں پیسٹ کریں۔"
+  "Copied. Paste them into your node's settings app.": "کاپی ہو گیا۔ انہیں اپنے سرور کی سیٹنگز ایپ میں پیسٹ کریں۔",
+  "A few examples to start from, and a guide.": "شروع کرنے کے لیے چند مثالیں، اور ایک گائیڈ۔",
+  "A fixed number of Beans": "پھلیوں کی ایک مقررہ تعداد",
+  "About this tool": "اس اوزار کے بارے میں",
+  "Allow notifications": "اطلاعات کی اجازت دیں",
+  "Ask to borrow this?": "کیا یہ ادھار مانگنا ہے؟",
+  "Asked to borrow": "ادھار مانگا گیا",
+  "Beans per day": "پھلیاں فی دن",
+  "Beans per week": "پھلیاں فی ہفتہ",
+  "Books: how it's going": "کھاتہ: کیسا چل رہا ہے",
+  "Fee": "فیس",
+  "Free": "مفت",
+  "Free to borrow. Nothing is held: the lender says yes first.": "ادھار لینا مفت ہے۔ کچھ بھی روکا نہیں جاتا: ادھار دینے والا پہلے ہاں کہتا ہے۔",
+  "Go on": "جاری رکھیں",
+  "Go on to post": "پوسٹ کرنے کے لیے آگے بڑھیں",
+  "Go straight in and add what you keep.": "سیدھے اندر جائیں اور جو آپ کے پاس ہے اسے شامل کریں۔",
+  "I already do this": "میں یہ پہلے سے کرتا ہوں",
+  "I already do this: go straight in and add what you keep.": "میں یہ پہلے سے کرتا ہوں: سیدھے اندر جائیں اور جو آپ کے پاس ہے اسے شامل کریں۔",
+  "I'm starting out": "میں نیا آغاز کر رہا ہوں",
+  "I'm starting out: a few examples to start from, and a guide.": "میں نیا آغاز کر رہا ہوں: شروع کرنے کے لیے چند مثالیں، اور ایک گائیڈ۔",
+  "It shows in the Market as an Offer.": "یہ مارکیٹ میں ایک پیشکش کے طور پر نظر آتا ہے۔",
+  "Keep a private copy on your community's server": "اپنی کمیونٹی کے سرور پر ایک نجی کاپی رکھیں",
+  "Kept on this phone only. Nothing in it leaves this phone.": "صرف اسی فون پر محفوظ ہے۔ اس میں سے کچھ بھی اس فون سے باہر نہیں جاتا۔",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "اسی فون پر محفوظ ہے، آپ کی کمیونٹی کے سرور پر ایک نجی کاپی کے ساتھ جسے صرف آپ ایپ کے ذریعے پڑھ سکتے ہیں۔ اس سرور کی ہر چیز کی طرح، اس کا آپریٹر اسے پڑھ سکتا ہے۔",
+  "List it in the Market": "اسے مارکیٹ میں درج کریں",
+  "More tools": "مزید اوزار",
+  "Next you check it and tap Post. Nothing is posted before that.": "اگلے مرحلے میں آپ اس کی تصدیق کریں گے اور پوسٹ پر ٹیپ کریں گے۔ اس سے پہلے کچھ بھی پوسٹ نہیں ہوتا۔",
+  "No thanks": "نہیں، شکریہ",
+  "No tools here yet. They come with updates of the app.": "یہاں ابھی کوئی اوزار نہیں ہیں۔ وہ ایپ کی اپ ڈیٹس کے ساتھ آئیں گے۔",
+  "Nothing is held until the lender says yes.": "جب تک ادھار دینے والا ہاں نہ کہے کچھ بھی روکا نہیں جاتا۔",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "جب تک ادھار دینے والا ہاں نہ کہے کچھ بھی روکا نہیں جاتا۔ پھر فیس ایک عارضی ٹرسٹ والیٹ میں چلی جاتی ہے، اور واپسی پر ادھار دینے والے کو کامنز پول کی فنڈنگ کے لیے 1.5% ٹرانزیکشن فیس {owned} منہا کر کے مل جاتی ہے۔",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "اس فون پر BeanPool کے لیے اطلاعات بند ہیں، اس لیے یاد دہانیاں نہیں دکھائی جا سکتیں۔",
+  "Open {tool}": "{tool} کھولیں",
+  "Options for {tool}": "{tool} کے اختیارات",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "کیا اس اوزار کو ہوم پر رکھنا ہے؟ یہ ایک نظر میں دکھاتا ہے کہ اس میں کیا رکھا ہے۔",
+  "Read in English": "انگریزی میں پڑھیں",
+  "Read the guide": "گائیڈ پڑھیں",
+  "Reminders": "یاد دہانیاں",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "وہ یاد دہانیاں جو آپ کے اوزار اس فون پر لگاتے ہیں۔ ان کے بارے میں کچھ بھی اس فون سے باہر نہیں جاتا۔",
+  "Remove my data from this phone": "میرا ڈیٹا اس فون سے ہٹا دیں",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "اس فون پر اس اوزار کے لیے اس کمیونٹی کی فہرست، تصاویر اور یاد دہانیوں کو ہٹا دیتا ہے۔ دوسری کمیونٹی میں یہی اوزار اپنا ڈیٹا الگ رکھتا ہے۔ یہ عمل واپس نہیں کیا جا سکتا۔",
+  "Replace your unfinished post?": "کیا اپنی ادھوری پوسٹ کو تبدیل کرنا ہے؟",
+  "Show translation": "ترجمہ دکھائیں",
+  "Some examples": "چند مثالیں",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "اس اوزار میں کوئی مسئلہ پیش آیا۔ جو کچھ اس فون پر محفوظ ہے وہ محفوظ ہے۔",
+  "Stock: what you have": "اسٹاک: آپ کے پاس کیا ہے",
+  "Things you can do on your own": "وہ کام جو آپ خود کر سکتے ہیں",
+  "Things you can do on your own, that make your community stronger.": "وہ کام جو آپ خود کر سکتے ہیں، جو آپ کی کمیونٹی کو مضبوط بناتے ہیں۔",
+  "This page is in English for now.": "یہ صفحہ فی الحال انگریزی میں ہے۔",
+  "This page is newer in English.": "یہ صفحہ انگریزی میں زیادہ نیا ہے۔",
+  "This tool isn't in this version of the app": "یہ اوزار ایپ کے اس ورژن میں موجود نہیں ہے",
+  "Tool reminders": "اوزار کی یاد دہانیاں",
+  "Trade: how you deal": "تبادلہ: آپ کا لین دین",
+  "Update": "اپ ڈیٹ کریں",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "اسے استعمال کرنے کے لیے BeanPool کو اپ ڈیٹ کریں۔ آپ کا ورژن سیٹنگز کے آخر میں دکھایا گیا ہے۔",
+  "You have an unfinished post on the map. Going on replaces it.": "نقشے پر آپ کی ایک غیر مکمل پوسٹ موجود ہے۔ آگے بڑھنے سے وہ بدل جائے گی۔",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "آپ نے اس پیشکش کے لیے امانت والیٹ میں {credits} کریڈٹس ({n} دن) جمع کروائے ہیں۔",
+    "other": "آپ نے اس پیشکش کے لیے امانت والیٹ میں {credits} کریڈٹس ({n} دن) جمع کروائے ہیں۔"
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "آپ نے اس پیشکش کے لیے امانت والیٹ میں {credits} کریڈٹس ({n} مہینہ) جمع کروائے ہیں۔",
+    "other": "آپ نے اس پیشکش کے لیے امانت والیٹ میں {credits} کریڈٹس ({n} مہینے) جمع کروائے ہیں۔"
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "آپ نے اس پیشکش کے لیے امانت والیٹ میں {credits} کریڈٹس ({n} ہفتہ) جمع کروائے ہیں۔",
+    "other": "آپ نے اس پیشکش کے لیے امانت والیٹ میں {credits} کریڈٹس ({n} ہفتے) جمع کروائے ہیں۔"
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "آپ نے اس ضرورت کو پورا کرنے کے لیے {credits} کریڈٹس ({n} دن) (1.5% ٹرانزیکشن فیس کے بعد خالص {net}) {owned} کمانے کی درخواست کی ہے۔",
+    "other": "آپ نے اس ضرورت کو پورا کرنے کے لیے {credits} کریڈٹس ({n} دن) (1.5% ٹرانزیکشن فیس کے بعد خالص {net}) {owned} کمانے کی درخواست کی ہے۔"
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "آپ نے اس ضرورت کو پورا کرنے کے لیے {credits} کریڈٹس ({n} مہینہ) (1.5% ٹرانزیکشن فیس کے بعد خالص {net}) {owned} کمانے کی درخواست کی ہے۔",
+    "other": "آپ نے اس ضرورت کو پورا کرنے کے لیے {credits} کریڈٹس ({n} مہینے) (1.5% ٹرانزیکشن فیس کے بعد خالص {net}) {owned} کمانے کی درخواست کی ہے۔"
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "آپ نے اس ضرورت کو پورا کرنے کے لیے {credits} کریڈٹس ({n} ہفتہ) (1.5% ٹرانزیکشن فیس کے بعد خالص {net}) {owned} کمانے کی درخواست کی ہے۔",
+    "other": "آپ نے اس ضرورت کو پورا کرنے کے لیے {credits} کریڈٹس ({n} ہفتے) (1.5% ٹرانزیکشن فیس کے بعد خالص {net}) {owned} کمانے کی درخواست کی ہے۔"
+  },
+  "Your community asks for a profile photo before you post.": "آپ کی کمیونٹی پوسٹ کرنے سے پہلے پروفائل تصویر مانگتی ہے۔",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "آپ کی کمیونٹی کا سرور ابھی کاپی محفوظ نہیں کر سکتا، اس لیے فی الحال یہ صرف اسی فون پر رہے گا۔",
+  "for {n} day|for {n} days": {
+    "one": "{n} دن کے لیے",
+    "other": "{n} دن کے لیے"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} ہفتے کے لیے",
+    "other": "{n} ہفتوں کے لیے"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} مہینہ",
+    "other": "{n} مہینے"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} ہفتہ",
+    "other": "{n} ہفتے"
+  },
+  "📦 Ask to borrow": "📦 ادھار مانگیں"
 }

@@ -75,7 +75,7 @@ Che tu abbia acconsentito o meno, in qualsiasi comunità, ogni amministratore pu
 
 Le statistiche dei membri visibili agli amministratori mostrano quanti post ciascun membro ha pubblicato e quanti messaggi ha inviato, e per gli scambi solo i totali dell'intera comunità: quanti scambi sono stati completati o annullati e a quanto ammontavano quelli conclusi, mai quelli di un singolo membro.
 
-Ogni membro, inclusi gli amministratori, vede il **profilo di affidabilità** di ciascun membro: quanti dei suoi scambi sono stati completati e quanti annullati, e la percentuale di completamento, quanti pagamenti in Bean ha inviato o ricevuto dai membri oltre agli scambi completati, con quanti membri diversi ha effettuato o ricevuto pagamenti o scambiato, quanti pagamenti e scambi ha effettuato con il membro che consulta e i tuoi Punti affidabilità. Questa consultazione non viene registrata, poiché ogni membro può vederla.
+Ogni membro, inclusi gli amministratori, vede il **profilo di affidabilità** di ciascun membro: quanti dei suoi scambi sono stati completati e quanti annullati, e la percentuale di completamento, quanti pagamenti in Bean ha inviato o ricevuto dai membri oltre agli scambi completati, con quanti membri diversi ha effettuato o ricevuto pagamenti o scambiato, quanti pagamenti e scambi ha effettuato con il membro che consulta e i suoi Punti affidabilità. Questa consultazione non viene registrata, poiché ogni membro può vederla.
 
 Nient'altro dei tuoi scambi.
 

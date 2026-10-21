@@ -3,7 +3,7 @@ slug: credit-line
 title: Batas kreditmu
 summary: Seberapa jauh saldomu bisa di bawah nol, dan bagaimana batas ini bertambah.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Apa itu batas kredit
@@ -46,12 +46,16 @@ Baris di bawah bilah memberi tahumu, misalnya "Pasang penawaran untuk membuka ja
 
 ## Di komunitas yang saling mengenal
 
-Beberapa komunitas memiliki admin yang mengenal setiap anggotanya secara langsung. Jika komunitasmu mengaktifkan **batas dasar yang diketahui**, anggota yang telah dikonfirmasi oleh admin langsung mendapatkan batas kredit: 1.000 Kacang kecuali jika komunitasmu memilih jumlah lain. Itu setara dengan sekitar 25 jam kerja yang dipercayakan komunitas kepadamu. Hal ini menaikkan batasmu, bukan tingkatmu: lencana percayamu tetap hanya menghitung apa yang telah kamu lakukan.
+Beberapa komunitas memiliki admin yang mengenal setiap anggotanya berdasarkan nama. Anggota yang telah dikonfirmasi oleh admin langsung mendapatkan batas kredit, **batas dasar yang diketahui**: 1.000 Kacang kecuali jika komunitasmu memilih jumlah lain. Itu setara dengan sekitar 25 jam kerja yang dipercayakan komunitas kepadamu. Hal ini menaikkan batasmu, bukan tingkatmu: lencana percayamu tetap hanya menghitung apa yang telah kamu lakukan. Batas dasar yang diketahui aktif di setiap komunitas dengan Kacang kecuali jika pemiliknya menonaktifkannya.
 
 - Satu Penawaran aktif memungkinkanmu menggunakan semuanya. Tanpa Penawaran, kamu tidak dapat menggunakannya.
 - Kepercayaan yang kamu peroleh dari bertransaksi menambah batas tersebut, hingga batas atas komunitasmu (2.000 Kacang kecuali jika dipilih lebih banyak, hingga 5.000).
 - Seorang admin dapat menetapkan batas yang lebih kecil untukmu, misalnya saat kamu baru bergabung. Hal itu tidak pernah mengambil Kacang darimu: jika kamu sudah berada di bawahnya, pengeluaran dijeda sampai kamu kembali berada di atasnya.
 - Jika kamu sedang melunasi utang dari akun sebelumnya, Kacang yang kamu terima di atas 0 akan disalurkan ke Sarana Bersama sampai utang lunas. Buku kasmu menyebutkan berapa sisa utangmu. Kamu juga dapat membayar sebagian atau seluruhnya sendiri di **Buku kas → Bayar ke Sarana Bersama**: kode bayar-kembali milikmu telah terisi di sana (atau masukkan kode yang diberikan admin kepadamu). Apa yang kamu bayar dengan kode tersebut langsung mengurangi utang seketika, dan ketika tidak ada yang tersisa maka utang dianggap lunas: tidak ada lagi yang diambil, baik melalui pembayaran maupun dari apa yang kamu terima. Pembayaran tanpa kode akan masuk ke Sarana Bersama tetapi tidak memotong utangmu, dan aplikasi memberi tahu demikian: agar dihitung, mintalah admin untuk mencatatnya ke utangmu dengan nomor referensinya. Sampai mereka melakukannya, utang masih dipotong: saat berikutnya kamu menerima Kacang, sisanya akan diambil dari apa yang kamu miliki di atas 0. Jumlah dalam pesan admin adalah sisa utang saat mereka membagikannya: jika sekarang sisanya lebih sedikit, servermu menolak pembayaran yang lebih besar dan menyebutkan berapa sisanya, serta tidak ada yang dibayarkan. Jika aplikasi menyatakan bahwa pembayaran mungkin telah berhasil, ketuk **Coba lagi** pada layar yang sama: pembayaran yang sama tidak pernah dibayarkan dua kali. Jika kamu keluar dari layar tersebut, periksa Buku kasmu sebelum membayar lagi.
+
+## Komunitas campuran
+
+Di beberapa komunitas, setiap anggota dapat mengundang orang lain, sehingga admin tidak mengenal semua orang. Admin dapat mengonfirmasi anggota yang mereka kenal, dan anggota tersebut memulai dengan batas yang lebih tinggi, **batas dasar yang diketahui**, kecuali jika pemilik komunitasmu menonaktifkannya. Semua orang lainnya memulai dari nol, dan batas setiap orang bertambah dengan cara yang sama setelah itu seiring mereka bertransaksi dan membangun kepercayaan.
 
 ## Dibekukan oleh admin
 

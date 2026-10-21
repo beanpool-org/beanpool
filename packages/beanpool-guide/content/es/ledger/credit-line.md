@@ -3,7 +3,7 @@ slug: credit-line
 title: Tu línea de crédito
 summary: Hasta cuánto puedes tener saldo negativo y cómo se incrementa.
 related: trust-badges, trading-partner-limit, how-it-works, posting
-source-hash: 30c343cb535ac79a
+source-hash: d966829d85d430b1
 ---
 
 ## Qué es
@@ -46,7 +46,7 @@ La línea debajo de la barra te lo indica, por ejemplo "Publica una oferta para 
 
 ## En una comunidad conocida
 
-Algunas comunidades tienen administradores que conocen a cada miembro por su nombre. Si la tuya ha activado **el límite mínimo conocido**, un miembro confirmado por un administrador obtiene una línea de crédito de inmediato: 1,000 frijoles, a menos que tu comunidad haya elegido otra cantidad. Eso equivale a unas 25 horas de trabajo por las que la comunidad confía en ti. Aumenta tu límite, no tu nivel: tu insignia de confianza sigue contando solo lo que has hecho.
+Algunas comunidades tienen administradores que conocen a cada miembro por su nombre. Un miembro que un administrador haya confirmado obtiene una línea de crédito de inmediato, **el límite mínimo conocido**: 1,000 frijoles, a menos que tu comunidad haya elegido otra cantidad. Eso equivale a unas 25 horas de trabajo por las que la comunidad confía en ti. Aumenta tu límite, no tu nivel: tu insignia de confianza sigue contando solo lo que has hecho. El límite mínimo conocido está activado en cada comunidad con frijoles a menos que su propietario lo haya desactivado.
 
 - Una Oferta activa te permite usarla toda. Sin Ofertas, no puedes usarla.
 - La confianza que ganas intercambiando se suma a ella, hasta el tope de tu comunidad (2,000 frijoles a menos que haya elegido más, hasta 5,000).
@@ -55,7 +55,7 @@ Algunas comunidades tienen administradores que conocen a cada miembro por su nom
 
 ## Una comunidad mixta
 
-En algunas comunidades cualquier miembro puede invitar a personas, por lo que los administradores no conocen a todos. Si la tuya ha activado **el límite mínimo conocido**, los administradores pueden confirmar a los miembros que sí conocen, y esos miembros comienzan con un límite más alto. Todos los demás comienzan en cero, y el límite de todos crece de la misma manera a partir de ahí a medida que intercambian y generan confianza.
+En algunas comunidades cualquier miembro puede invitar a personas, por lo que los administradores no conocen a todos. Los administradores pueden confirmar a los miembros que sí conocen, y esos miembros comienzan con un límite más alto, **el límite mínimo conocido**, a menos que el propietario de tu comunidad lo haya desactivado. Todos los demás comienzan en cero, y el límite de todos crece de la misma manera a partir de ahí a medida que intercambian y generan confianza.
 
 ## Congelada por los administradores
 

@@ -6011,5 +6011,13 @@
   "Look around first, then join with this account": "Angalia kwanza, kisha jiunge kwa akaunti hii",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Kutana na watu kutoka kila mahali na upate jumuiya zilizo karibu nawe. Angalia kwanza kama mgeni, kisha uguse Jiunge hapo juu ili kujiunga kama akaunti iliyo kwenye simu hii: ufunguo wako na maneno yako 12 yanabaki vile vile, na hakuna kinachobadilika katika jumuiya zako nyingine.",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Pindi wakithibitishwa, kikomo chao kinaongezeka kwa hadi {amount}: kima cha chini kinachojulikana cha jumuiya yako, mradi wataendelea kuwa na ofa iliyoorodheshwa.",
-  "Uses the key and 12 words already on this phone. No new account is made.": "Inatumia ufunguo na maneno 12 yaliyo tayari kwenye simu hii. Hakuna akaunti mpya inayoundwa."
+  "Uses the key and 12 words already on this phone. No new account is made.": "Inatumia ufunguo na maneno 12 yaliyo tayari kwenye simu hii. Hakuna akaunti mpya inayoundwa.",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "Msimamizi alizima nakala ya seva ya zana hii, kwa hivyo inawekwa kwenye simu hii pekee. Unaweza kuiwasha tena katika Mipangilio.",
+  "Asked to join": "Ameomba kujiunga",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Haikuweza kufikia seva ya jumuiya yako, kwa hivyo hakuna kilichobadilika. Jaribu tena ukiwa mtandaoni.",
+  "One phone at a time: the copy you changed last is the one kept.": "Simu moja kwa wakati mmoja: nakala uliyobadilisha mwisho ndiyo inayowekwa.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "Huondoa data yako ya zana hii kwenye simu hii, na nakala yake kwenye seva ya jumuiya yako. Simu nyingine iliyoingia kama wewe huweka kile ilicho nacho na huacha kukituma. Zana hiyo hiyo katika jumuiya nyingine huweka zake. Hili haliwezi kutenduliwa.",
+  "You can edit a message for 15 minutes after sending it.": "Unaweza kuhariri ujumbe kwa dakika 15 baada ya kuutuma.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "Seva ya jumuiya yako haiweki tena nakala ya zana hii, kwa hivyo inawekwa kwenye simu hii pekee. Unaweza kuwasha nakala hiyo tena katika Mipangilio.",
+  "{name}, asked to join": "{name}, ameomba kujiunga"
 }

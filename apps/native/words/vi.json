@@ -5741,5 +5741,26 @@
   "{n} week|{n} weeks": {
     "other": "{n} tuần"
   },
-  "📦 Ask to borrow": "📦 Yêu cầu mượn"
+  "📦 Ask to borrow": "📦 Yêu cầu mượn",
+  "Add a community by address": "Thêm cộng đồng bằng địa chỉ",
+  "COMMUNITY ADDRESS": "ĐỊA CHỈ CỘNG ĐỒNG",
+  "COMMUNITY NAME (OPTIONAL)": "TÊN CỘNG ĐỒNG (TÙY CHỌN)",
+  "Clear this phone's copy and download again": "Xóa bản sao trên điện thoại này và tải lại",
+  "Community name (optional)": "Tên cộng đồng (tùy chọn)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Kết nối với một cộng đồng bằng cách nhập địa chỉ. Điện thoại của bạn sẽ lưu vào danh sách này và chuyển sang cộng đồng đó.",
+  "Have an invite code for this community?": "Bạn có mã mời cho cộng đồng này?",
+  "Invited": "Đã mời",
+  "Reached at **{trust}** trust": "Đạt ở **{trust}** điểm tin cậy",
+  "Reached at **{trust}** trust (up to {upTo})": "Đạt ở **{trust}** điểm tin cậy (tối đa {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Điều hành cộng đồng này? Chủ sở hữu và quản trị viên thấy hàng Quản lý ở đầu Cài đặt.",
+  "Saved communities": "Cộng đồng đã lưu",
+  "Switch to this community": "Chuyển sang cộng đồng này",
+  "Switch, forget or refresh the communities on this phone": "Chuyển, quên hoặc làm mới các cộng đồng trên điện thoại này",
+  "Switching...": "Đang chuyển...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Các cộng đồng điện thoại này đã tham gia. Khóa và 12 từ của bạn đều giống nhau ở mỗi cộng đồng; chuyển sang một cộng đồng để sử dụng.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Chào mừng bạn. Ngay từ ngày đầu tiên, bạn có thể khám phá, giao dịch, nhận tín dụng và mời người khác — và hạn mức tín dụng của bạn đã được mở.",
+  "from {n} trust|from {n} trust": {
+    "other": "từ {n} điểm tin cậy"
+  },
+  "{name}, already invited": "{name}, đã được mời"
 }

@@ -5975,5 +5975,27 @@
     "one": "wiki {n}",
     "other": "wiki {n}"
   },
-  "📦 Ask to borrow": "📦 Omba kuazima"
+  "📦 Ask to borrow": "📦 Omba kuazima",
+  "Add a community by address": "Ongeza jumuiya kwa anwani",
+  "COMMUNITY ADDRESS": "ANWANI YA JUMUIYA",
+  "COMMUNITY NAME (OPTIONAL)": "JINA LA JUMUIYA (HIARI)",
+  "Clear this phone's copy and download again": "Futa nakala ya simu hii na upakue tena",
+  "Community name (optional)": "Jina la jumuiya (hiari)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Unganisha na jumuiya kwa kuandika anwani yake. Simu yako itaihifadhi kwenye orodha hii na kubadilisha hadi kwake.",
+  "Have an invite code for this community?": "Una msimbo wa mwaliko kwa ajili ya jumuiya hii?",
+  "Invited": "Amealikwa",
+  "Reached at **{trust}** trust": "Inafikiwa kwa uaminifu **{trust}**",
+  "Reached at **{trust}** trust (up to {upTo})": "Inafikiwa kwa uaminifu **{trust}** (hadi {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Unaendesha jumuiya hii? Wamiliki na wasimamizi huona safu ya Dhibiti juu ya Mipangilio.",
+  "Saved communities": "Jumuiya zilizohifadhiwa",
+  "Switch to this community": "Badilisha hadi jumuiya hii",
+  "Switch, forget or refresh the communities on this phone": "Badilisha, sahau au onyesha upya jumuiya zilizo kwenye simu hii",
+  "Switching...": "Inabadilisha...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Jumuiya ambazo simu hii imejiunga nazo. Ufunguo wako na maneno 12 ni sawa katika kila moja; badilisha hadi moja ili kuitumia.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Karibu. Kuanzia siku ya kwanza unaweza kuvinjari, kufanya biashara, kupokea mikopo na kualika wengine — na mstari wako wa mkopo tayari umefunguliwa.",
+  "from {n} trust|from {n} trust": {
+    "one": "kutoka uaminifu {n}",
+    "other": "kutoka uaminifu {n}"
+  },
+  "{name}, already invited": "{name}, tayari amealikwa"
 }

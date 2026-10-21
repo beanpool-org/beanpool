@@ -5774,5 +5774,13 @@
   "Look around first, then join with this account": "まずは見学して、このアカウントで参加",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "世界中の人々と出会い、近くのコミュニティを見つけましょう。まずはゲストとして見学し、上部の「参加」をタップしてこの端末のアカウントで参加できます：鍵と12個の単語はそのまま保持され、他のコミュニティには何の影響もありません。",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "確認されると、提供を公開している間、相手の限度額は最大{amount}分まで拡大します：コミュニティの既知の下限です。",
-  "Uses the key and 12 words already on this phone. No new account is made.": "この端末にすでにある鍵と12個の単語を使用します。新しいアカウントは作成されません。"
+  "Uses the key and 12 words already on this phone. No new account is made.": "この端末にすでにある鍵と12個の単語を使用します。新しいアカウントは作成されません。",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "運営者がこのツールのサーバー上のコピーをオフにしたため、この端末にのみ保存されます。設定で再度オンにできます。",
+  "Asked to join": "参加申請中",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "コミュニティのサーバーに接続できなかったため、何も変更されませんでした。オンラインになったらもう一度お試しください。",
+  "One phone at a time: the copy you changed last is the one kept.": "端末は一度に1台のみ：最後に変更したコピーが保持されます。",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "この端末からこのツールのデータと、コミュニティのサーバー上のコピーを削除します。あなたとしてサインインしている別の端末は、保持しているデータをそのまま残し、送信を停止します。他のコミュニティの同じツールにはそれぞれのデータが保持されます。この操作は取り消せません。",
+  "You can edit a message for 15 minutes after sending it.": "メッセージは送信後15分間編集できます。",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "コミュニティのサーバーはこのツールのコピーを保持しなくなったため、この端末にのみ保存されます。設定でコピーを再度オンにできます。",
+  "{name}, asked to join": "{name}（参加申請中）"
 }

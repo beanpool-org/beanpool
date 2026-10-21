@@ -2,7 +2,7 @@
  * A post author's tier, for the badges on cards and the Elder card treatment.
  *
  * `energyCycled` is the post's author_energy_cycled. The node fills it with the author's tier credit
- * (vouch + earned + granted = CREDIT_BASE_FLOOR − floor), so the tier here is the one the author's own
+ * (what they did: vouch + earned + granted, never the known grant), so the tier here is the one the author's own
  * Ledger shows. The thresholds are @beanpool/core's — never a copy. Pure, so vitest can hold it to core.
  */
 import { tierForCredit, word, type TierLevel, type TierName, type WordKey } from '@beanpool/core';

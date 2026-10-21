@@ -138,7 +138,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', () => ({
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/TrustBadge', () => ({ TrustBadge: ({ level }: { level: string }) => createElement('span', { 'data-badge': level }) }));
 
-import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, PROTOCOL_CONSTANTS, SAMPLE_COMMUNITY, TIER_LEVELS, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
+import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, SAMPLE_COMMUNITY, TIER_LEVELS, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
@@ -330,12 +330,11 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(bypassing(), 'Trust Formula').toEqual([]);
         await click(row('Tiers & Perks'), 'Tiers & Perks');
         expect(text()).toContain(xx('OPEN TO EVERYONE — NO TIER REQUIRED'));
-        // The node's own table, never a copy: Elder's floor and the cap.
-        const { CREDIT_BASE_FLOOR, CREDIT_FLOOR_CAP } = PROTOCOL_CONSTANTS;
-        expect(text()).toContain(xx('Reached when your credit floor reaches **{floor}B** (max **{max}B**)')
-            .replace('{floor}', String(CREDIT_BASE_FLOOR - TIER_LEVELS[3].minCredit)).replace('{max}', String(CREDIT_BASE_FLOOR - CREDIT_FLOOR_CAP)).replace(/\*\*/g, ''));
-        expect(text()).toContain(xx('Reached when your credit floor reaches **{floor}B** (up to {upTo}B)')
-            .replace('{floor}', String(CREDIT_BASE_FLOOR - TIER_LEVELS[1].minCredit)).replace('{upTo}', String(CREDIT_BASE_FLOOR - TIER_LEVELS[2].minCredit + 1)).replace(/\*\*/g, ''));
+        // The node's own table, never a copy: where Elder and Resident start, in trust. Never the credit floor: a confirmed
+        // member's floor holds the known floor too, which no tier counts (Marty, 21 Oct: "Badge counts what they did only").
+        expect(text()).toContain(xx('Reached at **{trust}** trust').replace('{trust}', String(TIER_LEVELS[3].minCredit)).replace(/\*\*/g, ''));
+        expect(text()).toContain(xx('Reached at **{trust}** trust (up to {upTo})')
+            .replace('{trust}', String(TIER_LEVELS[1].minCredit)).replace('{upTo}', String(TIER_LEVELS[2].minCredit - 1)).replace(/\*\*/g, ''));
         expect(bypassing(), 'Tiers & Perks').toEqual([]);
     });
 
@@ -432,6 +431,46 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         await click(row('Send (needs +ve balance)'), 'Send (needs +ve balance)');
         expect(alerts.said[0]).toBe(xx('Positive balance required'));
         expect(bypassing()).toEqual([]);
+    });
+
+    it('a confirmed member (floor -1,000, 0 Trust Points): sees no level promising a floor, and their own line once', async () => {
+        ledger.balance = {
+            balance: 0, floor: -1000, usableFloor: -1000, liveOffers: 0, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 1000,
+            tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 0, earnedCredit: 0, qualifiedValue: 0, avgRating: 0, reviewCount: 0, commons: 0,
+            trustStats: { uniquePartners: 0 },
+        };
+        await renderIn('en');
+        // Own line shown once from their real floor (-1000)
+        expect(text()).toContain('Your current floor');
+        expect(text()).toContain('-1000');
+        expect(text()).not.toContain('Floor starts at');
+        expect(text()).not.toContain('Floor from this tier');
+        // Their line is open already: no 'your first completed trade … opens your credit line' above it
+        expect(text()).toContain('and your credit line is already open.');
+        expect(text()).not.toContain('opens your credit line');
+
+        // Tap Resident shelf button
+        const residentBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Resident'));
+        await click(residentBtn, 'Resident');
+        expect(text()).toContain('from 200 trust');
+        expect(text()).not.toContain('Floor starts at');
+        expect(text()).not.toContain('Floor from this tier');
+        expect(text()).not.toContain('-200');
+
+        // Tap Steward shelf button
+        const stewardBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Steward'));
+        await click(stewardBtn, 'Steward');
+        expect(text()).toContain('from 600 trust');
+        expect(text()).not.toContain('Floor starts at');
+        expect(text()).not.toContain('Floor from this tier');
+        expect(text()).not.toContain('-600');
+
+        // Tap Elder shelf button
+        const elderBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('Elder'));
+        await click(elderBtn, 'Elder');
+        expect(text()).toContain('from 1400 trust');
+        expect(text()).not.toContain('Floor starts at');
+        expect(text()).not.toContain('Floor from this tier');
     });
 
     it('a phone that has lost its community: Send asks to connect first', async () => {
@@ -582,6 +621,32 @@ describe('the Ledger at 320 dp with 1.3× text, in the pseudo-locale', () => {
         const wallet = Array.from(host.querySelectorAll('span')).filter((s) => styleOf(s).textTransform);
         expect([...levels, ...wallet].map((s) => s.textContent)).toEqual([]);
         for (const label of ['YOUR BALANCE', 'COMMONS ⓘ', 'CREDIT FLOOR', 'IN ESCROW', 'RECENT TRANSACTIONS']) expect(text(), label).toContain(xx(label));
+    });
+
+    it('a confirmed member\'s levels card at 320 dp with 1.3× text in the pseudo-locale', async () => {
+        ledger.balance = {
+            balance: 0, floor: -1000, usableFloor: -1000, liveOffers: 0, activated: true, frozen: false, creditFrozen: false, knownFrozen: false, knownGrant: 1000,
+            tier: { name: 'Newcomer', emoji: '🌱' }, tierCredit: 0, earnedCredit: 0, qualifiedValue: 0, avgRating: 0, reviewCount: 0, commons: 0,
+            trustStats: { uniquePartners: 0 },
+        };
+        await renderIn('xx');
+        expect(bypassing()).toEqual([]);
+        expect(text()).toContain(xx('Your current floor'));
+        expect(text()).not.toContain(xx('Floor starts at'));
+
+        const residentBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(xx('Resident')));
+        await click(residentBtn, 'Resident');
+        expect(bypassing()).toEqual([]);
+        const residentTrust = spanSaying(xx('from {n} trust').replace('{n}', '200'))!;
+        expect(residentTrust).not.toBeNull();
+        expect(text()).not.toContain(xx('Floor starts at'));
+
+        const elderBtn = Array.from(host.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(xx('Elder')));
+        await click(elderBtn, 'Elder');
+        expect(bypassing()).toEqual([]);
+        const elderTrust = spanSaying(xx('from {n} trust').replace('{n}', formatNumber(1400, undefined, 'xx')))!;
+        expect(elderTrust).not.toBeNull();
+        expect(text()).not.toContain(xx('Floor starts at'));
     });
 });
 

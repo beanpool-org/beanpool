@@ -1,0 +1,219 @@
+<!-- source-hash: b6cb7426f4ee45f1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kurallar — BeanPool Nasıl Çalışır</title>
+    <meta name="description" content="BeanPool'un basit kuralları: bakiyeler, kredi, teklifler, ücretler, Keynesyen federasyon, topluluk girişimleri ve yönetişim nasıl çalışır.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool Simgesi" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Nasıl Çalışır</a>
+                <a href="rules.html">Kurallar</a>
+                <a href="index.html#features">Özellikler</a>
+                <a href="help.html">Yardım</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Eğitimler</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube'da Eğitim Videolarını İzleyin (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit Topluluğuna Katılın (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub'da Görüntüle">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Başlayın</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Menüyü aç"><span aria-hidden="true">☰</span> Menü</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Başlayın</a>
+                    <a href="index.html#how-it-works">Nasıl Çalışır</a>
+                    <a href="rules.html" aria-current="page">Kurallar</a>
+                    <a href="index.html#features">Özellikler</a>
+                    <a href="help.html">Yardım</a>
+                    <a href="guide/index.html">Üye rehberi</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube'da Eğitimler</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit'te r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub'da Kaynak Kod</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Kurallar — BeanPool Nasıl Çalışır</h1>
+        <p class="lede">BeanPool, herkesin sıfırdan başladığı bir topluluk takasıdır. Başkalarına yardım ederek fasulye kazanır ve başkaları size yardım ettiğinde bunları harcarsınız. Hiçbir para el değiştirmez ve kurumsal aracılar yoktur — yalnızca bu basit kurallar geçerlidir.</p>
+
+        <div class="callout amber">Kısacası: <strong>takas yaparak kredi limitinizi kazanın, kullanmak için bir veya iki teklifi yayında tutun ve fasulyelerin akmasına izin verin.</strong> Sıfır hedef noktasıdır — aldığınız kadar verin.</div>
+
+        <h2 id="1"><span class="num">1.</span>Fasulyeler ve bakiyeniz</h2>
+        <p>Fasulyeler verdiğiniz ve aldığınız değeri ölçer (kabaca zamanı). <strong style="color:var(--text-primary)">Sıfır hedef noktasıdır</strong> — aldığınız kadar verdiğiniz anlamına gelir.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Pozitif bakiye</strong> — aldığınızdan fazlasını verdiniz. Topluluğun size borcu var.</li>
+            <li><strong style="color:var(--text-primary)">Negatif bakiye</strong> — topluluk size kredi sağladı. Vererek bunu geri ödersiniz.</li>
+            <li>Çoğu toplulukta birinin inebileceği en derin nokta <strong>−2000 fasulyedir</strong>. Üyelerini gerçek isimle doğrulayan bir topluluk, −5000'e kadar kendi sınırını belirleyebilir ve doğrulanmış üyelere bir başlangıç limiti verebilir.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Başlarken</h2>
+        <p>Davet ile katılırsınız. İlk günden itibaren göz atabilir ve fasulye alabilirsiniz. Fasulyeye sahip olduğunuzda (onları kazanarak veya bir hediye alarak), harcayabilirsiniz. Krediyle harcamak için en az bir <strong style="color:var(--text-primary)">Teklif</strong> paylaşmalısınız (bkz. §4 ve §5). Yeni üyeler <strong style="color:var(--text-primary)">kredi limiti olmadan</strong> başlar — ilk tamamlanan takasınızla limitiniz etkinleştirilene kadar (veya bir kefil ya da yönetici size bir başlangıç limiti verene kadar — bkz. §3 ve §9) yalnızca gerçekten sahip olduğunuz fasulyeleri harcayabilirsiniz.</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Kredi limitiniz takas yapılarak kazanılır</h2>
+        <p>Kredi limitiniz, biraz eksiye düşmenize olanak tanır — geri kazanmadan önce harcama yapabilirsiniz. <strong style="color:var(--text-primary)">Verilmez, kazanılır</strong>:</p>
+        <ul>
+            <li>Güven, <strong style="color:var(--text-primary)">tamamlanan pazar takaslarından</strong> gelir — asla hediyelerden gelmez. Başlangıçta yavaş büyür: 100 Fasulyelik bir takas yaklaşık 37 Fasulye kredi limiti kazandırır. Bir yönetici veya atanan bir kefil de birine başlangıç limiti verebilir; bir yöneticinin hibesi rozet olarak görünür.</li>
+            <li><strong style="color:var(--text-primary)">Birçok farklı kişiyle</strong> takas yapmak, tek bir kişiyle tekrarlanan takaslara göre güveni çok daha hızlı oluşturur.</li>
+            <li>Güveniniz kredi <em>limitinizi</em> belirler — çoğu toplulukta tabanınızın ne kadar derine inebileceğini, 0'dan −2000'e kadar (bkz. §1).</li>
+            <li>Tabanınız <strong style="color:var(--text-primary)">ilk gerçek takasınızdan</strong> sonra açılır ve sonrasındaki her takasla büyür (veya bir topluluk kefili size bir başlangıç tabanı verebilir — bkz. §9). Kefalet zorunlu değildir.</li>
+        </ul>
+        <div class="callout">Güven seviyeleri — <strong>Yeni Gelen → Sakin → Temsilci → Büyük</strong> — tanınma rozetleridir. Kazandığınız rozetler kendi başlarına hiçbir şeyin kilidini açmaz; daha derin bir kredi limiti gerçek takastan gelir. Bir yönetici de birine rozet verebilir ve bununla birlikte o rozetin başlangıç kredi limitini sağlayabilir.</div>
+
+        <h2 id="4"><span class="num">4.</span>Karşılıklılık: Kredi kullanmak için aktif teklifleri yayında tutmalısınız</h2>
+        <p>Güven kazanmak kredi <strong style="color:var(--text-primary)">limitinizi</strong> belirler (potansiyel olarak ne kadar derine inebileceğiniz). Ancak bu krediyi fiilen <strong style="color:var(--text-primary)">çekebilmek</strong> için aktif Teklifleri yayında tutmalısınız. Bu, borç taşıyan herkesin topluluğa nasıl katkıda bulunmayı planladığını aktif olarak göstermesini sağlar.</p>
+        
+        <p>Yayında tuttuğunuz aktif teklif sayısı, ne kadar kredinin <strong style="color:var(--text-primary)">kullanılabilir</strong> olduğunu belirler:</p>
+        <table>
+            <thead><tr><th>Aktif teklifler</th><th>Kullanılabilir kredi limiti</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — yalnızca tutulan fasulyeleri harcayın</td></tr>
+                <tr><td class="num-col">1</td><td>−200 Fasulyeye kadar</td></tr>
+                <tr><td class="num-col">2</td><td>−500 Fasulyeye kadar</td></tr>
+                <tr><td class="num-col">3</td><td>−1000 Fasulyeye kadar</td></tr>
+                <tr><td class="num-col">4</td><td>−1500 Fasulyeye kadar</td></tr>
+                <tr><td class="num-col">5</td><td>−2000 Fasulyeye kadar <em>(genel üst sınır)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Gerçek harcama limitiniz, kazandığınız ile aktif tekliflerinizin sağladığı limitin <strong style="color:var(--text-primary)">küçük olanıdır</strong>.</p>
+        <p><em>Örneğin: Takaslar yoluyla −600 limiti kazandıysanız, 2 aktif teklifi yayında tutmak bunun −500'ünü kullanılabilir yapar. 3. bir teklifi tutmak −600 limitinizin tamamını kullanılabilir yapar (kazandığınız limite zaten ulaşıldığından asla 4. veya 5. bir teklife ihtiyacınız olmaz).</em></p>
+        <div class="callout">
+            <strong>Harcama Duraklatması (Donma):</strong><br>
+            Mevcut borcunuz için gereken aktif teklif sayısının altına düşerseniz (örneğin, tekliflerinizden biri satılıp tamamlanırsa veya birini duraklatırsanız), <strong>krediyle harcama yapma yeteneğiniz duraklatılır</strong>. Bu bir ceza değil güvenlik ağıdır: sizden hiçbir şey alınmaz. Fasulye almaya, satış yapmaya ve göz atmaya devam edebilirsiniz. Bakiyeniz aktif tekliflerinizin karşıladığı aralığa geri döndüğünde kredi limitiniz kendiliğinden yeniden açılır: başka bir teklif yayınlayın veya fasulye alın.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Teklifler (ilanlarınız)</h2>
+        <ul>
+            <li>Tekrarlananlar dahil istediğiniz kadar teklif bulundurun ve her birini istediğiniz zaman <strong style="color:var(--text-primary)">Aktif veya Duraklatıldı</strong> olarak değiştirin. Yalnızca <em>Aktif</em> teklifler kredi limitinize sayılır.</li>
+            <li><strong style="color:var(--text-primary)">Almadan önce verin:</strong> Fasulye olan bir toplulukta, başkalarından satın almadan veya bir İhtiyaç paylaşmadan önce en az bir teklif listelemiş olmanız gerekir. Fasulyenin olmadığı küresel toplulukta olduğu gibi ilk gönderiniz bir İhtiyaç olabilir.</li>
+            <li>Pozitif bakiye mi var? İsterseniz her şeyi duraklatın — teklifler yalnızca eksiye gitmek için gereklidir.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Ücretler ve topluluk havuzu</h2>
+        <p>İki küçük kesinti vardır ve her ikisi de <strong style="color:var(--text-primary)">Topluluk Ortak</strong> havuzuna akar — topluluğunuzun yerel projeler için harcamak üzere oy kullandığı ortak bir havuz. Hiçbir şey bir şirkete gitmez.</p>
+        <p><strong style="color:var(--text-primary)">a) Pazar yeri ücreti — tamamlanan takaslarda %1,5.</strong> Bir pazar satışı sonuçlandığında satıcı fiyattan %1,5 daha az net alır ve fark Ortak'a gider. <strong style="color:var(--text-primary)">Hediyeler (üyeler arası doğrudan gönderimler) ücretsizdir</strong> — iadeler ve sistem hareketleri de öyledir.</p>
+        <p><strong style="color:var(--text-primary)">b) Pozitif bakiyeler üzerinde dolaşım ücreti — aylık ve yalnızca 200'ün üzerindeki kısım için.</strong> Kademeli vergi dilimleri gibi, her dilim yalnızca bakiyenizin içindeki dilim üzerinden ücretlendirilir:</p>
+        <table>
+            <thead><tr><th>Bakiye dilimi</th><th>Aylık dolaşım oranı</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Ücretsiz</span> yeşil bölge</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>%1</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>%1,5</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>%2</td></tr>
+                <tr><td class="num-col">2000+</td><td>%2,5</td></tr>
+            </tbody>
+        </table>
+        <p>Bu, fasulyelerin <strong style="color:var(--text-primary)">birikmek yerine dolaşmasını</strong> nazikçe teşvik eder. <strong style="color:var(--text-primary)">Negatif bakiyeler asla dolaşım ücretine tabi tutulmaz</strong> — zaten topluluk için kredi taşıyorsunuz. +200 ücretsiz bölgenin ilk −200 kredi dilimini yansıttığına dikkat edin, bu nedenle sistem sıfır etrafında simetriktir.</p>
+
+        <h2 id="7"><span class="num">7.</span>Hediyeler (fasulye gönderme)</h2>
+        <ul>
+            <li>Yalnızca <strong style="color:var(--text-primary)">gerçekten sahip olduğunuz fasulyeleri hediye edebilirsiniz</strong> — bir hediye asla eksiye düşmez ve asla kredi limitinizi kullanmaz.</li>
+            <li>En az bir gerçek takası tamamladıktan sonra gönderebilirsiniz (bu, yepyeni hesapların anında fasulyeleri iletip ortadan kaybolmasını önler).</li>
+            <li>Hediyeler alıcı için güven oluşturmaz ve <strong style="color:var(--text-primary)">ücretsizdir</strong> — kesinti yoktur (yalnızca halihazırda elinizde bulunan fasulyeleri hediye edebilirsiniz).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Takaslar nasıl sonuçlanır</h2>
+        <p>Pazar takasları, işlem tamamlanana kadar güvenli bir şekilde <strong style="color:var(--text-primary)">emanette</strong> (sistem tarafından güvence altında) tutulur, ardından satıcıya aktarılır (%1,5 kesinti düşülerek). Bir anlaşma iptal edilirse, alıcıya tutarın tamamı iade edilir.</p>
+
+        <h2 id="9"><span class="num">9.</span>Kefillik (isteğe bağlı bir avantajlı başlangıç)</h2>
+        <p>Topluluk tarafından atanan güvenilir bir <strong style="color:var(--text-primary)">kefil</strong>, yeni bir gelene <strong style="color:var(--text-primary)">25, 50 veya 100 fasulyelik bir başlangıç tabanı</strong> verebilir, böylece krediyi kazanmadan önce kullanmaya başlayabilirler. Bunlar genellikle — tamamen kefilin takdirine bağlı olarak — gönderilerini ve katkılarını kefilin gerçekten ilgi çekici ve ilham verici bulduğu kişilere verilir. Her iki durumda da isteğe bağlıdır: kimsenin katılmak için kefilliğe ihtiyacı yoktur, çünkü kredi limitinizi yalnızca takas yaparak da açarsınız (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Federe Topluluklar Arası Takas ve Mahsuplaşma</h2>
+        <p>Toplulukların yalıtılmış bir şekilde var olmasına gerek yoktur. <strong style="color:var(--text-primary)">Federe Takas Bağlayıcıları</strong> (Keynes'in takas birliğinden esinlenilmiştir) aracılığıyla, bağımsız topluluk düğümleri komşu bir düğümle fiat para birimi veya bankacılık rezervleri olmadan eşler arası takas yapabilir. Fasulyeler asla kendi topluluklarından ayrılmaz — her bir düğüm çifti emek olarak birbirlerine ne kadar borçlu olduklarının bir köprü defterini tutar ve her iki taraf da bunun ne kadar ilerleyebileceği konusunda kendi sınırını belirler. Mahsuplaşma topluluk çiftleri arasındadır, her operatör bunu bilinçli olarak açar ve henüz erkendir: ekranları web uygulamasında mevcuttur ve yalnızca kendi test topluluklarımızdan ikisi arasında denenmiştir, hiçbir zaman canlı topluluklar arasında denenmemiştir.</p>
+
+        <h2 id="11"><span class="num">11.</span>Kriptografik Kimlik ve Anahtar Saklama</h2>
+        <p>Hesabınız, cihazınızda oluşturulan bir Ed25519 kriptografik anahtar çifti ile korunur. BeanPool ihtiyaçlarınıza uyacak esnek saklama olanakları sunar:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Tam Öz Egemenlik:</strong> Telefon uygulamalarında özel anahtarınız cihazın güvenli depolama alanında tutulur (iOS Keychain / Android Keystore); web uygulamasında tarayıcının kendi depolama alanında tutulur. Cihazdan yalnızca oturum açma kurtarması için kilitli bir kopya olarak veya hesabınızı başka bir cihazınıza kopyaladığınızda ayrılır. 12 kelimelik tohum yedeğinizi çevrimdışı saklayın.</li>
+            <li><strong style="color:var(--text-primary)">Kurtarma:</strong> 12 kelimelik ifadeniz hesabınızı herhangi bir cihazda geri yükler. Google, Apple veya Facebook ile oturum açmayı da bağlayabilirsiniz. Bunun için anahtarınızın kilitli bir kopyası saklanır: BeanPool'un anahtar kasasını kullanan telefon uygulamaları bunu orada, İzlanda'daki küçük bir sunucuda tutar; telefon uygulamasının eski sürümleri bunu topluluğunuzun düğümünde tutar; küresel topluluktaki web uygulaması bunu bizim çalıştırdığımız o topluluğun sunucusunda tutar. Kopyayı kim tutuyorsa onu açabilir. Kasadan geri yükleme, kendi cihazlarınızdan biri onaylamadığı sürece 24 saat bekler. Cihazınızı, 12 kelimenizi ve oturum açma yönteminizi kaybederseniz, topluluğunuzun bir yöneticisi hesabınızı sizin karşınızda tek seferlik bir kodla yeni bir telefona taşıyabilir; geçmişiniz korunur. Bu yüzden kelimeleri bir yere yazın.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Sınırlar ve güvenlik</h2>
+        <ul>
+            <li>Çoğu toplulukta <strong style="color:var(--text-primary)">taban sınırı −2000</strong>'dir (bkz. §1). Ne kadar fasulye harcayacağınıza ilişkin günlük bir sınır yoktur — sınır tabanınızdır. Ne sıklıkla harcayabileceğinize ilişkin bir sınır vardır: herhangi bir 24 saat içinde 100 ödeme, daha önce hiç ödeme yapmadığınız 30 kişi ve 100 pazar talebi.</li>
+            <li>Tek bir ortakla olan güven sınırlandırılmıştır, böylece hiç kimse tek bir suç ortağıyla karşılıklı takas yaparak itibarını şişiremez.</li>
+            <li><strong style="color:var(--text-primary)">Tatil modu</strong>, siz uzaktayken tekliflerinizi gizler ve gelen talepleri duraklatır.</li>
+            <li>Üyeler kötü niyetli kişileri bildirebilir ve işaretleyebilir; topluluk yöneticileri bunları kaldırabilir.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Topluluk Girişimleri ve Yönetişim</h2>
+        <p>Topluluk girişimleri (örneğin bir topluluk alet kütüphanesi, bir yumurta kümesi veya bir odun deposu) ve sınırlı projeler, kolektif gözetim altındaki paylaşılan girişimlerdir. Açık, kodla uygulanan kurallar altında çalışırlar (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">Ortak yönetişim modeli</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Tek nesne, iki yaşam döngüsü (§2.1):</strong> Sürekli bir girişim varlığını sürdürür ve takas yapar; sınırlı bir girişim (bir proje) bir hedefe ve bitiş tarihine sahiptir, tamamlandığında hesabını tasfiye eder ve kalanı Ortak'a iade eder.</li>
+            <li><strong style="color:var(--text-primary)">Kazanılan tabanlar ve sorumlu taahhütleri (Kurallar 1–3):</strong> Yeni bir girişim, hak edilmemiş bir kredili mevduat olmadan başlar: kredi tabanı, sorumlularının kazandığı takas itibarından açık taahhütlerle desteklenir (doğrudan toplam, yapay çarpan yok). Destek taahhüt etmek, bir sorumlunun kişisel hane kredi tabanına asla dokunmaz veya onu azaltmaz. Daha eski girişimler, taahhütlerden önce sahip oldukları başlangıç tabanını korur.</li>
+            <li><strong style="color:var(--text-primary)">Sınırlı sorumluluk (Kural 4):</strong> Sorumlunun hanesi değil, girişim batar. Bir girişim temerrüde düşerse harcamaları donar, ancak sorumlularının kişisel tabanları korunur.</li>
+            <li><strong style="color:var(--text-primary)">Kredi girdi satın alır, kâr insanlara ödeme yapar (Kural 5):</strong> Bir girişim, dışarıdaki komşulardan malzeme veya hizmet satın almak için kullanılabilir tabanına kadar kredi kullanabilir. Kendi sorumlularına ödeme yapmak için <em>asla</em> kredi kullanamaz — sorumlulara yalnızca <code>bakiye − tutar ≥ 0</code> olduğunda ödeme yapılır.</li>
+            <li><strong style="color:var(--text-primary)">Kazanılan fazla ile sınırlandırılmış sorumlu ücreti (Kural 6):</strong> Sorumlulara yapılan ödemeler, gerçek takas fazlasıyla (satış geliri eksi sorumlu ödemeleri) kesin olarak sınırlandırılmıştır. Hibeler, taahhütler ve hediyeler asla sorumlu ücretlerine dönüştürülemez.</li>
+            <li><strong style="color:var(--text-primary)">Otomatik işletme sermayesi süpürmeleri (Kural 7):</strong> Bir girişim bir işletme sermayesi tavanı belirleyebilir. Bunun üzerindeki kazanılan fazla, istifçiliği önlemek için otomatik olarak Topluluk Ortak havuzuna süpürülür. Hibeler ve hediyeler asla süpürülmez.</li>
+            <li><strong style="color:var(--text-primary)">İki kişilik onay kuralı:</strong> Sorumlular kendilerine yapılacak ödemeleri veya girişim ihtiyaçlarına yönelik kişisel tekliflerini onaylayamazlar — başka bir sorumlu onaylamalıdır.</li>
+            <li><strong style="color:var(--text-primary)">Anketler ve Kararlar (§3):</strong> Gayri resmi sorular, pazar akışındaki <em>Anketler</em>'dir: her biri bir oy, sayılır, hiçbir bağlayıcılığı yoktur. Bağlayıcı yönetişim (havuz hibeleri, borç silme, rol değişiklikleri ve bir üyeyi askıya alma, dondurma veya çıkarma), Ortak sekmesindeki 7 günlük bir oylama penceresine sahip <em>Kararlar</em> aracılığıyla yürütülür. Bir Karar, yeterli sayıda üye oy kullandığında (son 30 günde aktif olanların %30'u, en az 3 kişi; bir üyeyi çıkarmak için %25) oyların %60'ı ile kabul edilir (bir üyeyi çıkarmak için %66; askıya almayı veya dondurmayı kaldırmak ya da bir üyeyi geri getirmek için yarıdan fazlası). Ardından kendini otomatik olarak yürütür. Havuz hibeleri, kazanılan takas itibarı üzerinden ikinci dereceden oylama (kuadratik oylama) kullanır — likit fasulyeler oy satın alamaz.</li>
+            <li><strong style="color:var(--text-primary)">Yerleşik sözlük (§9):</strong> Dört düzey, dört belirgin sözcük: düğüm → <em>sahip / yönetici</em> · girişim → <em>baş sorumlu / sorumlu</em> · grup → <em>koordinatör</em> · güven kademesi → <em>Temsilci</em>.</li>
+        </ul>
+        <div class="callout amber">Kısacası: <strong>takas yaparak kredi limitinizi kazanın, kullanmak için bir veya iki teklifi yayında tutun ve fasulyelerin akmasına izin verin.</strong> Sıfır hedef noktasıdır — aldığınız kadar verin.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool Simgesi" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Topluluklar için karşılıklı kredi, topluluklar tarafından yönetilir.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Yardım Merkezi</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Nasıl Çalışır</a>
+                    <a href="getting-started.html">Başlarken</a>
+                    <a href="rules.html">Kurallar</a>
+                    <a href="safety.html">Çocuk Güvenliği</a>
+                    <a href="privacy.html">Gizlilik Politikası</a>
+                    <a href="terms.html">Hizmet Şartları</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT lisansı altında açık kaynak. Topluluklar tarafından topluluklar için <img src="bean.png" alt="sevgiyle" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> yapıldı. Saat dilimi sınırları © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap katkıda bulunanları</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

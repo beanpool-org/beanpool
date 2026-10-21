@@ -1,0 +1,291 @@
+<!-- source-hash: 85100d10c15dfef1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uchumi Baada ya Unyonyaji — BeanPool</title>
+    <meta name="description" content="Nini maana ya uchumi baada ya unyonyaji, na mbinu mahususi ambazo BeanPool hutumia kuujenga: mkopo wa pande zote bila riba, mzunguko badala ya kurundika, Mali za Pamoja zinazopigiwa kura na wanachama, na muungano usioinyonya miji midogo.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Aikoni ya BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Jinsi Inavyofanya Kazi</a>
+                <a href="rules.html">Kanuni</a>
+                <a href="index.html#features">Vipengele</a>
+                <a href="help.html">Msaada</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mafunzo</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tazama Mafunzo ya Video kwenye YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Jiunge na Jamii ya Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Tazama kwenye GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Anza Sasa</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Fungua menyu"><span aria-hidden="true">☰</span> Menyu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Anza Sasa</a>
+                    <a href="index.html#how-it-works">Jinsi Inavyofanya Kazi</a>
+                    <a href="rules.html">Kanuni</a>
+                    <a href="index.html#features">Vipengele</a>
+                    <a href="help.html">Msaada</a>
+                    <a href="guide/index.html">Mwongozo wa wanachama</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mafunzo kwenye YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool kwenye Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Msimbo chanzo kwenye GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>Uchumi Baada ya Unyonyaji</h1>
+
+        <p class="lede">Zana nyingi ambazo jamii hutumia kufanya biashara zimeundwa ili kuchukua sehemu ya mapato. Si kwa nia mbaya — bali kimuundo tu. Asilimia fulani huenda kwa mchakataji wa malipo, riba huenda kwa benki, usikivu huenda kwa mtangazaji, na data huenda mahali ambapo hakuna mtu katika jamii aliyechagua. <strong>BeanPool imeundwa ili kuondoa njia hizo za upotevu.</strong></p>
+
+        <div class="pe-define">
+            <p><strong>Baada ya unyonyaji</strong> inamaanisha miundombinu inayoruhusu jamii kuunda na kubakiza thamani wanayozalisha, badala ya kutekwa na madalali. Si kauli mbiu ya kuwa wakarimu tu. Ni kikwazo thabiti cha jinsi programu inavyopaswa kujengwa — na mambo yatakayokiuka hayajumuishwi kamwe kwenye mfumo.</p>
+        </div>
+
+        <h2>Jinsi unyonyaji unavyoonekana hasa</h2>
+        <p>Inafaa kuwa wazi, kwa sababu "unyonyaji" mara nyingi huachwa bila kufafanuliwa. Jirani anapomlipa jirani kupitia jukwaa la kawaida, thamani huondoka katika jamii kupitia milango kadhaa kwa wakati mmoja:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ Ambapo thamani huondoka</h4>
+                <ul>
+                    <li><strong>Ada za miamala</strong> kwenda kwa mchakataji mwenye makao makuu kwingineko.</li>
+                    <li><strong>Riba</strong> kwenye mkopo uliofanikisha mabadilishano hayo, ikilipwa kwa benki.</li>
+                    <li><strong>Matangazo</strong> — usikivu wako ukiuzwa kwa mtu anayetoa bei ya juu zaidi.</li>
+                    <li><strong>Data</strong> — mahusiano na ununuzi wako vinakuwa rasilimali ya mtu mwingine.</li>
+                    <li><strong>Kodi ya jukwaa</strong> — mara tu kila mtu anapokuwa juu yake, bei hupanda, kwa sababu kuondoka inamaanisha kuwaacha majirani zako.</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ Kile tunachofanya badala yake</h4>
+                <ul>
+                    <li>Mkopo <strong>unaundwa na mabadilishano yenyewe</strong>, hivyo hakuna mkopeshaji wa kumlipa.</li>
+                    <li>Ada ndogo zilizopo zinaingia kwenye <strong>Mfuko wa Mali za Pamoja ambao jamii yako hupiga kura kuutumia</strong>.</li>
+                    <li><strong>Hakuna matangazo.</strong> Hakuna mtangazaji, kwa hivyo hakuna cha kuteka usikivu wako kwa ajili yake.</li>
+                    <li><strong>Hakuna uvunaji wa data.</strong> Ufunguo wako wa siri unabaki kwenye kifaa chako. Ukiiunganisha na njia ya kuingia ili kuurejesha, nakala iliyolindwa huwekwa kwa ajili yake: kwenye chumba salama cha funguo za BeanPool, au kwenye seva ya jamii, kulingana na programu. Yeyote anayeihifadhi anaweza kuifungua. Jumbe za moja kwa moja na gumzo za vikundi zimesimbwa kutoka mwisho hadi mwisho.</li>
+                    <li><strong>Hakuna utegemezi wa kulazimishwa.</strong> Itifaki ni ya msimbo huria na jamii yako huendesha nodi yake yenyewe.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">Ili kuwa wazi kuhusu ukweli halisi: <strong>BeanPool si kwamba haina gharama kabisa.</strong> Kuna tozo ndogo ya mzunguko kwenye masalio makubwa yasiyotumika, na tozo ndogo kwenye mabadilishano. Tofauti si kwamba fedha zinapotea — bali ni <strong>zinakokwenda</strong>. Zinaenda kwenye Mfuko wa Mali za Pamoja, na jamii hupiga kura jinsi ya kuzitumia. Hakuna kinacholipwa kwa mwenye hisa, kwa sababu hakuna mwenye hisa.</div>
+
+        <h2>Hatukuanzisha ukosoaji huu sisi</h2>
+        <p>Mtindo ulio hapo juu umechambuliwa kwa kina, na kupewa majina mara kadhaa, na watu ambao wametumia miaka mingi kuutafiti. Tunaamini uchambuzi huo ni sahihi; tunapotofautiana ni kwamba sisi tunajaribu kujenga njia ya kutokea badala ya kuelezea tu mtego. Ikiwa unataka hoja kamili badala ya muhtasari wetu, hapa ndipo pa kuanzia.</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Platform Capitalism <span>— Nick Srnicek, 2016</span></h4>
+                <p>Huchukulia jukwaa kama mtindo wa biashara badala ya teknolojia: kujiweka kati ya makundi mawili yanayohitaji kufikiana, kisha kuchukua sehemu ya kila muunganisho. Kwa sababu thamani ya jukwaa inakua kulingana na idadi ya watu waliopo, kuondoka kunakuwa kugumu zaidi kadri sehemu inayochukuliwa inavyozidi kuwa kubwa.</p>
+            </div>
+            <div class="pe-book">
+                <h4>The Age of Surveillance Capitalism <span>— Shoshana Zuboff, 2019</span></h4>
+                <p>Inaelezea unyonyaji wa pili unaoendana sambamba na ule wa kwanza. Uzoefu wa kawaida wa kibinadamu unachukuliwa kama malighafi isiyo na mwenyeji, ikichakatwa kuwa utabiri wa kile ambacho watu watafanya baadaye, na kuuzwa kwa yeyote anayefaidika kwa kujua hilo. Mtu ambaye data ilitoka kwake siye mteja.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Technofeudalism <span>— Yanis Varoufakis, 2023</span></h4>
+                <p>Toleo kali zaidi la hoja hiyo. Kile ambacho mmiliki wa jukwaa anakusanya si faida kutokana na kuzalisha chochote — bali ni <em>kodi ya pango</em>, inayotozwa kwa kupata nafasi wanayomiliki. Hoja ya Varoufakis ni kwamba hii inafanya mpangilio huo kuwa wa zamani zaidi kuliko ubepari badala ya kuwa mpya: uhusiano wa mwenye nyumba uliovalia nguo za kampuni ya teknolojia.</p>
+            </div>
+        </div>
+
+        <p>Kuna maneno ya kawaida zaidi ya jinsi mpangilio huo unavyohisiwa kutoka chini — <strong>ugawaji wa mazao wa kidijitali</strong>. Unafanya kazi, kwenye ardhi usiyoimiliki, na mmiliki anachukua sehemu ya kila kitu unachovuna. Inamuelezea dereva, muuzaji, mwanamuziki na msafirishaji wa mizigo sawia, jambo ambalo kawaida ni ishara kwamba maelezo hayo yanalenga kitu halisi.</p>
+
+        <p>Jibu letu si mwenye nyumba mwenye haki zaidi au kuchukua sehemu ndogo zaidi ya mapato. Ni kwamba <strong>hapaswi kuwepo na ardhi ya kupanga tangu mwanzo.</strong> Majirani wawili wanaobadilishana kazi ya mchana mmoja hawahitaji kupitia eneo ambalo mtu yeyote analimiliki. Kwa hivyo jamii inamiliki nodi, itifaki iko wazi kwa mtu yeyote kuiendesha au kuifanyia mabadiliko, na tozo pekee iliyopo huenda kwenye Mali za Pamoja za jamii yenyewe. Hakuna nafasi katikati kwa mtu yeyote kuuza ufikiaji — ikiwa ni pamoja na sisi wenyewe.</p>
+
+        <p class="pe-credit">Njia nzuri ya kuanza, ikiwa ungependa kutazama badala ya kusoma: video ya Benn Jordan <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">“You Are Witnessing the Death of American Capitalism”</a>, ambayo inaelezea mada hii na kuashiria vitabu vyote vitatu vilivyo hapo juu.</p>
+
+        <h2>Mbinu za utekelezaji</h2>
+        <p>Nne za kwanza ni sehemu zinazofanya kazi katika kila jamii leo. Ya tano, usuluhishi kati ya jamii, umejengwa na umejaribiwa tu kati ya jamii zetu mbili za majaribio, bado si kati ya jamii halisi. Zinaelezewa kikamilifu katika <a href="rules.html">Kanuni</a>.</p>
+
+        <div class="pe-mech">
+            <h3>Fedha ambazo jamii inajitengenezea yenyewe</h3>
+            <p>BeanPool inaendeshwa kwa <strong>mkopo wa pande zote</strong>. Unapomfanyia jirani kazi ya saa tatu, saa tatu za mkopo huundwa papo hapo wakati huo — salio lako chanya na salio lao hasi, vikiundwa pamoja na mabadilishano hayo. Hakuna benki iliyoitoa. Hakuna aliyekukopesha. Hakuna riba, kwa sababu hakuna mkopeshaji.</p>
+            <p>Huu ndio msingi wa muundo mzima. Ikiwa upatikanaji wa fedha unapaswa kukopwa ili uwepo, mtu fulani nje ya jamii anakuwa na madai juu ya kazi yake ya baadaye. Ikiwa jamii inaiunda kwa kufanya mabadilishano, hakuna mtu anayekuwa na madai hayo.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Sifuri ndio lengo, si salio kubwa</h3>
+            <p>Salio la <strong>sifuri</strong> linamaanisha umetoa kiasi kinacholingana na ulichopokea. Huo ndio ustawi mzuri, na ni lengo tofauti kabisa na lile linalowekwa na mifumo mingi ya kiuchumi. Hakuna zawadi ya kurundika maharagwe, na hakuna njia ya kuyageuza kuwa madai kwa mtu yeyote nje ya jamii.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Mzunguko badala ya kurundika</h3>
+            <p>Masalio makubwa yasiyotumika hupungua taratibu kadri muda unavyopita, kwa kiwango cha kimaendeleo. Lengo ni kuwezesha maharagwe kuendelea kuzunguka — yakitumiwa na majirani, yakitolewa kwenye miradi ya eneo husika — badala ya kukaa tu bila kufanya kazi. Uchumi ambao njia ya mabadilishano huacha kuzunguka ni ule ambao umeacha kufanya kazi.</p>
+            <p>Jambo la msingi ni kwamba, kinachopunguzwa hakiharibiwi na hakichukuliwi kama faida: <strong>kinahamia kwenye Mfuko wa Mali za Pamoja.</strong> Masalio hasi kamwe hayatozwi tozo. Mtu mwenye salio hasi ametumia mkopo ambao jamii ilimpa, na kumtoza tozo mtu ambaye tayari yuko nyuma kungeongeza shida zaidi badala ya kufanya maharagwe yazunguke — jambo ambalo ni kinyume kabisa na kusudi.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Mali za Pamoja ambazo ni mzunguko endelevu, si shimo la kupotea</h3>
+            <p>Mfuko wa Mali za Pamoja unashikilia kile kinachokusanywa na tozo za mzunguko na mabadilishano, na kile unachoshikilia huenda maeneo mawili: kufidia deni lililoachwa wakati mwanachama anapoondoka au kuondolewa akiwa na deni, na kufadhili biashara na miradi ambayo wanachama wanaidhinisha kupitia <strong>Maamuzi</strong> yanayojitekeleza yenyewe — zana za bustani ya pamoja, vifaa vya nafasi ya kazi, chochote kinachopendekezwa na kupigiwa kura kupita. Jamii yenyewe huamua kile ambacho ziada yake inajenga.</p>
+            <p>Ni mzunguko uliofungwa kimuundo: thamani huzalishwa katika eneo husika, inashikiliwa kwa pamoja, na kutumika tena ndani ya jamii hiyo hiyo.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Muungano usioinyonya miji midogo</h3>
+            <p>Wakati jamii zinapofanya mabadilishano zenyewe kwa zenyewe, unyonyaji unaweza kujitokeza tena kwa njia ya hila zaidi — mji tajiri zaidi kuunyonya mji mdogo kimyakimya. Hili ndilo tatizo ambalo John Maynard Keynes alikusudia kulitatua huko Bretton Woods, na usuluhishi wa BeanPool kati ya jamii umejengwa juu ya suluhisho lake.</p>
+            <p><strong>Maharagwe kamwe hayavuki mpaka.</strong> Mabadilishano kati ya jamii mbili yanakamilika kupitia jozi ya leja za daraja, moja ikishikiliwa na kila nodi, ikirekodi kile ambacho kila upande unadaiwa na mwingine katika kazi. Kila upande huweka kikomo chake cha jinsi hiyo inavyoweza kwenda — ili jamii jirani iweze tu kukudai kiasi ulichochagua mapema.</p>
+            <p>Mambo mawili yanafuata, na ndiyo sababu hii si kikomo cha matumizi tu. <strong>Kusuluhisha kile unachodaiwa kamwe hakuzuiwi</strong> — kikomo kinazuia mwelekeo unaotoa mkopo, kamwe si mwelekeo unaoulipa. Na jamii yenye ziada haikaa nayo tu: <strong>kadri mji unavyodaiwa zaidi, ndivyo unavyoweza kuagiza kazi zaidi kutoka kwa mji unaoudai</strong>, ukigeuza ukosefu wa usawa kuwa mabadilishano tena badala ya kuuacha kama deni.</p>
+            <div class="pe-worked">
+                <strong>Kwa nini muundo lazima ufanye kazi kwa njia hii.</strong> Kila haragwe chanya lina haragwe hasi linalolingana nalo linaloshikiliwa na mwanachama mahususi, ambaye analilipa kwa kufanya kazi. Ikiwa +50 ya mwanachama ingeenda tu kwenye mji mwingine, jirani aliyeko kwenye −50 hangeweza tena kuirudisha kutoka kwenye mzunguko wa eneo husika — mwenzake anayelingana na deni lake amekwenda. Rudia hilo kwa wageni wengi na mzunguko wa jamii ndogo unadumaa kabisa. Si kwa njia ya ulaghai; bali kupitia uhamisho ambao wote ulionekana kuwa sahihi.
+            </div>
+            <p class="pe-edges">Mipaka ilipo, kwa uwazi: jamii iliyo katika nakisi <em>kamwe</em> haitozwi tozo kwa kuwa katika nakisi — hoja ya Keynes, na yetu pia, ni kwamba shinikizo linapaswa kuangukia tu kwa mtu mwenye uwezo wa kulifanyia kazi. Wenzo mmoja uliobaki, tozo kwenye ziada inayoachwa kimakusudi bila kutumika, imebainishwa na kuachwa bila kujengwa kimakusudi hadi iweze kupita mtihani huo huo wa haki. Usuluhishi unafanyika kati ya jozi za jamii badala ya mtandao mpana zaidi, na mwendeshaji wa kila jamii huwasha kwa hiari.</p>
+        </div>
+
+        <h2>Ahadi ambazo msingi huu unategemea</h2>
+        <p>Hizi ndizo thamani za uanzilishi ambazo kila mchango kwa BeanPool hupimwa nazo. Zimechapishwa katika <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">mwongozo wa wachangiaji</a> wa mradi, na zina mamlaka thabiti: kazi inayokinzana nazo hukataliwa, haijalishi jinsi msimbo ulivyo mzuri.</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>Baada ya unyonyaji</h4>
+                <p>Tunajenga miundombinu inayowezesha jamii kuunda na kubakiza thamani badala ya kutekwa na madalali. Michango inayoleta mienendo ya unyonyaji — athari za mtandao zinazonufaisha upande mmoja pekee unaodhibiti, kufungia kwa umiliki binafsi, uchumaji mapato unaotegemea ufuatiliaji — haikubaliki.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Ugatuaji wa mamlaka</h4>
+                <p>Jamii za eneo zinapaswa kuwa na uwezo wa kuendesha nodi zao wenyewe, kufanya maamuzi yao wenyewe ya uongozi, na kufanya kazi kwa uhuru. Michango inayosukuma maamuzi juu kwenye mamlaka ya kimataifa, au inayofanya uendeshaji wa eneo kutowezekana, inakwenda kinyume na malengo ya itifaki.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Ueleweka</h4>
+                <p>Itifaki inapaswa kueleweka na jamii inazozihudumia — si wahandisi wa programu pekee. Maelezo ya kiufundi yameandikwa kwa lugha rahisi inapowezekana, huku maelezo ya kina ya kiufundi yakiwekwa chini yake.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Idhini na faragha</h4>
+                <p>Hakuna kipengele kinachopaswa kuruhusu data kusafirishwa bila idhini ya wazi, inayoweza kubatilishwa, na inayoweza kukaguliwa ya upande inayomiliki. Vipengele vinavyoingilia faragha havitajumuishwa bila kujali ubora wao wa kiufundi.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Urejeshaji na uendelevu</h4>
+                <p>Tunapima mafanikio kwa kuangalia kama jamii, mifumo ya ekolojia, na mali za pamoja zina ustawi bora zaidi kwa sababu ya BeanPool — si kwa vipimo vya ukuaji au bei ya sarafu pepe.</p>
+            </div>
+        </div>
+
+        <h2>Jinsi ya kuthibitisha tunamaanisha</h2>
+        <p>Madai kama haya yana thamani kulingana na uwezo wa kuyathibitisha tu, kwa hivyo:</p>
+        <ul class="pe-check">
+            <li>Itifaki nzima ni ya <strong>msimbo huria chini ya leseni ya MIT</strong> — <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">soma msimbo</a>, ikijumuisha kila kanuni iliyoelezwa kwenye ukurasa huu.</li>
+            <li>Kanuni za kiuchumi zimeandikwa kwa lugha rahisi katika <a href="rules.html">Kanuni</a> — masalio, mikopo, tozo, na kila moja inakokwenda.</li>
+            <li>Jamii yako inaweza <strong>kuendesha nodi yake yenyewe</strong>. Ikiwa tutawahi kuwa madalali wa katikati, unaweza kuondoka na kwenda na jamii yako.</li>
+            <li>Hakuna <strong>sarafu pepe wala wawekezaji</strong>. Maharagwe ni mkopo wa pande zote kwa ajili ya mabadilishano halisi, na kamwe hayabadilishwi kwenye soko la fedha.</li>
+        </ul>
+
+        <div class="callout">Kwa ufupi: <strong>uchumi unakuwa baada ya unyonyaji wakati thamani ambayo jamii inaiunda haina mahali pa kuvujia nje.</strong> Si kwa sababu kila mtu ni mwema, bali kwa sababu hakuna milango ya upotevu katika muundo.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Aikoni ya BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Mkopo wa pande zote kwa ajili ya jamii, unaoendeshwa na jamii.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Kituo cha Msaada</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Jinsi Inavyofanya Kazi</a>
+                    <a href="getting-started.html">Kuanza Sasa</a>
+                    <a href="rules.html">Kanuni</a>
+                    <a href="post-extraction.html">Baada ya Unyonyaji</a>
+                    <a href="safety.html">Usalama wa Watoto</a>
+                    <a href="privacy.html">Sera ya Faragha</a>
+                    <a href="terms.html">Masharti ya Huduma</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Msimbo huria chini ya leseni ya MIT. Imetengenezwa kwa <img src="bean.png" alt="upendo" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> na jamii, kwa ajili ya jamii. Mipaka ya maeneo ya saa © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Wachangiaji wa OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

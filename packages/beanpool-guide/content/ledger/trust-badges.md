@@ -16,7 +16,7 @@ Your trust badge shows how much trust you have built:
 
 A member who has not traded yet shows **FOUNDING** on their posts.
 
-Trust comes from a vouch when you join, from completed trades, and from trust an admin has granted. In a community that confirms its members, the credit line a confirmed member gets counts too.
+Trust comes from a vouch when you join, from completed trades, and from trust an admin has granted. In a community that confirms its members, being confirmed gives you a higher credit limit, not a higher badge: your badge counts only what you have done, so it never shows that you are confirmed.
 
 ## They unlock nothing
 

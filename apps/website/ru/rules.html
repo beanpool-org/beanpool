@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Правила — Как работает BeanPool</title>
+    <meta name="description" content="Простые правила BeanPool: как работают балансы, кредит, предложения, комиссии, кейнсианская федерация, предприятия сообщества и управление.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/rules">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/rules">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/rules">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/rules">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/rules">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/rules">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/rules">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/rules">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/rules">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/rules">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/rules">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/rules">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/rules">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/rules">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/rules">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/rules">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/rules">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/rules">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/rules">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/rules">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/rules">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/rules">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/rules">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/rules">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/rules">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/rules">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Иконка BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Как это работает</a>
+                <a href="rules.html">Правила</a>
+                <a href="index.html#features">Возможности</a>
+                <a href="help.html">Справка</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Уроки</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Смотрите видеоуроки на YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Присоединяйтесь к сообществу на Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Посмотреть на GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">С чего начать</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Открыть меню"><span aria-hidden="true">☰</span> Меню</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">С чего начать</a>
+                    <a href="index.html#how-it-works">Как это работает</a>
+                    <a href="rules.html" aria-current="page">Правила</a>
+                    <a href="index.html#features">Возможности</a>
+                    <a href="help.html">Справка</a>
+                    <a href="../guide/index.html">Руководство для участников</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Уроки на YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool на Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Исходный код на GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Правила — Как работает BeanPool</h1>
+        <p class="lede">BeanPool — это система обмена в сообществе, где каждый начинает с нуля. Вы зарабатываете бобы, помогая другим, и тратите их, когда помогают вам. Деньги не используются, и здесь нет корпоративных посредников — только эти простые правила.</p>
+
+        <div class="callout amber">Вкратце: <strong>зарабатывайте кредитную линию торговлей, держите одно-два активных предложения, чтобы использовать её, и пусть бобы циркулируют.</strong> Цель — ноль: отдавать примерно столько же, сколько берете.</div>
+
+        <h2 id="1"><span class="num">1.</span>Бобы и ваш баланс</h2>
+        <p>Бобы измеряют ценность, которую вы отдали и получили (примерно время). <strong style="color:var(--text-primary)">Цель — ноль</strong>: это значит, что вы отдали примерно столько же, сколько взяли.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Положительный баланс</strong> — вы отдали больше, чем взяли. Сообщество должно вам.</li>
+            <li><strong style="color:var(--text-primary)">Отрицательный баланс</strong> — сообщество предоставило вам кредит. Вы возвращаете долг помощью.</li>
+            <li>В большинстве сообществ максимальный минус составляет <strong>−2000 бобов</strong>. Сообщество, подтверждающее участников по настоящему имени, может установить собственный лимит до −5000 и предоставить подтвержденным участникам начальную линию.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>С чего начать</h2>
+        <p>Вы вступаете по приглашению. С первого дня вы можете просматривать объявления и получать бобы. Имея бобы на балансе (заработав их или получив подарок), вы можете их тратить. Чтобы тратить в кредит, необходимо опубликовать хотя бы одно <strong style="color:var(--text-primary)">Предложение</strong> (см. §4 и §5). Новые участники начинают <strong style="color:var(--text-primary)">без кредитной линии</strong>: вы можете тратить только те бобы, которые у вас есть, пока кредитная линия не активируется вашей первой завершенной сделкой (или пока поручитель либо администратор не предоставит вам начальную линию — см. §3 и §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Кредитная линия зарабатывается торговлей</h2>
+        <p>Кредитная линия позволяет вам немного уходить в минус — тратить до того, как вы заработали. Она <strong style="color:var(--text-primary)">зарабатывается, а не выдается просто так</strong>:</p>
+        <ul>
+            <li>Доверие формируется из <strong style="color:var(--text-primary)">завершенных сделок на рынке</strong> — и никогда из подарков. Сначала оно растет медленно: сделка на 100 бобов дает около 37 бобов кредитной линии. Администратор или назначенный поручитель также могут предоставить начальную линию; назначение от администратора отображается в виде значка.</li>
+            <li>Торговля со <strong style="color:var(--text-primary)">множеством разных людей</strong> формирует доверие гораздо быстрее, чем повторные сделки с одним и тем же человеком.</li>
+            <li>Ваше доверие определяет <em>лимит</em> кредита — насколько низко может опуститься ваш баланс, от 0 до −2000 в большинстве сообществ (см. §1).</li>
+            <li>Кредитный лимит открывается после <strong style="color:var(--text-primary)">первой реальной сделки</strong> и растет с каждой последующей сделкой (или поручитель сообщества может дать стартовый лимит — см. §9). Поручительство не обязательно.</li>
+        </ul>
+        <div class="callout">Уровни доверия — <strong>Новичок → Житель → Хранитель → Старейшина</strong> — это значки признания. Заработанные значки сами по себе ничего не блокируют; углубление кредитной линии достигается реальной торговлей. Администратор также может выдать участнику значок, а вместе с ним и начальную кредитную линию для этого значка.</div>
+
+        <h2 id="4"><span class="num">4.</span>Взаимность: чтобы пользоваться кредитом, нужны активные предложения</h2>
+        <p>Заработанное доверие определяет ваш кредитный <strong style="color:var(--text-primary)">лимит</strong> (до какого минуса можно дойти). Но чтобы фактически <strong style="color:var(--text-primary)">использовать</strong> этот кредит, у вас должны быть активные Предложения. Это гарантирует, что каждый, у кого есть долг, наглядно показывает сообществу, как он планирует внести свой вклад.</p>
+        
+        <p>Количество ваших активных предложений определяет доступный объем кредита:</p>
+        <table>
+            <thead><tr><th>Активные предложения</th><th>Доступная кредитная линия</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — только бобы на балансе</td></tr>
+                <tr><td class="num-col">1</td><td>До −200 бобов</td></tr>
+                <tr><td class="num-col">2</td><td>До −500 бобов</td></tr>
+                <tr><td class="num-col">3</td><td>До −1000 бобов</td></tr>
+                <tr><td class="num-col">4</td><td>До −1500 бобов</td></tr>
+                <tr><td class="num-col">5</td><td>До −2000 бобов <em>(обычный предел)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Ваш фактический лимит расходов — это <strong style="color:var(--text-primary)">меньшая</strong> из двух величин: заработанного кредита и лимита, доступного по вашим активным предложениям.</p>
+        <p><em>Например: если в сделках вы заработали лимит −600, наличие 2 активных предложений открывает доступ к −500 из них. 3-е активное предложение открывает полный лимит −600 (4-е или 5-е предложение вам не понадобится, так как ваш заработанный лимит уже исчерпан).</em></p>
+        <div class="callout">
+            <strong>Приостановка расходов (заморозка):</strong><br>
+            Если у вас окажется меньше активных предложений, чем требуется для покрытия текущего долга (например, одно из предложений было продано и закрыто, или вы поставили его на паузу), ваша <strong>возможность тратить в кредит приостанавливается</strong>. Это защитный механизм, а не штраф: у вас ничего не отбирают. Вы по-прежнему можете получать бобы, продавать и просматривать рынок. Кредитная линия автоматически возобновляет работу, как только баланс снова уложится в рамки активных предложений: просто опубликуйте новое предложение или получите бобы.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Предложения (ваши публикации)</h2>
+        <ul>
+            <li>Размещайте сколько угодно предложений — включая регулярные — и переключайте каждое в статус <strong style="color:var(--text-primary)">Активно или На паузе</strong> в любое время. Только <em>активные</em> предложения учитываются для кредитной линии.</li>
+            <li><strong style="color:var(--text-primary)">Сначала отдайте, потом берите:</strong> в сообществе с бобами вам необходимо опубликовать хотя бы одно предложение, прежде чем вы сможете опубликовать спрос или купить что-то у других. Там, где нет бобов, как в глобальном сообществе, вашей первой публикацией может быть спрос.</li>
+            <li>Баланс положительный? При желании можете приостановить все — предложения требуются только для ухода в минус.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Комиссии и фонд сообщества</h2>
+        <p>Два небольших сбора, и оба поступают в <strong style="color:var(--text-primary)">Общие проекты сообщества</strong> — общий фонд, который сообщество распределяет голосованием на местные проекты. Ничего не уходит корпорациям.</p>
+        <p><strong style="color:var(--text-primary)">а) Торговая комиссия — 1,5% с завершенных сделок.</strong> При расчете по сделке на рынке продавец получает на 1,5% меньше стоимости, а разница идет в фонд общих проектов. <strong style="color:var(--text-primary)">Подарки (прямые переводы между участниками) бесплатны</strong> — как и возвраты средств и системные операции.</p>
+        <p><strong style="color:var(--text-primary)">б) Комиссия за обращение на положительные балансы — ежемесячно и только на часть свыше 200.</strong> Подобно прогрессивной шкале, сбор взимается только с части баланса в соответствующем диапазоне:</p>
+        <table>
+            <thead><tr><th>Диапазон баланса</th><th>Ежемесячная ставка обращения</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Бесплатно</span> зеленая зона</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
+            </tbody>
+        </table>
+        <p>Это мягко стимулирует бобы <strong style="color:var(--text-primary)">обращаться, а не скапливаться</strong>. <strong style="color:var(--text-primary)">На отрицательные балансы комиссия за обращение никогда не начисляется</strong> — вы и так несете кредитную нагрузку для сообщества. Обратите внимание: бесплатная зона +200 зеркально отражает первый диапазон кредита −200, обеспечивая симметрию системы вокруг нуля.</p>
+
+        <h2 id="7"><span class="num">7.</span>Подарки (отправка бобов)</h2>
+        <ul>
+            <li>Вы можете <strong style="color:var(--text-primary)">дарить только те бобы, которые фактически есть на балансе</strong>: подарок никогда не уводит баланс в минус и не использует кредитную линию.</li>
+            <li>Отправка доступна после совершения хотя бы одной реальной сделки (это защищает от создания пустых аккаунтов для быстрого вывода бобов).</li>
+            <li>Подарки не формируют доверие у получателя и являются <strong style="color:var(--text-primary)">бесплатными</strong> — комиссии нет (дарить можно только те бобы, которые уже есть у вас).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Как закрываются сделки</h2>
+        <p>Сделки на рынке безопасно удерживаются на <strong style="color:var(--text-primary)">депозите</strong> (в доверительном хранении системой) до завершения работы, затем переводятся продавцу (за вычетом комиссии 1,5%). При отмене сделки покупателю полностью возвращаются средства.</p>
+
+        <h2 id="9"><span class="num">9.</span>Поручительство (дополнительный начальный старт)</h2>
+        <p>Доверенный, назначенный сообществом <strong style="color:var(--text-primary)">поручитель</strong> может предоставить новичку <strong style="color:var(--text-primary)">стартовый кредитный лимит в 25, 50 или 100 бобов</strong>, чтобы тот мог пользоваться кредитом до того, как заработает его сам. Они обычно присуждаются — исключительно на усмотрение поручителя — людям, чьи публикации и вклад поручитель находит искренними и полезными. В любом случае это необязательно: поручительство никому не требуется для участия, поскольку кредитная линия открывается и просто торговлей (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Федеративный межузловой клиринг</h2>
+        <p>Сообществам не нужно существовать изолированно. С помощью <strong style="color:var(--text-primary)">федеративных торговых коннекторов</strong> (вдохновленных клиринговым союзом Кейнса) независимые узлы сообществ могут проводить клиринг сделок с соседним узлом напрямую между собой, без фиатных валют или банковских резервов. Бобы никогда не покидают родное сообщество — каждая пара узлов ведет промежуточный реестр того, сколько они должны друг другу в объеме выполненной работы, и каждая сторона устанавливает собственный лимит. Клиринг работает между парами сообществ, каждый оператор включает его осознанно, и эта технология пока на ранней стадии: она реализована, ее экраны есть в веб-приложении, но тестировалась она только между двумя нашими тестовыми сообществами, а не между действующими.</p>
+
+        <h2 id="11"><span class="num">11.</span>Криптографическая идентификация и хранение ключей</h2>
+        <p>Ваш аккаунт защищен криптографической парой ключей Ed25519, сгенерированной на вашем устройстве. BeanPool предлагает гибкие варианты хранения под ваши задачи:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Полная автономность:</strong> в мобильных приложениях ваш закрытый ключ хранится в защищенном хранилище устройства (iOS Keychain / Android Keystore); в веб-приложении — в локальном хранилище браузера. Он покидает устройство только в виде зашифрованной копии для восстановления входа или при переносе аккаунта на другое ваше устройство. Храните резервную копию из 12 слов офлайн.</li>
+            <li><strong style="color:var(--text-primary)">Восстановление:</strong> фраза из 12 слов восстанавливает ваш аккаунт на любом устройстве. Вы также можете привязать вход через Google, Apple или Facebook. В этом случае для него сохраняется зашифрованная копия вашего ключа: приложения для телефонов, использующие хранилище ключей BeanPool, сохраняют ее там, на небольшом сервере в Исландии; старые версии приложения хранят ее на узле вашего сообщества; веб-приложение в глобальном сообществе хранит ее на сервере этого сообщества, которым управляем мы. Тот, кто хранит копию, может ее открыть. Восстановление из хранилища ожидает 24 часа, если только одно из ваших собственных устройств не подтвердит запрос. Если вы потеряете устройство, свои 12 слов и учетную запись входа, администратор вашего сообщества может перенести ваш аккаунт на новый телефон с помощью одноразового кода в вашем присутствии; ваша история сохранится. Поэтому обязательно запишите слова.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Лимиты и безопасность</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Предельный лимит −2000</strong> в большинстве сообществ (см. §1). Дневного лимита на сумму расхода бобов нет — границей служит ваш кредитный лимит. Есть ограничение по частоте: 100 платежей, 30 новых получателей и 100 запросов на рынке за любые 24 часа.</li>
+            <li>Доверие с любым отдельным партнером ограничено лимитом, чтобы никто не мог искусственно завысить свой рейтинг взаимными сделками с одним сообщником.</li>
+            <li><strong style="color:var(--text-primary)">Режим отпуска</strong> скрывает ваши предложения и приостанавливает входящие запросы на время вашего отсутствия.</li>
+            <li>Участники могут отправлять жалобы на нарушителей; администраторы сообщества могут удалять их.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Предприятия сообщества и управление</h2>
+        <p>Предприятия сообщества (такие как общественная библиотека инструментов, птичник или склад дров) и ограниченные проекты являются общими инициативами под коллективным управлением. Они функционируют по четким, закрепленным в программном коде правилам (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">модель управления Общими проектами</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Один объект, два жизненных цикла (§2.1):</strong> постоянное предприятие действует непрерывно и совершает сделки; ограниченное предприятие (проект) имеет цель и срок завершения, закрывая свой счет и возвращая остаток в Общие проекты после окончания.</li>
+            <li><strong style="color:var(--text-primary)">Заработанные лимиты и поручительства хранителей (Правила 1–3):</strong> новое предприятие начинает работу без незаработанного овердрафта: его кредитный лимит обеспечивается прямыми поручительствами из заработанного торгового рейтинга его хранителей (простая сумма, без искусственных множителей). Предоставление обеспечения никак не затрагивает и не уменьшает личный кредитный лимит домохозяйства хранителя. Более старые предприятия сохраняют начальный лимит, который у них был до введения поручительств.</li>
+            <li><strong style="color:var(--text-primary)">Ограниченная ответственность (Правило 4):</strong> банкротится предприятие, а не домохозяйство хранителя. Если у предприятия возникает дефолт, его расходы замораживаются, но личные кредитные лимиты хранителей остаются защищенными.</li>
+            <li><strong style="color:var(--text-primary)">Кредит покупает сырье, прибыль оплачивает труд (Правило 5):</strong> предприятие может использовать кредит в пределах доступного лимита для покупки расходных материалов или услуг у сторонних соседей. Оно <em>никогда</em> не может брать кредит для выплаты вознаграждения собственным хранителям — хранители получают оплату только при условии <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Выплаты хранителям ограничены заработанным излишком (Правило 6):</strong> выплаты хранителям строго ограничены реальным торговым излишком (доходы от продаж за вычетом прошлых выплат хранителям). Гранты, поручительства и подарки ни в коем случае не могут быть обращены в заработную плату хранителей.</li>
+            <li><strong style="color:var(--text-primary)">Автоматический перевод оборотного капитала (Правило 7):</strong> предприятие может установить потолок оборотного капитала. Заработанный излишек сверх этого потолка автоматически переводится обратно в фонд Общих проектов сообщества для предотвращения накопительства. Гранты и подарки никогда не переводятся автоматически.</li>
+            <li><strong style="color:var(--text-primary)">Правило одобрения двумя лицами:</strong> хранители не могут утверждать выплаты самим себе или собственные отклики на потребности предприятия — утверждение должен дать другой хранитель.</li>
+            <li><strong style="color:var(--text-primary)">Опросы и Решения (§3):</strong> неформальные вопросы — это <em>Опросы</em> в ленте рынка: по одному голосу от каждого, подсчитываются, не имеют обязательной силы. Имеющие обязательную силу решения (гранты из фонда, списание долгов, смена ролей, а также приостановка, заморозка или удаление участника) проводятся через <em>Решения</em> во вкладке «Проекты» с 7-дневным окном для голосования. Решение принимается при 60% голосов «за» (66% для удаления участника; более половины для снятия приостановки, заморозки или восстановления участника), если проголосовало достаточно участников: 30% активных за последние 30 дней, но не менее 3 человек (25% для удаления участника). После этого оно приводится в исполнение автоматически. При распределении грантов фонда используется квадратичное голосование на основе заработанного торгового рейтинга — ликвидные бобы не могут купить голоса.</li>
+            <li><strong style="color:var(--text-primary)">Устоявшаяся терминология (§9):</strong> четыре уровня, четыре отдельных слова: узел → <em>владелец / администратор</em> · предприятие → <em>старший хранитель / хранитель</em> · группа → <em>координатор</em> · уровень доверия → <em>Хранитель</em>.</li>
+        </ul>
+        <div class="callout amber">Вкратце: <strong>зарабатывайте кредитную линию торговлей, держите одно-два активных предложения, чтобы использовать её, и пусть бобы циркулируют.</strong> Цель — ноль: отдавать примерно столько же, сколько берете.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Иконка BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Взаимный кредит для сообществ под управлением самих сообществ.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Справочный центр</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Как это работает</a>
+                    <a href="getting-started.html">С чего начать</a>
+                    <a href="rules.html">Правила</a>
+                    <a href="safety.html">Безопасность детей</a>
+                    <a href="../privacy.html">Политика конфиденциальности</a>
+                    <a href="../terms.html">Условия использования</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../rules.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/rules.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/rules.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/rules.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/rules.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/rules.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/rules.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/rules.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="rules.html" hreflang="ru" lang="ru" aria-current="page">Русский</a>
+                    <a href="../zh-Hans/rules.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/rules.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/rules.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/rules.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/rules.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/rules.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/rules.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/rules.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/rules.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/rules.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/rules.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/rules.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/rules.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/rules.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/rules.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/rules.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Открытый исходный код под лицензией MIT. Сделано с <img src="../bean.png" alt="любовью" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> сообществами для сообществ. Границы часовых поясов © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">участники OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

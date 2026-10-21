@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool —— 面向社群的互助交易，而非商業銀行</title>
+    <meta name="description" content="BeanPool 是一款由社群自主營運的免費應用程式，使用豆子代替金錢來交易互助、物品與技能。尋找或建立你身邊的社群，或透過邀請加入；全球社群即將向所有人開放。支援 iPhone、Android 與網頁端。">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../style.css?v=2.8">
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="#" class="logo"><img src="../bean.png" alt="BeanPool 圖示" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="#how-it-works">運作方式</a>
+                <a href="#features">你能做什麼</a>
+                <a href="rules.html">規則</a>
+                <a href="#run-a-node">營運社群</a>
+                <a href="help.html" title="所有規則、指南與手冊的一站式中心">說明</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="在 YouTube (@beanpool) 上觀看教學影片">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="加入 Reddit 社群 (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="在 GitHub 上查看">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">開始使用</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="開啟選單"><span aria-hidden="true">☰</span> 選單</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">開始使用</a>
+                    <a href="#how-it-works">運作方式</a>
+                    <a href="#features">你能做什麼</a>
+                    <a href="rules.html">規則</a>
+                    <a href="#run-a-node">營運社群</a>
+                    <a href="help.html">說明</a>
+                    <a href="../guide/index.html">成員指南</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube 影片</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit 上的 r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub 原始碼</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+            <div class="hero-header">
+                <div class="hero-badge">手機與網頁端完全免費</div>
+                <h1>面向<span class="gradient-text">社群</span>的互助交易，<br>而非商業銀行</h1>
+                <p class="hero-subtitle">BeanPool 是一款免費應用程式，供你的社群成員相互交易互助、物品與技能。使用豆子代替金錢：幫助他人，你會獲得豆子；得到幫助，豆子則流向對方。目標是歸零 &mdash; 付出與收穫大致相當。</p>
+            </div>
+
+            <div class="hero-lower-grid">
+                <!-- Left: what BeanPool is not -->
+                <div class="not-card glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">🚫 反剝削宣言</span>
+                        <h3>BeanPool <span class="text-rose">不是</span>什麼</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>不是廣告推送機器</strong>
+                                <p>沒有受眾特徵追蹤、資料收割，也沒有致富大師的演算法推薦。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>不是投機性加密代幣</strong>
+                                <p>豆子是用於真實交易的互助信用 — 絕不會在交易所被炒作拉盤。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>不是注意力老虎機</strong>
+                                <p>沒有多巴胺循環的無休止滑動 — 只有真實的在地提供與鄰里。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>不是企業債務或剝削</strong>
+                                <p>沒有利息，沒有銀行，沒有中間人。唯一的費用微乎其微，並全部進入你社群自己的公共板塊資金池，絕不流向我們。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>不是加密貨幣應用程式</strong>
+                                <p>沒有區塊鏈，沒有代幣，沒有需要購買的錢包。你的 12 個助記詞僅用於開啟你自己的帳號。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <div class="hero-cta-card glass-panel">
+                    <div class="hero-cta-header">
+                        <span class="hero-cta-tag">三種加入方式</span>
+                        <h3>從你所在之處開始</h3>
+                    </div>
+
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">立即體驗，連結全球</a>
+                            <p>全球社群即將向所有人開放，無需邀請：隨處看看、刊登免費贈送或交換的物品，並尋找你身邊的社群。目前它處於私人預覽階段。在正式開放之前，你可以查看下方已經在運作的社群、建立一個社群，或使用成員給你的邀請。</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">尋找或建立社群</a>
+                            <p>查看已經在運作的社群，或在一台閒置電腦或小型租用伺服器上建立社群。待全球社群開放時，很快就能申請加入你身邊的社群。</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">收到邀請了？</a>
+                            <p>安裝應用程式並開啟成員給你的連結或掃描 QR 碼；每個邀請限用一次，有效期限為 30 天。</p>
+                        </div>
+                    </div>
+                    <p class="hero-web-note">豆子存在於在地社群中，每個社群運作在各自的伺服器上。全球社群帶你認識各項功能，並引導你加入在地社群。它透過範例社群向你展示豆子在其中的運作方式。</p>
+
+                    <div class="hero-logos-group">
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="在 App Store 下載">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Download on the</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                        <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                        <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="在 Google Play 下載">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">GET IT ON</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
+                        <p class="hero-web-note">沒有應用程式商店？全球社群和你自己的社群都能在手機瀏覽器中開啟；可將它們新增至主畫面。</p>
+                    </div>
+                    <!-- Where to find us: small round links, same destinations as the menu -->
+                    <div class="hero-social-row">
+                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" aria-label="YouTube 上的 BeanPool" title="YouTube 上的 BeanPool">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--youtube)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        </a>
+                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" aria-label="Reddit 上的 BeanPool" title="Reddit 上的 BeanPool">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--reddit)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                        </a>
+                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" aria-label="GitHub 上的 BeanPool 原始碼" title="GitHub 上的 BeanPool 原始碼">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hero Principles / Trust Banner -->
+            <div class="hero-principles-banner">
+                <div class="principle-item">
+                    <span class="principle-text">100% 免費</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">無應用程式內購買</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">開放原始碼</span>
+                </div>
+            </div>
+
+            <!-- How Beans move, below the two cards -->
+            <div class="hero-example-row">
+                <div class="not-card hero-example glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">豆子如何流轉</span>
+                        <h3>三個鄰居，一週生活</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">1</div>
+                            <div class="not-item-content">
+                                <strong>Sam 修理了 Ana 的腳踏車 &mdash; 30 顆豆子</strong>
+                                <p>Sam 增加到 +30。Ana 減少到 −30。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">2</div>
+                            <div class="not-item-content">
+                                <strong>Ana 為 Lee 烤了麵包 &mdash; 30 顆豆子</strong>
+                                <p>Ana 回到了 0。Lee 變成了 −30。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">3</div>
+                            <div class="not-item-content">
+                                <strong>Lee 幫 Sam 照看小狗 &mdash; 30 顆豆子</strong>
+                                <p>所有人都回到了接近零，完成了三件事，而且誰都沒有花錢。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="hero-example-note">每次交易價格的 98.5% 歸賣家所有；另外的 1.5% 進入社群的公共板塊資金池，因此實際數值會略低於這些。</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>BeanPool 是什麼</h2>
+            </div>
+            <p class="what-it-is-lead">社群在自己擁有的小型伺服器上運作 BeanPool。成員刊登他們能夠提供的幫助與需求，並以豆子進行交易。豆子不是花錢買來的貨幣：它是某人幫助了他人的紀錄。每個人的起始餘額都是零。當你提供幫助時，餘額增加；當你接受幫助時，餘額減少；整個社群的所有餘額相加始終為零。沒有人發行豆子，沒有人收取利息借出豆子，也沒有人將豆子兌現。每筆交易的小額費用進入社群自己的資金池，由成員投票決定如何使用。該應用程式免費且開源；社群自行選擇伺服器，其上的資料歸社群所有。</p>
+            <ul class="what-it-is-not">
+                <li><strong>不是加密貨幣。</strong>沒有區塊鏈，沒有代幣，沒有任何可供買賣的金融產品。你的 12 個助記詞僅用於開啟你自己的帳號。</li>
+                <li><strong>不是銀行。</strong>信用源自你自身的交易，沒有利息：完成第一筆交易後便會開啟小額信用額度，並隨著交易增加而成長。</li>
+                <li><strong>沒有居中牟利的公司。</strong>BeanPool 不從交易中抽取任何分成，也不展示任何廣告。</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">互助信用由來已久：LETS 團體在紙本帳本上運作了數十年，而在瑞士，商業聯盟 WIR 自 1934 年起就使用其自身的信用進行交易。繁瑣的紙本作業耗盡了大多數組織的精力。BeanPool 則是由應用程式自動完成這套記帳作業。</p>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2>運作方式</h2>
+                <p>從初次開啟畫面到完成第一筆交易。</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
+                    <div class="step-number" aria-hidden="true">01</div>
+                    <div>
+                        <h3>1. 透過三扇大門之一進入</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>開啟成員發給你的邀請；不久後你也可以無需邀請直接體驗全球社群，並從那裡申請加入你身邊的社群。無論哪種方式，你都可以選擇一個讓大家認識你的名稱。</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🔑</div>
+                    <div class="step-number" aria-hidden="true">02</div>
+                    <div>
+                        <h3>2. 保管好你的 12 個助記詞</h3>
+                        <p>應用程式會在你的手機上建立帳號並向你顯示 12 個助記詞。請將它們抄寫下來並妥善保管：如果不慎遺失或更換手機，它們能找回你的帳號。</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
+                    <div class="step-number" aria-hidden="true">03</div>
+                    <div>
+                        <h3>3. 刊登提供</h3>
+                        <p>刊登你能做或能分享的事物：順風車進城、新鮮雞蛋、修理腳踏車、一小時園藝協助。在使用豆子的社群中，你至少需要先刊登一個「提供」，然後才能刊登「需求」或購買。而在不使用豆子的全球社群中，你的第一篇刊登可以是「需求」。</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-number" aria-hidden="true">04</div>
+                    <div>
+                        <h3>4. 進行交易</h3>
+                        <p>雙方商定豆子價格。豆子會被安全託管，直到事情完成，然後支付給賣家。事後你們可以互相評價。</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-more"><a href="getting-started.html">閱讀完整新手入門指南 →</a></p>
+        </div>
+    </section>
+
+    <!-- What you can do: one card per part of the app, in the app's own words -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>你能做什麼</h2>
+                <p>應用程式開啟即為首頁，由你自主選擇的一組卡片構成。其後包含：市集、地圖、聊天（網頁版中為 Chat）、成員、Pulse 動態、公共板塊和帳本（你可以在此查看餘額與交易）。</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧺</div>
+                    <h3>市集</h3>
+                    <p>社群成員正在提供的事物與需求，投票與活動也匯聚在同一動態中。你可以搜尋、按分類篩選，並點擊進行交易。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗺️</div>
+                    <h3>地圖</h3>
+                    <p>查看你附近提供的事物。每一個圖釘都由你親自放置：可以使用你當下的定位，也可以手動放置圖釘。當你允許時，應用程式還會根據你的位置顯示距離你最近的內容，且絕不會在背景定位。活動圖釘以及在網頁版中設定的在地事業圖釘可以設為「大約」，將地點模糊到約 100&nbsp;公尺。圖釘僅對你所在社群的成員可見。當全球社群向所有人開放時，那裡的訪客可以看到刊登內容及其大致範圍，但看不到姓名、個人資料相片以及精確地點。任何人都能在一分鐘內加入，因此其成員看到的彼此刊登位置也會模糊到大約一公里範圍；精確地點則由你在約定見面時自行告知對方。</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📅</div>
+                    <h3>活動 <span class="new-pill">新功能</span></h3>
+                    <p>刊登互助勞動、維修咖啡館或技能分享，附上時間和地點。成員可以點擊「確定參加」或「感興趣」。參加者可加入活動聊天並收到主辦人的私密備忘 &mdash; 大門密碼、需要攜帶的物品 &mdash; 若時間地點變更或活動取消也會收到通知。在任何人都能加入的場合（例如全球社群），主辦人預設會先審核每位申請者。活動完全免費；不涉及任何豆子交易。可在地圖上的「今天」、「本週末」或「未來 7 天」找到它們，並使用「複製到新日期」再次舉辦。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">💬</div>
+                    <h3>聊天（網頁版中為 Chat）</h3>
+                    <p>向你社群中的任何人發送訊息。私訊與群組聊天均經過端對端加密：你社群的節點負責傳輸但無法讀取內容。在尚未更新的節點上，群組聊天仍可能被營運者讀取，聊天中會對此予以說明。在地事業討論與活動聊天可由營運社群節點的人員讀取，以便進行內容審核。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>公共板塊：在地事業 <span class="new-pill">新功能</span></h3>
+                    <p>在地事業是社群共同營運的項目：養雞產蛋、工具圖書館、柴火集散點，或是有明確目標與結束日期的專案。由管理人共同管理，並由主要管理人負責帶領；成員可以申請加入成為管理人。在地事業擁有自己的豆子，像其他人一樣在市集中刊登提供與需求，展示其收支情況，並可因應季節暫停運作。任何管理人均不得核准向自己付款：必須由另一位管理人核准。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>投票與決策 <span class="new-pill">新功能</span></h3>
+                    <p>任何人都可以在市集中發起投票向社群提問。更重大的選擇是決策，位於公共板塊分頁：從公共板塊資金池向在地事業撥款、急難救助金、更換主要管理人。一項決策開放投票 7 天，若通過則自動執行。一旦你完成了一筆交易，就可以發起提議。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>群組 <span class="new-pill">新功能</span></h3>
+                    <p>為你的街道、園藝俱樂部或樂團建立群組，你將成為召集人。僅向群組內發布內容，並可自由選擇群組是公開、需申請加入還是僅限受邀加入。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>Pulse 動態</h3>
+                    <p>了解在地居民正在創作什麼。成員可以連結自己的頻道 &mdash; TikTok、Instagram、YouTube、SoundCloud 或部落格訂閱源 &mdash; 其公開動態就會顯示在你社群的 Pulse 動態中。是否連結完全由每位成員自行決定。任何不當內容均可被檢舉，你社群的節點可以將其下架。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>信用靠累積，而非借貸</h2>
+                <p>沒有人花錢買豆子，也沒有人支付利息。</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>每個人的起始都是零</h3>
+                    <p>新帳號擁有 0 顆豆子。當你出售時，餘額增加；當你購買時，餘額減少。在整個社群中，所有餘額相加始終為零。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>第一筆交易開啟信用額度</h3>
+                    <p>一旦你完成了一筆交易，就可以開始透支（低於零）在回饋之前先行獲得幫助。你的信用額度從很小開始（一筆 100 顆豆子的交易大約能獲得 37 顆豆子的額度），隨著你與更多人交易而成長。你保持刊登的提供數量決定了你能使用多少額度：1 個提供最高可達 200 顆豆子，5 個提供最高可達 2000 顆豆子。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>是徽章，不是門檻</h3>
+                    <p>隨著時間推移，你會獲得徽章：新人、居民、管家、長老。它們展現你在社群中的歷程。它們不會限制任何功能。管理員也可以授予某人一枚徽章，並隨之附帶該徽章的初始信用額度。</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">閱讀規則了解所有具體數字 →</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">費用的去向</span>
+                    <h3>價值留存在你的社群中</h3>
+                </div>
+                <p class="stays-local-lead">已完成交易的 1.5% 費用，以及餘額超過 200 顆豆子部分所收取的微額月費，均進入你社群的公共板塊資金池 &mdash; 絕不歸我們或任何其他人所有。你的社群透過決策來決定資金池的支出用途。</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>沒有廣告，沒有追蹤</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>沒有可買賣的代幣 &mdash; 豆子僅用於交易</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>沒有利息，沒有銀行</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">我們為何這樣構建：後剝削經濟 →</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>你的帳號與安全</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>你的金鑰保留在手機中</h3>
+                    <p>在手機應用程式中，你的金鑰保存在手機的安全儲存區中，你還可以啟用「應用程式鎖定」，它會要求驗證你手機本身的螢幕鎖定。在網頁版中，金鑰保存在該瀏覽器的獨立儲存區中。你的 12 個助記詞是無需依賴任何人的獨立備份。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>檢舉任何問題</h3>
+                    <p>你可以檢舉任何貼文、成員、活動或 Pulse 動態，並封鎖任何人。檢舉將發送給營運你社群節點的人員 &mdash; 即所有者與管理員 &mdash; 他們可以移除相關內容和帳號。成員也可以透過投票表決決策來暫停或移除某人的帳號。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>詳細規範</h3>
+                    <p>儲存了哪些資料、誰可以看到以及如何刪除你的帳號。</p>
+                    <p class="card-links"><a href="../privacy.html">隱私權政策</a>&nbsp;· <a href="safety.html">兒童安全</a>&nbsp;· <a href="../terms.html">服務條款</a>&nbsp;· <a href="../data-deletion.html">刪除你的資料</a></p>
+                </div>
+                <div class="feature-card glass-panel feature-wide" id="key-copy">
+                    <h3>找回金鑰的第二種方式，以及誰能打開它</h3>
+                    <p>你還可以連結 Google、Apple 或 Facebook 登入作為第二種找回方式。系統會為該登入方式保存一份你金鑰的加密複本。使用 BeanPool 金鑰保險庫的手機應用程式會將複本保存在那裡（位於冰島的一台不作他用的小型伺服器上）；舊版手機應用程式則保存在你社群的節點上；全球社群的網頁版應用程式則保存在該社群的伺服器上（由我們營運）。誰保存該複本，誰就能打開它：對於保險庫和全球社群是 BeanPool，對於保存在節點上的複本則是營運你節點的人。從保險庫還原需要等待一天，除非你自己的其中一台裝置確認是你本人。除了該複本以及將帳號複製到你自己的另一台裝置之外，你的金鑰絕不會以任何其他方式離開你的裝置。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <span id="find-or-start"></span>
+        <div class="container">
+            <div class="section-header">
+                <h2>尋找你的在地互助站</h2>
+                <p>已在名錄中列出的正在運作 BeanPool 的社群。</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">你附近暫時還沒有社群。</span>
+                    <a id="map-empty-start" href="#run-a-node">建立社群</a>
+                </div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">已列出的社群</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">成員數（依回報數據）</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
+        <div class="container">
+            <div class="section-header">
+                <span class="audience-tag">面向社群組織者</span>
+                <h2>為你的社群營運 BeanPool</h2>
+                <p>每個社群都運作在自己的節點上：一台保存該社群成員、貼文與帳本的小型伺服器。由在地人員負責維護。如果你所在的城鎮或山谷還沒有節點，你可以成為發起人。</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>你負責照顧的事項</h3>
+                    <p>你和你指定的管理員是你社群的版主：檢舉會發送給你們。成員的資料存放在你的機器上，因此你需要負責備份。你可以讀取在地事業討論與活動聊天；但你無法讀取私訊。你負責邀請第一批成員，再由他們邀請其他人。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>設定應用程式</h3>
+                    <p>你的節點在瀏覽器中隨附專屬的設定應用程式。你可以從中為社群命名、指定使用自身金鑰登入的所有者與管理員、列印 QR 碼邀請函、監控硬碟健全狀況、選擇公開網址或穿透通道，並協助同時遺失手機與 12 個助記詞的成員，透過你當面確認的一次性驗證碼，在全新手機上重新取回自己的帳號。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>從首次啟動即維持私密</h3>
+                    <p>社群的刊登內容、地圖、訊息與餘額從節點啟動的那一刻起就僅供成員使用；無需開啟任何設定。未持有帳號而開啟該網址的訪客會被引導至全球社群，全球社群即將向所有人開放。</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>與相鄰社群連結</h3>
+                    <p>兩個社群可以協議連結，以便雙方成員相互交易。豆子絕不會離開本地：每對社群都會持續記錄彼此積欠對方的差額，雙方各自設定交易限額。除非雙方營運者都開啟此功能，否則連結預設處於關閉狀態，且目前仍處於早期階段：該功能已建置完成，在網頁版應用程式中備有操作畫面，但僅在我們自有的兩個測試社群之間進行過試驗，尚未在實際運作的社群間使用過。</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>建立社群</h2>
+                <p>如果你能照著步驟操作，大約需要半小時。首先需要了解的六件事：</p>
+                <ul class="run-node-facts">
+                    <li><strong>花費成本。</strong>軟體完全免費。它可以運作在家中常開的閒置電腦上（迷你電腦 Mini PC、NAS，或搭載 64 位元系統的 Raspberry Pi 樹莓派），或每月幾美元（約 6 美元）的小型租用伺服器上。</li>
+                    <li><strong>由誰主機託管。</strong>由你主機託管，運行在你自己的機器或租用的伺服器上。它絕不需要 beanpool.org：使用你自己的專屬網址即可。</li>
+                    <li><strong>你承擔的責任。</strong>成員的檢舉會發送給你。資料資料夾由你透過還原代碼自行備份。請維持兩位所有者。確保伺服器持續開啟並保持更新。</li>
+                    <li><strong>你絕不會看到的內容。</strong>成員的私人一對一訊息。</li>
+                    <li><strong>先安裝 Docker。</strong>在執行下方指令區塊前，機器需要先安裝 Docker；新租用的伺服器通常沒有預載。</li>
+                    <li><strong>手機可連線的網址。</strong>手機在網際網路上僅能透過 https 連線至社群。在具有公開 IP 位址且開放連接埠 80 和 443 的租用伺服器上，該 IP 位址即已足夠：伺服器會自動取得專屬憑證，無需 Cloudflare 帳號，自有網域亦同。在家中或未開放連接埠的情況下，認領程序會透過伺服器自行執行的穿透通道，為你提供以 .beanpool.org 結尾的免費網域名稱。純 http:// 位址僅在家庭區域網路中有效。</li>
+                </ul>
+                <p>接著，在已安裝 Docker 的機器上，貼上這段單一指令區塊。它會取得 compose 檔案、建立節點使用的網路、拉取已發布的映像檔（Intel/AMD 或 ARM64）、啟動節點、等待伺服器產生一次性認領代碼（在 Raspberry Pi 樹莓派上初次啟動較慢，最多約需五分鐘），並執行認領。啟動前無需進行任何設定。</p>
+
+                <!-- macOS Style Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — 建立社群</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">單一指令區塊：取得、建立網路、拉取、啟動、等待、認領</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="複製至剪貼簿">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">最後一行：beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>你的網址。</strong>在貼上指令前先選定，並修改最後一行以相符合。如果你已經貼上執行，請在提問時按 Enter 跳過，然後再次執行最後一行：認領代碼會等待手機連線。<strong>租用伺服器</strong>若擁有公開 IP 位址並開放連接埠 80 和 443：加上 <code>--ip</code> 及其 IP 位址，例如 <code>beanpool claim --ip 203.0.113.7</code>。伺服器會透過連接埠 80 從 Let's Encrypt 自動取得該位址的憑證，手機即可透過 https://203.0.113.7 連線。<strong>家中的電腦，或沒有開放連接埠</strong>：保持原樣即可。它會要求輸入免費名稱的第一部分（若要使用 yourtown.beanpool.org，只需輸入 <strong>yourtown</strong>；按 Enter 可略過），透過伺服器自行執行的穿透通道連線，並等待最多三分鐘完成上線。<strong>自有網域</strong>：為該網域設定指向伺服器 IP 位址的 A 記錄，開放連接埠 80 和 443，並加上 <code>--address https://your.domain</code>。網域名稱在更換伺服器後仍可繼續使用；數字 IP 則不行：你也可以稍後在「設定」中新增名稱，使用 IP 位址的成員連線不會中斷。若想稍後在「設定」中選擇，請加上 <code>--no-name</code>。純 <code>http://</code> 位址僅適用於家用網路：手機在網際網路上會拒絕連線，認領程序也會發出警告。即使 BeanPool 專案的網址服務發生中斷，認領功能依然有效。</li>
+                    <li><strong>代碼與 QR 碼。</strong>畫面會顯示一次性認領代碼與 QR 碼。使用手機鏡頭掃描 QR 碼，或開啟 BeanPool，在<strong>尋找你的社群</strong>下方輸入伺服器網址，然後點擊<strong>認領</strong>。該手機即成為所有者。</li>
+                    <li><strong>設定。</strong>在網址（或伺服器專屬位址）後加上 <strong>/settings</strong> 開啟。設定精靈會引導你為社群命名、要求新增第二位所有者，並產生三份創始邀請。在「節點身分」下設定地圖上的位置，以便附近的人能找到你。</li>
+                </ol>
+                <p class="run-node-note">如果指令區塊顯示 <strong>No claim code after 5 minutes</strong>，或 <code>beanpool claim</code> 顯示 <strong>This community has no claim code waiting</strong>，表示伺服器尚未完成啟動：<code>docker compose logs beanpool-node</code> 會顯示目前進度。一旦記錄檔顯示社群尚無所有者且已有認領代碼，請重新執行最後一行。完整步驟請參閱營運者手冊的<a href="../guide/operators/first-time-setup.html">首次設定</a>。</p>
+
+                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    在 GitHub 上查看 →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section id="newsletter">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="newsletter-content">
+                    <h3><img src="../bean.png" alt="圖示" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />獲取最新消息</h3>
+                    <p>當有新版本發布或新社群建立時接收電子郵件通知。</p>
+                </div>
+                <div class="newsletter-form-container">
+                    <form id="newsletter-form" class="newsletter-form">
+                        <input type="email" id="newsletter-email" placeholder="you@example.com" aria-label="電子郵件地址" required>
+                        <button type="submit" class="btn btn-primary btn-subscribe">訂閱</button>
+                    </form>
+                    <div id="newsletter-status" class="newsletter-status"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="BeanPool 圖示" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>一款使用豆子與鄰居進行互助交易的免費應用程式。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">說明中心</a>
+                    <a href="getting-started.html">新手入門</a>
+                    <a href="rules.html">規則</a>
+                    <a href="post-extraction.html">後剝削經濟</a>
+                    <a href="#run-a-node">營運社群</a>
+                    <a href="../guide/index.html">成員指南</a>
+                    <a href="status.html">伺服器狀態</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="../privacy.html">隱私權政策</a>
+                    <a href="../terms.html">服務條款</a>
+                    <a href="safety.html">兒童安全</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../index.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/index.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/index.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/index.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/index.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/index.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/index.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/index.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/index.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/index.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="index.html" hreflang="zh-Hant" lang="zh-Hant" aria-current="page">繁體中文</a>
+                    <a href="../it/index.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/index.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/index.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/index.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/index.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/index.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/index.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/index.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/index.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/index.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/index.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/index.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/index.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>以 MIT 授權條款開源發行。由社群用<img src="../bean.png" alt="愛心" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />打造，服務於社群。時區邊界資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 貢獻者</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../main.js?v=1.10"></script>
+</body>
+</html>

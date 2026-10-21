@@ -1,0 +1,159 @@
+<!-- source-hash: 4ad64dc454d69949 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>शुरुआत करना — BeanPool में शामिल होने के तीन तरीके</title>
+    <meta name="description" content="वैश्विक समुदाय पर BeanPool को कैसे आज़माएँ, अपने आस-पास कोई समुदाय कैसे ढूँढें या शुरू करें, या किसी आमंत्रण से कैसे जुड़ें; फिर आपके 12 शब्द और आपका पहला व्यापार।">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The doors land on these headings (#global, #invite…): below the fixed bar, 74 px tall on a phone, 88 px wide */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content p strong { color: var(--text-primary); }
+        .rules-content p { overflow-wrap: anywhere; }
+        .rules-content .guide-links { font-size: 0.95rem; margin-top: -0.5rem; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool आइकन" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">यह कैसे काम करता है</a>
+                <a href="rules.html">नियम</a>
+                <a href="index.html#features">सुविधाएँ</a>
+                <a href="help.html">मदद</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">ट्यूटोरियल</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube पर वीडियो ट्यूटोरियल देखें (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit समुदाय से जुड़ें (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub पर देखें">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">शुरुआत करें</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="मेनू खोलें"><span aria-hidden="true">☰</span> मेनू</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta" aria-current="page">शुरुआत करें</a>
+                    <a href="index.html#how-it-works">यह कैसे काम करता है</a>
+                    <a href="rules.html">नियम</a>
+                    <a href="index.html#features">सुविधाएँ</a>
+                    <a href="help.html">मदद</a>
+                    <a href="guide/index.html">सदस्यों की मार्गदर्शिका</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube पर ट्यूटोरियल</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit पर r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub पर सोर्स कोड</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>शुरुआत करना</h1>
+        <p class="lede">शामिल होने के तीन रास्ते हैं। वह चुनें जो आज आपके लिए सबसे उपयुक्त हो; आप कोई भी चुनें आपका खाता वही रहता है, और यह एक से अधिक समुदायों से जुड़ सकता है।</p>
+
+        <!-- OPEN-GLOBAL: when global's private preview is off, the heading becomes "Try it now on the global community" and the
+             two paragraphs below become this one:
+             The global community is people from everywhere. You need no invite: open <strong>global.beanpool.org</strong> in a browser and tap <strong>Join</strong>, or install the app and tap <strong>Explore BeanPool worldwide</strong> on the first screen. Create an account with <strong>12 secret words</strong> (no Google, Apple or Facebook account needed), or sign in once with Google, Apple or Facebook; that sign-in also becomes a way back if you lose your phone. Tell it roughly where you are, to about 10 km, or skip that. Then you can see what people near you offer, post something free or for swap, message people, and ask a community near you to let you in. Beans, trades, the Commons and its Decisions are switched off there: they belong to a local community. The app shows you each of them with an example community, so you know what a local community offers before you join or start one. -->
+        <h2 id="global"><span class="num">1.</span>इसे दुनिया भर में आज़माएँ: वैश्विक समुदाय</h2>
+        <p>वैश्विक समुदाय हर जगह के लोगों के लिए है, और इसके लिए किसी आमंत्रण की आवश्यकता नहीं होगी। BeanPool इसे संयुक्त राज्य अमेरिका में हमारे द्वारा किराए पर लिए गए सर्वर पर चलाता है। आज यह एक निजी पूर्वावलोकन है जबकि इसके पहले सदस्य इसे आज़मा रहे हैं: केवल वही लोग जुड़ सकते हैं जिन्हें इसका मालिक या एडमिन आमंत्रित करता है, और कोई अन्य व्यक्ति जो <strong>global.beanpool.org</strong> खोलता है, उसे एक वाक्य दिखाई देता है, “यह समुदाय निजी प्रीव्यू में है। आमंत्रण के लिए इसके मालिक से कहें।” यह जल्द ही सभी के लिए खुल रहा है। फिर आप ब्राउज़र या ऐप में <strong>12 गुप्त शब्दों</strong> या Google, Apple या Facebook साइन-इन के साथ शामिल हो सकते हैं, देख सकते हैं कि आपके आस-पास के लोग क्या पेशकश करते हैं, कुछ मुफ़्त या अदला-बदली के लिए पोस्ट कर सकते हैं, लोगों को संदेश भेज सकते हैं, और अपने आस-पास के समुदाय से शामिल करने का अनुरोध कर सकते हैं। फलियाँ, व्यापार, साझा और इसके निर्णय किसी स्थानीय समुदाय से संबंधित होते हैं; वैश्विक समुदाय आपको एक उदाहरण समुदाय के साथ इनमें से प्रत्येक को दिखाता है, ताकि आप किसी समुदाय में शामिल होने या शुरू करने से पहले जान सकें कि स्थानीय समुदाय क्या प्रदान करता है।</p>
+        <p>जब तक यह नहीं खुलता: ऐप को <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> या <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> से प्राप्त करें, <a href="index.html#find-or-start">हमारे नक्शे</a> पर पहले से चल रहे समुदायों को देखें या एक शुरू करें (भाग 2), या किसी आमंत्रण से जुड़ें (भाग 3)।</p>
+        <p class="guide-links">गाइड: <a href="guide/joining.html">BeanPool से जुड़ना</a>, <a href="guide/web-app.html">वेब ब्राउज़र में BeanPool का उपयोग करना</a>।</p>
+
+        <h2 id="find"><span class="num">2.</span>समुदाय ढूँढें या शुरू करें</h2>
+        <!-- OPEN-GLOBAL: when global's private preview is off, the paragraph below goes back to starting:
+             On the global community, <strong>Find your community</strong> on Home lists the communities nearest you. Tap <strong>Ask to join</strong>, write a few words about yourself, and any member of that community can let you in with one tap, and if no answer comes in 30 days you can ask again. Nothing near you? <strong>Tell me when one starts here</strong> watches your area. Or start one: every community … (the rest unchanged) -->
+        <p>आज आप <a href="index.html#find-or-start">हमारे नक्शे</a> पर पहले से चल रहे समुदायों को देख सकते हैं, और किसी सदस्य के आमंत्रण से जुड़ सकते हैं (भाग 3)। जुड़ने का अनुरोध करने की सुविधा जल्द ही आएगी, जब वैश्विक समुदाय खुलेगा (भाग 1): वहाँ, होम पर <strong>अपना समुदाय खोजें</strong> आपके सबसे नज़दीकी समुदायों को सूचीबद्ध करता है। <strong>शामिल होने का अनुरोध करें</strong> पर टैप करें, अपने बारे में कुछ शब्द लिखें, और उस समुदाय का कोई भी सदस्य आपको एक टैप से शामिल कर सकता है, और यदि 30 दिनों में कोई जवाब नहीं आता है तो आप फिर से अनुरोध कर सकते हैं। आपके आस-पास कोई नहीं? <strong>यहाँ शुरू होने पर मुझे बताएं</strong> आपके क्षेत्र पर नज़र रखता है। या एक शुरू करें: प्रत्येक समुदाय अपने स्वयं के छोटे सर्वर पर चलता है, एक खाली हमेशा चालू रहने वाला कंप्यूटर या कुछ डॉलर प्रति माह पर किराए पर लिया गया कंप्यूटर, जिसकी देखभाल कोई स्थानीय व्यक्ति करता है। ऐप की <strong>एक समुदाय शुरू करें</strong> स्क्रीन आपको इसके बारे में मार्गदर्शन करती है, और इसके चरण हमारे होम पेज पर <a href="index.html#run-a-node">अपने समुदाय के लिए BeanPool चलाएं</a> के तहत दिए गए हैं।</p>
+        <p class="guide-links">गाइड: <a href="guide/finding-a-community.html">अपने पास का समुदाय ढूँढना</a>।</p>
+
+        <h2 id="invite"><span class="num">3.</span>क्या आपके पास आमंत्रण है?</h2>
+        <p>एक आमंत्रण एक लिंक, एक क्यूआर कोड या <strong>INV-</strong> या <strong>BP-</strong> से शुरू होने वाला कोड होता है। यह एक बार काम करता है और 30 दिनों तक रहता है। ऐप इंस्टॉल करें, <strong>आमंत्रण से जुड़ें</strong> पर टैप करें (वेब ऐप में, <strong>पहली बार यहाँ</strong>), लिंक या कोड पेस्ट करें, और वह नाम चुनें जो लोग देखेंगे, 20 अक्षरों तक। यदि आपके पास केवल एक कोड है, तो समुदाय का नाम या पता भी लिखें; जिस व्यक्ति ने आपको आमंत्रित किया है वह आपको बता सकता है।</p>
+        <p class="guide-links">गाइड: <a href="guide/joining.html">BeanPool से जुड़ना</a>।</p>
+
+        <h2 id="words"><span class="num">4.</span>आपके 12 शब्द</h2>
+        <p>आपका खाता एक चाबी है जो आपके फ़ोन पर, या आपके ब्राउज़र के वेब ऐप में रखी जाती है। कोई पासवर्ड नहीं है। ऐप आपको <strong>सुरक्षा बैकअप</strong> पर 12 शब्द दिखाता है: उन्हें लिख लें और सुरक्षित रखें, क्योंकि वे ही आपके खाते को नए फ़ोन पर वापस लाते हैं। फ़ोन ऐप पर, और वैश्विक समुदाय पर, आप वापस आने के दूसरे तरीके के रूप में Google, Apple या Facebook साइन-इन जोड़ सकते हैं। तब इसके लिए आपकी चाबी की एक सुरक्षित कॉपी रखी जाती है: BeanPool की चाबी वॉल्ट का उपयोग करने वाले फ़ोन ऐप इसे वहाँ रखते हैं, आइसलैंड के एक छोटे सर्वर पर; फ़ोन ऐप के पुराने संस्करण इसे आपके समुदाय के सर्वर पर रखते हैं; वैश्विक समुदाय पर वेब ऐप इसे उस समुदाय के सर्वर पर रखता है, जिसे हम चलाते हैं। जो भी कॉपी रखता है वह इसे खोल सकता है, और वॉल्ट से पुनर्स्थापना में एक दिन का समय लगता है जब तक कि आपके अपने उपकरणों में से कोई यह पुष्टि न कर दे कि यह आप ही हैं। यदि आप चाहते हैं कि आपके अलावा कोई भी अंदर न आ सके, तो केवल अपने 12 शब्दों का उपयोग करें।</p>
+        <p class="guide-links">गाइड: <a href="guide/your-12-words.html">आपके 12 शब्द</a>।</p>
+
+        <h2 id="trade"><span class="num">5.</span>आपका पहला व्यापार</h2>
+        <p>एक स्थानीय समुदाय में, पहले एक <strong>प्रस्ताव</strong> पोस्ट करें: शहर तक लिफ़्ट, अंडे, एक घंटे की बागवानी। फलियों में कीमत पर सहमति बनाएं; काम पूरा होने तक फलियों को रोक कर रखा जाता है, फिर वे विक्रेता के पास जाती हैं, और आप एक-दूसरे को रेटिंग देते हैं। आपकी साख सीमा आपके पहले पूर्ण व्यापार के बाद खुलती है; यह छोटी शुरू होती है और जैसे-जैसे आप अधिक लोगों के साथ व्यापार करते हैं, बढ़ती जाती है। आपके द्वारा सक्रिय रखे गए ऑफ़र तय करते हैं कि आप इसमें से कितना उपयोग कर सकते हैं: एक ऑफ़र पर 200 फलियों तक, पाँच पर 2000 तक। बैज (नवागंतुक, निवासी, प्रबंधक, वरिष्ठ) आपका इतिहास दिखाते हैं; वे किसी चीज़ पर पाबंदी नहीं लगाते।</p>
+        <p class="guide-links">गाइड: <a href="guide/a-deal-step-by-step.html">एक सौदा, चरण दर चरण</a>, <a href="guide/credit-line.html">आपकी साख सीमा</a>, <a href="rules.html#4">नियम</a> में संख्याएँ।</p>
+
+        <h2 id="6"><span class="num">6.</span>मदद</h2>
+        <p>क्या आप वीडियो ट्यूटोरियल देखना पसंद करते हैं या अपने नोड की शुरुआत करने में मदद चाहिए? BeanPool समुदाय से जुड़ें:</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1.25rem;">
+            <div class="feature-card feature-card-brand brand-youtube glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper youtube-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </div>
+                    <span class="brand-badge youtube-badge">▶ वीडियो गाइड</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">YouTube ट्यूटोरियल</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">शामिल होने, अपने 12 शब्दों और एक व्यापार के संक्षिप्त विवरण।</p>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-youtube" style="margin-top: 0.5rem;">YouTube पर देखें →</a>
+            </div>
+            <div class="feature-card feature-card-brand brand-reddit glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper reddit-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </div>
+                    <span class="brand-badge reddit-badge">💬 r/beanpool</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Reddit चर्चाएँ</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">चर्चाओं में शामिल हों, सवाल पूछें, ऑफ़र साझा करें, और अन्य नोड संचालकों से जुड़ें।</p>
+                <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-reddit" style="margin-top: 0.5rem;">r/beanpool से जुड़ें →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool आइकन" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>फलियों में अपने पड़ोसियों के साथ व्यापार करने के लिए एक मुफ़्त ऐप।</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">सहायता केंद्र</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">यह कैसे काम करता है</a>
+                    <a href="getting-started.html">शुरुआत करें</a>
+                    <a href="rules.html">नियम</a>
+                    <a href="safety.html">बाल सुरक्षा</a>
+                    <a href="privacy.html">गोपनीयता नीति</a>
+                    <a href="terms.html">सेवा की शर्तें</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT लाइसेंस के तहत ओपन सोर्स। समुदायों द्वारा, समुदायों के लिए <img src="bean.png" alt="स्नेह" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> से निर्मित। समय क्षेत्र सीमाएँ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap योगदानकर्ता</a> (ODbL)।</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

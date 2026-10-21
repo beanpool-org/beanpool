@@ -302,6 +302,7 @@ import PublicProfileScreen from '../../app/public-profile';
 import { meetingTips } from '../market-global';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { InvitePeopleSheet } from '../../components/InvitePeopleSheet';
+import { splitRosterKeys } from '../../components/GroupChatView';
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { forgetRecentLookups } from '../members-lookup';
 
@@ -705,6 +706,53 @@ for (const scheme of ['light', 'dark'] as const) {
                 community.membersOnDemand = false;
                 await render(sheet());
                 expect(text()).toContain('Nobody else is in this community yet.');
+            });
+
+            it('loadDetails split: active + invited + pending_approval -> memberKeys = active, invitedKeys = invited', () => {
+                const roster = [
+                    { memberPubkey: KOFI, status: 'active' },
+                    { memberPubkey: ROSA, status: 'invited' },
+                    { memberPubkey: 'pending-key', status: 'pending_approval' },
+                    { memberPubkey: 'removed-key', status: 'removed' },
+                ];
+                const { memberKeys, invitedKeys } = splitRosterKeys(roster);
+                expect(memberKeys).toEqual(new Set([KOFI]));
+                expect(invitedKeys).toEqual(new Set([ROSA]));
+            });
+
+            it('active row says "In the group", invited row says "Invited", neither selectable, words fit at 320 dp × 1.3 font', async () => {
+                await holdCard(KOFI, 'Kofi');
+                await holdCard(ROSA, 'Rosa');
+                await render(createElement(InvitePeopleSheet, {
+                    isOpen: true,
+                    groupId: 'g1',
+                    groupName: 'Garden',
+                    existing: new Set([KOFI]),
+                    invited: new Set([ROSA]),
+                    myPubkey: OWN,
+                    onClose: () => {},
+                    onInvited: () => {},
+                }));
+                expect(text()).toContain('Kofi');
+                expect(text()).toContain('Rosa');
+                expect(text()).toContain('In the group');
+                expect(text()).toContain('Invited');
+
+                const kofiBtn = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Kofi'));
+                const rosaBtn = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Rosa'));
+                expect(kofiBtn).toBeDefined();
+                expect(rosaBtn).toBeDefined();
+                expect(kofiBtn?.getAttribute('aria-label')).toBe('Kofi, already in the group');
+                expect(rosaBtn?.getAttribute('aria-label')).toBe('Rosa, already invited');
+                expect(host.querySelector('[data-icon="checkbox-marked-circle"]')).not.toBeNull();
+                expect(host.querySelector('[data-icon="clock-outline"]')).not.toBeNull();
+
+                // Neither is selectable: clicking does not select them
+                await press(kofiBtn!);
+                await press(rosaBtn!);
+                expect(text()).toContain('Pick people to invite');
+
+                await fits([OWN, KOFI, ROSA]);
             });
         });
 

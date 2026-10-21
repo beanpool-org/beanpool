@@ -2811,8 +2811,6 @@
   "Next level": "Следующий уровень",
   "Up ahead": "Впереди",
   "Your current floor": "Ваш текущий лимит",
-  "Floor from this tier": "Лимит этого уровня",
-  "Floor starts at": "Лимит начинается с",
   "Grows deeper as you trade more": "Растёт по мере увеличения объёма сделок",
   "Reach {min} trust ({left} to go) from the real value you trade.": "Наберите {min} доверия (осталось {left}) за счёт реального объёма сделок.",
   "🚀 Reach {emoji} {tier}": "🚀 Достичь уровня {emoji} {tier}",

@@ -1,0 +1,219 @@
+<!-- source-hash: b6cb7426f4ee45f1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanuni — Jinsi BeanPool Inavyofanya Kazi</title>
+    <meta name="description" content="Kanuni rahisi za BeanPool: jinsi masalio, mikopo, ofa, ada, muungano wa Keynesian, biashara za jamii, na uongozi unavyofanya kazi.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Aikoni ya BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Jinsi Inavyofanya Kazi</a>
+                <a href="rules.html">Kanuni</a>
+                <a href="index.html#features">Vipengele</a>
+                <a href="help.html">Msaada</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mafunzo</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tazama Mafunzo ya Video kwenye YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Jiunge na Jamii ya Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Tazama kwenye GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Anza Sasa</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Fungua menyu"><span aria-hidden="true">☰</span> Menyu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Anza Sasa</a>
+                    <a href="index.html#how-it-works">Jinsi Inavyofanya Kazi</a>
+                    <a href="rules.html" aria-current="page">Kanuni</a>
+                    <a href="index.html#features">Vipengele</a>
+                    <a href="help.html">Msaada</a>
+                    <a href="guide/index.html">Mwongozo wa wanachama</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mafunzo kwenye YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool kwenye Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Msimbo chanzo kwenye GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Kanuni — Jinsi BeanPool Inavyofanya Kazi</h1>
+        <p class="lede">BeanPool ni mabadilishano ya kijamii ambapo kila mtu huanzia sifuri. Unapata maharagwe kwa kusaidia wengine na kuyatumia wengine wanapokusaidia. Hakuna pesa inayobadilishana mikono, na hakuna madalali wa kibiashara — ni kanuni hizi rahisi tu.</p>
+
+        <div class="callout amber">Kwa ufupi: <strong>pata kiwango chako cha mkopo kwa kufanya mabadilishano, weka ofa moja au mbili amilifu ili kukitumia, na uruhusu maharagwe yazunguke.</strong> Sifuri ndio lengo — toa kiasi kinacholingana na unachopokea.</div>
+
+        <h2 id="1"><span class="num">1.</span>Maharagwe na salio lako</h2>
+        <p>Maharagwe hupima thamani uliyotoa na uliyopokea (takriban, muda). <strong style="color:var(--text-primary)">Sifuri ndio lengo</strong> — inamaanisha umetoa kiasi kinacholingana na ulichopokea.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Salio chanya</strong> — umetoa zaidi kuliko ulivyopokea. Jamii inadaiwa nawe.</li>
+            <li><strong style="color:var(--text-primary)">Salio hasi</strong> — jamii imekupa mkopo. Unapaswa kuurudisha kwa kutoa msaada.</li>
+            <li>Katika jamii nyingi kiwango cha chini kabisa mtu anachoweza kwenda ni <strong>maharagwe −2000</strong>. Jamii inayothibitisha wanachama wake kwa majina halisi inaweza kuweka kikomo chake yenyewe, hadi −5000, na kuwapa wanachama waliothibitishwa kiwango cha kuanzia.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Kuanza</h2>
+        <p>Unajiunga kwa mwaliko. Kuanzia siku ya kwanza unaweza kuvinjari na kupokea maharagwe. Mara tu unapokuwa na maharagwe (kwa kuyapata au kupokea zawadi), unaweza kuyatumia. Ili kutumia kwa mkopo, lazima uchapishe angalau <strong style="color:var(--text-primary)">Ofa</strong> moja (tazama §4 na §5). Wanachama wapya huanza <strong style="color:var(--text-primary)">bila kiwango cha mkopo</strong> — unaweza kutumia tu maharagwe uliyonayo hasa hadi kiwango chako kiamilishwe na mabadilishano yako ya kwanza kukamilika (au ikiwa mdhamini au msimamizi atakupa kiwango cha kuanzia — tazama §3 na §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Kiwango chako cha mkopo kinapatikana kwa mabadilishano</h2>
+        <p>Kiwango chako cha mkopo kinakuruhusu kwenda hasi kidogo — kutumia kabla hujakirudisha. <strong style="color:var(--text-primary)">Kinapatikana kwa kufanya kazi, hakitolewi bure</strong>:</p>
+        <ul>
+            <li>Uaminifu unatokana na <strong style="color:var(--text-primary)">mabadilishano yaliyokamilika sokoni</strong> — kamwe hautokani na zawadi. Hukua polepole mwanzoni: mabadilishano ya Maharagwe 100 yanakupa takriban Maharagwe 37 ya kiwango cha mkopo. Msimamizi au mdhamini aliyeteuliwa anaweza pia kumpa mtu kiwango cha kuanzia; ruzuku ya msimamizi huonekana kama beji yao.</li>
+            <li>Kufanya mabadilishano na <strong style="color:var(--text-primary)">watu wengi tofauti</strong> hujenga uaminifu haraka zaidi kuliko kurudia mabadilishano na mtu mmoja.</li>
+            <li>Uaminifu wako huamua <em>kikomo</em> chako cha mkopo — kiwango cha chini kabisa unachoweza kufikia, kuanzia 0 hadi −2000 katika jamii nyingi (tazama §1).</li>
+            <li>Kiwango chako cha chini hufunguka baada ya <strong style="color:var(--text-primary)">mabadilishano yako ya kwanza halisi</strong>, na hukua kwa kila mabadilishano baada ya hapo (au mdhamini wa jamii anaweza kukupa kiwango cha kuanzia — tazama §9). Hakuna udhamini unaohitajika kwa lazima.</li>
+        </ul>
+        <div class="callout">Viwango vya uaminifu — <strong>Mgeni → Mkazi → Msimamizi → Mzee</strong> — ni beji za utambuzi. Beji unazopata hazizuii chochote zenyewe; kiwango kikubwa zaidi cha mkopo kinatokana na mabadilishano halisi. Msimamizi anaweza pia kumpa mtu beji, na pamoja nayo kiwango cha kuanzia cha mkopo cha beji hiyo.</div>
+
+        <h2 id="4"><span class="num">4.</span>Kusaidiana: Ili kutumia mkopo, lazima uwe na ofa amilifu</h2>
+        <p>Kupata uaminifu kunaweka <strong style="color:var(--text-primary)">kikomo</strong> chako cha mkopo (kiwango cha chini unachoweza kufikia). Lakini ili <strong style="color:var(--text-primary)">kutumia</strong> mkopo huo hasa, lazima uendelee kuwa na Ofa amilifu zilizochapishwa. Hii inahakikisha kwamba mtu yeyote mwenye deni anaiashiria jamii wazi jinsi anavyopanga kutoa mchango wake.</p>
+        
+        <p>Idadi ya ofa amilifu unazoendelea kuzichapisha huamua ni kiasi gani cha mkopo <strong style="color:var(--text-primary)">kinachopatikana</strong>:</p>
+        <table>
+            <thead><tr><th>Ofa amilifu</th><th>Kiwango cha mkopo kinachopatikana</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — tumia maharagwe uliyonayo tu</td></tr>
+                <tr><td class="num-col">1</td><td>Hadi Maharagwe −200</td></tr>
+                <tr><td class="num-col">2</td><td>Hadi Maharagwe −500</td></tr>
+                <tr><td class="num-col">3</td><td>Hadi Maharagwe −1000</td></tr>
+                <tr><td class="num-col">4</td><td>Hadi Maharagwe −1500</td></tr>
+                <tr><td class="num-col">5</td><td>Hadi Maharagwe −2000 <em>(kikomo cha kawaida)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Kikomo chako halisi cha matumizi ni kile <strong style="color:var(--text-primary)">kidogo zaidi</strong> kati ya kile ulichopata na kile kinachowezeshwa na ofa zako amilifu.</p>
+        <p><em>Kwa mfano: Ikiwa umepata kikomo cha −600 kupitia mabadilishano, kuwa na ofa 2 amilifu kunawezesha −500 yake. Kuwa na ofa ya 3 kunawezesha kikomo chako kamili cha −600 (kamwe hauhitaji ofa ya 4 au ya 5 kwa sababu kikomo ulichopata tayari kimefikiwa).</em></p>
+        <div class="callout">
+            <strong>Kusitisha Matumizi kwa Muda (Kugandisha):</strong><br>
+            Ukipungukiwa na ofa amilifu zinazohitajika kwa deni lako la sasa (k.m., ikiwa mojawapo ya ofa zako inauzwa na kukamilika, au ukisitisha moja), <strong>uwezo wako wa kutumia kwa mkopo unasitishwa kwa muda</strong>. Huu ni wavu wa usalama, si adhabu: hakuna chochote unachonyang'anywa. Bado unaweza kupokea maharagwe, kuendelea kuuza, na kuvinjari. Kiwango chako cha mkopo kinajirejesha chenyewe pindi salio lako linaporudi ndani ya kile kinachofunikwa na ofa zako amilifu: chapisha ofa nyingine, au pokea maharagwe.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Ofa (matangazo yako)</h2>
+        <ul>
+            <li>Weka ofa nyingi kadri unavyopenda — ikiwa ni pamoja na zinazorudiarudia — na ubadilishe kila moja kuwa <strong style="color:var(--text-primary)">Amilifu au Imesitishwa</strong> wakati wowote unaotaka. Ofa <em>Amilifu</em> pekee ndizo zinazohesabiwa kwenye kiwango chako cha mkopo.</li>
+            <li><strong style="color:var(--text-primary)">Toa kabla ya kupokea:</strong> katika jamii yenye Maharagwe, lazima uwe umeorodhesha angalau ofa moja kabla ya kuweka Hitaji au kununua kutoka kwa wengine. Mahali ambapo hakuna Maharagwe, kama ilivyo kwenye jamii ya kimataifa, chapisho lako la kwanza linaweza kuwa Hitaji.</li>
+            <li>Una salio chanya? Sitisha kila kitu ukipenda — ofa zinahitajika tu ili kwenda kwenye salio hasi.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Ada na mfuko wa jamii</h2>
+        <p>Malipo madogo mawili, na yote mawili yanaingia kwenye <strong style="color:var(--text-primary)">Mali za Pamoja za Jamii</strong> — mfuko wa pamoja ambao jamii yako hupiga kura kuutumia kwa miradi ya eneo husika. Hakuna kinachopotea kwa shirika la kibiashara.</p>
+        <p><strong style="color:var(--text-primary)">a) Ada ya soko — 1.5% kwenye mabadilishano yaliyokamilika.</strong> Uuzaji wa sokoni unapokamilika, muuzaji anapata 1.5% pungufu ya bei na tofauti hiyo huenda kwenye Mali za Pamoja. <strong style="color:var(--text-primary)">Zawadi (kutuma moja kwa moja kati ya wanachama) ni bure</strong> — kama ilivyo kwa urejeshaji wa pesa na miamala ya mfumo.</p>
+        <p><strong style="color:var(--text-primary)">b) Ada ya mzunguko kwenye masalio chanya — ya kila mwezi, na kwenye sehemu inayozidi 200 pekee.</strong> Kama madaraja ya kikodi yanayopanda, kila daraja hutozwa tu kwenye sehemu ya salio lako iliyo ndani yake:</p>
+        <table>
+            <thead><tr><th>Daraja la salio</th><th>Kiwango cha kila mwezi cha mzunguko</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Bure</span> eneo salama</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
+            </tbody>
+        </table>
+        <p>Hii inahimiza kwa upole maharagwe <strong style="color:var(--text-primary)">kuzunguka badala ya kurundikana</strong>. <strong style="color:var(--text-primary)">Masalio hasi kamwe hayatozwi ada ya mzunguko</strong> — tayari unabeba mkopo kwa ajili ya jamii. Kumbuka eneo la bure la +200 linafanana na daraja la kwanza la mkopo la −200, hivyo mfumo unalingana pande zote kuzunguka sifuri.</p>
+
+        <h2 id="7"><span class="num">7.</span>Zawadi (kutuma maharagwe)</h2>
+        <ul>
+            <li>Unaweza <strong style="color:var(--text-primary)">kutoa zawadi ya maharagwe uliyonayo hasa pekee</strong> — zawadi kamwe haiendi kwenye salio hasi na haitumii kiwango chako cha mkopo.</li>
+            <li>Unaweza kutuma mara tu unapokamilisha angalau mabadilishano moja halisi (hii inazuia akaunti mpya kabisa kusambaza maharagwe papo hapo na kutoweka).</li>
+            <li>Zawadi hazimjengei mpokeaji uaminifu, na ni <strong style="color:var(--text-primary)">bure</strong> — hakuna ada (unaweza tu kutoa zawadi ya maharagwe ambayo tayari unayo).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Jinsi mabadilishano yanavyokamilika</h2>
+        <p>Mabadilishano ya sokoni yanashikiliwa kwa usalama katika <strong style="color:var(--text-primary)">amana</strong> (yakishikiliwa kwa amana na mfumo) hadi makubaliano yakamilike, kisha hutolewa kwa muuzaji (ikipunguzwa ada ya 1.5%). Ikiwa makubaliano yataghairiwa, mnunuzi anarudishiwa kiasi kamili.</p>
+
+        <h2 id="9"><span class="num">9.</span>Kudhamini (mwanzo wa hiari wa haraka)</h2>
+        <p>Mtu anayeaminika, aliyeteuliwa na jamii kama <strong style="color:var(--text-primary)">mdhamini</strong> anaweza kumpa mgeni <strong style="color:var(--text-primary)">kiwango cha kuanzia cha chini cha maharagwe 25, 50, au 100</strong> ili waweze kuanza kutumia mkopo kabla ya kuupata. Hizi kawaida hutolewa — kwa hiari kamili ya mdhamini — kwa watu ambao machapisho na michango yao mdhamini anaona inavutia na kutia moyo kweli. Ni hiari kwa njia yoyote: hakuna anayehitaji udhamini ili kushiriki, kwani unafungua pia kiwango chako cha mkopo kwa kufanya tu mabadilishano (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Usuluhishi wa Pamoja Kati ya Jamii (Clearing)</h2>
+        <p>Jamii hazihitaji kuwepo zikiwa zimetengwa. Kupitia <strong style="color:var(--text-primary)">Viunganishi vya Biashara vya Muungano</strong> (vilivyoongozwa na umoja wa usuluhishi wa Keynes), nodi huru za jamii zinaweza kusuluhisha mabadilishano na nodi jirani moja kwa moja (peer-to-peer), bila sarafu za serikali au akiba za kibenki. Maharagwe kamwe hayaondoki katika jamii yao ya asili — kila jozi ya nodi huweka leja ya daraja ya kile wanachodaiwa wao kwa wao katika kazi, na kila upande huweka kikomo chake cha jinsi hiyo inavyoweza kwenda. Usuluhishi unafanyika kati ya jozi za jamii, kila mwendeshaji huwasha kwa hiari, na bado uko katika hatua za awali: umejengwa, ukiwa na skrini zake katika programu ya wavuti, na umejaribiwa tu kati ya jamii zetu mbili za majaribio, kamwe si kati ya jamii halisi.</p>
+
+        <h2 id="11"><span class="num">11.</span>Utambulisho wa Kisiri na Uhifadhi wa Ufunguo</h2>
+        <p>Akaunti yako inalindwa na jozi ya funguo za kriptografia za Ed25519 zilizoundwa kwenye kifaa chako. BeanPool inatoa uhifadhi rahisi unaokidhi mahitaji yako:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Uhuru Kamili wa Kibinafsi:</strong> Kwenye programu za simu, ufunguo wako wa siri huwekwa katika hifadhi salama ya kifaa (iOS Keychain / Android Keystore); katika programu ya wavuti huwekwa kwenye hifadhi ya kivinjari yenyewe. Huondoka kwenye kifaa kama nakala iliyolindwa pekee kwa ajili ya urejeshaji wa kuingia, au unaponakili akaunti yako kwenye kifaa chako kingine. Weka nakala yako ya maneno 12 ya kurejesha (ambayo ni maneno ya Kiingereza) nje ya mtandao.</li>
+            <li><strong style="color:var(--text-primary)">Urejeshaji:</strong> Maneno yako 12 yanarejesha akaunti yako kwenye kifaa chochote. Unaweza pia kuunganisha kuingia kwa Google, Apple au Facebook. Nakala iliyolindwa ya ufunguo wako huwekwa kwa ajili yake: programu za simu zinazotumia chumba salama cha funguo za BeanPool huuhifadhi hapo, kwenye seva ndogo nchini Iceland; matoleo ya zamani ya programu ya simu huuhifadhi kwenye nodi ya jamii yako; programu ya wavuti kwenye jamii ya kimataifa huuhifadhi kwenye seva ya jamii hiyo, tunayoiendesha sisi. Yeyote anayehifadhi nakala hiyo anaweza kuifungua. Urejeshaji kutoka chumba salama husubiri saa 24 isipokuwa kifaa chako kimojawapo kikiidhinisha. Ukipoteza kifaa chako, maneno yako 12 na njia yako ya kuingia, msimamizi wa jamii yako anaweza kuhamishia akaunti yako kwenye simu mpya kwa msimbo wa mara moja, mbele yako; historia yako inabaki. Kwa hivyo yaandike maneno hayo chini.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Vikomo na usalama</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Kikomo cha chini −2000</strong> katika jamii nyingi (tazama §1). Hakuna kikomo cha kila siku cha maharagwe mangapi unayotumia — kikomo chako cha chini ndicho mpaka. Kuna kikomo cha mara ngapi: malipo 100, watu 30 ambao hujawahi kuwalipa kabla na maombi 100 ya sokoni ndani ya saa 24 zozote.</li>
+            <li>Uaminifu kwa mshirika yeyote mmoja una kikomo, hivyo hakuna anayeweza kupandisha hadhi yake kwa kufanya mabadilishano mfululizo na mshirika mmoja pekee.</li>
+            <li><strong style="color:var(--text-primary)">Hali ya likizo</strong> huficha ofa zako na kusitisha maombi yanayoingia ukiwa mbali.</li>
+            <li>Wanachama wanaweza kuripoti na kuashiria watenda mabaya; wasimamizi wa jamii wanaweza kuwaondoa.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Biashara za Jamii na Uongozi</h2>
+        <p>Biashara za jamii (kama vile maktaba ya zana ya jamii, kundi la kuku wa mayai, au ghala la kuni) na miradi yenye ukomo ni mipango ya pamoja chini ya usimamizi wa pamoja. Zinafanya kazi chini ya kanuni zilizo wazi, zinazotekelezwa na mfumo (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">mfumo wa uongozi wa Mali za Pamoja</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Lengo moja, mizunguko miwili ya maisha (§2.1):</strong> Biashara inayoendelea hudumu na kufanya mabadilishano; biashara yenye ukomo (mradi) ina lengo na tarehe ya mwisho, ikifunga akaunti yake na kurudisha kilichosalia kwenye Mali za Pamoja inapokamilika.</li>
+            <li><strong style="color:var(--text-primary)">Viwango vya chini vilivyopatikana na ahadi za wasimamizi (Kanuni 1–3):</strong> Biashara mpya huanza bila mkopo usiopatikana: kiwango chake cha chini cha mkopo kinaungwa mkono na ahadi za wazi kutoka kwa hadhi ya kibiashara iliyopatikana ya wasimamizi wake (jumla ya moja kwa moja, bila kizidishi bandia). Kuahidi msaada kamwe hakugusi au kupunguza kiwango cha chini cha mkopo cha kaya ya kibinafsi ya msimamizi. Biashara za zamani zinabaki na kiwango cha kuanzia cha chini zilichokuwa nacho kabla ya ahadi.</li>
+            <li><strong style="color:var(--text-primary)">Dhima yenye ukomo (Kanuni ya 4):</strong> Biashara ndiyo inayofeli, si kaya ya msimamizi. Ikiwa biashara itashindwa kulipa, matumizi yake yanaganda, lakini viwango vya kibinafsi vya wasimamizi wake vinalindwa.</li>
+            <li><strong style="color:var(--text-primary)">Mkopo unanunua pembejeo, faida inalipa watu (Kanuni ya 5):</strong> Biashara inaweza kutumia mkopo hadi kiwango chake cha chini kinachotumika ili kununua vifaa au huduma kutoka kwa majirani wa nje. Kamwe <em>haiwezi</em> kutumia mkopo kuwalipa wasimamizi wake wenyewe — wasimamizi hulipwa tu wakati <code>salio − kiasi ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Malipo ya wasimamizi yanawekewa kikomo na ziada iliyopatikana (Kanuni ya 6):</strong> Malipo kwa wasimamizi yanawekewa kikomo madhubuti na ziada halisi ya kibiashara (mapato ya mauzo ukitoa malipo ya wasimamizi). Ruzuku, ahadi, na zawadi kamwe haziwezi kubadilishwa kuwa mishahara ya wasimamizi.</li>
+            <li><strong style="color:var(--text-primary)">Uhawilishaji wa kiotomatiki wa mtaji wa uendeshaji (Kanuni ya 7):</strong> Biashara inaweza kuweka ukomo wa mtaji wa uendeshaji. Ziada iliyopatikana juu yake huhamishwa kiotomatiki kurudi kwenye mfuko wa Mali za Pamoja wa Jamii ili kuzuia kurundika. Ruzuku na zawadi kamwe hazihamishwi.</li>
+            <li><strong style="color:var(--text-primary)">Kanuni ya idhini ya watu wawili:</strong> Wasimamizi hawawezi kuidhinisha malipo yao wenyewe au zabuni za kibinafsi kwenye mahitaji ya biashara — msimamizi mwingine lazima aidhinishe.</li>
+            <li><strong style="color:var(--text-primary)">Kura za Maoni dhidi ya Maamuzi (§3):</strong> Maswali yasiyo rasmi ni <em>Kura za Maoni</em> katika ukurasa wa soko: kura moja kwa kila mtu, zinahesabiwa, hazilazimishi chochote. Uongozi unaolazimisha (ruzuku za mfuko, kufuta madeni, kubadilisha majukumu, na kumsimamisha, kumgandisha au kumwondoa mwanachama) unaendeshwa kupitia <em>Maamuzi</em> kwenye kichupo cha Mali za Pamoja, kukiwa na dirisha la siku 7 la kupiga kura. Uamuzi hupita kwa 60% ya kura (66% ili kumwondoa mwanachama; zaidi ya nusu ili kuondoa usimamishaji au mgando, au kumrejesha mwanachama) mara tu wanachama wa kutosha wanapopiga kura: 30% ya wale waliokuwa amilifu katika siku 30 zilizopita, angalau 3 (25% kwa ajili ya kumwondoa mwanachama). Kisha unajitekeleza wenyewe. Ruzuku za mfuko hutumia upigaji kura wa kiwango cha mraba (quadratic voting) kulingana na hadhi ya kibiashara iliyopatikana — maharagwe taslimu hayawezi kununua kura.</li>
+            <li><strong style="color:var(--text-primary)">Msamiati rasmi (§9):</strong> Viwango vinne, maneno manne mahususi: nodi → <em>mmiliki / msimamizi</em> · biashara → <em>msimamizi mkuu / msimamizi</em> · kikundi → <em>mratibu</em> · ngazi ya uaminifu → <em>Msimamizi</em>.</li>
+        </ul>
+        <div class="callout amber">Kwa ufupi: <strong>pata kiwango chako cha mkopo kwa kufanya mabadilishano, weka ofa moja au mbili amilifu ili kukitumia, na uruhusu maharagwe yazunguke.</strong> Sifuri ndio lengo — toa kiasi kinacholingana na unachopokea.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Aikoni ya BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Mkopo wa pande zote kwa ajili ya jamii, unaoendeshwa na jamii.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Kituo cha Msaada</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Jinsi Inavyofanya Kazi</a>
+                    <a href="getting-started.html">Kuanza Sasa</a>
+                    <a href="rules.html">Kanuni</a>
+                    <a href="safety.html">Usalama wa Watoto</a>
+                    <a href="privacy.html">Sera ya Faragha</a>
+                    <a href="terms.html">Masharti ya Huduma</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Msimbo huria chini ya leseni ya MIT. Imetengenezwa kwa <img src="bean.png" alt="upendo" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> na jamii, kwa ajili ya jamii. Mipaka ya maeneo ya saa © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Wachangiaji wa OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

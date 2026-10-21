@@ -1059,7 +1059,7 @@ test('mobile width (320px) desktop-lang-menu on pages without phone menu stays w
     }
 });
 
-test('nav-cta is never clipped and does not wrap where main did not, ☰ panel links are reachable with and without banner, and phone header is unchanged', { timeout: 240_000 }, async () => {
+test('nav-cta is never clipped and does not wrap where main did not, ☰ panel links are reachable with and without banner, phone header is unchanged, and no-menu controls are >=44px with >=16px padding', { timeout: 240_000 }, async () => {
     const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.woff2': 'font/woff2' };
 
     const server = http.createServer((req, res) => {
@@ -1296,14 +1296,129 @@ test('nav-cta is never clipped and does not wrap where main did not, ☰ panel l
             await ctxPt.close();
         }
 
-        const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length;
+        // Check pages without ☰ at 320, 360, 412, 480, 600, 768, 1024 px across 100% and 130% text (en, pt, ta, ar)
+        const NO_MENU_CHECK_PAGES = [
+            { url: 'privacy.html', lang: 'en', rtl: false },
+            { url: 'data-deletion.html', lang: 'en', rtl: false },
+            { url: 'global.html', lang: 'en', rtl: false },
+            { url: 'status.html', lang: 'en', rtl: false },
+            { url: 'pt/global.html', lang: 'pt', rtl: false },
+            { url: 'pt/status.html', lang: 'pt', rtl: false },
+            { url: 'ta/global.html', lang: 'ta', rtl: false },
+            { url: 'ta/status.html', lang: 'ta', rtl: false },
+            { url: 'ar/global.html', lang: 'ar', rtl: true },
+            { url: 'ar/status.html', lang: 'ar', rtl: true }
+        ];
+        const NO_MENU_WIDTHS = [320, 360, 412, 480, 600, 768, 1024];
+        const noMenuCtaSizeBad = [];
+        const noMenuGlobeSizeBad = [];
+        const noMenuPaddingBad = [];
+        const noMenuClipped = [];
+        const noMenuWrapped = [];
+
+        {
+            const ctx100NoMenu = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            const ctx130NoMenu = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: 'en-US' });
+            await ctx100NoMenu.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+            });
+            await ctx130NoMenu.addInitScript(() => {
+                const style = document.createElement('style');
+                style.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+                document.head ? document.head.appendChild(style) : document.addEventListener('DOMContentLoaded', () => document.head.appendChild(style));
+                const el = document.documentElement;
+                if (el) el.style.fontSize = '130%';
+                const observer = new MutationObserver(() => {
+                    if (document.documentElement && document.documentElement.style.fontSize !== '130%') {
+                        document.documentElement.style.fontSize = '130%';
+                    }
+                });
+                observer.observe(document, { childList: true, subtree: true });
+            });
+
+            const p100 = await ctx100NoMenu.newPage();
+            const p130 = await ctx130NoMenu.newPage();
+
+            for (const item of NO_MENU_CHECK_PAGES) {
+                for (const [scale, page] of [[1.0, p100], [1.3, p130]]) {
+                    await page.goto(`http://127.0.0.1:${port}/${item.url}`, { waitUntil: 'domcontentloaded' });
+                    for (const width of NO_MENU_WIDTHS) {
+                        await page.setViewportSize({ width, height: 800 });
+                        const res = await page.evaluate(({ isRtl, sc }) => {
+                            const cta = document.querySelector('.nav-cta');
+                            const globe = document.querySelector('.desktop-lang-menu summary') || document.querySelector('.lang-menu summary');
+                            const nav = document.querySelector('#navbar .nav-inner') || document.querySelector('.nav-inner');
+                            if (!cta || !globe || !nav) return null;
+
+                            const ctaRect = cta.getBoundingClientRect();
+                            const globeRect = globe.getBoundingClientRect();
+                            const navStyle = window.getComputedStyle(nav);
+
+                            const range = document.createRange();
+                            range.selectNodeContents(cta);
+                            const rects = range.getClientRects();
+
+                            const isClipped = isRtl
+                                ? (ctaRect.left < -0.5 || ctaRect.right > window.innerWidth + 0.5)
+                                : (ctaRect.right > window.innerWidth + 0.5);
+                            const isWrapped = rects.length > 1 || (sc === 1.3 ? ctaRect.height > 75 : ctaRect.height > 50);
+
+                            return {
+                                ctaW: ctaRect.width,
+                                ctaH: ctaRect.height,
+                                globeW: globeRect.width,
+                                globeH: globeRect.height,
+                                padL: parseFloat(navStyle.paddingLeft),
+                                padR: parseFloat(navStyle.paddingRight),
+                                isClipped,
+                                isWrapped
+                            };
+                        }, { isRtl: item.rtl, sc: scale });
+
+                        if (!res) continue;
+
+                        if (res.ctaW < 43.5 || res.ctaH < 43.5) {
+                            noMenuCtaSizeBad.push({ page: item.url, width, scale, w: res.ctaW, h: res.ctaH });
+                        }
+                        if (res.globeW < 43.5 || res.globeH < 43.5) {
+                            noMenuGlobeSizeBad.push({ page: item.url, width, scale, w: res.globeW, h: res.globeH });
+                        }
+                        if (res.padL < 15.5 || res.padR < 15.5) {
+                            noMenuPaddingBad.push({ page: item.url, width, scale, padL: res.padL, padR: res.padR });
+                        }
+                        if (res.isClipped) {
+                            noMenuClipped.push({ page: item.url, width, scale });
+                        }
+                        if (res.isWrapped) {
+                            noMenuWrapped.push({ page: item.url, width, scale });
+                        }
+                    }
+                }
+            }
+
+            await ctx100NoMenu.close();
+            await ctx130NoMenu.close();
+        }
+
+        const totalFailures = allClipped.length + allWrapped.length + allPhoneHeaderBad.length + allUnreachable.length + bannerUnreachable.length
+            + noMenuCtaSizeBad.length + noMenuGlobeSizeBad.length + noMenuPaddingBad.length + noMenuClipped.length + noMenuWrapped.length;
         assert.equal(totalFailures, 0,
             `Failing counts:\n` +
             `  - Clipped CTAs: ${allClipped.length}\n` +
             `  - Wrapped CTAs: ${allWrapped.length}\n` +
             `  - Phone header mismatches: ${allPhoneHeaderBad.length}\n` +
             `  - Unreachable panel links without banner: ${allUnreachable.length}\n` +
-            `  - Unreachable panel links with banner: ${bannerUnreachable.length}\n\n` +
+            `  - Unreachable panel links with banner: ${bannerUnreachable.length}\n` +
+            `  - No-menu CTA size (<44px): ${noMenuCtaSizeBad.length}\n` +
+            `  - No-menu 🌐 size (<44px): ${noMenuGlobeSizeBad.length}\n` +
+            `  - No-menu side padding (<16px): ${noMenuPaddingBad.length}\n` +
+            `  - No-menu clipped CTAs: ${noMenuClipped.length}\n` +
+            `  - No-menu wrapped CTAs: ${noMenuWrapped.length}\n\n` +
+            (noMenuCtaSizeBad.length ? `No-menu CTA size bad samples:\n  ` + noMenuCtaSizeBad.slice(0, 5).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text): ${c.w.toFixed(1)}x${c.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+            (noMenuGlobeSizeBad.length ? `No-menu 🌐 size bad samples:\n  ` + noMenuGlobeSizeBad.slice(0, 5).map(g => `${g.page} @ ${g.width}px (${g.scale * 100}% text): ${g.w.toFixed(1)}x${g.h.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
+            (noMenuPaddingBad.length ? `No-menu padding bad samples:\n  ` + noMenuPaddingBad.slice(0, 5).map(p => `${p.page} @ ${p.width}px (${p.scale * 100}% text): L=${p.padL.toFixed(1)}px R=${p.padR.toFixed(1)}px`).join('\n  ') + '\n\n' : '') +
             (allClipped.length ? `Clipped samples:\n  ` + allClipped.slice(0, 10).map(c => `${c.page} @ ${c.width}px (${c.scale * 100}% text, right: ${c.right})`).join('\n  ') + '\n\n' : '') +
             (allWrapped.length ? `Wrapped samples:\n  ` + allWrapped.slice(0, 10).map(w => `${w.page} @ ${w.width}px (${w.scale * 100}% text)`).join('\n  ') + '\n\n' : '') +
             (allPhoneHeaderBad.length ? `Phone header samples:\n  ` + allPhoneHeaderBad.slice(0, 5).map(h => `${h.page} @ ${h.width}px (${h.scale * 100}%): pad=${h.padL}px (exp ${h.expectedPad}px), bean=${h.beanW}px (exp ${h.expectedBean}px)`).join('\n  ') + '\n\n' : '') +

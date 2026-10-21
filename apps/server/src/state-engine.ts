@@ -3346,13 +3346,26 @@ export function backingFigureDrift(): { enterprises: number; frozen: number } {
     return { enterprises: rows.length, frozen };
 }
 
-/** Says at boot how many enterprises' spend floors now read their pledges alone (backingFigureDrift). Never throws. */
+/** The counts the boot last said (backingFigureDrift), "<enterprises>/<frozen>"; no row is 0/0. Per server. */
+const BACKING_DRIFT_SAID_KEY = 'backing_drift_said';
+
+/**
+ * Says at boot how many enterprises' spend floors now read their pledges alone (backingFigureDrift), once per change of
+ * the counts, not at every boot: a keeper's known pledge keeps its enterprise counted for good (the joining figure holds
+ * the known part, which the pledges count among the known ones), so with the confirmation dial on by default the same line
+ * would come at every restart. Never throws.
+ */
 function reportBackingFigureDriftAtBoot(): void {
     try {
         const { enterprises, frozen } = backingFigureDrift();
+        const counts = `${enterprises}/${frozen}`;
+        const said = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(BACKING_DRIFT_SAID_KEY) as { value: string } | undefined)?.value ?? '0/0';
+        if (counts === said) return;
         if (enterprises > 0) {
             console.log(`[Boot] Enterprise spend floors read their keepers' pledges only: ${enterprises} enterprise(s) had a joining figure above what is pledged now, ${frozen} of them owe more than their pledges allow (spend-frozen, nothing moved)`);
         }
+        if (enterprises === 0) db.prepare('DELETE FROM node_config WHERE key = ?').run(BACKING_DRIFT_SAID_KEY);
+        else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(BACKING_DRIFT_SAID_KEY, counts);
     } catch (e) {
         console.error('[Boot] Could not count enterprises whose joining figures are above their pledges:', e);
     }

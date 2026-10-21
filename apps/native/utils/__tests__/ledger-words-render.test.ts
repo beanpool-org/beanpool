@@ -138,7 +138,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', () => ({
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 vi.mock('../../components/TrustBadge', () => ({ TrustBadge: ({ level }: { level: string }) => createElement('span', { 'data-badge': level }) }));
 
-import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, PROTOCOL_CONSTANTS, SAMPLE_COMMUNITY, TIER_LEVELS, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
+import { BLOCKED_BEANS_NOTE, CIRCULATION_FREE_BEANS, SAMPLE_COMMUNITY, TIER_LEVELS, formatNumber, pseudoLocalise, setLanguage, type UiLang } from '@beanpool/core';
 import { DrawnInLanguage, LanguageProvider } from '../../components/LanguageProvider';
 import { LanguageRow } from '../../components/LanguagePicker';
 import { PricingInfoModal } from '../../components/info-content/PricingInfoModal';
@@ -330,12 +330,11 @@ describe('the Ledger in the pseudo-locale: every word on it came through t() (wo
         expect(bypassing(), 'Trust Formula').toEqual([]);
         await click(row('Tiers & Perks'), 'Tiers & Perks');
         expect(text()).toContain(xx('OPEN TO EVERYONE — NO TIER REQUIRED'));
-        // The node's own table, never a copy: Elder's floor and the cap.
-        const { CREDIT_BASE_FLOOR, CREDIT_FLOOR_CAP } = PROTOCOL_CONSTANTS;
-        expect(text()).toContain(xx('Reached when your credit floor reaches **{floor}B** (max **{max}B**)')
-            .replace('{floor}', String(CREDIT_BASE_FLOOR - TIER_LEVELS[3].minCredit)).replace('{max}', String(CREDIT_BASE_FLOOR - CREDIT_FLOOR_CAP)).replace(/\*\*/g, ''));
-        expect(text()).toContain(xx('Reached when your credit floor reaches **{floor}B** (up to {upTo}B)')
-            .replace('{floor}', String(CREDIT_BASE_FLOOR - TIER_LEVELS[1].minCredit)).replace('{upTo}', String(CREDIT_BASE_FLOOR - TIER_LEVELS[2].minCredit + 1)).replace(/\*\*/g, ''));
+        // The node's own table, never a copy: where Elder and Resident start, in trust. Never the credit floor: a confirmed
+        // member's floor holds the known floor too, which no tier counts (Marty, 21 Oct: "Badge counts what they did only").
+        expect(text()).toContain(xx('Reached at **{trust}** trust').replace('{trust}', String(TIER_LEVELS[3].minCredit)).replace(/\*\*/g, ''));
+        expect(text()).toContain(xx('Reached at **{trust}** trust (up to {upTo})')
+            .replace('{trust}', String(TIER_LEVELS[1].minCredit)).replace('{upTo}', String(TIER_LEVELS[2].minCredit - 1)).replace(/\*\*/g, ''));
         expect(bypassing(), 'Tiers & Perks').toEqual([]);
     });
 

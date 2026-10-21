@@ -65,6 +65,7 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { localFetch } from './keepalive-test-fetch.js';
+import { pruneAuthAttempts } from './auth-rate-limit.js';
 
 const IS_CHILD = process.argv[2] === '--child';
 
@@ -591,7 +592,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(dataDir!, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
     const { hash, salt } = hashPassword(MAIN_PW);
     updateLocalConfig({ adminHash: hash, salt, breakGlassMode: false } as any);
-    const tfa = turnOn2faForTests(MAIN_PW);
+    let tfa = turnOn2faForTests(MAIN_PW);
     const owner = crypto.randomBytes(32).toString('hex');
     const admin = crypto.randomBytes(32).toString('hex');
     seedGenesisMember(owner, 'Olive');
@@ -735,7 +736,7 @@ async function main(): Promise<void> {
         }
     }
     const signIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
-    const tfaSession: string = signIn.json?.tfaSessionToken;
+    let tfaSession: string = signIn.json?.tfaSessionToken;
     assert(signIn.status === 200 && typeof tfaSession === 'string', `setup: the password and a code sign in, with a 2FA session (${signIn.status})`);
     const earlier2fa = (): Record<string, string> => ({ 'X-Admin-Password': MAIN_PW, 'X-Admin-2FA-Session': tfaSession });
 
@@ -813,6 +814,7 @@ async function main(): Promise<void> {
         let rolledBack = 0;
         const changedAfter: string[] = [];
         const pinChangedAfter: string[] = [];
+        let passwordRowRefused = 0;
         for (const [who, headers] of credentials) {
             for (const [m, p] of routes) {
                 // The roll-back with a proof that passes is the one route meant to add a point (row 3 runs it, in a child).
@@ -821,7 +823,19 @@ async function main(): Promise<void> {
                 const h = headers();
                 const body = proven && m !== 'GET' ? { ...bait, code: tfa.code() } : bait;
                 const q = m === 'GET' || m === 'DELETE' ? `?name=${encodeURIComponent(name)}&path=${encodeURIComponent(`restore-points/${name}`)}` : '';
-                await call(m, fill(p) + q, h, body);
+                if (p === '/api/local/admin/2fa/disable') {
+                    pruneAuthAttempts(Date.now() + 61_000);
+                }
+                const res = await call(m, fill(p) + q, h, body);
+                if (p === '/api/local/admin/2fa/disable') {
+                    if (who === 'an owner key session (phone, just unlocked)') {
+                        assert(res.status === 200, `5. 2fa/disable with owner phone session must return 200 (got ${res.status} ${res.text})`);
+                    }
+                    // A proven 2fa/disable turns 2FA off: on again at once, so the routes after it, and the password-with-a-code
+                    // row, run with 2FA on, as on main.
+                    if (res.status === 200) tfa = turnOn2faForTests(MAIN_PW);
+                }
+                if (who.includes('password with a code') && res.status === 403 && String(res.text).includes('password_needs_2fa')) passwordRowRefused++;
                 sent++;
                 const now = JSON.stringify(treeOf(pointsDir));
                 if (now !== JSON.stringify(before) && changedAfter.length < 5) changedAfter.push(`${who}: ${m} ${p}`);
@@ -835,8 +849,16 @@ async function main(): Promise<void> {
             `the sweep sent ${sent} requests (${routes.length} routes × ${credentials.length} credentials, the proven roll-back skipped twice)`);
         assert(JSON.stringify(treeOf(pointsDir)) === JSON.stringify(before) && changedAfter.length === 0,
             `5. the restore point is byte for byte as it was (${changedAfter.join(' | ') || 'no request changed it'})`);
+        assert(passwordRowRefused === 0, `5. the owner password with a code reaches every route: 2FA stays on through the sweep (${passwordRowRefused} refused as 'password_needs_2fa')`);
         assert(pinChangedAfter.length === 0, `5. (case 19 g) data/standby-main.json is byte for byte as it was after every request: no route writes or removes it (${pinChangedAfter.join(' | ') || 'none changed it'})`);
         unpinMainServerForTests(dataDir!);
+        // 2FA is back on after each proven 2fa/disable (above); turn it on once more and sign in again, so sections 6 and 8
+        // start with 2FA on and section 8's earlier2fa reads a fresh session.
+        tfa = turnOn2faForTests(MAIN_PW);
+        pruneAuthAttempts(Date.now() + 61_000);
+        const reSignIn = await call('POST', '/api/local/verify-password', {}, { password: MAIN_PW, totpCode: tfa.code() });
+        tfaSession = reSignIn.json?.tfaSessionToken;
+        assert(reSignIn.status === 200 && typeof tfaSession === 'string', `setup: 2FA re-enabled for sections 6 and 8 (${reSignIn.status})`);
     }
 
     // ── 6. Retention ──

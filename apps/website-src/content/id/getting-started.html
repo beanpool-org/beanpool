@@ -1,0 +1,159 @@
+<!-- source-hash: 4ad64dc454d69949 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memulai — Tiga cara masuk ke BeanPool</title>
+    <meta name="description" content="Cara mencoba BeanPool di komunitas global, menemukan atau memulai komunitas di dekat Anda, atau bergabung dengan undangan; lalu 12 katamu dan transaksi pertama Anda.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The doors land on these headings (#global, #invite…): below the fixed bar, 74 px tall on a phone, 88 px wide */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content p strong { color: var(--text-primary); }
+        .rules-content p { overflow-wrap: anywhere; }
+        .rules-content .guide-links { font-size: 0.95rem; margin-top: -0.5rem; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Ikon BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Cara Kerja</a>
+                <a href="rules.html">Aturan</a>
+                <a href="index.html#features">Fitur</a>
+                <a href="help.html">Bantuan</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Tonton Video Tutorial di YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Gabung ke Komunitas Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Lihat di GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Mulai</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Buka menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta" aria-current="page">Mulai</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="index.html#features">Features</a>
+                    <a href="help.html">Help</a>
+                    <a href="guide/index.html">Panduan anggota</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorial di YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool di Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Kode Sumber di GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Memulai</h1>
+        <p class="lede">Ada tiga cara untuk masuk. Pilih salah satu yang paling sesuai dengan kondisi Anda saat ini; akun Anda tetap sama apa pun yang Anda pilih, dan akun tersebut dapat tergabung di lebih dari satu komunitas.</p>
+
+        <!-- OPEN-GLOBAL: when global's private preview is off, the heading becomes "Try it now on the global community" and the
+             two paragraphs below become this one:
+             The global community is people from everywhere. You need no invite: open <strong>global.beanpool.org</strong> in a browser and tap <strong>Join</strong>, or install the app and tap <strong>Explore BeanPool worldwide</strong> on the first screen. Create an account with <strong>12 secret words</strong> (no Google, Apple or Facebook account needed), or sign in once with Google, Apple or Facebook; that sign-in also becomes a way back if you lose your phone. Tell it roughly where you are, to about 10 km, or skip that. Then you can see what people near you offer, post something free or for swap, message people, and ask a community near you to let you in. Beans, trades, the Commons and its Decisions are switched off there: they belong to a local community. The app shows you each of them with an example community, so you know what a local community offers before you join or start one. -->
+        <h2 id="global"><span class="num">1.</span>Coba di seluruh dunia: komunitas global</h2>
+        <p>Komunitas global terdiri dari orang-orang dari berbagai penjuru dunia, dan nantinya tidak memerlukan undangan. BeanPool menjalankannya di server yang kami sewa di Amerika Serikat. Saat ini komunitas tersebut berupa pratinjau pribadi selagi anggota pertamanya mencobanya: hanya orang yang diundang oleh pemilik atau adminnya yang dapat bergabung, dan siapa pun yang membuka <strong>global.beanpool.org</strong> akan melihat satu kalimat, “Komunitas ini sedang dalam pratinjau pribadi. Minta undangan dari pemiliknya.” Komunitas ini segera dibuka untuk semua orang. Setelah itu, Anda dapat bergabung melalui peramban atau di aplikasi dengan <strong>12 kata rahasia</strong> atau akun masuk Google, Apple, atau Facebook, melihat apa yang ditawarkan orang-orang di dekat Anda, memasang sesuatu secara gratis atau untuk barter, mengirim pesan kepada orang lain, dan meminta komunitas di dekat Anda untuk mengizinkan Anda masuk. Kacang, transaksi, Sarana Bersama, dan Keputusannya merupakan bagian dari komunitas lokal; komunitas global menampilkan masing-masing fitur ini dengan komunitas contoh, agar Anda mengetahui apa yang ditawarkan komunitas lokal sebelum bergabung atau memulainya.</p>
+        <p>Sebelum dibuka: dapatkan aplikasi dari <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> atau <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a>, lihat komunitas yang sudah berjalan di <a href="index.html#find-or-start">peta kami</a> atau mulai satu komunitas (bagian 2), atau bergabung dengan undangan (bagian 3).</p>
+        <p class="guide-links">Panduan: <a href="guide/joining.html">Bergabung dengan BeanPool</a>, <a href="guide/web-app.html">Menggunakan BeanPool di peramban web</a>.</p>
+
+        <h2 id="find"><span class="num">2.</span>Temukan atau mulai komunitas</h2>
+        <!-- OPEN-GLOBAL: when global's private preview is off, the paragraph below goes back to starting:
+             On the global community, <strong>Find your community</strong> on Home lists the communities nearest you. Tap <strong>Ask to join</strong>, write a few words about yourself, and any member of that community can let you in with one tap, and if no answer comes in 30 days you can ask again. Nothing near you? <strong>Tell me when one starts here</strong> watches your area. Or start one: every community … (the rest unchanged) -->
+        <p>Saat ini Anda dapat melihat komunitas yang sudah berjalan di <a href="index.html#find-or-start">peta kami</a>, dan bergabung dengan undangan dari seorang anggota (bagian 3). Mengajukan permohonan untuk bergabung akan segera hadir saat komunitas global dibuka (bagian 1): di sana, <strong>Temukan komunitas Anda</strong> di Beranda menampilkan daftar komunitas terdekat dari Anda. Ketuk <strong>Minta bergabung</strong>, tulis beberapa kata tentang diri Anda, dan anggota mana pun dari komunitas tersebut dapat mengizinkan Anda masuk dengan satu ketukan, dan jika tidak ada jawaban dalam 30 hari Anda dapat mengajukannya lagi. Belum ada yang dekat dengan Anda? <strong>Beri tahu saya jika ada yang dimulai di sini</strong> memantau wilayah Anda. Atau mulai sendiri: setiap komunitas berjalan di server kecilnya sendiri, komputer cadangan yang selalu menyala atau server sewaan seharga beberapa dolar sebulan, yang dikelola oleh warga lokal. Layar <strong>Mulai komunitas</strong> di aplikasi memandu Anda melaluinya, dan langkah-langkahnya ada di beranda kami di bawah <a href="index.html#run-a-node">Jalankan BeanPool untuk komunitas Anda</a>.</p>
+        <p class="guide-links">Panduan: <a href="guide/finding-a-community.html">Menemukan komunitas di dekat Anda</a>.</p>
+
+        <h2 id="invite"><span class="num">3.</span>Punya undangan?</h2>
+        <p>Undangan berupa tautan, kode QR, atau kode yang diawali dengan <strong>INV-</strong> atau <strong>BP-</strong>. Berlaku satu kali dan aktif selama 30 hari. Pasang aplikasi, ketuk <strong>Gabung dengan undangan</strong> (di aplikasi web, <strong>Saya Baru di Sini</strong>), tempel tautan atau kode, dan pilih nama yang akan dilihat orang lain, hingga 20 karakter. Jika Anda hanya memiliki kode, ketik juga nama atau alamat komunitas; orang yang mengundang Anda dapat memberi tahunya.</p>
+        <p class="guide-links">Panduan: <a href="guide/joining.html">Bergabung dengan BeanPool</a>.</p>
+
+        <h2 id="words"><span class="num">4.</span>12 katamu</h2>
+        <p>Akun Anda adalah kunci yang disimpan di ponsel Anda, atau di peramban pada aplikasi web. Tidak ada kata sandi. Aplikasi menampilkan 12 kata pada <strong>Cadangan aman</strong>: catat dan simpan dengan aman, karena kata-kata inilah yang memulihkan akun Anda di ponsel baru (12 kata pemulihan ini tetap dalam bahasa Inggris). Pada aplikasi ponsel, dan di komunitas global, Anda dapat menambahkan akun masuk Google, Apple, atau Facebook sebagai cara kedua untuk masuk kembali. Salinan terkunci dari kunci Anda kemudian disimpan untuk akun masuk tersebut: aplikasi ponsel yang menggunakan brankas kunci BeanPool menyimpannya di sana, pada server kecil di Islandia; versi aplikasi ponsel yang lebih lama menyimpannya di server komunitas Anda; aplikasi web di komunitas global menyimpannya di server komunitas tersebut, yang kami jalankan. Siapa pun yang menyimpan salinan dapat membukanya, dan pemulihan dari brankas menunggu satu hari kecuali salah satu perangkat Anda sendiri mengonfirmasi bahwa itu Anda. Jika Anda ingin tidak ada seorang pun selain Anda yang dapat masuk, gunakan hanya 12 katamu.</p>
+        <p class="guide-links">Panduan: <a href="guide/your-12-words.html">12 katamu</a>.</p>
+
+        <h2 id="trade"><span class="num">5.</span>Transaksi pertama Anda</h2>
+        <p>Di komunitas lokal, pasang <strong>Penawaran</strong> terlebih dahulu: tumpangan ke kota, telur, satu jam berkebun. Sepakati harga dalam Kacang; Kacang ditahan hingga pekerjaan selesai, lalu diserahkan kepada penjual, dan Anda saling memberikan ulasan. Batas kredit Anda terbuka setelah transaksi pertama Anda selesai; batas ini mulai dari nilai kecil dan bertambah seiring Anda bertransaksi dengan lebih banyak orang. Penawaran yang tetap Anda pasang menentukan berapa banyak kredit yang dapat Anda gunakan: satu penawaran hingga 200 Kacang, lima hingga 2000 Kacang. Lencana (Pendatang Baru, Warga, Pengelola, Tetua) menunjukkan riwayat Anda; lencana ini tidak mengunci apa pun.</p>
+        <p class="guide-links">Panduan: <a href="guide/a-deal-step-by-step.html">Sebuah transaksi, langkah demi langkah</a>, <a href="guide/credit-line.html">Batas kredit Anda</a>, rincian angka di <a href="rules.html#4">Aturan</a>.</p>
+
+        <h2 id="6"><span class="num">6.</span>Bantuan</h2>
+        <p>Lebih suka menonton tutorial visual atau butuh bantuan untuk memulai dengan node Anda? Terhubunglah dengan komunitas BeanPool:</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1.25rem;">
+            <div class="feature-card feature-card-brand brand-youtube glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper youtube-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </div>
+                    <span class="brand-badge youtube-badge">▶ Panduan Video</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Tutorial YouTube</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Panduan singkat tentang cara bergabung, 12 katamu, dan transaksi.</p>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-youtube" style="margin-top: 0.5rem;">Tonton di YouTube →</a>
+            </div>
+            <div class="feature-card feature-card-brand brand-reddit glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper reddit-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </div>
+                    <span class="brand-badge reddit-badge">💬 r/beanpool</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">Diskusi Reddit</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Ikuti diskusi, ajukan pertanyaan, bagikan penawaran, dan terhubung dengan pengelola node lainnya.</p>
+                <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-reddit" style="margin-top: 0.5rem;">Gabung r/beanpool →</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Ikon BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Aplikasi gratis untuk bertransaksi dengan tetangga Anda, menggunakan Kacang.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Pusat Bantuan</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">How It Works</a>
+                    <a href="getting-started.html">Memulai</a>
+                    <a href="rules.html">The Rules</a>
+                    <a href="safety.html">Keselamatan Anak</a>
+                    <a href="privacy.html">Kebijakan Privasi</a>
+                    <a href="terms.html">Ketentuan Layanan</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Sumber terbuka di bawah lisensi MIT. Dibuat dengan <img src="bean.png" alt="cinta" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> oleh komunitas, untuk komunitas. Batas zona waktu © kontributor <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

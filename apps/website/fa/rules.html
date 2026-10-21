@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>قوانین — نحوه کارکرد BeanPool</title>
+    <meta name="description" content="قوانین ساده BeanPool: نحوه کارکرد موجودی‌ها، اعتبار، پیشنهادها، کارمزدها، فدراسیون کینزی، طرح‌های تجاری جامعه، و اداره و حاکمیت.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/rules">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/rules">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/rules">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/rules">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/rules">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/rules">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/rules">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/rules">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/rules">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/rules">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/rules">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/rules">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/rules">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/rules">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/rules">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/rules">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/rules">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/rules">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/rules">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/rules">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/rules">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/rules">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/rules">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/rules">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/rules">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/rules">
+</head>
+<body dir="rtl">
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="آیکون BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">نحوه کارکرد</a>
+                <a href="rules.html">قوانین</a>
+                <a href="index.html#features">ویژگی‌ها</a>
+                <a href="help.html">راهنما</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">آموزش‌ها</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="تماشای آموزش‌های ویدیویی در یوتیوب (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="پیوستن به جامعه ردیت (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="مشاهده در گیت‌هاب">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">شروع کار</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="باز کردن منو"><span aria-hidden="true">☰</span> منو</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">شروع کار</a>
+                    <a href="index.html#how-it-works">نحوه کارکرد</a>
+                    <a href="rules.html" aria-current="page">قوانین</a>
+                    <a href="index.html#features">ویژگی‌ها</a>
+                    <a href="help.html">راهنما</a>
+                    <a href="../guide/index.html">راهنمای اعضا</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">آموزش‌ها در یوتیوب</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool در ردیت</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">کد منبع در گیت‌هاب</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>قوانین — نحوه کارکرد BeanPool</h1>
+        <p class="lede">BeanPool یک سامانه مبادله جامعه‌محور است که در آن همه از صفر شروع می‌کنند. شما با کمک به دیگران لوبیا به دست می‌آورید و وقتی دیگران به شما کمک می‌کنند آن را خرج می‌کنید. هیچ پولی ردوبدل نمی‌شود و واسطه‌های شرکتی وجود ندارند — تنها همین قوانین ساده حاکم هستند.</p>
+
+        <div class="callout amber">به‌طور خلاصه: <strong>با انجام معامله خط اعتباری خود را کسب کنید، یک یا دو پیشنهاد فعال نگه دارید تا از آن استفاده کنید، و بگذارید لوبیاها به گردش درآیند.</strong> هدف رسیدن به صفر است — تقریباً به همان اندازه‌ای که می‌گیرید، ببخشید.</div>
+
+        <h2 id="1"><span class="num">۱.</span>لوبیا و موجودی شما</h2>
+        <p>لوبیا ارزش داده‌شده و دریافت‌شده را می‌سنجد (تقریباً معادل زمان). <strong style="color:var(--text-primary)">هدف رسیدن به صفر است</strong> — به این معنا که تقریباً به همان اندازه‌ای که گرفته‌اید، بخشیده‌اید.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">موجودی مثبت</strong> — شما بیشتر از آنچه گرفته‌اید، بخشیده‌اید. جامعه به شما بدهکار است.</li>
+            <li><strong style="color:var(--text-primary)">موجودی منفی</strong> — جامعه به شما اعتبار داده است. شما با بخشیدن و کمک کردن، آن را جبران می‌کنید.</li>
+            <li>در بیشتر جامعه‌ها، عمیق‌ترین مقداری که هر شخص می‌تواند منفی شود <strong>−۲۰۰۰ لوبیا</strong> است. جامعه‌ای که هویت اعضای خود را با نام واقعی تأیید می‌کند می‌تواند سقف خود را تا −۵۰۰۰ تنظیم کند و به اعضای تأییدشده یک خط اعتباری اولیه بدهد.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">۲.</span>شروع کار</h2>
+        <p>شما با دعوت‌نامه ملحق می‌شوید. از روز اول می‌توانید موارد را مرور کرده و لوبیا دریافت کنید. هنگامی که لوبیا داشته باشید (از طریق کسب کردن یا دریافت هدیه)، می‌توانید آن را خرج کنید. برای خرج کردن با اعتبار، باید حداقل یک <strong style="color:var(--text-primary)">پیشنهاد</strong> ارسال کنید (به بخش ۴ و ۵ مراجعه کنید). اعضای جدید با <strong style="color:var(--text-primary)">بدون خط اعتباری</strong> شروع می‌کنند — شما فقط می‌توانید لوبیایی را که واقعاً دارید خرج کنید تا زمانی که خط اعتباری شما با اولین معامله تکمیل‌شده فعال شود (یا اگر ضامن یا مدیری به شما خط اعتباری اولیه اعطا کند — به بخش ۳ و ۹ مراجعه کنید).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">۳.</span>خط اعتباری با معامله کردن کسب می‌شود</h2>
+        <p>خط اعتباری شما اجازه می‌دهد کمی به موجودی منفی بروید — یعنی پیش از جبران، هزینه کنید. این اعتبار <strong style="color:var(--text-primary)">کسب می‌شود، اعطا نمی‌شود</strong>:</p>
+        <ul>
+            <li>اعتماد از <strong style="color:var(--text-primary)">معاملات تکمیل‌شده در بازار</strong> حاصل می‌شود — هرگز از هدایا ناشی نمی‌شود. در ابتدا به آرامی رشد می‌کند: یک معامله ۱۰۰ لوبیایی حدود ۳۷ لوبیا خط اعتباری ایجاد می‌کند. مدیر سیستم یا یک ضامن منصوب‌شده نیز می‌تواند به فردی خط اعتباری اولیه بدهد؛ اعطای مدیر به‌عنوان نشان او نمایش داده می‌شود.</li>
+            <li>معامله با <strong style="color:var(--text-primary)">افراد گوناگون</strong> اعتماد را بسیار سریع‌تر از معاملات مکرر با یک نفر ایجاد می‌کند.</li>
+            <li>اعتماد شما <em>سقف</em> اعتبار شما را تعیین می‌کند — کف اعتباری شما چقدر می‌تواند عمیق شود، از ۰ تا −۲۰۰۰ در بیشتر جامعه‌ها (به بخش ۱ مراجعه کنید).</li>
+            <li>کف اعتباری شما پس از <strong style="color:var(--text-primary)">اولین معامله واقعی</strong> باز می‌شود و با هر معامله پس از آن رشد می‌کند (یا ضامن جامعه می‌تواند کف اعتباری اولیه‌ای به شما بدهد — به بخش ۹ مراجعه کنید). هیچ ضمانتی الزامی نیست.</li>
+        </ul>
+        <div class="callout">سطوح اعتماد — <strong>تازه‌وارد ← ساکن ← پیشکار ← ریش‌سفید</strong> — نشان‌های شناسایی هستند. نشان‌هایی که کسب می‌کنید به‌خودی‌خود چیزی را باز نمی‌کنند؛ خط اعتباری عمیق‌تر از معامله واقعی حاصل می‌شود. مدیر سیستم همچنین می‌تواند به فردی نشان اعطا کند، و همراه با آن خط اعتباری آغازین آن نشان را در اختیارش قرار دهد.</div>
+
+        <h2 id="4"><span class="num">۴.</span>عمل متقابل: برای استفاده از اعتبار، باید پیشنهادهای فعال داشته باشید</h2>
+        <p>کسب اعتماد، <strong style="color:var(--text-primary)">سقف</strong> اعتباری شما را مشخص می‌کند (پتانسیل منفی شدن شما چقدر است). اما برای <strong style="color:var(--text-primary)">برداشت واقعی</strong> از آن اعتبار، باید پیشنهادهای فعال ارسال کرده باشید. این امر تضمین می‌کند هر کسی که بدهی دارد، فعالانه به جامعه نشان می‌دهد که چگونه می‌خواهد مشارکت کند.</p>
+        
+        <p>تعداد پیشنهادهای فعالی که ثبت می‌کنید تعیین می‌کند چه مقدار از اعتبار <strong style="color:var(--text-primary)">در دسترس</strong> قرار می‌گیرد:</p>
+        <table>
+            <thead><tr><th>پیشنهادهای فعال</th><th>خط اعتباری در دسترس</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>۰ — فقط خرج کردن لوبیای موجود</td></tr>
+                <tr><td class="num-col">1</td><td>تا −۲۰۰ لوبیا</td></tr>
+                <tr><td class="num-col">2</td><td>تا −۵۰۰ لوبیا</td></tr>
+                <tr><td class="num-col">3</td><td>تا −۱۰۰۰ لوبیا</td></tr>
+                <tr><td class="num-col">4</td><td>تا −۱۵۰۰ لوبیا</td></tr>
+                <tr><td class="num-col">5</td><td>تا −۲۰۰۰ لوبیا <em>(سقف معمول)</em></td></tr>
+            </tbody>
+        </table>
+        <p>سقف هزینه واقعی شما مقدار <strong style="color:var(--text-primary)">کمتر</strong> بین آنچه به دست آورده‌اید و آنچه پیشنهادهای فعال شما در دسترس قرار می‌دهند است.</p>
+        <p><em>به عنوان مثال: اگر از طریق معاملات سقف اعتباری −۶۰۰ کسب کرده باشید، داشتن ۲ پیشنهاد فعال −۵۰۰ از آن را در دسترس قرار می‌دهد. داشتن پیشنهاد سوم کل سقف −۶۰۰ شما را در اختیارتان می‌گذارد (شما هرگز به پیشنهاد چهارم یا پنجم نیازی ندارید زیرا سقف کسب‌شده شما پیش‌تر پر شده است).</em></p>
+        <div class="callout">
+            <strong>توقف هزینه (انجماد):</strong><br>
+            اگر تعداد پیشنهادهای فعال شما از مقدار لازم برای بدهی فعلی‌تان کمتر شود (مثلاً اگر یکی از پیشنهادهایتان فروخته و تکمیل شود، یا یکی را متوقف کنید)، <strong>امکان هزینه کردن اعتباری شما متوقف می‌شود</strong>. این یک شبکه ایمنی است، نه مجازات: چیزی از شما کسر نمی‌شود. همچنان می‌توانید لوبیا دریافت کنید، به فروش ادامه دهید و صفحات را مرور نمایید. به محض اینکه موجودی شما دوباره در محدوده پوشش پیشنهادهای فعال قرار گیرد، خط اعتباری شما خودبه‌خود از توقف خارج می‌شود: پیشنهاد دیگری ارسال کنید، یا لوبیا دریافت نمایید.
+        </div>
+
+        <h2 id="5"><span class="num">۵.</span>پیشنهادها (آگهی‌های شما)</h2>
+        <ul>
+            <li>هر تعداد پیشنهاد که مایلید داشته باشید — از جمله موارد تکرارشونده — و وضعیت هرکدام را هر زمان خواستید بین <strong style="color:var(--text-primary)">فعال یا متوقف‌شده</strong> تغییر دهید. تنها پیشنهادهای <em>فعال</em> در خط اعتباری شما به حساب می‌آیند.</li>
+            <li><strong style="color:var(--text-primary)">ابتدا ببخشید، سپس بگیرید:</strong> در جامعه‌ای دارای لوبیا، پیش از ثبت نیاز یا خرید از دیگران، باید حداقل یک پیشنهاد ثبت کرده باشید. جایی که لوبیایی وجود ندارد، مانند جامعه جهانی، اولین پست شما می‌تواند یک نیاز باشد.</li>
+            <li>موجودی مثبت دارید؟ اگر مایلید همه چیز را متوقف کنید — پیشنهادها فقط برای ورود به موجودی منفی الزامی هستند.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">۶.</span>کارمزدها و صندوق جامعه</h2>
+        <p>دو هزینه ناچیز وجود دارد که هر دو به <strong style="color:var(--text-primary)">مشاع جامعه</strong> واریز می‌شوند — صندوق مشترکی که جامعه شما برای خرج کردن آن در پروژه‌های محلی رأی می‌دهد. هیچ چیزی نصیب شرکت‌ها نمی‌شود.</p>
+        <p><strong style="color:var(--text-primary)">الف) کارمزد بازار — ۱.۵٪ برای معاملات تکمیل‌شده.</strong> هنگام تسویه معامله در بازار، دریافتی فروشنده ۱.۵٪ کمتر از قیمت است و تفاوت به صندوق مشاع می‌رود. <strong style="color:var(--text-primary)">هدایا (ارسال مستقیم میان اعضا) رایگان هستند</strong> — درست مانند بازپرداخت‌ها و انتقالات سیستمی.</p>
+        <p><strong style="color:var(--text-primary)">ب) کارمزد گردش برای موجودی‌های مثبت — ماهانه، و تنها برای بخش بالای ۲۰۰.</strong> مانند سطوح مالیات تصاعدی، هر طبقه فقط مشمول بخشی از موجودی شما می‌شود که در آن محدوده قرار دارد:</p>
+        <table>
+            <thead><tr><th>محدوده موجودی</th><th>نرخ گردش ماهانه</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">رایگان</span> منطقه سبز</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
+            </tbody>
+        </table>
+        <p>این قانون به آرامی لوبیاها را به <strong style="color:var(--text-primary)">گردش به جای انباشته شدن</strong> تشویق می‌کند. <strong style="color:var(--text-primary)">موجودی‌های منفی هرگز مشمول کارمزد گردش نمی‌شوند</strong> — شما پیش از این هم بار اعتبار جامعه را به دوش می‌کشید. توجه داشته باشید که منطقه رایگان ۲۰۰+ قرینه طبقه اعتباری اول در ۲۰۰− است، بنابراین سیستم حول صفر متقارن است.</p>
+
+        <h2 id="7"><span class="num">۷.</span>هدایا (ارسال لوبیا)</h2>
+        <ul>
+            <li>شما <strong style="color:var(--text-primary)">فقط لوبیایی را که واقعاً دارید می‌توانید هدیه دهید</strong> — یک هدیه هرگز موجودی را منفی نمی‌کند و هرگز از خط اعتباری شما استفاده نمی‌نماید.</li>
+            <li>پس از تکمیل حداقل یک معامله واقعی می‌توانید هدیه ارسال کنید (این کار مانع از آن می‌شود که حساب‌های کاملاً تازه بلافاصله لوبیاها را منتقل کنند و ناپدید شوند).</li>
+            <li>هدایا اعتمادی برای دریافت‌کننده ایجاد نمی‌کنند و <strong style="color:var(--text-primary)">رایگان</strong> هستند — بدون کارمزد (شما فقط لوبیایی را که از قبل دارید می‌توانید هدیه دهید).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">۸.</span>نحوه تسویه معاملات</h2>
+        <p>معاملات بازار تا زمان اتمام کار به‌صورت امن در <strong style="color:var(--text-primary)">امانت</strong> (نگهداری امانی توسط سیستم) می‌مانند و سپس برای فروشنده آزاد می‌شوند (با کسر کارمزد ۱.۵٪). اگر معامله‌ای لغو شود، کل وجه خریدار بازپرداخت می‌شود.</p>
+
+        <h2 id="9"><span class="num">۹.</span>ضمانت (یک شروع اولیه اختیاری)</h2>
+        <p>یک <strong style="color:var(--text-primary)">ضامن</strong> معتمد و منصوب‌شده توسط جامعه می‌تواند به یک تازه‌وارد <strong style="color:var(--text-primary)">کف اعتباری اولیه ۲۵، ۵۰ یا ۱۰۰ لوبیا</strong> بدهد تا بتواند پیش از کسب اعتبار، شروع به استفاده از آن کند. این اعتبار معمولاً — کاملاً بنا به صلاحدید ضامن — به افرادی اعطا می‌شود که پست‌ها و مشارکت‌های آن‌ها از نظر ضامن حقیقتاً الهام‌بخش و جذاب باشد. در هر صورت اختیاری است: هیچ‌کس برای مشارکت نیازی به ضمانت ندارد، زیرا شما صرفاً با انجام معامله نیز خط اعتباری خود را باز می‌کنید (بخش ۳).</p>
+
+        <h2 id="10"><span class="num">۱۰.</span>تسویه فدرال بین‌جامعه‌ای</h2>
+        <p>جامعه‌ها نیازی به فعالیت در انزوا ندارند. از طریق <strong style="color:var(--text-primary)">اتصال‌دهنده‌های تجاری فدرال</strong> (الهام‌گرفته از اتحادیه تسویه کینز)، نودهای مستقل جامعه می‌توانند معاملات را با یک نود همسایه به‌صورت همتا‌به‌همتا، بدون ارز فیات یا ذخایر بانکی تسویه کنند. لوبیاها هرگز جامعه بومی خود را ترک نمی‌کنند — هر جفت نود یک دفتر کل رابط از آنچه بر حسب کار به یکدیگر بدهکارند نگه می‌دارد، و هر طرف سقف مشخصی برای میزان آن تعیین می‌کند. تسویه میان جفت‌های جامعه انجام می‌شود، هر گرداننده آن را آگاهانه فعال می‌کند، و هنوز در مراحل اولیه است: همراه با صفحات آن در برنامه تحت وب ساخته شده است، و فقط میان دو جامعه آزمایشی خودمان امتحان شده است، نه میان جامعه‌های فعال واقعی.</p>
+
+        <h2 id="11"><span class="num">۱۱.</span>هویت رمزنگاری‌شده و حفاظت از کلید</h2>
+        <p>حساب شما با یک جفت‌کلید رمزنگاری‌شده Ed25519 که روی دستگاه شما ساخته می‌شود، محافظت می‌گردد. BeanPool نگهداری انعطاف‌پذیری متناسب با نیازهای شما ارائه می‌دهد:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">حاکمیت کامل فردی:</strong> در برنامه‌های گوشی، کلید خصوصی شما در حافظه امن دستگاه (iOS Keychain / Android Keystore) نگهداری می‌شود؛ در برنامه تحت وب در حافظه خود مرورگر نگهداری می‌شود. کلید تنها به‌صورت یک نسخه قفل‌شده برای بازیابی از طریق ورود به سیستم، یا هنگام کپی کردن حسابتان به دستگاه دیگر خودتان از دستگاه خارج می‌شود. نسخه پشتیبان ۱۲ کلمه‌ای خود را به‌صورت آفلاین نگه دارید.</li>
+            <li><strong style="color:var(--text-primary)">بازیابی:</strong> عبارت ۱۲ کلمه‌ای شما حسابتان را روی هر دستگاهی بازمی‌گرداند. همچنین می‌توانید ورود با Google، Apple یا Facebook را متصل کنید. در این صورت، یک نسخه قفل‌شده از کلید شما برای آن نگهداری می‌شود: برنامه‌های گوشی که از خزن کلید BeanPool استفاده می‌کنند آن را در آنجا نگه می‌دارند، روی یک سرور کوچک در ایسلند؛ نسخه‌های قدیمی‌تر برنامه گوشی آن را روی نود جامعه شما نگه می‌دارند؛ برنامه تحت وب در جامعه جهانی آن را روی سرور همان جامعه که ما اداره می‌کنیم نگه می‌دارد. هر کس نسخه را نگه دارد می‌تواند آن را باز کند. بازیابی از خزن ۲۴ ساعت منتظر می‌ماند مگر اینکه یکی از دستگاه‌های خودتان آن را تأیید کند. اگر دستگاه، ۱۲ کلمه و ورود خود را گم کنید، مدیر سیستم جامعه شما می‌تواند با یک کد یک‌بارمصرف و در حضور خودتان حسابتان را به یک گوشی جدید منتقل کند؛ سوابق شما حفظ می‌شود. بنابراین کلمات را یادداشت کنید.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">۱۲.</span>سقف‌ها و امنیت</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">سقف کف اعتباری −۲۰۰۰</strong> در بیشتر جامعه‌ها (به بخش ۱ مراجعه کنید). هیچ سقف روزانه‌ای برای تعداد لوبیایی که خرج می‌کنید وجود ندارد — کف اعتباری شما مرز آن است. برای دفعات انجام، محدودیتی وجود دارد: ۱۰۰ پرداخت، ۳۰ نفر که هرگز به آن‌ها پرداخت نداشته‌اید و ۱۰۰ درخواست بازار در هر ۲۴ ساعت.</li>
+            <li>اعتماد با هر شریک تجاری منفرد دارای سقف است، بنابراین هیچ‌کس نمی‌تواند با دادوستد متقابل مکرر با یک همدست، جایگاه خود را بالا ببرد.</li>
+            <li><strong style="color:var(--text-primary)">حالت تعطیلات</strong> پیشنهادهای شما را پنهان می‌کند و درخواست‌های ورودی را در زمان غیبت شما متوقف می‌سازد.</li>
+            <li>اعضا می‌توانند بازیگران مخرب را گزارش و نشانه‌گذاری کنند؛ مدیران سیستم جامعه می‌توانند آن‌ها را حذف نمایند.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">۱۳.</span>طرح‌های تجاری جامعه و اداره امور</h2>
+        <p>طرح‌های تجاری جامعه (مانند کتابخانه ابزار جامعه، گله تخم‌گذار، یا انبار هیزم) و پروژه‌های محدود، طرح‌های مشترکی تحت مباشرت جمعی هستند. آن‌ها تحت قوانینی شفاف و الزام‌آور در کد فعالیت می‌کنند (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">مدل حاکمیت مشاع</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">یک شیء، دو چرخه حیات (بخش ۲.۱):</strong> یک طرح تجاری مداوم ادامه می‌یابد و معامله می‌کند؛ یک طرح تجاری محدود (پروژه) دارای یک هدف و تاریخ پایان است و پس از اتمام، حساب خود را تصفیه کرده و آنچه باقی مانده را به مشاع بازمی‌گرداند.</li>
+            <li><strong style="color:var(--text-primary)">کف‌های اعتباری کسب‌شده و تعهدات مدیران (قوانین ۱–۳):</strong> یک طرح تجاری جدید بدون اضافه‌برداشت غیرکسب‌شده شروع می‌شود: کف اعتباری آن با تعهدات صریح از اعتبار و جایگاه تجاری کسب‌شده مدیرانش پشتیبانی می‌شود (مجموع مستقیم، بدون ضریب مصنوعی). تعهد پشتیبانی هرگز به کف اعتباری خانگی شخصی مدیر دست نمی‌زند و آن را کاهش نمی‌دهد. طرح‌های تجاری قدیمی‌تر همان کف اعتباری اولیه‌ای را که پیش از تعهدات داشتند حفظ می‌کنند.</li>
+            <li><strong style="color:var(--text-primary)">مسئولیت محدود (قانون ۴):</strong> طرح تجاری ورشکست می‌شود، نه خانواده مدیر. اگر یک طرح تجاری نکول کند، هزینه‌کرد آن منجمد می‌شود، اما کف‌های اعتباری شخصی مدیرانش حفظ می‌گردد.</li>
+            <li><strong style="color:var(--text-primary)">اعتبار ورودی‌ها را می‌خرد، سود دستمزد افراد را می‌دهد (قانون ۵):</strong> یک طرح تجاری ممکن است برای خرید ملزومات یا خدمات از همسایگان خارجی، تا کف قابل استفاده خود از اعتبار برداشت کند. <em>هرگز</em> نمی‌تواند از اعتبار برای پرداخت به مدیران خود برداشت کند — پرداخت به مدیران فقط زمانی امکان‌پذیر است که <code>balance − amount ≥ 0</code> باشد.</li>
+            <li><strong style="color:var(--text-primary)">دستمزد مدیر با مازاد کسب‌شده محدود می‌شود (قانون ۶):</strong> پرداخت‌ها به مدیران به شدت با مازاد تجاری واقعی (درآمد فروش منهای پرداخت‌های مدیران) محدود می‌شود. کمک‌های بلاعوض، تعهدات و هدایا هرگز نمی‌توانند به دستمزد مدیر تبدیل شوند.</li>
+            <li><strong style="color:var(--text-primary)">انتقال خودکار سرمایه در گردش (قانون ۷):</strong> یک طرح تجاری می‌تواند سقفی برای سرمایه در گردش تعیین کند. مازاد کسب‌شده بالاتر از آن، برای جلوگیری از احتکار، به طور خودکار به صندوق مشاع جامعه بازگردانده می‌شود. کمک‌های بلاعوض و هدایا هرگز منتقل نمی‌شوند.</li>
+            <li><strong style="color:var(--text-primary)">قانون تأیید دومرحله‌ای (دونفره):</strong> مدیران نمی‌توانند پرداخت‌های مربوط به خود یا پیشنهادهای شخصی خود را برای نیازهای طرح تجاری تأیید کنند — مدیر دیگری باید آن را تأیید کند.</li>
+            <li><strong style="color:var(--text-primary)">نظرسنجی‌ها در برابر تصمیمات (بخش ۳):</strong> سؤالات غیررسمی همان <em>نظرسنجی‌ها</em> در فید بازار هستند: هر نفر یک رأی، شمرده می‌شود، و تعهدی ایجاد نمی‌کند. حاکمیت الزام‌آور (کمک‌های مالی صندوق، بخشش بدهی، تغییر نقش‌ها، و تعلیق، انجماد یا حذف یک عضو) از طریق <em>تصمیمات</em> در برگه مشاع با بازه رأی‌گیری ۷ روزه انجام می‌شود. یک تصمیم با ۶۰٪ آرا تصویب می‌شود (۶۶٪ برای حذف یک عضو؛ بیش از نصف برای رفع تعلیق یا انجماد، یا بازگرداندن یک عضو) مشروط بر اینکه تعداد کافی از اعضا رأی داده باشند: ۳۰٪ از افرادی که در ۳۰ روز گذشته فعال بوده‌اند، حداقل ۳ نفر (۲۵٪ برای حذف یک عضو). سپس خودبه‌خود اجرا می‌شود. کمک‌های مالی صندوق از رأی‌گیری درجه دوم بر پایه جایگاه تجاری کسب‌شده استفاده می‌کند — لوبیاهای جاری نمی‌توانند رأی بخرند.</li>
+            <li><strong style="color:var(--text-primary)">واژگان مصوب (بخش ۹):</strong> چهار سطح، چهار واژه متمایز: نود → <em>مالک / مدیر سیستم</em> · طرح تجاری → <em>مدیر ارشد / مدیر</em> · گروه → <em>هماهنگ‌کننده</em> · رتبه اعتماد → <em>پیشکار</em>.</li>
+        </ul>
+        <div class="callout amber">به‌طور خلاصه: <strong>با انجام معامله خط اعتباری خود را کسب کنید، یک یا دو پیشنهاد فعال نگه دارید تا از آن استفاده کنید، و بگذارید لوبیاها به گردش درآیند.</strong> هدف رسیدن به صفر است — تقریباً به همان اندازه‌ای که می‌گیرید، ببخشید.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="آیکون BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>اعتبار متقابل برای جامعه‌ها، اداره‌شده توسط جامعه‌ها.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">مرکز راهنما</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">نحوه کارکرد</a>
+                    <a href="getting-started.html">شروع کار</a>
+                    <a href="rules.html">قوانین</a>
+                    <a href="safety.html">ایمنی کودکان</a>
+                    <a href="../privacy.html">سیاست حفظ حریم خصوصی</a>
+                    <a href="../terms.html">شرایط خدمات</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../rules.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/rules.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/rules.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/rules.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/rules.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/rules.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/rules.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/rules.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/rules.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/rules.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/rules.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/rules.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/rules.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/rules.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/rules.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/rules.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/rules.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/rules.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/rules.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="rules.html" hreflang="fa" lang="fa" aria-current="page">فارسی</a>
+                    <a href="../vi/rules.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/rules.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/rules.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/rules.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/rules.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>متن‌باز تحت مجوز MIT. ساخته شده با <img src="../bean.png" alt="عشق" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> توسط جامعه‌ها، برای جامعه‌ها. مرزهای منطقه زمانی © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">مشارکت‌کنندگان OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

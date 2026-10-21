@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool — समुदायों के लिए विनिमय, व्यावसायिक बैंकों के लिए नहीं</title>
+    <meta name="description" content="BeanPool एक मुफ़्त ऐप है जिसे कोई समुदाय अपने लिए पैसे के बजाय फलियों में मदद, सामान और कौशल का व्यापार करने के लिए चलाता है। अपने आस-पास कोई समुदाय ढूँढें या शुरू करें, या किसी आमंत्रण से जुड़ें; वैश्विक समुदाय जल्द ही सभी के लिए खुल रहा है। iPhone, Android और वेब।">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../style.css?v=2.8">
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="#" class="logo"><img src="../bean.png" alt="BeanPool आइकन" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="#how-it-works">यह कैसे काम करता है</a>
+                <a href="#features">आप क्या कर सकते हैं</a>
+                <a href="rules.html">नियम</a>
+                <a href="#run-a-node">समुदाय चलाएं</a>
+                <a href="help.html" title="प्रत्येक नियम, गाइड और मैनुअल एक ही जगह पर">मदद</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube पर वीडियो ट्यूटोरियल देखें (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit समुदाय से जुड़ें (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub पर देखें">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">शुरुआत करें</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="मेनू खोलें"><span aria-hidden="true">☰</span> मेनू</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">शुरुआत करें</a>
+                    <a href="#how-it-works">यह कैसे काम करता है</a>
+                    <a href="#features">आप क्या कर सकते हैं</a>
+                    <a href="rules.html">नियम</a>
+                    <a href="#run-a-node">समुदाय चलाएं</a>
+                    <a href="help.html">मदद</a>
+                    <a href="../guide/index.html">सदस्यों की मार्गदर्शिका</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube पर वीडियो</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit पर r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub पर सोर्स कोड</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+            <div class="hero-header">
+                <div class="hero-badge">फ़ोन और वेब पर मुफ़्त</div>
+                <h1><span class="gradient-text">समुदायों</span> के लिए विनिमय,<br>व्यावसायिक बैंकों के लिए नहीं</h1>
+                <p class="hero-subtitle">BeanPool एक मुफ़्त ऐप है जिसका उपयोग आपका समुदाय आपस में मदद, सामान और कौशल का आदान-प्रदान करने के लिए करता है। पैसे के बजाय, आप फलियों का उपयोग करते हैं: किसी की मदद करें और फलियाँ आपके पास आएँगी; मदद लें और वे दूसरी तरफ जाएँगी। शून्य ही लक्ष्य है &mdash; जितना लें, लगभग उतना ही दें।</p>
+            </div>
+
+            <div class="hero-lower-grid">
+                <!-- Left: what BeanPool is not -->
+                <div class="not-card glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">🚫 निष्कर्षण-विरोधी घोषणापत्र</span>
+                        <h3>BeanPool क्या <span class="text-rose">नहीं है</span></h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>कोई विज्ञापन परोसने वाली मशीन नहीं</strong>
+                                <p>कोई ट्रैकिंग नहीं, कोई डेटा इकट्ठा करना नहीं, और न ही जल्दी अमीर बनाने वाले गुरुओं के एल्गोरिदम।</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>कोई सट्टा लगाने वाला क्रिप्टो टोकन नहीं</strong>
+                                <p>फलियाँ वास्तविक व्यापार के लिए आपसी साख हैं — एक्सचेंजों पर कभी कृत्रिम रूप से नहीं बढ़ाई जातीं।</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>ध्यान खींचने वाली स्लॉट मशीन नहीं</strong>
+                                <p>डोपामाइन में उलझाने वाली अंतहीन स्क्रॉलिंग नहीं — केवल वास्तविक स्थानीय ऑफ़र और पड़ोसी।</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>कॉर्पोरेट कर्ज़ या शोषण नहीं</strong>
+                                <p>कोई ब्याज नहीं, कोई बैंक नहीं, कोई बिचौलिए नहीं। एकमात्र शुल्क बहुत छोटा है और वह आपके समुदाय के अपने साझा पूल में जाता है, हमें कभी नहीं।</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>कोई क्रिप्टो ऐप नहीं</strong>
+                                <p>कोई ब्लॉकचेन नहीं, कोई सिक्के नहीं, खरीदने के लिए कोई वॉलेट नहीं। आपके 12 शब्द बस आपके अपने खाते को खोलते हैं।</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <div class="hero-cta-card glass-panel">
+                    <div class="hero-cta-header">
+                        <span class="hero-cta-tag">शामिल होने के तीन रास्ते</span>
+                        <h3>जहाँ हैं वहीं से शुरू करें</h3>
+                    </div>
+
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">दुनिया भर में, अभी आज़माएँ</a>
+                            <p>वैश्विक समुदाय जल्द ही बिना किसी आमंत्रण के सभी के लिए खुल रहा है: चारों ओर देखें, कुछ मुफ़्त या अदला-बदली के लिए पोस्ट करें, और अपने पास एक समुदाय ढूँढें। आज यह एक निजी पूर्वावलोकन है। जब तक यह नहीं खुलता, नीचे पहले से चल रहे समुदायों को देखें, एक नया शुरू करें, या किसी सदस्य द्वारा दिए गए आमंत्रण का उपयोग करें।</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">समुदाय ढूँढें या शुरू करें</a>
+                            <p>पहले से चल रहे समुदायों को देखें, या किसी खाली कंप्यूटर या छोटे किराए के सर्वर पर एक शुरू करें। अपने आस-पास के किसी समुदाय से शामिल करने का अनुरोध करने की सुविधा जल्द ही आएगी, जब वैश्विक समुदाय खुलेगा।</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">क्या आपके पास आमंत्रण है?</a>
+                            <p>ऐप इंस्टॉल करें और किसी सदस्य द्वारा दिए गए लिंक को खोलें या क्यूआर कोड को स्कैन करें; एक आमंत्रण एक बार काम करता है और 30 दिनों तक वैध रहता है।</p>
+                        </div>
+                    </div>
+                    <p class="hero-web-note">फलियाँ स्थानीय समुदायों में रहती हैं, प्रत्येक अपने स्वयं के सर्वर पर। वैश्विक समुदाय आपको इसका परिचय कराता है और किसी समुदाय तक ले जाता है। यह आपको एक उदाहरण समुदाय के साथ दिखाता है कि वहाँ फलियाँ कैसे काम करती हैं।</p>
+
+                    <div class="hero-logos-group">
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="App Store पर डाउनलोड करें">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Download on the</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                         <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                         <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Google Play पर पाएँ">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">GET IT ON</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
+                        <p class="hero-web-note">ऐप स्टोर नहीं है? वैश्विक समुदाय और आपका अपना समुदाय दोनों आपके फ़ोन के ब्राउज़र में खुलते हैं; उन्हें अपनी होम स्क्रीन पर जोड़ें।</p>
+                    </div>
+                    <!-- Where to find us: small round links, same destinations as the menu -->
+                    <div class="hero-social-row">
+                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" aria-label="YouTube पर BeanPool" title="YouTube पर BeanPool">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--youtube)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        </a>
+                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" aria-label="Reddit पर BeanPool" title="Reddit पर BeanPool">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--reddit)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                        </a>
+                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" aria-label="GitHub पर BeanPool सोर्स कोड" title="GitHub पर BeanPool सोर्स कोड">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hero Principles / Trust Banner -->
+            <div class="hero-principles-banner">
+                <div class="principle-item">
+                    <span class="principle-text">100% मुफ़्त</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">कोई इन-ऐप खरीदारी नहीं</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">ओपन सोर्स</span>
+                </div>
+            </div>
+
+            <!-- How Beans move, below the two cards -->
+            <div class="hero-example-row">
+                <div class="not-card hero-example glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">फलियाँ कैसे चलती हैं</span>
+                        <h3>तीन पड़ोसी, एक सप्ताह</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">1</div>
+                            <div class="not-item-content">
+                                <strong>सैम एना की साइकिल ठीक करता है &mdash; 30 फलियाँ</strong>
+                                <p>सैम +30 पर पहुँचता है। एना −30 पर जाती है।</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">2</div>
+                            <div class="not-item-content">
+                                <strong>एना ली के लिए रोटी बनाती है &mdash; 30 फलियाँ</strong>
+                                <p>एना वापस 0 पर आ जाती है। ली अब −30 पर है।</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">3</div>
+                            <div class="not-item-content">
+                                <strong>ली सैम के कुत्ते की देखभाल करता है &mdash; 30 फलियाँ</strong>
+                                <p>हर कोई वापस शून्य के करीब आ गया, और बिना पैसे खर्च किए तीन काम पूरे हो गए।</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="hero-example-note">विक्रेता प्रत्येक कीमत का 98.5% रखता है; अन्य 1.5% समुदाय के साझा पूल में जाता है, इसलिए वास्तविक संख्याएँ इनसे थोड़ी कम रहती हैं।</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>BeanPool क्या है</h2>
+            </div>
+            <p class="what-it-is-lead">एक समुदाय अपने छोटे सर्वर पर BeanPool चलाता है। सदस्य पोस्ट करते हैं कि वे क्या दे सकते हैं और उन्हें क्या चाहिए, और फलियों में व्यापार करते हैं। एक बीन ऐसा पैसा नहीं है जिसे आप खरीदते हैं: यह एक रिकॉर्ड है कि किसी ने किसी की मदद की। हर कोई शून्य से शुरू करता है। जब आप मदद करते हैं, तो आपका बैलेंस बढ़ता है; जब आपकी मदद की जाती है, तो यह घटता है; पूरे समुदाय में बैलेंस का योग हमेशा शून्य रहता है। कोई भी फलियाँ जारी नहीं करता, कोई भी उन्हें ब्याज पर उधार नहीं देता, और कोई भी उन्हें भुना नहीं सकता। प्रत्येक व्यापार पर एक छोटा सा शुल्क समुदाय के अपने पूल में जाता है, जिसे इसके सदस्य वोट द्वारा खर्च करते हैं। ऐप मुफ़्त और ओपन सोर्स है; समुदाय अपना सर्वर खुद चुनता है, और उस पर मौजूद डेटा उसी का होता है।</p>
+            <ul class="what-it-is-not">
+                <li><strong>क्रिप्टोकरेंसी नहीं।</strong> कोई ब्लॉकचेन नहीं, कोई टोकन नहीं, खरीदने या बेचने के लिए कुछ भी नहीं। आपके 12 शब्द केवल आपके अपने खाते को खोलते हैं।</li>
+                <li><strong>बैंक नहीं।</strong> साख आपके अपने व्यापार से आती है, बिना किसी ब्याज के: आपका पहला व्यापार पूरा होने के बाद आपकी साख सीमा थोड़ी खुलती है और जैसे-जैसे आप व्यापार करते हैं, बढ़ती जाती है।</li>
+                <li><strong>बीच में कोई कंपनी नहीं।</strong> BeanPool किसी व्यापार से कुछ नहीं लेता, और कोई विज्ञापन नहीं दिखाता।</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">आपसी साख (म्यूचुअल क्रेडिट) पुरानी प्रणाली है: LETS समूहों ने इसे दशकों तक कागज़ पर चलाया, और स्विट्ज़रलैंड में व्यवसायों का एक समूह, WIR, 1934 से अपनी साख में व्यापार कर रहा है। कागज़ी काम ही था जिसने उनमें से अधिकांश को थका दिया। BeanPool वही कागज़ी काम है, जो ऐप द्वारा किया जाता है।</p>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2>यह कैसे काम करता है</h2>
+                <p>पहली स्क्रीन से लेकर आपके पहले व्यापार तक।</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
+                    <div class="step-number" aria-hidden="true">01</div>
+                    <div>
+                        <h3>1. तीन रास्तों में से किसी एक से आएँ</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>किसी सदस्य द्वारा आपको भेजा गया आमंत्रण खोलें; जल्द ही आप बिना किसी आमंत्रण के वैश्विक समुदाय को भी आज़मा सकेंगे और वहाँ से अपने पास के किसी समुदाय से शामिल करने का अनुरोध कर सकेंगे। दोनों ही तरीकों से आप वह नाम चुनते हैं जिससे लोग आपको जानेंगे।</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🔑</div>
+                    <div class="step-number" aria-hidden="true">02</div>
+                    <div>
+                        <h3>2. अपने 12 शब्द संभाल कर रखें</h3>
+                        <p>ऐप आपके फ़ोन पर आपका खाता बनाता है और आपको 12 शब्द दिखाता है। उन्हें लिख लें और सुरक्षित रखें: यदि आपका फ़ोन खो जाता है या बदल जाता है, तो वे आपके खाते को वापस लाते हैं।</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
+                    <div class="step-number" aria-hidden="true">03</div>
+                    <div>
+                        <h3>3. एक ऑफ़र पोस्ट करें</h3>
+                        <p>कुछ ऐसा पेश करें जो आप कर सकते हैं या साझा कर सकते हैं: शहर तक लिफ़्ट, अंडे, साइकिल की मरम्मत, एक घंटे की बागवानी। फलियों वाले समुदाय में, कोई ज़रूरत पोस्ट करने या खरीदने से पहले आपके पास कम से कम एक ऑफ़र होना आवश्यक है। वैश्विक समुदाय में, जहाँ फलियाँ नहीं हैं, आपकी पहली पोस्ट एक ज़रूरत हो सकती है।</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-number" aria-hidden="true">04</div>
+                    <div>
+                        <h3>4. व्यापार करें</h3>
+                        <p>फलियों में कीमत पर सहमति बनाएं। काम पूरा होने तक फलियों को सुरक्षित रखा जाता है, फिर वे विक्रेता के पास जाती हैं। इसके बाद आप एक-दूसरे को रेटिंग देते हैं।</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-more"><a href="getting-started.html">पूरी शुरुआत करने की मार्गदर्शिका पढ़ें →</a></p>
+        </div>
+    </section>
+
+    <!-- What you can do: one card per part of the app, in the app's own words -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>आप क्या कर सकते हैं</h2>
+                <p>ऐप होम पर खुलता है, जो आपके द्वारा चुने गए कार्डों का एक सेट है। इसके पीछे: बाज़ार, नक्शा, बातचीत (वेब ऐप में चैट), लोग, पल्स, साझा और खाता, जहाँ आप अपना बैलेंस और अपने व्यापार देखते हैं।</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧺</div>
+                    <h3>बाज़ार</h3>
+                    <p>आपके समुदाय के लोग क्या पेशकश कर रहे हैं और उन्हें क्या चाहिए, उसी फ़ीड में पोल और कार्यक्रम भी शामिल हैं। इसे खोजें, श्रेणी के अनुसार फ़िल्टर करें, और व्यापार करने के लिए टैप करें।</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗺️</div>
+                    <h3>नक्शा</h3>
+                    <p>देखें कि आपके आस-पास क्या उपलब्ध है। प्रत्येक पिन वह है जिसे आप लगाते हैं: उस समय की अपनी लोकेशन का उपयोग करें, या हाथ से पिन लगाएं। जब आप अनुमति देते हैं, तो ऐप आपके सबसे नज़दीक क्या है यह दिखाने के लिए भी आपकी लोकेशन का उपयोग करता है, और कभी भी बैकग्राउंड में नहीं। कार्यक्रम के पिन, और वेब ऐप में सेट किए गए उद्यम के पिन, अनुमानित पर सेट किए जा सकते हैं, जो स्थान को लगभग 100&nbsp;मीटर तक सीमित करता है। पिन आपके समुदाय के सदस्यों द्वारा देखे जाते हैं। जब वैश्विक समुदाय सभी के लिए खुलेगा, तो वहाँ आने वाले आगंतुक को लिस्टिंग और लगभग उनका स्थान दिखाई देगा, लेकिन कोई नाम नहीं, कोई प्रोफ़ाइल फ़ोटो नहीं और कोई सटीक स्थान नहीं। कोई भी एक मिनट में इससे जुड़ सकता है, इसलिए इसके सदस्य भी एक-दूसरे की लिस्टिंग लगभग एक किलोमीटर के दायरे में देखते हैं; सटीक स्थान साझा करना आपकी मर्ज़ी है जब आप मिलने का प्रबंध करते हैं।</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📅</div>
+                    <h3>कार्यक्रम <span class="new-pill">नया</span></h3>
+                    <p>समय और स्थान के साथ श्रमदान, मरम्मत कैफ़े या कौशल-साझाकरण पोस्ट करें। लोग 'जा रहे हैं' या 'रुचि रखते हैं' पर टैप करते हैं। जाने वाले लोगों को कार्यक्रम की चैट और मेज़बान का निजी नोट मिलता है &mdash; गेट कोड, क्या लाना है &mdash; और समय या स्थान बदलने या रद्द होने पर सूचना मिलती है। जहाँ कोई भी शामिल हो सकता है, जैसे कि वैश्विक समुदाय में, मेज़बान डिफ़ॉल्ट रूप से पहले प्रत्येक व्यक्ति को अनुमति देता है। कार्यक्रम मुफ़्त हैं; कोई फलियाँ नहीं ली-दी जातीं। उन्हें नक्शे पर आज, इस सप्ताहांत या अगले 7 दिन के तहत खोजें, और दोबारा आयोजित करने के लिए 'नई तारीख पर कॉपी करें' का उपयोग करें।</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">💬</div>
+                    <h3>बातचीत (वेब ऐप में चैट)</h3>
+                    <p>अपने समुदाय के किसी भी व्यक्ति को संदेश भेजें। सीधे संदेश और समूह चैट शुरू से अंत तक एन्क्रिप्टेड (end-to-end encrypted) होते हैं: आपके समुदाय का नोड उन्हें पहुँचाता है लेकिन पढ़ नहीं सकता। जिस नोड को अभी तक अपडेट नहीं किया गया है, उस पर ग्रुप चैट को अब भी इसे चलाने वाले लोग पढ़ सकते हैं, और चैट में ऐसा लिखा होता है। उद्यम की चर्चाओं और कार्यक्रम की चैट को आपके समुदाय के नोड को चलाने वाले लोग पढ़ सकते हैं, ताकि उन्हें मॉडरेट किया जा सके।</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>साझा: उद्यम <span class="new-pill">नया</span></h3>
+                    <p>एक उद्यम वह चीज़ है जिसे आपका समुदाय मिलकर चलाता है: मुर्गी पालन, औज़ारों की लाइब्रेरी, जलाऊ लकड़ी का डिपो, या एक लक्ष्य और समाप्ति तिथि वाला प्रोजेक्ट। व्यवस्थापक इसे चलाते हैं और एक मुख्य व्यवस्थापक इसका नेतृत्व करता है; सदस्य व्यवस्थापक के रूप में शामिल होने का अनुरोध कर सकते हैं। इसके पास अपनी फलियाँ होती हैं, किसी अन्य सदस्य की तरह बाज़ार में ऑफ़र और ज़रूरतें पोस्ट करता है, अपनी आय और खर्च दिखाता है, और मौसम के अनुसार रोका जा सकता है। कोई भी व्यवस्थापक खुद को भुगतान स्वीकृत नहीं कर सकता: किसी अन्य व्यवस्थापक को करना होता है।</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>पोल और निर्णय <span class="new-pill">नया</span></h3>
+                    <p>कोई भी बाज़ार में पोल के ज़रिए समुदाय से सवाल पूछ सकता है। बड़े विकल्प 'निर्णय' हैं, जो साझा टैब में होते हैं: साझा पूल से किसी उद्यम को अनुदान, कठिनाई अनुदान, मुख्य व्यवस्थापक को बदलना। एक निर्णय 7 दिनों के लिए खुला रहता है और पारित होने पर अपने आप लागू हो जाता है। एक बार व्यापार पूरा करने के बाद, आप कोई निर्णय प्रस्तावित कर सकते हैं।</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>समूह <span class="new-pill">नया</span></h3>
+                    <p>अपनी गली, अपने गार्डन क्लब या अपने बैंड के लिए एक समूह शुरू करें, और आप इसके संयोजक बन जाते हैं। केवल समूह में पोस्ट करें, और चुनें कि क्या यह खुला है, लोग जुड़ने का अनुरोध करते हैं, या यह केवल आमंत्रण पर है।</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>पल्स</h3>
+                    <p>देखें कि स्थानीय लोग क्या बना रहे हैं। सदस्य अपने स्वयं के चैनल जोड़ सकते हैं &mdash; TikTok, Instagram, YouTube, SoundCloud या ब्लॉग फ़ीड &mdash; और उनकी सार्वजनिक पोस्ट आपके समुदाय के पल्स में दिखाई देती हैं। कनेक्ट करना प्रत्येक सदस्य पर निर्भर है। जो कुछ भी वहाँ नहीं होना चाहिए उसकी रिपोर्ट की जा सकती है, और आपके समुदाय का नोड उसे हटा सकता है।</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>साख जो आप कमाते हैं, उधार नहीं लेते</h2>
+                <p>कोई भी फलियाँ नहीं खरीदता, और कोई भी ब्याज नहीं देता।</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>हर कोई शून्य से शुरू करता है</h3>
+                    <p>एक नए खाते में 0 फलियाँ होती हैं। जब आप बेचते हैं, तो आपका बैलेंस बढ़ता है; जब आप खरीदते हैं, तो यह घटता है। पूरे समुदाय में बैलेंस का योग हमेशा शून्य रहता है।</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>आपका पहला व्यापार एक साख सीमा खोलता है</h3>
+                    <p>एक बार व्यापार पूरा करने के बाद, आप मदद लौटाने से पहले मदद पाने के लिए शून्य से नीचे जाना शुरू कर सकते हैं। आपकी साख सीमा थोड़ी शुरू होती है (100-फलियों के व्यापार से लगभग 37 फलियों की साख मिलती है) और जैसे-जैसे आप अधिक लोगों के साथ व्यापार करते हैं, बढ़ती जाती है। आपके द्वारा सक्रिय रखे गए ऑफ़र तय करते हैं कि आप इसमें से कितना उपयोग कर सकते हैं: एक ऑफ़र पर 200 फलियों तक, पाँच ऑफ़र पर 2000 तक।</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>बैज, कोई पाबंदी नहीं</h3>
+                    <p>समय के साथ आप बैज अर्जित करते हैं: नवागंतुक, निवासी, प्रबंधक, वरिष्ठ। वे समुदाय में आपका इतिहास दिखाते हैं। वे किसी चीज़ को सीमित या अनलॉक नहीं करते। कोई एडमिन किसी को बैज भी दे सकता है, और उसके साथ उस बैज की शुरुआती साख सीमा भी।</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">प्रत्येक संख्या के लिए नियम पढ़ें →</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">शुल्क कहाँ जाता है</span>
+                    <h3>मूल्य आपके समुदाय में ही रहता है</h3>
+                </div>
+                <p class="stays-local-lead">पूर्ण व्यापारों पर 1.5% शुल्क, और 200 फलियों से अधिक बैलेंस वाले हिस्से पर एक छोटा मासिक शुल्क, आपके समुदाय के साझा पूल में जाता है &mdash; हमें या किसी अन्य को नहीं। आपका समुदाय निर्णयों के माध्यम से तय करता है कि पूल किस चीज़ के लिए भुगतान करेगा।</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>कोई विज्ञापन नहीं और कोई ट्रैकिंग नहीं</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>खरीदने या बेचने के लिए कोई टोकन नहीं &mdash; फलियाँ केवल व्यापार के लिए हैं</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>कोई ब्याज नहीं और कोई बैंक नहीं</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">हमने इसे इस तरह क्यों बनाया: एक निष्कर्षण-उपरांत अर्थव्यवस्था →</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>आपका खाता और आपकी सुरक्षा</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>आपकी चाबी आपके फ़ोन पर रहती है</h3>
+                    <p>फ़ोन ऐप पर आपकी चाबी फ़ोन के सुरक्षित स्टोरेज में रखी जाती है, और आप ऐप लॉक जोड़ सकते हैं, जो आपके फ़ोन के अपने स्क्रीन लॉक की मांग करता है। वेब ऐप में इसे उस ब्राउज़र के अपने स्टोरेज में रखा जाता है। आपके 12 शब्द वह बैकअप हैं जो किसी पर निर्भर नहीं करते।</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>किसी भी चीज़ की रिपोर्ट करें</h3>
+                    <p>आप किसी पोस्ट, सदस्य, कार्यक्रम या पल्स आइटम की रिपोर्ट कर सकते हैं, और किसी को भी ब्लॉक कर सकते हैं। रिपोर्ट आपके समुदाय के नोड को चलाने वाले लोगों के पास जाती हैं &mdash; इसके मालिक और एडमिन &mdash; जो सामग्री और खातों को हटा सकते हैं। सदस्य किसी को निलंबित करने या हटाने के निर्णय पर वोट भी कर सकते हैं।</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>बारीक विवरण</h3>
+                    <p>क्या संग्रहीत किया जाता है, इसे कौन देख सकता है, और अपना खाता कैसे हटाया जाए।</p>
+                    <p class="card-links"><a href="../privacy.html">गोपनीयता नीति</a>&nbsp;· <a href="safety.html">बाल सुरक्षा</a>&nbsp;· <a href="../terms.html">शर्तें</a>&nbsp;· <a href="../data-deletion.html">अपना डेटा हटाना</a></p>
+                </div>
+                <div class="feature-card glass-panel feature-wide" id="key-copy">
+                    <h3>आपकी चाबी तक वापस पहुँचने का दूसरा तरीका, और इसे कौन खोल सकता है</h3>
+                    <p>आप वापस पहुँचने के दूसरे तरीके के रूप में Google, Apple या Facebook साइन-इन को भी लिंक कर सकते हैं। तब उस साइन-इन के लिए आपकी चाबी की एक सुरक्षित कॉपी रखी जाती है। BeanPool की चाबी वॉल्ट का उपयोग करने वाले फ़ोन ऐप इसे वहाँ रखते हैं, आइसलैंड के एक छोटे सर्वर पर जो इसके अलावा कुछ नहीं करता; फ़ोन ऐप के पुराने संस्करण इसे आपके समुदाय के नोड पर रखते हैं; वैश्विक समुदाय पर वेब ऐप इसे उस समुदाय के सर्वर पर रखता है, जिसे हम चलाते हैं। जो भी कॉपी रखता है वह इसे खोल सकता है: वॉल्ट और वैश्विक समुदाय के लिए BeanPool, वहाँ रखी गई कॉपी के लिए आपके नोड को चलाने वाले लोग। वॉल्ट से पुनर्स्थापना में एक दिन का समय लगता है, जब तक कि आपके अपने उपकरणों में से कोई यह पुष्टि न कर दे कि यह आप ही हैं। वह कॉपी, और अपने खाते को अपने किसी अन्य डिवाइस पर कॉपी करना, केवल यही दो तरीके हैं जिनसे आपकी चाबी आपके डिवाइस से बाहर जाती है।</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <span id="find-or-start"></span>
+        <div class="container">
+            <div class="section-header">
+                <h2>अपना स्थानीय विनिमय खोजें</h2>
+                <p>निर्देशिका में खुद को सूचीबद्ध करने वाले BeanPool चलाने वाले समुदाय।</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">अभी आपके आस-पास कोई समुदाय नहीं है।</span>
+                    <a id="map-empty-start" href="#run-a-node">एक समुदाय शुरू करें</a>
+                </div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">सूचीबद्ध समुदाय</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">सदस्य (रिपोर्ट के अनुसार)</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
+        <div class="container">
+            <div class="section-header">
+                <span class="audience-tag">सामुदायिक आयोजकों के लिए</span>
+                <h2>अपने समुदाय के लिए BeanPool चलाएं</h2>
+                <p>प्रत्येक समुदाय अपने स्वयं के नोड पर चलता है: एक छोटा सर्वर जो उस समुदाय के सदस्यों, पोस्ट और खाते को रखता है। कोई स्थानीय व्यक्ति इसे चलाता है। यदि आपके कस्बे या इलाके में अभी तक कोई नहीं है, तो वह आप हो सकते हैं।</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>आप क्या संभालते हैं</h3>
+                    <p>आप और आपके द्वारा नियुक्त एडमिन आपके समुदाय के मॉडरेटर हैं: रिपोर्ट आपके पास आती हैं। आपके सदस्यों का डेटा आपकी मशीन पर रहता है, इसलिए आप इसका बैकअप रखते हैं। आप उद्यम की चर्चाओं और कार्यक्रम की चैट पढ़ सकते हैं; आप सीधे संदेश नहीं पढ़ सकते। आप पहले सदस्यों को आमंत्रित करते हैं, और वे बाकियों को आमंत्रित करते हैं।</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>सेटिंग्स ऐप</h3>
+                    <p>आपका नोड ब्राउज़र में अपने स्वयं के सेटिंग्स ऐप के साथ आता है। इससे आप अपने समुदाय का नाम रखते हैं, एक मालिक और ऐसे एडमिन नियुक्त करते हैं जो अपनी चाबियों से साइन इन करते हैं, क्यूआर आमंत्रण प्रिंट करते हैं, डिस्क की स्थिति देखते हैं, एक सार्वजनिक वेब पता या टनल चुनते हैं, और ऐसे सदस्य की मदद करते हैं जिसने अपने फ़ोन और अपने 12 शब्द दोनों खो दिए हैं, एक बार के कोड के साथ जिसे आप व्यक्तिगत रूप से पुष्टि करते हैं, ताकि वह नए फ़ोन पर अपने खाते में वापस आ सके।</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>पहले बूट से ही निजी</h3>
+                    <p>समुदाय की लिस्टिंग, नक्शा, संदेश और बैलेंस नोड शुरू होने के क्षण से ही उसके सदस्यों के लिए होते हैं; कुछ भी चालू करने की आवश्यकता नहीं है। कोई व्यक्ति जो बिना खाते के इसका पता खोलता है, उसे वैश्विक समुदाय की ओर निर्देशित किया जाता है, जो जल्द ही सभी के लिए खुल रहा है।</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>पड़ोसी समुदाय से जुड़ना</h3>
+                    <p>दो समुदाय लिंक होने के लिए सहमत हो सकते हैं ताकि उनके सदस्य एक-दूसरे के साथ व्यापार कर सकें। फलियाँ कभी अपना स्थान नहीं छोड़तीं: प्रत्येक जोड़ी इस बात का हिसाब रखती है कि एक समुदाय पर दूसरे का कितना बकाया है, और प्रत्येक पक्ष अपनी सीमा तय करता है। जब तक दोनों ऑपरेटर इसे चालू नहीं करते, लिंकिंग बंद रहती है, और यह अभी प्रारंभिक चरण में है: यह बनाया गया है, वेब ऐप में इसकी स्क्रीन हैं, और इसे केवल हमारे अपने दो परीक्षण समुदायों के बीच आज़माया गया है, कभी भी वास्तविक समुदायों के बीच नहीं।</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>एक समुदाय शुरू करें</h2>
+                <p>लगभग आधा घंटा, यदि आप निर्देशों का पालन कर सकते हैं। पहले जानने योग्य छह बातें:</p>
+                <ul class="run-node-facts">
+                    <li><strong>इसकी लागत क्या है।</strong> सॉफ्टवेयर मुफ़्त है। यह घर पर चालू रहने वाले किसी खाली कंप्यूटर (मिनी पीसी, NAS, या 64-बिट सिस्टम वाले रास्पबेरी पाई) पर, या कुछ डॉलर प्रति माह (लगभग US$6) के छोटे किराए के सर्वर पर चलता है।</li>
+                    <li><strong>इसे कौन होस्ट करता है।</strong> आप, अपनी मशीन पर या जिसे आप किराए पर लेते हैं। इसे कभी भी beanpool.org की आवश्यकता नहीं होती: आपका अपना वेब पता काम करता है।</li>
+                    <li><strong>आप क्या ज़िम्मेदारी लेते हैं।</strong> आपके सदस्यों की रिपोर्ट आपके पास आती हैं। डेटा फ़ोल्डर का बैकअप आपको रिकवरी कोड के साथ रखना होता है। दो मालिक रखें। सर्वर को चालू और अपडेट रखें।</li>
+                    <li><strong>आप क्या कभी नहीं देखते।</strong> आपके सदस्यों के सीधे संदेश।</li>
+                    <li><strong>पहले डॉकर।</strong> नीचे दिए गए ब्लॉक से पहले मशीन में डॉकर (Docker) इंस्टॉल होना आवश्यक है; नए किराए पर लिए गए सर्वर में यह नहीं होता।</li>
+                    <li><strong>एक पता जहाँ तक फ़ोन पहुँच सकें।</strong> फ़ोन इंटरनेट पर किसी समुदाय तक केवल https के ज़रिए पहुँचते हैं। सार्वजनिक आईपी पते और पोर्ट 80 और 443 खुले वाले किराए के सर्वर पर, वह आईपी पता ही काफी है: आपके सर्वर को इसके लिए अपना प्रमाणपत्र मिलता है, बिना किसी क्लाउडफ्लेयर खाते के, और आपके अपने डोमेन के लिए भी यही लागू होता है। घर पर, या बिना खुले पोर्ट के, दावा आपको .beanpool.org पर समाप्त होने वाला एक मुफ़्त नाम देता है, एक टनल के माध्यम से जिसे आपका सर्वर खुद चलाता है। एक सामान्य http:// पता केवल घरेलू नेटवर्क पर काम करता है।</li>
+                </ul>
+                <p>फिर, डॉकर इंस्टॉल वाली उस मशीन पर, यह एक ब्लॉक पेस्ट करें। यह कंपोज़ फ़ाइल प्राप्त करता है, नोड द्वारा उपयोग किए जाने वाले नेटवर्क को बनाता है, प्रकाशित छवि (Intel/AMD या ARM64) को डाउनलोड करता है, इसे शुरू करता है, जब तक कि सर्वर अपना एक बार का दावा कोड नहीं बना लेता (रास्पबेरी पाई पर धीमी पहली शुरुआत के लिए पाँच मिनट तक) तब तक प्रतीक्षा करता है, और इसका दावा करता है। शुरू होने से पहले कॉन्फ़िगर करने के लिए कुछ भी नहीं है।</p>
+
+                <!-- macOS Style Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — एक समुदाय शुरू करें</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">एक ब्लॉक: डाउनलोड, नेटवर्क, पुल, शुरू, प्रतीक्षा, दावा</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="क्लिपबोर्ड पर कॉपी करें">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">अंतिम पंक्ति: beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>आपका पता।</strong> पेस्ट करने से पहले इसे चुनें, और मिलान करने के लिए अंतिम पंक्ति को बदलें। यदि आपने पहले ही पेस्ट कर दिया है, तो इसके सवालों पर Enter दबाएं, फिर अंतिम पंक्ति को फिर से चलाएं: दावा कोड फ़ोन की प्रतीक्षा करता है। सार्वजनिक आईपी पते और पोर्ट 80 व 443 खुले वाले <strong>किराए के सर्वर</strong> के लिए: <code>--ip</code> और उसका आईपी पता जोड़ें, जैसे <code>beanpool claim --ip 203.0.113.7</code> में। आपके सर्वर को पोर्ट 80 पर Let's Encrypt से उस पते के लिए अपना प्रमाणपत्र मिलता है, और फ़ोन https://203.0.113.7 पर उस तक पहुँचते हैं। <strong>घर पर कंप्यूटर, या कोई खुला पोर्ट न होने पर</strong>: इसे वैसे ही छोड़ दें। यह एक मुफ़्त नाम के पहले भाग के लिए पूछता है (yourtown.beanpool.org के लिए केवल <strong>yourtown</strong> टाइप करें; Enter छोड़ने के लिए है), जिस तक आपका सर्वर स्वयं चलने वाले टनल के ज़रिए पहुँचता है, और इसके लाइव होने के लिए तीन मिनट तक प्रतीक्षा करता है। <strong>आपका अपना डोमेन</strong>: इसके लिए एक A रिकॉर्ड को सर्वर के आईपी पते पर इंगित करें, पोर्ट 80 और 443 खोलें, और <code>--address https://your.domain</code> जोड़ें। नाम सर्वर के बदलाव के बाद भी बना रहता है; संख्या नहीं: आप बाद में सेटिंग्स में नाम जोड़ सकते हैं, और आईपी पते का उपयोग करने वाले सदस्य काम करते रहेंगे। सेटिंग्स में बाद में चुनने के लिए, <code>--no-name</code> जोड़ें। एक सामान्य <code>http://</code> पता केवल घरेलू नेटवर्क पर काम करता है: फ़ोन इंटरनेट पर इसे अस्वीकार कर देते हैं, और दावा आपको चेतावनी देता है। यदि BeanPool प्रोजेक्ट की पता सेवा बंद है, तब भी दावा काम करता है।</li>
+                    <li><strong>कोड और क्यूआर।</strong> यह एक बार का दावा कोड और एक क्यूआर कोड दिखाता है। अपने फ़ोन के कैमरे से क्यूआर कोड को स्कैन करें, या BeanPool खोलें, <strong>अपना समुदाय खोजें</strong> के तहत सर्वर का पता लिखें और <strong>दावा करें</strong> पर टैप करें। वह फ़ोन मालिक बन जाता है।</li>
+                    <li><strong>सेटिंग्स।</strong> अपना पता (या सर्वर का अपना पता) उसके बाद <strong>/settings</strong> खोलें। सेटअप विज़ार्ड आपके समुदाय का नाम रखता है, आपसे दूसरा मालिक जोड़ने के लिए कहता है, और तीन संस्थापक आमंत्रण बनाता है। नोड पहचान के तहत नक्शे पर अपना स्थान निर्धारित करें ताकि आस-पास के लोग आपको ढूँढ सकें।</li>
+                </ol>
+                <p class="run-node-note">यदि ब्लॉक <strong>No claim code after 5 minutes</strong> कहता है, या <code>beanpool claim</code> <strong>This community has no claim code waiting</strong> कहता है, तो सर्वर पूरी तरह से शुरू नहीं हुआ है: <code>docker compose logs beanpool-node</code> दिखाता है कि यह कहाँ है। एक बार जब लॉग कहे कि समुदाय का अभी तक कोई मालिक नहीं है और उसके पास एक दावा कोड है, तो अंतिम पंक्ति फिर से चलाएं। पूरे चरण ऑपरेटर मैनुअल के <a href="../guide/operators/first-time-setup.html">पहली बार सेटअप</a> में हैं।</p>
+
+                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    GitHub पर देखें →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section id="newsletter">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="newsletter-content">
+                    <h3><img src="../bean.png" alt="आइकन" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />जुड़े रहें</h3>
+                    <p>जब कोई नया संस्करण या नया समुदाय आए तो ईमेल प्राप्त करें।</p>
+                </div>
+                <div class="newsletter-form-container">
+                    <form id="newsletter-form" class="newsletter-form">
+                        <input type="email" id="newsletter-email" placeholder="you@example.com" aria-label="ईमेल पता" required>
+                        <button type="submit" class="btn btn-primary btn-subscribe">सब्सक्राइब करें</button>
+                    </form>
+                    <div id="newsletter-status" class="newsletter-status"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="BeanPool आइकन" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>फलियों में अपने पड़ोसियों के साथ व्यापार करने के लिए एक मुफ़्त ऐप।</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">सहायता केंद्र</a>
+                    <a href="getting-started.html">शुरुआत करें</a>
+                    <a href="rules.html">नियम</a>
+                    <a href="post-extraction.html">निष्कर्षण-उपरांत</a>
+                    <a href="#run-a-node">समुदाय चलाएं</a>
+                    <a href="../guide/index.html">सदस्यों की मार्गदर्शिका</a>
+                    <a href="status.html">सर्वर स्थिति</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="../privacy.html">गोपनीयता नीति</a>
+                    <a href="../terms.html">सेवा की शर्तें</a>
+                    <a href="safety.html">बाल सुरक्षा</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../index.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/index.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/index.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="index.html" hreflang="hi" lang="hi" aria-current="page">हिन्दी</a>
+                    <a href="../bn/index.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/index.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/index.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/index.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/index.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/index.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/index.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/index.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/index.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/index.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/index.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/index.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/index.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/index.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/index.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/index.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/index.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/index.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/index.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/index.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT लाइसेंस के तहत ओपन सोर्स। समुदायों द्वारा, समुदायों के लिए <img src="../bean.png" alt="स्नेह" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> से निर्मित। समय क्षेत्र सीमाएँ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap योगदानकर्ता</a> (ODbL)।</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../main.js?v=1.10"></script>
+</body>
+</html>

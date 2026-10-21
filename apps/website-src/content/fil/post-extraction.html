@@ -1,0 +1,291 @@
+<!-- source-hash: 85100d10c15dfef1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ang Ekonomiyang Post-Extraction — BeanPool</title>
+    <meta name="description" content="Kung ano ang ibig sabihin ng ekonomiyang post-extraction, at ang mga tiyak na mekanismo na ginagamit ng BeanPool upang bumuo nito: mutual credit nang walang interes, sirkulasyon sa halip na pag-iimbak, isang Komun na ibinoboto ng miyembro, at pederasyon na hindi umuubos sa mas maliit na bayan.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="Icon ng BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Paano Ito Gumagana</a>
+                <a href="rules.html">Ang Mga Panuntunan</a>
+                <a href="index.html#features">Mga Tampok</a>
+                <a href="help.html">Tulong</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mga Tutorial</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Manood ng mga Video Tutorial sa YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Sumali sa Komunidad sa Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Tingnan sa GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Magsimula</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Buksan ang menu"><span aria-hidden="true">☰</span> Menu</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Magsimula</a>
+                    <a href="index.html#how-it-works">Paano Ito Gumagana</a>
+                    <a href="rules.html">Ang Mga Panuntunan</a>
+                    <a href="index.html#features">Mga Tampok</a>
+                    <a href="help.html">Tulong</a>
+                    <a href="guide/index.html">Gabay ng mga miyembro</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Mga Tutorial sa YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool sa Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Source code sa GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>Ang Ekonomiyang Post-Extraction</h1>
+
+        <p class="lede">Karamihan sa mga kagamitang ginagamit ng komunidad upang makipagkalakalan ay idinisenyo upang kumuha ng bahagi. Hindi dahil sa masamang hangarin — kundi ayon sa istruktura. Isang porsyento ang napupunta sa processor ng pagbabayad, interes ang napupunta sa bangko, atensyon ang napupunta sa advertiser, at ang data ay napupunta sa lugar na walang sinuman sa komunidad ang pumili. <strong>Binuo ang BeanPool upang alisin ang mga labasang iyon.</strong></p>
+
+        <div class="pe-define">
+            <p>Ang <strong>Post-extraction</strong> ay nangangahulugang imprastraktura na nagbibigay-daan sa mga komunidad na lumikha at magpanatili ng halagang kanilang nagagawa, sa halip na maagaw ito ng mga tagapamagitan. Hindi ito isang slogan tungkol sa pagiging mabait. Isa itong limitasyon sa kung paano maaaring buuin ang software — at ang mga bagay na lumalabag dito ay hindi isinasama.</p>
+        </div>
+
+        <h2>Kung ano talaga ang hitsura ng extraction</h2>
+        <p>Nararapat na maging kongkreto, dahil ang "extraction" ay karaniwang iniiwang malabo. Kapag nagbabayad ang isang kapitbahay sa kapwa kapitbahay sa pamamagitan ng karaniwang platform, ang halaga ay umaalis sa komunidad sa maraming pintuan nang sabay-sabay:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ Kung saan umaalis ang halaga</h4>
+                <ul>
+                    <li><strong>Mga bayarin sa transaksyon</strong> sa isang processor na may punong-tanggapan sa ibang lugar.</li>
+                    <li><strong>Interes</strong> sa credit na nagbigay-daan sa kalakalan, na ibinabayad sa isang bangko.</li>
+                    <li><strong>Patalastas</strong> — ang iyong atensyon na ibinebenta sa sinumang may pinakamataas na tawad.</li>
+                    <li><strong>Data</strong> — ang iyong mga ugnayan at pagbili ay nagiging pag-aari ng iba.</li>
+                    <li><strong>Upa sa platform</strong> — kapag naroroon na ang lahat, tumataas ang presyo, dahil ang pag-alis ay nangangahulugan ng pag-iwan sa iyong mga kapitbahay.</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ Ang ginagawa namin sa halip</h4>
+                <ul>
+                    <li>Ang credit ay <strong>nililikha mismo ng kalakalan</strong>, kaya walang nagpapautang na dapat bayaran.</li>
+                    <li>Ang maliliit na bayarin na umiiral ay dumadaloy sa isang <strong>Pool ng Komun na ibinoboto ng iyong komunidad na gastusin</strong>.</li>
+                    <li><strong>Walang mga patalastas.</strong> Walang advertiser, kaya walang anuman upang i-optimize ang iyong atensyon.</li>
+                    <li><strong>Walang pangangalap ng data.</strong> Nananatili ang iyong private key sa iyong device. Kung nag-link ka ng sign-in upang maibalik ito, itinatago ang isang nakakandadong kopya para dito: sa key vault ng BeanPool, o sa server ng komunidad, depende sa app. Sinumang nagtatago nito ay maaaring magbukas nito. End-to-end encrypted ang mga direct message at group chat.</li>
+                    <li><strong>Walang lock-in.</strong> Open source ang protocol at pinapatakbo ng iyong komunidad ang sarili nitong node.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">Upang maging malinaw sa tapat na bahagi: <strong>Ang BeanPool ay hindi libre sa mga gastusin.</strong> Mayroong maliit na singil sa sirkulasyon sa malalaking natutulog na balanse, at maliit na singil sa mga kalakalan. Ang pagkakaiba ay hindi dahil naglalaho ang pera — kundi <strong>kung saan ito napupunta</strong>. Napupunta ito sa Pool ng Komun, at bumoboto ang komunidad kung paano ito gagastusin. Walang ibinabayad sa isang shareholder, dahil walang shareholder.</div>
+
+        <h2>Hindi namin inimbento ang kritisismong ito</h2>
+        <p>Ang huwarang nasa itaas ay maingat na pinag-aralan, at pinangalanan nang maraming ulit, ng mga taong naglaan ng maraming taon dito. Naniniwala kaming tama ang pagsusuri; ang pagkakaiba namin ay sinusubukan naming buuin ang daan palabas sa halip na ilarawan lamang ang bitag. Kung nais mo ang buong argumento sa halip na ang aming buod, ito ang mga lugar na dapat simulan.</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Platform Capitalism <span>— Nick Srnicek, 2016</span></h4>
+                <p>Itinuturing ang platform bilang isang modelo ng negosyo sa halip na teknolohiya: ilagay ang sarili sa pagitan ng dalawang pangkat na kailangang maabot ang isa't isa, pagkatapos ay kumuha ng bahagi sa bawat koneksyon. Dahil lumalaki ang halaga ng platform habang dumarami ang mga tao rito, lalong nagiging mahirap ang pag-alis habang lumalaki ang kinukuhang bahagi.</p>
+            </div>
+            <div class="pe-book">
+                <h4>The Age of Surveillance Capitalism <span>— Shoshana Zuboff, 2019</span></h4>
+                <p>Naglalarawan ng pangalawang extraction na tumatakbo kasabay ng una. Ang ordinaryong karanasan ng tao ay itinuturing na hindi inaangking hilaw na materyal, dinadalisay upang maging mga hula tungkol sa susunod na gagawin ng mga tao, at ibinebenta sa sinumang makikinabang sa kaalamang iyon. Ang taong pinagmulan ng data ay hindi ang customer.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Technofeudalism <span>— Yanis Varoufakis, 2023</span></h4>
+                <p>Ang pinakamatalas na bersyon ng argumento. Ang kinokolekta ng may-ari ng platform ay hindi kita mula sa paggawa ng anuman — ito ay <em>upa</em>, na sinisingil para sa access sa espasyong kanilang pagmamay-ari. Ang punto ni Varoufakis ay ginagawa nitong mas luma ang kaayusan kaysa sa kapitalismo sa halip na mas bago: isang relasyon ng kasero na nakasuot ng damit ng kumpanya ng teknolohiya.</p>
+            </div>
+        </div>
+
+        <p>May mas payak na parirala para sa kung paano nararamdaman ang kaayusang iyon mula sa ilalim — <strong>digital sharecropping</strong>. Ikaw ang gumagawa ng trabaho, sa lupang hindi mo pag-aari, at kinukuha ng may-ari ang bahagi ng bawat itinanim mo. Inilalarawan nito ang tsuper, ang nagbebenta, ang musikero at ang delivery rider nang magkakatulad, na karaniwang tanda na ang paglalarawan ay tumutukoy sa isang bagay na totoo.</p>
+
+        <p>Ang sagot namin ay hindi isang mas patas na kasero o mas maliit na bawas. Ito ay <strong>hindi dapat magkaroon ng lupang uupahan sa simula pa lamang.</strong> Ang dalawang magkapitbahay na nagpapalitan ng isang hapon ng trabaho ay hindi kailangang dumaan sa espasyong pagmamay-ari ninuman. Kaya hawak ng komunidad ang node, bukas ang protocol para patakbuhin o i-fork ng sinuman, at ang tanging singil na umiiral ay napupunta sa sariling Komun ng komunidad. Walang posisyon sa gitna para sa sinumang magbenta ng access — kabilang kami.</p>
+
+        <p class="pe-credit">Isang magandang paraan sa pagsisimula, kung mas gusto mong manood kaysa magbasa: ang <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">“You Are Witnessing the Death of American Capitalism”</a> ni Benn Jordan, na sumasaklaw sa paksang ito at tumutukoy sa lahat ng tatlong aklat sa itaas.</p>
+
+        <h2>Ang mga mekanismo</h2>
+        <p>Ang unang apat ay gumaganang bahagi ng bawat komunidad ngayon. Ang ikalima, ang pag-clear sa pagitan ng mga komunidad, ay binuo at nasubukan pa lamang sa pagitan ng dalawa sa sarili naming mga pansubukang komunidad, hindi pa sa pagitan ng mga live na komunidad. Ganap na inilarawan ang mga ito sa <a href="rules.html">Ang Mga Panuntunan</a>.</p>
+
+        <div class="pe-mech">
+            <h3>Pera na ginagawa mismo ng komunidad</h3>
+            <p>Tumatakbo ang BeanPool sa <strong>mutual credit</strong>. Kapag gumawa ka ng tatlong oras na trabaho para sa isang kapitbahay, tatlong oras ng credit ang nalilikha sa sandaling iyon — ang iyong positibong balanse at ang kanilang negatibong balanse, na magkasamang nilikha ng kalakalan. Walang bangkong naglabas nito. Walang nagpautang nito sa iyo. Walang interes, dahil walang nagpapautang.</p>
+            <p>Ito ang ugat ng buong disenyo. Kung ang suplay ng pera ay kailangang utangin upang umiral, may isang tao sa labas ng komunidad ang nagmamay-ari ng karapatan sa hinaharap nitong trabaho. Kung nililikha ito ng komunidad sa pamamagitan ng pakikipagkalakalan, walang sinuman ang nagmamay-ari nito.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Zero ang layunin, hindi ang malaking balanse</h3>
+            <p>Ang balanseng <strong>zero</strong> ay nangangahulugang nakapagbigay ka nang halos kasingdami ng iyong natanggap. Iyon ang malusog na kalagayan, at ito ay tunay na naiibang target mula sa itinatakda ng karamihan sa mga ekonomiya. Walang premyo sa pag-iipon ng Munggo, at walang paraan upang i-convert ang mga ito sa paniningil kaninuman sa labas ng komunidad.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Sirkulasyon sa halip na pag-iimbak</h3>
+            <p>Ang malalaking natutulog na balanse ay marahang nababawasan sa paglipas ng panahon, sa progresibong rate. Ang epekto ay mapanatiling gumagalaw ang Munggo — nagagastos sa mga kapitbahay, inilalagay sa mga lokal na proyekto — sa halip na nakatengga lamang. Ang isang ekonomiya kung saan ang midyum ng palitan ay humihinto sa paggalaw ay isang ekonomiyang huminto na sa paggana.</p>
+            <p>Higit sa lahat, ang nababawas ay hindi sinisira at hindi kinukuha bilang kita: <strong>lumilipat ito sa Pool ng Komun.</strong> Ang mga negatibong balanse ay hindi kailanman sinisingil. Ang isang taong nasa negatibo ay humugot ng credit na ibinigay sa kanila ng komunidad, at ang pagsingil sa isang taong may kakulangan na ay magpapalalim lamang sa hukay sa halip na pagalawin ang Munggo — kabaligtaran ng layunin.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Isang Komun na isang loop, hindi isang tapunan</h3>
+            <p>Hawak ng Pool ng Komun ang kinokolekta ng mga singil sa sirkulasyon at kalakalan, at ang hawak nito ay napupunta sa dalawang lugar: sumasalo sa utang na naiwan kapag ang isang miyembro ay umalis o inalis habang may utang, at nagpopondo sa mga negosyo at proyekto na inaprubahan ng mga miyembro sa pamamagitan ng kusang nagpapatupad na <strong>Mga Desisyon</strong> — mga kagamitan para sa isang pinagsasaluhang hardin, kagamitan para sa isang workspace, anumang iminungkahi at naipasa sa botohan. Ang komunidad ang nagpapasya kung ano ang itinatayo ng sarili nitong labis.</p>
+            <p>Isa itong closed loop ayon sa konstruksyon: ang halaga ay nalilikha nang lokal, hawak nang kolektibo, at muling ginagastos pabalik sa parehong komunidad.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>Pederasyon na hindi umuubos sa mas maliit na bayan</h3>
+            <p>Kapag nakikipagkalakalan ang mga komunidad sa isa't isa, ang extraction ay maaaring muling lumitaw sa mas banayad na anyo — ang mas mayamang bayan ay tahimik na umuubos sa mas maliit. Ito ang problemang sinubukang lutasin ni John Maynard Keynes sa Bretton Woods, at ang inter-community clearing ng BeanPool ay binuo batay sa kanyang sagot.</p>
+            <p><strong>Hindi kailanman tumatawid sa hangganan ang Munggo.</strong> Ang isang kalakalan sa pagitan ng dalawang komunidad ay naisasaayos sa pamamagitan ng isang pares ng tulay na talaan, isa na hawak ng bawat node, na nagtatala kung ano ang utang ng bawat isa sa isa pa sa trabaho. Ang bawat panig ay nagtatakda ng sarili nitong limitasyon sa kung gaano kalayo ito maaaring tumakbo — kaya ang isang kalapit na komunidad ay magkakaroon lamang ng utang sa iyo sa halagang pinili mo nang maaga.</p>
+            <p>Dalawang bagay ang sumusunod, at ang mga ito ang dahilan kung bakit hindi lamang ito limitasyon sa paggastos. <strong>Ang pag-clear sa iyong utang ay hindi kailanman hinaharangan</strong> — pinipigilan ng limitasyon ang direksyon na nagbibigay ng credit, hindi kailanman ang direksyon na nag-aayos nito. At ang isang komunidad na may hawak na labis ay hindi lamang basta nakaupo rito: <strong>habang mas malaki ang utang sa isang bayan, mas maraming trabaho ang maaari nitong ipagawa sa bayang may utang dito</strong>, na nagpapalit sa kawalan ng balanse pabalik sa kalakalan sa halip na iwanan ito bilang utang.</p>
+            <div class="pe-worked">
+                <strong>Bakit kailangang gumana ang disenyo sa ganitong paraan.</strong> Bawat positibong munggo ay may katugmang negatibo na hawak ng isang tiyak na miyembro, na nag-aalis nito sa pamamagitan ng pagkita. Kung ang +50 ng isang miyembro ay umalis lamang papunta sa ibang bayan, ang kapitbahay na nasa −50 ay hindi na ito kikitain pabalik mula sa lokal na sirkulasyon — nawala na ang katapat ng kanilang utang. Ulitin iyon sa maraming bisita at ang sirkulasyon ng mas maliit na komunidad ay permanenteng liliit. Hindi dahil sa pandaraya; kundi sa pamamagitan ng mga paglipat na lahat ay mukhang tama.
+            </div>
+            <p class="pe-edges">Kung nasaan ang mga hangganan, nang maliwanag: ang isang komunidad na may kakulangan ay <em>hindi kailanman</em> sinisingil dahil sa pagkakaroon ng kakulangan — ang argumento ni Keynes, at ang sa amin, ay ang presyur ay dapat lamang mapunta sa isang may kapangyarihang kumilos dito. Ang isang natitirang pingga, ang singil sa labis na sadyang iniwang nakatengga, ay tinukoy at sadyang hindi pa binuo hanggang sa maipasa nito ang parehong pagsubok sa pagiging patas. Ang pag-clear ay tumatakbo sa pagitan ng mga pares ng komunidad sa halip na sa isang mas malawak na network, at binubuksan ito ng operator ng bawat komunidad ayon sa sariling pagpili.</p>
+        </div>
+
+        <h2>Ang mga paninindigang pinagbabatayan nito</h2>
+        <p>Ito ang mga pundasyong pagpapahalaga kung saan sinusukat ang bawat kontribusyon sa BeanPool. Nai-publish ang mga ito sa <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">gabay sa contributor</a> ng proyekto, at may bisa ang mga ito: ang gawaing sumasalungat sa mga ito ay tinatanggihan, gaano man kahusay ang code.</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>Post-extraction</h4>
+                <p>Bumubuo kami ng imprastraktura na nagbibigay-daan sa mga komunidad na lumikha at magpanatili ng halaga sa halip na maagaw ito ng mga tagapamagitan. Ang mga kontribusyong nagpapasok ng mga extractive na dinamika — mga network effect na nagbibigay-pakinabang sa iisang nagkokontrol na partido, pag-lock sa pagmamay-ari, monetization batay sa pagsubaybay — ay hindi malugod na tinatanggap.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Subsidiarity</h4>
+                <p>Ang mga lokal na komunidad ay dapat may kakayahang magpatakbo ng sarili nilang mga node, gumawa ng sarili nilang mga desisyon sa pamamahala, at gumana nang independiyente. Ang mga kontribusyong nagtutulak ng pagpapasya paitaas sa isang pandaigdigang awtoridad, o nagpapahirap sa lokal na operasyon, ay sumasalungat sa mga layunin ng protocol.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Kalinawan</h4>
+                <p>Ang protocol ay dapat nauunawaan ng mga komunidad na pinaglilingkuran nito — hindi lamang ng mga software engineer. Ang mga espesipikasyon ay isinusulat sa payak na wika kung maaari, na may teknikal na detalyeng nakapaloob sa ilalim.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Pahintulot at privacy</h4>
+                <p>Walang tampok na dapat magpahintulot sa data na lumipat nang walang tahasan, mababawi, at nasusuring pahintulot ng partidong nagmamay-ari nito. Ang mga tampok na lumalabag sa privacy ay hindi isasama anuman ang kanilang teknikal na gilas.</p>
+            </div>
+            <div class="pe-value">
+                <h4>Pagpapanumbalik</h4>
+                <p>Sinusukat namin ang tagumpay sa kung ang mga komunidad, ekolohiya, at mga komun ay mas malusog dahil sa BeanPool — hindi sa pamamagitan ng mga sukatan ng paglago o presyo ng token.</p>
+            </div>
+        </div>
+
+        <h2>Paano susuriin na totoo ang aming sinasabi</h2>
+        <p>Ang isang pahayag na tulad nito ay may halaga lamang ayon sa kakayahang patunayan ito, kaya:</p>
+        <ul class="pe-check">
+            <li>Ang buong protocol ay <strong>open source sa ilalim ng lisensyang MIT</strong> — <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">basahin ang code</a>, kabilang ang bawat panuntunang inilarawan sa pahinang ito.</li>
+            <li>Ang mga panuntunang pang-ekonomiya ay nakasulat sa payak na wika sa <a href="rules.html">Ang Mga Panuntunan</a> — mga balanse, credit, mga singil, at kung saan napupunta ang bawat isa.</li>
+            <li>Maaaring <strong>magpatakbo ang iyong komunidad ng sarili nitong node</strong>. Kung sakaling maging tagapamagitan kami, maaari kang umalis at isama ang iyong komunidad.</li>
+            <li>Walang <strong>token at walang mga mamumuhunan</strong>. Ang Munggo ay mutual credit para sa totoong kalakalan, at hindi kailanman kinakalakal sa isang exchange.</li>
+        </ul>
+
+        <div class="callout">Sa madaling sabi: <strong>ang isang ekonomiya ay post-extraction kapag ang halagang nililikha ng komunidad ay walang matatagasang lugar palabas.</strong> Hindi dahil ang lahat ay banal, kundi dahil walang mga pintuan sa disenyo.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="Icon ng BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Mutual credit para sa mga komunidad, pinapatakbo ng mga komunidad.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Sentro ng Tulong</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Paano Ito Gumagana</a>
+                    <a href="getting-started.html">Pagsisimula</a>
+                    <a href="rules.html">Ang Mga Panuntunan</a>
+                    <a href="post-extraction.html">Post-Extraction</a>
+                    <a href="safety.html">Kaligtasan ng Bata</a>
+                    <a href="privacy.html">Patakaran sa Privacy</a>
+                    <a href="terms.html">Mga Tuntunin ng Serbisyo</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Open source sa ilalim ng lisensyang MIT. Ginawa nang may <img src="bean.png" alt="pagmamahal" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> ng mga komunidad, para sa mga komunidad. Mga hangganan ng time zone © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">mga contributor ng OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

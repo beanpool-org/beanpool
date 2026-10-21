@@ -1,0 +1,159 @@
+<!-- source-hash: 4ad64dc454d69949 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>شروع کار — سه راه ورود به BeanPool</title>
+    <meta name="description" content="نحوه آزمایش BeanPool در جامعه جهانی، یافتن یا راه‌اندازی جامعه‌ای در نزدیکی خود، یا پیوستن با یک دعوت‌نامه؛ سپس ۱۲ کلمه شما و اولین معامله‌تان.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.6">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        /* The doors land on these headings (#global, #invite…): below the fixed bar, 74 px tall on a phone, 88 px wide */
+        .rules-content h2[id] { scroll-margin-top: 100px; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content p strong { color: var(--text-primary); }
+        .rules-content p { overflow-wrap: anywhere; }
+        .rules-content .guide-links { font-size: 0.95rem; margin-top: -0.5rem; }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="آیکون BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">نحوه کارکرد</a>
+                <a href="rules.html">قوانین</a>
+                <a href="index.html#features">ویژگی‌ها</a>
+                <a href="help.html">راهنما</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">آموزش‌ها</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="تماشای آموزش‌های ویدیویی در یوتیوب (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="پیوستن به جامعه ردیت (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="مشاهده در گیت‌هاب">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">شروع کار</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="باز کردن منو"><span aria-hidden="true">☰</span> منو</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta" aria-current="page">شروع کار</a>
+                    <a href="index.html#how-it-works">نحوه کارکرد</a>
+                    <a href="rules.html">قوانین</a>
+                    <a href="index.html#features">ویژگی‌ها</a>
+                    <a href="help.html">راهنما</a>
+                    <a href="guide/index.html">راهنمای اعضا</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">آموزش‌ها در یوتیوب</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool در ردیت</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">کد منبع در گیت‌هاب</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>شروع کار</h1>
+        <p class="lede">سه راه برای ورود وجود دارد. گزینه‌ای را انتخاب کنید که متناسب با شرایط امروز شماست؛ حساب کاربری شما با انتخاب هر کدام یکسان است و می‌تواند به بیش از یک جامعه تعلق داشته باشد.</p>
+
+        <!-- OPEN-GLOBAL: when global's private preview is off, the heading becomes "Try it now on the global community" and the
+             two paragraphs below become this one:
+             The global community is people from everywhere. You need no invite: open <strong>global.beanpool.org</strong> in a browser and tap <strong>Join</strong>, or install the app and tap <strong>Explore BeanPool worldwide</strong> on the first screen. Create an account with <strong>12 secret words</strong> (no Google, Apple or Facebook account needed), or sign in once with Google, Apple or Facebook; that sign-in also becomes a way back if you lose your phone. Tell it roughly where you are, to about 10 km, or skip that. Then you can see what people near you offer, post something free or for swap, message people, and ask a community near you to let you in. Beans, trades, the Commons and its Decisions are switched off there: they belong to a local community. The app shows you each of them with an example community, so you know what a local community offers before you join or start one. -->
+        <h2 id="global"><span class="num">۱.</span>امتحان در سراسر جهان: جامعه جهانی</h2>
+        <p>جامعه جهانی متشکل از افرادی از همه‌جاست و نیازی به دعوت‌نامه نخواهد داشت. BeanPool آن را روی سروری که در ایالات متحده اجاره کرده‌ایم اجرا می‌کند. امروز در قالب یک پیش‌نمایش خصوصی است در حالی که نخستین اعضای آن در حال آزمایش هستند: فقط افرادی که مالک یا مدیر سیستم دعوت می‌کند می‌توانند بپیوندند، و هر کس دیگری که <strong>global.beanpool.org</strong> را باز کند یک جمله می‌بیند: «این جامعه در مرحله پیش‌نمایش خصوصی است. از مالک آن یک دعوت‌نامه بخواهید.» این بخش به‌زودی برای همه باز می‌شود. سپس می‌توانید در مرورگر یا در برنامه با <strong>۱۲ کلمه محرمانه</strong> یا ورود از طریق Google، Apple یا Facebook بپیوندید، ببینید افراد نزدیک شما چه پیشنهادهایی دارند، چیزی را رایگان یا برای معاوضه ثبت کنید، به دیگران پیام دهید، و از جامعه‌ای در نزدیکی خود بخواهید اجازه ورود دهد. لوبیا، معاملات، مشاع و تصمیمات آن متعلق به جامعه محلی هستند؛ جامعه جهانی هر یک از آن‌ها را با یک جامعه نمونه به شما نشان می‌دهد تا پیش از پیوستن یا راه‌اندازی، با امکانات یک جامعه محلی آشنا شوید.</p>
+        <p>تا زمان باز شدن آن: برنامه را از <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener">App Store</a> یا <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&amp;hl=en" target="_blank" rel="noopener">Google Play</a> دریافت کنید، جامعه‌هایی را که در حال حاضر فعال هستند در <a href="index.html#find-or-start">نقشه ما</a> ببینید یا یکی را راه‌اندازی کنید (بخش ۲)، یا با یک دعوت‌نامه به یکی از آن‌ها بپیوندید (بخش ۳).</p>
+        <p class="guide-links">راهنما: <a href="guide/joining.html">پیوستن به BeanPool</a>، <a href="guide/web-app.html">استفاده از BeanPool در مرورگر وب</a>.</p>
+
+        <h2 id="find"><span class="num">۲.</span>یافتن یا راه‌اندازی یک جامعه</h2>
+        <!-- OPEN-GLOBAL: when global's private preview is off, the paragraph below goes back to starting:
+             On the global community, <strong>Find your community</strong> on Home lists the communities nearest you. Tap <strong>Ask to join</strong>, write a few words about yourself, and any member of that community can let you in with one tap, and if no answer comes in 30 days you can ask again. Nothing near you? <strong>Tell me when one starts here</strong> watches your area. Or start one: every community … (the rest unchanged) -->
+        <p>امروز می‌توانید جامعه‌هایی را که در حال حاضر فعال هستند در <a href="index.html#find-or-start">نقشه ما</a> ببینید و با دعوت‌نامه‌ای از طرف یکی از اعضا به یکی بپیوندید (بخش ۳). امکان درخواست ورود به‌زودی، با باز شدن جامعه جهانی فراهم می‌شود (بخش ۱): در آنجا، گزینه <strong>جامعه خود را پیدا کنید</strong> در بخش خانه، نزدیک‌ترین جامعه‌ها به شما را فهرست می‌کند. روی <strong>درخواست پیوستن</strong> ضربه بزنید، چند کلمه درباره خودتان بنویسید، و هر یک از اعضای آن جامعه می‌توانند با یک ضربه به شما اجازه ورود دهند، و اگر پاسخی ظرف ۳۰ روز نیامد می‌توانید دوباره درخواست دهید. چیزی در نزدیکی شما نیست؟ گزینه <strong>اگر اینجا جامعه‌ای شروع شد به من اطلاع بده</strong> منطقه شما را زیر نظر می‌گیرد. یا خودتان یکی را راه‌اندازی کنید: هر جامعه روی سرور کوچک اختصاصی خود اجرا می‌شود، یک رایانه یدکی که همیشه در خانه روشن بماند یا سروری اجاره‌ای با هزینه چند دلار در ماه، که فردی محلی از آن مراقبت می‌کند. صفحه <strong>راه‌اندازی یک جامعه</strong> در برنامه مراحل را به شما نشان می‌دهد، و مراحل در صفحه اصلی ما زیر بخش <a href="index.html#run-a-node">اجرای BeanPool برای جامعه خود</a> آمده است.</p>
+        <p class="guide-links">راهنما: <a href="guide/finding-a-community.html">یافتن جامعه‌ای در نزدیکی خود</a>.</p>
+
+        <h2 id="invite"><span class="num">۳.</span>دعوت‌نامه دارید؟</h2>
+        <p>دعوت‌نامه یک پیوند، یک کد QR یا یک کد است که با <strong>INV-</strong> یا <strong>BP-</strong> شروع می‌شود. یک بار کار می‌کند و ۳۰ روز اعتبار دارد. برنامه را نصب کنید، روی <strong>پیوستن با دعوت‌نامه</strong> (در برنامه تحت وب، <strong>اینجا تازه‌واردم</strong>) ضربه بزنید، پیوند یا کد را جای‌گذاری کنید، و نامی را که دیگران خواهند دید تا ۲۰ کاراکتر انتخاب نمایید. اگر فقط کد دارید، نام یا آدرس جامعه را نیز تایپ کنید؛ شخصی که شما را دعوت کرده می‌تواند آن را به شما بگوید.</p>
+        <p class="guide-links">راهنما: <a href="guide/joining.html">پیوستن به BeanPool</a>.</p>
+
+        <h2 id="words"><span class="num">۴.</span>۱۲ کلمه شما</h2>
+        <p>حساب شما کلیدی است که روی گوشی‌تان یا در برنامه تحت وب در مرورگرتان نگهداری می‌شود. هیچ رمز عبوری وجود ندارد. برنامه در بخش <strong>پشتیبان</strong> ۱۲ کلمه به شما نشان می‌دهد: آن‌ها را یادداشت کنید و در جای امنی نگه دارید، زیرا آن‌ها همان چیزی هستند که حسابتان را در یک گوشی جدید بازمی‌گردانند. در برنامه گوشی و در جامعه جهانی، می‌توانید ورود با Google، Apple یا Facebook را به‌عنوان راه دوم بازگشت اضافه کنید. در این صورت، یک نسخه قفل‌شده از کلید شما برای آن نگهداری می‌شود: برنامه‌های گوشی که از خزن کلید BeanPool استفاده می‌کنند آن را در آنجا نگه می‌دارند، روی یک سرور کوچک در ایسلند؛ نسخه‌های قدیمی‌تر برنامه گوشی آن را روی سرور جامعه شما نگهداری می‌کنند؛ برنامه تحت وب در جامعه جهانی آن را روی سرور همان جامعه که ما اداره می‌کنیم نگه می‌دارد. هر کس نسخه را نگه دارد می‌تواند آن را باز کند، و بازیابی از خزن یک روز به انتظار می‌ماند مگر اینکه یکی از دستگاه‌های خودتان بگوید که خود شما هستید. اگر می‌خواهید هیچ‌کس جز شما نتواند وارد شود، فقط از ۱۲ کلمه خود استفاده کنید.</p>
+        <p class="guide-links">راهنما: <a href="guide/your-12-words.html">۱۲ کلمه شما</a>.</p>
+
+        <h2 id="trade"><span class="num">۵.</span>اولین معامله شما</h2>
+        <p>در یک جامعه محلی، ابتدا یک <strong>پیشنهاد</strong> ارسال کنید: همسفری تا شهر، تخم‌مرغ، یک ساعت باغبانی. بر سر قیمتی به لوبیا توافق کنید؛ لوبیاها تا زمان اتمام کار نگهداری می‌شوند، سپس به فروشنده داده می‌شوند و شما به یکدیگر امتیاز می‌دهید. خط اعتباری شما پس از اولین معامله انجام‌شده باز می‌شود؛ از مقدار کمی شروع می‌شود و با دادوستد با افراد بیشتر افزایش می‌یابد. پیشنهادهایی که فعال نگه می‌دارید تعیین می‌کنند چه مقدار از آن را می‌توانید استفاده کنید: یک پیشنهاد تا ۲۰۰ لوبیا، پنج پیشنهاد تا ۲۰۰۰ لوبیا. نشان‌ها (تازه‌وارد، ساکن، پیشکار، ریش‌سفید) پیشینه شما را نشان می‌دهند؛ آن‌ها چیزی را باز نمی‌کنند.</p>
+        <p class="guide-links">راهنما: <a href="guide/a-deal-step-by-step.html">یک معامله، گام به گام</a>، <a href="guide/credit-line.html">خط اعتباری شما</a>، ارقام در <a href="rules.html#4">قوانین</a>.</p>
+
+        <h2 id="6"><span class="num">۶.</span>راهنما</h2>
+        <p>ترجیح می‌دهید آموزش‌های تصویری را تماشا کنید یا برای شروع کار با نود خود به کمک نیاز دارید؟ با جامعه BeanPool در ارتباط باشید:</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-top: 1.25rem;">
+            <div class="feature-card feature-card-brand brand-youtube glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper youtube-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </div>
+                    <span class="brand-badge youtube-badge">▶ راهنماهای ویدیویی</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">آموزش‌های یوتیوب</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">راهنماهای کوتاه درباره پیوستن، ۱۲ کلمه شما و انجام یک معامله.</p>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-youtube" style="margin-top: 0.5rem;">تماشا در یوتیوب ←</a>
+            </div>
+            <div class="feature-card feature-card-brand brand-reddit glass-panel" style="padding: 1.5rem;">
+                <div class="brand-card-top">
+                    <div class="brand-icon-wrapper reddit-bg">
+                        <svg width="24" height="24" viewBox="0 0 24 24" style="fill: var(--on-brand-fill)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </div>
+                    <span class="brand-badge reddit-badge">💬 r/beanpool</span>
+                </div>
+                <h3 style="font-size: 1.1rem; color: var(--text-heading); margin-bottom: 0.35rem;">گفتگوهای ردیت</h3>
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">به گفتگوها بپیوندید، سؤال بپرسید، پیشنهادها را به اشتراک بگذارید و با دیگر گردانندگان نود ارتباط برقرار کنید.</p>
+                <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="btn-brand btn-brand-reddit" style="margin-top: 0.5rem;">پیوستن به r/beanpool ←</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="آیکون BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>برنامه‌ای رایگان برای دادوستد با همسایگان، با لوبیا.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">مرکز راهنما</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">نحوه کارکرد</a>
+                    <a href="getting-started.html">شروع کار</a>
+                    <a href="rules.html">قوانین</a>
+                    <a href="safety.html">ایمنی کودکان</a>
+                    <a href="privacy.html">سیاست حفظ حریم خصوصی</a>
+                    <a href="terms.html">شرایط خدمات</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>متن‌باز تحت مجوز MIT. ساخته شده با <img src="bean.png" alt="عشق" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> توسط جامعه‌ها، برای جامعه‌ها. مرزهای منطقه زمانی © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">مشارکت‌کنندگان OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!-- source-hash: b6cb7426f4ee45f1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>القواعد — كيف يعمل BeanPool</title>
+    <meta name="description" content="القواعد البسيطة لـ BeanPool: كيف تعمل الأرصدة، والائتمان، والعروض، والرسوم، والاتحاد الكينزي، ومؤسسات المجتمع، والإدارة والحوكمة.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="أيقونة BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">كيف يعمل</a>
+                <a href="rules.html">القواعد</a>
+                <a href="index.html#features">الميزات</a>
+                <a href="help.html">المساعدة</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">شروحات تعليمية</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="مشاهدة الدروس المرئية على YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="الانضمام إلى مجتمع Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="عرض على GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">البدء</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="فتح القائمة"><span aria-hidden="true">☰</span> القائمة</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">البدء</a>
+                    <a href="index.html#how-it-works">كيف يعمل</a>
+                    <a href="rules.html" aria-current="page">القواعد</a>
+                    <a href="index.html#features">الميزات</a>
+                    <a href="help.html">المساعدة</a>
+                    <a href="guide/index.html">دليل الأعضاء</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">شروحات على YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool على Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">الرمز المصدري على GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>القواعد — كيف يعمل BeanPool</h1>
+        <p class="lede">BeanPool هو نظام تبادل مجتمعي حيث يبدأ الجميع من الصفر. تكتسب فاصوليا بمساعدة الآخرين وتنفقها عندما يساعدك الآخرون. لا يتم تداول أي أموال، ولا يوجد وسطاء من الشركات — فقط هذه القواعد البسيطة.</p>
+
+        <div class="callout amber">باختصار: <strong>اكسب حدك الائتماني من خلال التداول، واحتفظ بعرض أو عرضين نشطين لاستخدامه، ودع فاصوليا تتدفق.</strong> الصفر هو الهدف — امنح بقدر ما تأخذ تقريباً.</div>
+
+        <h2 id="1"><span class="num">1.</span>فاصوليا ورصيدك</h2>
+        <p>تقيس فاصوليا القيمة التي قدمتها وتلقيتها (وهي تعادل الوقت تقريباً). <strong style="color:var(--text-primary)">الصفر هو الهدف</strong> — وهو يعني أنك منحت بقدر ما أخذت تقريباً.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">رصيد موجب</strong> — لقد قدمت أكثر مما أخذت. والمجتمع مدين لك.</li>
+            <li><strong style="color:var(--text-primary)">رصيد سالب</strong> — لقد منحك المجتمع ائتماناً. وأنت مدين برده من خلال العطاء.</li>
+            <li>في معظم المجتمعات، أقصى حد سالب يمكن لأي شخص الوصول إليه هو <strong>−2000 فاصوليا</strong>. ويمكن للمجتمع الذي يؤكد أعضاءه بأسمائهم الحقيقية تحديد حده الخاص، بما يصل إلى −5000، ومنح الأعضاء المؤكدين حداً ائتمانياً مبدئياً.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>البدء</h2>
+        <p>تنضم عبر دعوة. من اليوم الأول يمكنك التصفح واستلام فاصوليا. وبمجرد امتلاكك لفاصوليا (عبر كسبها أو استلام هدية)، يمكنك إنفاقها. وللإنفاق عبر الائتمان، يجب عليك نشر <strong style="color:var(--text-primary)">عرض</strong> واحد على الأقل (انظر §4 و§5). يبدأ الأعضاء الجدد <strong style="color:var(--text-primary)">بدون حد ائتماني</strong> — يمكنك فقط إنفاق فاصوليا التي تمتلكها بالفعل حتى يتم تفعيل حدك بواسطة أول صفقة مكتملة لك (أو إذا منحك ضامن أو مشرف حداً مبدئياً — انظر §3 و§9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>حدك الائتماني يُكتسب بالتداول</h2>
+        <p>يتيح لك حدك الائتماني النزول قليلاً إلى السالب — الإنفاق قبل أن تعوضه بالعطاء. وهو <strong style="color:var(--text-primary)">مكتسب، وليس منحة</strong>:</p>
+        <ul>
+            <li>تأتي الثقة من <strong style="color:var(--text-primary)">الصفقات المكتملة في السوق</strong> — ولا تأتي أبداً من الهدايا. وتنمو ببطء في البداية: صفقة بقيمة 100 فاصوليا تكسبك نحو 37 فاصوليا من الحد الائتماني. كما يمكن للمشرف أو الضامن المعين منح شخص ما حداً مبدئياً؛ وتظهر منحة المشرف كشارة له.</li>
+            <li>التداول مع <strong style="color:var(--text-primary)">العديد من الأشخاص المختلفين</strong> يبني الثقة أسرع بكثير من تكرار الصفقات مع شخص واحد.</li>
+            <li>تحدد ثقتك <em>حدك</em> الائتماني — وهو أقصى عمق يمكن أن يصل إليه حدك الأدنى، من 0 نزولاً إلى −2000 في معظم المجتمعات (انظر §1).</li>
+            <li>يُفتح حدك الأدنى بعد <strong style="color:var(--text-primary)">أول صفقة حقيقية لك</strong>، وينمو مع كل صفقة تليها (أو يمكن لضامن المجتمع أن يمنحك حداً أدنى مبدئياً — انظر §9). ولا يلزم الحصول على تزكية.</li>
+        </ul>
+        <div class="callout">مستويات الثقة — <strong>قادم جديد (Newcomer) ← مقيم (Resident) ← راعٍ (Steward) ← حكيم (Elder)</strong> — هي شارات تقديرية. والشارات التي تكتسبها لا تفتح أي ميزة بمفردها؛ بل يأتي الحد الائتماني الأعمق من التداول الحقيقي. ويمكن للمشرف أيضاً منح شخص ما شارة، ومعها الحد الائتماني المبدئي لتلك الشارة.</div>
+
+        <h2 id="4"><span class="num">4.</span>المعاملة بالمثل: لاستخدام الائتمان، يجب الحفاظ على عروض نشطة</h2>
+        <p>كسب الثقة يحدد <strong style="color:var(--text-primary)">حدك</strong> الائتماني (العمق الذي يمكنك الوصول إليه). ولكن <strong style="color:var(--text-primary)">للسحب</strong> الفعلي من ذلك الائتمان، يجب عليك الحفاظ على عروض نشطة منشورة. وهذا يضمن أن أي شخص يحمل رصيداً سالباً يوضح للمجتمع بشكل عملي كيف يخطط للمساهمة.</p>
+        
+        <p>يحدد عدد العروض النشطة التي تحافظ على نشرها مقدار الائتمان <strong style="color:var(--text-primary)">المتاح للاستخدام</strong>:</p>
+        <table>
+            <thead><tr><th>العروض النشطة</th><th>الحد الائتماني المتاح</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — إنفاق الفاصوليا المملوكة فقط</td></tr>
+                <tr><td class="num-col">1</td><td>نزولاً حتى −200 فاصوليا</td></tr>
+                <tr><td class="num-col">2</td><td>نزولاً حتى −500 فاصوليا</td></tr>
+                <tr><td class="num-col">3</td><td>نزولاً حتى −1000 فاصوليا</td></tr>
+                <tr><td class="num-col">4</td><td>نزولاً حتى −1500 فاصوليا</td></tr>
+                <tr><td class="num-col">5</td><td>نزولاً حتى −2000 فاصوليا <em>(الحد الأقصى المعتاد)</em></td></tr>
+            </tbody>
+        </table>
+        <p>حد إنفاقك الفعلي هو القيمة <strong style="color:var(--text-primary)">الأقل</strong> بين ما اكتسبته وما تتيحه عروضك النشطة.</p>
+        <p><em>على سبيل المثال: إذا اكتسبت حداً قدره −600 من خلال الصفقات، فإن الحفاظ على عرضين نشطين يتيح لك −500 منه. والحفاظ على عرض ثالث يتيح حدك الكامل البالغ −600 (لن تحتاج أبداً إلى عرض رابع أو خامس لأن حدك المكتسب قد تم الوصول إليه بالفعل).</em></p>
+        <div class="callout">
+            <strong>إيقاف الإنفاق مؤقتاً (التجميد):</strong><br>
+            إذا انخفض عدد عروضك النشطة عن العدد المطلوب لرصيدك السالب الحالي (مثلاً إذا بيع أحد عروضك واكتمل، أو أوقفت أحدها مؤقتاً)، يتم <strong>إيقاف قدرتك على الإنفاق بالائتمان مؤقتاً</strong>. هذه شبكة أمان وليست عقوبة: لا يتم أخذ أي شيء منك. لا يزال بإمكانك استلام فاصوليا، ومواصلة البيع، والتصفح. ويُستأنف حدك الائتماني تلقائياً بمجرد عودة رصيدك إلى النطاق الذي تغطيه عروضك النشطة: انشر عرضاً آخر، أو استلم فاصوليا.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>العروض (قوائمك)</h2>
+        <ul>
+            <li>احتفظ بالعدد الذي تريده من العروض — بما في ذلك العروض المتكررة — وبدّل حالة كل منها بين <strong style="color:var(--text-primary)">نشط أو متوقف مؤقتاً</strong> متى شئت. العروض <em>النشطة</em> فقط هي التي تُحتسب ضمن حدك الائتماني.</li>
+            <li><strong style="color:var(--text-primary)">العطاء قبل الأخذ:</strong> في مجتمع يستخدم فاصوليا، يجب أن تكون قد نشرت عرضاً واحداً على الأقل قبل أن تتمكن من نشر طلب أو الشراء من الآخرين. وحيثما لا توجد فاصوليا، كما في المجتمع العالمي، يمكن أن يكون أول منشور لك طلباً.</li>
+            <li>رصيدك موجب؟ أوقف كل شيء مؤقتاً إن أردت — فالعروض مطلوبة فقط للنزول إلى الرصيد السالب.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>الرسوم وصندوق المجتمع</h2>
+        <p>رسمان ضئيلان، يصب كلاهما في <strong style="color:var(--text-primary)">مشاع المجتمع</strong> — وهو صندوق مشترك يصوت مجتمعك لإنفاقه على المشاريع المحلية. ولا يضيع أي شيء لصالح أي شركة.</p>
+        <p><strong style="color:var(--text-primary)">أ) رسم السوق — 1.5% على الصفقات المكتملة.</strong> عند تسوية عملية بيع في السوق، يحصل البائع على صافٍ يقل بنسبة 1.5% عن السعر ويذهب الفارق إلى المشاع. <strong style="color:var(--text-primary)">الهدايا (التحويلات المباشرة بين الأعضاء) مجانية</strong> — وكذلك عمليات الاسترداد والتحويلات النظامية.</p>
+        <p><strong style="color:var(--text-primary)">ب) رسم التداول على الأرصدة الموجبة — شهرياً، وفقط على الجزء الذي يتجاوز 200.</strong> مثل الشرائح التصاعدية، تُفرض الرسوم على كل شريحة فقط على الجزء من رصيدك الواقع ضمنها:</p>
+        <table>
+            <thead><tr><th>شريحة الرصيد</th><th>معدل التداول الشهري</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">مجاناً</span> المنطقة الخضراء</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
+            </tbody>
+        </table>
+        <p>هذا يشجع فاصوليا بلطف على <strong style="color:var(--text-primary)">التداول بدلاً من التراكم</strong>. <strong style="color:var(--text-primary)">الأرصدة السالبة لا تخضع أبداً لرسم التداول</strong> — فأنت بالفعل تتحمل ائتماناً لصالح المجتمع. لاحظ أن المنطقة المجانية +200 تعاكس تماماً شريحة الائتمان الأولى −200، وبذلك يكون النظام متناظراً حول الصفر.</p>
+
+        <h2 id="7"><span class="num">7.</span>الهدايا (إرسال فاصوليا)</h2>
+        <ul>
+            <li>يمكنك <strong style="color:var(--text-primary)">إهداء فاصوليا التي تمتلكها بالفعل فقط</strong> — لا تؤدي الهدية أبداً إلى رصيد سالب ولا تستخدم حدك الائتماني.</li>
+            <li>يمكنك الإرسال بمجرد إتمام صفقة حقيقية واحدة على الأقل (وهذا يمنع الحسابات الجديدة تماماً من تحويل فاصوليا فوراً ثم الاختفاء).</li>
+            <li>لا تبني الهدايا أي ثقة للمستلم، وهي <strong style="color:var(--text-primary)">مجانية</strong> — بلا أي رسوم (يمكنك فقط إهداء فاصوليا التي تمتلكها بالفعل).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>كيفية تسوية الصفقات</h2>
+        <p>تُحفظ صفقات السوق بأمان في <strong style="color:var(--text-primary)">حساب الضمان</strong> (محتجزة كأمانة لدى النظام) حتى إتمام الصفقة، ثم تُحرر للبائع (مخصوماً منها رسم 1.5%). وإذا أُلغيت الصفقة، يُسترد المبلغ للمشتري بالكامل.</p>
+
+        <h2 id="9"><span class="num">9.</span>التزكية (انطلاقة اختيارية مبكرة)</h2>
+        <p>يمكن <strong style="color:var(--text-primary)">للضامن</strong> الموثوق والمعين من قِبل المجتمع أن يمنح القادم الجديد <strong style="color:var(--text-primary)">حداً أدنى مبدئياً قدره 25 أو 50 أو 100 فاصوليا</strong> حتى يتمكن من بدء استخدام الائتمان قبل أن يكتسبه. وعادة ما تُمنح هذه التزكيات — وفقاً لتقدير الضامن وحده — لأشخاص يرى الضامن أن منشوراتهم ومساهماتهم مفيدة وملهمة حقاً. وهي اختيارية في كل الأحوال: لا يحتاج أي شخص إلى تزكية للمشاركة، حيث يمكنك أيضاً فتح حدك الائتماني ببساطة عن طريق التداول (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>المقاصة الفيدرالية بين المجتمعات</h2>
+        <p>لا تحتاج المجتمعات إلى العيش في عزلة. من خلال <strong style="color:var(--text-primary)">روابط التبادل الفيدرالية</strong> (المستوحاة من اتحاد المقاصة لكينز)، يمكن لخوادم المجتمعات المستقلة إجراء مقاصة للصفقات مع خادم مجاور بنظام الند للند، دون الحاجة إلى عملات ورقية أو احتياطيات بنكية. ولا تغادر فاصوليا موطنها الأصلي أبداً — حيث يحتفظ كل زوج من الخوادم بسجل تجسير يوضح ما يدين به كل منهما للآخر من عمل، ويحدد كل جانب سقفه الخاص لمدى سريان ذلك. وتتم المقاصة بين أزواج من المجتمعات، ويقوم كل مشغل بتفعيلها عن قصد، وهي لا تزال في مراحلها الأولى: إنها مبنية بالفعل، بشاشاتها في تطبيق الويب، ولم تُجرَّب إلا بين اثنين من مجتمعاتنا التجريبية، ولم تُجرَّب أبداً بين مجتمعات حية فعلية.</p>
+
+        <h2 id="11"><span class="num">11.</span>الهوية التشفيرية وحفظ المفاتيح</h2>
+        <p>حسابك محمي بزوج مفاتيح تشفير Ed25519 يتم إنشاؤه على جهازك. يقدم BeanPool خيارات حفظ مرنة تناسب احتياجاتك:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">السيادة الذاتية الكاملة:</strong> في تطبيقات الهاتف، يُحفظ مفتاحك الخاص في وحدة التخزين الآمنة بالجهاز (iOS Keychain / Android Keystore)؛ وفي تطبيق الويب يُحفظ في وحدة التخزين الخاصة بالمتصفح. ولا يغادر الجهاز إلا كنسخة مقفلة لاستعادة تسجيل الدخول، أو عند نسخ حسابك إلى جهاز آخر لك. احتفظ بنسختك الاحتياطية المكونة من كلماتك الـ 12 دون اتصال بالإنترنت (وهي كلمات إنجليزية).</li>
+            <li><strong style="color:var(--text-primary)">الاستعادة:</strong> عبارة كلماتك الـ 12 تعيد حسابك على أي جهاز. يمكنك أيضاً ربط تسجيل الدخول عبر Google أو Apple أو Facebook. وعندئذ تُحفظ نسخة مقفلة من مفتاحك له: وتطبيقات الهاتف التي تستخدم خزينة مفاتيح BeanPool تحتفظ بها هناك، على خادم صغير في آيسلندا؛ والإصدارات الأقدم من تطبيق الهاتف تحتفظ بها على خادم مجتمعك؛ ويحتفظ تطبيق الويب في المجتمع العالمي بها على خادم ذلك المجتمع، الذي نديره نحن. والجهة التي تحتفظ بالنسخة يمكنها فتحها. وتنتظر عملية الاستعادة من الخزينة 24 ساعة ما لم يوافق أحد أجهزتك الخاصة عليها. وإذا فقدت جهازك وكلماتك الـ 12 وتسجيل دخولك معاً، يمكن لمشرف مجتمعك نقل حسابك إلى هاتف جديد برمز استخدام لمرة واحدة، بحضورك شخصياً؛ ويظل تاريخك كما هو. لذا اكتب الكلمات واحتفظ بها.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>الحدود والأمان</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">الحد الأقصى للرصيد السالب −2000</strong> في معظم المجتمعات (انظر §1). لا يوجد حد يومي لمقدار فاصوليا التي تنفقها — فحدك الأدنى هو القيد. ولكن هناك حد لعدد المرات: 100 دفعة، و30 شخصاً لم تدفع لهم من قبل، و100 طلب في السوق خلال أي 24 ساعة.</li>
+            <li>الثقة مع أي شريك منفرد لها حد أقصى، حتى لا يتمكن أحد من تضخيم مكانته بالتداول ذهاباً وإياباً مع شريك واحد متواطئ.</li>
+            <li><strong style="color:var(--text-primary)">وضع العطلة</strong> يخفي عروضك ويوقف الطلبات الواردة مؤقتاً أثناء غيابك.</li>
+            <li>يمكن للأعضاء الإبلاغ عن أصحاب السلوك السيئ ووضع علامة عليهم؛ وبإمكان مشرفي المجتمع إزالتهم.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>مؤسسات المجتمع والحوكمة</h2>
+        <p>مؤسسات المجتمع (مثل مكتبة أدوات مجتمعية، أو تربية دواجن للبيض، أو مستودع حطب) والمشاريع المحددة هي مبادرات مشتركة تحت إشراف جماعي. وتعمل وفق قواعد واضحة ومطبقة برمجياً (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">نموذج حوكمة المشاع</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">كيان واحد، ودورتا حياة (§2.1):</strong> المؤسسة المستمرة تدوم وتتداول؛ أما المؤسسة المحددة (المشروع) فلها هدف وتاريخ انتهاء، حيث تُصفي حسابها وتعيد ما تبقى إلى المشاع عند انتهائها.</li>
+            <li><strong style="color:var(--text-primary)">الحدود الدنيا المكتسبة وتعهدات المسؤولين (القواعد 1–3):</strong> تبدأ أي مؤسسة جديدة دون سحب على المكشوف غير مكتسب: حدها الائتماني الأدنى مدعوم بتعهدات صريحة من مكانة التداول المكتسبة لمسؤوليها (مجموع مباشر دون مضاعف اصطناعي). وتعهد الدعم لا يمس ولا يقلل أبداً من الحد الائتماني الشخصي للمسؤول أو لأسرته. وتحتفظ المؤسسات الأقدم بالحد الأدنى المبدئي الذي كان لديها قبل التعهدات.</li>
+            <li><strong style="color:var(--text-primary)">المسؤولية المحدودة (القاعدة 4):</strong> المؤسسة هي التي تفشل، وليس أسرة المسؤول. فإذا تعثرت المؤسسة، يُجمّد إنفاقها، ولكن الحدود الدنيا الشخصية لمسؤوليها تظل محمية.</li>
+            <li><strong style="color:var(--text-primary)">الائتمان يشتري المدخلات، والأرباح تدفع للناس (القاعدة 5):</strong> يجوز للمؤسسة السحب من الائتمان نزولاً حتى حدها الأدنى القابل للاستخدام لشراء الإمدادات أو الخدمات من الجيران الخارجيين. ولا يجوز لها <em>أبداً</em> السحب من الائتمان لدفع مستحقات مسؤوليها — إذ يُدفع للمسؤولين فقط عندما يكون <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">مستحقات المسؤولين محددة بسقف الفائض المكتسب (القاعدة 6):</strong> المدفوعات للمسؤولين محددة بشكل صارم بسقف فائض التداول الحقيقي (دخل المبيعات مطروحاً منه مدفوعات المسؤولين). ولا يمكن أبداً تحويل المنح والتعهدات والهدايا إلى أجور للمسؤولين.</li>
+            <li><strong style="color:var(--text-primary)">التحويل التلقائي لرأس المال العامل (القاعدة 7):</strong> يمكن للمؤسسة تحديد سقف لرأس المال العامل. ويتم تحويل الفائض المكتسب الذي يتجاوزه تلقائياً إلى صندوق مشاع المجتمع لمنع الاكتناز. ولا يتم تحويل المنح والهدايا أبداً.</li>
+            <li><strong style="color:var(--text-primary)">قاعدة موافقة شخصين:</strong> لا يمكن للمسؤولين الموافقة على مدفوعاتهم الخاصة أو عروضهم الشخصية لتلبية احتياجات المؤسسة — بل يجب أن يوافق مسؤول آخر.</li>
+            <li><strong style="color:var(--text-primary)">استطلاعات الرأي مقابل القرارات (§3):</strong> الأسئلة غير الرسمية هي <em>استطلاعات رأي</em> في موجز السوق: صوت واحد لكل شخص، يُحتسب، ولا يلزم بأي شيء. أما الحوكمة الملزمة (منح الصندوق، وإسقاط الديون، وتغيير الأدوار، وتعليق عضوية أو تجميد أو إزالة عضو) فتتم عبر <em>القرارات</em> في تبويب المشاع، مع نافذة تصويت مدتها 7 أيام. يعتمد القرار بنسبة 60% من الأصوات (66% لإزالة عضو؛ وأكثر من النصف لرفع التعليق أو التجميد، أو لإعادة عضو) بمجرد تصويت عدد كافٍ من الأعضاء: 30% من الأعضاء النشطين خلال آخر 30 يوماً، على ألا يقل عن 3 أعضاء (25% لإزالة عضو). ثم يُنفذ القرار تلقائياً. وتستخدم منح الصندوق التصويت التربيعي على مكانة التداول المكتسبة — فلا يمكن للفاصوليا السائلة شراء الأصوات.</li>
+            <li><strong style="color:var(--text-primary)">المصطلحات المعتمدة (§9):</strong> أربعة مستويات، وأربع كلمات مميزة: الخادم ← <em>مالك / مشرف</em> · المؤسسة ← <em>مسؤول رئيسي / مسؤول</em> · المجموعة ← <em>منسق</em> · فئة الثقة ← <em>راعٍ (Steward)</em>.</li>
+        </ul>
+        <div class="callout amber">باختصار: <strong>اكسب حدك الائتماني من خلال التداول، واحتفظ بعرض أو عرضين نشطين لاستخدامه، ودع فاصوليا تتدفق.</strong> الصفر هو الهدف — امنح بقدر ما تأخذ تقريباً.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="أيقونة BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>ائتمان متبادل للمجتمعات، تديره المجتمعات.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">مركز المساعدة</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">كيف يعمل</a>
+                    <a href="getting-started.html">البدء</a>
+                    <a href="rules.html">القواعد</a>
+                    <a href="safety.html">سلامة الأطفال</a>
+                    <a href="privacy.html">سياسة الخصوصية</a>
+                    <a href="terms.html">شروط الخدمة</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>مفتوح المصدر بموجب ترخيص MIT. صُنع بـ <img src="bean.png" alt="حب" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> من المجتمعات، لأجل المجتمعات. حدود المناطق الزمنية © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">المساهمون في OpenStreetMap</a> (ترخيص ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!-- source-hash: b6cb7426f4ee45f1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>規則 —— BeanPool 的運作方式</title>
+    <meta name="description" content="BeanPool 的簡明規則：餘額、信用額度、提供、費用、凱因斯式聯盟、在地事業與治理機制如何運作。">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool 圖示" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">運作方式</a>
+                <a href="rules.html">規則</a>
+                <a href="index.html#features">功能特色</a>
+                <a href="help.html">說明</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">教學</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="在 YouTube (@beanpool) 上觀看教學影片">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="加入 Reddit 社群 (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="在 GitHub 上查看">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">開始使用</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="開啟選單"><span aria-hidden="true">☰</span> 選單</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">開始使用</a>
+                    <a href="index.html#how-it-works">運作方式</a>
+                    <a href="rules.html" aria-current="page">規則</a>
+                    <a href="index.html#features">功能特色</a>
+                    <a href="help.html">說明</a>
+                    <a href="guide/index.html">成員指南</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube 教學</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit 上的 r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub 原始碼</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>規則 —— BeanPool 的運作方式</h1>
+        <p class="lede">BeanPool 是一個所有人初始均為零的社群互助平台。你透過幫助他人賺取豆子，並在他人幫助你時消費豆子。沒有金錢交易，也沒有企業中間商 —— 只有這些簡明的規則。</p>
+
+        <div class="callout amber">簡而言之：<strong>透過交易建立你的信用額度，保持刊登一兩個「提供」以便使用額度，讓豆子流轉起來。</strong>目標是歸零 —— 付出與收穫大致相當。</div>
+
+        <h2 id="1"><span class="num">1.</span>豆子與你的餘額</h2>
+        <p>豆子衡量你付出與獲得的價值（大致相當於時間）。<strong style="color:var(--text-primary)">目標是歸零</strong> — 這意味著你的付出與收穫大致相當。</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">正餘額</strong> — 你的付出多於收穫。社群欠你。</li>
+            <li><strong style="color:var(--text-primary)">負餘額</strong> — 社群向你提供了信用額度。你需要透過付出來回饋社群。</li>
+            <li>在大多數社群中，任何人可透支的最大限度為 <strong>−2000 顆豆子</strong>。透過實名驗證成員的社群可以自行設定限額（最高達 −5000），並為已驗證成員提供初始額度。</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>新手入門</h2>
+        <p>你透過邀請加入。從第一天起，你就可以瀏覽並接收豆子。一旦你持有豆子（透過賺取或接收贈送），就可以消費它們。若要使用信用額度消費，你必須刊登至少一個<strong style="color:var(--text-primary)">提供</strong>（參見第 4 與第 5 節）。新成員一開始<strong style="color:var(--text-primary)">沒有信用額度</strong> — 你只能消費實際持有的豆子，直到完成第一筆交易啟用你的額度（或由擔保人或管理員為你提供初始額度 — 參見第 3 與第 9 節）。</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>信用額度透過交易累積</h2>
+        <p>信用額度允許你的餘額適度為負 — 在回饋之前先行消費。它是<strong style="color:var(--text-primary)">靠自己累積，而非憑空賦予</strong>：</p>
+        <ul>
+            <li>信任來自<strong style="color:var(--text-primary)">完成的市集交易</strong> — 絕不來自贈送。起初成長較慢：一筆 100 顆豆子的交易大約能獲得 37 顆豆子的信用額度。管理員或指定的擔保人也可以向某人提供初始額度；管理員的授予會顯示為其徽章。</li>
+            <li>與<strong style="color:var(--text-primary)">許多不同的人</strong>交易，建立信任的速度遠快於與同一個人反覆交易。</li>
+            <li>你的信任度決定了你的信用<em>限額</em> — 即你的透支底線，在大多數社群中從 0 到 −2000 不等（參見第 1 節）。</li>
+            <li>你的透支底線在<strong style="color:var(--text-primary)">第一筆真實交易</strong>後開啟，並隨著之後的每一筆交易而成長（或由社群擔保人為你提供初始底線 — 參見第 9 節）。擔保不是必須的。</li>
+        </ul>
+        <div class="callout">信任等級 — <strong>新人 → 居民 → 管家 → 長老</strong> — 是榮譽徽章。你獲得的徽章本身不限制任何功能；更高的信用額度來自真實交易。管理員也可以授予某人一枚徽章，並隨之附帶該徽章的初始信用額度。</div>
+
+        <h2 id="4"><span class="num">4.</span>互惠原則：要使用信用，必須保持刊登中的提供</h2>
+        <p>累積信任決定了你的信用<strong style="color:var(--text-primary)">限額</strong>（你潛在可以透支多深）。但要實際<strong style="color:var(--text-primary)">支取</strong>這筆信用，你必須保持刊登活躍的「提供」。這確保了任何負債的人都在積極向社群展示他們計劃如何做出貢獻。</p>
+        
+        <p>你保持刊登的提供數量決定了你可以使用多少信用額度：</p>
+        <table>
+            <thead><tr><th>刊登中的提供</th><th>可用信用額度</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — 僅限消費持有的豆子</td></tr>
+                <tr><td class="num-col">1</td><td>最高至 −200 顆豆子</td></tr>
+                <tr><td class="num-col">2</td><td>最高至 −500 顆豆子</td></tr>
+                <tr><td class="num-col">3</td><td>最高至 −1000 顆豆子</td></tr>
+                <tr><td class="num-col">4</td><td>最高至 −1500 顆豆子</td></tr>
+                <tr><td class="num-col">5</td><td>最高至 −2000 顆豆子 <em>（通常上限）</em></td></tr>
+            </tbody>
+        </table>
+        <p>你的實際消費限額是你已累積的額度與刊登中提供所對應額度中的<strong style="color:var(--text-primary)">較小者</strong>。</p>
+        <p><em>例如：如果你透過交易獲得了 −600 的限額，保持 2 個刊登中的提供可以讓你使用其中的 −500。保持第 3 個提供則可使用完整的 −600 限額（你絕不需要第 4 或第 5 個提供，因為已達到你所累積的上限）。</em></p>
+        <div class="callout">
+            <strong>消費暫停（凍結）：</strong><br>
+            如果你刊登中的提供數量低於當前負債所需的要求（例如你的某個提供已售出並完成，或你暫停了某個提供），你的<strong>信用消費能力將會暫停</strong>。這是一種安全機制而非懲罰：你不會失去任何東西。你仍然可以接收豆子、繼續出售並瀏覽市集。一旦你的餘額回到刊登中提供所能涵蓋的範圍內，信用額度會自動解除暫停：刊登另一個提供，或接收豆子即可。
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>提供（你的刊登）</h2>
+        <ul>
+            <li>你可以保留任意數量的提供 — 包括常態性提供 — 並可隨時將每一項切換為<strong style="color:var(--text-primary)">刊登中或已暫停</strong>。只有<em>刊登中</em>的提供才計入你的信用額度。</li>
+            <li><strong style="color:var(--text-primary)">先付出再獲取：</strong>在使用豆子的社群中，你必須先刊登至少一項提供，然後才能刊登需求或向他人購買。在沒有豆子的社群（例如全球社群）中，你的第一篇刊登可以是需求。</li>
+            <li>餘額為正？只要你願意，可以暫停所有提供 — 只有在餘額為負時才需要提供。</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>費用與社群資金池</h2>
+        <p>兩筆微小費用，均流入<strong style="color:var(--text-primary)">社群公共板塊</strong> — 一個由你社群投票決定用於在地專案的共享資金池。完全不會流失給商業公司。</p>
+        <p><strong style="color:var(--text-primary)">a) 市集費用 — 已完成交易的 1.5%。</strong>當市集交易結算時，賣家實收比售價少 1.5% 的豆子，差額進入公共板塊。<strong style="color:var(--text-primary)">贈送（成員之間的直接轉帳）完全免費</strong> — 退款與系統劃轉同樣免費。</p>
+        <p><strong style="color:var(--text-primary)">b) 正餘額流通費 — 按月收取，且僅針對超過 200 顆豆子的部分。</strong>類似累進級距，每個級距僅針對落在該區間內的餘額部分收取：</p>
+        <table>
+            <thead><tr><th>餘額區間</th><th>每月流通費率</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">免費</span> 綠色安全區</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
+            </tbody>
+        </table>
+        <p>這溫和地鼓勵豆子<strong style="color:var(--text-primary)">持續流通而非囤積</strong>。<strong style="color:var(--text-primary)">負餘額絕不產生流通費</strong> — 因為你已經在為社群承擔信用。請注意，+200 的免費區間與最初的 −200 信用區間完全對應，因此整個系統圍繞零對稱運作。</p>
+
+        <h2 id="7"><span class="num">7.</span>贈送（轉帳豆子）</h2>
+        <ul>
+            <li>你<strong style="color:var(--text-primary)">只能贈送實際持有的豆子</strong> — 贈送絕不能透支為負數，也絕不使用你的信用額度。</li>
+            <li>完成至少一筆真實交易後方可轉帳（這可防止全新帳號立即轉移豆子後消失）。</li>
+            <li>贈送不會為接收者建立任何信任度，且<strong style="color:var(--text-primary)">完全免費</strong> — 無手續費（你只能贈送已持有的豆子）。</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>交易如何結算</h2>
+        <p>市集交易由系統安全進行<strong style="color:var(--text-primary)">託管</strong>（由系統代為保管），直到交易完成，然後發放給賣家（扣除 1.5% 的費用）。如果交易取消，買家將獲得全額退款。</p>
+
+        <h2 id="9"><span class="num">9.</span>擔保（可選的起步加速）</h2>
+        <p>受信任且由社群指定的<strong style="color:var(--text-primary)">擔保人</strong>可以為新人提供 <strong style="color:var(--text-primary)">25、50 或 100 顆豆子的初始底線</strong>，以便他們在透過交易累積之前就能開始使用信用。這通常完全由擔保人酌情決定 — 授予那些發布的內容與貢獻讓擔保人感到真誠且深受啟發的人。無論如何這都是可選的：沒有人必須獲得擔保才能參與，因為只需透過交易就能開啟你的信用額度（第 3 節）。</p>
+
+        <h2 id="10"><span class="num">10.</span>跨社群聯合清算</h2>
+        <p>社群無需孤立存在。透過<strong style="color:var(--text-primary)">聯合交易連接器</strong>（靈感源自凱因斯的清算聯盟構想），獨立的社群節點可以與相鄰節點進行點對點的跨社群交易清算，無需法定貨幣或銀行準備金。豆子絕不會離開所屬的在地社群 — 每對節點都維護一本橋接帳本，記錄彼此在勞動互助上的欠款，且雙方均可對欠款上限做出各自限制。清算在成對的社群之間進行，需要每位營運者主動開啟，目前該機制仍處於早期階段：它已建置完成，在網頁版應用程式中有對應畫面，但僅在我們自有的兩個測試社群之間進行過試驗，尚未在實際運作的社群之間使用。</p>
+
+        <h2 id="11"><span class="num">11.</span>密碼學身分與金鑰保管</h2>
+        <p>你的帳號由在你的裝置上產生的 Ed25519 密碼學金鑰對提供保護。BeanPool 提供靈活的保管方式以滿足你的需求：</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">完全自我主權：</strong>在手機應用程式中，你的私鑰保存在裝置的安全儲存區（iOS Keychain / Android Keystore）中；在網頁版應用程式中保存在瀏覽器專屬的儲存區中。私鑰僅在用於登入還原時以加密複本形式離開裝置，或在你將帳號複製到你的另一台裝置時離開。請將你的 12 個助記詞種子備份在離線環境中。</li>
+            <li><strong style="color:var(--text-primary)">還原：</strong>你的 12 個助記詞可以在任何裝置上還原你的帳號。你還可以連結 Google、Apple 或 Facebook 登入。系統會為該登入方式保存一份金鑰的加密複本：使用 BeanPool 金鑰保險庫的手機應用程式會存放在那裡（位於冰島的小型伺服器上）；舊版手機應用程式會存放在你社群的節點上；全球社群的網頁版應用程式則存放在該社群的伺服器上（由我們營運）。誰保存該複本，誰就能打開它。從保險庫還原需要等待 24 小時，除非你自己的其中一台裝置批准它。如果你同時遺失了裝置、12 個助記詞以及登入方式，你社群的管理員可以在當面核對的情況下使用一次性驗證碼將你的帳號移轉到新手機上；你的歷史紀錄都會保留。所以請務必將助記詞抄寫下來。</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>限額與安全</h2>
+        <ul>
+            <li>大多數社群的<strong style="color:var(--text-primary)">透支下限為 −2000</strong>（參見第 1 節）。對你每天可以消費多少豆子沒有限制 — 你的透支底線就是界限。但對頻率有限制：在任何 24 小時內最多進行 100 次付款、向 30 位從未轉帳過的人付款，以及發起 100 次市集請求。</li>
+            <li>與任何單一夥伴之間的信任度設有上限，因此沒有人可以透過與同夥來回交易來虛增信譽。</li>
+            <li><strong style="color:var(--text-primary)">休假模式</strong>會在你離開期間隱藏你的提供，並暫停接收新請求。</li>
+            <li>成員可以檢舉並標記不良行為者；社群管理員可以將其移除。</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>在地事業與治理機制</h2>
+        <p>在地事業（例如社群工具圖書館、養雞產蛋或柴火集散點）以及有明確期限的專案是集體管理下的共同計畫。它們按照明確、由程式碼強制執行的規則運作（參見<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">公共板塊治理模型</a>）：</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">同一物件，兩種生命週期（第 2.1 節）：</strong>持續性事業長期存在並持續交易；有限期事業（專案）有明確的目標與結束日期，在結束時清算帳號並將剩餘資產歸還至公共板塊。</li>
+            <li><strong style="color:var(--text-primary)">累積的底線與管理人擔保認捐（規則 1–3）：</strong>新事業起步時沒有未經賺取的透支額度：其信用底線由其管理人已累積的交易信譽明確擔保認捐（直接相加，無合成槓桿乘數）。擔保認捐絕不會影響或減少管理人個人的家庭信用底線。成立較早的事業保留其在認捐前擁有的初始底線。</li>
+            <li><strong style="color:var(--text-primary)">有限責任（規則 4）：</strong>倒閉的是事業，而非管理人的家庭。若事業違約，其消費將被凍結，但其管理人的個人信用底線受到保護。</li>
+            <li><strong style="color:var(--text-primary)">信用採購物資，利潤支付報酬（規則 5）：</strong>在地事業可以使用其可用底線內的信用向外部鄰居購買物資或服務。但絕不可使用信用向其自身管理人支付報酬 — 只有在 <code>balance − amount ≥ 0</code> 時方可向管理人付款。</li>
+            <li><strong style="color:var(--text-primary)">管理人報酬以已賺取的盈餘為上限（規則 6）：</strong>向管理人支付的款項嚴格受限於真實的交易盈餘（銷售收入減去已支付給管理人的款項）。補助金、擔保認捐與贈送絕不能轉化為管理人的薪資。</li>
+            <li><strong style="color:var(--text-primary)">營運資金自動劃轉（規則 7）：</strong>事業可以設定營運資金上限。超過上限的已賺取盈餘會自動劃轉回社群公共板塊資金池以防止囤積。補助金與贈送絕不會被劃轉。</li>
+            <li><strong style="color:var(--text-primary)">雙人審核規則：</strong>管理人不得審核向自己付款或自己對在地事業需求發起的投標 — 必須由另一位管理人審核。</li>
+            <li><strong style="color:var(--text-primary)">投票 vs 決策（第 3 節）：</strong>非正式問題是市集動態中的<em>投票</em>：每人一票，僅作統計，無約束力。具約束力的治理（資金池補助金、債務註銷、角色變更，以及暫停、凍結或移除成員）透過公共板塊分頁下的<em>決策</em>進行，投票窗口期為 7 天。在達到法定投票人數（過去 30 天內活躍成員的 30%，且至少 3 人；移除成員為 25%）後，獲得 60% 的贊成票即可通過決策（移除成員需 66%；解除暫停、解除凍結或重新接納成員需過半數）。通過後將自動執行。資金池補助金採用基於已累積交易信譽的二次方投票 — 流動的豆子無法購買選票。</li>
+            <li><strong style="color:var(--text-primary)">統一術語（第 9 節）：</strong>四個層級，四組明確詞彙：節點 → <em>所有者 / 管理員</em> · 在地事業 → <em>主要管理人 / 管理人</em> · 群組 → <em>召集人</em> · 信任層級 → <em>管家</em>。</li>
+        </ul>
+        <div class="callout amber">簡而言之：<strong>透過交易建立你的信用額度，保持刊登一兩個「提供」以便使用額度，讓豆子流轉起來。</strong>目標是歸零 —— 付出與收穫大致相當。</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool 圖示" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>由社群營運的社群互助信用平台。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">說明中心</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">運作方式</a>
+                    <a href="getting-started.html">新手入門</a>
+                    <a href="rules.html">規則</a>
+                    <a href="safety.html">兒童安全</a>
+                    <a href="privacy.html">隱私權政策</a>
+                    <a href="terms.html">服務條款</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>以 MIT 授權條款開源發行。由社群用<img src="bean.png" alt="愛心" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />打造，服務於社群。時區邊界資料 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 貢獻者</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

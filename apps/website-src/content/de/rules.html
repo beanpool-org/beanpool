@@ -1,0 +1,219 @@
+<!-- source-hash: b6cb7426f4ee45f1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Die Regeln — Wie BeanPool funktioniert</title>
+    <meta name="description" content="Die einfachen Regeln von BeanPool: wie Salden, Kredit, Angebote, Gebühren, keynesianische Föderation, Gemeinschaftsbetriebe und Entscheidungsfindung funktionieren.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool-Symbol" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">So funktioniert's</a>
+                <a href="rules.html">Die Regeln</a>
+                <a href="index.html#features">Funktionen</a>
+                <a href="help.html">Hilfe</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorials</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Video-Tutorials auf YouTube ansehen (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit-Community beitreten (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Auf GitHub ansehen">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Erste Schritte</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Menü öffnen"><span aria-hidden="true">☰</span> Menü</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Erste Schritte</a>
+                    <a href="index.html#how-it-works">So funktioniert's</a>
+                    <a href="rules.html" aria-current="page">Die Regeln</a>
+                    <a href="index.html#features">Funktionen</a>
+                    <a href="help.html">Hilfe</a>
+                    <a href="guide/index.html">Mitglieder-Leitfaden</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutorials auf YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool auf Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Quellcode auf GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Die Regeln — Wie BeanPool funktioniert</h1>
+        <p class="lede">BeanPool ist ein Gemeinschaftstausch, bei dem alle bei null beginnen. Du verdienst Bohnen, indem du anderen hilfst, und gibst sie aus, wenn andere dir helfen. Es fließt kein Geld und es gibt keine zwischengeschalteten Konzerne — nur diese einfachen Regeln.</p>
+
+        <div class="callout amber">Kurz gesagt: <strong>Erarbeite dir deinen Kreditrahmen durch Tauschen, halte ein oder zwei Angebote aktiv, um ihn zu nutzen, und lass die Bohnen fließen.</strong> Null ist das Ziel — gib ungefähr so viel, wie du nimmst.</div>
+
+        <h2 id="1"><span class="num">1.</span>Bohnen &amp; dein Kontostand</h2>
+        <p>Bohnen messen den Wert, den du gegeben und empfangen hast (in etwa Zeit). <strong style="color:var(--text-primary)">Null ist das Ziel</strong> — es bedeutet, dass du ungefähr so viel gegeben hast, wie du genommen hast.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Positiver Saldo</strong> — du hast mehr gegeben als genommen. Die Gemeinschaft schuldet dir etwas.</li>
+            <li><strong style="color:var(--text-primary)">Negativer Saldo</strong> — die Gemeinschaft hat dir Kredit gewährt. Du gibst ihn zurück, indem du beiträgst.</li>
+            <li>In den meisten Gemeinschaften liegt die Untergrenze bei <strong>−2000 Bohnen</strong>. Eine Gemeinschaft, die ihre Mitglieder mit echtem Namen bestätigt, kann ihr eigenes Limit bis zu −5000 festlegen und bestätigten Mitgliedern einen Startrahmen gewähren.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Erste Schritte</h2>
+        <p>Du trittst auf Einladung bei. Vom ersten Tag an kannst du stöbern und Bohnen empfangen. Sobald du Bohnen besitzt (indem du sie verdienst oder als Geschenk erhältst), kannst du sie ausgeben. Um auf Kredit auszugeben, musst du mindestens ein <strong style="color:var(--text-primary)">Angebot</strong> einstellen (siehe §4 und §5). Neue Mitglieder beginnen <strong style="color:var(--text-primary)">ohne Kreditrahmen</strong> — du kannst nur Bohnen ausgeben, die du tatsächlich hast, bis dein Rahmen durch deinen ersten abgeschlossenen Tausch aktiviert wird (oder wenn eine bürgende Person oder ein Administrator dir einen Startrahmen einräumt — siehe §3 und §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Dein Kreditrahmen wird durch Tauschen erarbeitet</h2>
+        <p>Dein Kreditrahmen erlaubt es dir, leicht ins Minus zu gehen — auszugeben, bevor du es wieder hereingeholt hast. Er wird <strong style="color:var(--text-primary)">erarbeitet, nicht geschenkt</strong>:</p>
+        <ul>
+            <li>Vertrauen entsteht durch <strong style="color:var(--text-primary)">abgeschlossene Markttausche</strong> — niemals durch Geschenke. Es wächst anfangs langsam: Ein Tausch über 100 Bohnen bringt etwa 37 Bohnen Kreditlinie. Ein Administrator oder eine ernannte bürgende Person kann jemandem auch einen Startrahmen geben; die Zuweisung eines Administrators wird als dessen Abzeichen angezeigt.</li>
+            <li>Das Handeln mit <strong style="color:var(--text-primary)">vielen verschiedenen Personen</strong> baut Vertrauen viel schneller auf als wiederholte Tausche mit einer einzigen Person.</li>
+            <li>Dein Vertrauen bestimmt dein Kredit-<em>Limit</em> — wie weit dein Rahmen ins Minus reichen kann, in den meisten Gemeinschaften von 0 bis −2000 (siehe §1).</li>
+            <li>Dein Rahmen öffnet sich nach deinem <strong style="color:var(--text-primary)">ersten echten Tausch</strong> und wächst mit jedem weiteren Tausch danach (oder eine bürgende Person der Gemeinschaft kann dir einen Anfangsrahmen geben — siehe §9). Eine Bürgschaft ist nicht erforderlich.</li>
+        </ul>
+        <div class="callout">Vertrauensstufen — <strong>Neuling → Bewohner → Verwalter → Ältester</strong> — sind Anerkennungsabzeichen. Die Abzeichen, die du erlangst, sperren oder entsperren von sich aus nichts; ein tieferer Kreditrahmen entsteht durch echtes Tauschen. Ein Administrator kann jemandem auch direkt ein Abzeichen verleihen, und damit den Anfangs-Kreditrahmen dieses Abzeichens.</div>
+
+        <h2 id="4"><span class="num">4.</span>Gegenseitigkeit: Um Kredit zu nutzen, musst du aktive Angebote bereithalten</h2>
+        <p>Durch Vertrauen bestimmst du dein Kredit-<strong style="color:var(--text-primary)">Limit</strong> (wie tief du potenziell ins Minus gehen kannst). Um diesen Kredit aber tatsächlich in Anspruch zu <strong style="color:var(--text-primary)">nehmen</strong>, musst du aktive Angebote online halten. Dies stellt sicher, dass jeder, der im Minus ist, der Gemeinschaft aktiv zeigt, wie er beitragen möchte.</p>
+        
+        <p>Die Anzahl deiner aktiven Angebote bestimmt, wie viel Kredit <strong style="color:var(--text-primary)">verfügbar</strong> ist:</p>
+        <table>
+            <thead><tr><th>Aktive Angebote</th><th>Verfügbarer Kreditrahmen</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — nur vorhandene Bohnen ausgeben</td></tr>
+                <tr><td class="num-col">1</td><td>Bis zu −200 Bohnen</td></tr>
+                <tr><td class="num-col">2</td><td>Bis zu −500 Bohnen</td></tr>
+                <tr><td class="num-col">3</td><td>Bis zu −1000 Bohnen</td></tr>
+                <tr><td class="num-col">4</td><td>Bis zu −1500 Bohnen</td></tr>
+                <tr><td class="num-col">5</td><td>Bis zu −2000 Bohnen <em>(die übliche Obergrenze)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Dein tatsächliches Ausgabelimit ist der <strong style="color:var(--text-primary)">kleinere</strong> Wert aus dem, was du erarbeitet hast, und dem, was deine aktiven Angebote ermöglichen.</p>
+        <p><em>Beispiel: Wenn du dir durch Tausche ein Limit von −600 erarbeitet hast, ermöglichen 2 aktive Angebote davon −500. Ein 3. Angebot macht dein volles Limit von −600 verfügbar (ein 4. oder 5. Angebot brauchst du nicht, da dein erarbeitetes Limit bereits erreicht ist).</em></p>
+        <div class="callout">
+            <strong>Die Ausgabepause:</strong><br>
+            Wenn du unter die Anzahl aktiver Angebote fällst, die für dein aktuelles Minus erforderlich sind (z. B. wenn eines deiner Angebote verkauft und abgeschlossen wird oder du eines pausierst), wird deine <strong>Möglichkeit, auf Kredit auszugeben, pausiert</strong>. Dies ist ein Sicherheitsnetz, keine Strafe: Dir wird nichts weggenommen. Du kannst weiterhin Bohnen empfangen, weiter verkaufen und stöbern. Dein Kreditrahmen reaktiviert sich von selbst, sobald dein Saldo wieder durch deine aktiven Angebote abgedeckt ist: Stelle ein weiteres Angebot ein oder nimm Bohnen ein.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Angebote (deine Einträge)</h2>
+        <ul>
+            <li>Halte so viele Angebote wie du möchtest — auch wiederkehrende — und schalte jedes jederzeit auf <strong style="color:var(--text-primary)">Aktiv oder Pausiert</strong>. Nur <em>aktive</em> Angebote zählen für deinen Kreditrahmen.</li>
+            <li><strong style="color:var(--text-primary)">Geben vor Nehmen:</strong> In einer Gemeinschaft mit Bohnen musst du mindestens ein Angebot gelistet haben, bevor du ein Gesuch einstellen oder von anderen kaufen kannst. Wo es keine Bohnen gibt, wie in der globalen Gemeinschaft, kann dein erster Beitrag ein Gesuch sein.</li>
+            <li>Positiver Kontostand? Pausiere alles, wenn du möchtest — Angebote sind nur erforderlich, um ins Minus zu gehen.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Gebühren &amp; der Gemeinschaftspool</h2>
+        <p>Zwei kleine Abgaben, die beide in das <strong style="color:var(--text-primary)">Gemeingut der Gemeinschaft</strong> fließen &mdash; einen gemeinsamen Pool, über dessen Verwendung für lokale Projekte deine Gemeinschaft abstimmt. Nichts geht an einen Konzern verloren.</p>
+        <p><strong style="color:var(--text-primary)">a) Marktgebühr — 1,5% auf abgeschlossene Tausche.</strong> Wenn ein Verkauf auf dem Markt abgewickelt wird, erhält die anbietende Person 1,5% weniger als den Preis und die Differenz geht an das Gemeingut. <strong style="color:var(--text-primary)">Geschenke (direktes Senden zwischen Mitgliedern) sind kostenlos</strong> — ebenso wie Rückerstattungen und Systemübertragungen.</p>
+        <p><strong style="color:var(--text-primary)">b) Umlaufgebühr auf positive Salden — monatlich und nur auf den Teil über 200.</strong> Wie bei progressiven Steuerstufen wird jede Spanne nur auf den Teil deines Saldos erhoben, der darin liegt:</p>
+        <table>
+            <thead><tr><th>Saldostufe</th><th>Monatliche Umlaufrate</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Kostenlos</span> grüne Zone</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1,5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2,5%</td></tr>
+            </tbody>
+        </table>
+        <p>Dies regt auf sanfte Weise dazu an, dass Bohnen <strong style="color:var(--text-primary)">zirkulieren statt gehortet zu werden</strong>. <strong style="color:var(--text-primary)">Negative Salden unterliegen niemals einer Umlaufgebühr</strong> — du trägst der Gemeinschaft gegenüber ja bereits einen Kredit. Beachte, dass die gebührenfreie Zone bis +200 genau dem ersten Kreditbereich bis −200 entspricht, sodass das System symmetrisch um die Null angelegt ist.</p>
+
+        <h2 id="7"><span class="num">7.</span>Geschenke (Bohnen senden)</h2>
+        <ul>
+            <li>Du kannst <strong style="color:var(--text-primary)">nur Bohnen verschenken, die du tatsächlich besitzt</strong> — ein Geschenk geht niemals ins Minus und nutzt niemals deinen Kreditrahmen.</li>
+            <li>Du kannst senden, sobald du mindestens einen echten Tausch abgeschlossen hast (dies verhindert, dass nagelneue Konten sofort Bohnen weiterschicken und verschwinden).</li>
+            <li>Geschenke bauen beim Empfänger kein Vertrauen auf und sind <strong style="color:var(--text-primary)">kostenlos</strong> — keine Gebühr (du kannst nur Bohnen verschenken, die du bereits besitzt).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Wie Tausche abgewickelt werden</h2>
+        <p>Markttausche werden sicher im <strong style="color:var(--text-primary)">Treuhandservice</strong> (vom System treuhänderisch verwahrt) gehalten, bis das Geschäft erledigt ist, und dann an die anbietende Person freigegeben (abzüglich der Gebühr von 1,5%). Wird ein Geschäft abgebrochen, erhält die kaufende Person den vollen Betrag zurückerstattet.</p>
+
+        <h2 id="9"><span class="num">9.</span>Bürgschaften (ein optionaler Startvorteil)</h2>
+        <p>Eine vertrauenswürdige, von der Gemeinschaft ernannte <strong style="color:var(--text-primary)">bürgende Person</strong> kann einem Neuling einen <strong style="color:var(--text-primary)">Startrahmen von 25, 50 oder 100 Bohnen</strong> gewähren, damit dieser Kredit nutzen kann, bevor er ihn sich erarbeitet hat. Dies wird üblicherweise — rein nach Ermessen der bürgenden Person — Menschen zugesprochen, deren Beiträge und Engagement als bereichernd empfunden werden. Es ist in jeder Hinsicht optional: Niemand braucht eine Bürgschaft, um teilzunehmen, da sich dein Kreditrahmen auch einfach durch Tauschen öffnet (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Föderierter Ausgleich zwischen Gemeinschaften</h2>
+        <p>Gemeinschaften müssen nicht isoliert existieren. Durch <strong style="color:var(--text-primary)">föderierte Tausch-Konnektoren</strong> (inspiriert von Keynes' Clearing-Union) können unabhängige Gemeinschaftsserver Tausche mit einem Nachbarserver direkt von Rechner zu Rechner ausgleichen, ohne Fiatwährung oder Bankreserven. Bohnen verlassen dabei nie ihre Heimatgemeinschaft — jedes Paar von Servern führt ein Brückenbuch darüber, was sie einander an Arbeitswert schulden, und jede Seite legt ihre eigene Obergrenze fest, wie weit dies laufen darf. Der Ausgleich findet zwischen Paaren von Gemeinschaften statt, jeder Betreiber schaltet ihn ganz bewusst ein, und er ist noch im Anfangsstadium: Er ist fertig entwickelt, mit entsprechenden Bildschirmen in der Web-App, und wurde bisher nur zwischen zwei unserer eigenen Testgemeinschaften erprobt, noch nie zwischen echten Gemeinschaften.</p>
+
+        <h2 id="11"><span class="num">11.</span>Kryptografische Identität &amp; Schlüsselverwahrung</h2>
+        <p>Dein Konto ist durch ein kryptografisches Ed25519-Schlüsselpaar geschützt, das auf deinem Gerät erzeugt wird. BeanPool bietet eine flexible Verwahrung passend zu deinen Bedürfnissen:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Vollständige Selbstsouveränität:</strong> In den Smartphone-Apps wird dein privater Schlüssel im sicheren Speicher des Geräts aufbewahrt (iOS-Schlüsselbund / Android-Keystore); in der Web-App liegt er im Speicher des Browsers. Er verlässt das Gerät nur als verschlüsselte Kopie für die Login-Wiederherstellung oder wenn du dein Konto auf ein anderes deiner Geräte kopierst. Bewahre deine 12-Wörter-Sicherheitskopie offline auf.</li>
+            <li><strong style="color:var(--text-primary)">Wiederherstellung:</strong> Deine 12-Wörter-Phrase stellt dein Konto auf jedem Gerät wieder her. Du kannst auch einen Login über Google, Apple oder Facebook verknüpfen. Eine verschlüsselte Kopie deines Schlüssels wird dann dafür hinterlegt: Smartphone-Apps, die den Schlüsseltresor von BeanPool nutzen, bewahren sie dort auf einem kleinen Server in Island auf; ältere Versionen der Smartphone-App speichern sie auf dem Server deiner Gemeinschaft; die Web-App in der globalen Gemeinschaft speichert sie auf dem Server dieser Gemeinschaft, den wir betreiben. Wer die Kopie aufbewahrt, kann sie öffnen. Eine Wiederherstellung aus dem Tresor wartet 24 Stunden, es sei denn, eines deiner eigenen Geräte bestätigt sie. Wenn du dein Gerät, deine 12 Wörter und deinen Login verlierst, kann ein Administrator deiner Gemeinschaft dein Konto in deiner Anwesenheit mit einem Einmal-Code auf ein neues Smartphone übertragen; dein Verlauf bleibt erhalten. Schreibe die Wörter also unbedingt auf.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Limits &amp; Sicherheit</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Kredituntergrenze von −2000</strong> in den meisten Gemeinschaften (siehe §1). Es gibt kein Tageslimit dafür, wie viele Bohnen du ausgibst — dein Rahmen ist die Grenze. Es gibt ein Limit dafür, wie oft: 100 Zahlungen, 30 Personen, an die du noch nie zuvor gezahlt hast, und 100 Marktanfragen innerhalb von 24 Stunden.</li>
+            <li>Das Vertrauen zu einem einzelnen Partner ist gedeckelt, damit niemand sein Ansehen durch Hin- und Her-Handeln mit einem Komplizen künstlich aufblähen kann.</li>
+            <li>Der <strong style="color:var(--text-primary)">Urlaubsmodus</strong> blendet deine Angebote aus und pausiert eingehende Anfragen, während du abwesend bist.</li>
+            <li>Mitglieder können missbräuchlich handelnde Personen melden und markieren; Administratoren der Gemeinschaft können sie entfernen.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Gemeinschaftsbetriebe &amp; Entscheidungsfindung</h2>
+        <p>Gemeinschaftsbetriebe (wie eine Werkzeugbibliothek, eine Hühnerhaltung oder ein Brennholzlager) und zeitlich begrenzte Projekte sind gemeinsame Initiativen unter kollektiver Verwaltung. Sie arbeiten nach klaren, durch Code durchgesetzten Regeln (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">das Gemeingut-Governance-Modell</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Ein Objekt, zwei Lebenszyklen (§2.1):</strong> Ein dauerhafter Betrieb besteht fort und handelt; ein zeitlich begrenzter Betrieb (ein Projekt) hat ein Ziel und ein Enddatum, wickelt sein Konto nach Abschluss ab und führt das Verbleibende an das Gemeingut zurück.</li>
+            <li><strong style="color:var(--text-primary)">Erarbeitete Rahmen &amp; Verwalter-Zusagen (Regeln 1–3):</strong> Ein neuer Betrieb beginnt ohne unverdienten Dispositionskredit: Sein Kreditrahmen wird durch ausdrückliche Zusagen aus dem erarbeiteten Handelsstatus seiner Verwalter gedeckt (einfache Summe, kein künstlicher Multiplikator). Die Deckungszusage berührt oder verringert niemals den persönlichen Haushalts-Kreditrahmen eines Verwalters. Ältere Betriebe behalten den Anfangsrahmen, den sie vor den Zusagen hatten.</li>
+            <li><strong style="color:var(--text-primary)">Beschränkte Haftung (Regel 4):</strong> Der Betrieb scheitert, nicht der Haushalt des Verwalters. Wenn ein Betrieb zahlungsunfähig wird, werden seine Ausgaben eingefroren, aber die persönlichen Rahmen der Verwalter bleiben geschützt.</li>
+            <li><strong style="color:var(--text-primary)">Kredit kauft Vorleistungen, Überschuss bezahlt Menschen (Regel 5):</strong> Ein Betrieb kann Kredit bis zu seinem nutzbaren Rahmen in Anspruch nehmen, um Vorräte oder Dienste von außenstehenden Nachbarn zu kaufen. Er darf <em>niemals</em> Kredit nutzen, um seine eigenen Verwalter zu bezahlen — Verwalter werden nur bezahlt, solange <code>balance − amount ≥ 0</code> gilt.</li>
+            <li><strong style="color:var(--text-primary)">Verwaltervergütung gedeckelt durch erwirtschafteten Überschuss (Regel 6):</strong> Auszahlungen an Verwalter sind streng durch den echten Handelsüberschuss gedeckelt (Verkaufserlöse minus Verwalterzahlungen). Förderungen, Zusagen und Geschenke können niemals in Verwalterlöhne umgewandelt werden.</li>
+            <li><strong style="color:var(--text-primary)">Automatische Betriebsmittelabschöpfung (Regel 7):</strong> Ein Betrieb kann eine Betriebsmittelobergrenze festlegen. Erwirtschafteter Überschuss darüber wird automatisch in den Gemeingut-Pool der Gemeinschaft abgeschöpft, um Horten zu verhindern. Förderungen und Geschenke werden niemals abgeschöpft.</li>
+            <li><strong style="color:var(--text-primary)">Zwei-Personen-Genehmigungsregel:</strong> Verwalter können ihre eigenen Zahlungen oder persönlichen Gebote auf Bedarfe des Betriebs nicht selbst genehmigen — ein anderer Verwalter muss dies genehmigen.</li>
+            <li><strong style="color:var(--text-primary)">Umfragen gegenüber Entscheidungen (§3):</strong> Informelle Fragen sind <em>Umfragen</em> im Markt-Feed: je eine Stimme, gezählt, unverbindlich. Verbindliche Entscheidungen (Pool-Förderungen, Schuldenstreichungen, Rollenwechsel sowie Suspendierung, Einfrieren oder Ausschluss eines Mitglieds) laufen über <em>Entscheidungen</em> im Reiter Gemeingut mit einem 7-tägigen Abstimmungsfenster. Eine Entscheidung ist mit 60% der Stimmen angenommen (66% für den Ausschluss eines Mitglieds; mehr als die Hälfte zur Aufhebung einer Suspendierung oder eines Einfrierens oder zur Wiederaufnahme eines Mitglieds), sobald genügend Mitglieder abgestimmt haben: 30% der in den letzten 30 Tagen aktiven Mitglieder, mindestens 3 (25% für den Ausschluss eines Mitglieds). Danach führt sie sich selbstständig aus. Pool-Förderungen nutzen quadratische Abstimmung auf Basis des erarbeiteten Handelsstatus — liquide Bohnen können keine Stimmen kaufen.</li>
+            <li><strong style="color:var(--text-primary)">Festgelegtes Vokabular (§9):</strong> Vier Ebenen, vier unterschiedliche Begriffe: Server → <em>Eigentümer / Admin</em> · Betrieb → <em>Hauptverwalter / Verwalter</em> · Gruppe → <em>Koordinator</em> · Vertrauensstufe → <em>Verwalter</em>.</li>
+        </ul>
+        <div class="callout amber">Kurz gesagt: <strong>Erarbeite dir deinen Kreditrahmen durch Tauschen, halte ein oder zwei Angebote aktiv, um ihn zu nutzen, und lass die Bohnen fließen.</strong> Null ist das Ziel — gib ungefähr so viel, wie du nimmst.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool-Symbol" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Gegenseitiges Guthaben für Gemeinschaften, von Gemeinschaften betrieben.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Hilfezentrum</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">So funktioniert's</a>
+                    <a href="getting-started.html">Erste Schritte</a>
+                    <a href="rules.html">Die Regeln</a>
+                    <a href="safety.html">Kinderschutz</a>
+                    <a href="privacy.html">Datenschutzerklärung</a>
+                    <a href="terms.html">Nutzungsbedingungen</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Open Source unter MIT-Lizenz. Mit <img src="bean.png" alt="Liebe" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> von Gemeinschaften für Gemeinschaften gemacht. Zeitzonengrenzen © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

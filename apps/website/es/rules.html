@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Las Reglas — Cómo funciona BeanPool</title>
+    <meta name="description" content="Las reglas simples de BeanPool: cómo funcionan los saldos, el crédito, las ofertas, las tarifas, la federación keynesiana, los emprendimientos comunitarios y la gobernanza.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the rule book — tables, bands and callouts on the dark theme */
+        .rules-content { max-width: 1000px; margin: 2rem auto; }
+        .rules-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; }
+        .rules-content h2 .num { color: var(--text-muted); font-weight: 700; margin-right: 0.55rem; }
+        .rules-content table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.95rem; }
+        .rules-content th, .rules-content td { text-align: left; padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+        .rules-content th { color: var(--green-ink); font-weight: 700; font-family: var(--font-header); background: rgba(var(--rgb-success), 0.06); }
+        .rules-content tbody td:first-child { color: var(--text-primary); font-weight: 600; }
+        .rules-content .num-col { font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rules-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.25rem 0; color: var(--text-secondary); }
+        .rules-content .callout.amber { border-left-color: var(--accent); background: var(--accent-glow); }
+        .rules-content .callout strong { color: var(--text-primary); }
+        .rules-content .pill { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+        .rules-content .pill.ok { background: rgba(var(--rgb-success), 0.15); color: var(--green-ink); }
+        .rules-content .pill.no { background: rgba(var(--rgb-danger), 0.15); color: var(--danger-ink); }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/rules">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/rules">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/rules">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/rules">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/rules">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/rules">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/rules">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/rules">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/rules">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/rules">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/rules">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/rules">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/rules">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/rules">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/rules">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/rules">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/rules">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/rules">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/rules">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/rules">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/rules">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/rules">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/rules">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/rules">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/rules">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/rules">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="Icono de BeanPool" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">Cómo funciona</a>
+                <a href="rules.html">Las Reglas</a>
+                <a href="index.html#features">Características</a>
+                <a href="help.html">Ayuda</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriales</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="Mira videotutoriales en YouTube (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Únete a la comunidad de Reddit (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="Ver en GitHub">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">Comenzar</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="Abrir menú"><span aria-hidden="true">☰</span> Menú</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">Comenzar</a>
+                    <a href="index.html#how-it-works">Cómo funciona</a>
+                    <a href="rules.html" aria-current="page">Las Reglas</a>
+                    <a href="index.html#features">Características</a>
+                    <a href="help.html">Ayuda</a>
+                    <a href="../guide/index.html">Guía para miembros</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">Tutoriales en YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">r/beanpool en Reddit</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">Código en GitHub</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel rules-content">
+        <h1>Las Reglas — Cómo funciona BeanPool</h1>
+        <p class="lede">BeanPool es un intercambio comunitario donde todos comienzan en cero. Ganas frijoles ayudando a otros y los gastas cuando otros te ayudan a ti. No se intercambia dinero y no hay intermediarios corporativos — solo estas reglas simples.</p>
+
+        <div class="callout amber">En resumen: <strong>gana tu línea de crédito intercambiando, mantén una o dos ofertas activas para usarla y deja que los frijoles fluyan.</strong> Cero es el objetivo — da casi tanto como recibes.</div>
+
+        <h2 id="1"><span class="num">1.</span>Los Frijoles y tu saldo</h2>
+        <p>Los Frijoles miden el valor que has dado y recibido (aproximadamente, tiempo). <strong style="color:var(--text-primary)">Cero es el objetivo</strong> — significa que has dado casi tanto como has recibido.</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Saldo positivo</strong> — has dado más de lo que has recibido. La comunidad te debe.</li>
+            <li><strong style="color:var(--text-primary)">Saldo negativo</strong> — la comunidad te ha extendido crédito. Se lo debes de vuelta mediante tu ayuda.</li>
+            <li>En la mayoría de las comunidades, lo máximo que cualquiera puede bajar es <strong>−2000 frijoles</strong>. Una comunidad que confirma a sus miembros por su nombre real puede establecer su propio límite, hasta −5000, y dar a los miembros confirmados una línea inicial.</li>
+        </ul>
+
+        <h2 id="2"><span class="num">2.</span>Primeros pasos</h2>
+        <p>Te unes por invitación. Desde el primer día puedes explorar y recibir frijoles. Una vez que tengas frijoles (al ganarlos o recibir un regalo), puedes gastarlos. Para gastar a crédito, debes publicar al menos una <strong style="color:var(--text-primary)">Oferta</strong> (consulta los apartados §4 y §5). Los nuevos miembros comienzan <strong style="color:var(--text-primary)">sin línea de crédito</strong> — solo puedes gastar los frijoles que realmente tienes hasta que tu línea se active mediante tu primer intercambio completado (o si una persona avalista o un admin te otorga una línea inicial — consulta los apartados §3 y §9).</p>
+        <!-- OPEN-GLOBAL: "You join by invitation." stops being true when global's private preview is off (anyone joins global with no invite); reword this line then. -->
+
+        <h2 id="3"><span class="num">3.</span>Tu línea de crédito se gana intercambiando</h2>
+        <p>Tu línea de crédito te permite ponerte un poco en saldo negativo — gastando antes de haberlo recuperado. Se <strong style="color:var(--text-primary)">gana, no se regala</strong>:</p>
+        <ul>
+            <li>La confianza proviene de <strong style="color:var(--text-primary)">intercambios completados en el mercado</strong> — nunca de regalos. Crece lentamente al principio: un intercambio de 100 Frijoles otorga unos 37 Frijoles de línea de crédito. Un admin o un avalista designado también pueden otorgar a alguien una línea inicial; la concesión de un admin se muestra como su insignia.</li>
+            <li>Intercambiar con <strong style="color:var(--text-primary)">muchas personas diferentes</strong> genera confianza mucho más rápido que repetir intercambios con una sola persona.</li>
+            <li>Tu confianza define tu <em>límite</em> de crédito — qué tan abajo puede llegar tu piso, desde 0 hasta −2000 en la mayoría de las comunidades (consulta el apartado §1).</li>
+            <li>Tu piso se abre después de tu <strong style="color:var(--text-primary)">primer intercambio real</strong>, y crece con cada intercambio posterior (o un avalista de la comunidad puede darte un piso inicial — consulta el apartado §9). No se requiere ningún aval.</li>
+        </ul>
+        <div class="callout">Los niveles de confianza — <strong>Recién llegado → Residente → Cuidador → Anciano</strong> — son insignias de reconocimiento. Las insignias que ganas no condicionan accesos por sí solas; una línea de crédito más amplia proviene del intercambio real. Un admin también puede otorgar una insignia a alguien y, con ella, la línea de crédito inicial de esa insignia.</div>
+
+        <h2 id="4"><span class="num">4.</span>Reciprocidad: para usar crédito, debes mantener ofertas activas</h2>
+        <p>Ganar confianza establece tu <strong style="color:var(--text-primary)">límite</strong> de crédito (qué tan abajo puedes llegar potencialmente). Pero para <strong style="color:var(--text-primary)">disponer</strong> realmente de ese crédito, debes mantener Ofertas activas publicadas. Esto garantiza que cualquier persona con saldo negativo esté mostrando activamente a la comunidad cómo planea contribuir.</p>
+        
+        <p>La cantidad de ofertas activas que mantienes publicadas determina cuánto crédito está <strong style="color:var(--text-primary)">habilitado</strong>:</p>
+        <table>
+            <thead><tr><th>Ofertas activas</th><th>Línea de crédito habilitada</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0</td><td>0 — solo gastar frijoles en posesión</td></tr>
+                <tr><td class="num-col">1</td><td>Hasta −200 Frijoles</td></tr>
+                <tr><td class="num-col">2</td><td>Hasta −500 Frijoles</td></tr>
+                <tr><td class="num-col">3</td><td>Hasta −1000 Frijoles</td></tr>
+                <tr><td class="num-col">4</td><td>Hasta −1500 Frijoles</td></tr>
+                <tr><td class="num-col">5</td><td>Hasta −2000 Frijoles <em>(el límite habitual)</em></td></tr>
+            </tbody>
+        </table>
+        <p>Tu límite de gasto real es el <strong style="color:var(--text-primary)">menor</strong> entre lo que has ganado y lo que habilitan tus ofertas activas.</p>
+        <p><em>Por ejemplo: si has ganado un límite de −600 mediante intercambios, mantener 2 ofertas activas habilita −500 de ese monto. Mantener una 3.ª oferta habilita tu límite completo de −600 (nunca necesitas una 4.ª o 5.ª oferta porque tu límite ganado ya se alcanzó).</em></p>
+        <div class="callout">
+            <strong>La pausa de gasto (congelamiento):</strong><br>
+            Si bajas del número de ofertas activas requeridas para tu saldo negativo actual (por ejemplo, si una de tus ofertas se vende y se completa, o si pausas una), tu <strong>capacidad de gastar a crédito se pausa</strong>. Esta es una red de seguridad, no una penalización: no se te quita nada. Aún puedes recibir frijoles, seguir vendiendo y explorar. Tu línea de crédito se reanuda sola una vez que tu saldo vuelva a estar dentro de lo que cubren tus ofertas activas: publica otra oferta o recibe frijoles.
+        </div>
+
+        <h2 id="5"><span class="num">5.</span>Ofertas (tus publicaciones)</h2>
+        <ul>
+            <li>Mantén tantas ofertas como desees — incluidas las recurrentes — y cambia cada una a <strong style="color:var(--text-primary)">Activa o Pausada</strong> cuando quieras. Solo las ofertas <em>Activas</em> cuentan para tu línea de crédito.</li>
+            <li><strong style="color:var(--text-primary)">Dar antes de recibir:</strong> en una comunidad con Frijoles, debes haber publicado al menos una oferta antes de poder publicar una Necesidad o comprar a otros. Donde no hay Frijoles, como en la comunidad global, tu primera publicación puede ser una Necesidad.</li>
+            <li>¿Saldo positivo? Pausa todo si lo deseas — las ofertas solo son obligatorias para estar en saldo negativo.</li>
+        </ul>
+
+        <h2 id="6"><span class="num">6.</span>Tarifas y el fondo comunitario</h2>
+        <p>Dos pequeños cargos, y ambos van a los <strong style="color:var(--text-primary)">Bienes comunes de la comunidad</strong> — un fondo compartido que tu comunidad vota para gastar en proyectos locales. Nada se pierde en una corporación.</p>
+        <p><strong style="color:var(--text-primary)">a) Tarifa del mercado — 1.5% en intercambios completados.</strong> Cuando se liquida una venta en el mercado, el vendedor recibe un 1.5% menos del precio y la diferencia va a los bienes comunes. <strong style="color:var(--text-primary)">Los regalos (envíos directos entre miembros) son gratuitos</strong> — al igual que los reembolsos y los movimientos del sistema.</p>
+        <p><strong style="color:var(--text-primary)">b) Tarifa de circulación sobre saldos positivos — mensual y solo sobre la parte superior a 200.</strong> Al igual que los tramos progresivos, cada tramo se cobra solo sobre la fracción de tu saldo dentro de él:</p>
+        <table>
+            <thead><tr><th>Tramo de saldo</th><th>Tasa de circulación mensual</th></tr></thead>
+            <tbody>
+                <tr><td class="num-col">0 – 200</td><td><span class="pill ok">Gratis</span> zona verde</td></tr>
+                <tr><td class="num-col">200 – 500</td><td>1%</td></tr>
+                <tr><td class="num-col">500 – 1000</td><td>1.5%</td></tr>
+                <tr><td class="num-col">1000 – 2000</td><td>2%</td></tr>
+                <tr><td class="num-col">2000+</td><td>2.5%</td></tr>
+            </tbody>
+        </table>
+        <p>Esto estimula suavemente a que los frijoles <strong style="color:var(--text-primary)">circulen en lugar de acumularse</strong>. <strong style="color:var(--text-primary)">Los saldos negativos nunca incurren en una tarifa de circulación</strong> — ya estás sosteniendo crédito para la comunidad. Ten en cuenta que la zona gratuita de +200 refleja el primer tramo de crédito de −200, por lo que el sistema es simétrico alrededor de cero.</p>
+
+        <h2 id="7"><span class="num">7.</span>Regalos (enviar frijoles)</h2>
+        <ul>
+            <li>Solo puedes <strong style="color:var(--text-primary)">regalar frijoles que realmente posees</strong> — un regalo nunca baja de cero y nunca usa tu línea de crédito.</li>
+            <li>Puedes enviar una vez que hayas completado al menos un intercambio real (esto evita que las cuentas recién creadas reenvíen frijoles al instante y desaparezcan).</li>
+            <li>Los regalos no generan confianza para quien los recibe y son <strong style="color:var(--text-primary)">gratuitos</strong> — sin tarifas (solo puedes regalar frijoles que ya posees).</li>
+        </ul>
+
+        <h2 id="8"><span class="num">8.</span>Cómo se liquidan los intercambios</h2>
+        <p>Los intercambios del mercado se retienen de forma segura en <strong style="color:var(--text-primary)">garantía</strong> (custodiados por el sistema) hasta que se completa el acuerdo, y luego se liberan al vendedor (menos la tarifa del 1.5%). Si se cancela un acuerdo, se reembolsa el importe total al comprador.</p>
+
+        <h2 id="9"><span class="num">9.</span>Avales (un impulso inicial opcional)</h2>
+        <p>Un <strong style="color:var(--text-primary)">avalista</strong> de confianza, designado por la comunidad, puede dar a un recién llegado un <strong style="color:var(--text-primary)">piso inicial de 25, 50 o 100 frijoles</strong> para que pueda comenzar a usar crédito antes de haberlo ganado. Estos se otorgan típicamente — a total discreción del avalista — a personas cuyas publicaciones y aportes resultan genuinamente interesantes e inspiradores para el avalista. Es opcional en ambos sentidos: nadie necesita un aval para participar, ya que también abres tu línea de crédito simplemente intercambiando (§3).</p>
+
+        <h2 id="10"><span class="num">10.</span>Compensación federada entre comunidades</h2>
+        <p>Las comunidades no necesitan existir de forma aislada. A través de <strong style="color:var(--text-primary)">Conectores de Intercambio Federados</strong> (inspirados en la unión de compensación de Keynes), los nodos comunitarios independientes pueden liquidar intercambios con un nodo vecino entre pares, sin moneda fiduciaria ni reservas bancarias. Los Frijoles nunca salen de su comunidad de origen — cada par de nodos mantiene un registro puente de lo que se deben mutuamente en trabajo, y cada parte establece su propio límite sobre qué tan lejos puede llegar. La compensación se realiza entre pares de comunidades, cada operador la activa de forma deliberada y todavía está en fase inicial: está desarrollada, con sus pantallas en la app web, y solo se ha probado entre dos de nuestras propias comunidades de prueba, nunca entre comunidades en vivo.</p>
+
+        <h2 id="11"><span class="num">11.</span>Identidad criptográfica y custodia de claves</h2>
+        <p>Tu cuenta está protegida por un par de claves criptográficas Ed25519 generado en tu dispositivo. BeanPool ofrece custodia flexible para adaptarse a tus necesidades:</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Autonomía completa:</strong> En las apps para teléfono, tu clave privada se guarda en el almacenamiento seguro del dispositivo (Keychain de iOS / Android Keystore); en la app web se guarda en el propio almacenamiento del navegador. Solo sale del dispositivo como una copia protegida para recuperación de inicio de sesión, o cuando copias tu cuenta a otro de tus dispositivos. Mantén tu respaldo de 12 palabras desconectado de internet.</li>
+            <li><strong style="color:var(--text-primary)">Recuperación:</strong> Tu frase de 12 palabras restaura tu cuenta en cualquier dispositivo. También puedes vincular un inicio de sesión de Google, Apple o Facebook. Luego se guarda una copia protegida de tu clave para él: las apps para teléfono que usan la bóveda de claves de BeanPool la guardan allí, en un pequeño servidor en Islandia; las versiones anteriores de la app para teléfono la guardan en el nodo de tu comunidad; la app web en la comunidad global la guarda en el servidor de esa comunidad, que nosotros gestionamos. Quien custodia la copia puede abrirla. Una restauración desde la bóveda espera 24 horas a menos que uno de tus propios dispositivos la apruebe. Si pierdes tu dispositivo, tus 12 palabras y tu inicio de sesión, un administrador de tu comunidad puede transferir tu cuenta a un teléfono nuevo con un código de un solo uso, frente a ti; tu historial se conserva. Por eso, escribe las palabras en papel.</li>
+        </ul>
+
+        <h2 id="12"><span class="num">12.</span>Límites y seguridad</h2>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Límite de piso −2000</strong> en la mayoría de las comunidades (consulta el apartado §1). No hay límite diario en la cantidad de frijoles que gastas — tu piso es la frontera. Hay un límite en la frecuencia: 100 pagos, 30 personas a las que nunca antes has pagado y 100 solicitudes de mercado en un período de 24 horas.</li>
+            <li>La confianza con cualquier contraparte individual tiene un tope, de modo que nadie puede inflar su reputación intercambiando de ida y vuelta con un solo cómplice.</li>
+            <li>El <strong style="color:var(--text-primary)">modo vacaciones</strong> oculta tus ofertas y pausa las solicitudes entrantes mientras estás fuera.</li>
+            <li>Los miembros pueden reportar y señalar a infractores; los administradores de la comunidad pueden expulsarlos.</li>
+        </ul>
+
+        <h2 id="13"><span class="num">13.</span>Emprendimientos comunitarios y gobernanza</h2>
+        <p>Los emprendimientos comunitarios (como una biblioteca comunitaria de herramientas, un gallinero comunitario o un depósito de leña) y los proyectos acotados son iniciativas compartidas bajo custodia colectiva. Funcionan bajo reglas claras aplicadas por código (<a href="https://github.com/beanpool-org/beanpool/blob/main/docs/the-commons.md" target="_blank" rel="noopener">el modelo de gobernanza de los Bienes comunes</a>):</p>
+        <ul>
+            <li><strong style="color:var(--text-primary)">Un objeto, dos ciclos de vida (§2.1):</strong> Un emprendimiento continuo perdura y comercia; un emprendimiento acotado (un proyecto) tiene un objetivo y una fecha de finalización, cerrando su cuenta y devolviendo lo que queda a los Bienes comunes cuando finaliza.</li>
+            <li><strong style="color:var(--text-primary)">Pisos ganados y compromisos de custodios (Reglas 1–3):</strong> Un nuevo emprendimiento comienza sin sobregiro no ganado: su piso de crédito está respaldado por compromisos explícitos de la reputación comercial ganada de sus custodios (suma directa, sin multiplicador sintético). Comprometer respaldo nunca toca ni reduce el piso de crédito del hogar personal de un custodio. Los emprendimientos más antiguos conservan el piso inicial que tenían antes de los compromisos.</li>
+            <li><strong style="color:var(--text-primary)">Responsabilidad limitada (Regla 4):</strong> Falla el emprendimiento, no el hogar del custodio. Si un emprendimiento incumple, su gasto se congela, pero los pisos personales de sus custodios están protegidos.</li>
+            <li><strong style="color:var(--text-primary)">El crédito compra insumos, las ganancias pagan a las personas (Regla 5):</strong> Un emprendimiento puede recurrir al crédito hasta su piso utilizable para comprar suministros o servicios a vecinos externos. <em>Nunca</em> puede recurrir al crédito para pagar a sus propios custodios — a los custodios solo se les paga mientras <code>balance − amount ≥ 0</code>.</li>
+            <li><strong style="color:var(--text-primary)">Pago a custodios limitado por el excedente ganado (Regla 6):</strong> Los pagos a los custodios están estrictamente limitados por el excedente comercial genuino (ingresos por ventas menos pagos a custodios). Las subvenciones, compromisos y donaciones nunca pueden convertirse en salarios para los custodios.</li>
+            <li><strong style="color:var(--text-primary)">Transferencias automáticas de capital de trabajo (Regla 7):</strong> Un emprendimiento puede establecer un techo de capital de trabajo. El excedente ganado que lo supere se transfiere automáticamente de vuelta al fondo de Bienes comunes de la comunidad para evitar la acumulación. Las subvenciones y donaciones nunca se transfieren.</li>
+            <li><strong style="color:var(--text-primary)">Regla de aprobación por dos personas:</strong> Los custodios no pueden aprobar sus propios pagos ni ofertas personales para necesidades del emprendimiento — otro custodio debe aprobarlos.</li>
+            <li><strong style="color:var(--text-primary)">Encuestas frente a Decisiones (§3):</strong> Las preguntas informales son <em>Encuestas</em> en el feed del mercado: un voto por persona, se cuentan y no son vinculantes. La gobernanza vinculante (subvenciones del fondo, condonación de deudas, cambios de roles y suspensión, congelamiento o expulsión de un miembro) se gestiona mediante <em>Decisiones</em> en la pestaña Bienes comunes, con un período de votación de 7 días. Una Decisión se aprueba con el 60% de los votos (66% para expulsar a un miembro; más de la mitad para levantar una suspensión o un congelamiento, o para reincorporar a un miembro) una vez que haya votado un número suficiente de miembros: el 30% de los activos en los últimos 30 días, con un mínimo de 3 (25% para expulsar a un miembro). Luego se ejecuta por sí misma. Las subvenciones del fondo utilizan votación cuadrática sobre la reputación comercial ganada — los frijoles líquidos no pueden comprar votos.</li>
+            <li><strong style="color:var(--text-primary)">Vocabulario establecido (§9):</strong> Cuatro niveles, cuatro palabras distintas: nodo → <em>propietario / admin</em> · emprendimiento → <em>custodio principal / custodio</em> · grupo → <em>coordinador</em> · nivel de confianza → <em>Administrador</em>.</li>
+        </ul>
+        <div class="callout amber">En resumen: <strong>gana tu línea de crédito intercambiando, mantén una o dos ofertas activas para usarla y deja que los frijoles fluyan.</strong> Cero es el objetivo — da casi tanto como recibes.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="Icono de BeanPool" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>Crédito mutuo para comunidades, gestionado por comunidades.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">Centro de ayuda</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">Cómo funciona</a>
+                    <a href="getting-started.html">Comenzar</a>
+                    <a href="rules.html">Las Reglas</a>
+                    <a href="safety.html">Seguridad infantil</a>
+                    <a href="../privacy.html">Política de privacidad</a>
+                    <a href="../terms.html">Términos de servicio</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../rules.html" hreflang="en" lang="en">English</a>
+                    <a href="rules.html" hreflang="es" lang="es" aria-current="page">Español</a>
+                    <a href="../pt/rules.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/rules.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/rules.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/rules.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/rules.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/rules.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/rules.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/rules.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/rules.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/rules.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/rules.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/rules.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/rules.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/rules.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/rules.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/rules.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/rules.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/rules.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/rules.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/rules.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/rules.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/rules.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/rules.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>Código abierto bajo licencia MIT. Hecho con <img src="../bean.png" alt="amor" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> por comunidades, para comunidades. Límites de zonas horarias © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

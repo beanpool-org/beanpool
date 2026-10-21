@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>சுரண்டலுக்குப் பிந்தைய பொருளாதாரம் — BeanPool</title>
+    <meta name="description" content="சுரண்டலுக்குப் பிந்தைய பொருளாதாரம் என்றால் என்ன, அதை உருவாக்க BeanPool பயன்படுத்தும் குறிப்பிட்ட வழிமுறைகள்: வட்டி இல்லாத பரஸ்பர கடன், பதுக்கலுக்குப் பதிலாகச் சுழற்சி, உறுப்பினர்கள் வாக்களிக்கும் பொதுத் தொகுப்பு மற்றும் சிறிய நகரத்தை வறிதாக்காத கூட்டமைப்பு.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Scoped extras for the post-extraction page */
+        .pe-content { max-width: 1000px; margin: 2rem auto; }
+        .pe-content .lede { font-size: 1.15rem; color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.7; }
+        .pe-content .lede strong { color: var(--text-primary); }
+        .pe-content h2 { margin-top: 2.75rem; }
+        .pe-content h3 { font-family: var(--font-header); font-size: 1.05rem; color: var(--text-primary); margin: 1.75rem 0 0.4rem; }
+
+        /* The definition, set apart — this is the sentence everything else serves */
+        .pe-define {
+            border-left: 3px solid var(--accent);
+            background: var(--accent-glow);
+            padding: 1.35rem 1.6rem;
+            border-radius: 12px;
+            margin: 1.5rem 0 2rem;
+        }
+        .pe-define p { margin: 0; font-size: 1.1rem; line-height: 1.65; color: var(--text-secondary); }
+        .pe-define strong { color: var(--text-primary); }
+
+        /* Two-column: what leaves vs what stays */
+        .pe-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin: 1.5rem 0 0.5rem; }
+        .pe-col { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.15rem 1.3rem; background: var(--bg-card); }
+        .pe-col h4 { font-family: var(--font-header); font-size: 0.78rem; letter-spacing: 0.07em; text-transform: uppercase; margin: 0 0 0.75rem; }
+        .pe-col.out h4 { color: var(--danger-ink); }
+        .pe-col.in h4 { color: var(--green-ink); }
+        .pe-col ul { margin: 0; padding-left: 1.05rem; }
+        .pe-col li { color: var(--text-secondary); margin-bottom: 0.5rem; line-height: 1.55; font-size: 0.95rem; }
+        .pe-col li:last-child { margin-bottom: 0; }
+
+        /* Mechanism rows — each claim paired with the thing that makes it true */
+        .pe-mech { border-top: 1px solid var(--border); padding: 1.4rem 0; }
+        .pe-mech:last-of-type { border-bottom: 1px solid var(--border); }
+        .pe-mech h3 { margin-top: 0; }
+        .pe-mech p { color: var(--text-secondary); margin: 0 0 0.5rem; line-height: 1.65; }
+        .pe-mech p:last-child { margin-bottom: 0; }
+        .pe-mech strong { color: var(--text-primary); }
+        .pe-worked {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+            background: rgba(var(--rgb-overlay), 0.03);
+            border: 1px solid var(--border);
+            font-size: 0.92rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+        .pe-worked strong { color: var(--text-secondary); }
+
+        /* The five commitments */
+        .pe-values { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-value { border: 1px solid var(--border); border-left: 3px solid var(--accent-success); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-value h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-value p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+
+        .pe-content .callout { border-left: 3px solid var(--accent-success); background: rgba(var(--rgb-success), 0.07); padding: 0.9rem 1.15rem; border-radius: 10px; margin: 1.5rem 0; color: var(--text-secondary); line-height: 1.65; }
+        .pe-content .callout strong { color: var(--text-primary); }
+
+        .pe-edges { font-size: 0.93rem; color: var(--text-muted); border-left: 2px solid var(--border); padding-left: 0.9rem; margin-top: 1rem; line-height: 1.6; }
+        .pe-reading { display: grid; gap: 0.85rem; margin: 1.5rem 0; }
+        .pe-book { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); padding: 1rem 1.25rem; background: var(--bg-card); }
+        .pe-book h4 { font-family: var(--font-header); font-size: 1rem; color: var(--text-primary); margin: 0 0 0.35rem; }
+        .pe-book h4 span { color: var(--text-muted); font-weight: 500; font-size: 0.88rem; white-space: nowrap; }
+        .pe-book p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+        .pe-credit { font-size: 0.93rem; color: var(--text-muted); margin-top: 1.25rem; }
+        .pe-credit a { color: var(--accent-ink); }
+        .pe-check { margin-top: 1rem; }
+        .pe-check a { color: var(--accent-ink); }
+
+        @media (max-width: 720px) {
+            .pe-compare { grid-template-columns: 1fr; }
+        }
+    </style>
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/post-extraction">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/post-extraction">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/post-extraction">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/post-extraction">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/post-extraction">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/post-extraction">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/post-extraction">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/post-extraction">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/post-extraction">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/post-extraction">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/post-extraction">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/post-extraction">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/post-extraction">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/post-extraction">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/post-extraction">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/post-extraction">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/post-extraction">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/post-extraction">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/post-extraction">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/post-extraction">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/post-extraction">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/post-extraction">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/post-extraction">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/post-extraction">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/post-extraction">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/post-extraction">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="../bean.png" alt="BeanPool ஐகான்" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">செயல்படும் விதம்</a>
+                <a href="rules.html">விதிகள்</a>
+                <a href="index.html#features">அம்சங்கள்</a>
+                <a href="help.html">உதவி</a>
+                <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">பயிற்சிகள்</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube-ல் வீடியோ பயிற்சிகளைக் காண்க (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit சமூகத்தில் இணையுங்கள் (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub-ல் காண்க">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">தொடங்குங்கள்</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="மெனுவைத் திற"><span aria-hidden="true">☰</span> மெனு</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">தொடங்குங்கள்</a>
+                    <a href="index.html#how-it-works">செயல்படும் விதம்</a>
+                    <a href="rules.html">விதிகள்</a>
+                    <a href="index.html#features">அம்சங்கள்</a>
+                    <a href="help.html">உதவி</a>
+                    <a href="../guide/index.html">உறுப்பினர்களுக்கான வழிகாட்டி</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube-ல் பயிற்சிகள்</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit-ல் r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub-ல் மூலக் குறியீடு</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <section class="legal-content glass-panel pe-content">
+        <h1>சுரண்டலுக்குப் பிந்தைய பொருளாதாரம்</h1>
+
+        <p class="lede">ஒரு சமூகம் வர்த்தகம் செய்யப் பயன்படுத்தும் பெரும்பாலான கருவிகள் லாபப் பங்கைப் பெறும் வகையிலேயே வடிவமைக்கப்பட்டுள்ளன. தீய நோக்கத்துடன் அல்ல — கட்டமைப்பு ரீதியாகவே அவ்வாறு உள்ளன. ஒரு சதவீதம் கட்டணச் செயலாக்கத்திற்குச் செல்கிறது, வட்டி வங்கிக்குச் செல்கிறது, கவனம் விளம்பரதாரருக்குச் செல்கிறது, மேலும் தரவு சமூகத்தில் யாரும் தேர்ந்தெடுக்காத இடத்திற்குச் செல்கிறது. <strong>அந்த வெளியேறும் வழிகளை அகற்றுவதற்காகவே BeanPool உருவாக்கப்பட்டுள்ளது.</strong></p>
+
+        <div class="pe-define">
+            <p><strong>சுரண்டலுக்குப் பிந்தைய நிலை (Post-extraction)</strong> என்பது சமூகங்கள் உருவாக்கும் மதிப்பை இடைத்தரகர்கள் அபகரித்துக் கொள்ளாமல், தாங்களே உருவாக்கித் தக்கவைத்துக்கொள்ள அனுமதிக்கும் உள்கட்டமைப்பைக் குறிக்கிறது. இது நற்பண்புக்கான வெற்று முழக்கம் அல்ல. மென்பொருளை எவ்வாறு உருவாக்க வேண்டும் என்பதற்கான ஒரு கட்டுப்பாடு — அதை மீறும் விஷயங்கள் இணைக்கப்படுவதில்லை (merged).</p>
+        </div>
+
+        <h2>சுரண்டல் உண்மையில் எப்படி இருக்கும்</h2>
+        <p>திட்டவட்டமாகப் பேசுவது நல்லது, ஏனெனில் "சுரண்டல்" என்பது பொதுவாக தெளிவின்றி விடப்படுகிறது. ஒரு வழக்கமான தளம் வழியாக ஓர் அண்டை வீட்டார் மற்றொரு அண்டை வீட்டாருக்குப் பணம் செலுத்தும்போது, சமூகத்தை விட்டு மதிப்பு ஒரே நேரத்தில் பல வழிகளில் வெளியேறுகிறது:</p>
+
+        <div class="pe-compare">
+            <div class="pe-col out">
+                <h4>✕ மதிப்பு எங்கு வெளியேறுகிறது</h4>
+                <ul>
+                    <li>வேறெங்கோ தலைமையகத்தைக் கொண்ட செயலாக்க நிறுவனத்திற்குச் செல்லும் <strong>பரிவர்த்தனைக் கட்டணங்கள்</strong>.</li>
+                    <li>வர்த்தகத்தை சாத்தியமாக்கிய கடனுக்காக வங்கிக்குச் செலுத்தப்படும் <strong>வட்டி</strong>.</li>
+                    <li><strong>விளம்பரம்</strong> — உங்கள் கவனம் அதிக ஏலம் கேட்பவருக்கு விற்கப்படுகிறது.</li>
+                    <li><strong>தரவு</strong> — உங்கள் உறவுகளும் வாங்குதல்களும் வேறொருவரின் சொத்தாக மாறுகின்றன.</li>
+                    <li><strong>தள வாடகை</strong> — அனைவரும் அதில் இணைந்தவுடன், விலை உயர்கிறது, ஏனெனில் அதிலிருந்து வெளியேறுவது என்பது உங்கள் அண்டை வீட்டாரை விட்டு வெளியேறுவதாகும்.</li>
+                </ul>
+            </div>
+            <div class="pe-col in">
+                <h4>✓ அதற்குப் பதிலாக நாங்கள் என்ன செய்கிறோம்</h4>
+                <ul>
+                    <li>கடன் என்பது <strong>பரிமாற்றத்தின் மூலமே உருவாக்கப்படுகிறது</strong>, எனவே செலுத்த வேண்டிய கடன் வழங்குநர் யாரும் இல்லை.</li>
+                    <li>இருக்கும் சிறிய கட்டணங்கள் <strong>உங்கள் சமூகம் வாக்களித்துச் செலவிடும் பொதுத் தொகுப்பில்</strong> பாய்கின்றன.</li>
+                    <li><strong>விளம்பரங்கள் இல்லை.</strong> விளம்பரதாரர் யாரும் இல்லை, எனவே உங்கள் கவனத்தை வணிகமயமாக்க எதுவும் இல்லை.</li>
+                    <li><strong>தரவு அறுவடை இல்லை.</strong> உங்கள் தனிப்பட்ட சாவி உங்கள் சாதனத்திலேயே இருக்கும். அதை மீட்டெடுக்க நீங்கள் ஓர் உள்நுழைவை இணைத்தால், அதற்கான பூட்டப்பட்ட நகல் வைக்கப்படும்: BeanPool-இன் சாவிப் பெட்டகத்தில் அல்லது சமூகத்தின் சர்வரில் (செயலியைப் பொறுத்து). அதை வைத்திருப்பவர் எவரோ அவரால் அதைத் திறக்க முடியும். நேரடிச் செய்திகளும் குழு அரட்டைகளும் தொடக்கம் முதல் முடிவு வரை மறைகுறியாக்கப்பட்டவை.</li>
+                    <li><strong>கட்டாயப் பிணைப்பு (Lock-in) இல்லை.</strong> நெறிமுறை திறவூற்றானது மற்றும் உங்கள் சமூகம் தனது சொந்த சர்வரை இயக்குகிறது.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="callout">நேர்மையான பகுதியைப் பற்றித் தெளிவாகக் கூற வேண்டுமானால்: <strong>BeanPool செலவுகள் அற்றது அல்ல.</strong> பெரிய செயலற்ற இருப்புகளின் மீது சிறிய சுழற்சி கட்டணமும், பரிமாற்றங்களின் மீது சிறிய கட்டணமும் உள்ளன. வித்தியாசம் என்னவென்றால் பணம் மறைந்து போவதில்லை — அது <strong>எங்கு செல்கிறது</strong> என்பதுதான். அது பொதுத் தொகுப்பிற்குச் செல்கிறது, மேலும் அதை எவ்வாறு செலவிடுவது என்பதைச் சமூகம் வாக்களித்துத் தீர்மானிக்கிறது. பங்குதாரர் எவரும் இல்லாததால், யாருக்கும் எதுவும் வழங்கப்படுவதில்லை.</div>
+
+        <h2>இந்த விமர்சனத்தை நாங்கள் புதிதாகக் கண்டுபிடிக்கவில்லை</h2>
+        <p>மேலே உள்ள முறை கவனமாக ஆய்வு செய்யப்பட்டு, பல வருடங்களாக இதில் பணியாற்றிய மக்களால் பலமுறை பெயரிடப்பட்டுள்ளது. அவர்களின் பகுப்பாய்வு சரியானது என்று நாங்கள் நினைக்கிறோம்; நாங்கள் எங்கு வேறுபடுகிறோம் என்றால், நாங்கள் வலையை விவரிப்பதற்குப் பதிலாக அதிலிருந்து வெளியேறும் வழியை உருவாக்க முயற்சிக்கிறோம். எங்கள் சுருக்கத்தை விட முழுமையான வாதத்தை நீங்கள் விரும்பினால், தொடங்குவதற்கான இடங்கள் இவைதான்.</p>
+
+        <div class="pe-reading">
+            <div class="pe-book">
+                <h4>Platform Capitalism <span>— Nick Srnicek, 2016</span></h4>
+                <p>தளத்தை ஒரு தொழில்நுட்பமாக அல்லாமல் ஒரு வணிக மாதிரியாக அணுகுகிறது: ஒருவருக்கொருவர் தொடர்பு கொள்ள வேண்டிய இரண்டு குழுக்களுக்கு இடையே உங்களை நிலைநிறுத்துங்கள், பின்னர் ஒவ்வொரு இணைப்பிலும் ஒரு பங்கை எடுத்துக் கொள்ளுங்கள். அதில் உள்ள மக்களின் எண்ணிக்கையுடன் தளத்தின் மதிப்பு வளர்வதால், பங்கு பெரிதாகும்போது வெளியேறுவது கடினமாகிறது.</p>
+            </div>
+            <div class="pe-book">
+                <h4>The Age of Surveillance Capitalism <span>— Shoshana Zuboff, 2019</span></h4>
+                <p>முதலாவதோடு இயங்கும் இரண்டாவது சுரண்டலை விவரிக்கிறது. சாதாரண மனித அனுபவம் உரிமை கோரப்படாத மூலப்பொருளாகக் கருதப்படுகிறது, மக்கள் அடுத்து என்ன செய்வார்கள் என்பதற்கான கணிப்புகளாகச் செம்மைப்படுத்தப்பட்டு, அறிந்துகொள்வதால் பயனடைபவருக்கு விற்கப்படுகிறது. யாரிடமிருந்து தரவு வந்ததோ அந்த நபர் வாடிக்கையாளர் அல்ல.</p>
+            </div>
+            <div class="pe-book">
+                <h4>Technofeudalism <span>— Yanis Varoufakis, 2023</span></h4>
+                <p>வாதத்தின் மிகக் கூர்மையான வடிவம். ஒரு தளத்தின் உரிமையாளர் வசூலிப்பது எதையும் உற்பத்தி செய்வதன் மூலம் கிடைக்கும் லாபம் அல்ல — அது தங்களுக்குச் சொந்தமான ஒரு இடத்தை அணுகுவதற்காக வசூலிக்கப்படும் <em>வாடகை</em>. வரோஃபாகிஸின் கூற்றுப்படி, இது இந்த ஏற்பாட்டை முதலாளித்துவத்தை விட புதியதாக அல்லாமல் பழமையானதாக மாற்றுகிறது: ஒரு தொழில்நுட்ப நிறுவனத்தின் ஆடையை அணிந்த நிலப்பிரபுத்துவ உறவு.</p>
+            </div>
+        </div>
+
+        <p>கீழிருந்து பார்க்கும்போது அந்த ஏற்பாடு எவ்வாறு உணரப்படுகிறது என்பதற்கு எளிய சொல் உண்டு — <strong>டிஜிட்டல் பண்ணை அடிமைத்தனம் (digital sharecropping)</strong>. உங்களுக்குச் சொந்தமில்லாத நிலத்தில் நீங்கள் வேலை செய்கிறீர்கள், நீங்கள் விளைவிக்கும் எல்லாவற்றிலும் உரிமையாளர் ஒரு பங்கை எடுத்துக்கொள்கிறார். இது ஓட்டுநர், விற்பனையாளர், இசைக்கலைஞர் மற்றும் டெலிவரி செய்பவர் ஆகியோரை சமமாக விவரிக்கிறது, இது பொதுவாக ஒரு விளக்கம் உண்மையான ஒன்றைச் சுட்டிக்காட்டுகிறது என்பதற்கான அறிகுறியாகும்.</p>
+
+        <p>எங்கள் பதில் ஒரு நியாயமான நிலப்பிரபுவோ அல்லது குறைந்த வாடகையோ அல்ல. <strong>முதலில் வாடகைக்கு விடுவதற்கு எந்த நிலமும் இருக்கக்கூடாது என்பதே எங்கள் பதில்.</strong> ஒரு பிற்பகல் வேலையைப் பரிமாறிக்கொள்ளும் இரண்டு அண்டை வீட்டார் எவருக்கும் சொந்தமான ஒரு வழியைக் கடந்து செல்ல வேண்டிய அவசியமில்லை. எனவே சமூகம் சர்வரை வைத்திருக்கிறது, நெறிமுறை எவரும் இயக்கவோ அல்லது பிரிக்கவோ (fork) திறந்திருக்கிறது, மற்றும் இருக்கும் ஒரே கட்டணம் சமூகத்தின் சொந்த பொதுத் தொகுப்பிற்கே செல்கிறது. எங்களை உள்ளடக்கி — அணுகலை விற்க நடுவில் யாருக்கும் இடம் இல்லை.</p>
+
+        <p class="pe-credit">படிப்பதை விட பார்க்க விரும்பினால், நல்ல தொடக்கப் புள்ளி: பென் ஜோர்டானின் <a href="https://www.youtube.com/watch?v=gqtrNXdlraM" target="_blank" rel="noopener">“You Are Witnessing the Death of American Capitalism”</a>, இது இந்தக் களத்தை உள்ளடக்கி மேலே உள்ள மூன்று புத்தகங்களையும் சுட்டிக்காட்டுகிறது.</p>
+
+        <h2>வழிமுறைகள்</h2>
+        <p>முதல் நான்கு வழிமுறைகள் இன்று ஒவ்வொரு சமூகத்திலும் செயல்படும் பகுதிகளாகும். ஐந்தாவது, சமூகங்களுக்கு இடையிலான தீர்வு, உருவாக்கப்பட்டு எங்கள் சொந்த இரண்டு சோதனைச் சமூகங்களுக்கு இடையே மட்டுமே சோதிக்கப்பட்டது, இன்னும் நேரடிச் சமூகங்களுக்கு இடையே சோதிக்கப்படவில்லை. அவை <a href="rules.html">விதிகள்</a>-இல் முழுமையாக விவரிக்கப்பட்டுள்ளன.</p>
+
+        <div class="pe-mech">
+            <h3>சமூகம் தனக்குத்தானே உருவாக்கும் பணம்</h3>
+            <p>BeanPool <strong>பரஸ்பர கடனில்</strong> இயங்குகிறது. ஓர் அண்டை வீட்டாருக்காக நீங்கள் மூன்று மணிநேரம் வேலை செய்யும்போது, அந்தத் தருணத்தில் மூன்று மணிநேர கடன் நடைமுறைக்கு வருகிறது — உங்கள் நேர்மறை இருப்பும் அவர்களின் எதிர்மறை இருப்பும் பரிமாற்றத்தால் ஒன்றாக உருவாக்கப்படுகின்றன. எந்த வங்கியும் அதை வெளியிடவில்லை. யாரும் அதை உங்களுக்குக் கடனாகக் கொடுக்கவில்லை. கடன் வழங்குநர் யாரும் இல்லாததால், வட்டி எதுவும் இல்லை.</p>
+            <p>இதுவே முழு வடிவமைப்பின் அடித்தளம். பணப்புழக்கத்தை உருவாக்கக் கடன் வாங்க வேண்டியிருந்தால், சமூகத்திற்கு வெளியே உள்ள ஒருவர் அதன் எதிர்கால வேலையின் மீது உரிமை கோருவார். சமூகம் பரிமாற்றம் செய்வதன் மூலம் அதை உருவாக்கினால், யாரும் அப்படி உரிமை கோர முடியாது.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>பூஜ்ஜியமே இலக்கு, பெரிய இருப்பு அல்ல</h3>
+            <p><strong>பூஜ்ஜியம்</strong> இருப்பு என்பது நீங்கள் பெற்ற அளவுக்குக் கொடுத்துள்ளீர்கள் என்பதைக் குறிக்கிறது. அதுவே ஆரோக்கியமான நிலை, மேலும் பெரும்பாலான பொருளாதாரங்கள் நிர்ணயிக்கும் இலக்கிலிருந்து இது உண்மையிலேயே மாறுபட்ட இலக்காகும். பயறுகளைக் குவிப்பதற்கு எந்தப் பரிசும் இல்லை, மேலும் சமூகத்திற்கு வெளியே உள்ள எவர் மீதும் அவற்றை உரிமைகோரலாக மாற்ற வழி எதுவும் இல்லை.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>பதுக்கலுக்குப் பதிலாகச் சுழற்சி</h3>
+            <p>பெரிய செயலற்ற இருப்புகள் காலப்போக்கில் படிப்படியான விகிதத்தில் மெதுவாகக் குறைகின்றன. பயறுகளை ஓரிடத்தில் முடக்கி வைக்காமல் — அண்டை வீட்டாருடன் செலவழித்து, உள்ளூர் திட்டங்களில் முதலீடு செய்து — தொடர்ந்து நகர்த்துவதே இதன் விளைவு. பரிமாற்ற ஊடகம் நகர்வதை நிறுத்தும் ஒரு பொருளாதாரம் தனது செயல்பாட்டை நிறுத்திய ஒன்றாகும்.</p>
+            <p>முக்கியமாக, குறைக்கப்படுவது அழிக்கப்படுவதில்லை மற்றும் லாபமாக எடுத்துக்கொள்ளப்படுவதில்லை: <strong>அது பொதுத் தொகுப்பிற்கு நகர்கிறது.</strong> எதிர்மறை இருப்புகளுக்கு ஒருபோதும் கட்டணம் விதிக்கப்படுவதில்லை. எதிர்மறையில் உள்ள ஒருவர் சமூகம் அவருக்கு வழங்கிய கடனைப் பெற்றுள்ளார், மேலும் ஏற்கனவே பின்தங்கியுள்ள ஒருவரிடம் கட்டணம் வசூலிப்பது பயறுகளைச் சுழல வைப்பதற்குப் பதிலாகப் பள்ளத்தை ஆழப்படுத்தும் — இது நோக்கத்திற்கு எதிரானது.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>பொது என்பது ஒரு சுழற்சி, தேக்கம் அல்ல</h3>
+            <p>சுழற்சி மற்றும் வர்த்தகக் கட்டணங்கள் வசூலிப்பதை பொதுத் தொகுப்பு வைத்திருக்கிறது, மேலும் அது வைத்திருப்பது இரண்டு இடங்களுக்குச் செல்கிறது: ஓர் உறுப்பினர் எதிர்மறை இருப்பில் இருக்கும்போது வெளியேறினாலோ அல்லது நீக்கப்பட்டாலோ எஞ்சியிருக்கும் கடனை ஈடுகட்டுதல், மற்றும் தானாகச் செயல்படும் <strong>முடிவுகள்</strong> மூலம் உறுப்பினர்கள் அங்கீகரிக்கும் கூட்டு முயற்சிகள் மற்றும் திட்டங்களுக்கு நிதியளித்தல் — பகிரப்பட்ட தோட்டத்திற்கான கருவிகள், ஒரு பணியிடத்திற்கான உபகரணங்கள், முன்மொழியப்பட்டு வாக்களிக்கப்படும் எதுவாகவும் இருக்கலாம். தனது சொந்த உபரி எதை உருவாக்குகிறது என்பதைச் சமூகமே தீர்மானிக்கிறது.</p>
+            <p>இது கட்டமைப்பிலேயே ஒரு மூடிய சுழற்சியாகும்: மதிப்பு உள்ளூரில் உருவாக்கப்பட்டு, கூட்டாக வைக்கப்பட்டு, அதே சமூகத்திற்குள் மீண்டும் செலவிடப்படுகிறது.</p>
+        </div>
+
+        <div class="pe-mech">
+            <h3>சிறிய நகரத்தை வறிதாக்காத கூட்டமைப்பு</h3>
+            <p>சமூகங்கள் தங்களுக்குள் வர்த்தகம் செய்யும்போது, சுரண்டல் ஒரு நுட்பமான வடிவத்தில் மீண்டும் தோன்றக்கூடும் — பணக்கார நகரம் சிறிய நகரத்தை மெதுவாக வறிதாக்குவது. பிரெட்டன் உட்ஸில் ஜான் மேனார்ட் கெயின்ஸ் தீர்க்க முயன்ற பிரச்சனை இதுவே, மேலும் சமூகங்களுக்கிடையேயான BeanPool-இன் தீர்வு அவரது பதிலின் அடிப்படையிலேயே கட்டமைக்கப்பட்டுள்ளது.</p>
+            <p><strong>பயறுகள் ஒருபோதும் எல்லையைத் தாண்டுவதில்லை.</strong> இரண்டு சமூகங்களுக்கு இடையிலான வர்த்தகம் ஒரு ஜோடி பாலப் பேரேடுகள் மூலம் தீர்க்கப்படுகிறது, ஒவ்வொன்றும் ஒவ்வொரு முனையத்தாலும் பராமரிக்கப்பட்டு, வேலையில் ஒன்றுக்கொன்று என்ன கடன்பட்டுள்ளன என்பதைப் பதிவு செய்கிறது. அது எவ்வளவு தூரம் செல்லலாம் என்பதற்கு ஒவ்வொரு தரப்பும் தனக்கான வரம்பை அமைக்கிறது — எனவே ஓர் அண்டை சமூகம் நீங்கள் முன்கூட்டியே தேர்ந்தெடுத்த தொகையை மட்டுமே உங்களுக்குக் கடன்பட்டிருக்க முடியும்.</p>
+            <p>இரண்டு விஷயங்கள் இதைப் பின்பற்றுகின்றன, மேலும் இது வெறும் செலவு வரம்பு மட்டுமல்ல என்பதற்கான காரணம் அவையே. <strong>நீங்கள் கடன்பட்டிருப்பதைத் தீர்ப்பது ஒருபோதும் தடுக்கப்படுவதில்லை</strong> — வரம்பு கடனை நீட்டிக்கும் திசையைக் கட்டுப்படுத்துகிறது, அதைத் தீர்க்கும் திசையை அல்ல. மேலும் உபரியை வைத்திருக்கும் ஒரு சமூகம் சும்மா உட்கார்ந்திருக்காது: <strong>ஒரு நகரம் எவ்வளவு கடன்பட்டுள்ளதோ, அவ்வளவுக்குக் கடன் கொடுத்த நகரம் அதனிடமிருந்து பணிகளைச் செய்யச் சொல்லலாம்</strong>, சமநிலையின்மையை ஒரு கடனாக விட்டுவிடாமல் மீண்டும் வர்த்தகமாக மாற்றுகிறது.</p>
+            <div class="pe-worked">
+                <strong>வடிவமைப்பு ஏன் இந்த வழியில் செயல்பட வேண்டும்.</strong> ஒவ்வொரு நேர்மறை பயறும் ஒரு குறிப்பிட்ட உறுப்பினரால் வைக்கப்பட்டிருக்கும் பொருந்தும் எதிர்மறையைக் கொண்டுள்ளது, அவர் உழைத்து ஈட்டுவதன் மூலம் அதைத் தீர்க்கிறார். ஓர் உறுப்பினரின் +50 மற்றொரு நகரத்திற்குச் சென்றால், −50 இல் இருக்கும் அண்டை வீட்டார் உள்ளூர் சுழற்சியிலிருந்து அதை மீண்டும் ஈட்ட முடியாது — அவர்களின் கடனுக்கான இணை வெளியேறிவிட்டது. பல பார்வையாளர்களிடையே இதை மீண்டும் செய்தால், சிறிய சமூகத்தின் சுழற்சி நிரந்தரமாகச் சுருங்கிவிடும். மோசடி மூலம் அல்ல; அனைத்தும் சரியாகத் தோன்றிய பரிமாற்றங்கள் மூலம்.
+            </div>
+            <p class="pe-edges">எல்லைகள் எங்கு உள்ளன என்பதை வெளிப்படையாகச் சொல்வதானால்: பற்றாக்குறையில் உள்ள ஒரு சமூகம் பற்றாக்குறையில் இருப்பதற்காக <em>ஒருபோதும்</em> தண்டிக்கப்படுவதில்லை — கெயின்ஸின் வாதமும், எங்களுடையதும் என்னவென்றால், அதன் மீது செயல்படும் திறன் கொண்ட ஒருவர் மீதே அழுத்தம் விழ வேண்டும். திட்டமிட்டு செயலற்று விடப்படும் உபரியின் மீதான கட்டணம் என்ற எஞ்சியிருக்கும் ஒரே நெம்புகோல் குறிப்பிடப்பட்டு, அதே நியாயத்தன்மை சோதனையில் தேர்ச்சி பெறும் வரை திட்டமிட்டு உருவாக்கப்படாமல் உள்ளது. தீர்வு என்பது பரந்த நெட்வொர்க்கில் இல்லாமல் ஜோடி சமூகங்களுக்கு இடையே இயங்குகிறது, மேலும் ஒவ்வொரு சமூகத்தின் இயக்குபவரும் அதைத் தன் விருப்பப்படி இயக்குகிறார்.</p>
+        </div>
+
+        <h2>இதன் அடிப்படையிலான உறுதிமொழிகள்</h2>
+        <p>BeanPool-க்கான ஒவ்வொரு பங்களிப்பும் மதிப்பிடப்படும் நிறுவன மதிப்புகள் இவை. அவை திட்டத்தின் <a href="https://github.com/beanpool-org/beanpool/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">பங்களிப்பாளர் வழிகாட்டியில்</a> வெளியிடப்பட்டுள்ளன, மேலும் அவை வலிமையானவை: குறியீடு எவ்வளவு சிறப்பாக இருந்தாலும், அவற்றுடன் முரண்படும் பணிகள் நிராகரிக்கப்படுகின்றன.</p>
+
+        <div class="pe-values">
+            <div class="pe-value">
+                <h4>சுரண்டலுக்குப் பிந்தைய நிலை</h4>
+                <p>இடைத்தரகர்களால் கைப்பற்றப்படாமல் சமூகங்கள் மதிப்பை உருவாக்கித் தக்கவைத்துக்கொள்ள உதவும் உள்கட்டமைப்பை நாங்கள் உருவாக்குகிறோம். சுரண்டல் இயக்கவியலை அறிமுகப்படுத்தும் பங்களிப்புகள் — ஒற்றைக் கட்டுப்பாட்டுத் தரப்பிற்குப் பயனளிக்கும் பிணைய விளைவுகள், தனியுரிமப் பூட்டுகள் (proprietary lock-in), கண்காணிப்பு அடிப்படையிலான வருமானம் ஈட்டுதல் — வரவேற்கப்படுவதில்லை.</p>
+            </div>
+            <div class="pe-value">
+                <h4>துணைநிலை ஆட்சி (Subsidiarity)</h4>
+                <p>உள்ளூர் சமூகங்கள் தங்களின் சொந்த முனையங்களை இயக்கவும், தங்களின் சொந்த நிர்வாக முடிவுகளை எடுக்கவும், சுதந்திரமாக செயல்படவும் முடியும். முடிவெடுப்பதை உலகளாவிய அதிகாரத்திற்குத் தள்ளும் அல்லது உள்ளூர் செயல்பாட்டை நடைமுறைக்கு மாறானதாக மாற்றும் பங்களிப்புகள் நெறிமுறையின் இலக்குகளுக்கு எதிராகச் செயல்படுகின்றன.</p>
+            </div>
+            <div class="pe-value">
+                <h4>தெளிவுத்தன்மை (Legibility)</h4>
+                <p>மென்பொருள் பொறியாளர்களுக்கு மட்டுமல்லாமல், தான் சேவை செய்யும் சமூகங்களுக்கும் நெறிமுறை புரியும்படி இருக்க வேண்டும். விவரக்குறிப்புகள் முடிந்தவரை எளிய மொழியில் எழுதப்பட்டு, தொழில்நுட்ப விவரங்கள் அதன் கீழ் அடுக்கடுக்காக அமைக்கப்பட்டிருக்கும்.</p>
+            </div>
+            <div class="pe-value">
+                <h4>ஒப்புதலும் தனியுரிமையும்</h4>
+                <p>தரவு யாருக்குச் சொந்தமானதோ அவர்களின் வெளிப்படையான, திரும்பப்பெறக்கூடிய, தணிக்கை செய்யக்கூடிய ஒப்புதல் இல்லாமல் தரவு நகர எந்த அம்சமும் அனுமதிக்கக்கூடாது. தொழில்நுட்ப நேர்த்தி எதுவாக இருந்தாலும் தனியுரிமையை ஆக்கிரமிக்கும் அம்சங்கள் இணைக்கப்பட மாட்டாது.</p>
+            </div>
+            <div class="pe-value">
+                <h4>மீளுருவாக்கம் (Regeneration)</h4>
+                <p>வளர்ச்சி அளவீடுகள் அல்லது டோக்கன் விலையைக் கொண்டு அல்லாமல், BeanPool காரணமாகச் சமூகங்கள், சூழலியல் மற்றும் பொது இடங்கள் ஆரோக்கியமாக இருக்கிறதா என்பதை வைத்தே வெற்றியை அளவிடுகிறோம்.</p>
+            </div>
+        </div>
+
+        <h2>நாங்கள் உண்மையாக இருக்கிறோம் என்பதை எவ்வாறு சரிபார்ப்பது</h2>
+        <p>இது போன்ற ஒரு கூற்று அதைச் சரிபார்க்கும் திறனைப் போலவே மதிப்புடையது, எனவே:</p>
+        <ul class="pe-check">
+            <li>முழு நெறிமுறையும் <strong>MIT உரிமத்தின் கீழ் திறவூற்றானது</strong> — இந்தப் பக்கத்தில் விவரிக்கப்பட்டுள்ள ஒவ்வொரு விதியும் உட்பட <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">குறியீட்டைப் படியுங்கள்</a>.</li>
+            <li>பொருளாதார விதிகள் <a href="rules.html">விதிகள்</a>-இல் எளிய மொழியில் எழுதப்பட்டுள்ளன — இருப்புகள், கடன், கட்டணங்கள் மற்றும் ஒவ்வொன்றும் எங்கு செல்கின்றன.</li>
+            <li>உங்கள் சமூகம் <strong>தனது சொந்த முனையத்தை இயக்க முடியும்</strong>. நாங்கள் எப்போதாவது இடைத்தரகராக மாறினால், நீங்கள் உங்கள் சமூகத்தை உங்களுடன் அழைத்துக்கொண்டு வெளியேறலாம்.</li>
+            <li><strong>டோக்கனும் இல்லை, முதலீட்டாளர்களும் இல்லை</strong>. பயறுகள் உண்மையான வர்த்தகத்திற்கான பரஸ்பரக் கடன், மேலும் ஒரு பரிவர்த்தனை தளத்தில் ஒருபோதும் வர்த்தகம் செய்யப்படுவதில்லை.</li>
+        </ul>
+
+        <div class="callout">சுருக்கமாக: <strong>ஒரு சமூகம் உருவாக்கும் மதிப்பு வெளியே கசிந்து செல்ல எங்கும் வழியில்லாத போது அந்தப் பொருளாதாரம் சுரண்டலுக்குப் பிந்தையதாக மாறுகிறது.</strong> அனைவரும் நல்லொழுக்கம் கொண்டவர்கள் என்பதால் அல்ல, வடிவமைப்பில் வெளியேறும் கதவுகள் எதுவும் இல்லை என்பதால்.</div>
+    </section>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="BeanPool ஐகான்" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>சமூகங்களுக்கான பரஸ்பர கடன், சமூகங்களால் நடத்தப்படுகிறது.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">உதவி மையம்</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="index.html#how-it-works">செயல்படும் விதம்</a>
+                    <a href="getting-started.html">தொடங்குதல்</a>
+                    <a href="rules.html">விதிகள்</a>
+                    <a href="post-extraction.html">சுரண்டலுக்குப் பிந்தைய பொருளாதாரம்</a>
+                    <a href="safety.html">குழந்தைகள் பாதுகாப்பு</a>
+                    <a href="../privacy.html">தனியுரிமைக் கொள்கை</a>
+                    <a href="../terms.html">சேவை விதிமுறைகள்</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../post-extraction.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/post-extraction.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/post-extraction.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/post-extraction.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/post-extraction.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/post-extraction.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/post-extraction.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/post-extraction.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/post-extraction.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/post-extraction.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/post-extraction.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/post-extraction.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/post-extraction.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/post-extraction.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/post-extraction.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/post-extraction.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="post-extraction.html" hreflang="ta" lang="ta" aria-current="page">தமிழ்</a>
+                    <a href="../uk/post-extraction.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/post-extraction.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/post-extraction.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/post-extraction.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/post-extraction.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/post-extraction.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="../ja/post-extraction.html" hreflang="ja" lang="ja">日本語</a>
+                    <a href="../ko/post-extraction.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT உரிமத்தின் கீழ் திறவூற்று. சமூகங்களால், சமூகங்களுக்காக <img src="../bean.png" alt="அன்புடன்" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" /> உருவாக்கப்பட்டது. நேர மண்டல எல்லைகள் © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap பங்களிப்பாளர்கள்</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+    <script src="../main.js"></script>
+</body>
+</html>

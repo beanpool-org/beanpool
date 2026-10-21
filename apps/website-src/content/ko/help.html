@@ -1,0 +1,167 @@
+<!-- source-hash: 64da0b917fdb13a9 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>도움말 센터 — BeanPool</title>
+    <meta name="description" content="BeanPool의 모든 규칙, 가이드, 설명서를 한곳에서 확인하세요: 시작하기, 규칙, 멤버 가이드, 커뮤니티 운영하기, 안전, 개인정보 보호 등.">
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="stylesheet" href="fonts/fonts.css">
+    <link rel="stylesheet" href="style.css?v=2.8">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="index.html" class="logo"><img src="bean.png" alt="BeanPool 아이콘" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html#how-it-works">이용 방법</a>
+                <a href="index.html#features">할 수 있는 일</a>
+                <a href="rules.html">규칙</a>
+                <a href="index.html#run-a-node">커뮤니티 운영하기</a>
+                <a href="help.html" aria-current="page" title="모든 규칙, 가이드, 설명서를 한곳에서 확인하세요">도움말</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTube에서 비디오 튜토리얼 시청하기 (@beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Reddit 커뮤니티 참여하기 (r/beanpool)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHub에서 보기">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">시작하기</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="메뉴 열기"><span aria-hidden="true">☰</span> 메뉴</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">시작하기</a>
+                    <a href="index.html#how-it-works">이용 방법</a>
+                    <a href="index.html#features">할 수 있는 일</a>
+                    <a href="rules.html">규칙</a>
+                    <a href="index.html#run-a-node">커뮤니티 운영하기</a>
+                    <a href="help.html" aria-current="page">도움말</a>
+                    <a href="guide/index.html">멤버 가이드</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube 영상</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit r/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub 소스 코드</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <main class="legal-content help-centre">
+        <h1>도움말 센터</h1>
+        <p class="lede">BeanPool의 모든 규칙, 가이드, 설명서를 한곳에 모았습니다. 자신에게 맞는 것을 선택해 보세요.</p>
+
+        <h2>가이드와 규칙</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="getting-started.html">
+                <h3>시작하기</h3>
+                <p class="help-who">BeanPool이 처음이신 분들을 위한 안내.</p>
+                <p>참여하는 세 가지 방법: 글로벌 커뮤니티(곧 모두에게 공개), 가까운 커뮤니티 찾기 또는 시작하기, 초대장으로 참여하기. 그리고 내 12개 단어와 첫 거래 안내.</p>
+                <!-- OPEN-GLOBAL: "The three ways in: try the global community, find or start a community near you, or join with an invite. Then your 12 words and your first trade." -->
+            </a>
+            <a class="help-card glass-panel" href="rules.html">
+                <h3>규칙</h3>
+                <p class="help-who">모든 구체적 수치를 알고 싶은 분들을 위한 안내.</p>
+                <p>콩, 신용 한도, 수수료, 선물, 한도, 거래 정산 방식 등 모든 내용을 한곳에서 확인하세요.</p>
+            </a>
+            <a class="help-card glass-panel" href="guide/index.html">
+                <h3>멤버 가이드</h3>
+                <p class="help-who">이미 커뮤니티에 참여 중인 분들을 위한 안내.</p>
+                <p>글 올리기, 거래하기, 메시지 주고받기, 투표하기, 계정을 안전하게 지키는 방법. 휴대폰 앱 왼쪽 상단의 콩 아이콘이나 웹 앱의 <strong>?</strong>를 탭하면 앱 내에서도 동일한 가이드를 볼 수 있어요.</p>
+            </a>
+            <a class="help-card glass-panel" href="index.html#run-a-node">
+                <h3>커뮤니티 운영하기</h3>
+                <p class="help-who">커뮤니티를 시작하거나 운영하고 싶은 분들을 위한 안내.</p>
+                <p>커뮤니티 자체 서버를 운영하는 데 필요한 사항과 설치 방법.</p>
+                <p class="help-note">운영자 매뉴얼은 커뮤니티 서버에 있어요: 설정(서버 주소 뒤에 /settings)에 로그인한 후 사이드바에서 '매뉴얼'을 누르거나 화면 제목 옆의 ?를 누르세요. 이 웹사이트에는 첫 설정 가이드 페이지만 포함되어 있어요.</p>
+            </a>
+        </div>
+
+        <h2>안전과 내 데이터</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="safety.html">
+                <h3>안전</h3>
+                <p class="help-who">BeanPool에서의 유해 행위가 우려되는 분들을 위한 안내.</p>
+                <p>아동을 안전하게 보호하는 방법, 신고 방법, 문의 방법.</p>
+            </a>
+            <a class="help-card glass-panel" href="privacy.html">
+                <h3>개인정보 보호</h3>
+                <p class="help-who">어떤 정보가 저장되는지 알고 싶은 분들을 위한 안내.</p>
+                <p>커뮤니티 서버가 보관하는 정보와 그 이유.</p>
+            </a>
+            <a class="help-card glass-panel" href="terms.html">
+                <h3>이용약관</h3>
+                <p class="help-who">BeanPool을 사용하는 모든 분들을 위한 안내.</p>
+                <p>앱을 이용할 때 동의하게 되는 약관.</p>
+            </a>
+            <a class="help-card glass-panel" href="data-deletion.html">
+                <h3>데이터 삭제</h3>
+                <p class="help-who">내 데이터를 삭제하고 싶은 분들을 위한 안내.</p>
+                <p>연결된 계정 또는 전체 BeanPool 계정을 삭제하는 방법.</p>
+            </a>
+        </div>
+
+        <h2 id="writing-to-us">문의하기</h2>
+        <p>보내주신 내용을 누가 확인하고 언제 답변하는지 안내해 드려요.</p>
+        <p><strong>글로벌 커뮤니티에서의 신고.</strong> 글로벌 커뮤니티는 우리가 직접 운영하므로 앱에서 접수된 신고는 우리에게 전달되며, 하루 이내에 검토해요.</p>
+        <p><strong>로컬 커뮤니티에서의 신고.</strong> 해당 커뮤니티의 중재자에게 전달되며, 우리에게 오지 않아요.</p>
+        <p><strong>이메일 문의.</strong> <a href="mailto:admin@beanpool.org">admin@beanpool.org</a>로 메일을 보내주시면 이틀 이내에 회신을 드려요. 절대 12개 단어를 보내지 마세요. 12개 단어를 가진 사람은 누구나 계정을 사용할 수 있어요. BeanPool 팀이나 커뮤니티의 누구도 이를 요구하지 않아요.</p>
+        <p>아동 안전과 관련된 사안: 앱 내에서 먼저 신고한 후 <a href="safety.html">안전</a> 페이지를 참조하세요.</p>
+
+        <h2>기타 채널</h2>
+        <div class="help-grid">
+            <a class="help-card glass-panel" href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">
+                <h3><svg style="color: var(--youtube)" class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>동영상</h3>
+                <p class="help-who">글보다 영상으로 보는 것을 선호하는 분들을 위한 안내.</p>
+                <p>BeanPool 작동 방식을 보여주는 YouTube 짧은 영상들.</p>
+            </a>
+            <a class="help-card glass-panel" href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">
+                <h3><svg style="color: var(--reddit)" class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>커뮤니티</h3>
+                <p class="help-who">질문이나 아이디어가 있는 분들을 위한 안내.</p>
+                <p>Reddit에서 다른 멤버들과 BeanPool 제작자들에게 질문해 보세요.</p>
+            </a>
+            <a class="help-card glass-panel" href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">
+                <h3><svg class="help-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>소스 코드</h3>
+                <p class="help-who">개발자를 위한 안내.</p>
+                <p>BeanPool은 오픈 소스입니다. GitHub에서 코드를 읽고, 버그를 제보하거나 개발에 참여해 보세요.</p>
+            </a>
+        </div>
+    </main>
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="bean.png" alt="BeanPool 아이콘" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>이웃과 콩으로 거래하는 무료 앱.</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">도움말 센터</a>
+                    <a href="getting-started.html">시작하기</a>
+                    <a href="rules.html">규칙</a>
+                    <a href="post-extraction.html">탈착취</a>
+                    <a href="index.html#run-a-node">커뮤니티 운영하기</a>
+                    <a href="guide/index.html">멤버 가이드</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="privacy.html">개인정보 처리방침</a>
+                    <a href="terms.html">서비스 이용약관</a>
+                    <a href="safety.html">아동 안전</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>MIT 라이선스에 따른 오픈 소스입니다. 커뮤니티를 위해, 커뮤니티가 <img src="bean.png" alt="사랑" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />을 담아 만들었습니다. 표준시 경계 © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap 기여자</a> (ODbL).</p>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

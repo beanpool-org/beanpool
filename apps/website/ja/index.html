@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeanPool — 商業銀行ではなく、コミュニティのための交換の場</title>
+    <meta name="description" content="BeanPoolは、お金の代わりに「豆」を使って助け合い、物、スキルを取引するために、コミュニティが自分たちで運営する無料アプリです。近くのコミュニティを探すか立ち上げるか、または招待で参加できます。グローバルコミュニティもまもなく全員に公開されます。iPhone、Android、Web対応。">
+    <!-- OPEN-GLOBAL: description becomes "… in Beans instead of money. Try it on the global community, find or start a community near you, or join with an invite. iPhone, Android and web." -->
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="stylesheet" href="../fonts/fonts.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="../style.css?v=2.8">
+    <link rel="alternate" hreflang="en" href="https://beanpool.org/">
+    <link rel="alternate" hreflang="es" href="https://beanpool.org/es/">
+    <link rel="alternate" hreflang="pt" href="https://beanpool.org/pt/">
+    <link rel="alternate" hreflang="hi" href="https://beanpool.org/hi/">
+    <link rel="alternate" hreflang="bn" href="https://beanpool.org/bn/">
+    <link rel="alternate" hreflang="fr" href="https://beanpool.org/fr/">
+    <link rel="alternate" hreflang="ar" href="https://beanpool.org/ar/">
+    <link rel="alternate" hreflang="id" href="https://beanpool.org/id/">
+    <link rel="alternate" hreflang="ru" href="https://beanpool.org/ru/">
+    <link rel="alternate" hreflang="zh-Hans" href="https://beanpool.org/zh-Hans/">
+    <link rel="alternate" hreflang="zh-Hant" href="https://beanpool.org/zh-Hant/">
+    <link rel="alternate" hreflang="it" href="https://beanpool.org/it/">
+    <link rel="alternate" hreflang="de" href="https://beanpool.org/de/">
+    <link rel="alternate" hreflang="tr" href="https://beanpool.org/tr/">
+    <link rel="alternate" hreflang="sw" href="https://beanpool.org/sw/">
+    <link rel="alternate" hreflang="ml" href="https://beanpool.org/ml/">
+    <link rel="alternate" hreflang="ta" href="https://beanpool.org/ta/">
+    <link rel="alternate" hreflang="uk" href="https://beanpool.org/uk/">
+    <link rel="alternate" hreflang="ur" href="https://beanpool.org/ur/">
+    <link rel="alternate" hreflang="fa" href="https://beanpool.org/fa/">
+    <link rel="alternate" hreflang="vi" href="https://beanpool.org/vi/">
+    <link rel="alternate" hreflang="el" href="https://beanpool.org/el/">
+    <link rel="alternate" hreflang="fil" href="https://beanpool.org/fil/">
+    <link rel="alternate" hreflang="ja" href="https://beanpool.org/ja/">
+    <link rel="alternate" hreflang="ko" href="https://beanpool.org/ko/">
+    <link rel="alternate" hreflang="x-default" href="https://beanpool.org/">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav id="navbar">
+        <div class="nav-inner has-menu">
+            <a href="#" class="logo"><img src="../bean.png" alt="BeanPoolアイコン" style="width: 52px; height: 52px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="#how-it-works">仕組み</a>
+                <a href="#features">できること</a>
+                <a href="rules.html">ルール</a>
+                <a href="#run-a-node">コミュニティを運営する</a>
+                <a href="help.html" title="すべてのルール、ガイド、マニュアルが1か所に">ヘルプ</a>
+                <div class="nav-social-icons">
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="nav-social nav-youtube" title="YouTubeでチュートリアル動画を見る（@beanpool）">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                    </a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="nav-social nav-reddit" title="Redditコミュニティに参加する（r/beanpool）">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                    </a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="nav-social nav-github" title="GitHubで見る">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    </a>
+                </div>
+                <a href="getting-started.html" class="nav-cta">使ってみる</a>
+            </div>
+            <!-- Phone menu: at 1023px and below the links above are hidden, so they live here instead. No script needed. -->
+            <details class="nav-menu">
+                <summary aria-label="メニューを開く"><span aria-hidden="true">☰</span> メニュー</summary>
+                <div class="nav-menu-panel">
+                    <a href="getting-started.html" class="nav-menu-cta">使ってみる</a>
+                    <a href="#how-it-works">仕組み</a>
+                    <a href="#features">できること</a>
+                    <a href="rules.html">ルール</a>
+                    <a href="#run-a-node">コミュニティを運営する</a>
+                    <a href="help.html">ヘルプ</a>
+                    <a href="../guide/index.html">メンバーズガイド</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTubeで動画を見る</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Redditのr/beanpool</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHubのソースコード</a>
+                </div>
+            </details>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero">
+        <div class="hero-bg"></div>
+        <div class="container hero-container">
+            <div class="hero-header">
+                <div class="hero-badge">スマートフォンとWebで無料</div>
+                <h1>商業銀行ではなく、<br><span class="gradient-text">コミュニティ</span>のための交換の場</h1>
+                <p class="hero-subtitle">BeanPoolは、コミュニティ内の人々が助け合い、物、スキルを相互に取引するための無料アプリです。お金の代わりに「豆」を使います。誰かを助けると豆を受け取り、助けてもらうと豆を渡します。目指すのはゼロ（均衡）です &mdash; 受け取った分だけ誰かを助けましょう。</p>
+            </div>
+
+            <div class="hero-lower-grid">
+                <!-- Left: what BeanPool is not -->
+                <div class="not-card glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">🚫 脱・搾取宣言</span>
+                        <h3>BeanPoolが<span class="text-rose">目指さないもの</span></h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>広告配信マシンではありません</strong>
+                                <p>類似オーディエンスターゲティングも、データ収集も、一攫千金を煽るアルゴリズムもありません。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>投機的な暗号資産トークンではありません</strong>
+                                <p>豆は現実の取引のための相互信用（クレジット）です — 取引所で価格操作されることはありません。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>射幸心を煽るアテンションマシーンではありません</strong>
+                                <p>ドーパミン中毒を生む無限スクロールはありません — あるのは地域の実際の提供とご近所さんだけです。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>企業による負債や富の搾取ではありません</strong>
+                                <p>金利も、銀行も、中間業者もありません。ごくわずかな手数料はコミュニティ自身のコモンズプールに送られ、運営元に入ることは決してありません。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">✕</div>
+                            <div class="not-item-content">
+                                <strong>仮想通貨（暗号資産）アプリではありません</strong>
+                                <p>ブロックチェーンもコインも購入が必要なウォレットもありません。あなたの12個の単語は、単にご自身のアカウントを開くための鍵です。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: three ways in. The global community runs the showcase (14 Oct) but is a private preview: only an
+                     owner's or admin's invite joins, and a stranger who opens it sees one sentence saying so. So door 1 leads to
+                     getting-started.html#global, which says that, and no line on this site says anyone can join global today.
+                     OPEN-GLOBAL: each line that changes when global's preview is switched off carries an OPEN-GLOBAL comment
+                     with its replacement (here, getting-started.html, help.html, rules.html). Grep OPEN-GLOBAL on that day. -->
+                <div class="hero-cta-card glass-panel">
+                    <div class="hero-cta-header">
+                        <span class="hero-cta-tag">3つの参加方法</span>
+                        <h3>あなたのいる場所から始める</h3>
+                    </div>
+
+                    <div class="hero-doors">
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: href="/global", the smart link (global.html: the app first on a phone, else its store; global.beanpool.org on a computer), not https://global.beanpool.org: decision 3 of the global-entry design (Marty, 17 Oct 2026); sentence: "No invite needed: join the global community in your browser or in the app, look around, post something free or for swap, and find a community near you."; and under the sentence, its second line: <p><a href="https://global.beanpool.org">or in your browser</a></p>. -->
+                            <a href="getting-started.html#global" class="btn btn-primary font-header">世界中どこからでも試す</a>
+                            <p>グローバルコミュニティはまもなく誰でも招待なしで参加できるようになります。中を見て回り、無料や交換の投稿をし、近くのコミュニティを探せます。現在は限定プレビュー中です。一般公開までは、以下で稼働中のコミュニティを見るか、立ち上げるか、メンバーからの招待を利用してください。</p>
+                        </div>
+                        <div class="hero-door">
+                            <!-- OPEN-GLOBAL: sentence: "See the communities already running, ask one near you to let you in, or start one on a spare computer or a small rented server." -->
+                            <a href="#find-or-start" class="btn btn-ghost">コミュニティを探す・始める</a>
+                            <p>現在稼働中のコミュニティを見るか、予備のパソコンや小さなレンタルサーバーで立ち上げてみましょう。近くのコミュニティに参加申請する機能は、グローバルコミュニティの一般公開に合わせて利用可能になります。</p>
+                        </div>
+                        <div class="hero-door">
+                            <a href="getting-started.html#invite" class="btn btn-ghost">招待を受け取りましたか？</a>
+                            <p>アプリをインストールし、メンバーから受け取ったリンクを開くかQRコードをスキャンしてください。招待は1回限り有効で、有効期限は30日間です。</p>
+                        </div>
+                    </div>
+                    <p class="hero-web-note">豆はそれぞれ独自のサーバーを持つローカルコミュニティに存在します。グローバルコミュニティは全体を案内し、各地のコミュニティへ導きます。そこではサンプルコミュニティを通じて豆の仕組みを体験できます。</p>
+
+                    <div class="hero-logos-group">
+                        <div class="hero-store-grid">
+                            <a href="https://apps.apple.com/au/app/bean-pool/id6761870086" target="_blank" rel="noopener" class="hero-store-badge" title="App Storeからダウンロード">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="42" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">Download on the</text>
+                                    <text x="42" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="16" font-weight="600">App Store</text>
+                                    <g transform="translate(10, 6) scale(0.58)">
+                                        <path d="M24.769 20.3c-.04-4.25 3.47-6.29 3.63-6.39-1.98-2.89-5.06-3.29-6.15-3.33-2.62-.27-5.11 1.54-6.44 1.54-1.33 0-3.38-1.5-5.56-1.46-2.86.04-5.5 1.66-6.97 4.22-2.97 5.16-.76 12.81 2.14 17 1.41 2.05 3.1 4.35 5.32 4.27 2.13-.09 2.94-1.38 5.52-1.38 2.58 0 3.3 1.38 5.56 1.34 2.3-.04 3.76-2.09 5.15-4.15 1.62-2.38 2.29-4.69 2.33-4.81-.05-.02-4.47-1.72-4.52-6.81z" fill="#fff"/>
+                                        <path d="M20.514 7.54c1.18-1.43 1.97-3.42 1.76-5.4-1.7.07-3.76 1.13-4.98 2.56-1.09 1.27-2.05 3.29-1.79 5.23 1.9.15 3.83-0.96 5.01-2.39z" fill="#fff"/>
+                                    </g>
+                                </svg>
+                            </a>
+                            <a href="https://play.google.com/store/apps/details?id=org.beanpool.pillar&hl=en" target="_blank" rel="noopener" class="hero-store-badge" title="Google Playで手に入れよう">
+                                <svg viewBox="0 0 135 40" xmlns="http://www.w3.org/2000/svg">
+                                    <rect width="135" height="40" rx="7" fill="#000"/>
+                                    <rect x="0.5" y="0.5" width="134" height="39" rx="6.5" stroke="#ffffff" stroke-opacity="0.65" fill="none"/>
+                                    <text x="47" y="15" fill="#fff" font-family="Inter,sans-serif" font-size="8" font-weight="400">GET IT ON</text>
+                                    <text x="47" y="29" fill="#fff" font-family="Inter,sans-serif" font-size="14" font-weight="600">Google Play</text>
+                                    <g transform="translate(10, 7)">
+                                        <path d="M4 1.5L17 13 4 24.5V1.5z" fill="#4285F4"/>
+                                        <path d="M4 1.5L17 13l4.5-4L8 1.5H4z" fill="#34A853"/>
+                                        <path d="M4 24.5l4.5 0 13-8L17 13 4 24.5z" fill="#EA4335"/>
+                                        <path d="M8 1.5l13.5 7.5L24 7.5 8 0v1.5z" fill="#FBBC04"/>
+                                        <path d="M21.5 18.5L8 26v-1.5l13.5-7.5L24 18.5z" fill="#EA4335"/>
+                                    </g>
+                                </svg>
+                            </a>
+                        </div>
+                        <p class="hero-web-note">アプリストアが使えませんか？グローバルコミュニティも自分のコミュニティもスマートフォンのブラウザで開けます。ホーム画面に追加してご利用ください。</p>
+                    </div>
+                    <!-- Where to find us: small round links, same destinations as the menu -->
+                    <div class="hero-social-row">
+                        <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener" class="hero-social-btn social-youtube" aria-label="YouTubeのBeanPool" title="YouTubeのBeanPool">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--youtube)"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        </a>
+                        <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-reddit" aria-label="RedditのBeanPool" title="RedditのBeanPool">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" style="fill: var(--reddit)"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
+                        </a>
+                        <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener" class="hero-social-btn social-github" aria-label="GitHubのBeanPoolソースコード" title="GitHubのBeanPoolソースコード">
+                            <svg class="social-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hero Principles / Trust Banner -->
+            <div class="hero-principles-banner">
+                <div class="principle-item">
+                    <span class="principle-text">完全無料</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">アプリ内課金なし</span>
+                </div>
+                <span class="principle-star">✦</span>
+                <div class="principle-item">
+                    <span class="principle-text">オープンソース</span>
+                </div>
+            </div>
+
+            <!-- How Beans move, below the two cards -->
+            <div class="hero-example-row">
+                <div class="not-card hero-example glass-panel">
+                    <div class="not-card-header">
+                        <span class="not-card-tag">豆が循環する仕組み</span>
+                        <h3>ご近所さん3人の1週間</h3>
+                    </div>
+                    <div class="not-card-list">
+                        <div class="not-card-item">
+                            <div class="not-item-icon">1</div>
+                            <div class="not-item-content">
+                                <strong>サムがアナの自転車を修理 &mdash; 30豆</strong>
+                                <p>サムの残高は+30になり、アナの残高は−30になります。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">2</div>
+                            <div class="not-item-content">
+                                <strong>アナがリーのためにパンを焼く &mdash; 30豆</strong>
+                                <p>アナは0に戻り、リーは−30になります。</p>
+                            </div>
+                        </div>
+                        <div class="not-card-item">
+                            <div class="not-item-icon">3</div>
+                            <div class="not-item-content">
+                                <strong>リーがサムの犬の世話をする &mdash; 30豆</strong>
+                                <p>全員がゼロ付近に戻り、誰もお金を使うことなく3つの用事が片付きました。</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="hero-example-note">売り手は価格の98.5%を受け取り、残りの1.5%はコミュニティのコモンズプールに入ります。そのため実際の数値はこれらよりわずかに少なくなります。</p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- What BeanPool is: one paragraph and three "not" lines, one column -->
+    <section id="what-it-is">
+        <div class="container what-it-is">
+            <div class="section-header">
+                <h2>BeanPoolとは</h2>
+            </div>
+            <p class="what-it-is-lead">コミュニティは独自の小さなサーバーでBeanPoolを運営します。メンバーは提供できることと必要なことを投稿し、豆を使って取引します。豆はお金で買うものではなく、誰かが誰かを助けた記録です。誰もがゼロからスタートします。誰かを助けると残高が増え、助けてもらうと残高が減ります。コミュニティ全体の残高を合計すると常にゼロになります。誰も豆を発行せず、利息をつけて貸し出すこともなく、現金化することもできません。取引ごとのわずかな手数料はコミュニティ独自のプールに入り、メンバーが投票で使い道を決めます。アプリは無料でオープンソースです。コミュニティは自分たちでサーバーを選び、そこにあるデータは彼ら自身のものです。</p>
+            <ul class="what-it-is-not">
+                <li><strong>暗号資産ではありません。</strong> ブロックチェーンもトークンもなく、売買するものもありません。あなたの12個の単語は、自分自身のアカウントを開くためだけのものです。</li>
+                <li><strong>銀行ではありません。</strong> 信用（クレジット）は自分自身の取引実績から生まれ、金利はありません。最初の取引が完了した後に小さな信用枠が開き、取引を重ねるにつれて広がります。</li>
+                <li><strong>中間搾取する企業ではありません。</strong> BeanPoolが取引から利益を得ることはなく、広告も表示しません。</li>
+            </ul>
+            <!-- Needs Marty's OK (copy §2): the closing history line -->
+            <p class="what-it-is-history">相互信用（クレジット）の歴史は古く、LETSグループは何十年にもわたり紙で運用してきました。スイスでは1934年以来、企業ネットワークWIRが独自の信用で取引を続けています。多くの組織を行き詰まらせたのは事務処理の手間でした。BeanPoolは、その事務処理をアプリで行う仕組みです。</p>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <h2>仕組み</h2>
+                <p>最初の画面から初めての取引まで。</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card glass-panel">
+                    <div class="step-icon">📩</div>
+                    <div class="step-number" aria-hidden="true">01</div>
+                    <div>
+                        <h3>1. 3つの入り口のいずれかから参加する</h3>
+                        <!-- OPEN-GLOBAL: "Try the global community with no invite, ask a community near you to let you in, or open the invite a member sent you. Either way you pick the name people will know you by." -->
+                        <p>メンバーから届いた招待を開きます。まもなく、招待なしでグローバルコミュニティを試し、そこから近くのコミュニティに参加申請することもできるようになります。どちらの方法でも、周囲に認知される表示名を決めます。</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🔑</div>
+                    <div class="step-number" aria-hidden="true">02</div>
+                    <div>
+                        <h3>2. 12個の単語を保管する</h3>
+                        <p>アプリはスマートフォン上でアカウントを作成し、12個の単語（英語）を表示します。紙に書き留めて大切に保管してください。スマートフォンを紛失したり機種変更したりしたときに、アカウントを復元できます。</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🧺</div>
+                    <div class="step-number" aria-hidden="true">03</div>
+                    <div>
+                        <h3>3. 提供を投稿する</h3>
+                        <p>自分ができることや共有できるものを投稿します。街までの相乗り、卵、自転車の修理、1時間の庭仕事などです。豆を使うコミュニティでは、求めの投稿や購入を行う前に、少なくとも1つの提供を掲載する必要があります。豆のないグローバルコミュニティでは、最初の投稿が求めであってもかまいません。</p>
+                    </div>
+                </div>
+                <div class="step-card glass-panel">
+                    <div class="step-icon">🤝</div>
+                    <div class="step-number" aria-hidden="true">04</div>
+                    <div>
+                        <h3>4. 取引する</h3>
+                        <p>豆での価格に合意します。仕事が完了するまで豆は安全に保管（エスクロー）され、その後に売り手に送られます。取引が終わったら、お互いを評価します。</p>
+                    </div>
+                </div>
+            </div>
+            <p class="section-more"><a href="getting-started.html">スタートガイドをすべて読む →</a></p>
+        </div>
+    </section>
+
+    <!-- What you can do: one card per part of the app, in the app's own words -->
+    <section id="features">
+        <div class="container">
+            <div class="section-header">
+                <h2>できること</h2>
+                <p>アプリを開くと、自分で選んだカードが並ぶ「ホーム」が表示されます。その先には、マーケット、地図、トーク（Webアプリではチャット）、仲間、パルス、コモンズ、そして残高や取引履歴を確認できる台帳があります。</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧺</div>
+                    <h3>マーケット</h3>
+                    <p>コミュニティ内の人々が提供しているものや必要としているものが、投票やイベントと同じフィードに表示されます。検索やカテゴリー絞り込みができ、タップして取引できます。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗺️</div>
+                    <h3>地図</h3>
+                    <p>近くで提供されているものを確認できます。ピンはすべて自分で設置します。その場の現在地を使うか、手動でピンを落とします。許可した場合、アプリは現在地を使って最も近いものを表示しますが、バックグラウンドで使用することは決してありません。イベントピンやWebアプリで設定した事業体のピンは「おおよそ」に設定でき、位置が約100&nbsp;m単位で丸められます。ピンはあなたのコミュニティのメンバーに表示されます。グローバルコミュニティが一般公開されると、訪問者には出品情報とおおよその位置が表示されますが、名前、プロフィール写真、正確な位置は表示されません。誰でも1分で参加できるため、メンバー同士の出品情報も約1km単位で表示されます。正確な位置は待ち合わせを決めるときに共有できます。</p>
+                    <!-- OPEN-GLOBAL: the second-last sentence becomes "On the global community a visitor sees listings and roughly where they are, but no names, no profile pictures and no exact spots."; the last ("Anyone can join it in a minute, so its members see each other's listings to about a kilometre too; …", Marty's words, 15 Oct 2026) stays as it is. -->
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📅</div>
+                    <h3>イベント <span class="new-pill">新機能</span></h3>
+                    <p>共同作業、リペアカフェ、スキルシェアなどを日時や場所とともに投稿できます。「参加」や「興味あり」をタップして参加表明します。参加者にはイベントチャットと主催者のプライベートメモ（門の暗証番号や持ち物など）が共有され、日時や場所の変更、中止の際にも通知が届きます。グローバルコミュニティのように誰でも参加できる場所では、デフォルトで主催者が各参加者を個別に承認します。イベントは無料であり、豆のやり取りはありません。地図上の「今日」「今週末」「今後7日間」から見つけることができ、「新しい日程にコピー」を使って再開催も簡単です。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">💬</div>
+                    <h3>トーク（Webアプリではチャット）</h3>
+                    <p>コミュニティ内の誰とでもメッセージをやり取りできます。ダイレクトメッセージとグループチャットはエンドツーエンドで暗号化されています。コミュニティのノードはデータを中継しますが、内容を読むことはできません。まだ更新されていないノードでは、グループチャットが運営者に閲覧される可能性があり、その場合はチャット内にその旨が表示されます。事業体のディスカッションやイベントチャットは、適切にモデレーションできるようコミュニティのノード運営者が閲覧できます。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>コモンズ：事業体 <span class="new-pill">新機能</span></h3>
+                    <p>事業体とは、コミュニティが共同で運営するものです。養鶏、道具のシェアライブラリ、薪置き場、あるいは目標と終了期日があるプロジェクトなどです。運営者が管理し、代表運営者が統括します。メンバーは運営者としての参加を申請できます。事業体は独自の豆を持ち、他の人と同じようにマーケットに提供や求めを投稿し、収入と支出を公開し、季節に応じて休止することもできます。運営者は自分自身への支払いを承認することはできず、別の運営者が承認する必要があります。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🗳️</div>
+                    <h3>投票と決定 <span class="new-pill">新機能</span></h3>
+                    <p>マーケットの投票機能を使えば、誰でもコミュニティに質問を投げかけることができます。より重大な選択はコモンズタブの「決定」で行います。コモンズプールから事業体への助成金交付、困窮支援、代表運営者の交代などです。決定は7日間投票を受け付け、可決されると自動的に実行されます。取引を1回完了すると、提案を行えるようになります。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">👥</div>
+                    <h3>グループ <span class="new-pill">新機能</span></h3>
+                    <p>自分の通り、園芸クラブ、バンドなどのグループを立ち上げると、あなたがそのまとめ役になります。グループ内限定で投稿でき、公開にするか、参加申請制にするか、完全招待制にするかを選べます。</p>
+                </div>
+
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📡</div>
+                    <h3>パルス</h3>
+                    <p>地域の人々がどんな活動や発信をしているかを確認できます。メンバーは自分のチャンネル（TikTok、Instagram、YouTube、SoundCloud、ブログフィードなど）を連携でき、公開投稿がコミュニティのパルスに表示されます。連携するかどうかは各メンバーの自由です。不適切な投稿は通報でき、コミュニティのノード側で削除できます。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Credit: earned, not borrowed -->
+    <section id="credit">
+        <div class="container">
+            <div class="section-header">
+                <h2>借りるのではなく、獲得する信用</h2>
+                <p>豆を買う人はいません。利息を払う人もいません。</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">0️⃣</div>
+                    <h3>誰もがゼロからスタート</h3>
+                    <p>新しいアカウントの豆は0です。提供（売却）すると残高が増え、利用（購入）すると減ります。コミュニティ全体で見ると、残高の合計は常にゼロになります。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚖️</div>
+                    <h3>初取引で信用枠が開設</h3>
+                    <p>1回取引を完了すると、誰かを助ける前であっても残高をマイナスにして助けを受けることができるようになります。信用枠は小さく始まり（100豆の取引で約37豆の枠を獲得）、より多くの人と取引するにつれて拡大します。掲載し続けている提供の数によって利用できる上限が決まります（提供1件で最大200豆、5件で最大2000豆）。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🏅</div>
+                    <h3>制限ではなく、証としてのバッジ</h3>
+                    <p>活動を続けるにつれて、バッジ（新規、住民、世話人、長老）を獲得できます。これらはコミュニティでの実績を示すものです。何かを制限したり解除したりするものではありません。管理者がバッジを付与することもでき、その場合はそのバッジの初期信用枠も付与されます。</p>
+                </div>
+            </div>
+            <p class="section-more"><a href="rules.html">すべての数値については「ルール」をお読みください →</a></p>
+        </div>
+    </section>
+
+    <!-- Anti-extraction: one short section -->
+    <section id="stays-local">
+        <div class="container">
+            <div class="not-card stays-local-card glass-panel">
+                <div class="not-card-header">
+                    <span class="not-card-tag">手数料の行き先</span>
+                    <h3>価値はコミュニティの中にとどまります</h3>
+                </div>
+                <p class="stays-local-lead">完了した取引にかかる1.5%の手数料と、200豆を超える残高に対する少額の月間手数料は、コミュニティのコモンズプールに送られます &mdash; 運営元や他の誰かに渡ることはありません。プールの資金を何に使うかは、コミュニティが「決定」を通じて自分たちで判断します。</p>
+                <div class="not-card-list">
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>広告なし、トラッキングなし</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>売買するトークンなし &mdash; 豆は取引のためだけのものです</strong>
+                        </div>
+                    </div>
+                    <div class="not-card-item">
+                        <div class="not-item-icon">✕</div>
+                        <div class="not-item-content">
+                            <strong>金利なし、銀行なし</strong>
+                        </div>
+                    </div>
+                </div>
+                <p class="stays-local-more"><a href="post-extraction.html">このような設計にした理由：脱・搾取経済への道 →</a></p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust and safety -->
+    <section id="safety">
+        <div class="container">
+            <div class="section-header">
+                <h2>アカウントと安全性</h2>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔑</div>
+                    <h3>鍵はあなたのスマートフォン内にとどまります</h3>
+                    <p>スマートフォンアプリでは、鍵は端末の安全なストレージに保管されます。スマートフォンの画面ロックと連動する「アプリロック」を追加することもできます。Webアプリでは、そのブラウザ自体のストレージに保管されます。あなたの12個の単語は、誰にも依存しないバックアップです。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🚩</div>
+                    <h3>気になることはいつでも通報</h3>
+                    <p>投稿、メンバー、イベント、パルスの項目を通報したり、特定の人をブロックしたりできます。通報はコミュニティのノードを運営するオーナーや管理者に届き、コンテンツやアカウントを削除できます。メンバー同士の投票による「決定」で利用停止や除名を決めることもできます。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">📄</div>
+                    <h3>詳細規約</h3>
+                    <p>保存される情報、それを閲覧できる人、アカウントの削除方法について。</p>
+                    <p class="card-links"><a href="../privacy.html">プライバシーポリシー</a>&nbsp;· <a href="safety.html">児童の安全</a>&nbsp;· <a href="../terms.html">利用規約</a>&nbsp;· <a href="../data-deletion.html">データの削除</a></p>
+                </div>
+                <div class="feature-card glass-panel feature-wide" id="key-copy">
+                    <h3>鍵を取り戻す第2の方法と、それを開ける権限</h3>
+                    <p>Google、Apple、またはFacebookのサインインを連携させて、第2の復元方法とすることもできます。その場合、そのサインイン用に暗号化された鍵のコピーが保持されます。BeanPoolのキー保管庫（ヴォールト）を使用するスマートフォンアプリは、この保管のみを行うアイスランドの小さなサーバーに鍵を保管します。古いバージョンのスマートフォンアプリはコミュニティのノードに保管し、グローバルコミュニティのWebアプリは私たちが運営するそのコミュニティのサーバーに保管します。コピーを保管している者は誰でもそれを開くことができます（保管庫およびグローバルコミュニティの場合はBeanPool、ノードに保管されたコピーの場合はそのノードの運営者）。保管庫からの復元には、自身の別の端末で本人確認を行わない限り1日の待機時間が発生します。このコピーと、自分の別の端末へアカウントをコピーすること以外に、鍵があなたの端末から外に出ることはありません。</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Nodes Map Section -->
+    <section id="live-nodes">
+        <span id="find-or-start"></span>
+        <div class="container">
+            <div class="section-header">
+                <h2>地域のコミュニティを探す</h2>
+                <p>ディレクトリに登録されている、BeanPoolを運営中のコミュニティです。</p>
+            </div>
+            <div class="map-wrapper">
+                <div id="nodes-map"></div>
+                <div id="map-empty-state" class="map-empty-state" role="status" style="display: none;">
+                    <span id="map-empty-text">近くにまだコミュニティがありません。</span>
+                    <a id="map-empty-start" href="#run-a-node">コミュニティを始める</a>
+                </div>
+            </div>
+            <div class="map-stats">
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-nodes">—</span>
+                    <span class="map-stat-label">登録コミュニティ数</span>
+                </div>
+                <div class="map-stat-divider"></div>
+                <div class="map-stat">
+                    <span class="map-stat-value" id="stat-members">—</span>
+                    <span class="map-stat-label">メンバー数（報告ベース）</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- For community organisers: running a node -->
+    <section id="run-a-node">
+        <span id="get-started"></span>
+        <div class="container">
+            <div class="section-header">
+                <span class="audience-tag">コミュニティの運営者向け</span>
+                <h2>あなたのコミュニティでBeanPoolを運営する</h2>
+                <p>すべてのコミュニティは専用のノード（メンバー、投稿、台帳のデータを保持する小さなサーバー）上で動いています。地域の誰かがそれを運営しています。あなたの町や地域にまだないなら、あなたが立ち上げることもできます。</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🧰</div>
+                    <h3>管理するもの</h3>
+                    <p>あなたとあなたが指名した管理者がコミュニティのモデレーターとなります。通報はあなたに届きます。メンバーのデータはあなたのマシン上にあるため、バックアップを管理します。事業体のディスカッションやイベントチャットは閲覧できますが、ダイレクトメッセージは閲覧できません。あなたが最初のメンバーを招待し、その人たちが次のメンバーを招待していきます。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>設定アプリ</h3>
+                    <p>ノードにはブラウザで操作できる専用の設定アプリが付属しています。そこからコミュニティの名前を設定し、各自の鍵でサインインするオーナーや管理者を指名し、QR招待状を印刷し、ディスクの健全性を監視し、公開Webアドレスやトンネルを選択できます。また、スマートフォンと12個の単語の両方を失ったメンバーに対して、対面で確認したうえでワンタイムコードを発行し、新しい端末でアカウントに復帰できるよう手助けすることもできます。</p>
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🔒</div>
+                    <h3>起動直後からプライベート</h3>
+                    <p>ノードが起動した瞬間から、コミュニティの出品、地図、メッセージ、残高はメンバー専用となります。特別な設定は不要です。アカウントを持たずにそのアドレスを開いた人は、まもなく全員に公開されるグローバルコミュニティへと案内されます。</p>
+                    <!-- OPEN-GLOBAL: last sentence becomes "Someone who opens its address without an account is pointed to the global community, where they can see what is near them and ask to join." -->
+                </div>
+                <div class="feature-card glass-panel">
+                    <div class="feature-icon">🌐</div>
+                    <h3>近隣コミュニティとの連携</h3>
+                    <p>2つのコミュニティが合意して連携することで、メンバー同士が取引できるようになります。豆がコミュニティの外に出ることはありません。相互のコミュニティ間で貸し借りの累計を記録し、双方が独自の上限を設定します。双方の運営者が有効にしない限り連携はオフのままであり、機能はまだ初期段階です。Webアプリに画面は用意されていますが、テストコミュニティ間で試行されたのみで、本番環境同士での実績はまだありません。</p>
+                </div>
+            </div>
+
+            <div class="cta-card run-node-card">
+                <h2>コミュニティを始める</h2>
+                <p>手順に従えば約30分で完了します。まず知っておくべき6つのこと：</p>
+                <ul class="run-node-facts">
+                    <li><strong>費用。</strong> ソフトウェアは無料です。自宅で常時稼働できる予備のコンピューター（ミニPC、NAS、64ビットOSのRaspberry Piなど）、または月額数ドル（約6米ドル）の小さなレンタルサーバーで動作します。</li>
+                    <li><strong>ホスティングの担当者。</strong> ご自身で管理します（自前のマシンまたはレンタルしたサーバー）。beanpool.orgへの依存は不要で、独自のWebアドレスで運用できます。</li>
+                    <li><strong>担当する役割。</strong> メンバーからの通報はあなたに届きます。データフォルダーはリカバリーコードを使ってご自身でバックアップしてください。オーナーは2名体制にしてください。サーバーの常時稼働とアップデートを維持してください。</li>
+                    <li><strong>閲覧できないもの。</strong> メンバー同士のダイレクトメッセージ。</li>
+                    <li><strong>Dockerの事前準備。</strong> 以下のコマンドを実行する前に、マシンにDockerがインストールされている必要があります（契約直後のレンタルサーバーには通常入っていません）。</li>
+                    <li><strong>スマートフォンから接続できるアドレス。</strong> スマートフォンがインターネット経由でコミュニティに接続するにはhttpsが必須です。パブリックIPアドレスがありポート80と443が開いているレンタルサーバーなら、そのIPアドレスだけで十分です。Cloudflareアカウントなしでサーバーが自動的に証明書を取得します。独自ドメインでも同様です。自宅環境や開放ポートがない場合でも、申請手続きによってサーバー自身がトンネルを実行し、.beanpool.orgで終わる無料の名前が取得できます。暗号化のないhttp://アドレスはホームネットワーク内でのみ機能します。</li>
+                </ul>
+                <p>次に、Dockerをインストールしたマシンで、このコマンドブロックを貼り付けます。composeファイルを取得し、ノードが使用するネットワークを作成し、公開イメージ（Intel/AMDまたはARM64）をダウンロードして起動し、サーバーがワンタイム申請コードを生成するのを待って（Raspberry Piでの初回起動など遅い場合は最大5分）、所有権の申請（claim）を行います。起動前に設定が必要な項目はありません。</p>
+
+                <!-- macOS Style Terminal Window -->
+                <div class="terminal-window">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="terminal-dot red"></span>
+                            <span class="terminal-dot yellow"></span>
+                            <span class="terminal-dot green"></span>
+                        </div>
+                        <div class="terminal-title">bash — コミュニティを始める</div>
+                    </div>
+                    <div class="terminal-body">
+                        <div class="cta-step">
+                            <span class="cta-step-label">1つのブロック：取得、ネットワーク作成、イメージ取得、起動、待機、申請</span>
+                            <code class="cta-block">git clone https://github.com/beanpool-org/beanpool.git &amp;&amp; cd beanpool
+docker network create beanpool-shared
+docker compose pull
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null &amp;&amp; break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt &lt;/dev/null 2&gt;/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim</code>
+                            <button class="copy-btn" onclick="copyCode(this)" title="クリップボードにコピー">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="run-node-sub">最後の行：beanpool claim</h3>
+                <ol class="run-node-steps">
+                    <li><strong>アドレスの決定。</strong> 貼り付ける前に選択し、最後の行をそれに合わせて変更します。すでに貼り付けてしまった場合は、質問でEnterキーを押し、その後に最後の行を再実行してください（申請コードはスマートフォンからの接続を待機します）。<strong>パブリックIPアドレスとポート80および443が開いているレンタルサーバーの場合</strong>：<code>beanpool claim --ip 203.0.113.7</code>のように、<code>--ip</code>とIPアドレスを追加します。サーバーはポート80経由でLet's Encryptからそのアドレス用の証明書を取得し、スマートフォンはhttps://203.0.113.7で接続できるようになります。<strong>自宅のコンピューターまたは開放ポートがない場合</strong>：そのまま変更せず実行します。無料のサブドメイン名の先頭部分を聞かれます（yourtown.beanpool.orgにする場合は<strong>yourtown</strong>と入力、Enterでスキップ）。サーバーが自ら実行するトンネル経由で接続され、開通まで最大3分待機します。<strong>独自ドメインの場合</strong>：ドメインのAレコードをサーバーのIPアドレスに向け、ポート80と443を開放し、<code>--address https://your.domain</code>を追加します。ドメイン名ならサーバーを変更しても使い続けられますが、IPアドレスの数値は引き継げません（後から「設定」で名前を追加でき、以前のIPアドレスを使っていたメンバーもそのまま接続できます）。後で「設定」から選択する場合は<code>--no-name</code>を追加してください。暗号化のない<code>http://</code>アドレスはホームネットワークでのみ動作します。インターネット上ではスマートフォンに接続を拒否され、申請時にも警告されます。BeanPoolプロジェクトのアドレスサービスが停止していても、申請自体は問題なく機能します。</li>
+                    <li><strong>コードとQRコード。</strong> ワンタイム申請コードとQRコードが表示されます。スマートフォンのカメラでQRコードをスキャンするか、BeanPoolを開いて<strong>コミュニティを探す</strong>の下にサーバーのアドレスを入力し、<strong>申請</strong>をタップします。そのスマートフォンがオーナーになります。</li>
+                    <li><strong>設定。</strong> あなたのアドレス（またはサーバーのアドレス）の末尾に<strong>/settings</strong>を付けてブラウザで開きます。セットアップウィザードに従ってコミュニティの名前を決め、2人目のオーナーを追加し、3つの設立メンバー用招待状を作成します。「ノードの識別情報」で地図上の位置を設定すると、近くの人があなたを見つけられるようになります。</li>
+                </ol>
+                <p class="run-node-note">ブロックに<strong>No claim code after 5 minutes</strong>と表示されたり、<code>beanpool claim</code>に<strong>This community has no claim code waiting</strong>と表示されたりした場合、サーバーの起動がまだ完了していません。<code>docker compose logs beanpool-node</code>で進捗状況を確認できます。ログにコミュニティにまだオーナーがおらず申請コードが発行された旨が表示されたら、最後の行を再度実行してください。詳しい手順は運営者マニュアルの<a href="../guide/operators/first-time-setup.html">初回セットアップ</a>に記載されています。</p>
+
+                <a href="https://github.com/beanpool-org/beanpool" class="btn btn-primary" target="_blank" rel="noopener">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:0.4rem;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                    GitHubで見る →
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section id="newsletter">
+        <div class="container">
+            <div class="newsletter-card glass-panel">
+                <div class="newsletter-content">
+                    <h3><img src="../bean.png" alt="アイコン" style="width: 24px; height: 24px; object-fit: contain; vertical-align: middle; margin-right: 0.4rem; margin-top: -4px;" />最新情報を受け取る</h3>
+                    <p>新バージョンのリリースや新しいコミュニティが開設されたときにメールでお知らせします。</p>
+                </div>
+                <div class="newsletter-form-container">
+                    <form id="newsletter-form" class="newsletter-form">
+                        <input type="email" id="newsletter-email" placeholder="you@example.com" aria-label="メールアドレス" required>
+                        <button type="submit" class="btn btn-primary btn-subscribe">登録する</button>
+                    </form>
+                    <div id="newsletter-status" class="newsletter-status"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PARTNER-BLOCK: OFF. The one block for the partner sites' pages (copy §6 of the three-doors copy), approved by Marty
+         13 Oct, kept here as an HTML comment so it is shipped but shown nowhere. It stays off until Marty publishes the
+         first partner site; then it is pasted onto those pages (it is not meant for this page, which has the doors above).
+         Its first door links the global community directly: switch it on only together with OPEN-GLOBAL.
+
+    <div class="partner-block">
+        <h3>The BeanPool Project</h3>
+        <p>A free, open-source app a community runs for itself, to trade help, goods and skills in Beans instead of money. Everyone starts at zero; help earns Beans, getting help spends them; the community's own server keeps the record, and a small fee on each trade goes to a pool its members spend by vote. No token, no bank, no company in the middle.</p>
+        <ul>
+            <li><a href="https://global.beanpool.org">Try it now, worldwide</a> · join in your browser, no invite.</li>
+            <li><a href="https://beanpool.org/#find-or-start">Find or start a community</a> · the communities running now, and how to start one.</li>
+            <li><a href="https://beanpool.org/getting-started.html#invite">Got an invite?</a> · open the link or QR code a member gave you.</li>
+        </ul>
+        <p>Source and licence: <a href="https://github.com/beanpool-org/beanpool">github.com/beanpool-org/beanpool</a> (MIT).</p>
+    </div>
+    PARTNER-BLOCK end -->
+
+    <!-- Footer Module -->
+    <footer>
+        <div class="container">
+            <div class="footer-inner">
+                <div class="footer-brand">
+                    <span class="logo"><img src="../bean.png" alt="BeanPoolアイコン" style="width: 48px; height: 48px; object-fit: contain; vertical-align: middle; margin-right: 0.1rem;" /> BeanPool</span>
+                    <p>豆を使ってご近所さんと取引できる無料アプリ。</p>
+                </div>
+                <div class="footer-links">
+                    <a href="help.html">ヘルプセンター</a>
+                    <a href="getting-started.html">スタートガイド</a>
+                    <a href="rules.html">ルール</a>
+                    <a href="post-extraction.html">脱・搾取経済</a>
+                    <a href="#run-a-node">コミュニティを運営する</a>
+                    <a href="../guide/index.html">メンバーズガイド</a>
+                    <a href="status.html">サーバーステータス</a>
+                    <a href="https://github.com/beanpool-org/beanpool" target="_blank" rel="noopener">GitHub</a>
+                    <a href="https://www.youtube.com/@beanpool" target="_blank" rel="noopener">YouTube</a>
+                    <a href="https://www.reddit.com/r/beanpool" target="_blank" rel="noopener">Reddit</a>
+                    <a href="../privacy.html">プライバシーポリシー</a>
+                    <a href="../terms.html">利用規約</a>
+                    <a href="safety.html">児童の安全</a>
+                </div>
+            </div>
+            <div class="footer-languages">
+                    <a href="../index.html" hreflang="en" lang="en">English</a>
+                    <a href="../es/index.html" hreflang="es" lang="es">Español</a>
+                    <a href="../pt/index.html" hreflang="pt" lang="pt">Português</a>
+                    <a href="../hi/index.html" hreflang="hi" lang="hi">हिन्दी</a>
+                    <a href="../bn/index.html" hreflang="bn" lang="bn">বাংলা</a>
+                    <a href="../fr/index.html" hreflang="fr" lang="fr">Français</a>
+                    <a href="../ar/index.html" hreflang="ar" lang="ar">العربية</a>
+                    <a href="../id/index.html" hreflang="id" lang="id">Bahasa Indonesia</a>
+                    <a href="../ru/index.html" hreflang="ru" lang="ru">Русский</a>
+                    <a href="../zh-Hans/index.html" hreflang="zh-Hans" lang="zh-Hans">简体中文</a>
+                    <a href="../zh-Hant/index.html" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a>
+                    <a href="../it/index.html" hreflang="it" lang="it">Italiano</a>
+                    <a href="../de/index.html" hreflang="de" lang="de">Deutsch</a>
+                    <a href="../tr/index.html" hreflang="tr" lang="tr">Türkçe</a>
+                    <a href="../sw/index.html" hreflang="sw" lang="sw">Kiswahili</a>
+                    <a href="../ml/index.html" hreflang="ml" lang="ml">മലയാളം</a>
+                    <a href="../ta/index.html" hreflang="ta" lang="ta">தமிழ்</a>
+                    <a href="../uk/index.html" hreflang="uk" lang="uk">Українська</a>
+                    <a href="../ur/index.html" hreflang="ur" lang="ur">اردو</a>
+                    <a href="../fa/index.html" hreflang="fa" lang="fa">فارسی</a>
+                    <a href="../vi/index.html" hreflang="vi" lang="vi">Tiếng Việt</a>
+                    <a href="../el/index.html" hreflang="el" lang="el">Ελληνικά</a>
+                    <a href="../fil/index.html" hreflang="fil" lang="fil">Filipino</a>
+                    <a href="index.html" hreflang="ja" lang="ja" aria-current="page">日本語</a>
+                    <a href="../ko/index.html" hreflang="ko" lang="ko">한국어</a>
+            </div>
+            <div class="footer-bottom">
+                <p>MITライセンスに基づくオープンソース。コミュニティによって、コミュニティのために<img src="../bean.png" alt="愛" style="width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin: 0 0.1rem;" />を込めて制作。タイムゾーン境界データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL)。</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../main.js?v=1.10"></script>
+</body>
+</html>

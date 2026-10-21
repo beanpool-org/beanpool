@@ -385,6 +385,13 @@ run_check "website_status" run_website_status
 # global=1, its script sends each kind of visitor where the global-entry design says, and the iPhone app claims it. Instant.
 run_check "website_global_link" node --test scripts/website-global-link.test.mjs
 
+# website-s6: every page in the 24 languages, hreflang, footer row, read in banner, RTL, check
+run_website_lang() {
+  while [ ! -f "$LOGDIR/website_contrast.rc" ]; do sleep 1; done
+  node --test scripts/website-lang.test.mjs
+}
+run_check "website_lang" run_website_lang
+
 # setup-backup.mjs against a stand-in primary on localhost: a password refused for needing two-factor sign-in (step 7c)
 # prints the primary's words and the way out. Instant.
 run_check "setup_backup" node --test scripts/setup-backup.test.mjs

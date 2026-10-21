@@ -2048,4 +2048,140 @@ footer {
    with the lines 52px apart so a link's box never reaches into the next line's (50px tall at 130%); relative, so the
    " · " beside a link doesn't take the tap from its edge */
 .feature-card p.card-links, .rules-content p.guide-links { line-height: 52px; }
+
+/* Translation Slice S6: Language banner, footer language row, stale notices, and RTL */
+.read-in-banner {
+    background: rgba(var(--rgb-success), 0.12);
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    text-align: center;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1001;
+    min-height: 40px;
+    box-sizing: border-box;
+}
+body.has-read-in-banner #navbar {
+    top: var(--banner-height, 61px);
+}
+body.has-read-in-banner {
+    padding-top: var(--banner-height, 61px);
+}
+.read-in-banner a {
+    color: var(--green-ink);
+    font-weight: 600;
+    text-decoration: underline;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+}
+.read-in-banner button.read-in-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    cursor: pointer;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    border-radius: var(--radius-sm);
+}
+.read-in-banner button.read-in-close:focus-visible,
+.read-in-banner a:focus-visible {
+    outline: 2px solid var(--green-ink);
+    outline-offset: 2px;
+}
+.footer-languages {
+    margin: 1.5rem 0 1rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.85rem;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+.footer-languages a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.25rem 0.4rem;
+    border-radius: var(--radius-sm);
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+}
+.footer-languages a:hover {
+    color: var(--green-ink);
+}
+.footer-languages a[aria-current="page"] {
+    color: var(--text-primary);
+    font-weight: 700;
+}
+.website-stale-banner,
+.website-legal-banner {
+    background: rgba(var(--rgb-accent), 0.12);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+.website-stale-banner a,
+.website-legal-banner a {
+    color: var(--green-ink);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+/* RTL layout adjustments (ar, fa, ur) */
+body[dir="rtl"] {
+    direction: rtl;
+    text-align: right;
+}
+body[dir="rtl"] .cta-step code {
+    padding: 0.7rem 0.7rem 0.7rem 2.6rem;
+}
+body[dir="rtl"] .copy-btn {
+    right: auto;
+    left: calc(0.2rem - 2px);
+}
+body[dir="rtl"] #navbar .logo img {
+    margin-right: 0;
+    margin-left: 0.2rem;
+}
+body[dir="rtl"] .footer-inner {
+    text-align: right;
+}
+body[dir="rtl"] .rules-content th,
+body[dir="rtl"] .rules-content td {
+    text-align: right;
+}
+body[dir="rtl"] .rules-content h2 .num {
+    margin-right: 0;
+    margin-left: 0.55rem;
+}
+body[dir="rtl"] .run-node-facts,
+body[dir="rtl"] .run-node-steps {
+    text-align: right;
+    padding-left: 0;
+    padding-right: 1.25rem;
+}
+
 .card-links a, .guide-links a { position: relative; padding: 13px 4px; margin: 0 -4px; }

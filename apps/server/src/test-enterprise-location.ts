@@ -113,7 +113,7 @@ async function main() {
         db.prepare("INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_at, granted_by) VALUES (?, 'admin', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis')").run(adminId.pubKeyHex);
 
         // Appoint Alice as keeper of shed
-        adminAssignTreasuryOperator(shed, aliceKeeper.pubKeyHex, 'admin', 100);
+        adminAssignTreasuryOperator(shed, aliceKeeper.pubKeyHex, 'admin');
 
         // Check additive, idempotent migration: existing enterprises have no location
         const initialShedRow = db.prepare('SELECT lat, lng, location_auth_signer FROM members WHERE public_key = ?').get(shed) as any;

@@ -140,7 +140,7 @@ async function main() {
 
     // Create Enterprise Alpha ("Bakery") and Beta ("ToolLibrary")
     const { publicKey: bakery } = createTreasury('Bakery', AVATAR, 300, { leadKeeperPubkey: leadAlice.pubKeyHex });
-    adminAssignTreasuryOperator(bakery, bobKeeper.pubKeyHex, 'admin', 50);
+    adminAssignTreasuryOperator(bakery, bobKeeper.pubKeyHex, 'admin');
 
     const { publicKey: toolLibrary } = createTreasury('ToolLibrary', AVATAR, 200, { leadKeeperPubkey: carolOutsider.pubKeyHex });
 

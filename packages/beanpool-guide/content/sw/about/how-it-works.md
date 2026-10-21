@@ -3,7 +3,7 @@ slug: how-it-works
 title: Kazi ya BeanPool
 summary: Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Maharagwe
@@ -70,7 +70,7 @@ Baadhi ya jumuiya huthibitisha wanachama wao ni nani. Huko, mwanachama aliyethib
 
 ## Beji za uaminifu
 
-Uaminifu wako huonyeshwa kama beji. Beji hizo ni Mgeni, Mkazi, Msimamizi na Mzee. Uaminifu ulio nyuma ya beji yako unajumuisha mambo matatu: mwanzo ambao udhamini ulikupa, uaminifu uliopata kwa kufanya biashara, na uaminifu wowote ambao msimamizi alikupa. Msimamizi anaweza kumpa mwanachama beji moja kwa moja, bila kufanya biashara. Katika jumuiya inayowathibitisha wanachama wake, kikomo cha mkopo ambacho mwanachama aliyethibitishwa hupata huhesabiwa pia.
+Uaminifu wako huonyeshwa kama beji. Beji hizo ni Mgeni, Mkazi, Msimamizi na Mzee. Uaminifu ulio nyuma ya beji yako unajumuisha mambo matatu: mwanzo ambao udhamini ulikupa, uaminifu uliopata kwa kufanya biashara, na uaminifu wowote ambao msimamizi alikupa. Msimamizi anaweza kumpa mwanachama beji moja kwa moja, bila kufanya biashara. Katika jumuiya inayowathibitisha wanachama wake, mwanachama aliyethibitishwa hupata kikomo cha juu zaidi cha mkopo, si beji ya juu zaidi: beji yake huhesabu tu kile alichofanya.
 
 - Mkazi kuanzia uaminifu wa 200.
 - Msimamizi kuanzia uaminifu wa 600.

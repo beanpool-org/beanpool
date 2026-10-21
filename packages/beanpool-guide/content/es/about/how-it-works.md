@@ -3,7 +3,7 @@ slug: how-it-works
 title: Cómo funciona BeanPool
 summary: Frijoles, intercambios, ofertas y necesidades, y crédito, en palabras sencillas.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Frijoles
@@ -70,7 +70,7 @@ Algunas comunidades confirman quiénes son sus miembros. Allí, un miembro confi
 
 ## Insignias de confianza
 
-Tu confianza se muestra como una insignia. Las insignias son Recién llegado, Residente, Cuidador y Anciano. La confianza detrás de tu insignia suma tres cosas: el inicio que te dio un aval, la confianza que ganaste comerciando y cualquier confianza que te haya otorgado un administrador. Un administrador puede darle a un miembro una insignia directamente, sin tratos. En una comunidad que confirma a sus miembros, la línea de crédito que obtiene un miembro confirmado también cuenta.
+Tu confianza se muestra como una insignia. Las insignias son Recién llegado, Residente, Cuidador y Anciano. La confianza detrás de tu insignia suma tres cosas: el inicio que te dio un aval, la confianza que ganaste comerciando y cualquier confianza que te haya otorgado un administrador. Un administrador puede darle a un miembro una insignia directamente, sin tratos. En una comunidad que confirma a sus miembros, un miembro confirmado obtiene un límite de crédito más alto, no una insignia más alta: su insignia solo cuenta lo que ha hecho.
 
 - Residente a partir de 200 de confianza.
 - Cuidador a partir de 600 de confianza.

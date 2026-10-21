@@ -2,10 +2,10 @@
   "_meta": {
     "language": "vi",
     "name": "Vietnamese",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "đậu",
@@ -3206,8 +3206,6 @@
   "Next level": "Cấp tiếp theo",
   "Up ahead": "Sắp tới",
   "Your current floor": "Mức sàn hiện tại của bạn",
-  "Floor from this tier": "Mức sàn từ hạng này",
-  "Floor starts at": "Mức sàn bắt đầu từ",
   "Grows deeper as you trade more": "Mở rộng hơn khi bạn giao dịch nhiều hơn",
   "Reach {min} trust ({left} to go) from the real value you trade.": "Đạt {min} điểm tin cậy (còn {left}) từ giá trị thực tế bạn giao dịch.",
   "🚀 Reach {emoji} {tier}": "🚀 Đạt {emoji} {tier}",
@@ -3401,7 +3399,6 @@
   "Recirculated amount above 200B: **4.5B / month**": "Lượng tái lưu thông trên 200B: **4.5B / tháng**",
   "**Effective rate: ~0.75% per month**": "**Tỷ lệ thực tế: ~0.75% mỗi tháng**",
   "Credit Slider Info": "Thông tin thanh trượt tín dụng",
-  "Reached when your credit floor reaches **{floor}B** (up to {upTo}B)": "Đạt được khi mức sàn tín dụng chạm **{floor}B** (lên tới {upTo}B)",
   "Trust Formula": "Công thức tính điểm tin cậy",
   "Your **Trust** grows with the **real value you trade** with the community — not how many trades or handshakes you rack up.": "**Điểm tin cậy** của bạn tăng theo **giá trị thực tế bạn giao dịch** với cộng đồng — không phụ thuộc vào số lượng giao dịch hay sự quen biết đơn thuần.",
   "1. VALUE YOU'VE TRADED": "1. GIÁ TRỊ BẠN ĐÃ GIAO DỊCH",
@@ -3428,7 +3425,6 @@
   "Browse & trade the marketplace, receive credits": "Khám phá & giao dịch trên chợ, nhận tín dụng",
   "**Sending credits** unlocks the moment you complete that first trade": "**Gửi tín dụng** mở khóa ngay khoảnh khắc bạn hoàn tất giao dịch đầu tiên",
   "Trusted-trader recognition across the community": "Sự ghi nhận người giao dịch đáng tin cậy trong toàn cộng đồng",
-  "Reached when your credit floor reaches **{floor}B** (max **{max}B**)": "Đạt được khi mức sàn tín dụng chạm **{floor}B** (tối đa **{max}B**)",
   "Recognised as a long-standing, high-trust member": "Được công nhận là thành viên lâu năm có độ tin cậy cao",
   "OPEN TO EVERYONE — NO TIER REQUIRED": "MỞ CHO MỌI NGƯỜI — KHÔNG YÊU CẦU CẤP BẬC",
   "**Inviting new members** — share BeanPool freely from day one.": "**Mời thành viên mới** — chia sẻ BeanPool thoải mái ngay từ ngày đầu tiên.",
@@ -5657,5 +5653,114 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Khi máy chủ của bạn hoạt động, bạn đặt tên cộng đồng trong ứng dụng cài đặt, mời những thành viên đầu tiên, và họ sẽ mời những người khác. Bật \"công khai vị trí\" tại đó, và những người gần bạn đã đăng ký nhận tin sẽ biết đến.",
   "How to run a node, on beanpool.org": "Cách vận hành máy chủ, trên beanpool.org",
   "Copy my community's details": "Sao chép thông tin cộng đồng của tôi",
-  "Copied. Paste them into your node's settings app.": "Đã sao chép. Dán vào ứng dụng cài đặt máy chủ của bạn."
+  "Copied. Paste them into your node's settings app.": "Đã sao chép. Dán vào ứng dụng cài đặt máy chủ của bạn.",
+  "A few examples to start from, and a guide.": "Một vài ví dụ để bắt đầu, và phần hướng dẫn.",
+  "A fixed number of Beans": "Số đậu cố định",
+  "About this tool": "Giới thiệu về công cụ này",
+  "Allow notifications": "Cho phép thông báo",
+  "Ask to borrow this?": "Yêu cầu mượn món này?",
+  "Asked to borrow": "Đã yêu cầu mượn",
+  "Beans per day": "Đậu mỗi ngày",
+  "Beans per week": "Đậu mỗi tuần",
+  "Books: how it's going": "Sổ sách: tình hình diễn ra",
+  "Fee": "Phí",
+  "Free": "Miễn phí",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Mượn miễn phí. Không có khoản nào bị giữ: người cho mượn đồng ý trước.",
+  "Go on": "Tiếp tục",
+  "Go on to post": "Tiếp tục để đăng",
+  "Go straight in and add what you keep.": "Vào thẳng và thêm những gì bạn lưu giữ.",
+  "I already do this": "Tôi đã làm việc này rồi",
+  "I already do this: go straight in and add what you keep.": "Tôi đã làm việc này rồi: vào thẳng và thêm những gì bạn lưu giữ.",
+  "I'm starting out": "Tôi mới bắt đầu",
+  "I'm starting out: a few examples to start from, and a guide.": "Tôi mới bắt đầu: một vài ví dụ để bắt đầu, và phần hướng dẫn.",
+  "It shows in the Market as an Offer.": "Mục này hiển thị trên Chợ dưới dạng Đề nghị.",
+  "Keep a private copy on your community's server": "Lưu bản sao riêng tư trên máy chủ của cộng đồng bạn",
+  "Kept on this phone only. Nothing in it leaves this phone.": "Chỉ lưu trên điện thoại này. Không có dữ liệu nào rời khỏi điện thoại này.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Được lưu trên điện thoại này, kèm một bản sao riêng tư trên máy chủ của cộng đồng bạn mà chỉ bạn mới có thể đọc qua ứng dụng. Giống như mọi thứ trên máy chủ đó, người vận hành máy chủ cũng có thể đọc được.",
+  "List it in the Market": "Đăng lên Chợ",
+  "More tools": "Thêm công cụ",
+  "Next you check it and tap Post. Nothing is posted before that.": "Tiếp theo, bạn kiểm tra lại và nhấn Đăng. Không có gì được đăng trước đó.",
+  "No thanks": "Không, cảm ơn",
+  "No tools here yet. They come with updates of the app.": "Chưa có công cụ nào ở đây. Chúng sẽ đến cùng các bản cập nhật ứng dụng.",
+  "Nothing is held until the lender says yes.": "Không có khoản nào bị giữ cho đến khi người cho mượn đồng ý.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Không có khoản nào bị giữ cho đến khi người cho mượn đồng ý. Sau đó khoản phí sẽ được chuyển vào Ví uỷ thác tạm thời, và khi món đồ được trả lại, người cho mượn sẽ nhận được số tiền sau khi trừ 1.5% phí giao dịch {owned} để đóng góp vào Quỹ chung.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "Thông báo đang tắt cho BeanPool trên điện thoại này, nên lời nhắc không thể hiển thị.",
+  "Open {tool}": "Mở {tool}",
+  "Options for {tool}": "Tùy chọn cho {tool}",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "Đưa công cụ này lên Trang chủ của bạn? Công cụ sẽ hiển thị những gì được lưu giữ chỉ trong nháy mắt.",
+  "Read in English": "Đọc bằng tiếng Anh",
+  "Read the guide": "Đọc hướng dẫn",
+  "Reminders": "Lời nhắc",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "Lời nhắc mà các công cụ của bạn đặt trên điện thoại này. Không có thông tin nào rời khỏi điện thoại.",
+  "Remove my data from this phone": "Xóa dữ liệu của tôi khỏi điện thoại này",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "Xóa danh sách, ảnh và lời nhắc của cộng đồng này đối với công cụ này trên điện thoại này. Cùng công cụ đó ở cộng đồng khác vẫn giữ dữ liệu riêng. Hành động này không thể hoàn tác.",
+  "Replace your unfinished post?": "Thay thế bài đăng chưa hoàn thành của bạn?",
+  "Show translation": "Hiện bản dịch",
+  "Some examples": "Một số ví dụ",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "Đã xảy ra lỗi trong công cụ này. Những gì công cụ lưu giữ trên điện thoại này vẫn an toàn.",
+  "Stock: what you have": "Kho đồ: những gì bạn có",
+  "Things you can do on your own": "Những việc bạn có thể tự làm",
+  "Things you can do on your own, that make your community stronger.": "Những việc bạn có thể tự làm, giúp cộng đồng của bạn vững mạnh hơn.",
+  "This page is in English for now.": "Trang này hiện chỉ có bằng tiếng Anh.",
+  "This page is newer in English.": "Trang này có bản tiếng Anh mới hơn.",
+  "This tool isn't in this version of the app": "Công cụ này không có trong phiên bản ứng dụng này",
+  "Tool reminders": "Lời nhắc của công cụ",
+  "Trade: how you deal": "Trao đổi: cách bạn giao dịch",
+  "Update": "Cập nhật",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "Hãy cập nhật BeanPool để sử dụng. Phiên bản của bạn được hiển thị ở cuối phần Cài đặt.",
+  "You have an unfinished post on the map. Going on replaces it.": "Bạn có một bài đăng chưa hoàn thành trên bản đồ. Tiếp tục sẽ thay thế bài đăng đó.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "other": "Bạn đã gửi {credits} tín dụng ({n} ngày) vào Ví uỷ thác cho bài chia sẻ này."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "other": "Bạn đã gửi {credits} tín dụng ({n} tháng) vào Ví uỷ thác cho bài chia sẻ này."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "other": "Bạn đã gửi {credits} tín dụng ({n} tuần) vào Ví uỷ thác cho bài chia sẻ này."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "Bạn đã đề nghị nhận {credits} tín dụng ({n} ngày) (thực nhận {net} sau 1.5% phí giao dịch) {owned} khi hoàn thành nhu cầu này."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "Bạn đã đề nghị nhận {credits} tín dụng ({n} tháng) (thực nhận {net} sau 1.5% phí giao dịch) {owned} khi hoàn thành nhu cầu này."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "other": "Bạn đã đề nghị nhận {credits} tín dụng ({n} tuần) (thực nhận {net} sau 1.5% phí giao dịch) {owned} khi hoàn thành nhu cầu này."
+  },
+  "Your community asks for a profile photo before you post.": "Cộng đồng của bạn yêu cầu ảnh hồ sơ trước khi bạn đăng bài.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "Máy chủ của cộng đồng bạn chưa thể lưu bản sao, nên lúc này dữ liệu chỉ ở trên điện thoại này.",
+  "for {n} day|for {n} days": {
+    "other": "trong {n} ngày"
+  },
+  "for {n} week|for {n} weeks": {
+    "other": "trong {n} tuần"
+  },
+  "{n} month|{n} months": {
+    "other": "{n} tháng"
+  },
+  "{n} week|{n} weeks": {
+    "other": "{n} tuần"
+  },
+  "📦 Ask to borrow": "📦 Yêu cầu mượn",
+  "Add a community by address": "Thêm cộng đồng bằng địa chỉ",
+  "COMMUNITY ADDRESS": "ĐỊA CHỈ CỘNG ĐỒNG",
+  "COMMUNITY NAME (OPTIONAL)": "TÊN CỘNG ĐỒNG (TÙY CHỌN)",
+  "Clear this phone's copy and download again": "Xóa bản sao trên điện thoại này và tải lại",
+  "Community name (optional)": "Tên cộng đồng (tùy chọn)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "Kết nối với một cộng đồng bằng cách nhập địa chỉ. Điện thoại của bạn sẽ lưu vào danh sách này và chuyển sang cộng đồng đó.",
+  "Have an invite code for this community?": "Bạn có mã mời cho cộng đồng này?",
+  "Invited": "Đã mời",
+  "Reached at **{trust}** trust": "Đạt ở **{trust}** điểm tin cậy",
+  "Reached at **{trust}** trust (up to {upTo})": "Đạt ở **{trust}** điểm tin cậy (tối đa {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "Điều hành cộng đồng này? Chủ sở hữu và quản trị viên thấy hàng Quản lý ở đầu Cài đặt.",
+  "Saved communities": "Cộng đồng đã lưu",
+  "Switch to this community": "Chuyển sang cộng đồng này",
+  "Switch, forget or refresh the communities on this phone": "Chuyển, quên hoặc làm mới các cộng đồng trên điện thoại này",
+  "Switching...": "Đang chuyển...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "Các cộng đồng điện thoại này đã tham gia. Khóa và 12 từ của bạn đều giống nhau ở mỗi cộng đồng; chuyển sang một cộng đồng để sử dụng.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "Chào mừng bạn. Ngay từ ngày đầu tiên, bạn có thể khám phá, giao dịch, nhận tín dụng và mời người khác — và hạn mức tín dụng của bạn đã được mở.",
+  "from {n} trust|from {n} trust": {
+    "other": "từ {n} điểm tin cậy"
+  },
+  "{name}, already invited": "{name}, đã được mời"
 }

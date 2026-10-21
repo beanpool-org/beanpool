@@ -997,7 +997,10 @@ Smallest first. Each slice is independently useful — nothing here is a big-ban
 
 **Slice 4 — the derived floor ⚠️ the one slice that can break a live community**
 - Replace `Math.max(200, grantedCredit)` and the `|| isTreasury` activation with the derived model.
-- Add explicit backing pledges (`treasury_operators.backing`), with the pledge lock.
+- Add explicit backing pledges (`enterprise_pledges`), with the pledge lock. The pledge rows are the backing every floor
+  reads, the spend check included; `treasury_operators.backing` only records the figure a keeper pledged as they joined
+  (21 Oct, after #2309's report: read by the spend check, it kept a released pledge's floor and counted a known pledge
+  twice).
 - Cache the derived floor; invalidate on trade completion, keeper change, backing change and
   freeze/status change. `getBalance` and `usableFloor` are on the hot path — they must stay O(1).
 - **Do not ship this to mullum without the grandfather migration.** Community Eggs is live, holds a

@@ -3,7 +3,7 @@ slug: trust-badges
 title: Insignias
 summary: Recién llegado, Residente, Cuidador y Anciano. Qué significan y por qué no desbloquean nada.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: d954cfcd237a4685
+source-hash: a6cc3bb74fc395bb
 ---
 
 ## Qué son
@@ -17,7 +17,7 @@ Tu insignia de confianza muestra cuánta confianza has acumulado:
 
 Un miembro que aún no ha intercambiado muestra **FUNDADOR** en sus publicaciones.
 
-La confianza proviene de un aval al unirte, de intercambios completados y de la confianza que un administrador haya otorgado. En una comunidad que confirma a sus miembros, la línea de crédito que obtiene un miembro confirmado también cuenta.
+La confianza proviene de un aval al unirte, de intercambios completados y de la confianza que un administrador haya otorgado. En una comunidad que confirma a sus miembros, estar confirmado te otorga un límite de crédito más alto, no una insignia más alta: tu insignia solo cuenta lo que has hecho, por lo que nunca muestra que estés confirmado.
 
 ## No desbloquean nada
 

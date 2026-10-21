@@ -48,7 +48,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { setMemberPhoto } from '@beanpool/engine';
+import { setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -96,6 +96,14 @@ function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
+/** An admin's binding with the keeper's pledge of `amount` beside it: the pledge row is the backing every floor reads. */
+function assignWithPledge(enterprise: string, keeper: string, grantedBy: string, amount: number) {
+    adminAssignTreasuryOperator(enterprise, keeper, grantedBy);
+    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+        .run(crypto.randomUUID(), keeper, enterprise, amount, new Date().toISOString());
+    clearEnterpriseFloorCache(db, enterprise);
+}
+
 function verifyConservation(): number {
     const sumAccounts = (db.prepare(
         "SELECT COALESCE(SUM(balance), 0) AS s FROM accounts WHERE public_key != 'COMMONS_POOL'"
@@ -120,9 +128,9 @@ async function main() {
 
     // Create an enterprise "GreenFarm"
     const { publicKey: farm } = createTreasury('GreenFarm', AVATAR, 200);
-    adminAssignTreasuryOperator(farm, leadKeeper, 'admin', 200);
+    assignWithPledge(farm, leadKeeper, 'admin', 200);
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(farm, leadKeeper);
-    adminAssignTreasuryOperator(farm, regKeeper, 'admin', 50);
+    assignWithPledge(farm, regKeeper, 'admin', 50);
 
     // Initial offer for covenant
     createPost('offer', 'food', 'Fresh Kale', 'Crisp organic kale', 20, 'fixed', farm);
@@ -372,7 +380,7 @@ async function main() {
     // Test operator backing excludes inactive / credit-frozen keepers (Comment 4)
     createTreasury('BackingTestCoop', AVATAR, 0);
     const coopPubkey = (db.prepare("SELECT public_key FROM members WHERE callsign = 'BackingTestCoop'").get() as any).public_key;
-    adminAssignTreasuryOperator(coopPubkey, regKeeper, 'keeper', 100);
+    assignWithPledge(coopPubkey, regKeeper, 'keeper', 100);
     assert(getEnterpriseUnderlyingFloor(coopPubkey).floor === -100, 'Operator backing is active for active keeper');
     // Freeze credit of regKeeper
     db.prepare("UPDATE members SET credit_frozen = 1 WHERE public_key = ?").run(regKeeper);
@@ -453,7 +461,7 @@ async function main() {
 
     // Create active enterprise "SolarBakery" to test P&L transactions
     const { publicKey: bakery } = createTreasury('SolarBakery', AVATAR, 100);
-    adminAssignTreasuryOperator(bakery, leadKeeper, 'admin', 100);
+    assignWithPledge(bakery, leadKeeper, 'admin', 100);
 
     // Initial funding transfer (150 beans)
     transfer('genesis', bakery, 150, 'Startup capital grant');
@@ -515,9 +523,9 @@ async function main() {
     const httpOutsider = makeIdentity('HTTPOutsider');
 
     const { publicKey: cafe } = createTreasury('CommunityCafe', AVATAR, 100);
-    adminAssignTreasuryOperator(cafe, httpLead.pubKeyHex, 'admin', 100);
+    assignWithPledge(cafe, httpLead.pubKeyHex, 'admin', 100);
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(cafe, httpLead.pubKeyHex);
-    adminAssignTreasuryOperator(cafe, httpKeeper.pubKeyHex, 'admin', 50);
+    assignWithPledge(cafe, httpKeeper.pubKeyHex, 'admin', 50);
 
     // Initial funding to cafe
     transfer('genesis', cafe, 80, 'Cafe initial capital');

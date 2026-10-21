@@ -45,7 +45,7 @@ The line under the bar tells you, for example "Post an offer to open your credit
 
 ## In a known community
 
-Some communities have admins who know every member by name. A member an admin has confirmed gets a credit line straight away, **the known floor**: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for. The known floor is on in every community unless its owner switched it off.
+Some communities have admins who know every member by name. A member an admin has confirmed gets a credit line straight away, **the known floor**: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for. It raises your limit, not your level: your trust badge still counts only what you have done. The known floor is on in every community with Beans unless its owner switched it off.
 
 - One live Offer lets you use all of it. With no Offers, you can't use it.
 - Trust you earn by trading adds to it, up to your community's cap (2,000 Beans unless it chose more, up to 5,000).
@@ -63,7 +63,7 @@ Your community's admins can freeze a member's credit line: all of it, or, in a k
 - If they freeze all of it, or the confirmed part is all the line you have, the Ledger says **Your credit line is frozen**: you can't spend into debit while it lasts, but you can still sell and receive Beans, and spend what you hold above zero. If you were in debit when they froze it, the Ledger also says how many Beans you are in debit: selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.
 - If they freeze the confirmed part and you also have credit from a vouch, from trading or from a grant, the bar stays, with a note under it that the confirmed part is frozen and the rest works as before. If you are below what is left, the Ledger says **Spending paused** too (below).
 
-Your level doesn't change: it is the one your credit line gives you when it isn't frozen, even if the admins had set your line lower or higher than the community's, on your profile and on your listings alike. To ask why, or to have it opened again, ask one of the admins.
+Your level doesn't change, on your profile and on your listings alike: it counts what you have done (a vouch, your trades and any trust an admin granted you), never the part of your line that comes from being confirmed, or any amount the admins set for it. To ask why, or to have it opened again, ask one of the admins.
 
 ## Spending paused
 

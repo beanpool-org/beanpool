@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 2,
+  "version": 4,
   "language": "sw",
-  "hash": "b89715614558baf1c0ef5d66d4bec7445fc32455644edfb9b809f3902751d5a6",
+  "hash": "f79adfaab5fc49ce17984e3fd6436ec8c153a8ac1acf8157980cab1148b2522c",
   "sections": [
     {
       "id": "about",
@@ -11,7 +11,8 @@
       "slugs": [
         "how-it-works",
         "rules",
-        "faq"
+        "faq",
+        "whats-new"
       ]
     },
     {
@@ -131,8 +132,8 @@
       "slug": "how-it-works",
       "title": "Kazi ya BeanPool",
       "summary": "Maharagwe, biashara, ofa na mahitaji, na mikopo, kwa maneno rahisi.",
-      "sourceHash": "64cee61091609f80",
-      "source-hash": "64cee61091609f80",
+      "sourceHash": "a3d4bd4eee0c67cb",
+      "source-hash": "a3d4bd4eee0c67cb",
       "section": "about",
       "related": [
         "posting",
@@ -267,7 +268,7 @@
         },
         {
           "type": "p",
-          "text": "Uaminifu wako huonyeshwa kama beji. Beji hizo ni Mgeni, Mkazi, Msimamizi na Mzee. Uaminifu ulio nyuma ya beji yako unajumuisha mambo matatu: mwanzo ambao udhamini ulikupa, uaminifu uliopata kwa kufanya biashara, na uaminifu wowote ambao msimamizi alikupa. Msimamizi anaweza kumpa mwanachama beji moja kwa moja, bila kufanya biashara. Katika jumuiya inayowathibitisha wanachama wake, kikomo cha mkopo ambacho mwanachama aliyethibitishwa hupata huhesabiwa pia."
+          "text": "Uaminifu wako huonyeshwa kama beji. Beji hizo ni Mgeni, Mkazi, Msimamizi na Mzee. Uaminifu ulio nyuma ya beji yako unajumuisha mambo matatu: mwanzo ambao udhamini ulikupa, uaminifu uliopata kwa kufanya biashara, na uaminifu wowote ambao msimamizi alikupa. Msimamizi anaweza kumpa mwanachama beji moja kwa moja, bila kufanya biashara. Katika jumuiya inayowathibitisha wanachama wake, mwanachama aliyethibitishwa hupata kikomo cha juu zaidi cha mkopo, si beji ya juu zaidi: beji yake huhesabu tu kile alichofanya."
         },
         {
           "type": "ul",
@@ -767,6 +768,189 @@
         {
           "type": "p",
           "text": "Kwa matatizo yanayohusu mtu au biashara, zungumza na wasimamizi wa jumuiya yako. Ili kuripoti tangazo, tukio au chapisho la Mwenendo, gusa bendera yake ya **🚩 Ripoti** (kwenye simu, kitufe cha tangazo kinasema **Ripoti Tangazo**). Katika programu ya wavuti, gumzo na mtu mmoja lina kitufe cha **Ripoti** pia. Wasimamizi wa jumuiya yako huarifiwa. Chagua **Usalama wa mtoto** ikiwa mtoto anaweza kuwa hatarini. Tazama \"Kuripoti tatizo\". Kwa mawazo kuhusu programu yenyewe, tembelea beanpool.org."
+        }
+      ]
+    },
+    {
+      "slug": "whats-new",
+      "title": "Mambo mapya",
+      "summary": "Kilichobadilika katika programu, kwa maneno rahisi.",
+      "sourceHash": "c2a0d89c3be40880",
+      "source-hash": "c2a0d89c3be40880",
+      "section": "about",
+      "related": [
+        "home",
+        "the-bean",
+        "how-it-works",
+        "rules",
+        "faq",
+        "communities"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Jumuiya ya kimataifa, karibu nawe"
+        },
+        {
+          "type": "p",
+          "text": "Unapata mambo haya seva ya jumuiya ya kimataifa inaposasishwa. Kwenye simu yanahitaji programu iliyosasishwa."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bure, ikiwa na mipaka.** Kwenye jumuiya ya kimataifa, tangazo huwekwa kwenye kumbukumbu baada ya siku 90 tangu lilipobadilishwa mara ya mwisho, pamoja na picha zake. Kulihifadhi tena hulifanya liendelee kuwepo. Mipaka yote ipo kwenye ukurasa mmoja. Tazama \"Mipaka ya jumuiya ya kimataifa\".",
+            "**Matangazo yaliyo karibu nawe.** Jumuiya ya kimataifa ina matangazo kutoka kila mahali. Simu yako sasa huweka 500 za karibu zaidi ndani ya km 250 kutoka eneo lako, pamoja na yako mwenyewe na tangazo lolote unalofanya biashara nalo au unalolizungumzia, popote yalipo. Utafutaji wa Sokoni bado hupata matangazo kutoka kila mahali. Tazama \"Zaidi ya jumuiya moja\".",
+            "**Eneo lako.** Kwenye programu ya wavuti, kujiunga na jumuiya ya kimataifa kuna hatua moja zaidi baada ya picha yako: **Uko takriban wapi?** Kwenye simu huulizwa unapojiunga kwa akaunti uliyo nayo tayari; akaunti mpya ya simu huliweka baadaye kwenye Mipangilio, chini ya **Eneo lako**. Katika hatua hiyo, gusa **Tumia mahali nilipo**, **Andika mji au mtaa**, au **Ruka kwa sasa**. Huhifadhiwa hadi takriban km 10, si mahali ulipo hasa. Libadilishe au lifute kwenye Mipangilio, chini ya **Eneo lako**. Tazama \"Eneo lako\".",
+            "**Huna eneo, hakuna shida.** Bila eneo unaona matangazo mapya zaidi kutoka kila mahali, na mstari ulio juu ya Soko unasema hivyo. Kwenye simu, uguse ili kuweka eneo lako.",
+            "**Matangazo mapya karibu nawe.** Huingia yanapochapishwa. Yale ya mbali hayafiki tena kwenye simu yako.",
+            "**Kwenye programu ya wavuti**, Soko na Ramani huanzia kwenye eneo lako, au mahali unapochagua kwa **Umbali**: yaliyo karibu kwanza, kila tangazo likionyesha umbali wake. Tazama \"Kupata vitu vilivyo karibu\".",
+            "**Kura za maoni** hazina mahali pake maalum, kwa hivyo kila moja huonyeshwa kwenye eneo la mwanachama aliyeiunda.",
+            "**Andika mji wako.** Kwenye jumuiya ya kimataifa, **Pata jumuiya yako** kwenye Nyumbani haihitaji tena eneo lako: gusa **au andika mji wako** na uchague mji wako. Nukta ya makadirio tu ndiyo inayowekwa. Tazama \"Kupata jumuiya iliyo karibu nawe\".",
+            "**Kuchapisha bila bei.** Kwenye jumuiya ya kimataifa fomu ya chapisho haiombi bei, kwa sababu Maharagwe huishi katika jumuiya za eneo. Kwenye programu ya wavuti, **Weka Ofa** na **Weka Uhitaji** sasa hufanya kazi bila bei. Jumuiya ya eneo bado huomba bei."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Nyumbani"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Kichupo kipya cha Nyumbani.** Programu sasa hufungukia kwenye Nyumbani: dashibodi inayojibu kinachokuhitaji, kilicho kipya karibu nawe, na kile unachoweza kufanya baadaye. Soko sasa lina kichupo chake chenyewe, na Mwenendo ni kadi kwenye Nyumbani. Unachagua kadi zako: **Ongeza kadi** huweka moja kwenye Nyumbani, **…** ya kila kadi huihamisha au kuiondoa, na **Hariri nyumbani** huziorodhesha zote ili kupanga upya au kuondoa, kwenye simu na katika programu ya wavuti.",
+            "**Kuanza.** Nyumbani ya mwanachama mpya huanza na kadi moja, **Kuanza**. Gusa **Angalia** kwa muhtasari wa dakika moja, au **Ruka**, na kadi zako za kawaida zitaonekana. Kila skrini ina **?** juu ikiwa na usaidizi wake.",
+            "**Utafutaji uliohifadhiwa kwenye Nyumbani.** Chagua maneno kama vile \"mayai\", na iwapo unataka ofa, mahitaji au yote mawili, kategoria na umbali. Kadi huonyesha matangazo manne ya kwanza yanayolingana, yale yale ambayo utafutaji wa Sokoni hupata, na **Ona zaidi** hufungua Soko ikiwa na maneno yako katika utafutaji wake. Inahitaji programu iliyosasishwa na seva ya jumuiya yako kusasishwa.",
+            "**Hifadhi utafutaji kutoka Sokoni.** Wakati kuna maneno katika utafutaji wa Sokoni, **Hifadhi utafutaji huu kwenye Nyumbani** huonekana, kwenye simu na katika programu ya wavuti. Inafungua Nyumbani ikiwa na maneno yako, **Ofa** au **Mahitaji**, kategoria na umbali ukiwa umejazwa. Gusa **Weka kwenye Nyumbani**. Utafutaji uliohifadhiwa huonyesha matokeo yake mapya zaidi kwanza; kwenye jumuiya ya kimataifa, yaliyo karibu zaidi kwanza. Ni kwa ajili ya Ofa na Mahitaji, kwa hivyo hauonekani chini ya Matukio au Kura za maoni.",
+            "**Jua na mwezi kwenye Nyumbani.** Mwezi wa leo usiku na mawio na machweo ya leo, yakihesabiwa kwenye simu yako au katika kivinjari chako kwa mahali pa jumuiya yako au eneo lako, kwenye saa yako mwenyewe. Haiombi chochote kutoka kwa seva ya jumuiya yako. Inahitaji programu iliyosasishwa; hadi seva ya jumuiya yako itakaposasishwa, hutumia eneo lako."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Faragha kama msingi"
+        },
+        {
+          "type": "p",
+          "text": "Mabadiliko haya yapo kwenye seva ya jumuiya yako. Unayapata seva ya jumuiya yako inaposasishwa. Chaguo la Kura ya maoni linahitaji programu iliyosasishwa."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Salio lako na biashara ni zako.** Hakuna mtu mwingine yeyote katika jumuiya yako anayeweza kusoma salio lako au historia yako. Biashara huonyesha watu wake wawili pekee, kwenye shughuli za jumuiya pia. Kura ya kumwondoa mwanachama huonyesha salio la mwanachama huyo kwa watu wanaoweza kupiga kura humo, na si mahali pengine popote.",
+            "**Matangazo ni kwa ajili ya wanachama.** Mtu ambaye hajajiunga hawezi kuona matangazo ya jumuiya yako au picha zake. Badala yake huonyeshwa njia ya kuelekea jumuiya ya kimataifa, ambako mtu yeyote anaweza kuangalia.",
+            "**Kura za maoni zisizotaja majina.** Kura za maoni huonyesha jumla pekee, isipokuwa mtu anayeanzisha moja akiifanya kuwa **Kura ya wazi**.",
+            "**Hesabu za mashirika.** Kila mtu bado huona kiasi cha shirika. Nani aliyelipa, na dokezo, huonekana tu kwa wasimamizi wake na mwanachama huyo.",
+            "**Nani aliyeandika tathmini.** Kila mtu katika jumuiya yako anaweza kusoma nyota na maneno ya tathmini. Watu wawili pekee waliofanya biashara ndio wanaoweza kuona nani aliyeandika na ilikuwa kuhusu makubaliano gani.",
+            "**Usalama wa mtoto.** Kila skrini ya ripoti, kwenye simu na katika programu ya wavuti, sasa inatoa **Usalama wa mtoto** kama sababu. Ichague ikiwa mtoto anaweza kuwa hatarini: watu wanaoendesha seva ya jumuiya yako huarifiwa mara moja na huiangalia kwanza. Tazama \"Kuripoti tatizo\"."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Mipaka ya kila siku"
+        },
+        {
+          "type": "p",
+          "text": "Hii iko kwenye seva ya jumuiya yako. Unayapata seva ya jumuiya yako inaposasishwa."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Hakuna anayeweza kuijaza jumuiya kupita kiasi.** Akaunti moja inaweza kufanya mabadiliko hadi 5,000 kwa siku: machapisho, jumbe, masahihisho na mfano wa hayo. Ndani ya hayo, hadi machapisho mapya 100, vikundi vipya 5, mashirika mapya 3, mialiko 20 na viungo 50 kwenye Mwenendo kwa siku. Hakuna mtu anayetumia BeanPool kawaida anayekaribia viwango hivi. Ukifikia kimoja, programu inasema ni kipi, na lini unaweza kuendelea.",
+            "**Jumbe.** Hadi 30 kwa dakika katika gumzo lolote, jumbe za moja kwa moja pia. Ujumbe mrefu sana hukataliwa: utume kwa sehemu. Picha hazihesabiwi.",
+            "**Watu wapya.** Unaweza kuanzisha mazungumzo na watu 20 kutoka nje ya jumuiya yako kwa siku. Kutuma ujumbe kwa wanachama, na kujibu, hakuna kikomo.",
+            "**Mialiko.** Unaweza kuwa na 50 ambazo hakuna mtu aliyezitumia bado. Isipotumiwa na mtu yeyote hufutwa baada ya siku zake 30.",
+            "**Malipo.** Hadi malipo 100 kwa siku, na hadi watu 30 ambao hujawahi kuwalipa hapo awali. Hadi makubaliano 100 yaliyoombwa, yaliyokubaliwa au kuidhinishwa, na ahadi 20 zilizotolewa au kubadilishwa. Kupokea hakuna kikomo kamwe.",
+            "**Miradi na mashirika** yana mipaka yake yenyewe, mara kumi ya ile ya mwanachama. Kile ambacho msimamizi hufanya kwa ajili yake huhesabiwa dhidi yake, si dhidi ya ya msimamizi mwenyewe, isipokuwa kuiendesha: wasimamizi, kusitisha, kufunga, na kukamilisha au kukataa makubaliano yake. Shirika likiwa limetumia kikomo cha siku, kile ambacho msimamizi hufanya kwa ajili yake huhesabiwa dhidi ya ya msimamizi mwenyewe, ili msimamizi asitumie siku yake yote na kuwazuia wengine. Msimamizi anaweza kufanya kiwango cha thamani ya shirika moja kwa siku kwa mashirika yote anayoyasimamia kwa pamoja.",
+            "**Marafiki.** Unaweza kuongeza hadi watu 100 kama marafiki kwa siku. Kumwongeza mtu humfahamisha."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Toleo la 1.2.38"
+        },
+        {
+          "type": "p",
+          "text": "Baadhi ya mabadiliko haya yapo kwenye seva ya jumuiya yako. Unayapata seva ya jumuiya yako inaposasishwa."
+        },
+        {
+          "type": "h3",
+          "text": "Mapya"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ukurasa huu wa BeanPool.** Miongozo ya jinsi BeanPool inavyofanya kazi, sheria, maswali ya kawaida na mambo mapya. Inafanya kazi bila mtandao. Ifungue kutoka Mipangilio, chini ya **BeanPool**: **Usaidizi & jinsi inavyofanya kazi**. Alama ya **?** juu ya skrini yoyote hufungua usaidizi wa skrini hiyo.",
+            "**Mwanga au giza.** Programu huanza ikiwa na mwanga. Ili kuifanya iwe giza, au kufuata simu yako, nenda kwenye Mipangilio → Mwonekano: Sawa na simu, Mwanga au Giza.",
+            "**Beji.** Kila skrini sasa inatumia viwango vya uaminifu sawa na seva ya jumuiya yako: Mkazi kuanzia uaminifu 200, Msimamizi kuanzia 600, Mzee kuanzia 1,400. Baadhi ya skrini zilikuwa zikionyesha beji isiyo sahihi. Beji ya Mgeni ni rahisi zaidi kuisoma."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Upigaji kura"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Kura za siri.** Programu haimwonyeshi mtu yeyote tena jinsi ulivyopiga kura kwenye Uamuzi, ikiwa ni pamoja na wasimamizi. Unaweza kuona kura yako mwenyewe.",
+            "**Nani anayeweza kupiga kura.** Wanachama waliojiunga kabla ya Uamuzi kufunguliwa pekee ndio wanaoweza kuupigia kura.",
+            "**Kujitokeza kwa wapiga kura.** Idadi ya waliojitokeza sasa inahesabu wanachama waliofanya jambo katika programu ndani ya siku 30 zilizopita.",
+            "**Usitishaji wa dharura.** Msimamizi anapomsimamisha mtu, kura ya siku 7 hufunguliwa mara moja: \"Dumisha usitishaji huu?\". Isipopita, usitishaji huondoka wenyewe. Kwenye jumuiya ya kimataifa hakuna kura: usitishaji hudumu kwa siku 7 kisha huondoka wenyewe, au mapema zaidi ikiwa msimamizi atauondoa.",
+            "**Mikopo ya sauti.** Mikopo ya sauti inayoonyeshwa kwa kura za maharagwe ya Mali za Pamoja ndiyo inayohesabiwa. Unayapata kikamilifu katika kila kura kama hiyo.",
+            "**Aina chache za Maamuzi.** Maamuzi hayawezi kubadilisha tena beji za uaminifu. \"Awamu za upigaji kura\" za zamani zimeondolewa."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Mashirika"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Msimamizi mkuu anapoongeza au kumwondoa msimamizi, wasimamizi wengine wana siku 3 za kupinga.",
+            "Msimamizi anaweza kujiuzulu, isipokuwa akiwa ndiye msimamizi pekee, au wakati ahadi yake bado inahitajika kufidia deni la shirika.",
+            "Kuchagua kiongozi mkuu mpya sasa kuna kikomo cha siku 14, na wasimamizi wanaweza kupiga kura ya Hapana.",
+            "Kiongozi mkuu akiondoka, msimamizi aliyetumikia kwa muda mrefu zaidi anachukua nafasi mara moja."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Vikundi"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Kila kikundi kina gumzo.** Mazungumzo sasa yana vitufe vitatu: **Jumbe**, **Vikundi** na **Watu**. **Vikundi** huorodhesha vikundi vyako, mashirika unayoyasimamia na matukio unayohudhuria, kila kimoja kikiwa na ujumbe wake wa hivi karibuni na idadi ya jumbe ambazo hazijasomwa.",
+            "**Njia moja ya kuanzisha kikundi.** **Kikundi kipya** katika Mazungumzo na **+** katika Mali za Pamoja hufungua fomu ile ile, huku **Mzunguko wa Kijamii** ukiwa umechaguliwa kwa ajili yako. Baada ya kukiunda unaingia kwenye gumzo lake, linalouliza unataka kumwalika nani.",
+            "**Mialiko.** Waratibu wanaweza kuwaalika watu kutoka kwenye menyu ya gumzo. Mwaliko huonyesha nani aliyeutuma, na **Jiunge na kikundi** hukupeleka moja kwa moja kwenye gumzo.",
+            "**Nyamazisha gumzo**: Kwa saa 8, Kwa wiki moja au Kila wakati. Katika kikundi, kutaja kwa @ bado hupita.",
+            "**Kichwa kimoja kwa kila gumzo**: jina la kikundi, shirika au tukio likiwa juu. Liguse ili kuona kikundi, shirika au tukio.",
+            "Mazungumzo ya zamani ya vikundi katika Mazungumzo yameondolewa, pamoja na jumbe zake.",
+            "Kila kikundi sasa kina **mratibu mkuu** — yeyote aliyekiumba, mwanzoni. Mratibu yeyote bado hushughulikia wanachama na machapisho, lakini mratibu mkuu pekee ndiye anayeweza kumwondoa au kumshusha cheo mratibu, na hakuna anayeweza kumwondoa mratibu mkuu. Mratibu mkuu anaweza kukabidhi uongozi kwa mtu mwingine. Mratibu mkuu akinyamaza kwa siku 30, kikundi kinaweza kuchagua mpya, kwenye skrini ya kikundi juu ya orodha. Tazama \"Sheria na jinsi maamuzi hufanywa\".",
+            "**Kura katika kikundi.** Wanachama wa kikundi wanaweza kupigia kura mambo ya kikundi chenyewe, kama vile mratibu mpya au kiongozi mkuu mpya: fungua kikundi na utazame chini ya **Maamuzi**.",
+            "**Kuchagua kiongozi mkuu mpya kwa kikundi kilichonyamaza.** Watu waliokuwa katika kikundi kabla ya kiongozi mkuu kunyamaza pekee ndio wanaoweza kupiga kura. Watu waliojiunga, au kufanywa kuwa waratibu, baada ya hapo hawana kauli, ili akaunti mpya zisiweze kuchukua uongozi wa kikundi ambacho kiongozi mkuu wake amenyamaza."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Usalama"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Mmiliki pekee ndiye anayeweza kurudisha au kuchukua nafasi ya mmiliki au msimamizi.",
+            "Msimamizi hawezi kusuluhisha biashara iliyokwama ambayo yeye ni sehemu yake.",
+            "Mazungumzo ya vikundi na matukio huweka kikomo cha kasi ya mtu mmoja kuchapisha.",
+            "**Gumzo kati ya watu wawili hufungwa daima.** Programu ilikuwa ikituma ujumbe bila kufungwa ikiwa haikuweza kupata ufunguo wa mtu mwingine. Sasa haiutumi: maneno yako yanabaki kwenye kisanduku cha ujumbe, na unaweza kutuma tena baada ya muda mfupi. Seva ya jumuiya yako hukataa ujumbe kati ya watu wawili ambao haujafungwa."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Marekebisho"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Ramani ina kitufe kimoja cha kutambua mahali tena.",
+            "Orodha ya Soko ni rahisi zaidi kuisoma katika hali ya giza."
+          ]
         }
       ]
     },
@@ -5691,8 +5875,8 @@
       "slug": "credit-line",
       "title": "Kikomo chako cha mkopo",
       "summary": "Jinsi unavyoweza kwenda chini ya sifuri, na jinsi inavyoongezeka.",
-      "sourceHash": "64ce3e39f9617713",
-      "source-hash": "64ce3e39f9617713",
+      "sourceHash": "30c343cb535ac79a",
+      "source-hash": "30c343cb535ac79a",
       "section": "ledger",
       "related": [
         "trust-badges",
@@ -5779,7 +5963,7 @@
         },
         {
           "type": "p",
-          "text": "Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo."
+          "text": "Baadhi ya jumuiya zina wasimamizi wanaomjua kila mwanachama kwa jina. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, mwanachama ambaye msimamizi amemthibitisha hupata kikomo cha mkopo mara moja: Maharagwe 1,000 isipokuwa jumuiya yako iwe ilichagua kiasi kingine. Hiyo ni takriban saa 25 za kazi ambazo jumuiya inakuamini kwazo. Kinainua kikomo chako, si kiwango chako: beji yako ya uaminifu bado inahesabu tu kile ulichofanya."
         },
         {
           "type": "ul",
@@ -5789,6 +5973,14 @@
             "Msimamizi anaweza kukuwekea kikomo kidogo zaidi, kwa mfano ukiwa bado mpya. Hiyo haichukui Maharagwe kutoka kwako kamwe: ikiwa tayari uko chini yake, matumizi husitishwa hadi utakaporudi juu yake tena.",
             "Ikiwa unalipa deni kutoka kwenye akaunti ya awali, Maharagwe unayopokea zaidi ya 0 huenda kwenye Mali za Pamoja hadi litakapolipwa. Leja yako husema kiasi gani kimebaki. Unaweza pia kulipa sehemu au lote mwenyewe katika **Leja → Lipa Hazina ya Pamoja**: msimbo wako wa kulipa deni umejazwa hapo (au weka ule ambao msimamizi anakupa). Kile unacholipa kwa msimbo huo kinapunguzwa kwenye deni mara moja, na kukiwa hakuna kilichosalia deni linamalizika: hakuna kingine kinachochukuliwa, kwa malipo au kutoka kwa unachopokea. Malipo bila msimbo huenda kwenye Mali za Pamoja lakini hayatoki kwenye deni lako, na programu inasema hivyo: ili lihesabiwe, mwombe msimamizi alihesabu kwenye deni lako kwa kumbukumbu yake. Hadi wafanye hivyo, deni bado linaendelea kulipwa: wakati ujao utakapopokea Maharagwe, yaliyosalia yanachukuliwa kutoka kwa yale unayoshikilia zaidi ya 0. Kiasi kilicho katika ujumbe wa msimamizi ndicho kilichokuwa kimesalia walipokishiriki: ikiwa kimesalia kidogo sasa, seva yako inakataa malipo makubwa zaidi na kusema ni kiasi gani kilichobaki, na hakuna kinacholipwa. Programu ikisema kuwa malipo yanaweza kuwa yamepita, gusa **Jaribu tena** kwenye skrini hiyohiyo: malipo yaleyale hayalipwi mara mbili kamwe. Ikiwa uliondoka kwenye skrini hiyo, kagua Leja yako kabla ya kulipa tena."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Jumuiya mchanganyiko"
+        },
+        {
+          "type": "p",
+          "text": "Katika baadhi ya jumuiya mwanachama yeyote anaweza kualika watu, kwa hivyo wasimamizi hawamjui kila mtu. Ikiwa jumuiya yako imewasha **kima cha chini kinachojulikana**, wasimamizi wanaweza kuwathibitisha wanachama wanaowajua, na wanachama hao huanza na kikomo cha juu zaidi. Kila mtu mwingine huanzia sifuri, na kikomo cha kila mtu hukua kwa njia ileile baada ya hapo wanapofanya biashara na kujenga uaminifu."
         },
         {
           "type": "h2",
@@ -5807,7 +5999,7 @@
         },
         {
           "type": "p",
-          "text": "Kiwango chako hakibadiliki: ni kile ambacho kikomo chako cha mkopo kinakupa wakati hakijasimamishwa, hata kama wasimamizi walikuwa wameweka kikomo chako kuwa cha chini au cha juu kuliko cha jumuiya, kwenye wasifu wako na kwenye orodha zako pia. Ili kuuliza kwa nini, au kukifanya kifunguliwe tena, muulize mmoja wa wasimamizi."
+          "text": "Kiwango chako hakibadiliki, kwenye wasifu wako na kwenye orodha zako pia: kinahesabu kile ulichofanya (udhamini, biashara zako na uaminifu wowote ambao msimamizi alikupa), kamwe si sehemu ya kikomo chako inayotokana na kuthibitishwa, au kiasi chochote ambacho wasimamizi waliweka kwa ajili yake. Ili kuuliza kwa nini, au kukifanya kifunguliwe tena, muulize mmoja wa wasimamizi."
         },
         {
           "type": "h2",
@@ -5888,8 +6080,8 @@
       "slug": "trust-badges",
       "title": "Beji za uaminifu",
       "summary": "Mgeni, Mkazi, Msimamizi na Mzee. Maana yake, na kwa nini hazifungui kitu chochote.",
-      "sourceHash": "d954cfcd237a4685",
-      "source-hash": "d954cfcd237a4685",
+      "sourceHash": "a6cc3bb74fc395bb",
+      "source-hash": "a6cc3bb74fc395bb",
       "section": "ledger",
       "related": [
         "credit-line",
@@ -5921,7 +6113,7 @@
         },
         {
           "type": "p",
-          "text": "Uaminifu hutoka kwa dhamana unapojiunga, kutokana na biashara zilizokamilika, na kutokana na uaminifu ambao msimamizi amekupa. Katika jumuiya inayowathibitisha wanachama wake, kikomo cha mkopo ambacho mwanachama aliyethibitishwa anapata kinahesabiwa pia."
+          "text": "Uaminifu hutoka kwa dhamana unapojiunga, kutokana na biashara zilizokamilika, na kutokana na uaminifu ambao msimamizi amekupa. Katika jumuiya inayowathibitisha wanachama wake, kuthibitishwa kunakupa kikomo cha juu zaidi cha mkopo, si beji ya juu zaidi: beji yako huhesabu tu kile ulichofanya, kwa hivyo haionyeshi kamwe kuwa umethibitishwa."
         },
         {
           "type": "h2",

@@ -24,6 +24,7 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
+import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, createTreasury, createPost, completePostTransaction,
@@ -32,7 +33,7 @@ import {
     adminRevokeTreasuryOperator, getEnterpriseUnderlyingFloor, reconcileLedgerFromDb,
 } from './state-engine.js';
 import { db, pledgeToProject } from './db/db.js';
-import { getPosts, setMemberPhoto } from '@beanpool/engine';
+import { getPosts, setMemberPhoto, clearEnterpriseFloorCache } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -51,6 +52,14 @@ function seedMember(pk: string, callsign: string) {
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
 }
 
+/** An admin's binding with the keeper's pledge of `amount` beside it: the pledge row is the backing every floor reads. */
+function assignWithPledge(enterprise: string, keeper: string, amount: number) {
+    adminAssignTreasuryOperator(enterprise, keeper, 'admin');
+    db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+        .run(crypto.randomUUID(), keeper, enterprise, amount, new Date().toISOString());
+    clearEnterpriseFloorCache(db, enterprise);
+}
+
 async function main() {
     console.log('Running enterprise pause tests (docs/the-commons.md §2.2)...\n');
     await initTls();
@@ -65,9 +74,9 @@ async function main() {
     seedMember(malloryStranger, 'MalloryOutsider');
 
     // Appoint Carol with 200 backing, Dave with 0 backing
-    adminAssignTreasuryOperator(shed, carolLead, 'admin', 200);
+    assignWithPledge(shed, carolLead, 200);
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(shed, carolLead);
-    adminAssignTreasuryOperator(shed, daveKeeper, 'admin', 0);
+    adminAssignTreasuryOperator(shed, daveKeeper, 'admin');
 
     // Initial check: ToolShed has 200 underlying allowance from Carol's backing
     const und0 = getEnterpriseUnderlyingFloor(shed);
@@ -127,7 +136,7 @@ async function main() {
     assert(floorAfterCarolExit === 0, `Carol exit released backing; floor dropped to 0 overriding snapshot (got ${floorAfterCarolExit})`);
 
     // Re-assign Carol with 200 backing for remaining tests
-    adminAssignTreasuryOperator(shed, carolLead, 'admin', 200);
+    assignWithPledge(shed, carolLead, 200);
     db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(shed, carolLead);
     assert(usableFloor(shed) === -200, `Re-assigned Carol backing restored floor to -200`);
 

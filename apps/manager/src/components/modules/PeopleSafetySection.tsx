@@ -328,6 +328,7 @@ export function PeopleSafetySection({
                             activeNodeUrl={activeNode.url}
                             adminPassword={nodeCredential(activeNode)}
                             tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                            rolesViewer={rolesViewer}
                             onRefresh={onRefresh}
                             onFreezeUser={onFreezeUser}
                             onPruneUser={onPruneUser}

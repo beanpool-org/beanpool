@@ -16,7 +16,7 @@ import {
     canReplyToMessage, chatActionErrorMessage, formatDayLabel, hasAnyAction, isAtBottom, isDaySeparator,
     isSystemLine, isTombstone, messageActions, normaliseThreadMessage, pendingAfterRead, reactionSummary,
     shouldFollowNewMessages, shouldShowChatLoadError, showsAuthorName, threadMessageDisplayText, tombstoneText,
-    type ChatMessage, type ChatViewer,
+    type ChatMessage, type ChatViewer, type MessageActions,
 } from '../chat-actions';
 // The wording the event chat has always shown, so the two cannot drift apart unnoticed.
 import { EVENT_CHAT_REMOVED_TEXT } from '../events';
@@ -170,6 +170,44 @@ describe('the whole action bar', () => {
     it('gives a tombstone nothing at all, for anyone', () => {
         const dead = msg({ type: 'removed', metadata: { removed: true, removedBy: ME } });
         expect(hasAnyAction(messageActions(dead, viewer({ kind: 'group', isModerator: true })))).toBe(false);
+    });
+
+    it('does not open an action bar when only editClosed is set (nothing on offer)', () => {
+        const a: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: false, editClosed: true };
+        expect(hasAnyAction(a)).toBe(false);
+    });
+
+    it('reports editClosed after 15 minutes for own text message, but not inside the window or on someone else\'s line', () => {
+        const at16Min = msg({ rawTimestamp: new Date(NOW - 16 * 60_000).toISOString() });
+        const at14Min = msg({ rawTimestamp: new Date(NOW - 14 * 60_000).toISOString() });
+        const someoneElseAt16Min = msg({ senderId: THEM, rawTimestamp: new Date(NOW - 16 * 60_000).toISOString() });
+
+        // own text line at 16 min -> editClosed: true for both dm and group
+        const dm16 = messageActions(at16Min, viewer({ kind: 'dm' }));
+        expect(dm16.edit).toBe(false);
+        expect((dm16 as any).editClosed).toBe(true);
+
+        const group16 = messageActions(at16Min, viewer({ kind: 'group' }));
+        expect(group16.edit).toBe(false);
+        expect((group16 as any).editClosed).toBe(true);
+
+        // at 14 min -> pencil (edit: true), no reason
+        const dm14 = messageActions(at14Min, viewer({ kind: 'dm' }));
+        expect(dm14.edit).toBe(true);
+        expect((dm14 as any).editClosed).toBeFalsy();
+
+        const group14 = messageActions(at14Min, viewer({ kind: 'group' }));
+        expect(group14.edit).toBe(true);
+        expect((group14 as any).editClosed).toBeFalsy();
+
+        // someone else's line at 16 min -> no reason
+        const dmThem = messageActions(someoneElseAt16Min, viewer({ kind: 'dm' }));
+        expect(dmThem.edit).toBe(false);
+        expect((dmThem as any).editClosed).toBeFalsy();
+
+        const groupThem = messageActions(someoneElseAt16Min, viewer({ kind: 'group' }));
+        expect(groupThem.edit).toBe(false);
+        expect((groupThem as any).editClosed).toBeFalsy();
     });
 });
 

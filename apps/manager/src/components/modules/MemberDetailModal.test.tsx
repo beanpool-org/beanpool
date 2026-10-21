@@ -145,6 +145,63 @@ describe('MemberDetailModal', () => {
         expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'admin');
     });
 
+    it('does not call a newly granted owner the only one when another owner exists (ownerCount 1)', async () => {
+        const handleGrantRole = vi.fn().mockResolvedValue(undefined);
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                nodeRole={null}
+                ownerCount={1}
+                onToggleFreeze={vi.fn()}
+                onGrantNodeRole={handleGrantRole}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
+        await userEvent.click(screen.getByText('👑 Grant Owner'));
+        expect(handleGrantRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner');
+        // ownerCount 1 is someone else: granting makes two owners, so this member is NOT the only one
+        await screen.findByText('Revoke owner');
+        expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
+    });
+
+    it('names the only owner after a grant when no other owner exists, and not when the stale list holds another', async () => {
+        const handleGrantRole = vi.fn().mockResolvedValue(undefined);
+        const others = [{ publicKey: 'pubkey-other-owner', callsign: 'A', nodeRole: 'owner' }];
+        const { unmount } = render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                nodeRole={null}
+                ownerCount={1}
+                members={[...others, { ...mockMember, nodeRole: null }] as any}
+                onToggleFreeze={vi.fn()}
+                onGrantNodeRole={handleGrantRole}
+                onClose={vi.fn()}
+            />
+        );
+        await userEvent.click(screen.getByText('👑 Grant Owner'));
+        await screen.findByText('Revoke owner');
+        expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
+        unmount();
+
+        render(
+            <MemberDetailModal
+                member={mockMember}
+                isFrozen={false}
+                nodeRole={null}
+                ownerCount={0}
+                onToggleFreeze={vi.fn()}
+                onGrantNodeRole={handleGrantRole}
+                onClose={vi.fn()}
+            />
+        );
+        await userEvent.click(screen.getByText('👑 Grant Owner'));
+        expect(await screen.findByText("This is the community's only owner. Another owner must be added before this one can step down or be removed.")).toBeInTheDocument();
+    });
+
     it('surfaces last-owner guard when revoking the last owner fails', async () => {
         const handleRevokeRole = vi.fn().mockRejectedValue(new Error('Cannot remove the last owner'));
         render(
@@ -152,16 +209,127 @@ describe('MemberDetailModal', () => {
                 member={{ ...mockMember, nodeRole: 'owner' }}
                 isFrozen={false}
                 nodeRole="owner"
+                ownerCount={1}
                 onToggleFreeze={vi.fn()}
                 onRevokeNodeRole={handleRevokeRole}
                 onClose={vi.fn()}
             />
         );
 
-        expect(screen.getByText('Last-owner guard active:')).toBeInTheDocument();
+        expect(screen.getByText("This is the community's only owner. Another owner must be added before this one can step down or be removed.")).toBeInTheDocument();
         await userEvent.click(screen.getByText('Revoke owner'));
         expect(handleRevokeRole).toHaveBeenCalledWith('pubkey-1234567890-abcdef', 'owner');
         expect(await screen.findByText(/Cannot remove the last owner/)).toBeInTheDocument();
+    });
+
+    it('does not show last-owner notice when there are two owners', () => {
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: 'owner' }}
+                isFrozen={false}
+                nodeRole="owner"
+                ownerCount={2}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Last-owner guard active/i)).not.toBeInTheDocument();
+    });
+
+    it('does not show last-owner notice when members list contains two owners', () => {
+        const owner2 = { ...mockMember, publicKey: 'pubkey-owner-2', nodeRole: 'owner' };
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: 'owner' }}
+                members={[{ ...mockMember, nodeRole: 'owner' }, owner2]}
+                isFrozen={false}
+                nodeRole="owner"
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByText(/This is the community's only owner/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Last-owner guard active/i)).not.toBeInTheDocument();
+    });
+
+    it("hides role action buttons and shows muted line when an admin views an owner's profile", () => {
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: 'owner' }}
+                isFrozen={false}
+                nodeRole="owner"
+                viewerRole="admin"
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.queryByText('Revoke owner')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Owner/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Admin/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Moderator/i)).not.toBeInTheDocument();
+        expect(screen.getByText("Only an owner can change this member's role.")).toBeInTheDocument();
+    });
+
+    it("shows only Revoke moderator when an admin views a moderator's profile", () => {
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: 'moderator' }}
+                isFrozen={false}
+                nodeRole="moderator"
+                viewerRole="admin"
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.getByText('Revoke moderator')).toBeInTheDocument();
+        expect(screen.queryByText(/Grant Moderator/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Owner/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Admin/i)).not.toBeInTheDocument();
+        expect(screen.queryByText('Assign role:')).not.toBeInTheDocument();
+        expect(screen.queryByText("Only an owner can change this member's role.")).not.toBeInTheDocument();
+    });
+
+    it("shows Grant Moderator when an admin views a member with no role", () => {
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: null }}
+                isFrozen={false}
+                nodeRole={null}
+                viewerRole="admin"
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.getByText('🛡️ Grant Moderator')).toBeInTheDocument();
+        expect(screen.getByText('Assign role:')).toBeInTheDocument();
+        expect(screen.queryByText(/Grant Owner/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Grant Admin/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Revoke/i)).not.toBeInTheDocument();
+    });
+
+    it("shows role buttons when an owner views an owner's profile with multiple owners", () => {
+        render(
+            <MemberDetailModal
+                member={{ ...mockMember, nodeRole: 'owner' }}
+                isFrozen={false}
+                nodeRole="owner"
+                viewerRole="owner"
+                ownerCount={2}
+                onToggleFreeze={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+
+        expect(screen.getByText('Revoke owner')).toBeInTheDocument();
+        expect(screen.getByText('⚡ Grant Admin')).toBeInTheDocument();
+        expect(screen.getByText('🛡️ Grant Moderator')).toBeInTheDocument();
+        expect(screen.queryByText("Only an owner can change this member's role.")).not.toBeInTheDocument();
     });
 
     it('forwards accounts to PruneBranchModal and surfaces calculated financial impact', async () => {

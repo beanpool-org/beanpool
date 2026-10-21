@@ -7,9 +7,10 @@
  * - The empty state with two doors ({@link ToolDoors}): "I already do this" (straight to the tool's own screen, where its
  *   Add is) and "I'm starting out" (its three examples and its guide page). The tool's Home card, when it has one, is
  *   offered here once, and never added by itself (Marty, 20 Oct).
- * - The backup line and the Settings sheet ({@link ToolSettingsSheet}): where the document is kept, the toggle "Keep a
- *   private copy on your community's server" (on by default; the copy itself is slice T0.4, and until then the line says
- *   plainly that it stays on this phone), the tool's reminders, and Remove my data.
+ * - The backup line and the Settings sheet ({@link ToolSettingsSheet}): where the document is kept ({@link backupLine}),
+ *   for a tool that asks for `node-copy` the toggle "Keep a private copy on your community's server" (on by default; each
+ *   change waits for the server, tools/node-copy.ts, and says so when it couldn't reach it), the tool's reminders, and
+ *   Remove my data.
  * - Home's body for a tool's card ({@link ToolHomeBody}) and the page for a tool or screen this build doesn't have
  *   ({@link ToolNotInThisVersion}): never a crash.
  *
@@ -25,7 +26,8 @@ import type { AppColors } from '../constants/colors';
 import { HOME_TARGET_DP, HomeLink, HomeRow, homeStyles } from '../components/home/HomeParts';
 import { editHomeStyles } from '../components/home/EditHomeSheet';
 import { STORE_URLS } from '../utils/force-update';
-import { NODE_COPY_BUILT, reminderOn, readToolDoc, subscribeToolStore, type ToolSettings } from './store';
+import { reminderOn, readToolDoc, subscribeToolStore, type ToolSettings } from './store';
+import { keepsNodeCopy } from './node-copy';
 import type { PhoneTool } from './index';
 
 /** The row's state line, the Home card's lines: a manifest's function on the document, never a throw. */
@@ -58,12 +60,37 @@ export function isEmptyDoc(manifest: ToolManifest, doc: unknown): boolean {
     }
 }
 
-/** Where a tool's document is kept, in one sentence (once per tool, at the foot of its frame). */
-export function backupLine(settings: ToolSettings): string {
-    if (NODE_COPY_BUILT && settings.nodeCopy !== false) {
-        return t("Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.");
+/**
+ * What this open learned of the node copy, beside the setting: the server keeps no copies yet (`older-node`), or it no
+ * longer keeps this one, so the phone has just switched it off (`removed`, said once: on this open only).
+ */
+export type ToolCopyNote = 'older-node' | 'removed' | null;
+
+/** Where a tool's document is kept, in one sentence (once per tool, at the foot of its frame, and atop its Settings). */
+export function backupLine(manifest: Pick<ToolManifest, 'permissions'>, settings: ToolSettings, note: ToolCopyNote = null, owner: 'member' | 'enterprise' = 'member'): string {
+    if (!keepsNodeCopy(manifest)) return t('Kept on this phone only. Nothing in it leaves this phone.');
+    if (note === 'removed') {
+        return owner === 'enterprise'
+            ? t('A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.')
+            : t("Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.");
     }
-    return t('Kept on this phone only. Nothing in it leaves this phone.');
+    if (note === 'older-node') return olderNodeLine();
+    if (settings.nodeCopy === false) return t('Kept on this phone only. Nothing in it leaves this phone.');
+    return t("Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.");
+}
+
+/** A server older than the tool store: the copy stays on this phone, and the toggle sends nothing. */
+export const olderNodeLine = () => t("Your community's server can't keep a copy yet, so for now it stays on this phone only.");
+
+/** The toggle or Remove my data, when the server couldn't be reached or refused: nothing changed. */
+export const copyFailedLine = () => t("Couldn't reach your community's server, so nothing changed. Try again when you're online.");
+
+/** Remove my data's question: with the copy on, it says the server's copy goes too, and what another phone does. */
+export function removeQuestion(manifest: Pick<ToolManifest, 'permissions'>, settings: ToolSettings): string {
+    if (keepsNodeCopy(manifest) && settings.nodeCopy !== false) {
+        return t("Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.");
+    }
+    return t("Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.");
 }
 
 /**
@@ -80,11 +107,14 @@ export function toolBack() {
 /** A sheet opened as another closes: iOS can't present one modal while the last is still going (Android can). */
 export const afterModal = (fn: () => void, os: string = Platform.OS) => (os === 'ios' ? void setTimeout(fn, 350) : fn());
 
-export function ToolFrame({ manifest, state, settings, colors, onSettings, onAbout, onRemove, children }: {
+export function ToolFrame({ manifest, state, settings, copyNote = null, ownerKind = 'member', colors, onSettings, onAbout, onRemove, children }: {
     manifest: ToolManifest;
     /** The row's state line now, or null. */
     state: string | null;
     settings: ToolSettings;
+    copyNote?: ToolCopyNote;
+    /** Whose document: the member's own, or an enterprise's (its keepers share one copy). */
+    ownerKind?: 'member' | 'enterprise';
     colors: AppColors;
     onSettings: () => void;
     onAbout: () => void;
@@ -112,7 +142,7 @@ export function ToolFrame({ manifest, state, settings, colors, onSettings, onAbo
                 </Pressable>
             </View>
             <View style={frame.body}>{children}</View>
-            <Text style={[frame.backup, { color: colors.text.secondary, paddingBottom: 8 + insets.bottom }]} testID="tool-backup-line">{backupLine(settings)}</Text>
+            <Text style={[frame.backup, { color: colors.text.secondary, paddingBottom: 8 + insets.bottom }]} testID="tool-backup-line">{backupLine(manifest, settings, copyNote, ownerKind)}</Text>
             <Modal visible={menu} transparent animationType="fade" onRequestClose={() => setMenu(false)} statusBarTranslucent>
                 <View style={editHomeStyles.backdrop}>
                     {/* The dimmed space above the sheet closes it, as a tap outside does. */}
@@ -201,14 +231,21 @@ export function ToolDoors({ manifest, settings, colors, onDoor, onHomeAnswer }: 
 
 // ── Settings ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function ToolSettingsSheet({ visible, manifest, settings, notificationsAllowed, colors, onChange, onAllowNotifications, onRemove, onClose }: {
+export function ToolSettingsSheet({ visible, manifest, settings, copyNote = null, ownerKind = 'member', copy = { busy: false, failed: null }, notificationsAllowed, colors, onChange, onNodeCopy, onAllowNotifications, onRemove, onClose }: {
     visible: boolean;
     manifest: ToolManifest;
     settings: ToolSettings;
+    copyNote?: ToolCopyNote;
+    ownerKind?: 'member' | 'enterprise';
+    /** The toggle's round trip: under way (the switch waits), or the last one failed (its line, the switch unchanged). */
+    copy?: { busy: boolean; failed: 'failed' | 'older-node' | null };
     /** Null while unknown; false shows the line and the button that asks. */
     notificationsAllowed: boolean | null;
     colors: AppColors;
+    /** Reminders and the like; never the node copy, which is {@link onNodeCopy}'s. */
     onChange: (next: ToolSettings) => void;
+    /** The member moves the toggle: the host asks the server, and the setting follows its answer. */
+    onNodeCopy?: (on: boolean) => void;
     onAllowNotifications: () => void;
     onRemove: () => void;
     onClose: () => void;
@@ -227,13 +264,22 @@ export function ToolSettingsSheet({ visible, manifest, settings, notificationsAl
                         </Pressable>
                     </View>
                     <ScrollView contentContainerStyle={editHomeStyles.list}>
-                        <Text style={[editHomeStyles.note, { color: colors.text.secondary }]}>{backupLine(settings)}</Text>
-                        <SwitchRow text={t("Keep a private copy on your community's server")} value={nodeCopy} colors={colors}
-                            onChange={(on) => onChange({ ...settings, nodeCopy: on })} testID="tool-settings-node-copy" />
-                        {!NODE_COPY_BUILT ? (
-                            <Text style={[editHomeStyles.note, { color: colors.text.secondary }]} testID="tool-settings-node-copy-note">
-                                {t("Your community's server can't keep a copy yet, so for now it stays on this phone only.")}
-                            </Text>
+                        <Text style={[editHomeStyles.note, { color: colors.text.secondary }]} testID="tool-settings-kept">{backupLine(manifest, settings, copyNote, ownerKind)}</Text>
+                        {keepsNodeCopy(manifest) ? (
+                            <>
+                                <SwitchRow text={t("Keep a private copy on your community's server")} value={nodeCopy} colors={colors} disabled={copy.busy}
+                                    onChange={(on) => onNodeCopy?.(on)} testID="tool-settings-node-copy" />
+                                <Text style={[editHomeStyles.note, { color: colors.text.secondary }]} testID="tool-settings-node-copy-note">
+                                    {copyNote === 'older-node' || copy.failed === 'older-node'
+                                        ? olderNodeLine()
+                                        : t('One phone at a time: the copy you changed last is the one kept.')}
+                                </Text>
+                                {copy.failed === 'failed' ? (
+                                    <Text style={[editHomeStyles.note, { color: colors.feedback.danger.fg }]} accessibilityLiveRegion="polite" testID="tool-settings-node-copy-failed">
+                                        {copyFailedLine()}
+                                    </Text>
+                                ) : null}
+                            </>
                         ) : null}
                         {reminders.length > 0 ? (
                             <>
@@ -267,11 +313,11 @@ export function ToolSettingsSheet({ visible, manifest, settings, notificationsAl
     );
 }
 
-function SwitchRow({ text, value, colors, onChange, testID }: { text: string; value: boolean; colors: AppColors; onChange: (v: boolean) => void; testID?: string }) {
+function SwitchRow({ text, value, colors, onChange, disabled, testID }: { text: string; value: boolean; colors: AppColors; onChange: (v: boolean) => void; disabled?: boolean; testID?: string }) {
     return (
         <View style={[editHomeStyles.row, { borderBottomColor: colors.border.default }]}>
             <Text style={[editHomeStyles.rowText, editHomeStyles.name, { color: colors.text.body }]}>{text}</Text>
-            <Switch value={value} onValueChange={onChange} accessibilityLabel={text} testID={testID}
+            <Switch value={value} onValueChange={onChange} disabled={disabled} accessibilityLabel={text} testID={testID}
                 trackColor={{ false: colors.border.strong, true: colors.brand.fill }} thumbColor={colors.surface.card} />
         </View>
     );

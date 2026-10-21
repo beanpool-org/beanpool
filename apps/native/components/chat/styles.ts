@@ -62,6 +62,13 @@ export const makeChatStyles = ({ theme, colors }: ThemeContextType) => StyleShee
     },
     circleActionButtonActive: { backgroundColor: colors.accent.fill },
     circleActionButtonDanger: { backgroundColor: colors.feedback.danger.solid },
+    editClosedText: {
+        fontSize: 11,
+        lineHeight: 14,
+        color: colors.text.muted,
+        maxWidth: '85%',
+        marginTop: 4,
+    },
 
     reactionPickerContainer: {
         position: 'absolute', top: -45, backgroundColor: colors.text.body, borderRadius: 24,

@@ -690,4 +690,8 @@ export const SERIAL = {
     // pool (4 cores, load 12-15) its best of 3 rounds missed the x3 line three times on 21 Oct 2026 (near 61.8, 65.3,
     // 68.3 ms vs 60; main run 39529892401 near 73-92 ms per round) on PRs that never touch the members query.
     'test-members-on-demand': 'absolute p95 budgets; missed them in the CI pool',
+    // Asserts a group chat id and an id nobody has answer an outsider's send within a flat 3 ms (median of 21 paired
+    // calls). In the CI pool it missed twice on 21 Oct 2026 in opposite directions (#2305: 18.16 vs 13.30 ms; run
+    // 39596632957: 9.95 vs 13.20, pairs 3.10 ms) on PRs that never touch messaging: noise, not the path's cost.
+    'test-group-existence-leaks-http': 'paired wall-clock timing, flat 3 ms bound',
 };

@@ -1801,6 +1801,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         activeNodeUrl={activeNode?.url}
                                         adminPassword={nodeCredential(activeNode)}
                                         tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                                        rolesViewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
                                         onRefresh={() => loadNodeData()}
                                         onFreezeUser={async (pubkey, freeze) => {
                                             if (activeNode) {

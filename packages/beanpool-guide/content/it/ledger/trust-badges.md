@@ -3,7 +3,7 @@ slug: trust-badges
 title: Badge di fiducia
 summary: Nuovo arrivato, Residente, Custode e Saggio. Cosa significano e perché non sbloccano privilegi.
 related: credit-line, trading-partner-limit, your-profile, how-it-works
-source-hash: d954cfcd237a4685
+source-hash: a6cc3bb74fc395bb
 ---
 
 ## Cosa sono
@@ -17,9 +17,9 @@ Il tuo badge di fiducia mostra quanta fiducia hai costruito:
 
 Un membro che non ha ancora effettuato scambi mostra **FOUNDING** sui propri post.
 
-La fiducia deriva da una garanzia al momento dell'ingresso, dagli scambi completati e dalla fiducia concessa da un amministratore. In una comunità che conferma i propri membri, conta anche la linea di credito ricevuta da un membro confermato.
+La fiducia deriva da una garanzia al momento dell'ingresso, dagli scambi completati e dalla fiducia concessa da un amministratore. In una comunità che conferma i propri membri, essere confermati assegna un limite di credito più alto, non un badge più alto: il tuo badge conta solo ciò che hai fatto, quindi non mostra mai che sei confermato.
 
-## Non vincolano nulla
+## Non sbloccano nulla
 
 I badge sono riconoscimenti, non permessi. Ogni membro può pubblicare, scambiare, invitare e votare, qualunque sia il suo badge.
 
@@ -27,8 +27,8 @@ Ciò che la tua fiducia modifica è fino a quanto in profondità può scendere l
 
 ## Dove vederli
 
-- **Mastro**, poi **Livelli:** il tuo badge, quanta fiducia possiedi e quanta ne manca al successivo. **TUTTI I LIVELLI** mostra ogni badge. Uno che non hai ancora raggiunto riporta **Livello successivo** o **Più avanti**, con la quantità di fiducia richiesta: un traguardo a cui arrivare, mai qualcosa che ti viene negato.
-- **COSA COSTRUISCE LA TUA FIDUCIA:** quanto hai scambiato, con quante persone e la tua valutazione.
+- **Mastro**, poi **Livelli:** il tuo badge, quanta fiducia possiedi e quanta ne manca al successivo. **Tutti i livelli** mostra ogni badge. Uno che non hai ancora raggiunto riporta **Livello successivo** o **Più avanti**, con la quantità di fiducia richiesta: un traguardo a cui arrivare, mai qualcosa che ti viene negato.
+- **Cosa costruisce la tua fiducia:** quanto hai scambiato, con quante persone e la tua valutazione.
 - Sui post e sui profili, accanto al nome di ciascun membro.
 
 Sul telefono, il filtro **Fiducia** del Mercato può mostrare solo i post di membri con un determinato badge o superiore, solo **Nuovi arrivati**, o solo membri **Fondatori**, che non hanno ancora scambiato. Nell'app web, **🌱 Nuovi membri** mostra i post dei membri che non hanno ancora scambiato.

@@ -6911,5 +6911,31 @@
     "many": "{n} أسبوعًا",
     "other": "{n} أسبوع"
   },
-  "📦 Ask to borrow": "📦 طلب استعارة"
+  "📦 Ask to borrow": "📦 طلب استعارة",
+  "Add a community by address": "إضافة مجتمع بالعنوان",
+  "COMMUNITY ADDRESS": "عنوان المجتمع",
+  "COMMUNITY NAME (OPTIONAL)": "اسم المجتمع (اختياري)",
+  "Clear this phone's copy and download again": "مسح نسخة هذا الهاتف وإعادة التنزيل",
+  "Community name (optional)": "اسم المجتمع (اختياري)",
+  "Connect to a community by typing its address. Your phone will save it to this list and switch to it.": "اتصل بمجتمع عن طريق كتابة عنوانه. سيحفظه هاتفك في هذه القائمة ويبدّل إليه.",
+  "Have an invite code for this community?": "هل لديك رمز دعوة لهذا المجتمع؟",
+  "Invited": "تمت الدعوة",
+  "Reached at **{trust}** trust": "يُصل إليه عند **{trust}** من الثقة",
+  "Reached at **{trust}** trust (up to {upTo})": "يُصل إليه عند **{trust}** من الثقة (حتى {upTo})",
+  "Run this community? Owners and admins see a Manage row at the top of Settings.": "هل تدير هذا المجتمع؟ يرى المالكون والمشرفون صف «إدارة» في أعلى الإعدادات.",
+  "Saved communities": "المجتمعات المحفوظة",
+  "Switch to this community": "التبديل إلى هذا المجتمع",
+  "Switch, forget or refresh the communities on this phone": "تبديل المجتمعات على هذا الهاتف أو نسيانها أو تحديثها",
+  "Switching...": "جارٍ التبديل...",
+  "The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.": "المجتمعات التي انضم إليها هذا الهاتف. مفتاحك وكلماتك الـ 12 هي نفسها في كل منها؛ بدّل إلى أحدها لاستخدامه.",
+  "Welcome. From day one you can browse, trade, receive credits and invite others — and your credit line is already open.": "مرحبًا بك. يمكنك من اليوم الأول التصفح والتداول واستلام الرصيد ودعوة الآخرين — وحدك الائتماني مفتوح بالفعل.",
+  "from {n} trust|from {n} trust": {
+    "zero": "من {n} ثقة",
+    "one": "من {n} ثقة",
+    "two": "من {n} ثقة",
+    "few": "من {n} ثقة",
+    "many": "من {n} ثقة",
+    "other": "من {n} ثقة"
+  },
+  "{name}, already invited": "{name}، تمت دعوته بالفعل"
 }

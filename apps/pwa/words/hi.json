@@ -3425,5 +3425,65 @@
   "Recurring listing (stays active after purchase)": "आवर्ती लिस्टिंग (खरीद के बाद भी सक्रिय रहती है)",
   "Posting…": "पोस्ट कर रहे हैं…",
   "Publish Listing": "लिस्टिंग प्रकाशित करें",
-  "Translated by machine: some words may be wrong.": "मशीन से अनुवादित: कुछ शब्द ग़लत हो सकते हैं।"
+  "Translated by machine: some words may be wrong.": "मशीन से अनुवादित: कुछ शब्द ग़लत हो सकते हैं।",
+  "About this tool": "इस टूल के बारे में",
+  "Ask to borrow this?": "क्या इसे उधार लेने का अनुरोध करें?",
+  "Asked to borrow": "उधार लेने का अनुरोध किया गया",
+  "Check your connection, then try again.": "अपना कनेक्शन जांचें, फिर पुनः प्रयास करें।",
+  "For example": "उदाहरण के लिए",
+  "Free to borrow. Nothing is held: the lender says yes first.": "उधार लेने के लिए मुफ़्त। कुछ भी रोका नहीं जाता: पहले उधार देने वाला हाँ कहता है।",
+  "How it's going": "काम कैसा चल रहा है",
+  "How you deal": "आप कैसे लेन-देन करते हैं",
+  "I already do this": "मैं पहले से यह करता हूँ",
+  "I'm starting out": "मैं नई शुरुआत कर रहा हूँ",
+  "It couldn't be removed. Try again.": "इसे हटाया नहीं जा सका। पुनः प्रयास करें।",
+  "Kept in this browser, for you only. Nothing of it leaves this browser, and signing out here removes it.": "इस ब्राउज़र में रखा गया, केवल आपके लिए। इसमें से कुछ भी इस ब्राउज़र से बाहर नहीं जाता, और यहाँ साइन आउट करने पर यह हट जाता है।",
+  "No tools in this version of the app yet.": "ऐप के इस संस्करण में अभी कोई टूल नहीं हैं।",
+  "Nothing is held until the lender says yes.": "जब तक उधार देने वाला हाँ नहीं कहता, तब तक कुछ भी रोका नहीं जाता।",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "जब तक उधार देने वाला हाँ नहीं कहता, तब तक कुछ भी रोका नहीं जाता। फिर शुल्क एक अस्थायी ट्रस्ट वॉलेट में जाता है, और वस्तु वापस आने पर उधार देने वाले को कॉमन्स पूल के लिए 1.5% लेनदेन शुल्क {owned} घटाकर शुद्ध राशि प्राप्त होती है।",
+  "Nothing is held until the lender says yes. Then {total} B go into a Trust Wallet, and once it is back the lender receives {net} B (net of 1.5% transaction fee {owned} to fund the Commons Pool).": "जब तक उधार देने वाला हाँ नहीं कहता, तब तक कुछ भी रोका नहीं जाता। फिर {total} B ट्रस्ट वॉलेट में जाते हैं, और वस्तु वापस आने पर उधार देने वाले को {net} B प्राप्त होते हैं (कॉमन्स पूल के वित्तपोषण के लिए 1.5% लेनदेन शुल्क {owned} काटने के बाद)।",
+  "On your Home": "आपके होम पर",
+  "Open {tool}": "{tool} खोलें",
+  "Options for {tool}": "{tool} के विकल्प",
+  "Read in English": "अंग्रेज़ी में पढ़ें",
+  "Read the guide": "गाइड पढ़ें",
+  "Refresh the page to load the newest version your community has.": "आपके समुदाय के पास मौजूद नवीनतम संस्करण को लोड करने के लिए पेज को रीफ्रेश करें।",
+  "Remove my data": "मेरा डेटा हटाएं",
+  "Remove my data from this browser": "इस ब्राउज़र से मेरा डेटा हटाएं",
+  "Removed from this browser.": "इस ब्राउज़र से हटा दिया गया।",
+  "Show translation": "अनुवाद दिखाएं",
+  "Start": "शुरू करें",
+  "Takes this community's data for {tool} out of this browser. The same tool in another community keeps its own. It can't be undone.": "इस ब्राउज़र से {tool} के लिए इस समुदाय का डेटा हटाता है। दूसरे समुदाय में यही टूल अपना डेटा रखता है। इसे पूर्ववत नहीं किया जा सकता।",
+  "Things you can do on your own, that make your community stronger.": "चीजें जो आप खुद कर सकते हैं, जो आपके समुदाय को मजबूत बनाती हैं।",
+  "This page is in English for now.": "यह पेज अभी अंग्रेज़ी में है।",
+  "This page is newer in English.": "यह पेज अंग्रेज़ी में नया है।",
+  "This screen stopped working": "इस स्क्रीन ने काम करना बंद कर दिया",
+  "This tool didn't load": "यह टूल लोड नहीं हुआ",
+  "This tool isn't in this version of the app": "यह टूल ऐप के इस संस्करण में नहीं है",
+  "What this tool keeps is safe. Go back and open it again.": "इस टूल में जो रखा है वह सुरक्षित है। वापस जाएं और इसे फिर से खोलें।",
+  "What you have": "आपके पास क्या है",
+  "Where it is kept": "यह कहाँ रखा जाता है",
+  "Withdraw request": "अनुरोध वापस लें",
+  "Yes, remove it": "हाँ, इसे हटाएं",
+  "for {n} day|for {n} days": {
+    "one": "{n} दिन के लिए",
+    "other": "{n} दिनों के लिए"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "{n} सप्ताह के लिए",
+    "other": "{n} सप्ताह के लिए"
+  },
+  "{n} day|{n} days": {
+    "one": "{n} दिन",
+    "other": "{n} दिन"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} महीना",
+    "other": "{n} महीने"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} सप्ताह",
+    "other": "{n} सप्ताह"
+  },
+  "📦 Ask to borrow": "📦 उधार लेने का अनुरोध करें"
 }

@@ -123,13 +123,22 @@ async function boot(dataDir: string, env: Record<string, string> = {}): Promise<
             if (typeof msg.reply === 'number') waiting.get(msg.reply)?.(msg);
         } catch { /* ignore */ }
     };
+    let lineBuf = '';
     proc.stdout!.on('data', (d) => {
         const str = d.toString();
         out += str;
-        for (const line of str.split('\n')) onLine(line);
+        lineBuf += str;
+        const lines = lineBuf.split('\n');
+        lineBuf = lines.pop() ?? '';
+        for (const line of lines) onLine(line);
     });
     proc.stderr!.on('data', (d) => { out += d.toString(); });
-    const exited = new Promise<number | null>((resolve) => proc.on('exit', (code) => resolve(code)));
+    const exited = new Promise<number | null>((resolve) => proc.on('exit', (code) => {
+        if (lineBuf) onLine(lineBuf);
+        for (const [, cb] of waiting) cb({ error: `node exited (${code}) while waiting for reply:\n${out.slice(-500)}` });
+        waiting.clear();
+        resolve(code);
+    }));
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => proc.kill('SIGKILL'), 60_000);
         exited.then((code) => { clearTimeout(timer); reject(new Error(`node exited (${code}) before it served:\n${out}`)); });
@@ -145,7 +154,12 @@ async function boot(dataDir: string, env: Record<string, string> = {}): Promise<
                 output: () => out,
                 send: (cmd: string, args: Record<string, unknown> = {}) => new Promise((res, rej) => {
                     const id = ++seq;
+                    const timeoutTimer = setTimeout(() => {
+                        waiting.delete(id);
+                        rej(new Error(`send('${cmd}') timed out after 30s; last output:\n${out.slice(-500)}`));
+                    }, 30_000);
                     waiting.set(id, (m) => {
+                        clearTimeout(timeoutTimer);
                         waiting.delete(id);
                         if (m.error) rej(new Error(m.error)); else res(m.result ?? m);
                     });

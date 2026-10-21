@@ -2,10 +2,10 @@
   "_meta": {
     "language": "el",
     "name": "Greek",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools and lending top-up 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "φασόλια",
@@ -5895,5 +5895,103 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Μόλις ο διακομιστής σου τεθεί σε λειτουργία, ονομάζεις την κοινότητά σου στην εφαρμογή ρυθμίσεών του, προσκαλείς τα πρώτα μέλη και αυτά προσκαλούν τα υπόλοιπα. Ενεργοποίησε τη «δημοσίευση τοποθεσίας» εκεί και οι άνθρωποι κοντά σου που ζήτησαν να ενημερώνονται θα το μάθουν.",
   "How to run a node, on beanpool.org": "Πώς να λειτουργήσεις διακομιστή, στο beanpool.org",
   "Copy my community's details": "Αντιγραφή στοιχείων της κοινότητάς μου",
-  "Copied. Paste them into your node's settings app.": "Αντιγράφηκαν. Επικόλλησέ τα στην εφαρμογή ρυθμίσεων του διακομιστή σου."
+  "Copied. Paste them into your node's settings app.": "Αντιγράφηκαν. Επικόλλησέ τα στην εφαρμογή ρυθμίσεων του διακομιστή σου.",
+  "A few examples to start from, and a guide.": "Μερικά παραδείγματα για ξεκίνημα, και ένας οδηγός.",
+  "A fixed number of Beans": "Σταθερός αριθμός φασολιών",
+  "About this tool": "Σχετικά με αυτό το εργαλείο",
+  "Allow notifications": "Να επιτρέπονται οι ειδοποιήσεις",
+  "Ask to borrow this?": "Αίτημα δανεισμού γι' αυτό;",
+  "Asked to borrow": "Ζητήθηκε δανεισμός",
+  "Beans per day": "Φασόλια ανά ημέρα",
+  "Beans per week": "Φασόλια ανά εβδομάδα",
+  "Books: how it's going": "Βιβλία: πώς πάει",
+  "Fee": "Χρέωση",
+  "Free": "Δωρεάν",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Δωρεάν για δανεισμό. Δεν δεσμεύεται τίποτα: πρώτα συμφωνεί ο δανειστής.",
+  "Go on": "Συνέχεια",
+  "Go on to post": "Συνέχεια για δημοσίευση",
+  "Go straight in and add what you keep.": "Μπες απευθείας και πρόσθεσε ό,τι κρατάς.",
+  "I already do this": "Το κάνω ήδη",
+  "I already do this: go straight in and add what you keep.": "Το κάνω ήδη: μπες απευθείας και πρόσθεσε ό,τι κρατάς.",
+  "I'm starting out": "Τώρα ξεκινάω",
+  "I'm starting out: a few examples to start from, and a guide.": "Τώρα ξεκινάω: μερικά παραδείγματα για ξεκίνημα, και ένας οδηγός.",
+  "It shows in the Market as an Offer.": "Εμφανίζεται στην Αγορά ως Προσφορά.",
+  "Keep a private copy on your community's server": "Διατήρηση ιδιωτικού αντιγράφου στον διακομιστή της κοινότητάς σου",
+  "Kept on this phone only. Nothing in it leaves this phone.": "Διατηρείται μόνο σε αυτό το τηλέφωνο. Τίποτα από αυτό δεν φεύγει από αυτό το τηλέφωνο.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Διατηρείται σε αυτό το τηλέφωνο, με ένα ιδιωτικό αντίγραφο στον διακομιστή της κοινότητάς σου το οποίο μόνο εσύ μπορείς να διαβάσεις μέσω της εφαρμογής. Όπως και με οτιδήποτε σε αυτόν τον διακομιστή, ο διαχειριστής του θα μπορούσε.",
+  "List it in the Market": "Καταχώριση στην Αγορά",
+  "More tools": "Περισσότερα εργαλεία",
+  "Next you check it and tap Post. Nothing is posted before that.": "Στη συνέχεια το ελέγχεις και πατάς Δημοσίευση. Τίποτα δεν δημοσιεύεται πριν από αυτό.",
+  "No thanks": "Όχι, ευχαριστώ",
+  "No tools here yet. They come with updates of the app.": "Δεν υπάρχουν εργαλεία εδώ ακόμα. Έρχονται με ενημερώσεις της εφαρμογής.",
+  "Nothing is held until the lender says yes.": "Δεν δεσμεύεται τίποτα μέχρι να πει το ναι ο δανειστής.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Δεν δεσμεύεται τίποτα μέχρι να πει το ναι ο δανειστής. Στη συνέχεια, η χρέωση μπαίνει σε ένα προσωρινό πορτοφόλι καταπιστεύματος και μόλις επιστραφεί, ο δανειστής τη λαμβάνει καθαρή μετά από τέλος συναλλαγής 1.5% {owned} για τη χρηματοδότηση του Κοινού Ταμείου.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "Οι ειδοποιήσεις είναι απενεργοποιημένες για το BeanPool σε αυτό το τηλέφωνο, επομένως οι υπενθυμίσεις δεν μπορούν να εμφανιστούν.",
+  "Open {tool}": "Άνοιγμα {tool}",
+  "Options for {tool}": "Επιλογές για: {tool}",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "Να μπει αυτό το εργαλείο στην Αρχική σου; Δείχνει με μια ματιά όσα περιέχει.",
+  "Read in English": "Ανάγνωση στα αγγλικά",
+  "Read the guide": "Διάβασε τον οδηγό",
+  "Reminders": "Υπενθυμίσεις",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "Υπενθυμίσεις που ορίζουν τα εργαλεία σου σε αυτό το τηλέφωνο. Τίποτα σχετικά με αυτές δεν φεύγει από εδώ.",
+  "Remove my data from this phone": "Αφαίρεση των δεδομένων μου από αυτό το τηλέφωνο",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "Αφαιρεί τη λίστα, τις φωτογραφίες και τις υπενθυμίσεις αυτής της κοινότητας για αυτό το εργαλείο σε αυτό το τηλέφωνο. Το ίδιο εργαλείο σε άλλη κοινότητα διατηρεί τα δικά του. Αυτό δεν μπορεί να αναιρεθεί.",
+  "Replace your unfinished post?": "Αντικατάσταση της ημιτελούς δημοσίευσής σου;",
+  "Show translation": "Εμφάνιση μετάφρασης",
+  "Some examples": "Μερικά παραδείγματα",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "Κάτι πήγε στραβά σε αυτό το εργαλείο. Όσα διατηρεί σε αυτό το τηλέφωνο είναι ασφαλή.",
+  "Stock: what you have": "Απόθεμα: τι έχεις",
+  "Things you can do on your own": "Πράγματα που μπορείς να κάνεις αυτόνομα",
+  "Things you can do on your own, that make your community stronger.": "Πράγματα που μπορείς να κάνεις αυτόνομα, που κάνουν την κοινότητά σου πιο δυνατή.",
+  "This page is in English for now.": "Αυτή η σελίδα είναι προς το παρόν στα αγγλικά.",
+  "This page is newer in English.": "Αυτή η σελίδα είναι πιο πρόσφατη στα αγγλικά.",
+  "This tool isn't in this version of the app": "Αυτό το εργαλείο δεν υπάρχει σε αυτή την έκδοση της εφαρμογής",
+  "Tool reminders": "Υπενθυμίσεις εργαλείων",
+  "Trade: how you deal": "Εμπόριο: πώς συναλλάσσεσαι",
+  "Update": "Ενημέρωση",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "Ενημέρωσε το BeanPool για να το χρησιμοποιήσεις. Η έκδοσή σου εμφανίζεται στο κάτω μέρος των Ρυθμίσεων.",
+  "You have an unfinished post on the map. Going on replaces it.": "Έχεις μια ημιτελή δημοσίευση στον χάρτη. Αν συνεχίσεις, θα αντικατασταθεί.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "Δεσμεύσατε {credits} πιστώσεις ({n} ημέρα) σε πορτοφόλι καταπιστεύματος για αυτή την προσφορά.",
+    "other": "Δεσμεύσατε {credits} πιστώσεις ({n} ημέρες) σε πορτοφόλι καταπιστεύματος για αυτή την προσφορά."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "Δεσμεύσατε {credits} πιστώσεις ({n} μήνα) σε πορτοφόλι καταπιστεύματος για αυτή την προσφορά.",
+    "other": "Δεσμεύσατε {credits} πιστώσεις ({n} μήνες) σε πορτοφόλι καταπιστεύματος για αυτή την προσφορά."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "Δεσμεύσατε {credits} πιστώσεις ({n} εβδομάδα) σε πορτοφόλι καταπιστεύματος για αυτή την προσφορά.",
+    "other": "Δεσμεύσατε {credits} πιστώσεις ({n} εβδομάδες) σε πορτοφόλι καταπιστεύματος για αυτή την προσφορά."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Ζητήσατε να λάβετε {credits} πιστώσεις ({n} ημέρα) (καθαρά {net} μετά από τέλος συναλλαγής 1.5%) {owned} για την εκπλήρωση αυτής της ζήτησης.",
+    "other": "Ζητήσατε να λάβετε {credits} πιστώσεις ({n} ημέρες) (καθαρά {net} μετά από τέλος συναλλαγής 1.5%) {owned} για την εκπλήρωση αυτής της ζήτησης."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Ζητήσατε να λάβετε {credits} πιστώσεις ({n} μήνα) (καθαρά {net} μετά από τέλος συναλλαγής 1.5%) {owned} για την εκπλήρωση αυτής της ζήτησης.",
+    "other": "Ζητήσατε να λάβετε {credits} πιστώσεις ({n} μήνες) (καθαρά {net} μετά από τέλος συναλλαγής 1.5%) {owned} για την εκπλήρωση αυτής της ζήτησης."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Ζητήσατε να λάβετε {credits} πιστώσεις ({n} εβδομάδα) (καθαρά {net} μετά από τέλος συναλλαγής 1.5%) {owned} για την εκπλήρωση αυτής της ζήτησης.",
+    "other": "Ζητήσατε να λάβετε {credits} πιστώσεις ({n} εβδομάδες) (καθαρά {net} μετά από τέλος συναλλαγής 1.5%) {owned} για την εκπλήρωση αυτής της ζήτησης."
+  },
+  "Your community asks for a profile photo before you post.": "Η κοινότητά σου ζητά φωτογραφία προφίλ πριν δημοσιεύσεις.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "Ο διακομιστής της κοινότητάς σου δεν μπορεί να κρατήσει αντίγραφο ακόμα, οπότε προς το παρόν μένει μόνο σε αυτό το τηλέφωνο.",
+  "for {n} day|for {n} days": {
+    "one": "για {n} ημέρα",
+    "other": "για {n} ημέρες"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "για {n} εβδομάδα",
+    "other": "για {n} εβδομάδες"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} μήνας",
+    "other": "{n} μήνες"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} εβδομάδα",
+    "other": "{n} εβδομάδες"
+  },
+  "📦 Ask to borrow": "📦 Αίτημα δανεισμού"
 }

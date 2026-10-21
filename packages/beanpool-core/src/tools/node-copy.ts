@@ -17,12 +17,15 @@
  *   hosts let it go then ({@link withinAnswerTime}), and nothing else on that tool starts until it has (the queue).
  * - Off means gone, even when a slow PUT is still on its way: a PUT whose end the device never heard, or that ended while
  *   the copy was going off, leaves a mark ({@link ToolCopyMarks}); once off, the next open asks whether the node's copy
- *   is gone, and DELETEs it again if not.
+ *   is gone, and DELETEs it again if it is that PUT's. Another device's copy, switched on since, is never this one's to
+ *   remove.
  *
  * The owner is never in a body: a member's copy is the signer's own route, an enterprise's the treasury route of a keeper
  * ({@link toolCopyPath}), and a PUT carries the document alone, under `doc`. Nothing here needs any address but the
  * member's own community's. Pure but for what the host hands in: no platform imports (the barrel is bundled for the phone).
  */
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import type { ToolManifest } from './manifest.js';
 import { reconcile, type ToolLocalCopy, type ToolRemoteCopy, type ToolSyncIntent, type ToolSyncStep } from './reconcile.js';
 
@@ -84,18 +87,42 @@ export interface ToolCopyDevice {
  * another tab of the same browser has a queue of its own. So:
  * - `unsure`: `out` while a PUT is on its way; `check` once one ended unheard (no answer in time, let go, the network, a
  *   5xx), or heard while the copy was going off. With the setting off, the next open asks once whether the node's copy
- *   is gone ({@link syncToolCopy}), and only a node that says so clears it. Never cleared by a later PUT.
+ *   is gone ({@link syncToolCopy}), and the node's answer clears it. So does a later PUT the node kept: the queue held
+ *   that one until each before it had settled, so those have landed or never will (PR #2297's review at 8a48f318).
+ * - `digests`: the {@link toolCopyDigest} of each PUT `unsure` stands for, the latest last: two let go in a row may
+ *   each land. Only a node copy with one of these bodies is this device's to DELETE again; one with any other body is
+ *   another device's or keeper's, switched on since, and is left alone (design §1, "On again on B").
  * - `deleting`: a DELETE is on its way (off, Remove my data). A PUT that ends meanwhile may land after it: `check`.
  */
 export interface ToolCopyMarks {
     unsure?: 'out' | 'check';
+    digests?: string[];
     deleting?: boolean;
 }
+
+/** How many PUTs' digests a mark keeps, the latest: one a PUT, and a PUT the node kept clears them all. */
+const DIGESTS_MAX = 8;
+const DIGEST = /^[0-9a-f]{16}$/;
+
+/**
+ * A PUT's body as a mark keeps it: the first 16 hex digits (64 bits) of the SHA-256 (@noble/hashes, as avatar-url.ts) of
+ * `JSON.stringify(doc)`, the exact body sent under `doc`. It is also what {@link toolRemoteOf} makes of the node's copy
+ * of that body (engine/tool-state.ts keeps JSON.stringify of the doc it was sent, and answers it parsed).
+ */
+export const toolCopyDigest = (body: string): string => bytesToHex(sha256(utf8ToBytes(body))).slice(0, 16);
+
+/** `digests` with `digest` last, once, keeping the latest {@link DIGESTS_MAX}. */
+const withDigest = (digests: string[] | undefined, digest: string): string[] =>
+    [...(digests ?? []).filter((d) => d !== digest), digest].slice(-DIGESTS_MAX);
 
 /** The marks as a host keeps them in its settings record: only those set, and no field at all (undefined) once none is. */
 export function keptMarks(marks: ToolCopyMarks): ToolCopyMarks | undefined {
     const kept: ToolCopyMarks = {};
-    if (marks.unsure === 'out' || marks.unsure === 'check') kept.unsure = marks.unsure;
+    if (marks.unsure === 'out' || marks.unsure === 'check') {
+        kept.unsure = marks.unsure;
+        const digests = Array.isArray(marks.digests) ? marks.digests.filter((d) => typeof d === 'string' && DIGEST.test(d)).slice(-DIGESTS_MAX) : [];
+        if (digests.length) kept.digests = digests;
+    }
     if (marks.deleting === true) kept.deleting = true;
     return kept.unsure || kept.deleting ? kept : undefined;
 }
@@ -212,17 +239,19 @@ async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, nod
             let doc: unknown;
             try { doc = JSON.parse(body); } catch { doc = null; }
             if (!isObject(doc)) return 'later';
+            const digest = toolCopyDigest(JSON.stringify(doc));
             // Off as it goes is turning on; off only by its end is another device's or tab's off, made meanwhile.
             let offBefore = false;
             await device.mark((m, setting) => {
                 offBefore = setting === false;
-                return { ...m, unsure: m.unsure === 'check' ? 'check' : 'out' };
+                return { ...m, unsure: m.unsure === 'check' ? 'check' : 'out', digests: withDigest(m.digests, digest) };
             });
             const answer = await answered(() => node.put(doc as Record<string, unknown>));
-            // Going off meanwhile, it may have landed after the DELETE; unheard, it may land yet.
+            // Going off meanwhile, it may have landed after the DELETE; unheard, it may land yet. Kept, the node holds this
+            // one, and any unheard before it has landed or never will (the queue held this one until each had settled).
             await device.mark((m, setting) => (m.deleting || (setting === false && !offBefore) || !heard(answer)
-                ? { ...m, unsure: 'check' }
-                : m.unsure === 'out' ? { ...m, unsure: undefined } : m));
+                ? { ...m, unsure: 'check', digests: withDigest(m.digests, digest) }
+                : ok(answer) || m.unsure === 'out' ? { ...m, unsure: undefined, digests: undefined } : m));
             if (answer?.status === 404) return 'older-node';
             const at = keptAt(answer);
             if (!at) return 'later';
@@ -240,7 +269,7 @@ async function syncWith<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, no
 
 /**
  * A tool's open, or the sync after a write: the GET and the step. While the setting is off, nothing; but a mark
- * ({@link ToolCopyMarks}) asks once whether the node's copy is gone, and DELETEs it again if not.
+ * ({@link ToolCopyMarks}) asks once whether the node's copy is gone, and DELETEs it again if it is this device's late PUT.
  */
 export async function syncToolCopy<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, node: ToolCopyNode): Promise<ToolCopyOutcome> {
     if (await device.setting() === false) {
@@ -251,15 +280,19 @@ export async function syncToolCopy<D>(manifest: ToolManifest<D>, device: ToolCop
 }
 
 /**
- * Off, with a PUT that may have landed after its DELETE: one GET, and the DELETE again if the node holds a copy. The mark
- * goes only once the node has said its copy is gone (none, deleted, or an older node, which keeps none); else it stays.
+ * Off, with a PUT that may have landed after its DELETE: one GET, and the DELETE again only if the node's copy is one the
+ * mark stands for (its body's digest is the mark's). A copy with any other body is another device's or keeper's, switched
+ * on since: left alone, as an unmarked device leaves it. The mark goes once the node has answered (none, deleted, an
+ * older node, which keeps none, another's copy, or this device's DELETEd); with no answer it stays. True when it went:
+ * the node holds nothing of this device's.
  */
 async function checkGone(device: ToolCopyDevice, node: ToolCopyNode): Promise<boolean> {
     const remote = toolRemoteOf(await answered(() => node.get()));
-    const gone = remote.kind === 'copy' ? deleted(await answered(() => node.delete()))
-        : remote.kind === 'none' || remote.kind === 'deleted' || remote.kind === 'older-node';
-    if (gone) await device.mark((m) => ({ ...m, unsure: undefined }));
-    return gone;
+    if (remote.kind === 'offline') return false;
+    const mine = remote.kind === 'copy' && !!(await device.marks()).digests?.includes(toolCopyDigest(remote.body));
+    if (mine && !deleted(await answered(() => node.delete()))) return false;
+    await device.mark((m) => ({ ...m, unsure: undefined, digests: undefined }));
+    return true;
 }
 
 /**
@@ -297,9 +330,10 @@ export async function turnToolCopyOff(device: ToolCopyDevice, node: ToolCopyNode
 
 /**
  * Remove my data, the node's part, first: the DELETE while the setting is on, and the setting off once it is answered
- * (off, the node keeps none, unless a mark says a PUT may have landed since: then it is asked, as an open would). True
- * when the node keeps no copy now: the host removes the device's and keeps the setting off, the one setting kept (with
- * the marks). False: the host removes nothing, so nothing removed comes back from the server on the next open.
+ * (off, the node keeps none of this device's, unless a mark says a PUT may have landed since: then it is asked, as an
+ * open would; another device's copy, switched on since, is that device's and stays). True when the node keeps no copy
+ * of this device's now: the host removes the device's and keeps the setting off, the one setting kept (with the marks).
+ * False: the host removes nothing, so nothing removed comes back from the server on the next open.
  */
 export async function removeToolCopy(device: ToolCopyDevice, node: ToolCopyNode): Promise<boolean> {
     if (await device.setting() === false) return !(await device.marks()).unsure || checkGone(device, node);

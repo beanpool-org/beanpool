@@ -8,8 +8,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { word } from '../words.js';
 import {
-    TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, createToolCopyQueue, readTakenBody, removeToolCopy, syncToolCopy, toolCopyPath, toolRemoteOf,
-    turnToolCopyOff, turnToolCopyOn, withinAnswerTime,
+    TOOL_COPY_ANSWER_MS, TOOL_COPY_PUSH_MS, createToolCopyQueue, keptMarks, readTakenBody, removeToolCopy, syncToolCopy, toolCopyDigest,
+    toolCopyMarksOf, toolCopyPath, toolRemoteOf, turnToolCopyOff, turnToolCopyOn, withinAnswerTime,
     type ToolCopyAlone, type ToolCopyDevice, type ToolCopyMarks, type ToolCopyNode, type ToolManifest, type ToolNodeAnswer,
 } from '../tools/index.js';
 
@@ -229,6 +229,8 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
     }
     const COPY = { status: 200, json: { doc: { v: 1, secret: 'garden' }, updatedAt: T2 } };
     const NONE = { status: 200, json: { doc: null, updatedAt: null } };
+    /** The digest a mark keeps of the device's PUT (its copy, below), which is COPY's body too. */
+    const GARDEN = toolCopyDigest('{"v":1,"secret":"garden"}');
 
     it('a PUT slower than the limit: no answer on time, the off waits for it, and the node ends with no copy', async () => {
         vi.useFakeTimers();
@@ -280,29 +282,34 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(d.marks.unsure).toBeUndefined();
     });
 
-    it('marked and off, the next open asks once: a copy there is DELETEd; the mark goes only once the node says none', async () => {
+    it("marked and off, the next open asks once: the marked PUT's copy there is DELETEd; the mark goes once the node answers", async () => {
         const DELETED = { status: 200, json: { doc: null, updatedAt: null, deletedAt: T2 } };
+        // Since the review at 8a48f318, a copy is DELETEd only when it is the body the mark stands for: any other is
+        // another device's, switched on since, and is left alone (and the mark goes: the node has answered).
+        const ANOTHERS = { status: 200, json: { doc: { v: 1, secret: 'shed' }, updatedAt: T2 } };
         for (const [name, get, sent, cleared] of [
             ['a copy there', COPY, ['GET', 'DELETE'], true],
+            ["another device's copy there", ANOTHERS, ['GET'], true],
             ['none', NONE, ['GET'], true],
             ['deleted (S2.1)', DELETED, ['GET'], true],
             ['an older node', { status: 404, json: null }, ['GET'], true],
             ['offline', null, ['GET'], false],
             ['refusing', { status: 500, json: null }, ['GET'], false],
         ] as const) {
-            const { d, store } = deviceOf(false, { unsure: 'check' });
+            const { d, store } = deviceOf(false, { unsure: 'check', digests: [GARDEN] });
             const n = answering(get);
             expect(await syncToolCopy(KIT, store, n.node), name).toBe('off');
             expect(n.sent, name).toEqual(sent);
             expect(d.marks.unsure, name).toBe(cleared ? undefined : 'check');
+            expect(d.marks.digests, name).toEqual(cleared ? undefined : [GARDEN]);
         }
         // The copy there and its DELETE unanswered: the mark stays, for the open after.
-        const { d, store } = deviceOf(false, { unsure: 'check' });
+        const { d, store } = deviceOf(false, { unsure: 'check', digests: [GARDEN] });
         const n = answering(COPY, { delete: null });
         expect(await syncToolCopy(KIT, store, n.node)).toBe('off');
-        expect([n.sent, d.marks.unsure]).toEqual([['GET', 'DELETE'], 'check']);
+        expect([n.sent, d.marks]).toEqual([['GET', 'DELETE'], { unsure: 'check', digests: [GARDEN] }]);
         // A PUT still `out` (its tab closed before it ended) is a mark too.
-        const closed = deviceOf(false, { unsure: 'out' });
+        const closed = deviceOf(false, { unsure: 'out', digests: [GARDEN] });
         const m = answering(COPY);
         await syncToolCopy(KIT, closed.store, m.node);
         expect([m.sent, closed.d.marks.unsure]).toEqual([['GET', 'DELETE'], undefined]);
@@ -340,10 +347,34 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         const { d, store } = deviceOf(false);
         expect(await turnToolCopyOn(KIT, store, answering(NONE).node)).toBe('on');
         expect([d.setting, d.marks.unsure]).toEqual([true, undefined]);
-        // A mark from a PUT unheard stays through later PUTs that are heard: only a node saying its copy is gone clears it.
-        const marked = deviceOf(undefined, { unsure: 'check' });
+        // A mark from a PUT unheard goes once a later PUT is kept: the queue held that one until the one before had
+        // settled, so the one before has landed or never will. Until the review at 8a48f318 it stayed, and a device off
+        // since removed the copy another device switched back on (a mark never removes another device's copy, below).
+        // A later PUT refused (4xx) took nothing: the mark stays.
+        const SHED = toolCopyDigest('{"v":1,"secret":"shed"}');
+        const marked = deviceOf(undefined, { unsure: 'check', digests: [SHED] });
+        await syncToolCopy(KIT, marked.store, answering(NONE, { put: { status: 413, json: { error: 'Too big' } } }).node);
+        expect(marked.d.marks).toEqual({ unsure: 'check', digests: [SHED, GARDEN] });
         await syncToolCopy(KIT, marked.store, answering(NONE).node);
-        expect(marked.d.marks.unsure).toBe('check');
+        expect(marked.d.marks).toEqual({});
+    });
+
+    it('the marks a host keeps: digests only beside `unsure`, each 16 hex digits, the latest eight; a PUT sent again is kept once', async () => {
+        const hex = (i: number) => i.toString(16).padStart(16, '0');
+        expect(GARDEN).toMatch(/^[0-9a-f]{16}$/);
+        expect(keptMarks({ unsure: 'check', digests: [GARDEN] })).toEqual({ unsure: 'check', digests: [GARDEN] });
+        expect(keptMarks({ digests: [GARDEN] })).toBeUndefined();
+        expect(keptMarks({ deleting: true, digests: [GARDEN] })).toEqual({ deleting: true });
+        expect(keptMarks({ unsure: 'out', digests: [] })).toEqual({ unsure: 'out' });
+        expect(toolCopyMarksOf({ unsure: 'check', digests: ['XYZ', 7, GARDEN.toUpperCase(), GARDEN] })).toEqual({ unsure: 'check', digests: [GARDEN] });
+        expect(toolCopyMarksOf({ unsure: 'check', digests: 'nope' })).toEqual({ unsure: 'check' });
+        expect(keptMarks({ unsure: 'check', digests: Array.from({ length: 12 }, (_, i) => hex(i)) })?.digests)
+            .toEqual(Array.from({ length: 8 }, (_, i) => hex(i + 4)));
+        // The same body PUT twice, both unheard: one digest, moved last.
+        const { d, store } = deviceOf();
+        await syncToolCopy(KIT, store, answering(NONE, { put: null }).node);
+        await syncToolCopy(KIT, store, answering(NONE, { put: null }).node);
+        expect(d.marks).toEqual({ unsure: 'check', digests: [GARDEN] });
     });
 
     it("another tab's off while this tab's PUT is out, with no lock between them: whichever is heard first, the next open DELETEs it", async () => {
@@ -364,7 +395,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
             expect(await off).toBe('off');
             expect(line.landed).toEqual(['DELETE', 'PUT']);
             expect(line.row).not.toBeNull();
-            expect([d.setting, d.marks], `DELETE heard after ${deleteHeard} ms`).toEqual([false, { unsure: 'check', deleting: undefined }]);
+            expect([d.setting, d.marks], `DELETE heard after ${deleteHeard} ms`).toEqual([false, { unsure: 'check', digests: [GARDEN], deleting: undefined }]);
             line.deleteHeard = 0;
             expect(await tabB.run('k', () => syncToolCopy(KIT, store, tabB.held('k', line.node())))).toBe('off');
             expect(line.row).toBeNull();
@@ -417,7 +448,7 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(await removeToolCopy(down.store, answering(COPY, { delete: null }).node)).toBe(false);
         expect([down.d.setting, down.d.marks]).toEqual([undefined, { deleting: undefined }]);
         // Off and marked: Remove asks, as the open would, and is true only once the node's copy is gone.
-        const marked = deviceOf(false, { unsure: 'check' });
+        const marked = deviceOf(false, { unsure: 'check', digests: [GARDEN] });
         expect(await removeToolCopy(marked.store, answering(COPY, { delete: null }).node)).toBe(false);
         expect(await removeToolCopy(marked.store, answering(COPY).node)).toBe(true);
         expect(marked.d.marks.unsure).toBeUndefined();
@@ -440,5 +471,163 @@ describe('off means gone, even when a slow PUT is on its way (PR #2297, the deci
         expect(await withinAnswerTime(async (s) => { quick = s; return 'answered'; })).toBe('answered');
         await vi.advanceTimersByTimeAsync(TOOL_COPY_ANSWER_MS * 2);
         expect(quick.aborted).toBe(false);
+    });
+});
+
+describe("a mark never removes another device's copy (PR #2297, the deciding review at 8a48f318)", () => {
+    const KIT = { id: 'kit', permissions: ['node-copy'], doc: { version: 1, empty: () => ({ v: 1 }), read: (r: unknown) => r } } as unknown as ToolManifest;
+
+    /**
+     * One server for every device, as engine/tool-state.ts keeps it: one row, stamped from its clock (which the devices'
+     * writes share, so later is later), and what each device sent. The next PUT can be `unheard` (the server takes it and
+     * its answer is lost), `lost` (it never arrives) or `late` (it arrives when {@link land} is called, long after the
+     * device let it go).
+     */
+    class Server {
+        row: { doc: Record<string, unknown>; updatedAt: string } | null = null;
+        clock = Date.parse('2026-10-21T08:00:00.000Z');
+        sent: string[] = [];
+        nextPut: Array<'unheard' | 'lost' | 'late'> = [];
+        arriving: Array<Record<string, unknown>> = [];
+        stamp() { return new Date(this.clock += 1000).toISOString(); }
+        node(name: string): ToolCopyNode {
+            return {
+                get: async () => {
+                    this.sent.push(`${name} GET`);
+                    return { status: 200, json: { doc: this.row?.doc ?? null, updatedAt: this.row?.updatedAt ?? null } };
+                },
+                put: async (doc) => {
+                    this.sent.push(`${name} PUT`);
+                    const how = this.nextPut.shift();
+                    const body = JSON.parse(JSON.stringify(doc)) as Record<string, unknown>;
+                    if (how === 'lost') return null;
+                    if (how === 'late') { this.arriving.push(body); return null; }
+                    this.row = { doc: body, updatedAt: this.stamp() };
+                    return how === 'unheard' ? null : { status: 200, json: { success: true, updatedAt: this.row.updatedAt } };
+                },
+                delete: async () => {
+                    this.sent.push(`${name} DELETE`);
+                    this.row = null;
+                    return { status: 200, json: { success: true } };
+                },
+            };
+        }
+        /** The `late` PUT sent `nth` (from 0) arrives now. */
+        land(nth = 0) { this.row = { doc: this.arriving[nth], updatedAt: this.stamp() }; }
+    }
+
+    /** One device on the server: its copy, its setting and the marks beside it; `write` is the member's edit there. */
+    function device(server: Server, name: string, body: string) {
+        const d = { body, updatedAt: server.stamp(), syncedAt: null as string | null, setting: undefined as boolean | undefined, marks: {} as ToolCopyMarks };
+        const store: ToolCopyDevice = {
+            read: async () => ({ body: d.body, updatedAt: d.updatedAt, syncedAt: d.syncedAt }),
+            take: async (b, at) => { Object.assign(d, { body: b, updatedAt: at, syncedAt: at }); return true; },
+            sent: async (_was, _b, at) => { Object.assign(d, { updatedAt: at, syncedAt: at }); },
+            setting: async () => d.setting,
+            setSetting: async (on) => { d.setting = on; },
+            marks: async () => d.marks,
+            mark: async (change) => { d.marks = change(d.marks, d.setting); },
+        };
+        const node = server.node(name);
+        return {
+            d,
+            write: (b: string) => { Object.assign(d, { body: b, updatedAt: server.stamp() }); },
+            open: () => syncToolCopy(KIT, store, node),
+            on: () => turnToolCopyOn(KIT, store, node),
+            off: () => turnToolCopyOff(store, node),
+            remove: () => removeToolCopy(store, node),
+        };
+    }
+
+    it("the review's seven steps: one PUT unheard and one heard since, off on A, on again on B; A's open sends nothing, B stays on", async () => {
+        const server = new Server();
+        const A = device(server, 'A', '{"v":1,"beds":["a"]}');
+        const B = device(server, 'B', '{"v":1,"beds":["mine"]}');
+        expect(await A.on()).toBe('on');
+        // A's sync after a write: the server takes the PUT, and its answer is lost.
+        A.write('{"v":1,"beds":["a","b"]}');
+        server.nextPut.push('unheard');
+        expect(await A.open()).toBe('later');
+        expect(A.d.marks.unsure).toBe('check');
+        // A's next sync after a write is heard. The queue held it until the one before had settled, so that one has
+        // landed or never will: the mark goes.
+        A.write('{"v":1,"beds":["a","b","c"]}');
+        expect(await A.open()).toBe('put');
+        expect(A.d.marks.unsure).toBeUndefined();
+        expect(await A.off()).toBe('off');
+        expect(await B.on()).toBe('on');
+        expect(server.row?.doc).toEqual({ v: 1, beds: ['mine'] });
+        // A, still off, is opened: it does nothing until its member turns it on (design §1, "On again on B").
+        server.sent.length = 0;
+        expect(await A.open()).toBe('off');
+        expect(server.sent).toEqual([]);
+        expect(server.row?.doc).toEqual({ v: 1, beds: ['mine'] });
+        expect(await B.open()).toBe('nothing');
+        expect(B.d.setting).toBe(true);
+    });
+
+    it("A marked and off, B on with its own document: A's open (or Remove my data) asks once and leaves B's copy; the mark goes, B stays on", async () => {
+        for (const how of ['open', 'remove'] as const) {
+            const server = new Server();
+            const A = device(server, 'A', '{"v":1,"beds":["a"]}');
+            const B = device(server, 'B', '{"v":1,"beds":["mine"]}');
+            expect(await A.on(), how).toBe('on');
+            A.write('{"v":1,"beds":["a","b"]}');
+            server.nextPut.push('unheard');
+            expect(await A.open(), how).toBe('later');
+            expect(await A.off(), how).toBe('off');
+            expect([A.d.setting, A.d.marks.unsure], how).toEqual([false, 'check']);
+            expect(await B.on(), how).toBe('on');
+            server.sent.length = 0;
+            // Remove my data: true, as for an unmarked device that is off: none of A's is left there to remove.
+            expect(await (how === 'open' ? A.open() : A.remove()), how).toBe(how === 'open' ? 'off' : true);
+            expect(server.sent, how).toEqual(['A GET']);
+            expect(server.row?.doc, how).toEqual({ v: 1, beds: ['mine'] });
+            expect(A.d.marks.unsure, how).toBeUndefined();
+            expect(await A.open(), how).toBe('off');
+            expect(server.sent, how).toEqual(['A GET']);
+            expect(await B.open(), how).toBe('nothing');
+            expect(B.d.setting, how).toBe(true);
+        }
+    });
+
+    it("A marked and off, and the server holds A's own late PUT: A's open DELETEs it, whichever of A's unheard PUTs it is", async () => {
+        for (const nth of [0, 1]) {
+            const server = new Server();
+            const A = device(server, 'A', '{"v":1,"beds":["a"]}');
+            expect(await A.on()).toBe('on');
+            A.write('{"v":1,"beds":["a","b"]}');
+            server.nextPut.push('late');
+            expect(await A.open()).toBe('later');
+            A.write('{"v":1,"beds":["a","b","c"]}');
+            server.nextPut.push('late');
+            expect(await A.open()).toBe('later');
+            expect(await A.off()).toBe('off');
+            server.land(nth);
+            server.sent.length = 0;
+            expect(await A.open(), `PUT ${nth}`).toBe('off');
+            expect(server.sent, `PUT ${nth}`).toEqual(['A GET', 'A DELETE']);
+            expect(server.row, `PUT ${nth}`).toBeNull();
+            expect(A.d.marks.unsure, `PUT ${nth}`).toBeUndefined();
+        }
+    });
+
+    it('a PUT unheard (taken or lost), then a later one heard: no mark, and once off the open sends nothing', async () => {
+        for (const how of ['unheard', 'lost'] as const) {
+            const server = new Server();
+            const A = device(server, 'A', '{"v":1,"beds":["a"]}');
+            expect(await A.on(), how).toBe('on');
+            A.write('{"v":1,"beds":["a","b"]}');
+            server.nextPut.push(how);
+            expect(await A.open(), how).toBe('later');
+            expect(A.d.marks.unsure, how).toBe('check');
+            A.write('{"v":1,"beds":["a","b","c"]}');
+            expect(await A.open(), how).toBe('put');
+            expect(A.d.marks.unsure, how).toBeUndefined();
+            expect(await A.off(), how).toBe('off');
+            server.sent.length = 0;
+            expect(await A.open(), how).toBe('off');
+            expect(server.sent, how).toEqual([]);
+        }
     });
 });

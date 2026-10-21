@@ -6937,5 +6937,27 @@
     "many": "من {n} ثقة",
     "other": "من {n} ثقة"
   },
-  "{name}, already invited": "{name}، تمت دعوته بالفعل"
+  "{name}, already invited": "{name}، تمت دعوته بالفعل",
+  "A way back in if you lose this phone. It's linked to this same account.": "وسيلة عودة إذا فقدت هذا الهاتف. وهي مرتبطة بهذا الحساب نفسه.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "zero": "إضافة {name} كمشارك، بدعم مسمى قدره {n} فاصوليا",
+    "one": "إضافة {name} كمشارك، بدعم مسمى قدره فاصوليا واحدة ({n})",
+    "two": "إضافة {name} كمشارك، بدعم مسمى قدره فاصوليتين ({n})",
+    "few": "إضافة {name} كمشارك، بدعم مسمى قدره {n} فاصوليا",
+    "many": "إضافة {name} كمشارك، بدعم مسمى قدره {n} فاصوليا",
+    "other": "إضافة {name} كمشارك، بدعم مسمى قدره {n} فاصوليا"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "zero": "إضافة {name} كمسؤول، بدعم مسمى قدره {n} فاصوليا",
+    "one": "إضافة {name} كمسؤول، بدعم مسمى قدره فاصوليا واحدة ({n})",
+    "two": "إضافة {name} كمسؤول، بدعم مسمى قدره فاصوليتين ({n})",
+    "few": "إضافة {name} كمسؤول، بدعم مسمى قدره {n} فاصوليا",
+    "many": "إضافة {name} كمسؤول، بدعم مسمى قدره {n} فاصوليا",
+    "other": "إضافة {name} كمسؤول، بدعم مسمى قدره {n} فاصوليا"
+  },
+  "Also add a sign-in": "إضافة تسجيل دخول أيضًا",
+  "Look around first, then join with this account": "استكشف أولاً، ثم انضم بهذا الحساب",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "تعرف على أشخاص من كل مكان واعثر على مجتمعات قريبة منك. استكشف أولاً كضيف، ثم اضغط على «انضمام» في الأعلى للانضمام بالحساب الموجود على هذا الهاتف: يظل مفتاحك وكلماتك الـ 12 كما هي، ولا يتغير شيء في مجتمعاتك الأخرى.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "بمجرد التأكيد، يزداد حده بما يصل إلى {amount}: الحد الأدنى المعلوم لمجتمعك، طالما كان لديه عرض مدرج.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "يستخدم المفتاح والكلمات الـ 12 الموجودة بالفعل على هذا الهاتف. لا يتم إنشاء حساب جديد."
 }

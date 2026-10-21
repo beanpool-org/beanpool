@@ -132,7 +132,7 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
                 </p>
                 {door === 'members' && (
                     <p data-testid="known-floor-mixed-note" className="text-xs text-nature-300 m-0 mt-2 leading-relaxed break-words">
-                        {t('A mixed community: anyone a member invites can join, and members your admins confirm start with a higher limit.')}
+                        {t('A mixed community: anyone a member invites can join, and once the known floor is on, members your admins confirm start with a higher limit.')}
                     </p>
                 )}
             </div>

@@ -87,7 +87,7 @@ describe('KnownFloorPanel', () => {
             mockNode({ ok: true, body: SETTINGS }, { ok: true, body: { door: 'members' } });
             render(<KnownFloorPanel activeNode={NODE} viewer={OWNER_KEY} />);
             expect(await screen.findByTestId('known-floor-mixed-note')).toHaveTextContent(
-                'A mixed community: anyone a member invites can join, and members your admins confirm start with a higher limit.'
+                'A mixed community: anyone a member invites can join, and once the known floor is on, members your admins confirm start with a higher limit.'
             );
         });
 

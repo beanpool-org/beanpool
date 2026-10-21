@@ -148,6 +148,17 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('chat_mutes', 'member_pubkey');
     // Their tools' private copies (engine/tool-state.ts): the new phone gets them back from here.
     move('member_tool_state', 'public_key');
+    // And the copies they switched off, each a tombstone `<key>|<tool>` for its 30 days: left on the old key, the new key's
+    // read says none was removed (routes/tools.ts deletedAt), and the new phone sends back the copy the member switched
+    // off. Each keeps its time, so it goes when it would have. One for a tool the new key now holds, as a copy (its own,
+    // or the one just moved, which is newer) or a removal of its own, says nothing more, and goes. A standby makes the same
+    // move as it follows the re-key: a delta carries a tombstone by its time, so one the standby already holds never comes
+    // again under the new key.
+    const toolTombstonesOf = "table_name = 'member_tool_state' AND row_key >= @old || '|' AND row_key < @old || '}'";
+    db.prepare(`UPDATE OR IGNORE tombstones SET row_key = @new || substr(row_key, length(@old) + 1) WHERE ${toolTombstonesOf}
+                AND NOT EXISTS (SELECT 1 FROM member_tool_state WHERE public_key = @new AND tool = substr(tombstones.row_key, length(@old) + 2))`)
+        .run({ old: oldKey, new: newKey });
+    db.prepare(`DELETE FROM tombstones WHERE ${toolTombstonesOf}`).run({ old: oldKey });
     db.prepare('UPDATE OR IGNORE thread_read_cursors SET member_pubkey = ? WHERE member_pubkey = ?').run(newKey, oldKey);
     db.prepare('DELETE FROM thread_read_cursors WHERE member_pubkey = ?').run(oldKey);
 

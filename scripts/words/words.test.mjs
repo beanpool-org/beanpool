@@ -12,6 +12,7 @@ import {
     BASELINE, ROOT, baselineAt, baselineBase, catalogLangs, checkRepo, compareToBaseline, countStrings, extractFromSource, extractRepo, lintCounts, unexplainedRises,
     updatedBaseline,
 } from './words.mjs';
+import './draft.test.mjs';
 
 const pkgOf = (file, text, extra = {}) => {
     const { calls, found, problems } = extractFromSource(file, text);
@@ -300,4 +301,12 @@ test('catalogs follow core\'s LANGS: 24 tags may have one, a missing one is untr
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+test('words.mjs CLI draft command runs without unsettled top-level await deadlock', () => {
+    const stdout = execFileSync(process.execPath, [path.join(ROOT, 'scripts/words/words.mjs'), 'draft', '--report', '--langs', 'es'], {
+        encoding: 'utf8',
+    });
+    assert.ok(stdout.includes('es:'));
+    assert.ok(stdout.includes('words:draft:'));
 });

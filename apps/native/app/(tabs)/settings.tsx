@@ -2051,8 +2051,8 @@ export default function SettingsScreen() {
                     <Pressable style={[styles.menuBtn, styles.menuBtnLast]} onPress={() => setMode('advanced')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>⚙️</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>{t("Advanced / Subsystem")}</Text>
-                            <Text style={styles.menuSub}>{t("Node management & cache controls")}</Text>
+                            <Text style={styles.menuText} adjustsFontSizeToFit minimumFontScale={0.75}>{t("Saved communities")}</Text>
+                            <Text style={styles.menuSub}>{t("Switch, forget or refresh the communities on this phone")}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -2470,9 +2470,9 @@ export default function SettingsScreen() {
 
             {mode === 'advanced' && (
                 <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>{t("Saved Communities")}</Text>
+                    <Text style={styles.sectionTitle}>{t("Saved communities")}</Text>
                     <Text style={styles.infoText}>
-                        {t("Your physical identity automatically ports between the dormant disconnected local states tracking below.")}
+                        {t("The communities this phone has joined. Your key and 12 words are the same in each; switch to one to use it.")}
                     </Text>
 
                     {savedNodes.map((node, i) => {
@@ -2489,7 +2489,7 @@ export default function SettingsScreen() {
                                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                                     {!isActive ? (
                                         <Pressable style={{ flex: 1, backgroundColor: colors.surface.subtle, padding: 8, borderRadius: 6, alignItems: 'center' }} onPress={() => handleSwitchNode(node.url)} disabled={advancedLoading} accessibilityRole="button">
-                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>{advancedLoading ? t('Mounting...') : t('Switch to Town')}</Text>
+                                            <Text style={{ fontSize: 12, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700 }}>{advancedLoading ? t('Switching...') : t('Switch to this community')}</Text>
                                         </Pressable>
                                     ) : (
                                         <View style={{ flex: 1, backgroundColor: colors.accent.tint, padding: 8, borderRadius: 6, alignItems: 'center' }}>
@@ -2505,7 +2505,7 @@ export default function SettingsScreen() {
 
                                 {isActive && (
                                     <View style={{ marginTop: 12, padding: 12, backgroundColor: colors.surface.subtle, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700, marginBottom: 8 }}>{t("Authenticate Identity on this Node")}</Text>
+                                        <Text style={{ fontSize: 13, fontWeight: 'bold', color: theme === 'dark' ? colors.text.body : palette.gray700, marginBottom: 8 }}>{t("Have an invite code for this community?")}</Text>
                                         <View style={{ flexDirection: 'row', gap: 8 }}>
                                             <TextInput
                                                 style={{ flex: 1, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 6, paddingHorizontal: 10, height: 36, fontSize: 13, color: theme === 'dark' ? colors.text.body : undefined }}
@@ -2527,7 +2527,7 @@ export default function SettingsScreen() {
                                         </View>
                                         <View style={{ marginTop: 16, flexDirection: 'row', justifyContent: 'flex-start', paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border.default }}>
                                             <Pressable style={{ backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, padding: 8, borderRadius: 6, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300 }} onPress={() => handleForceResync(node.url)} accessibilityRole="button" accessibilityHint={t("Deletes the local database for this community and redownloads everything")}>
-                                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.feedback.danger.fg }}>{t("Clear Cache & Resync")}</Text>
+                                                <Text style={{ fontSize: 12, fontWeight: 'bold', color: colors.feedback.danger.fg }}>{t("Clear this phone's copy and download again")}</Text>
                                             </Pressable>
                                         </View>
                                     </View>
@@ -2535,6 +2535,12 @@ export default function SettingsScreen() {
                             </View>
                         );
                     })}
+
+                    <Text style={[styles.infoText, { marginTop: 6, marginBottom: 4 }]}>
+                        {t('Run this community? Owners and admins see Manage {community} at the top of Settings.', {
+                            community: protectionNodeLabel || (anchorUrl ? communityName({ url: anchorUrl }) : '') || t('this community'),
+                        })}
+                    </Text>
 
                     <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 24 }} />
 
@@ -2549,10 +2555,10 @@ export default function SettingsScreen() {
                         </>
                     )}
 
-                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>{t("Add Manual Node")}</Text>
-                    <Text style={styles.infoText}>{t("You can manually append an offline Node IP Address to your keychain bypass, directly executing a forced sync pipeline setup.")}</Text>
+                    <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>{t("Add a community by address")}</Text>
+                    <Text style={styles.infoText}>{t("Connect to a community by typing its address. Your phone will save it to this list and switch to it.")}</Text>
 
-                    <Text style={styles.label}>{t("COMMUNITY ALIAS (OPTIONAL)")}</Text>
+                    <Text style={styles.label}>{t("COMMUNITY NAME (OPTIONAL)")}</Text>
                     <TextInput
                         style={styles.input}
                         value={newNodeAlias}
@@ -2561,10 +2567,10 @@ export default function SettingsScreen() {
                         placeholderTextColor={colors.text.secondary}
                         autoCapitalize="words"
                         autoCorrect={false}
-                        accessibilityLabel={t("Community alias (optional)")}
+                        accessibilityLabel={t("Community name (optional)")}
                     />
 
-                    <Text style={styles.label}>{t("NEW NODE IP")}</Text>
+                    <Text style={styles.label}>{t("COMMUNITY ADDRESS")}</Text>
                     <TextInput
                         style={styles.input}
                         value={newAnchorInput}
@@ -2573,7 +2579,7 @@ export default function SettingsScreen() {
                         placeholderTextColor={colors.text.secondary}
                         autoCapitalize="none"
                         autoCorrect={false}
-                        accessibilityLabel={t("New node IP")}
+                        accessibilityLabel={t("Community address")}
                     />
                     
                     <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">

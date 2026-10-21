@@ -172,6 +172,11 @@ describe('the whole action bar', () => {
         expect(hasAnyAction(messageActions(dead, viewer({ kind: 'group', isModerator: true })))).toBe(false);
     });
 
+    it('does not open an action bar when only editClosed is set (nothing on offer)', () => {
+        const a: MessageActions = { reply: false, react: false, edit: false, delete: false, remove: false, editClosed: true };
+        expect(hasAnyAction(a)).toBe(false);
+    });
+
     it('reports editClosed after 15 minutes for own text message, but not inside the window or on someone else\'s line', () => {
         const at16Min = msg({ rawTimestamp: new Date(NOW - 16 * 60_000).toISOString() });
         const at14Min = msg({ rawTimestamp: new Date(NOW - 14 * 60_000).toISOString() });

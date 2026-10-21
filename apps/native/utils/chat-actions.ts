@@ -302,7 +302,7 @@ export function messageActions(m: ChatMessage | null | undefined, viewer: ChatVi
 }
 
 export function hasAnyAction(a: MessageActions): boolean {
-    return a.reply || a.react || a.edit || a.delete || a.remove || !!a.editClosed;
+    return a.reply || a.react || a.edit || a.delete || a.remove;
 }
 
 /** WhatsApp-style day label: Today / Yesterday / "Mon 12 May" (core's date, in the member's language). */

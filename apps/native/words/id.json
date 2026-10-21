@@ -2,10 +2,10 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, tools & lending top-up 21 Oct); gemini-3.8-flash-high (machine draft, top-up 22 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-21",
+    "updated": "2026-10-22",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "kacang",
@@ -58,6 +58,7 @@
   "Global community": "Komunitas global",
   "Join with this account: 12 words or a sign-in": "Gabung dengan akun ini: 12 kata atau login",
   "Join with this account: a sign-in": "Gabung dengan akun ini: login",
+  "Look around first, then join with this account": "Lihat-lihat dulu, lalu gabung dengan akun ini",
   "Can't reach it right now. Tap to try again.": "Tidak bisa dijangkau sekarang. Ketuk untuk mencoba lagi.",
   "Can't reach it right now": "Tidak bisa dijangkau sekarang",
   "Your account there was closed.": "Akunmu di sana sudah ditutup.",
@@ -2053,6 +2054,7 @@
   "Deletes the local database for this community and redownloads everything": "Menghapus database lokal untuk komunitas ini dan mengunduh ulang semuanya",
   "Join the global community": "Bergabung dengan komunitas global",
   "Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.": "Temui orang dari mana saja dan temukan komunitas di dekatmu, dengan akun di ponsel ini. Masuk sekali: kuncimu dan 12 katamu tetap sama, dan tidak ada yang berubah di komunitasmu yang lain.",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Temui orang dari mana saja dan temukan komunitas di dekatmu. Lihat-lihat dulu sebagai tamu, lalu ketuk Gabung di bagian atas untuk bergabung dengan akun di ponsel ini: kuncimu dan 12 katamu tetap sama, dan tidak ada yang berubah di komunitasmu yang lain.",
   "e.g. My Secret Base": "mis. Pangkalan Rahasiaku",
   "e.g. {address}": "mis. {address}",
   "Add & Connect": "Tambah & Hubungkan",
@@ -4084,8 +4086,14 @@
   "Adding {name} as a collaborator, backing {n} beans|Adding {name} as a collaborator, backing {n} beans": {
     "other": "Menambahkan {name} sebagai kolaborator, mendukung {n} kacang"
   },
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "other": "Menambahkan {name} sebagai kolaborator, dengan {n} kacang dukungan bernama"
+  },
   "Adding {name} as a keeper, backing {n} beans|Adding {name} as a keeper, backing {n} beans": {
     "other": "Menambahkan {name} sebagai pengurus, mendukung {n} kacang"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "other": "Menambahkan {name} sebagai pengurus, dengan {n} kacang dukungan bernama"
   },
   "Adding {name} as a collaborator": "Menambahkan {name} sebagai kolaborator",
   "Adding {name} as a keeper": "Menambahkan {name} sebagai pengurus",
@@ -4234,6 +4242,7 @@
   "Which member is {name}? Confirm only someone you know is them.": "Anggota mana yang merupakan {name}? Konfirmasi hanya jika kamu yakin orang itu adalah mereka.",
   "Which member is this person? Confirm only someone you know is them.": "Anggota mana yang merupakan orang ini? Konfirmasi hanya jika kamu yakin orang itu adalah mereka.",
   "They work off {amount}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.": "Mereka melunasi {amount} dengan bekerja: batas bawah yang ditetapkan 0, dan setiap kacang yang mereka terima di atas 0 akan disalurkan ke sarana bersama sampai lunas.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Setelah dikonfirmasi, batas mereka bertambah hingga {amount}: batas dasar yang diketahui di komunitasmu, selama mereka tetap memasang penawaran.",
   "Find a member": "Cari anggota",
   "Find a member by name": "Cari anggota berdasarkan nama",
   "Nobody here is waiting to be confirmed.": "Tidak ada yang menunggu untuk dikonfirmasi di sini.",
@@ -4470,6 +4479,9 @@
   "No Google, Apple or Facebook needed. Your 12 words are the only way back in.": "Tidak butuh Google, Apple, atau Facebook. 12 katamu adalah satu-satunya cara untuk kembali masuk.",
   "Or sign in": "Atau masuk",
   "Also a way back if you lose your phone.": "Juga cara untuk kembali jika kamu kehilangan ponselmu.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Menggunakan kunci dan 12 kata yang sudah ada di ponsel ini. Tidak ada akun baru yang dibuat.",
+  "Also add a sign-in": "Tambahkan juga akun masuk",
+  "A way back in if you lose this phone. It's linked to this same account.": "Cara untuk masuk kembali jika kamu kehilangan ponsel ini. Ini tertaut ke akun yang sama ini.",
   "Setting up your account…": "Menyiapkan akunmu…",
   "🔑 These 12 words ARE your account.": "🔑 12 kata ini ADALAH akunmu.",
   "Nobody can reset them: not us, not this community. If you lose them and this phone, the account is gone for good.": "Tidak ada yang bisa menyetel ulang: bukan kami, bukan komunitas ini. Jika kamu kehilangannya dan ponsel ini, akunmu akan hilang selamanya.",

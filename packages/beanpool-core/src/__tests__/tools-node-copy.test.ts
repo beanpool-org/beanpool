@@ -566,6 +566,34 @@ describe("a mark never removes another device's copy (PR #2297, the deciding rev
         expect(B.d.setting).toBe(true);
     });
 
+    it("B takes A's unheard PUT, then switches it off; A's open switches A off and drops the mark: B on again, unedited, stays on (review at be7ee9ed)", async () => {
+        const server = new Server();
+        const A = device(server, 'A', '{"v":1,"beds":["a"]}');
+        const B = device(server, 'B', '{"v":1,"beds":["old"]}');
+        expect(await A.on()).toBe('on');
+        // A's last PUT lands, and its answer is lost: A is marked with that body's digest.
+        A.write('{"v":1,"beds":["a","b"]}');
+        server.nextPut.push('unheard');
+        expect(await A.open()).toBe('later');
+        expect(A.d.marks.unsure).toBe('check');
+        // B opens and takes that very copy (the node's is newer than B's own), then the member switches it off there.
+        expect(await B.open()).toBe('taken');
+        expect(await B.off()).toBe('off');
+        // A's next open hears none and switches A off: the same answer checkGone clears on, so the mark goes with it.
+        expect(await A.open()).toBe('switched-off');
+        expect(A.d.marks.unsure).toBeUndefined();
+        expect(A.d.marks.digests).toBeUndefined();
+        // Later the member switches the copy on again on B, unedited: B's body is A's old one, digest and all.
+        expect(await B.on()).toBe('on');
+        expect(server.row?.doc).toEqual({ v: 1, beds: ['a', 'b'] });
+        server.sent.length = 0;
+        expect(await A.open()).toBe('off');
+        expect(server.sent).toEqual([]);
+        expect(server.row?.doc).toEqual({ v: 1, beds: ['a', 'b'] });
+        expect(await B.open()).toBe('nothing');
+        expect(B.d.setting).toBe(true);
+    });
+
     it("A marked and off, B on with its own document: A's open (or Remove my data) asks once and leaves B's copy; the mark goes, B stays on", async () => {
         for (const how of ['open', 'remove'] as const) {
             const server = new Server();

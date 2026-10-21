@@ -228,6 +228,9 @@ async function runStep<D>(manifest: ToolManifest<D>, device: ToolCopyDevice, nod
         case 'nothing': return 'nothing';
         case 'switch-off':
             await device.setSetting(false);
+            // The node answered none (or deleted): the answer checkGone clears the mark on. Kept, a later open would
+            // DELETE the copy another device switched on again with the same body (review of #2297 at be7ee9ed).
+            await device.mark((m) => ({ ...m, unsure: undefined, digests: undefined }));
             return 'switched-off';
         case 'take': {
             const body = readTakenBody(manifest, step.body);

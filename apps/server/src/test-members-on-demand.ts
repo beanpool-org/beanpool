@@ -582,7 +582,10 @@ async function main() {
             q: p95(times.q), keys: p95(times.keys), near: p95(times.near) };
     };
     const best = { q: Infinity, keys: Infinity, near: Infinity, all: true };
-    let slack = 1;
+    // x2 on CI even when the runner is quiet: alone in the serial tail (load ~1.4) a GitHub runner measured q 5.47-6.06 ms
+    // and near 22.9 ms against the 5/20 ms budgets set for the droplet (21 Oct 2026, #2305 #2313 #2314). A real 2x
+    // regression (q ~11 ms, near ~46 ms there) still fails.
+    let slack = process.env.CI ? 2 : 1;
     for (let r = 1; r <= 3; r++) {
         const t = await round();
         best.q = Math.min(best.q, t.q); best.keys = Math.min(best.keys, t.keys); best.near = Math.min(best.near, t.near); best.all &&= t.all;

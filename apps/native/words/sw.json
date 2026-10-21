@@ -5997,5 +5997,19 @@
     "one": "kutoka uaminifu {n}",
     "other": "kutoka uaminifu {n}"
   },
-  "{name}, already invited": "{name}, tayari amealikwa"
+  "{name}, already invited": "{name}, tayari amealikwa",
+  "A way back in if you lose this phone. It's linked to this same account.": "Njia ya kurudi ukipoteza simu hii. Imeunganishwa na akaunti hii hii.",
+  "Adding {name} as a collaborator, with {n} beans of named backing|Adding {name} as a collaborator, with {n} beans of named backing": {
+    "one": "Kumwongeza {name} kama mshiriki, akiwa na maharagwe {n} ya dhamana iliyotajwa",
+    "other": "Kumwongeza {name} kama mshiriki, akiwa na maharagwe {n} ya dhamana iliyotajwa"
+  },
+  "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
+    "one": "Kumwongeza {name} kama msimamizi, akiwa na maharagwe {n} ya dhamana iliyotajwa",
+    "other": "Kumwongeza {name} kama msimamizi, akiwa na maharagwe {n} ya dhamana iliyotajwa"
+  },
+  "Also add a sign-in": "Pia ongeza njia ya kuingia",
+  "Look around first, then join with this account": "Angalia kwanza, kisha jiunge kwa akaunti hii",
+  "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Kutana na watu kutoka kila mahali na upate jumuiya zilizo karibu nawe. Angalia kwanza kama mgeni, kisha uguse Jiunge hapo juu ili kujiunga kama akaunti iliyo kwenye simu hii: ufunguo wako na maneno yako 12 yanabaki vile vile, na hakuna kinachobadilika katika jumuiya zako nyingine.",
+  "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Pindi wakithibitishwa, kikomo chao kinaongezeka kwa hadi {amount}: kima cha chini kinachojulikana cha jumuiya yako, mradi wataendelea kuwa na ofa iliyoorodheshwa.",
+  "Uses the key and 12 words already on this phone. No new account is made.": "Inatumia ufunguo na maneno 12 yaliyo tayari kwenye simu hii. Hakuna akaunti mpya inayoundwa."
 }

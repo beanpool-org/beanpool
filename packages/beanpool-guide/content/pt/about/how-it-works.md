@@ -3,7 +3,7 @@ slug: how-it-works
 title: Como o BeanPool funciona
 summary: Feijões, trocas, ofertas e pedidos, e crédito, em palavras simples.
 related: posting, a-deal-step-by-step, credit-line, gifts, circulation-fee, trust-badges
-source-hash: 64cee61091609f80
+source-hash: a3d4bd4eee0c67cb
 ---
 
 ## Feijões
@@ -58,11 +58,11 @@ Sua linha de crédito cresce com a sua **confiança**:
 A confiança define até onde você **poderia** ir. Suas Ofertas ativas definem até onde você **pode** ir agora. Você recebe o menor dos dois valores.
 
 - Nenhuma Oferta ativa: você não pode ficar abaixo de zero.
-- 1 Oferta: até −200 feijões.
-- 2 Ofertas: até −500 feijões.
-- 3 Ofertas: até −1.000 feijões.
-- 4 Ofertas: até −1.500 feijões.
-- 5 Ofertas: até −2.000 feijões.
+- 1 Oferta: até 200 abaixo de zero.
+- 2 Ofertas: até 500.
+- 3 Ofertas: até 1.000.
+- 4 Ofertas: até 1.500.
+- 5 Ofertas: até 2.000.
 
 Se você retirar Ofertas enquanto estiver abaixo de zero, poderá dever mais do que suas Ofertas agora cobrem. Nesse caso, você não poderá gastar mais até que volte para dentro do seu limite. Você ainda pode ganhar feijões, e nada é retirado de você.
 
@@ -70,7 +70,7 @@ Algumas comunidades confirmam quem são seus membros. Nelas, um membro confirmad
 
 ## Emblemas de confiança
 
-Sua confiança aparece como um emblema. Os emblemas são Recém-chegado, Morador, Guardião e Ancião. A confiança por trás do seu emblema soma três elementos: o valor inicial que um apoio deu a você, a confiança obtida negociando e qualquer confiança concedida por um administrador. Um administrador pode conceder um emblema diretamente a um membro, sem trocas. Em uma comunidade que confirma seus membros, a linha de crédito que um membro confirmado recebe também conta.
+Sua confiança aparece como um emblema. Os emblemas são Recém-chegado, Morador, Guardião e Ancião. A confiança por trás do seu emblema soma três elementos: o valor inicial que um apoio deu a você, a confiança obtida negociando e qualquer confiança concedida por um administrador. Um administrador pode conceder um emblema diretamente a um membro, sem trocas. Em uma comunidade que confirma seus membros, um membro confirmado recebe um limite de crédito maior, não um emblema superior: seu emblema conta apenas o que ele fez.
 
 - Morador a partir de 200 de confiança.
 - Guardião a partir de 600 de confiança.

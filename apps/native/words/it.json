@@ -2,10 +2,10 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1); claude-opus-5-5 (two sentences, vault words fact check); gemini-3.8-flash-high (machine draft, top-up 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera 16 Oct); claude-opus-5-5 (machine draft, pair-from-camera fix round 1, 16 Oct); claude-opus-5-5 (machine draft, Link a device four digits, 16 Oct); claude-opus-5-5 (machine draft, key paths KEY-04/KEY-07 16 Oct); claude-opus-5-5 (machine draft, global entry P2, 18 Oct); claude-opus-5-5 (machine draft, G1 global words, 18 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 21 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-21",
     "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
     "glossary": {
       "Beans": "fagioli",
@@ -5895,5 +5895,103 @@
   "Once your node is running, you name your community in its settings app, invite the first members, and they invite the rest. Turn on \"publish location\" there, and people near you who asked to be told will hear about it.": "Una volta avviato il nodo, dai un nome alla comunità nella sua app delle impostazioni, inviti i primi membri e loro inviteranno gli altri. Attiva «pubblica posizione» e le persone vicine che hanno chiesto di essere informate ne riceveranno notizia.",
   "How to run a node, on beanpool.org": "Come gestire un nodo, su beanpool.org",
   "Copy my community's details": "Copia i dettagli della mia comunità",
-  "Copied. Paste them into your node's settings app.": "Copiati. Incollali nell'app delle impostazioni del tuo nodo."
+  "Copied. Paste them into your node's settings app.": "Copiati. Incollali nell'app delle impostazioni del tuo nodo.",
+  "A few examples to start from, and a guide.": "Qualche esempio da cui iniziare e una guida.",
+  "A fixed number of Beans": "Un numero fisso di fagioli",
+  "About this tool": "Informazioni su questo strumento",
+  "Allow notifications": "Consenti notifiche",
+  "Ask to borrow this?": "Chiedere questo in prestito?",
+  "Asked to borrow": "Chiesto in prestito",
+  "Beans per day": "Fagioli al giorno",
+  "Beans per week": "Fagioli a settimana",
+  "Books: how it's going": "Contabilità: come sta andando",
+  "Fee": "Tariffa",
+  "Free": "Gratuito",
+  "Free to borrow. Nothing is held: the lender says yes first.": "Prestito gratuito. Non viene trattenuto nulla: prima chi presta deve accettare.",
+  "Go on": "Continua",
+  "Go on to post": "Continua per pubblicare",
+  "Go straight in and add what you keep.": "Entra subito e aggiungi quello che conservi.",
+  "I already do this": "Lo faccio già",
+  "I already do this: go straight in and add what you keep.": "Lo faccio già: entra subito e aggiungi quello che conservi.",
+  "I'm starting out": "Sto iniziando",
+  "I'm starting out: a few examples to start from, and a guide.": "Sto iniziando: qualche esempio da cui iniziare e una guida.",
+  "It shows in the Market as an Offer.": "Viene mostrato nel Mercato come Offerta.",
+  "Keep a private copy on your community's server": "Conserva una copia privata sul server della tua comunità",
+  "Kept on this phone only. Nothing in it leaves this phone.": "Conservato solo su questo telefono. Nulla di ciò che contiene esce da questo telefono.",
+  "Kept on this phone, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "Conservato su questo telefono, con una copia privata sul server della tua comunità che solo tu puoi leggere tramite l'app. Come per tutto ciò che si trova su quel server, il suo gestore potrebbe farlo.",
+  "List it in the Market": "Inseriscilo nel Mercato",
+  "More tools": "Altri strumenti",
+  "Next you check it and tap Post. Nothing is posted before that.": "Poi lo controlli e tocchi Pubblica. Prima di allora non viene pubblicato nulla.",
+  "No thanks": "No grazie",
+  "No tools here yet. They come with updates of the app.": "Ancora nessuno strumento qui. Arriveranno con gli aggiornamenti dell'app.",
+  "Nothing is held until the lender says yes.": "Non viene trattenuto nulla finché chi presta non accetta.",
+  "Nothing is held until the lender says yes. Then the fee goes into a temporary Trust Wallet, and once it is back the lender receives it net of 1.5% transaction fee {owned} to fund the Commons Pool.": "Non viene trattenuto nulla finché chi presta non accetta. Poi la tariffa viene versata in un Portafoglio di Garanzia temporaneo, e una volta restituito l'articolo chi presta la riceve al netto della commissione dell'1,5% {owned} per finanziare il Fondo Comune.",
+  "Notifications are off for BeanPool on this phone, so reminders can't show.": "Le notifiche sono disattivate per BeanPool su questo telefono, quindi i promemoria non possono essere mostrati.",
+  "Open {tool}": "Apri {tool}",
+  "Options for {tool}": "Opzioni per {tool}",
+  "Put this tool on your Home? It shows what it keeps at a glance.": "Vuoi aggiungere questo strumento alla tua Home? Mostra a colpo d'occhio ciò che conserva.",
+  "Read in English": "Leggi in inglese",
+  "Read the guide": "Leggi la guida",
+  "Reminders": "Promemoria",
+  "Reminders your tools set on this phone. Nothing about them leaves it.": "Promemoria impostati dai tuoi strumenti su questo telefono. Nulla che li riguardi esce da qui.",
+  "Remove my data from this phone": "Rimuovi i miei dati da questo telefono",
+  "Removes this community's list, photos and reminders for this tool on this phone. The same tool in another community keeps its own. This can't be undone.": "Rimuove l'elenco, le foto e i promemoria di questa comunità per questo strumento su questo telefono. Lo stesso strumento in un'altra comunità conserva i propri. Questa operazione non può essere annullata.",
+  "Replace your unfinished post?": "Sostituire il tuo post non completato?",
+  "Show translation": "Mostra traduzione",
+  "Some examples": "Alcuni esempi",
+  "Something went wrong in this tool. What it keeps on this phone is safe.": "Si è verificato un errore in questo strumento. Ciò che conserva su questo telefono è al sicuro.",
+  "Stock: what you have": "Scorte: cosa hai",
+  "Things you can do on your own": "Cose che puoi fare per conto tuo",
+  "Things you can do on your own, that make your community stronger.": "Cose che puoi fare per conto tuo, che rendono la tua comunità più forte.",
+  "This page is in English for now.": "Questa pagina per ora è in inglese.",
+  "This page is newer in English.": "Questa pagina è più recente in inglese.",
+  "This tool isn't in this version of the app": "Questo strumento non è presente in questa versione dell'app",
+  "Tool reminders": "Promemoria degli strumenti",
+  "Trade: how you deal": "Scambi: come tratti",
+  "Update": "Aggiorna",
+  "Update BeanPool to use it. Your version is shown at the foot of Settings.": "Aggiorna BeanPool per usarlo. La tua versione è indicata in fondo a Impostazioni.",
+  "You have an unfinished post on the map. Going on replaces it.": "Hai un post non completato sulla mappa. Proseguendo verrà sostituito.",
+  "You have committed {credits} credits ({n} day) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} days) to a Trust Wallet for this offer.": {
+    "one": "Hai vincolato {credits} crediti ({n} giorno) nel Portafoglio di Garanzia per questa offerta.",
+    "other": "Hai vincolato {credits} crediti ({n} giorni) nel Portafoglio di Garanzia per questa offerta."
+  },
+  "You have committed {credits} credits ({n} month) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} months) to a Trust Wallet for this offer.": {
+    "one": "Hai vincolato {credits} crediti ({n} mese) nel Portafoglio di Garanzia per questa offerta.",
+    "other": "Hai vincolato {credits} crediti ({n} mesi) nel Portafoglio di Garanzia per questa offerta."
+  },
+  "You have committed {credits} credits ({n} week) to a Trust Wallet for this offer.|You have committed {credits} credits ({n} weeks) to a Trust Wallet for this offer.": {
+    "one": "Hai vincolato {credits} crediti ({n} settimana) nel Portafoglio di Garanzia per questa offerta.",
+    "other": "Hai vincolato {credits} crediti ({n} settimane) nel Portafoglio di Garanzia per questa offerta."
+  },
+  "You have requested to earn {credits} credits ({n} day) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} days) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Hai richiesto di guadagnare {credits} crediti ({n} giorno) ({net} netti dopo la commissione dell'1,5%) {owned} per soddisfare questa richiesta.",
+    "other": "Hai richiesto di guadagnare {credits} crediti ({n} giorni) ({net} netti dopo la commissione dell'1,5%) {owned} per soddisfare questa richiesta."
+  },
+  "You have requested to earn {credits} credits ({n} month) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} months) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Hai richiesto di guadagnare {credits} crediti ({n} mese) ({net} netti dopo la commissione dell'1,5%) {owned} per soddisfare questa richiesta.",
+    "other": "Hai richiesto di guadagnare {credits} crediti ({n} mesi) ({net} netti dopo la commissione dell'1,5%) {owned} per soddisfare questa richiesta."
+  },
+  "You have requested to earn {credits} credits ({n} week) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.|You have requested to earn {credits} credits ({n} weeks) ({net} net after 1.5% transaction fee) {owned} for fulfilling this need.": {
+    "one": "Hai richiesto di guadagnare {credits} crediti ({n} settimana) ({net} netti dopo la commissione dell'1,5%) {owned} per soddisfare questa richiesta.",
+    "other": "Hai richiesto di guadagnare {credits} crediti ({n} settimane) ({net} netti dopo la commissione dell'1,5%) {owned} per soddisfare questa richiesta."
+  },
+  "Your community asks for a profile photo before you post.": "La tua comunità richiede una foto del profilo prima di pubblicare.",
+  "Your community's server can't keep a copy yet, so for now it stays on this phone only.": "Il server della tua comunità non può ancora conservare una copia, quindi per ora rimane solo su questo telefono.",
+  "for {n} day|for {n} days": {
+    "one": "per {n} giorno",
+    "other": "per {n} giorni"
+  },
+  "for {n} week|for {n} weeks": {
+    "one": "per {n} settimana",
+    "other": "per {n} settimane"
+  },
+  "{n} month|{n} months": {
+    "one": "{n} mese",
+    "other": "{n} mesi"
+  },
+  "{n} week|{n} weeks": {
+    "one": "{n} settimana",
+    "other": "{n} settimane"
+  },
+  "📦 Ask to borrow": "📦 Chiedi in prestito"
 }

@@ -3501,5 +3501,14 @@
   "Adding {name} as a keeper, with {n} beans of named backing|Adding {name} as a keeper, with {n} beans of named backing": {
     "one": "{name} کو بطور نگران شامل کیا جا رہا ہے، {n} پھلی کی نامزد ضمانت کے ساتھ",
     "other": "{name} کو بطور نگران شامل کیا جا رہا ہے، {n} پھلیوں کی نامزد ضمانت کے ساتھ"
-  }
+  },
+  "A keeper switched off the server copy of this tool, so it is kept in this browser only. You can switch it on again in Settings.": "ایک نگران نے اس اوزار کی سرور کاپی بند کر دی ہے، اس لیے یہ صرف اسی براؤزر میں محفوظ ہے۔ آپ سیٹنگز میں اسے دوبارہ آن کر سکتے ہیں۔",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "آپ کی کمیونٹی کے سرور سے رابطہ نہیں ہو سکا، اس لیے کچھ نہیں بدلا۔ آن لائن ہونے پر دوبارہ کوشش کریں۔",
+  "Keep a private copy on your community's server": "اپنی کمیونٹی کے سرور پر ایک نجی کاپی رکھیں",
+  "Kept in this browser, with a private copy on your community's server that only you can read through the app. Like everything on that server, its operator could.": "اسی براؤزر میں محفوظ ہے، آپ کی کمیونٹی کے سرور پر ایک نجی کاپی کے ساتھ جسے صرف آپ ایپ کے ذریعے پڑھ سکتے ہیں۔ اس سرور کی ہر چیز کی طرح، اس کا آپریٹر اسے پڑھ سکتا ہے۔",
+  "One device at a time: the copy you changed last is the one kept.": "ایک وقت میں ایک ڈیوائس: آپ نے آخری بار جس کاپی میں تبدیلی کی تھی، وہی محفوظ رکھی جاتی ہے۔",
+  "Takes this community's data for {tool} out of this browser, and its copy on your community's server. Another device signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. It can't be undone.": "اس براؤزر سے {tool} کے لیے اس کمیونٹی کا ڈیٹا، اور آپ کی کمیونٹی کے سرور پر موجود اس کی کاپی نکال دیتا ہے۔ آپ کے طور پر سائن اِن کوئی دوسری ڈیوائس اپنے پاس موجود ڈیٹا رکھتی ہے اور اسے بھیجنا بند کر دیتی ہے۔ دوسری کمیونٹی میں یہی اوزار اپنا ڈیٹا الگ رکھتا ہے۔ یہ عمل واپس نہیں کیا جا سکتا۔",
+  "You can edit a message for 15 minutes after sending it.": "آپ پیغام بھیجنے کے بعد 15 منٹ تک اس میں ترمیم کر سکتے ہیں۔",
+  "Your community's server can't keep a copy yet, so for now it stays in this browser only.": "آپ کی کمیونٹی کا سرور ابھی کاپی محفوظ نہیں کر سکتا، اس لیے فی الحال یہ صرف اسی براؤزر میں رہے گا۔",
+  "Your community's server no longer keeps a copy of this tool, so it is kept in this browser only. You can switch the copy on again in Settings.": "آپ کی کمیونٹی کا سرور اب اس اوزار کی کاپی نہیں رکھتا، اس لیے یہ صرف اسی براؤزر میں محفوظ ہے۔ آپ سیٹنگز میں کاپی کو دوبارہ آن کر سکتے ہیں۔"
 }

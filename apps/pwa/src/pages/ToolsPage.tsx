@@ -259,7 +259,8 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         }
     }, [copyOf]);
     // Remove my data: the server's copy first, or nothing. It leaves the document empty, so the doors are back, as on a
-    // first open, and the copy off (the one setting kept, so Settings says what is true).
+    // first open, and the copy off (the one setting kept, so Settings says what is true). On a later screen (a record),
+    // back to the first, where the doors are: what it showed has gone (the phone's host route does the same).
     const remove = useCallback(async (): Promise<RemoveOutcome> => {
         if (copyOf && !await removeToolCopyFirst(copyOf).catch(() => false)) return 'failed';
         const gone = await store.remove();
@@ -269,8 +270,9 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
             setCopy({ setting: false, note: null, busy: false, failed: null });
         }
         setPastDoors(false);
+        if (manifest) setStack([{ screen: manifest.screens[0], params: {} }]);
         return 'removed';
-    }, [store.remove, copyOf, owner]);
+    }, [store.remove, copyOf, owner, manifest]);
 
     const step = stack[stack.length - 1];
     const back = useCallback(() => {

@@ -439,6 +439,25 @@ describe('the frame', () => {
         expect(await screen.findByTestId('tool-doors')).toBeInTheDocument();
     });
 
+    // Review of #2297: Remove my data on a later screen left that screen up, drawn over the empty document.
+    it('Remove my data on a later screen (a record) goes back to the first, where the doors are', async () => {
+        const manifest: ToolManifest = { ...scaffold.manifest, id: 'two', screens: ['main', 'record'] };
+        const Record = ({ host }: AnyToolScreenProps) => <p>{(host.doc.get() as { items: Array<{ name: string }> }).items[0].name}</p>;
+        const app = await scaffold.loader();
+        const two: WebApp = { id: 'two', screens: () => ({ ...app.default.screens(), record: Record }) };
+        await keep('two', scaffold.fixtures.docs.small);
+        draw({ manifest, loader: async () => ({ default: two }) }, { id: 'two', screen: 'record', key: 'a' });
+        expect(await screen.findByText('Ladder')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('tool-menu'));
+        fireEvent.click(screen.getByTestId('tool-menu-remove'));
+        fireEvent.click(screen.getByTestId('tool-remove'));
+        await act(async () => { fireEvent.click(screen.getByTestId('tool-remove-yes')); });
+        expect(await screen.findByText('Removed from this browser.')).toBeInTheDocument();
+        fireEvent.click(screen.getAllByTestId('tools-back')[0]);
+        expect(await screen.findByTestId('tool-doors')).toBeInTheDocument();
+        expect(screen.queryByText('Ladder')).toBeNull();
+    });
+
     // Review of #2274: Back is the stack's (§1.5). A tool opened from the Tools screen went straight past it, closing the page.
     it('Back from a tool opened on the Tools screen goes back to the Tools screen; from one opened anywhere else, closes the page', async () => {
         await keep('scaffold', scaffold.fixtures.docs.small);

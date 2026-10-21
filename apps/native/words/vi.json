@@ -5774,5 +5774,13 @@
   "Look around first, then join with this account": "Dạo xem trước, rồi tham gia bằng tài khoản này",
   "Meet people from everywhere and find communities near you. Look around first as a guest, then tap Join at the top to join as the account on this phone: your key and your 12 words stay the same, and nothing changes in your other communities.": "Gặp gỡ mọi người khắp nơi và tìm cộng đồng gần bạn. Dạo xem trước với tư cách khách, rồi nhấn Tham gia ở trên cùng để tham gia bằng tài khoản trên điện thoại này: khóa và 12 từ của bạn giữ nguyên, và không có gì thay đổi trong các cộng đồng khác.",
   "Once confirmed, their limit grows by up to {amount}: your community’s known floor, while they keep an offer listed.": "Sau khi được xác nhận, hạn mức của họ tăng thêm tới {amount}: mức sàn đã biết của cộng đồng bạn, miễn là họ tiếp tục đăng một lời đề nghị.",
-  "Uses the key and 12 words already on this phone. No new account is made.": "Dùng khóa và 12 từ đã có trên điện thoại này. Không tạo tài khoản mới nào."
+  "Uses the key and 12 words already on this phone. No new account is made.": "Dùng khóa và 12 từ đã có trên điện thoại này. Không tạo tài khoản mới nào.",
+  "A keeper switched off the server copy of this tool, so it is kept on this phone only. You can switch it on again in Settings.": "Một người quản lý đã tắt bản sao trên máy chủ của công cụ này, nên dữ liệu chỉ được lưu trên điện thoại này. Bạn có thể bật lại trong Cài đặt.",
+  "Asked to join": "Đã yêu cầu tham gia",
+  "Couldn't reach your community's server, so nothing changed. Try again when you're online.": "Không thể kết nối với máy chủ của cộng đồng bạn, nên không có gì thay đổi. Hãy thử lại khi bạn trực tuyến.",
+  "One phone at a time: the copy you changed last is the one kept.": "Mỗi lần một điện thoại: bản sao bạn chỉnh sửa lần cuối là bản được giữ lại.",
+  "Removes your data for this tool from this phone, and its copy on your community's server. Another phone signed in as you keeps what it has and stops sending it. The same tool in another community keeps its own. This can't be undone.": "Xóa dữ liệu của bạn đối với công cụ này khỏi điện thoại này và bản sao trên máy chủ của cộng đồng bạn. Một điện thoại khác đăng nhập bằng tài khoản của bạn sẽ giữ những gì đang có và ngừng gửi dữ liệu. Cùng công cụ đó ở cộng đồng khác vẫn giữ dữ liệu riêng. Hành động này không thể hoàn tác.",
+  "You can edit a message for 15 minutes after sending it.": "Bạn có thể chỉnh sửa tin nhắn trong 15 phút sau khi gửi.",
+  "Your community's server no longer keeps a copy of this tool, so it is kept on this phone only. You can switch the copy on again in Settings.": "Máy chủ của cộng đồng bạn không còn lưu bản sao của công cụ này, nên dữ liệu chỉ được lưu trên điện thoại này. Bạn có thể bật lại bản sao trong Cài đặt.",
+  "{name}, asked to join": "{name}, đã yêu cầu tham gia"
 }

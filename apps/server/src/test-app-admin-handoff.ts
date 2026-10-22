@@ -772,12 +772,14 @@ async function main() {
         const noSuspend = await postJson('/api/local/admin/reports/ho-r14a/action', {}, as(adminFresh));
         assert(noSuspend.status === 200 && reportStatus('ho-r14a') === 'actioned' && roleOf(anAdmin.pub) === 'admin' && statusOf(anAdmin.pub) === 'active',
             `actioning that report without suspending still goes through (got ${noSuspend.status} ${JSON.stringify(noSuspend.body)})`);
+        // A report's suspension is the pause an emergency suspension is (removal by vote S1): 'disabled', the role held aside.
+        const heldAside = (pk: string) => (db.prepare('SELECT role FROM suspended_node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
         const onPlain = await postJson('/api/local/admin/reports/ho-r14p/action', { suspendUser: true }, as(adminFresh));
-        assert(onPlain.status === 200 && statusOf(plain.pub) === 'suspended', `an admin suspends a plain member through a report (got ${onPlain.status} ${JSON.stringify(onPlain.body)})`);
+        assert(onPlain.status === 200 && statusOf(plain.pub) === 'disabled', `an admin pauses a plain member through a report (got ${onPlain.status} ${JSON.stringify(onPlain.body)})`);
         const ownerFresh = await exchange((await requestLink(owner)).body.handshakeToken);
         const byOwner = await postJson('/api/local/admin/reports/ho-r14o/action', { suspendUser: true }, as(ownerFresh));
-        assert(byOwner.status === 200 && roleOf(coOwner.pub) === null && statusOf(coOwner.pub) === 'suspended',
-            `an owner's fresh session suspends the co-owner through it, as today (got ${byOwner.status} ${JSON.stringify(byOwner.body)})`);
+        assert(byOwner.status === 200 && roleOf(coOwner.pub) === null && heldAside(coOwner.pub) === 'owner' && statusOf(coOwner.pub) === 'disabled',
+            `an owner's fresh session pauses the co-owner through it, the owner role held aside (got ${byOwner.status} ${JSON.stringify(byOwner.body)})`);
     }
 
     // ── 15. A pending re-key code was the whole credential on /api/member/re-enroll, which bound the new key with the

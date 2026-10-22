@@ -26,7 +26,8 @@
  *      groups: the key-less sockets get exactly this node's row of the table, bare, and never a member-only event; the
  *      member's socket gets every one in full; the visitor's and the suspended member's every public one, bare
  *   6. listings that leave the board or come back with no post event of their own (review 4113937195): a community
- *      removal (tickDecisions at the end of the grace), an admin prune of a member with two listings, an enterprise
+ *      removal's grace window, which pauses the member (removal by vote S1), and its end (tickDecisions), an admin prune
+ *      of a member with two listings, an enterprise
  *      paused and resumed, winding up and cancelled, and paused when its only keeper, the lead, is unbound; a member on
  *      holiday and back; a report actioned with a suspension; a Delete account over HTTP; a trade's step
  *      (othersGetDoorbell). Every socket off the member feed gets one bare listing doorbell per change, and an unsigned
@@ -429,10 +430,16 @@ async function main(): Promise<void> {
         const proposer = member('DoorbellProposer', { earned: 50 });
         const removal = createDecision({ authorPubkey: proposer.pk, title: 'Remove Dora', description: 'A doorbell test of a community removal', touches: 'member',
             effect: 'remove_member', subject: dora.pk });
+        assert((await board()).includes(doraOffer), `setup: ${READER} reads Dora's offer`);
+        await sleep(100);
+        clear();
+        // The grace window pauses her ('disabled', removal by vote S1), so her listings leave the board now, with a doorbell
+        // of their own, and the removal at its end rings again.
         const graced = executeDecision(removal.id);
+        await rings("a removal's grace window", 'post_removed', ['profile_updated', 'decision_updated']);
+        assert(graced.status === 'execution_pending_grace' && !(await board()).includes(doraOffer),
+            `a removal's grace window: ${READER} no longer reads her offer (${graced.status})`);
         db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 60_000).toISOString(), removal.id);
-        assert(graced.status === 'execution_pending_grace' && (await board()).includes(doraOffer),
-            `setup: the removal of Dora is in its grace, past its end, and ${READER} still reads her offer (${graced.status})`);
         await sleep(100);
         clear();
         const tick = tickDecisions();

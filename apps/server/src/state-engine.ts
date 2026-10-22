@@ -8147,7 +8147,14 @@ export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled
     // listings' doorbell, as for a holiday (setHolidayMode). Asked inside the caller's transaction, it goes once that is
     // done (ringListingDoorbell). A closed account's listings close with it, and its prune rings its own.
     if (status === 'disabled' && was !== 'disabled') ringListingDoorbell('post_removed');
-    else if (status === 'active' && was === 'disabled') ringListingDoorbell('post_updated');
+    else if (status === 'active' && was === 'disabled') {
+        ringListingDoorbell('post_updated');
+        // A re-key code made while the pause held them recorded 'disabled' as the status its cancel puts back
+        // (member-wizards.ts cancelRekeyCode), and a code made over it once it expires inherits that. The pause is over:
+        // what a cancel puts back now is 'active', or a lifted pause would come back with no record and no end.
+        db.prepare(`UPDATE rekey_requests SET prior_status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                    WHERE old_pubkey = ? AND status IN ('pending', 'expired') AND prior_status = 'disabled'`).run(publicKey);
+    }
     // A role it takes away is told to the owners (engine/node-roles.ts dropNodeRoleRow), as by whom the caller says.
     if (status !== 'active') {
         try { dropNodeRoleRow(publicKey, by ?? { how: status === 'pruned' ? 'removed from the community' : 'suspended' }); } catch { }

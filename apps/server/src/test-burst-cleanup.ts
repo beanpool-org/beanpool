@@ -24,7 +24,8 @@
  *   9. a report on a post is about the post's author, whoever the reporter names: it is filed so, the reports list
  *      names the author, and a post report that names another member opens that member's group to nobody
  *  10. a moderator's own report opens nobody's group to them; another member's report does
- *  11. a member suspended from a report, or by an admin's status, shows as suspended
+ *  11. a member paused from a report ('disabled', removal by vote S1), or suspended by a report before that ('suspended'),
+ *      shows as suspended
  *  12. an undo weighs each post as if the whole hide were undone, so it never keeps hidden what reports would not hide
  *  13. a hide and its undo ring each open socket once, not once per post
  *  14. a report on a post id nobody has posted is refused; one that got in anyway (filed before that rule, or copied
@@ -575,13 +576,14 @@ async function main(): Promise<void> {
     // ── 11. statuses ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── 11. a member suspended from a report shows as suspended ──');
     const onB2 = await call('POST', pat, '/api/reports', { reporterPubkey: pat.pk, targetPubkey: bb2.pk, reason: 'spam' });
+    // A report's suspension is the pause an admin's is (removal by vote S1): 'disabled'.
     const susp = await adm('POST', `/api/local/admin/reports/${onB2.body?.report?.id}/action`, { suspendUser: true });
-    assert(susp.status === 200 && statusOf(bb2) === 'suspended', `setup: an admin suspends B2 from a report (${susp.status} ${statusOf(bb2)})`);
+    assert(susp.status === 200 && statusOf(bb2) === 'disabled', `setup: an admin pauses B2 from a report (${susp.status} ${statusOf(bb2)})`);
     const sB2 = ((await adm('GET', `/api/local/admin/members/${bb1.pk}/burst`)).body?.others ?? []).find((a: any) => a.publicKey === bb2.pk);
     assert(sB2?.status === 'suspended', `B1's group lists B2 as suspended (${sB2?.status})`);
-    db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(bb2.pk);
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(bb2.pk);
     const dB2 = ((await adm('GET', `/api/local/admin/members/${bb1.pk}/burst`)).body?.others ?? []).find((a: any) => a.publicKey === bb2.pk);
-    assert(dB2?.status === 'suspended', `and one suspended by an admin's status ('disabled') too (${dB2?.status})`);
+    assert(dB2?.status === 'suspended', `and one a report suspended before its suspension was a pause ('suspended') too (${dB2?.status})`);
 
     // ── 12. an undo weighs each post with the whole hide undone ──────────────────────────────────
     console.log('\n── 12. an undo weighs each post with the whole hide undone ──');
@@ -656,8 +658,8 @@ async function main(): Promise<void> {
     await own('POST', `/api/local/admin/users/${sam.pk}/freeze`, { freeze: false });
     await own('POST', `/api/local/admin/users/${vic.pk}/freeze`, { freeze: false });
     const act = await own('POST', `/api/local/admin/reports/${earlyRow}/action`, { suspendUser: true });
-    assert(act.status === 200 && statusOf(sam) === 'suspended' && statusOf(vic) === 'active',
-        `"action + suspendUser" on it suspends Sam, the post's author; Vic is untouched (${act.status} Sam ${statusOf(sam)}, Vic ${statusOf(vic)})`);
+    assert(act.status === 200 && statusOf(sam) === 'disabled' && statusOf(vic) === 'active',
+        `"action + suspendUser" on it pauses Sam, the post's author; Vic is untouched (${act.status} Sam ${statusOf(sam)}, Vic ${statusOf(vic)})`);
     // The phone app's report of an enterprise sends the enterprise's key as the post id too: still taken, about the account.
     const fund = member('Fund', 30);
     db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(fund.pk);
@@ -697,8 +699,8 @@ async function main(): Promise<void> {
     const pAct = await own('POST', `/api/local/admin/reports/${pulseRow}/action`, { removePulseItem: true, suspendUser: true, deletePost: true });
     const saulPostRow = db.prepare('SELECT active, status FROM posts WHERE id = ?').get(saulPost) as { active: number; status: string };
     const itemGone = (db.prepare('SELECT deleted_at FROM pulse_items WHERE id = ?').get(piaItem) as { deleted_at: string | null }).deleted_at;
-    assert(pAct.status === 200 && statusOf(pia) === 'suspended' && statusOf(saul) === 'active' && saulPostRow.active === 1 && !!itemGone,
-        `"action" on it removes Pia's item and suspends Pia; Saul and his post are untouched (${pAct.status} Pia ${statusOf(pia)}, Saul ${statusOf(saul)}, post ${saulPostRow.active === 1 ? 'up' : 'down'})`);
+    assert(pAct.status === 200 && statusOf(pia) === 'disabled' && statusOf(saul) === 'active' && saulPostRow.active === 1 && !!itemGone,
+        `"action" on it removes Pia's item and pauses Pia; Saul and his post are untouched (${pAct.status} Pia ${statusOf(pia)}, Saul ${statusOf(saul)}, post ${saulPostRow.active === 1 ? 'up' : 'down'})`);
 
     // ── 15. an undo weighs again until nothing changes; a post that goes back is as it was ───────
     console.log('\n── 15. an undo weighs again until nothing changes ──');

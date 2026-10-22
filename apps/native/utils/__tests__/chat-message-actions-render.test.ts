@@ -96,6 +96,7 @@ describe('ChatMessageActions render', () => {
         circleActionButton: { width: 32, height: 32 },
         circleActionButtonActive: {},
         circleActionButtonDanger: {},
+        editClosedBacking: {},
         editClosedText: { fontSize: 11, lineHeight: 14, flexShrink: 1 },
         bubbleContainer: {},
         bubbleMe: {},

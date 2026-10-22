@@ -81,9 +81,11 @@ export function ChatMessageRow({
                 {!isMe && actionBar}
             </View>
             {showActions && actions.editClosed && (
-                <Text style={[styles.editClosedText, isMe && { alignSelf: 'flex-end' }]}>
-                    {t('You can edit a message for 15 minutes after sending it.')}
-                </Text>
+                <View style={[styles.editClosedBacking, isMe && { alignSelf: 'flex-end' }]}>
+                    <Text style={styles.editClosedText}>
+                        {t('You can edit a message for 15 minutes after sending it.')}
+                    </Text>
+                </View>
             )}
         </View>
     );

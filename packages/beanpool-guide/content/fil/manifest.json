@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Mga miyembro ng iyong komunidad. I-tap ang isang tao upang makita ang kanyang profile, Mga Alok, Mga Kahilingan at trust badge.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Mga miyembro ng komunidad mo at mga kaibigan mo. I-tap ang isang tao para makita ang profile, o ang 💬 sa tabi ng miyembro para magmensahe.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Para sa mga may-ari ng komunidad. Pagsuri sa iyong 12 salita, pamamahala o pagbabalik ng server gamit ang iyong telepono, at ang pagsusuring kusa ng iyong telepono.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Iyong Tindahan",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Isang bintana sa harap ng sarili mong account, para sa mga Alok na pipiliin mo, sa ilalim ng isang pangalan.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Ang mga Alok mo sa ilalim ng isang pangalan. Pangalanan ito, sabihin kung anong uri ito, isara muna ito, o isara na.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

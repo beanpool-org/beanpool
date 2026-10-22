@@ -4,7 +4,7 @@ title: Pag-block sa isang tao
 summary: Itago ang mga post at mensahe ng isang tao mula sa iyo, at bawiin ito sa ibang pagkakataon.
 related: reporting, messages, privacy, getting-help
 help: Mga taong na-block mo. Nakatago sa iyo ang kanilang mga post at mensahe; mag-unblock ng tao rito.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Pag-block
@@ -34,8 +34,8 @@ Ginagawa ito ng iyong komunidad para sa mga block na itinatago nito para sa iyo.
 - Hindi ka nakakatanggap ng notipikasyon kapag nagsulat sila sa isang panggrupong chat, kahit na banggitin ka nila gamit ang @.
 - Kung humiling sila ng deal sa isa sa iyong mga listing, naghihintay ang kahilingan sa iyong mga deal nang walang notipikasyon. Kung pabayaan mo ito, magtatapos ito pagkalipas ng 7 araw, nang walang notipikasyon din.
 - Kung tatanggapin nila ang isa sa iyong Mga Alok kaagad, hindi ka makakatanggap ng notipikasyon, at wala rin kung kakanselahin nila ang deal na iyon pagkatapos. Lumalabas pa rin ang deal sa iyong mga deal, at ang mga mensahe nito sa iyong chat sa kanila, tulad ng kaninuman. Ang kanilang mga Munggo ay itinatabi at ibinabalik tulad ng dati.
-- Hindi sila maaaring gumawa ng isang listing na nakatugon lamang sa iyo.
-- Hindi mo sila maaaring idagdag. Kung idagdag ka nila, hindi ka aabisuhan. Kung naidagdag ka nila dati, ang linyang "idinagdag ka" sa iyong tab ng Tao ay mawawala. Ang iyong mga kaibigan ay hindi na makikita ka bilang isang karaniwang koneksyon sa profile ng taong na-block mo.
+- Hindi sila maaaring gumawa ng isang listing na nakatuon lamang sa iyo.
+- Hindi mo sila maaaring idagdag. Kung idagdag ka nila, hindi ka aabisuhan. Kung naidagdag ka nila dati, ang linyang "idinagdag ka" sa iyong tab ng Tao ay mawawala. Hindi ka na makikita ng iyong mga kaibigan bilang karaniwang koneksyon sa profile ng taong na-block mo.
 - Kung padadalhan ka nila ng Munggo na may tala, darating ang mga Munggo nang buo at ang tala ay hindi. Makikita mo ang "Munggo mula sa miyembrong na-block mo" sa halip, at makikita mo pa rin ito pagkatapos mong i-unblock sila.
 
 ## Kung ano ang hindi nito ginagawa
@@ -58,5 +58,6 @@ Ginagawa ito ng iyong komunidad para sa mga block na itinatago nito para sa iyo.
 
 - Buksan ang **Mga Setting**. Sa ilalim ng **Legal at Privacy**, i-tap ang **Pamahalaan ang mga Na-block na User**.
 - I-tap ang **I-unblock** sa tabi ng pangalan, o **I-unblock Lahat**.
+- Sa app sa telepono, maaari mo ring i-unblock ang isang tao mula sa kanilang profile. Sa ilalim ng kanilang pangalan, nakasulat ang "Na-block mo" at ang kanilang pangalan. I-tap doon ang **I-unblock**.
 
 Sa web app, ang pag-block at pag-unblock ay nangangailangan ng koneksyon sa iyong komunidad. Kung wala nito, sasabihin ito ng app at walang magbabago. Subukang muli kapag online ka na muli.

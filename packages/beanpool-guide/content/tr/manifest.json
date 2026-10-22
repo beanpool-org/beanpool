@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Topluluk üyeleri ve arkadaşlarınız. Profilini görmek için birine dokunun veya mesaj atmak için 💬 simgesine dokunun.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Topluluğunuzun üyeleri ve arkadaşlarınız. Profilini görmek için birine dokunun veya bir üyeye mesaj atmak için yanındaki 💬 simgesine dokunun.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Topluluk sahipleri için. 12 kelimenizi kontrol etme, telefonunuzla sunucuyu devralma veya geri yükleme ve telefonunuzun kendi kendine yaptığı kontrol.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Dükkânınız",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Kendi hesabınızın bir vitrini: seçtiğiniz Teklifler için, tek bir ad altında.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Tüm Tekliflerin tek bir ad altında. Ona bir ad verin, ne tür olduğunu söyleyin, şimdilik kapatın ya da tamamen kapatın.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

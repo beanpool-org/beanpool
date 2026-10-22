@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 5,
+  "version": 6,
   "language": "tr",
-  "hash": "7f5143f825041a8c029784ba53a676996097fc107d8752f1619c44cf9442d68c",
+  "hash": "817c0b05b5900d8ce4811cb3cc809135b0b012180e3151b9ccccb576a293c9e4",
   "sections": [
     {
       "id": "about",
@@ -41,6 +41,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3222,6 +3223,124 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Dükkânınız",
+      "summary": "Kendi hesabınızın bir vitrini: seçtiğiniz Teklifler için, tek bir ad altında.",
+      "help": "Tüm Tekliflerin tek bir ad altında. Ona bir ad verin, ne tür olduğunu söyleyin, şimdilik kapatın ya da tamamen kapatın.",
+      "sourceHash": "afc593ce2f4e5428",
+      "source-hash": "afc593ce2f4e5428",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Dükkân nedir"
+        },
+        {
+          "type": "p",
+          "text": "Dükkânınız, kendi hesabınızın bir vitrinidir. İçine koyduğunuz Teklifleri, tek bir ad altında ve hakkında birkaç kelimeyle bir arada tutar. Bunlardan gelen Fasulyeler, her Teklifte olduğu gibi sizindir. Bir girişim değildir: onu başka kimse tutmaz ve Tekliflerinizin zaten göstermediği hiçbir şeyi göstermez."
+        },
+        {
+          "type": "p",
+          "text": "Bulunduğunuz her toplulukta bir dükkânınız olur."
+        },
+        {
+          "type": "h2",
+          "text": "Dükkânı açma"
+        },
+        {
+          "type": "p",
+          "text": "Ana Sayfa'daki **Dükkânın ve aletlerin** kartından ya da **Aletler**'den **Dükkânın**'ı açın. Kartı Ana Sayfa'ya koymak için **Ana Sayfayı düzenle**'yi kullanın ve **Dükkânın ve aletlerin**'i ekleyin."
+        },
+        {
+          "type": "p",
+          "text": "**Dükkânımı aç**'a dokunun. Ona bir ad verene kadar adı sizden alınır: \"Ana dükkânı\"."
+        },
+        {
+          "type": "h2",
+          "text": "Adı, türü ve sözleri"
+        },
+        {
+          "type": "p",
+          "text": "Bunların her biri tek bir alandır. İstediğiniz sırayla doldurun ya da hiç doldurmayın:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ad:** en fazla 60 karakter. Yeniden sizin adınızla anılması için boş bırakın.",
+            "**Tür:** on dörtten biri, örneğin **Aletler ve ekipman**, **Onarım** ya da **Bahçeden veya çiftlikten yiyecek**. Komşularınızın sizi bulmasına yardım eder ve gösterilen aletleri seçer. Başka hiçbir şeyi değiştirmez.",
+            "**Hakkında:** ne olduğu, birkaç kelimeyle.",
+            "**Nasıl takas yaparım:** nereden alınacağı ve eşyaların ne zaman döneceği."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "İçine Teklif koyma"
+        },
+        {
+          "type": "p",
+          "text": "Bir dükkâna yalnızca buradaki herkese açık kendi Teklifleriniz girer. Bir İhtiyaç ya da bir gruba veya tek bir kişiye yönelik bir Teklif dışarıda kalır."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Bir Teklifi düzenlerken:** **Bunu dükkânına koy**'u işaretleyin ya da Teklifi çıkarmak için işareti kaldırın.",
+            "**Yayındaki Tekliflerimi ekle:** Dükkânın ekranında, zaten yayında olan Teklifleri işaretleyin ve **Dükkânıma koy**'a dokunun.",
+            "**Bir aletten:** bir aletten bir şey ilan ettiğinizde **Bunu dükkânına koy** işaretli gelir. Henüz dükkânınız yoksa o Teklifle birlikte açılır. Başlığını ya da sözlerini yeni Teklif formunda değiştirebilirsiniz ve yine de içeri girer. Onu tamamen değiştirirseniz ya da onun yerine başka bir şey paylaşırsanız dükkânınızın dışında yayınlanır ve uygulama size bunu söyler. İçine koymak için Teklifi açın, **İlanı Düzenle**'ye dokunun ve **Bunu dükkânına koy**'u işaretleyin."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Haritadaki yeni Teklif formunda henüz işaret kutusu yok. Teklifi paylaşın, sonra düzenleme ekranından ya da Dükkânın ekranından içine koyun."
+        },
+        {
+          "type": "h2",
+          "text": "Şimdilik kapatma"
+        },
+        {
+          "type": "p",
+          "text": "**Şimdilik kapat**'a dokunun. Ne zaman döneceğinizi söyleyebilirsiniz: bir hafta içinde, iki hafta içinde ya da bir ay içinde. Teklifleri Pazar'dan kalkar ve bekler. Kapalıyken içine hiçbir şey girmez ve Tekliflerinden hiçbiri tek başına yeniden yayına konamaz."
+        },
+        {
+          "type": "p",
+          "text": "Hepsini geri koymak için **Dükkânımı yeniden aç**'a dokunun. Kendiniz duraklattığınız bir Teklif duraklatılmış kalır."
+        },
+        {
+          "type": "h2",
+          "text": "Dükkânı kapatma"
+        },
+        {
+          "type": "p",
+          "text": "**Dükkânımı kapat**'a dokunun. Teklifleri Pazar'da sıradan Teklifler olarak kalır; **Tekliflerini de sonlandır**'ı seçerseniz onlar da sona erer. Özel alet listeleriniz telefonunuzda kalır. İstediğiniz zaman yeni bir dükkân açabilirsiniz."
+        },
+        {
+          "type": "p",
+          "text": "Onun eşyalarından biri için bir takas istenmişken ya da sürüyorken dükkânı kapatamaz ve şimdilik de kapatamazsınız. Uygulama kaç takasın açık olduğunu söyler ve **Takaslarım**'a giden bir düğme sunar."
+        },
+        {
+          "type": "h2",
+          "text": "Küresel toplulukta"
+        },
+        {
+          "type": "p",
+          "text": "Bir dükkân küresel toplulukta da aynı şekilde çalışır. Henüz katılmamış biri dükkânın ne tür bir dükkân olduğunu ve içinde kaç eşya bulunduğunu görür; asla onun adını ya da sizin adınızı görmez."
+        },
+        {
+          "type": "h2",
+          "text": "Web uygulamasında"
+        },
+        {
+          "type": "p",
+          "text": "Web uygulaması henüz dükkânları göstermiyor."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "Takaslarım",
       "summary": "Dahil olduğunuz her takas, yayındaki her ilanınız ve geçmiş takaslarınız için tek bir yer.",
@@ -3649,8 +3768,8 @@
       "slug": "near-you",
       "title": "Yakınınızdakileri bulma",
       "summary": "Yalnızca size veya seçtiğiniz herhangi bir yere belirli bir mesafedeki ilanları gösterin.",
-      "sourceHash": "e02b25e45f78d9fe",
-      "source-hash": "e02b25e45f78d9fe",
+      "sourceHash": "2db25a661f8751ec",
+      "source-hash": "2db25a661f8751ec",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3680,7 +3799,7 @@
         },
         {
           "type": "p",
-          "text": "Tarayıcınız BeanPool'un konumunuzu kullanmasına zaten izin veriyorsa seçici şu anda bulunduğunuz yerde açılabilir. İzin vermiyorsa sabit bir noktada açılır. **Uygula**'ya dokunmadan önce iğneyi kontrol edin veya hedef düğmesine ya da haritaya dokunun. Küresel toplulukta web uygulaması seçtiğiniz merkezi yaklaşık 11 metreye yuvarlayarak topluluğa gönderir."
+          "text": "Web uygulamasında seçici, seçtiğiniz son merkezde ya da yoksa topluluğun kendi yerinde açılır (topluluğun yeri yoksa dünya görünümüyle). **Uygula**'ya dokunmadan önce iğneyi kontrol edin veya merkezi seçmek için haritaya dokunun, iğneyi sürükleyin ya da hedef düğmesine dokunun. Konumunuzu yalnızca hedef düğmesine dokunduğunuzda ister. Küresel toplulukta web uygulaması seçtiğiniz merkezi, Pazar, Harita ve Ana Sayfa için, yaklaşık bir kilometreye yuvarlayarak topluluğa gönderir. Küçük bir yarıçap seçtiğinizde ya da Ana Sayfa'ya kaydettiğiniz bir arama küçük bir mesafe içinde baktığında daha yakın bir değer gönderir."
         },
         {
           "type": "p",
@@ -3741,8 +3860,8 @@
       "title": "Mesajlar",
       "summary": "Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.",
       "help": "Sohbetleriniz. Bire bir sohbetler uçtan uca şifrelidir. Açmak için bir sohbete dokunun veya bir ilandan başlatın.",
-      "sourceHash": "e7d6a44f876f54e7",
-      "source-hash": "e7d6a44f876f54e7",
+      "sourceHash": "dd41c095375671ac",
+      "source-hash": "dd41c095375671ac",
       "section": "talk",
       "related": [
         "people",
@@ -3789,14 +3908,15 @@
         {
           "type": "ul",
           "items": [
-            "Bir ilandan: **Mesaj** seçeneğine ve kişinin adına dokunun.",
+            "Bir profilden: profilini açın ve **Mesaj**'a dokunun. Orada onu arkadaş olarak da ekleyebilirsiniz.",
             "**Sohbet** içinden: kalem düğmesine dokunun, ardından kişiyi adına göre bulun. Dünya çapındaki toplulukta Yeni Mesaj, anlaşma yaptığınız kişileri ve arkadaşlarınızı listeler. Başka birini bulmak için adının en az 2 harfini yazın.",
-            "Arkadaşlarınızdan: **Sohbet**, ardından **Kişiler**, ardından **Arkadaşlar** yolunu izleyin ve bir adın yanındaki mesaj düğmesine dokunun."
+            "Üye listesinden: **Sohbet**, ardından **Kişiler**'e gidin ve **Topluluk** ya da **Arkadaşlar** içinde bir üyenin adının yanındaki 💬 simgesine dokunun.",
+            "Bir ilandan: **Mesaj** seçeneğine ve kişinin adına dokunun."
           ]
         },
         {
           "type": "p",
-          "text": "Web uygulamasında **✉️ Yeni Doğrudan Mesaj** seçeneğini veya bir ilandaki **💬 Mesaj** düğmesini kullanın. Arkadaşlarınız **Kişiler** sekmesi altındadır."
+          "text": "Web uygulamasında profilindeki **Mesaj**'ı, **Kişiler** altındaki satırındaki 💬 simgesini, **✉️ Yeni Doğrudan Mesaj** seçeneğini veya bir ilandaki **💬 Mesaj** düğmesini kullanın."
         },
         {
           "type": "h2",
@@ -4308,9 +4428,9 @@
       "slug": "people",
       "title": "Kişiler ve arkadaşlar",
       "summary": "Topluluk üyelerini bulma, arkadaş ekleme ve birine kefil olma.",
-      "help": "Topluluk üyeleri ve arkadaşlarınız. Profilini görmek için birine dokunun veya mesaj atmak için 💬 simgesine dokunun.",
-      "sourceHash": "7720f543f516d9dc",
-      "source-hash": "7720f543f516d9dc",
+      "help": "Topluluğunuzun üyeleri ve arkadaşlarınız. Profilini görmek için birine dokunun veya bir üyeye mesaj atmak için yanındaki 💬 simgesine dokunun.",
+      "sourceHash": "44b66169497e9909",
+      "source-hash": "44b66169497e9909",
       "section": "talk",
       "related": [
         "messages",
@@ -4337,7 +4457,7 @@
         },
         {
           "type": "p",
-          "text": "Profillerini görmek için bir kişiye dokunun: değerlendirmeleri ve ilanları ile telefonda Fasulye kullanılan bir toplulukta güven rozeti ve takasları. Bkz. \"Profiliniz\"."
+          "text": "Profillerini görmek için bir kişiye dokunun: değerlendirmeleri ve ilanları ile telefonda Fasulye kullanılan bir toplulukta güven rozeti ve takasları. Doğrudan profilinden **Mesaj** ile ona mesaj atabilir veya **+ Arkadaş ekle** ile onu arkadaş olarak ekleyebilirsiniz. Bkz. \"Profiliniz\"."
         },
         {
           "type": "h2",
@@ -4346,8 +4466,8 @@
         {
           "type": "ul",
           "items": [
-            "**Topluluk** içinde bir adın yanındaki **+ Ekle** seçeneğine dokunun. **Eklendi** olarak değişir. Onları tekrar çıkarmak için **Eklendi** seçeneğine dokunun. Web uygulamasında dokunamayacağınız **✓ Arkadaş** olarak değişir: birini çıkarmak için **Arkadaşlar** altındaki **Kaldır** seçeneğini kullanın.",
-            "**Arkadaşlar** içinde, bir sohbet başlatmak için mesaj düğmesine veya birini çıkarmak için kaldır düğmesine, ardından **Kaldır** seçeneğine dokunun.",
+            "**Topluluk** içinde bir sohbet başlatmak için 💬 simgesine dokunun ya da bir adın yanındaki **+ Ekle** seçeneğine dokunun. **Eklendi** olarak değişir. Onları tekrar çıkarmak için **Eklendi** seçeneğine dokunun. Web uygulamasında dokunamayacağınız **✓ Arkadaş** olarak değişir: birini çıkarmak için **Arkadaşlar** altındaki **Kaldır** seçeneğini kullanın. Birine mesaj atmayı ya da onu arkadaş olarak eklemeyi doğrudan profilinden de yapabilirsiniz.",
+            "**Arkadaşlar** içinde, bir sohbet başlatmak için 💬 simgesine veya birini çıkarmak için kaldır düğmesine, ardından **Kaldır** seçeneğine dokunun.",
             "Biri sizi eklediğinde **Arkadaşlar**'ın üst kısmında \"Sam seni ekledi\" gibi kimin eklediği ve **Sen de ekle** seçeneği yazar. Önce profilini görmek için adına dokunun. Bildirim yoktur. Onları siz de eklediğinizde veya 30 gün sonra bu satır kaybolur. En fazla 20 kişi gösterilir, ardından kaç kişi daha olduğu belirtilir.",
             "Herhangi bir 24 saat içinde en fazla 100 kişi ekleyebilirsiniz. Birini çıkarmak da sayılır. Bu sınıra ulaşırsanız uygulama bunu ve ne zaman tekrar birini ekleyebileceğinizi söyler.",
             "Engellediğiniz birini ekleyemezsiniz: önce engelini kaldırın. Bkz. \"Birini engelleme\"."
@@ -6720,8 +6840,8 @@
       "title": "Birini engelleme",
       "summary": "Birinin ilanlarını ve mesajlarını sizden gizleyin ve daha sonra bu işlemi geri alın.",
       "help": "Engellediğiniz kişiler. İlanları ve mesajları sizden gizlenir; engeli buradan kaldırabilirsiniz.",
-      "sourceHash": "be8515fdd8bc780e",
-      "source-hash": "be8515fdd8bc780e",
+      "sourceHash": "2fa23652f09ffb9b",
+      "source-hash": "2fa23652f09ffb9b",
       "section": "settings",
       "related": [
         "reporting",
@@ -6813,7 +6933,8 @@
           "type": "ul",
           "items": [
             "**Ayarlar**'ı açın. **YASAL VE GİZLİLİK** altında **Engellenen Kullanıcıları Yönet** seçeneğine dokunun.",
-            "Bir adın yanındaki **Engeli Kaldır** seçeneğine veya **Tümünün Engelini Kaldır** seçeneğine dokunun."
+            "Bir adın yanındaki **Engeli Kaldır** seçeneğine veya **Tümünün Engelini Kaldır** seçeneğine dokunun.",
+            "Telefon uygulamasında birinin engelini profilinden de kaldırabilirsiniz. Adının altında \"Engellediniz\" ve adı yazar. Orada **Engeli Kaldır**'a dokunun."
           ]
         },
         {

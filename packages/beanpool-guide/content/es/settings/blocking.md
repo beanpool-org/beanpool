@@ -4,7 +4,7 @@ title: Bloquear a alguien
 summary: Oculta las publicaciones y mensajes de alguien para no verlos, y reviértelo cuando quieras.
 related: reporting, messages, privacy, getting-help
 help: Personas que has bloqueado. Sus publicaciones y mensajes quedan ocultos; desbloquea a alguien aquí.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Cómo bloquear
@@ -58,5 +58,6 @@ Tu comunidad hace esto para los bloqueos que guarda para ti. Hoy en día se trat
 
 - Abre **Ajustes**. Bajo **Legal y privacidad**, toca **Administrar usuarios bloqueados**.
 - Toca **Desbloquear** junto a un nombre, o **Desbloquear a todos**.
+- En la app del teléfono también puedes desbloquear a alguien desde su perfil. Bajo su nombre dice «Bloqueaste a» y su nombre. Toca **Desbloquear** ahí.
 
 En la app web, bloquear y desbloquear necesitan una conexión con tu comunidad. Sin ella, la app te lo advertirá y nada cambiará. Inténtalo de nuevo cuando vuelvas a tener conexión.

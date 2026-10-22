@@ -4,7 +4,7 @@ title: Jemanden blockieren
 summary: Beiträge und Nachrichten einer Person ausblenden und dies später wieder aufheben.
 related: reporting, messages, privacy, getting-help
 help: Personen, die du blockiert hast. Deren Inhalte sind für dich unsichtbar; hier kannst du jemanden wieder freigeben.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Blockieren
@@ -58,5 +58,6 @@ Deine Community tut dies für Blockierungen, die sie für dich speichert. Derzei
 
 - Öffne die **Einstellungen**. Tippe unter **Rechtliches & Datenschutz** auf **Blockierte Benutzer verwalten**.
 - Tippe neben einem Namen auf **Freigeben** oder auf **Alle freigeben**.
+- In der Telefon-App kannst du jemanden auch über das Profil freigeben. Unter dem Namen steht „Du hast [Name] blockiert.“ Tippe dort auf **Freigeben**.
 
 In der Web-App erfordern das Blockieren und das Aufheben der Blockierung eine Verbindung zu deiner Community. Ohne Verbindung meldet die App dies, und es ändert sich nichts. Versuche es erneut, sobald du wieder online bist.

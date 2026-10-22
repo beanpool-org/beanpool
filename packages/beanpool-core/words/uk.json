@@ -814,5 +814,33 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "Вгорі: біб — ваша спільнота й довідник, ? пояснює цей екран, повзунки — Налаштування.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "Вгорі: ? пояснює поточний екран; у Налаштуваннях міститься весь довідник.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "Додайте перші картки: натисніть картку, щоб додати на Головну. Або натисніть «Готово» для звичних п'яти.",
-  "Step {n} of {total}": "Крок {n} із {total}"
+  "Step {n} of {total}": "Крок {n} із {total}",
+  "Things you own and might lend, and who has them.": "Речі, що вам належать і які ви можете позичити, та в кого вони зараз.",
+  "Tool shed": "Комора інструментів",
+  "When something lent outside BeanPool is due back": "Коли треба повернути річ, позичену поза BeanPool",
+  "Your shop and tools": "Ваша крамниця та інструменти",
+  "Your shop, and things you can do on your own.": "Ваша крамниця та те, що можна робити самостійно.",
+  "Your things, and what is out.": "Ваші речі та те, що зараз позичено.",
+  "a drill": "дриль",
+  "a ladder": "драбина",
+  "a tent": "намет",
+  "{name} is due back": "{name}: час повертати",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} річ · у вашій коморі",
+    "few": "{n} речі · усі у вашій коморі",
+    "many": "{n} речей · усі у вашій коморі",
+    "other": "{n} речі · усі у вашій коморі"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} річ · {listed} у вашій крамниці · {out} позичено",
+    "few": "{n} речі · {listed} у вашій крамниці · {out} позичено",
+    "many": "{n} речей · {listed} у вашій крамниці · {out} позичено",
+    "other": "{n} речі · {listed} у вашій крамниці · {out} позичено"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} річ · {out} позичено",
+    "few": "{n} речі · {out} позичено",
+    "many": "{n} речей · {out} позичено",
+    "other": "{n} речі · {out} позичено"
+  }
 }

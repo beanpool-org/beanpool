@@ -100,6 +100,7 @@ import { createCrowdfundProject } from './db/db.js';
 import { createDecision } from './decisions-engine.js';
 import { startHttpsServer, getKoaApp, resetAdminRateLimit } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { requestNonces } from './engine/member-signature.js';
 import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { ownerSessionHeaders, ownerPhoneSessionHeaders, seedOwnerForTests } from './admin-auth-test-harness.js';
@@ -278,6 +279,10 @@ async function main(): Promise<void> {
     initAdminPassword();
     await initTls();
     initStateEngine();
+    // The sweeps send Vera's every refused write and more, hundreds of signed requests in seconds with the gateway reset
+    // before each (call): the nonce store would hold a visitor's row to a newer account's 600 in flight first
+    // (engine/member-signature.ts NonceStore; test-nonce-store-cap measures it). Lifted, so only the rule refuses her.
+    requestNonces.setLimitsForTests({ keyMax: 1_000_000, newKeyMax: 1_000_000 });
     // Step 7c: the password alone opens no admin route with 2FA off: the admin calls go under an owner's key session,
     // made once here, before any section measures what changes.
     const ownerPub = seedOwnerForTests('visitorsOwner');

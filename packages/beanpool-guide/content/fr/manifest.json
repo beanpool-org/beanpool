@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Les membres de votre communauté et vos amis. Touchez une personne pour voir son profil ou touchez 💬 près d'un ami pour lui écrire.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Les membres de votre communauté et vos amis. Touchez une personne pour voir son profil, ou touchez 💬 près d'un membre pour lui écrire.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Pour les propriétaires d'une communauté. Vérifier vos 12 mots, reprendre la main ou restaurer le serveur avec votre téléphone, et vérification automatique par le téléphone.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Votre boutique",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Une vitrine sur votre propre compte, pour les Offres que vous choisissez, sous un seul nom.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Vos Offres sous un seul nom. Nommez-la, dites de quel type elle est, fermez-la pour le moment, ou fermez-la définitivement.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

@@ -3,8 +3,8 @@ slug: people
 title: Personas y amistades
 summary: Encuentra miembros de tu comunidad, agrega amistades y avala a alguien.
 related: messages, your-profile, joining, blocking
-help: Miembros de tu comunidad y tus amistades. Toca a alguien para ver su perfil o toca 💬 junto a una amistad para escribirle.
-source-hash: 7720f543f516d9dc
+help: Los miembros de tu comunidad y tus amistades. Toca a alguien para ver su perfil o toca 💬 junto a un miembro para escribirle.
+source-hash: 44b66169497e9909
 ---
 
 ## Encontrar personas
@@ -15,12 +15,12 @@ Toca **Charlas** y luego **Personas**. En la aplicación web, toca **Personas** 
 - **Comunidad:** todos los miembros. Busca por nombre. En el teléfono, ordena por **Más recientes**, **Nombre**, **Amigos**, **De confianza** o **Activos**. En la comunidad global muestra los miembros más cercanos a tu zona: escribe al menos 2 letras de un nombre para encontrar a cualquier otra persona.
 - **Invitaciones:** invita a alguien nuevo. Consulta «Unirse a BeanPool». Si aún no te has unido, este botón dice **Registrarse**. Cuando haya personas que hayan solicitado unirse a tu comunidad, muestra cuántas son y aparecen enumeradas bajo **Quiere unirse**. En la aplicación web este botón siempre es **🎟️ Invitaciones**, sin recuento ni lista de **Quiere unirse**.
 
-Toca a una persona para ver su perfil: sus reseñas y publicaciones y, en el teléfono en una comunidad con frijoles, su insignia de confianza y sus tratos. Consulta «Tu perfil».
+Toca a una persona para ver su perfil: sus reseñas y publicaciones y, en el teléfono en una comunidad con frijoles, su insignia de confianza y sus tratos. Puedes escribirle directamente desde su perfil con **Mensaje**, o agregarlo como amigo con **+ Agregar amigo**. Consulta «Tu perfil».
 
 ## Amigos
 
-- En **Comunidad**, toca **+ Agregar** junto a un nombre. Cambia a **✓ Agregado**. Toca **✓ Agregado** para quitar a la persona de nuevo. En la aplicación web cambia a **✓ Amigo**, sobre el cual no se puede tocar: para quitar a alguien, usa **Eliminar** bajo **Amigos**.
-- En **Amigos**, toca el botón de mensaje para iniciar un chat, o el botón de eliminar, luego **Eliminar**, para quitar a alguien.
+- En **Comunidad**, toca 💬 para iniciar un chat, o toca **+ Agregar** junto a un nombre. Cambia a **✓ Agregado**. Toca **✓ Agregado** para quitar a la persona de nuevo. En la aplicación web cambia a **✓ Amigo**, sobre el cual no se puede tocar: para quitar a alguien, usa **Eliminar** bajo **Amigos**. También puedes escribirle a alguien o agregarlo como amigo directamente desde su perfil.
+- En **Amigos**, toca 💬 para iniciar un chat, o el botón de eliminar, luego **Eliminar**, para quitar a alguien.
 - Cuando alguien te agrega, la parte superior de **Amigos** indica quién fue, como "Sam te agregó", con **Agregar también**. Toca su nombre para ver primero su perfil. No se envía ninguna notificación. La línea desaparece cuando le agregas también o después de 30 días. Se muestran hasta 20 personas y luego cuántas más hay.
 - Puedes agregar hasta 100 personas en cualquier período de 24 horas. Quitar a alguien también cuenta para el límite. Si lo alcanzas, la app te lo indica y cuándo podrás agregar a alguien de nuevo.
 - No puedes agregar a alguien que hayas bloqueado: desbloquéalo primero. Consulta «Bloquear a alguien».

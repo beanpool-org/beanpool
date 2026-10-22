@@ -712,5 +712,24 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "頂部區域：豆子圖示代表你的社群與指南，? 會說明目前畫面，滑桿圖示則是「設定」。",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "頂部：? 會說明你目前的畫面；「設定」則是完整指南所在之處。",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "新增你的第一批卡片：點選一張即可放上首頁。或點選「完成」，首頁將以常見的五張卡片開始。",
-  "Step {n} of {total}": "第 {n} 步，共 {total} 步"
+  "Step {n} of {total}": "第 {n} 步，共 {total} 步",
+  "Things you own and might lend, and who has them.": "你擁有、可能借出的物品,以及目前在誰手上。",
+  "Tool shed": "工具間",
+  "When something lent outside BeanPool is due back": "在 BeanPool 之外借出的物品到期歸還時",
+  "Your shop and tools": "你的小店與工具",
+  "Your shop, and things you can do on your own.": "你的小店,以及你可以自己完成的事。",
+  "Your things, and what is out.": "你的物品,以及借出去的有哪些。",
+  "a drill": "一把電鑽",
+  "a ladder": "一座梯子",
+  "a tent": "一頂帳篷",
+  "{name} is due back": "{name} 到期歸還",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "other": "{n} 件物品 · 都在你的工具間"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "other": "{n} 件物品 · {listed} 件在你的小店 · {out} 件借出"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "other": "{n} 件物品 · {out} 件借出"
+  }
 }

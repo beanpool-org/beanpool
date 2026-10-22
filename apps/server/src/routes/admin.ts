@@ -47,7 +47,7 @@ import {
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
 import { gatewayAllowlistRefusal } from '../config/gateway.js';
-import { clientIp } from '../client-ip.js';
+import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
@@ -382,12 +382,16 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
                 pubKeyHex, signature: signatureBase64, timestamp: timestampHeader, nonce,
                 method: ctx.method, path: ctx.path, body: (ctx as any).rawBody ?? '',
                 signedFor: typeof signedForHeader === 'string' ? signedForHeader : null,
-            }, { consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces });
+            }, {
+                consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces, client: clientLimiterKey(ctx),
+                perMinute: getGatewayConfig().rateLimiting?.maxRequestsPerMinute ?? 120,
+            });
             if (verdict.ok) {
                 targetPubkey = verdict.signer;
                 selfPubkey = verdict.signer;
             } else {
                 ctx.status = verdict.status === 403 || verdict.status === 400 ? 401 : verdict.status;
+                if (verdict.retryAfterSec) ctx.set('Retry-After', String(verdict.retryAfterSec));
                 ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
                 return;
             }

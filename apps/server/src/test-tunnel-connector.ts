@@ -181,10 +181,10 @@ async function main(): Promise<void> {
     });
     const fakes = () => fake.runs().filter((r) => alive(r.pid));
     /** Until exactly one fake runs, it is the connector's child, and it was started with `token` (it records itself as it starts). */
-    const upOn = (token: string) => until(() => {
+    const upOn = (token: string, ms?: number) => until(() => {
         const f = fakes();
         return f.length === 1 && f[0].env.TUNNEL_TOKEN === token && tunnelConnectorForTests().pid === f[0].pid;
-    });
+    }, ms);
     const T1 = 'eyJhIjoiYWxwaGEtMSJ9.token-one-4f1c9a2e';
     const servers: { app: http.Server | null } = { app: null };
     let settingsPost: ((p: string, body?: unknown) => Promise<{ status: number; body: any }>) | null = null;
@@ -282,13 +282,14 @@ async function main(): Promise<void> {
             const again = await restartTunnel();
             assert(again?.state === 'starting' && tunnelConnectorForTests().pid !== pid, 'Restart tunnel: a new child');
             assert(fake.exits().some((e) => e.pid === pid && e.signal === 'SIGTERM'), 'the old one got SIGTERM');
-            await until(() => getTunnelStatus().state === 'connected');
+            // Connected once the new child's /ready answers, which on a loaded runner can take seconds; then 400 ms for a claim.
+            await until(() => getTunnelStatus().state === 'connected', 30_000);
             await sleep(400);
             assert(claims().length === 1, `connected again: no second claim (${claims().length})`);
 
             await resetTunnelConnectorForTests();
             await syncTunnel();
-            await until(() => getTunnelStatus().state === 'connected');
+            await until(() => getTunnelStatus().state === 'connected', 30_000);
             await sleep(400);
             assert(getTunnelStatus().state === 'connected' && claims().length === 1, `after the process restarts either: no second claim (${claims().length})`);
         });
@@ -366,10 +367,13 @@ async function main(): Promise<void> {
             let most = 0;
             const sampler = setInterval(() => { most = Math.max(most, fakes().length); }, 10);
             await restartTunnel();
-            await fake.waitForRuns(n0 + 6, 5_000);
+            await fake.waitForRuns(n0 + 6, 30_000);
             clearInterval(sampler);
-            const starts = fake.runs().slice(n0).map((r) => r.at);
-            const gaps = starts.slice(1).map((t, i) => t - starts[i]);
+            const crashed = fake.runs().slice(n0);
+            const starts = crashed.map((r) => r.at);
+            // The wait: from each child's crash (as it records itself) to the next one's process start. Not record to record,
+            // which adds a child's own start-up, on a loaded runner more than this section's 600 ms of slack.
+            const gaps = crashed.slice(1).map((r, i) => r.started - crashed[i].at);
             assert(starts.length >= 6, `restarted after each crash (${starts.length} starts)`);
             const scheduled = tunnelLogs().slice(log0)
                 .map((l) => l.message.match(/starting it again in (\d+)\s*ms/))
@@ -424,6 +428,10 @@ async function main(): Promise<void> {
             const b = syncTunnel();
             const c = restartTunnel();
             await Promise.all([a, b, c]);
+            // The connector's start resolves on the child's 'spawn' event; the child records itself only once its Node is up,
+            // which on a loaded runner is well past any fixed wait (CI: 200 ms was not). So until it has, then a short settle
+            // for a second one to show, the sampler watching throughout.
+            await upOn('eyJ.token-six', 30_000);
             await sleep(200);
             clearInterval(sampler);
             assert(most <= 1 && fakes().length === 1, `one child, never two (at most ${most}; now ${fakes().length})`);

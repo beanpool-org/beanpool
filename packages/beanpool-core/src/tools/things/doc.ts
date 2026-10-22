@@ -7,7 +7,11 @@
  */
 
 export const THINGS_DOC_VERSION = 1;
-/** The most items the document keeps, which keeps it under its byte bound. */
+/**
+ * The most items the document keeps. It is not what keeps the document under its byte bound: at every field's cap a thing
+ * is about 1.4 KB (about 4.5 KB in emoji), so some 45 of them fill 64 KB, and past the bound the write is refused
+ * (maxBytes), never cut.
+ */
 export const THINGS_MAX_ITEMS = 100;
 export const THINGS_NAME_CHARS = 80;
 export const THINGS_CATEGORY_CHARS = 40;

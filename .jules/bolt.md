@@ -21,6 +21,9 @@ lookups/counts → O(1)" fix). Before opening a PR:
 - 2026-10-19 #2171: getAllProjects Map lookup: no measured benefit (#1723).
 - 2026-10-18 #2114: engine one-shot queries stay `db.prepare`; `prepared()` is for per-row statements only (statements.ts). Measure first.
 
+### 2026-10-20 — "O(1) standby lookups in standby health reporting" — CLOSED, NO MEASURABLE BENEFIT.
+A node has 1 or 2 standbys (capped at MAX_STANDBYS = 8), so replacing `.find()` with a Map lookup yields no measurable gain.
+
 ### 2026-10-16 — "Map for user groups in the native Market" (#2011) — merged in error; rule 11 stands (#1968). No more Map-for-find swaps without a profile.
 
 ### 2026-10-01 — "batch pre-fetch keepers and pledges in listTreasuriesHandler" (#1364) — CLOSED, NO MEANINGFUL GAIN.
@@ -272,7 +275,3 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-16 - O(1) Keeper Lookups in EnterpriseDecisions Component
 **Learning:** In `apps/pwa/src/components/EnterpriseDecisions.tsx`, `nameOf` executed `keepers.find(k => k.publicKey === pk)` on every decision card and author name resolution during component rendering.
 **Action:** Pre-computed `keepersMap` indexed by `publicKey` using `React.useMemo`, turning keeper callsign resolution into constant-time $O(1)$ Map retrievals.
-
-## 2026-10-20 - O(1) Standby Lookups in Standby Health Reporting
-**Learning:** In `apps/server/src/services/standby-health.ts`, generating log lines, push notification bodies, and Settings banners iterated over problems and ran `s.standbys.find(y => y.id === ...)` multiple times per problem item, resulting in nested array iterations ($O(P \times S)$ complexity).
-**Action:** Pre-computed `standbyMap` Map indexed by standby ID prior to problem formatting and banner generation, reducing standby lookup to constant-time $O(1)$ retrievals ($O(P + S)$ overall).

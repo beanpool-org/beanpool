@@ -228,8 +228,9 @@ export const NONCE_SWEEP_ABOVE = 10_000;
  * scratch/fable-redo/verdict-identity-auth.md §2). Without it the store was the one map a stranger with fresh keypairs
  * could grow without bound: one address is held to ~18,000 live nonces by the gateway limiter, but a flood rotating
  * IPv6 /64s, one request each, spent ~5,200 nonces a second on a Mac, ~3 M held over the 10-minute hold, past the
- * 512 MB heap. An app's nonce (32 hex, ~134 B measured) is held 5 minutes, so this is ~35 MB at worst, and ~830 signed
- * requests a second for 5 minutes before an honest community would meet it.
+ * 512 MB heap. A full store measured +26 MB of heap with apps' nonces (32 hex), +49 MB with every one MAX_NONCE_LENGTH
+ * long (2026-10-22, Node 26 on a Mac). An app's nonce is held 5 minutes, so an honest community would meet this only at
+ * ~830 signed requests a second for 5 minutes.
  *
  * When full, a request that needs a new nonce is refused as busy (503 store_full, Retry-After) until entries expire,
  * and the app tries again after the wait; a nonce still in its window is never forgotten to make room. A shorter

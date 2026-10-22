@@ -478,6 +478,7 @@ export const SUITES = [
     'test-decisions-client-api',
     'test-decisions-voting-answers',
     'test-decisions-scoped',
+    'test-enterprise-decisions',
     'test-decisions-group',
     'test-decisions-scoped-push',
     'test-decisions-tick-route-gone',

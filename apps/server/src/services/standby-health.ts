@@ -269,7 +269,8 @@ function evaluate(s: HealthState, t: number): void {
     // Written before the push: a push that throws never makes the next report push the same incident again.
     write(s);
     // Named without its address: a log line never carries one.
-    logger.security('P2P', `[StandbyHealth] ⚠️ The standby needs this community's owners: ${problems.map((p) => sentence(p, s, false)).join(' ')}`);
+    const standbyMap = new Map(s.standbys.map((x) => [x.id, x]));
+    logger.security('P2P', `[StandbyHealth] ⚠️ The standby needs this community's owners: ${problems.map((p) => sentence(p, s, false, standbyMap)).join(' ')}`);
     if (flapping) {
         logger.info('P2P', '[StandbyHealth] No push for this one: the last incident ended less than an hour ago. Settings shows it.');
         return;
@@ -338,9 +339,10 @@ export function standbyIncidentOpen(): boolean {
 
 const PUSH_TITLE = 'Your standby server needs attention';
 
+// ⚡ Bolt: O(1) lookup Map helper for standby health reporting
 /** How the owner is told which standby. `withAddress` false for a log line, which never names an address. */
-function label(id: string, s: HealthState, withAddress = true): string {
-    const x = s.standbys.find((y) => y.id === id);
+function label(id: string, s: HealthState, withAddress = true, standbyMap?: Map<string, StandbySeen>): string {
+    const x = standbyMap ? standbyMap.get(id) : s.standbys.find((y) => y.id === id);
     const others = s.standbys.length > 1;
     if (withAddress && x?.address) return `The standby at ${x.address}`;
     return others ? `Standby ${id.slice(0, 6)}` : 'The standby';
@@ -367,9 +369,10 @@ function pairedReason(x: StandbySeen | undefined): string | null {
     return null;
 }
 
-function sentence(p: Problem, s: HealthState, withAddress = true): string {
-    const who = label(p.standby, s, withAddress);
-    const reason = p.kind === 'stopped' || p.kind === 'refused' ? pairedReason(s.standbys.find((y) => y.id === p.standby)) : null;
+function sentence(p: Problem, s: HealthState, withAddress = true, standbyMap?: Map<string, StandbySeen>): string {
+    const target = standbyMap ? standbyMap.get(p.standby) : s.standbys.find((y) => y.id === p.standby);
+    const who = label(p.standby, s, withAddress, standbyMap);
+    const reason = p.kind === 'stopped' || p.kind === 'refused' ? pairedReason(target) : null;
     if (reason && p.kind === 'stopped') return `${who} has not made a copy of this server since ${timeInWords(p.since)}: ${reason}.`;
     if (reason && p.kind === 'refused') return `${who}'s last ${p.count} copies of this server were refused: ${reason}.`;
     if (p.kind === 'stopped') return `${who} has not made a copy of this server since ${timeInWords(p.since)}.`;
@@ -398,7 +401,8 @@ function sentence(p: Problem, s: HealthState, withAddress = true): string {
 }
 
 function pushBody(problems: Problem[], s: HealthState): string {
-    const reason = problems.map((p) => (p.kind === 'stopped' || p.kind === 'refused' ? pairedReason(s.standbys.find((y) => y.id === p.standby)) : null))
+    const standbyMap = new Map(s.standbys.map((x) => [x.id, x]));
+    const reason = problems.map((p) => (p.kind === 'stopped' || p.kind === 'refused' ? pairedReason(standbyMap.get(p.standby)) : null))
         .find((r): r is string => !!r);
     if (reason) return `Your standby server needs attention: ${reason}. Open Settings to see what is wrong.`;
     const kinds = new Set(problems.map((p) => p.kind));
@@ -453,6 +457,8 @@ export interface StandbyHealthBanner {
 export function getStandbyHealthBanner(): StandbyHealthBanner {
     if (!watchesStandbys()) return { incident: null, standbys: [] };
     const s = read();
+    // ⚡ Bolt: O(1) standby Map lookups during banner construction
+    const standbyMap = new Map(s.standbys.map((x) => [x.id, x]));
     const problems = s.incident?.problems ?? [];
     const sick = new Set(problems.map((p) => p.standby));
     return {
@@ -460,12 +466,12 @@ export function getStandbyHealthBanner(): StandbyHealthBanner {
             id: s.incident.id,
             startedAt: s.incident.startedAt,
             pushed: s.incident.pushedAt !== null && s.incident.pushed > 0,
-            lines: problems.map((p) => sentence(p, s)),
-            whatToDo: [...new Set(problems.map((p) => (pairedReason(s.standbys.find((y) => y.id === p.standby)) && (p.kind === 'stopped' || p.kind === 'refused')
+            lines: problems.map((p) => sentence(p, s, true, standbyMap)),
+            whatToDo: [...new Set(problems.map((p) => (pairedReason(standbyMap.get(p.standby)) && (p.kind === 'stopped' || p.kind === 'refused')
                 ? PAIR_AGAIN : WHAT_TO_DO[p.kind])))],
         } : null,
         standbys: s.standbys.map((x) => ({
-            id: x.id, label: label(x.id, s), lastPullAt: x.lastPullAt, lastCopyAt: x.lastCopyAt, lastExactAt: x.lastExactAt,
+            id: x.id, label: label(x.id, s, true, standbyMap), lastPullAt: x.lastPullAt, lastCopyAt: x.lastCopyAt, lastExactAt: x.lastExactAt,
             healthy: !sick.has(x.id), paired: pairedOf(x),
         })),
     };

@@ -1589,7 +1589,6 @@
   "Message {name}": "{name}にメッセージ",
   "@mentions still reach you.": "@メンションは引き続き届きます。",
   "to {name}": "{name}宛て",
-  "Search people in this community": "このコミュニティのメンバーを検索",
   "Search people": "メンバーを検索",
   "Loading people": "メンバーを読み込み中",
   "Nobody by that name.": "その名前のメンバーはいません。",

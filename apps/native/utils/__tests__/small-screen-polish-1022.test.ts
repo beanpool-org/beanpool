@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+
+vi.mock('react-native', () => ({
+    StyleSheet: { create: (s: any) => s },
+    Platform: { OS: 'ios', select: (o: any) => o.ios ?? o.default },
+}));
+
 import { contrastRatio } from '../readable-color';
 import { lightColors, darkColors, palette } from '../../constants/colors';
 import { makeChatStyles } from '../../components/chat/styles';

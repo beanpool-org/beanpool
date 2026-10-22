@@ -1646,6 +1646,22 @@ describe('MapPage: where the pins are read from (S5)', () => {
             expect(card).not.toHaveTextContent('9.9 km');
             expect(view!.queryByTestId('map-near-empty')).toBeNull();
         });
+
+        it('a listing pushed over the live feed joins only inside the exact circle, not the wider one the node was asked for', async () => {
+            resetLivePostsForTest();
+            vi.mocked(api.getMarketplacePosts).mockImplementation(async () => [] as any);
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+            await view!.findByTestId('map-near-empty');
+            const push = (id: string, lng: number) => act(async () => {
+                const change = livePostChange({ type: 'new_post', post: { ...ring, id, lng, updatedAt: '2026-09-24T01:00:00.000Z', audienceScope: 'public' } })!;
+                expect(routeLivePostChange(change, mockIdentity.publicKey)).toBe(true);
+            });
+            await push('pushed-ring', 153.652);
+            expect(view!.queryByTestId('map-near-empty')).not.toBeNull();
+            await push('pushed-inside', 153.61);
+            await waitFor(() => expect(view!.queryByTestId('map-near-empty')).toBeNull());
+        });
     });
 });
 

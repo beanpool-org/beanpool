@@ -17,6 +17,7 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 - **Chats**: 30 lines a minute per member, in direct messages as well as group and event chats and an enterprise's discussion.
 - **Checking an invite code** before joining: 30 a minute per internet address.
 - **Reports**: 10 an hour per member.
+- **Signed requests in flight**: 250,000 on the whole server. Each signed request from an app carries a number it uses only once, and your server remembers it for about 5 minutes (up to 10 for a phone whose clock runs ahead), so nobody can send that request again. A busy community uses a small share of this; a flood of requests from many internet addresses can fill it. While it is full, a request that needs a new number is answered "busy" (HTTP 503) and told to wait a minute, until the old numbers run out. Nothing a member already did is affected. Your server writes a line to its security log when this happens, at most once an hour. It can't be changed.
 
 ![Gateway switches and rate limits under Gateway & Peers](images/appliance-gateway.webp)
 
@@ -120,5 +121,6 @@ The message says which:
 - "You've shared a lot of photos today. Try again tomorrow.": photo upload day budget exceeded (HTTP 429).
 - "This community's storage is nearly full. Tell its owner.": free-disk floor reached on the disk image store (HTTP 507).
 - "Too many wrong admin passwords from your network", or "This node is getting a lot of wrong admin passwords from elsewhere": the password brake.
+- "This community is very busy right now. Please try again in a minute." (HTTP 503): signed requests in flight, 250,000 on the whole server.
 
 The gateway, the day's changes and the password brake also write a line in the logs.

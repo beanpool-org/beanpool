@@ -245,6 +245,32 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(host.querySelector('[data-testid="local-community-sheet"]')?.textContent).toContain(LOCAL_COMMUNITY_SHEET.features.beans);
         });
 
+        it('the mark, the strip and the sheet speak the member\'s language (every word through t())', async () => {
+            const { setLanguage, t } = await import('@beanpool/core');
+            const fs = await import('node:fs');
+            const path = await import('node:path');
+            const pt = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../../packages/beanpool-core/words/pt.json'), 'utf8'));
+            setLanguage('pt', [pt]);
+            try {
+                const keys = [LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_STRIP.lead.beans, LOCAL_COMMUNITY_STRIP.body.beans,
+                    LOCAL_COMMUNITY_SHEET.title, LOCAL_COMMUNITY_SHEET.features.beans, LOCAL_COMMUNITY_SHEET.common,
+                    LOCAL_COMMUNITY_SHEET.start, LOCAL_COMMUNITY_SHEET.nearYou, LOCAL_COMMUNITY_SHEET.howItWorks];
+                for (const k of keys) expect(t(k), k).not.toBe(k); // the catalog has every one, so a miss below is the screen's
+                await render(createElement(LocalCommunityMark, { variant: 'strip', feature: 'beans' }));
+                for (const k of [LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_STRIP.lead.beans, LOCAL_COMMUNITY_STRIP.body.beans]) {
+                    expect(text()).toContain(t(k));
+                    expect(text()).not.toContain(k);
+                }
+                await render(createElement(LocalCommunitySheet, { feature: 'beans', visible: true, onClose: () => {} }));
+                const sheet = host.querySelector('[data-testid="local-community-sheet"]')!.textContent ?? '';
+                for (const k of [LOCAL_COMMUNITY_SHEET.title, LOCAL_COMMUNITY_SHEET.features.beans, LOCAL_COMMUNITY_SHEET.common,
+                    LOCAL_COMMUNITY_SHEET.start, LOCAL_COMMUNITY_SHEET.nearYou, LOCAL_COMMUNITY_SHEET.howItWorks]) {
+                    expect(sheet).toContain(t(k));
+                    expect(sheet).not.toContain(k);
+                }
+            } finally { setLanguage('en'); }
+        });
+
         it('the sheet on its own: Start a community and Communities near you go to their screens', async () => {
             const onClose = vi.fn();
             await render(createElement(LocalCommunitySheet, { feature: 'beans', visible: true, onClose }));

@@ -2388,9 +2388,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             </p>
                             <p className="m-0 leading-relaxed text-[11px]">
                                 <Sentence
-                                    text={t('This post will be visible {groupOnly}. It will not appear in the public marketplace feed or on the public map.')}
+                                    text={t('This post will be visible only to active members of {group}. It will not appear in the public marketplace feed or on the public map.')}
                                     parts={{
-                                        groupOnly: <strong>{t('only to active members of {group}', { group: userGroupsById.get(targetGroupId)?.name || t('this group') })}</strong>
+                                        group: <strong>{userGroupsById.get(targetGroupId)?.name || t('this group')}</strong>
                                     }}
                                 />
                             </p>

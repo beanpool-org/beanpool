@@ -229,6 +229,33 @@ describe('PulseFeedCard Instagram link card (native)', () => {
         expect(links[0].textContent).toContain('Open on Instagram');
     });
 
+    it('resets imageFailed when item or thumbnail changes so recycled cards are not permanently locked in fallback', async () => {
+        await act(async () => {
+            root.render(createElement(PulseFeedCard, { item: instagramWithThumb, nodeUrl: 'https://node.example' }) as any);
+        });
+
+        expect(lastImageProps).not.toBeNull();
+
+        // Trigger image onError to switch to fallback mode
+        await act(async () => {
+            lastImageProps.onError();
+        });
+        expect(host.querySelector('img')).toBeNull();
+
+        // Feed updates or card recycled with a new item with thumbnail
+        const newItem = {
+            ...instagramWithThumb,
+            id: 'pulse-ig-new',
+            title: 'New ceramic bowl',
+        };
+        await act(async () => {
+            root.render(createElement(PulseFeedCard, { item: newItem, nodeUrl: 'https://node.example' }) as any);
+        });
+
+        // imageFailed reset, attempts image render again
+        expect(host.querySelector('img')).not.toBeNull();
+    });
+
     it('an Instagram item with a valid thumbnail shows the thumbnail with badge and drops the duplicate second link', async () => {
         await act(async () => {
             root.render(createElement(PulseFeedCard, { item: instagramWithThumb, nodeUrl: 'https://node.example' }) as any);

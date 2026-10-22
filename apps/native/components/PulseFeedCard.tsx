@@ -90,6 +90,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
     const compactHeader = windowWidth / fontScale < 360;
     const [imageFailed, setImageFailed] = useState(false);
     const thumbnailUri = resolvePulseThumbnailUrl(nodeUrl, item);
+
+    useEffect(() => {
+        setImageFailed(false);
+    }, [item.id, thumbnailUri]);
     const [showReport, setShowReport] = useState(false);
     const [reportReason, setReportReason] = useState<string | null>(null);
     const [submittingReport, setSubmittingReport] = useState(false);

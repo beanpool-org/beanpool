@@ -191,7 +191,7 @@ signed `/v1/report`.
 | Condition | Rule | Priority |
 |---|---|---|
 | `<server> down` | no answer as ours (a 3xx, a 5xx, a timeout, unreachable, or a 2xx that is "not a BeanPool answer": a node's needs JSON with its `version`, the vault's a `state` of open or locked — a parked page or a captive portal is down, never "locked") two looks in a row; cleared at the first answer | urgent |
-| `vault locked` | answers locked two looks in a row | urgent |
+| `vault locked` | answers locked two looks in a row; cleared only when it answers open: a locked look straight after a failed one (gone, and back still locked) decides nothing, so a raised one is never "open again" while it is locked | urgent |
 | `vault report` | its report missing, not signed by the ticket key ("report unverifiable"), unreadable, or not from now ("stale") two looks in a row; or its own report says a day's report was not made | high |
 | `vault backups`, `vault off-box copy` | its verified report says they fail, or the newest is over 2 h 10 min old | high |
 | `<server> now runs …` | the version or commit changed since the last look; told once | default (the vault: high) |

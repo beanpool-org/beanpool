@@ -11,6 +11,8 @@
  * also shows it under the chip, since a touch screen has no hover.
  */
 
+import { t } from '@beanpool/core';
+
 export type SyncMode = 'online' | 'guest' | 'offline';
 
 const STATUS_CONFIG = {
@@ -69,7 +71,7 @@ export function SyncChip({
         <div
             role="status"
             aria-live="polite"
-            aria-label={`Network status: ${name}${note ? `. ${note}` : ''}`}
+            aria-label={note ? t('Network status: {name}. {note}', { name, note }) : t('Network status: {name}', { name })}
             title={note || (dotOnly ? name : undefined)}
             data-testid="sync-chip"
             data-dot-only={dotOnly}

@@ -12,7 +12,7 @@ import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t, toolsMore, type HomeNodeFacts, type ToolManifest } from '@beanpool/core';
+import { t, toolLineText, toolsMore, type HomeNodeFacts, type ToolManifest } from '@beanpool/core';
 import { useIdentity } from './IdentityContext';
 import { useTheme } from './ThemeContext';
 import { useNodeProfile } from '../utils/use-node-profile';
@@ -43,7 +43,7 @@ export default function ToolsScreen() {
         void Promise.all(manifests.map(async (m) => {
             const { doc } = await readToolDoc(owner, m).catch(() => ({ doc: m.doc.empty() }));
             const line = safeLine(() => m.row(doc, Date.now()));
-            return [m.id, line ? t(line.key, line.values) : null] as const;
+            return [m.id, line ? toolLineText(line) : null] as const;
         })).then((pairs) => { if (!gone) setStates(Object.fromEntries(pairs)); });
         return () => { gone = true; };
     }, [identity?.publicKey, manifests.map((m) => m.id).join(',')]));

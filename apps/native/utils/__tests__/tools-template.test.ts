@@ -202,6 +202,39 @@ vi.mock('../../tools/index', async (importOriginal) => {
     };
 });
 
+const nodeCopyQueues = vi.hoisted(() => [] as Array<{ pending: () => string[]; cancelAll: () => void }>);
+vi.mock('@beanpool/core', async (importOriginal) => {
+    const real = await importOriginal<typeof import('@beanpool/core')>();
+    return {
+        ...real,
+        createToolCopyQueue: (delayMs?: number, alone?: any) => {
+            const q = real.createToolCopyQueue(delayMs, alone);
+            const pendingKeys = new Set<string>();
+            const origLater = q.later.bind(q);
+            const origCancel = q.cancel.bind(q);
+            q.later = (key: string, job: () => Promise<unknown>) => {
+                pendingKeys.add(key);
+                origLater(key, async () => {
+                    pendingKeys.delete(key);
+                    return job();
+                });
+            };
+            q.cancel = (key: string) => {
+                pendingKeys.delete(key);
+                origCancel(key);
+            };
+            nodeCopyQueues.push({
+                pending: () => [...pendingKeys].filter((k) => q.waiting(k)),
+                cancelAll: () => {
+                    for (const k of [...pendingKeys]) q.cancel(k);
+                    pendingKeys.clear();
+                },
+            });
+            return q;
+        },
+    };
+});
+
 import { DatabaseSync } from 'node:sqlite';
 import {
     TOOLS, pseudoLocalise, setLanguage, toolFixtureProblems, toolHomeCardType, toolManifestProblems, word,
@@ -361,7 +394,16 @@ beforeEach(() => {
     node.profile = { profile: 'local', features: { beans: true } };
     server.reset();
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    setLanguage('en');
+    const pending = nodeCopyQueues.flatMap((q) => q.pending());
+    if (pending.length) {
+        for (const q of nodeCopyQueues) q.cancelAll();
+        expect(pending, 'node-copy queue has pending sync timer at end of test').toEqual([]);
+    }
+});
 
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function drawTool(id: string, extra: Record<string, string> = {}, lang: 'xx' | 'en' = 'xx') {
@@ -657,8 +699,8 @@ describe('the route around a tool', () => {
             text: 'Add', testID: `add-${name}`, onPress: () => { const d = h.doc.get(); void h.doc.set({ ...d, items: [...d.items, { id: name, name, at: NOW + DAY }] }); },
         } as any);
         const Main = (p: KitProps) => createElement(ToolScreen, null as any, createElement(add('Rake'), p), ...p.host.doc.get().items.map((i) => createElement(ToolRow, { key: i.id, title: i.name } as any)));
-        reg.extra = [{ manifest: { ...KIT, id: 'two-screens' }, app: { id: 'two-screens', screens: () => ({ main: Main, item: add('Saw') }) } }];
-        const tool = { ...KIT, id: 'two-screens' };
+        const tool = { ...KIT, id: 'two-screens', permissions: KIT.permissions.filter((p) => p !== 'node-copy') };
+        reg.extra = [{ manifest: tool, app: { id: 'two-screens', screens: () => ({ main: Main, item: add('Saw') }) } }];
         await writeToolDoc(ME.publicKey, tool, KIT_FIXTURES.docs.small, NOW);
         await drawTool('two-screens', {}, 'en');
         const over = document.createElement('div');

@@ -9,7 +9,7 @@
  * is drawn only for a tool with both a Home card and a web half.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { TOOLS, TOOL_LIMITS, t, type ToolLine, type ToolManifest } from '@beanpool/core';
+import { TOOLS, TOOL_LIMITS, t, toolLineText, type ToolLine, type ToolManifest } from '@beanpool/core';
 import { HomeCard, HomeLine } from '../components/HomeCard';
 import { TOOL_APPS } from './index';
 import { toolOfCard } from './cards';
@@ -71,7 +71,7 @@ export function ToolHomeCard({ id, title, menu, style, type, publicKey, now, onN
                 ? lines.map((l, i) => (
                     <HomeLine key={i} onClick={() => open(l.screen)} testId={`home-tool-line-${i}`}>
                         <span aria-hidden="true" className="shrink-0">{tool.icon}</span>
-                        <span className="min-w-0 break-words">{t(l.key, l.values)}</span>
+                        <span className="min-w-0 break-words">{toolLineText(l)}</span>
                     </HomeLine>
                 ))
                 : (

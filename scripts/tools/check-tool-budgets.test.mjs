@@ -13,15 +13,46 @@ import { BUDGETS, checkTools } from './check-tool-budgets.mjs';
 import { newTool } from './new-tool.mjs';
 import { PARTS, ROOT, readRegistry, registerIn, toolNames } from './registry.mjs';
 
-/** A tree with this repository's three (empty) registries and budgets, and nothing else. */
+/**
+ * One part's index.ts with every tool it registers taken out, whatever the tool is called: each import and `export *` of a
+ * folder `readRegistry` finds there, and the registry's entries (left as the template's empty `[\n]` or `{\n}`).
+ */
+function emptyRegistry(p, text) {
+    const folders = new Set(readRegistry(p, text).entries.map((e) => e.folder));
+    if (!folders.size) return text;
+    const sf = ts.createSourceFile(p.index, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const cuts = [];
+    for (const st of sf.statements) {
+        if ((ts.isImportDeclaration(st) || ts.isExportDeclaration(st)) && st.moduleSpecifier && ts.isStringLiteral(st.moduleSpecifier)) {
+            const m = /^\.\/([^/]+?)(?:\/index(?:\.js)?)?$/.exec(st.moduleSpecifier.text);
+            if (m && folders.has(m[1])) cuts.push([st.getStart(sf), st.getEnd() + (text[st.getEnd()] === '\n' ? 1 : 0), '']);
+        } else if (ts.isVariableStatement(st)) {
+            for (const d of st.declarationList.declarations) {
+                if (!ts.isIdentifier(d.name) || d.name.text !== p.registry || !d.initializer) continue;
+                let init = d.initializer;
+                while (ts.isAsExpression(init) || ts.isSatisfiesExpression(init) || ts.isParenthesizedExpression(init)) init = init.expression;
+                cuts.push([init.getStart(sf) + 1, init.getEnd() - 1, '\n']);
+            }
+        }
+    }
+    let out = text;
+    for (const [from, to, by] of cuts.sort((a, b) => b[0] - a[0])) out = out.slice(0, from) + by + out.slice(to);
+    return out;
+}
+
+/** A tree with this repository's three registries, emptied of its tools, and budgets, and nothing else. */
 const trees = [];
 after(() => { for (const t of trees) fs.rmSync(t, { recursive: true, force: true }); });
 function tree() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-tools-'));
     trees.push(root);
-    for (const rel of [...PARTS.map((p) => p.index), BUDGETS]) {
-        fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
-        fs.copyFileSync(path.join(ROOT, rel), path.join(root, rel));
+    fs.mkdirSync(path.dirname(path.join(root, BUDGETS)), { recursive: true });
+    fs.copyFileSync(path.join(ROOT, BUDGETS), path.join(root, BUDGETS));
+    for (const p of PARTS) {
+        const text = emptyRegistry(p, fs.readFileSync(path.join(ROOT, p.index), 'utf8'));
+        assert.deepEqual(readRegistry(p, text), { entries: [], problems: [] }, `${p.index} still registers a tool after emptying it`);
+        fs.mkdirSync(path.dirname(path.join(root, p.index)), { recursive: true });
+        fs.writeFileSync(path.join(root, p.index), text);
     }
     return root;
 }
@@ -39,6 +70,16 @@ function one(problems, words) {
 test("this repository's registries are the template's, every tool registered and within budget", async () => {
     const { problems } = await checkTools();
     assert.deepEqual(problems, []);
+});
+
+test('tree() empties a registry of every tool it registers, whatever their names, back to the same empty index', () => {
+    for (const p of PARTS) {
+        const empty = emptyRegistry(p, fs.readFileSync(path.join(ROOT, p.index), 'utf8'));
+        assert.deepEqual(readRegistry(p, empty), { entries: [], problems: [] }, p.index);
+        const two = registerIn(p, registerIn(p, empty, 'garden'), 'seed-library');
+        assert.deepEqual(readRegistry(p, two).entries.map((e) => e.folder), ['garden', 'seed-library'], p.index);
+        assert.equal(emptyRegistry(p, two), empty, p.index);
+    }
 });
 
 test('an empty tree passes with no tools; a new tool from the scaffold passes registered and within budget', async () => {

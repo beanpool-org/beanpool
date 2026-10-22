@@ -145,9 +145,22 @@ export function toolManifestProblems(m: ToolManifest): string[] {
     return out;
 }
 
-/** A line or a due reminder's problem with the screens it may open. */
-function lineProblem(line: ToolLine | ToolDue, screens: readonly string[]): string | null {
-    if (!isPlainObject(line) || typeof line.key !== 'string' || line.key.trim() === '') return 'is not { key, values? }';
+/**
+ * A line or a due reminder's problem with its key and the screens it may open. Only a line (`counted`) may be a wordn()
+ * pair with its count: a reminder is drawn with t() alone.
+ */
+function lineProblem(line: ToolLine | ToolDue, screens: readonly string[], counted = false): string | null {
+    if (!isPlainObject(line)) return 'is not { key, values? }';
+    const sentence = (s: unknown) => typeof s === 'string' && s.trim() !== '';
+    const key: unknown = line.key;
+    const n: unknown = (line as ToolLine).n;
+    if (counted && isPlainObject(key)) {
+        if (!sentence(key.one) || !sentence(key.other)) return 'is not { key: wordn(…), n, values? }';
+        if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return 'has a wordn() key and no count n to choose its form by';
+    } else {
+        if (!sentence(key)) return 'is not { key, values? }';
+        if (n !== undefined) return 'has a count n, but its key is not a wordn() pair';
+    }
     if (line.screen !== undefined && !screens.includes(line.screen)) return `opens ${line.screen}, which is not one of its screens`;
     return null;
 }
@@ -243,14 +256,14 @@ export function toolFixtureProblems<D>(m: ToolManifest<D>, fx: ToolFixtures<D>):
         };
         const row = twice('row()', () => m.row(d, fx.now));
         if (row) {
-            const p = lineProblem(row, screens);
+            const p = lineProblem(row, screens, true);
             if (p) say(`its row() on the ${name} document ${p}.`);
         }
         if (m.homeCard) {
             const lines = twice("Home card's lines()", () => m.homeCard!.lines(d, fx.now)) ?? [];
             if (lines.length > TOOL_LIMITS.homeLines) say(`its Home card has ${lines.length} lines on the ${name} document, over ${TOOL_LIMITS.homeLines}.`);
             for (const l of lines) {
-                const p = lineProblem(l, screens);
+                const p = lineProblem(l, screens, true);
                 if (p) say(`a Home card line on the ${name} document ${p}.`);
             }
         }

@@ -20,6 +20,11 @@ const DEFAULT_LNG = 153.4991;
 
 const RADIUS_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 25, 50];
 
+// Android shrinks a label only while it takes more lines than numberOfLines. One word wider than its button is broken by
+// character instead, and if that still fits in 2 lines it is never shrunk: German "Zurücksetzen" was drawn "Zurücksetze" /
+// "n". A one-word label gets 1 line, so the shrink starts; a label with a space keeps 2 (Malayalam's Reset needs them).
+const labelLines = (label: string) => (label.includes(' ') ? 2 : 1);
+
 interface RadiusPickerModalProps {
     visible: boolean;
     initialRadius: number | null;
@@ -114,12 +119,12 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
             <View style={styles.container}>
                 <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
                     <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel={t('Cancel location picker')} style={styles.headerBtn}>
-                        <Text style={styles.cancelText} numberOfLines={1}>{t('Cancel')}</Text>
+                        <Text style={styles.cancelText} numberOfLines={labelLines(t('Cancel'))} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                     </Pressable>
-                    <Text style={styles.title} numberOfLines={1}>{t('📍 Location & Radius')}</Text>
                     <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel={t('Reset location and radius')} style={styles.headerBtn}>
-                        <Text style={styles.resetText} numberOfLines={1}>{t('Reset')}</Text>
+                        <Text style={styles.resetText} numberOfLines={labelLines(t('Reset'))} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Reset')}</Text>
                     </Pressable>
+                    <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📍 Location & Radius')}</Text>
                 </View>
 
                 <View style={styles.mapContainer}>
@@ -221,8 +226,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.surface.app,
     },
+    // At 320 wide and 1.3x text, Cancel and Reset alone fill the row in German, French, Malayalam and Urdu, so the title
+    // has a line of its own under them (flexWrap + the title's flexBasis), in every language.
     header: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
         backgroundColor: colors.surface.card,
@@ -233,10 +241,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: colors.border.default,
     },
+    // At most half the row less the gap, so Reset never wraps onto a line of its own; a longer word shrinks or wraps.
     headerBtn: {
         padding: 8,
         minHeight: 48,
         minWidth: 48,
+        maxWidth: '48%',
         justifyContent: 'center',
         flexShrink: 0,
     },
@@ -250,9 +260,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-    // At 320 wide and 1.3x text the title pushed Reset off the right edge; it now shrinks instead.
+    // At 320 wide and 1.3x text the title pushed Reset off the right edge; it now takes the whole second line.
     title: {
         flex: 1,
+        flexBasis: '100%',
         textAlign: 'center',
         color: colors.text.heading,
         fontSize: 15,

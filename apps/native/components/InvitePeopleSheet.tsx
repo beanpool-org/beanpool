@@ -187,7 +187,7 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, invite
                             style={styles.searchInput}
                             value={query}
                             onChangeText={setQuery}
-                            placeholder={t('Search people in this community')}
+                            placeholder={t('Search people')}
                             placeholderTextColor={colors.text.muted}
                             accessibilityLabel={t('Search people')}
                         />

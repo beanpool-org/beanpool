@@ -182,7 +182,7 @@ import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
-import { requestNonces, verifyMemberSignature } from './engine/member-signature.js';
+import { requestNonces, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
@@ -237,6 +237,8 @@ const WS_AUTH_MODE: WsAuthMode =
 type WsConnectResult =
     | { kind: 'unsigned' }
     | { kind: 'invalid' }
+    /** The nonce store is full (engine/member-signature.ts NONCE_STORE_MAX): turned away as busy, 503. */
+    | { kind: 'busy' }
     /**
      * `feed`: the key reads as a member (readsAsMember), so the socket gets the member feed too. `visitor`: a visitor's
      * row (isLiveVisitor), which gets of what is sent to it only its direct conversations and Beans.
@@ -250,7 +252,8 @@ type WsConnectResult =
  * format 2 (@beanpool/core request-signing.ts). `unsigned` when none of them is present, and for a token signed for
  * another community or, after the switch, one in the old format (engine/member-signature.ts): no member feed, public
  * doorbells in the default mode and 401 under ENFORCE_WS_AUTH=true, and the app still opens. `invalid` for a partial,
- * stale, replayed or forged token; otherwise whether the proven key belongs to a known member.
+ * stale, replayed or forged token; `busy` for a good one with a new nonce while the nonce store is full; otherwise
+ * whether the proven key belongs to a known member.
  */
 function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectResult {
     const pubKeyHex = params.get('pubkey');
@@ -272,7 +275,10 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
             { pubKeyHex, signature: sigB64, timestamp: ts, nonce, method: 'WS', path: pathname, body: '', signedFor },
             { consumeNonce: true },
         );
-        if (!verdict.ok) return verdict.status === 421 || verdict.status === 426 ? { kind: 'unsigned' } : { kind: 'invalid' };
+        if (!verdict.ok) {
+            if (verdict.status === 503) return { kind: 'busy' };
+            return verdict.status === 421 || verdict.status === 426 ? { kind: 'unsigned' } : { kind: 'invalid' };
+        }
         const signerKey = verdict.signer;
 
         // A valid signature only proves key possession — only a member (isNodeMember), or a visitor's row
@@ -959,6 +965,11 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 if (wait) { refuseUpgrade(socket, 429, wait); return; }
                 settled = charge;
             }
+            // In every mode: the token would need a new entry in a full nonce store, so the app is told to come back.
+            if (connect.kind === 'busy') {
+                refuseUpgrade(socket, 503, STORE_FULL_RETRY_AFTER_SEC);
+                return;
+            }
             const refuse = WS_AUTH_MODE === 'strict'
                 ? connect.kind !== 'member'
                 : WS_AUTH_MODE === 'members' && connect.kind === 'invalid';
@@ -1615,6 +1626,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         }
         if (!verdict.ok) {
             ctx.status = verdict.status;
+            if (verdict.retryAfterSec) ctx.set('Retry-After', String(verdict.retryAfterSec));
             ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
             return;
         }

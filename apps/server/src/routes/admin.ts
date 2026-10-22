@@ -388,6 +388,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
                 selfPubkey = verdict.signer;
             } else {
                 ctx.status = verdict.status === 403 || verdict.status === 400 ? 401 : verdict.status;
+                if (verdict.retryAfterSec) ctx.set('Retry-After', String(verdict.retryAfterSec));
                 ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
                 return;
             }

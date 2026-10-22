@@ -11,7 +11,8 @@
  *   4. format 2: the host is one of this community's (engine/own-addresses.ts), or 421 wrong_community;
  *   5. the old format: accepted and counted until the switch, 426 app_too_old after it;
  *   6. THEN the nonce is spent. Before this the signature middleware spent it first, so a forged request could burn a
- *      real one; and a request refused here for naming another community leaves its nonce unspent.
+ *      real one; and a request refused here for naming another community leaves its nonce unspent. A new nonce while
+ *      the store holds its most (NONCE_STORE_MAX) is refused as busy, 503 store_full; a spent one is still a replay.
  *
  * The switch is {@link UNBOUND_SIGNATURES_UNTIL}, overridable per node by env ACCEPT_UNBOUND_SIGNATURES_UNTIL. It is a
  * date, not a version, so a stranger's node that never touches its config closes on its own.
@@ -104,6 +105,11 @@ export const SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
  * the same test as before. Why every expired one is found: every `set` pushes its (expiry, nonce), and a pair leaves the
  * heap only once its expiry has passed, when the map's entry is deleted if that expiry has passed too; a pair left
  * behind by a re-spend (the map moved on to a later expiry) is skipped when it comes up.
+ *
+ * The map holds at most `max` nonces (NONCE_STORE_MAX): the verifier asks {@link full} before spending a new one, and
+ * refuses it while full. The heap follows: a re-spend happens only once the old pair has expired, so after a sweep the
+ * heap holds one pair per live nonce, and `consume` sweeps on every call once the map passes NONCE_SWEEP_ABOVE (or the
+ * heap 2 × NONCE_SWEEP_ABOVE): at most max(`max`, 2 × NONCE_SWEEP_ABOVE) + 1 pairs.
  */
 export class NonceStore {
     private readonly seen = new Map<string, number>();
@@ -112,7 +118,7 @@ export class NonceStore {
     private readonly heapNonce: string[] = [];
     /** Heap entries the sweeps have looked at, freed or not: what a test counts the forgetting's work by. */
     sweepVisits = 0;
-    constructor(private readonly windowMs: number) {}
+    constructor(private readonly windowMs: number, private max = NONCE_STORE_MAX) {}
 
     /**
      * Spend `nonce`, or false when it is already spent. It stays spent for as long as a request carrying it is fresh,
@@ -131,6 +137,21 @@ export class NonceStore {
         // A NaN expiry (a NaN `now`) is never spent and never freed, as before; on the heap it would block every sweep.
         if (!Number.isNaN(until)) this.push(until, nonce);
         return true;
+    }
+
+    /**
+     * Whether the store holds its most nonces still in their window. It forgets the expired ones first, never a live
+     * one: forgetting a live nonce early would let its request be replayed.
+     */
+    full(now: number): boolean {
+        if (this.seen.size < this.max) return false;
+        this.forgetExpired(now);
+        return this.seen.size >= this.max;
+    }
+
+    /** Tests: hold at most `max` nonces (null: NONCE_STORE_MAX again). */
+    setMaxForTests(max: number | null): void {
+        this.max = max ?? NONCE_STORE_MAX;
     }
 
     /** Forget every nonce whose window has passed. */
@@ -202,6 +223,40 @@ export class NonceStore {
 /** A store this small is not swept on `consume`: the minute timer's `prune` (https-server.ts) is enough for it. */
 export const NONCE_SWEEP_ABOVE = 10_000;
 
+/**
+ * The most nonces one store holds at once (NB1 of #2038's deciding review, settled by Fable 2026-10-22:
+ * scratch/fable-redo/verdict-identity-auth.md §2). Without it the store was the one map a stranger with fresh keypairs
+ * could grow without bound: one address is held to ~18,000 live nonces by the gateway limiter, but a flood rotating
+ * IPv6 /64s, one request each, spent ~5,200 nonces a second on a Mac, ~3 M held over the 10-minute hold, past the
+ * 512 MB heap. An app's nonce (32 hex, ~134 B measured) is held 5 minutes, so this is ~35 MB at worst, and ~830 signed
+ * requests a second for 5 minutes before an honest community would meet it.
+ *
+ * When full, a request that needs a new nonce is refused as busy (503 store_full, Retry-After) until entries expire,
+ * and the app tries again after the wait; a nonce still in its window is never forgotten to make room. A shorter
+ * freshness window was the other way, and was not taken: no app corrects for its phone's clock, and old phones' clocks
+ * are minutes out.
+ */
+export const NONCE_STORE_MAX = 250_000;
+export const STORE_FULL_CODE = 'store_full';
+export const STORE_FULL_ERROR = 'This community is very busy right now. Please try again in a minute.';
+export const STORE_FULL_RETRY_AFTER_SEC = 60;
+/** The security line about a full store is written at most this often, never per request (#1807 B1: under a flood, a
+ *  write per request is itself the outage). */
+const STORE_FULL_LOG_EVERY_MS = 60 * 60_000;
+let storeFullLoggedAt = -Infinity;
+
+/** The refusal for a new nonce while `nonces` is full, and the hour's security line if it is not written yet. */
+function storeFullRefusal(nonces: NonceStore, now: number): SignatureRefusal {
+    if (now - storeFullLoggedAt >= STORE_FULL_LOG_EVERY_MS) {
+        storeFullLoggedAt = now;
+        logger.security('AUTH', 'Signed requests: the store of nonces (each request\'s single-use number) is full, at '
+            + `${nonces.size.toLocaleString('en')}, the most this server keeps, so requests that need a new one are refused as busy (503 ${STORE_FULL_CODE}) `
+            + 'until older ones expire, within 10 minutes. A flood of requests from many addresses does this; members\' apps '
+            + 'try again after the wait. Written at most once an hour.');
+    }
+    return { ok: false, status: 503, error: STORE_FULL_ERROR, code: STORE_FULL_CODE, retryAfterSec: STORE_FULL_RETRY_AFTER_SEC };
+}
+
 /** The nonces of signed requests and `/ws` connect tokens, one store for the process. */
 export const requestNonces = new NonceStore(SIGNATURE_FRESHNESS_MS);
 
@@ -229,7 +284,8 @@ export interface SignedRequestParts {
     signedFor: string | null;
 }
 
-export type SignatureRefusal = { ok: false; status: 400 | 401 | 403 | 421 | 426; error: string; code?: string };
+/** `retryAfterSec`: how long to wait before trying again, sent as Retry-After (503 store_full). */
+export type SignatureRefusal = { ok: false; status: 400 | 401 | 403 | 421 | 426 | 503; error: string; code?: string; retryAfterSec?: number };
 
 export type MemberSignatureVerdict =
     | {
@@ -360,8 +416,13 @@ export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOpt
     const refusal = audience !== null ? audienceRefusal(audience, signer) : unboundRefusal();
     if (refusal) return refusal;
 
-    if (opts.consumeNonce && !(opts.nonces ?? requestNonces).consume(parts.nonce, now, ts)) {
-        return { ok: false, status: 403, error: 'Replay detected: nonce already used' };
+    if (opts.consumeNonce) {
+        const nonces = opts.nonces ?? requestNonces;
+        // A new nonce needs a new entry: busy while the store is full. A spent one is still a replay, never busy.
+        if (!nonces.isSpent(parts.nonce, now) && nonces.full(now)) return storeFullRefusal(nonces, now);
+        if (!nonces.consume(parts.nonce, now, ts)) {
+            return { ok: false, status: 403, error: 'Replay detected: nonce already used' };
+        }
     }
     countAcceptedSignature(signer, audience);
     return { ok: true, signer, format: bound ? 2 : 1, audience, text };

@@ -132,17 +132,21 @@ vi.mock('../../../utils/db', () => ({
     getPost: async (id: string) => market.rows.get(id) ?? null,
     getMyPosts: async (pubkey: string) => [...market.rows.values()].filter((p) => p.author_pubkey === pubkey),
     getMarketplaceTransactions: async (pubkey: string) => market.deals.filter((d) => d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey),
+    // As the node has them (posts.ts): only a live Offer is paused and only a paused one resumed; anything else is a 400,
+    // which the phone's signed request throws.
     pausePost: async (id: string) => {
         if (market.down) throw new TypeError('Network request failed');
-        market.paused.push(id);
         const p = market.rows.get(id);
-        if (p) p.status = 'paused';
+        if (p?.status !== 'active') throw new Error('Post not found, not active, or not owned by author');
+        market.paused.push(id);
+        p.status = 'paused';
     },
     resumePost: async (id: string) => {
         if (market.down) throw new TypeError('Network request failed');
-        market.resumed.push(id);
         const p = market.rows.get(id);
-        if (p) p.status = 'active';
+        if (p?.status !== 'paused') throw new Error('Post not found, not paused, or not owned by author');
+        market.resumed.push(id);
+        p.status = 'active';
     },
     // The node copy (the Tool shed asks for node-copy): a server that keeps copies and has none of this one yet.
     signedGet: async (p: string) => {
@@ -698,6 +702,30 @@ describe('A thing', () => {
         expect(shedThings(await kept())).toEqual([]);
         expect(readThingsDoc(await kept()).things[0]).toMatchObject({ id: 't-1', gone: true });
         expect(nav.backs).toBe(1);
+    });
+
+    it("an Offer already paused or gone from the Market is left as it is: lend and delete still do what they say", async () => {
+        offer('post-1', 'Ladder', 'paused');
+        await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1' }), thing('t-2', 'Drill', { postId: 'post-9' })));
+        await open('thing', { key: 't-1' });
+        expect(text('thing-offer-paused')).toContain('Its Offer is paused in the Market.');
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('thing-lend-save');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect((await keptThing('t-1'))?.lentTo?.name).toBe('Sam');
+        expect(market.rows.get('post-1')?.status).toBe('paused');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('thing', { key: 't-2' });
+        expect(text('thing-offer-gone')).toContain('Its Offer has gone from the Market.');
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(readThingsDoc(await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
+        expect(nav.backs).toBe(1);
+        expect(market.paused).toEqual([]);
     });
 
     it("out on a BeanPool loan: the deal's words, and no delete", async () => {

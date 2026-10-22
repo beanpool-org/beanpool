@@ -84,16 +84,20 @@ async function answer(input: RequestInfo | URL, init?: RequestInit): Promise<Res
             return json(id ? all.filter((p) => p.id === id) : all.filter((p) => !author || p.authorPublicKey === author));
         }
         case 'GET /api/marketplace/transactions': return json(server.deals.filter((d) => d.sellerPublicKey === url.searchParams.get('publicKey') || d.buyerPublicKey === url.searchParams.get('publicKey')));
+        // As the node has them (posts.ts, routes/marketplace.ts): only a live Offer is paused and only a paused one
+        // resumed; anything else is a 400.
         case 'POST /api/marketplace/posts/pause': {
-            server.paused.push(body.postId);
             const p = server.posts.get(body.postId);
-            if (p) p.status = 'paused';
+            if (p?.status !== 'active') return json({ success: false, error: 'Post not found, not active, or not owned by author' }, 400);
+            server.paused.push(body.postId);
+            p.status = 'paused';
             return json({ success: true });
         }
         case 'POST /api/marketplace/posts/resume': {
-            server.resumed.push(body.postId);
             const p = server.posts.get(body.postId);
-            if (p) p.status = 'active';
+            if (p?.status !== 'paused') return json({ success: false, error: 'Post not found, not paused, or not owned by author' }, 400);
+            server.resumed.push(body.postId);
+            p.status = 'active';
             return json({ success: true });
         }
         case 'GET /api/pricing-guide': return json(server.guide);
@@ -426,6 +430,30 @@ describe('A thing', () => {
         expect(shedThings(await kept())).toEqual([]);
         expect((await kept()).things[0]).toMatchObject({ id: 't-1', gone: true });
         expect(byTestId('things-main')).not.toBeNull();
+    });
+
+    it('an Offer already paused or gone from the Market is left as it is: lend and delete still do what they say', async () => {
+        offer('post-1', 'Ladder', 'paused');
+        await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1' }), thing('t-2', 'Drill', { postId: 'post-9' })));
+        await open('thing', 't-1');
+        await waitFor(() => expect(byTestId('thing-offer-paused')?.textContent).toContain('Its Offer is paused in the Market.'));
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('thing-lend-save');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect((await keptThing('t-1'))?.lentTo?.name).toBe('Sam');
+        expect(server.posts.get('post-1')?.status).toBe('paused');
+
+        cleanup();
+        await open('main');
+        await click('thing-row-t-2');
+        await waitFor(() => expect(byTestId('thing-offer-gone')?.textContent).toContain('Its Offer has gone from the Market.'));
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect((await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
+        expect(byTestId('things-main')).not.toBeNull();
+        expect(server.paused).toEqual([]);
     });
 
     it("out on a BeanPool loan: the deal's words, its back-around from the deal, and no delete", async () => {

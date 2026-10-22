@@ -114,9 +114,17 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         setOfferStatus('active');
         await write(setListed(host.doc.get(), id, paused, host.now()));
     });
+    /**
+     * Its Offer out of the Market while the thing is away or deleted. The server pauses only a live Offer, so one already
+     * paused or gone (here or elsewhere) is left as the Market has it.
+     */
+    const pauseOffer = async (offerId: string) => {
+        const status = await host.posts.status(offerId);
+        if (status !== 'paused' && status !== 'gone') await host.posts.pause(offerId);
+    };
     const lend = () => act(async () => {
         if (!lending || !lending.name.trim()) return;
-        if (postId) await host.posts.pause(postId);
+        if (postId) await pauseOffer(postId);
         const now = host.now();
         await write(lendOutside(host.doc.get(), id, lending.name, lending.days ? backAroundIn(now, lending.days) : null, now));
         setLending(null);
@@ -135,7 +143,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         await write(next);
     });
     const remove = () => act(async () => {
-        if (postId) await host.posts.pause(postId);
+        if (postId) await pauseOffer(postId);
         const photo = thing.photo;
         if (!await keep(host, removeThing(host.doc.get(), id, host.now()))) {
             setRefused(notKept());

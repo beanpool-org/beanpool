@@ -66,7 +66,11 @@ export function loanDaysRemaining(backAround: string | null | undefined, now: nu
     if (typeof backAround !== 'string' || !Number.isFinite(now)) return null;
     const at = Date.parse(backAround);
     if (!Number.isFinite(at)) return null;
-    return Math.ceil((at - now) / DAY_MS);
+    const diff = at - now;
+    if (diff < 0) {
+        return Math.floor(diff / DAY_MS); // Overdue: -1, -2, etc.
+    }
+    return Math.floor(diff / DAY_MS); // 0 if due today (<24h), 1+ if days ahead
 }
 
 /** Whether lendMaxDays is a valid loan period: whole integer between 1 and 365 days. */

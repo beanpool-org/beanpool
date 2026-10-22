@@ -474,8 +474,16 @@ describe('Loans maths and validations (against S3 lendable Offers semantics)', (
         const DAY = 24 * 60 * 60 * 1000;
         const threeDaysAhead = new Date(NOW + 3 * DAY).toISOString();
         const twoDaysPast = new Date(NOW - 2 * DAY).toISOString();
+        const dueInTwoHours = new Date(NOW + 2 * 3600_000).toISOString();
+        const dueIn25Hours = new Date(NOW + 25 * 3600_000).toISOString();
+        const overdueByTwoHours = new Date(NOW - 2 * 3600_000).toISOString();
+        const overdueBy25Hours = new Date(NOW - 25 * 3600_000).toISOString();
 
         expect(loanDaysRemaining(threeDaysAhead, NOW)).toBe(3);
+        expect(loanDaysRemaining(dueIn25Hours, NOW)).toBe(1);
+        expect(loanDaysRemaining(dueInTwoHours, NOW)).toBe(0); // 0 if due today (<24h)
+        expect(loanDaysRemaining(overdueByTwoHours, NOW)).toBe(-1); // negative integer if overdue (<0, never -0)
+        expect(loanDaysRemaining(overdueBy25Hours, NOW)).toBe(-2);
         expect(loanDaysRemaining(twoDaysPast, NOW)).toBe(-2);
         expect(loanDaysRemaining(null, NOW)).toBeNull();
         expect(loanDaysRemaining('invalid', NOW)).toBeNull();
@@ -604,23 +612,28 @@ describe('Mutation testing on loans maths and size bounds', () => {
     });
 
     describe('loanDaysRemaining mutations', () => {
-        it('mutant: using Math.floor instead of Math.ceil for partial days is caught', () => {
-            const partialDayAhead = new Date(NOW + 25 * 3600_000).toISOString();
-            expect(loanDaysRemaining(partialDayAhead, NOW)).toBe(2);
-            const mutantFloor = (atStr: string, n: number) => Math.floor((Date.parse(atStr) - n) / DAY);
-            expect(mutantFloor(partialDayAhead, NOW)).not.toBe(loanDaysRemaining(partialDayAhead, NOW));
+        it('mutant: using Math.ceil incorrectly returns 1 for loans due today and -0 for overdue <24h', () => {
+            const dueIn2Hours = new Date(NOW + 2 * 3600_000).toISOString();
+            expect(loanDaysRemaining(dueIn2Hours, NOW)).toBe(0); // Math.ceil would give 1
+            const overdueBy2Hours = new Date(NOW - 2 * 3600_000).toISOString();
+            const days = loanDaysRemaining(overdueBy2Hours, NOW);
+            expect(days).toBe(-1); // Math.ceil would give -0
+            expect(days! < 0).toBe(true);
+            expect(Object.is(days, -0)).toBe(false);
         });
 
-        it('mutant: using Math.round instead of Math.ceil is caught', () => {
-            const partialDayAhead = new Date(NOW + 25 * 3600_000).toISOString();
-            expect(loanDaysRemaining(partialDayAhead, NOW)).toBe(2);
+        it('mutant: using Math.round instead of Math.floor is caught', () => {
+            const dueIn18Hours = new Date(NOW + 18 * 3600_000).toISOString();
+            expect(loanDaysRemaining(dueIn18Hours, NOW)).toBe(0); // due today, but Math.round would give 1
             const mutantRound = (atStr: string, n: number) => Math.round((Date.parse(atStr) - n) / DAY);
-            expect(mutantRound(partialDayAhead, NOW)).not.toBe(loanDaysRemaining(partialDayAhead, NOW));
+            expect(mutantRound(dueIn18Hours, NOW)).not.toBe(loanDaysRemaining(dueIn18Hours, NOW));
         });
 
         it('mutant: exact day boundaries', () => {
             const exact2DaysAhead = new Date(NOW + 2 * DAY).toISOString();
             expect(loanDaysRemaining(exact2DaysAhead, NOW)).toBe(2);
+            const exact2DaysPast = new Date(NOW - 2 * DAY).toISOString();
+            expect(loanDaysRemaining(exact2DaysPast, NOW)).toBe(-2);
         });
     });
 

@@ -17,8 +17,9 @@ use Reddit's API at all (`"reddit": false` in `devvit.json`). It only listens fo
 public title of the post and the public link.
 
 **What it leaves out:** posts and comments Reddit has marked as spam or that are already deleted; moderators' and
-admins' distinguished posts (the team's own announcements); and anything written by AutoModerator or by another
-app's account. Every other new post and comment sends one notification.
+admins' distinguished posts (the team's own announcements); posts and comments by the accounts the moderators list
+in the app's install settings (the team's own, so their replies don't ping the team); and anything written by
+AutoModerator or by another app's account. Every other new post and comment sends one notification.
 
 **Where notifications go:** to the moderators' own [ntfy](https://ntfy.sh) topic, a free, public push-notification
 service: the ntfy app on a phone shows each message. The topic's address is set by the app's developer as a secret
@@ -54,7 +55,11 @@ Two developer secrets (global, set with the Devvit CLI, never in this code):
 | `ntfyUrl` | The topic's full address, `https://ntfy.sh/<topic>`. The topic's name is its password. |
 | `ntfyToken` | Optional: an ntfy access token, sent as `Authorization: Bearer`, if the topic needs one. |
 
-There are no settings for the subreddit's moderators to change.
+One setting for the subreddit's moderators, on the app's Install Settings page:
+
+| Setting | What it is |
+|---|---|
+| `quietUsernames` | The team's own usernames, comma-separated: their posts and comments send no notification. Empty: everyone's do. |
 
 ## Terms and privacy
 
@@ -154,7 +159,12 @@ npx devvit publish
 It stays unlisted (only we can install it). Reddit emails when it is approved (they aim for 1–2 business days; their
 rules say up to a week); then run `npx devvit install r/beanpool`.
 
-**9. Test on r/beanpool.** A post from any account pings the phone; delete the test post afterwards.
+**9. Name the team's own accounts.** Open the app's Install Settings for r/beanpool: from
+[the app's page](https://developers.reddit.com/apps/beanpool-watcher), **Installed in communities** → r/beanpool. In
+"Accounts that never ping", put the moderator account (and any other team account), comma-separated, and save. The
+names stay in Reddit's settings, not in this repository.
+
+**10. Test on r/beanpool.** A post from an account not in that list pings the phone; delete the test post afterwards.
 
 **Later**
 

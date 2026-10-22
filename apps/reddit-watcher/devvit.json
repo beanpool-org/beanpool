@@ -28,6 +28,15 @@
         "helpText": "Only if the topic needs one: sent as Authorization: Bearer.",
         "isSecret": true
       }
+    },
+    "subreddit": {
+      "quietUsernames": {
+        "type": "string",
+        "label": "Accounts that never ping (the team's own), comma-separated",
+        "helpText": "Posts and comments by these usernames send no notification, so the team's own replies don't ping the team.",
+        "placeholder": "name1, name2",
+        "defaultValue": ""
+      }
     }
   },
   "scripts": {

@@ -2,7 +2,7 @@
 // NTFY_URL / NTFY_TOKEN pair kept here as two Devvit secrets, ntfyUrl and ntfyToken. The topic URL and token are secrets:
 // they go in the request and nowhere else — a log line says what happened and the HTTP status, never the address.
 
-import { toNotice, type Notice } from './notice';
+import { quietNames, toNotice, type Notice } from './notice';
 
 /** The hosts a topic may be on. Devvit lets the app fetch only these: devvit.json's permissions.http.domains, the same list. */
 export const NTFY_HOSTS = ['ntfy.sh'];
@@ -40,7 +40,7 @@ export type Outcome = 'sent' | 'skipped' | 'repeat' | 'no-channel' | 'failed';
 
 /** What delivering needs from Devvit, passed in so the tests can stand in for it. */
 export type Deps = {
-    setting: (name: 'ntfyUrl' | 'ntfyToken') => Promise<unknown>;
+    setting: (name: 'ntfyUrl' | 'ntfyToken' | 'quietUsernames') => Promise<unknown>;
     /** Marks the item seen; true the first time. */
     firstTime: (key: string) => Promise<boolean>;
     /** Takes the mark off again, so a repeat delivery can try once more after a failed send. */
@@ -53,7 +53,13 @@ const say = (deps: Deps, line: string) => deps.log(`[reddit-watcher] ${line}`);
 
 /** One trigger delivery: its notice, once, to the topic. Never throws. */
 export async function deliver(event: unknown, deps: Deps): Promise<Outcome> {
-    const notice = toNotice(event);
+    let quiet = new Set<string>();
+    try {
+        quiet = quietNames(await deps.setting('quietUsernames'));
+    } catch {
+        // unread: everyone pings
+    }
+    const notice = toNotice(event, quiet);
     if (!notice) {
         say(deps, 'nothing to tell (not a new post or comment, or removed, spam, the team\'s own or AutoModerator\'s)');
         return 'skipped';

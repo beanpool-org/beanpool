@@ -22,7 +22,7 @@ const comment = {
 
 type World = Deps & { sent: { url: string; init: RequestInit }[]; logs: string[]; seen: Map<string, number>; expires: Map<string, number> };
 
-function world(opts: { url?: unknown; token?: unknown; status?: number | 'throw'; redis?: 'throw'; settings?: 'throw' } = {}): World {
+function world(opts: { url?: unknown; token?: unknown; quiet?: string; status?: number | 'throw'; redis?: 'throw'; settings?: 'throw' } = {}): World {
     const sent: World['sent'] = [];
     const logs: string[] = [];
     const seen = new Map<string, number>();
@@ -34,7 +34,8 @@ function world(opts: { url?: unknown; token?: unknown; status?: number | 'throw'
         expires,
         setting: async (name) => {
             if (opts.settings === 'throw') throw new Error('settings down');
-            return name === 'ntfyUrl' ? ('url' in opts ? opts.url : TOPIC) : opts.token;
+            if (name === 'ntfyUrl') return 'url' in opts ? opts.url : TOPIC;
+            return name === 'ntfyToken' ? opts.token : opts.quiet;
         },
         firstTime: async (key) => {
             if (opts.redis === 'throw') throw new Error('redis down');
@@ -143,6 +144,14 @@ describe('deliver', () => {
         expect(await deliver(null, w)).toBe('skipped');
         expect(w.sent).toHaveLength(0);
         expect(w.seen.size).toBe(0);
+    });
+
+    it('sends nothing for the team\'s own accounts (quietUsernames), and still for everyone else', async () => {
+        const w = world({ quiet: 'u/Other_Person, someone-else' });
+        expect(await deliver(comment, w)).toBe('skipped');
+        expect(await deliver(post, w)).toBe('sent');
+        expect(w.sent).toHaveLength(1);
+        expect(w.logs.join('\n')).not.toContain('Other_Person');
     });
 
     it('sends nothing without a usable topic, and says how to set one', async () => {

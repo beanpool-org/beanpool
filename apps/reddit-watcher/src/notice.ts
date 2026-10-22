@@ -69,13 +69,30 @@ function isGone(item: Item): boolean {
     return item.deleted === true || item.spam === true;
 }
 
-function quietAuthor(author: Item | null): boolean {
-    if (!author) return false;
-    return QUIET_AUTHORS.has(str(author.name).toLowerCase()) || APP_ACCOUNT.has(author.accountType);
+/**
+ * The quietUsernames setting as a set: names split on commas, spaces or new lines, without a leading u/, in lower
+ * case (Reddit's usernames are case-insensitive).
+ */
+export function quietNames(raw: unknown): Set<string> {
+    return new Set(
+        str(raw)
+            .split(/[\s,]+/u)
+            .map((n) => n.replace(/^\/?u\//i, '').toLowerCase())
+            .filter(Boolean),
+    );
 }
 
-/** One notice for a new post or comment, or null when it should not ping (see the README's "What it skips"). */
-export function toNotice(event: unknown): Notice | null {
+function quietAuthor(author: Item | null, quiet: Set<string>): boolean {
+    if (!author) return false;
+    const name = str(author.name).toLowerCase();
+    return QUIET_AUTHORS.has(name) || (name !== '' && quiet.has(name)) || APP_ACCOUNT.has(author.accountType);
+}
+
+/**
+ * One notice for a new post or comment, or null when it should not ping (see the README's "What it leaves out").
+ * `quiet` is the team's own accounts (the quietUsernames setting): the payload cannot say who is a moderator.
+ */
+export function toNotice(event: unknown, quiet: Set<string> = new Set()): Notice | null {
     const e = obj(event);
     if (!e) return null;
     const type = str(e.type);
@@ -84,7 +101,7 @@ export function toNotice(event: unknown): Notice | null {
     if (!isPost && !isComment) return null;
 
     const author = obj(e.author);
-    if (quietAuthor(author)) return null;
+    if (quietAuthor(author, quiet)) return null;
     const subName = str(obj(e.subreddit)?.name);
     const sub = SUBREDDIT.test(subName) ? subName : '';
     const where = sub ? `in r/${sub}` : 'on Reddit';

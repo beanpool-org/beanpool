@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { oneLine, TITLE_MAX, toNotice } from './notice';
+import { oneLine, quietNames, TITLE_MAX, toNotice } from './notice';
 
 const POST_URL = 'https://www.reddit.com/r/beanpool/comments/abc123/how_do_i_start_a_node/';
 const COMMENT_URL = 'https://www.reddit.com/r/beanpool/comments/abc123/how_do_i_start_a_node/def456/';
@@ -169,6 +169,16 @@ describe('toNotice: what it skips', () => {
         for (const accountType of [3, 'ACCOUNT_TYPE_APP']) {
             expect(toNotice(commentEvent({}, { author: { name: 'some-app', accountType } }))).toBeNull();
         }
+    });
+
+    it('the team\'s own accounts, named in quietUsernames, in any case', () => {
+        const quiet = quietNames(' u/some_member,\nOther_Person  /u/third ');
+        expect([...quiet].sort()).toEqual(['other_person', 'some_member', 'third']);
+        expect(toNotice(postEvent(), quiet)).toBeNull();
+        expect(toNotice(commentEvent(), quiet)).toBeNull();
+        expect(toNotice(postEvent(), quietNames('someone-else'))).not.toBeNull();
+        expect(toNotice(postEvent({}, { author: { name: '' } }), quietNames(''))).not.toBeNull();
+        for (const raw of [undefined, null, '', ' , ', 7]) expect(quietNames(raw).size).toBe(0);
     });
 
     it('a spam or deleted comment, or one on a deleted post', () => {

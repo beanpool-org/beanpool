@@ -39,6 +39,12 @@ describe('devvit.json', () => {
             // The 0.15.0 schema refuses a default on a secret (the docs' example has one; the CLI would refuse it).
             expect(global[name]).not.toHaveProperty('defaultValue');
         }
-        expect(json.settings.subreddit).toBeUndefined();
+    });
+
+    it('lets the moderators name the team\'s own accounts, on the install settings page, not in the repo', () => {
+        expect(json.settings.subreddit).toEqual({
+            quietUsernames: expect.objectContaining({ type: 'string', defaultValue: '' }),
+        });
+        expect(json.settings.subreddit.quietUsernames).not.toHaveProperty('isSecret');
     });
 });

@@ -9239,6 +9239,8 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
             now,
             projectId
         );
+        // Its chat is titled by its name: a rename carries over, as the face's does (engine/enterprise-shopfront.ts).
+        db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'enterprise_thread'").run(rowName, projectId);
     })();
     broadcast({ type: 'project_updated', project: projects[index] });
     return true;

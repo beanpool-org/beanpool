@@ -263,7 +263,7 @@ export const TABLES: Record<string, TableEntry> = {
         kind: 'replicated-except', payload: 'conversations', watermark: 'created_at',
         columns: cols('id type post_id created_by created_at'),
         except: {
-            name: { reason: "a group's or an enterprise's rename writes it with no stamp (state-engine.ts updateGroup, engine/enterprise-shopfront.ts changeEnterpriseFace) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net). An event chat's travels with its event (engine/post-scrub.ts)", gap: 'G1b' },
+            name: { reason: "a group's or an enterprise's rename writes it with no stamp (state-engine.ts updateGroup, engine/enterprise-shopfront.ts changeEnterpriseFace, db.ts updateCrowdfundProject, state-engine.ts updateProject) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net). An event chat's travels with its event (engine/post-scrub.ts)", gap: 'G1b' },
         },
     },
     conversation_participants: {

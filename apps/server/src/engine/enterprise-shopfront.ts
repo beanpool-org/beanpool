@@ -7,7 +7,7 @@
  *   lead's (or a node admin's); its About (members.bio) and its logo (its avatar, the picture it was made with), any
  *   keeper's. About is theirs alone: a crowdfund's and a Commons proposal's own create and edit (db.ts
  *   createCrowdfundProject, updateCrowdfundProject; state-engine.ts createProject, updateProject) write the name and
- *   the purpose, never About. The banner is its shop's one photo (round 3 §0 row 4),
+ *   the purpose, never About, and rename its chat as this does. The banner is its shop's one photo (round 3 §0 row 4),
  *   not here. Every column it writes is in the members row a standby copies whole (members_touch_updated_at lists each,
  *   and the photo travels in the row: engine/replication-manifest.ts), and its shop's name is read from that row
  *   (engine/shops.ts), so the shop follows a rename on every copy.

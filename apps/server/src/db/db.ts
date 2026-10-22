@@ -3037,6 +3037,8 @@ export function updateCrowdfundProject(
                 WHERE public_key = ?
             `).run(rowName, description, goal_amount, now, id);
         }
+        // Its chat is titled by its name: a rename carries over, as the face's does (engine/enterprise-shopfront.ts).
+        db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'enterprise_thread'").run(rowName, id);
         if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();
 

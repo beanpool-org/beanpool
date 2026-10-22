@@ -44,6 +44,38 @@ const feedReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) 
 const onlineReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.online);
 const ownReads = () => vi.mocked(api.getMarketplacePosts).mock.calls.map(([f]) => f).filter(f => !!f?.author);
 
+// The deciding review's board (#2363): a 10 km setting at -28.6149, 153.5951 goes to the node as -28.61, 153.6 and
+// 11 km, 0.73 km to the north-east. A listing 9.8 km out on the far side is inside the circle but 10.5 km from the rounded
+// centre; one 10.3 km out on the near side is outside it but 9.6 km from the rounded centre, so the node answers it first.
+const BOARD_CENTRE = { lat: -28.6149, lng: 153.5951 };
+const toRad = (deg: number) => (deg * Math.PI) / 180;
+const toDeg = (rad: number) => (rad * 180) / Math.PI;
+/** The point `km` from BOARD_CENTRE on `bearing` (degrees from north), on lib/geo's 6371 km sphere. */
+const boardPoint = (bearing: number, km: number) => {
+    const [φ1, λ1, θ, δ] = [toRad(BOARD_CENTRE.lat), toRad(BOARD_CENTRE.lng), toRad(bearing), km / 6371];
+    const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ));
+    const λ2 = λ1 + Math.atan2(Math.sin(θ) * Math.sin(δ) * Math.cos(φ1), Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2));
+    return { lat: toDeg(φ2), lng: toDeg(λ2) };
+};
+/** Which way the centre moved when it was rounded. */
+const SHIFT_BEARING = (() => {
+    const [φ1, φ2, Δλ] = [toRad(BOARD_CENTRE.lat), toRad(-28.61), toRad(153.6 - BOARD_CENTRE.lng)];
+    return toDeg(Math.atan2(Math.sin(Δλ) * Math.cos(φ2), Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)));
+})();
+/** `inside` listings 9.8 km out on the far side, and `ring` 10.3 km out on the near side. */
+const board = (inside: number, ring: number) => [
+    ...Array.from({ length: inside }, (_, i) => ({ ...offer, id: `in-${i}`, title: `Inside ${i}`, ...boardPoint(SHIFT_BEARING + 180 + (i - inside / 2) * 0.8, 9.8) })),
+    ...Array.from({ length: ring }, (_, i) => ({ ...offer, id: `ring-${i}`, title: `Ring ${i}`, ...boardPoint(SHIFT_BEARING + (i - ring / 2) * 0.1, 10.3) })),
+];
+/** A node that answers a read by radius as the posts route does: nearest first, then by id, `limit` (50 unless asked) from `offset`. */
+const pagingNode = (rows: ReturnType<typeof board>, km: typeof haversineDistance) => async (f: Parameters<typeof api.getMarketplacePosts>[0]) => {
+    if (f?.author || f?.online || f?.lat == null || f.lng == null || f.radiusKm == null) return [] as any;
+    const from = (p: { lat: number; lng: number }) => km(f.lat!, f.lng!, p.lat, p.lng);
+    const offset = f.offset ?? 0;
+    return rows.filter(p => from(p) <= f.radiusKm!).sort((a, b) => from(a) - from(b) || a.id.localeCompare(b.id))
+        .slice(offset, offset + (f.limit ?? 50)).map(p => ({ ...p, distanceKm: from(p) })) as any;
+};
+
 describe('MarketplacePage: where the list is read from (S5)', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
@@ -88,8 +120,9 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         vi.mocked(loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: '30km radius' });
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
-        // The node is asked for a tenth more than the setting (lib/listings-near nearRead); the line says the setting.
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -37.1, lng: 144.2, radiusKm: 33, sort: 'distance' }]);
+        // The node is asked for a tenth more than the setting (lib/listings-near nearRead), and for twice the 50 the list
+        // keeps (readNearestInCircle); the line says the setting.
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -37.1, lng: 144.2, radiusKm: 33, sort: 'distance', limit: 100 }]);
         expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 30 km of the place you picked.');
     });
 
@@ -106,12 +139,48 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         ]) as any);
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.612, lng: 153.599, radiusKm: 5.5, sort: 'distance' }]);
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.612, lng: 153.599, radiusKm: 5.5, sort: 'distance', limit: 100 }]);
         expect(screen.queryByText('Ring offer')).toBeNull();
         const shown = screen.getAllByTestId('card-distance').map(e => e.textContent?.replace('📍', '').trim());
         expect(shown).toEqual(['1.1 km', '2.1 km']);
         // The setting's radius, not the 5.5 km the node was asked for (lib/events formatDistance writes 5 as 5.0).
         expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 5.0 km of the place you picked.');
+    });
+
+    describe('no listing inside the circle is lost when the node\'s page fills with ones past its edge (review of #2363)', () => {
+        beforeEach(async () => {
+            info.current = GLOBAL;
+            const real = await vi.importActual<typeof import('../lib/geo')>('../lib/geo');
+            vi.mocked(haversineDistance).mockImplementation(real.haversineDistance);
+            vi.mocked(loadRadiusSettings).mockReturnValue({ ...BOARD_CENTRE, radiusKm: 10, label: '10km radius' });
+        });
+        const cards = () => screen.getAllByTestId('card-distance');
+
+        it('the review\'s board: 45 inside on the far side, 10 past the edge on the near side; all 45 shown', async () => {
+            const real = await vi.importActual<typeof import('../lib/geo')>('../lib/geo');
+            const rows = board(45, 10);
+            // As measured: from the rounded centre, every ring listing is nearer than every inside one.
+            const fromRounded = (p: { lat: number; lng: number }) => real.haversineDistance(-28.61, 153.6, p.lat, p.lng);
+            expect(Math.max(...rows.slice(45).map(fromRounded))).toBeLessThan(Math.min(...rows.slice(0, 45).map(fromRounded)));
+            vi.mocked(api.getMarketplacePosts).mockImplementation(pagingNode(rows, real.haversineDistance));
+            render(<MarketplacePage identity={identity} />);
+            await screen.findByText('Inside 0');
+            await waitFor(() => expect(cards()).toHaveLength(45));
+            expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.61, lng: 153.6, radiusKm: 11, sort: 'distance', limit: 100 }]);
+            for (let i = 0; i < 45; i++) expect(screen.getByText(`Inside ${i}`)).toBeInTheDocument();
+            expect(screen.queryByText(/^Ring /)).toBeNull();
+        });
+
+        it('a first page of only listings past the edge is followed by the next', async () => {
+            const real = await vi.importActual<typeof import('../lib/geo')>('../lib/geo');
+            vi.mocked(api.getMarketplacePosts).mockImplementation(pagingNode(board(45, 120), real.haversineDistance));
+            render(<MarketplacePage identity={identity} />);
+            await screen.findByText('Inside 0');
+            await waitFor(() => expect(cards()).toHaveLength(45));
+            const read = { types: CLIENT_POST_TYPES, lat: -28.61, lng: 153.6, radiusKm: 11, sort: 'distance', limit: 100 };
+            expect(feedReads()).toEqual([read, { ...read, offset: 100 }]);
+            expect(screen.queryByText(/^Ring /)).toBeNull();
+        });
     });
 
     it('a member with no area and no distance setting reads the newest, with a way to what is near', async () => {

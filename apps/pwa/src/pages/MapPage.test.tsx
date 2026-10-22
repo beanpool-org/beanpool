@@ -1663,6 +1663,83 @@ describe('MapPage: where the pins are read from (S5)', () => {
             await waitFor(() => expect(view!.queryByTestId('map-near-empty')).toBeNull());
         });
     });
+
+    // The deciding review's board (#2363): a 10 km setting at -28.6149, 153.5951 goes to the node as -28.61, 153.6 and
+    // 11 km, 0.73 km to the north-east. A listing 9.8 km out on the far side is inside the circle but 10.5 km from the
+    // rounded centre; one 10.3 km out on the near side is outside it but 9.6 km from the rounded centre, so the node
+    // answers it first. The map already asks for the node's cap (200), so a full page the cut left short reads the next.
+    describe('no pin inside the circle is lost when the node\'s page fills with ones past its edge (review of #2363)', () => {
+        const CENTRE = { lat: -28.6149, lng: 153.5951 };
+        const toRad = (deg: number) => (deg * Math.PI) / 180;
+        const toDeg = (rad: number) => (rad * 180) / Math.PI;
+        /** The point `km` from CENTRE on `bearing` (degrees from north), on lib/geo's 6371 km sphere. */
+        const point = (bearing: number, km: number) => {
+            const [φ1, λ1, θ, δ] = [toRad(CENTRE.lat), toRad(CENTRE.lng), toRad(bearing), km / 6371];
+            const φ2 = Math.asin(Math.sin(φ1) * Math.cos(δ) + Math.cos(φ1) * Math.sin(δ) * Math.cos(θ));
+            const λ2 = λ1 + Math.atan2(Math.sin(θ) * Math.sin(δ) * Math.cos(φ1), Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2));
+            return { lat: toDeg(φ2), lng: toDeg(λ2) };
+        };
+        /** Which way the centre moved when it was rounded. */
+        const shift = (() => {
+            const [φ1, φ2, Δλ] = [toRad(CENTRE.lat), toRad(-28.61), toRad(153.6 - CENTRE.lng)];
+            return toDeg(Math.atan2(Math.sin(Δλ) * Math.cos(φ2), Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ)));
+        })();
+        /** `inside` listings 9.8 km out on the far side, and `ring` 10.3 km out on the near side. */
+        const board = (inside: number, ring: number) => [
+            ...Array.from({ length: inside }, (_, i) => ({ ...post, id: `in-${i}`, title: `Inside ${i}`, ...point(shift + 180 + (i - inside / 2) * 0.8, 9.8) })),
+            ...Array.from({ length: ring }, (_, i) => ({ ...post, id: `ring-${i}`, title: `Ring ${i}`, ...point(shift + (i - ring / 2) * 0.1, 10.3) })),
+        ];
+        const READ = { types: TYPES, lat: -28.61, lng: 153.6, radiusKm: 11, sort: 'distance', limit: 200 };
+        let km: (lat1: number, lng1: number, lat2: number, lng2: number) => number;
+        /** A node that answers a read by radius as the posts route does: nearest first, then by id, `limit` from `offset`. */
+        const pagingNode = (rows: ReturnType<typeof board>) => async (f: Parameters<typeof api.getMarketplacePosts>[0]) => {
+            if (f?.author || f?.lat == null || f.lng == null || f.radiusKm == null) return [] as any;
+            const from = (p: { lat: number; lng: number }) => km(f.lat!, f.lng!, p.lat, p.lng);
+            const offset = f.offset ?? 0;
+            return rows.filter(p => from(p) <= f.radiusKm!).sort((a, b) => from(a) - from(b) || a.id.localeCompare(b.id))
+                .slice(offset, offset + (f.limit ?? 50)).map(p => ({ ...p, distanceKm: from(p) })) as any;
+        };
+        beforeEach(async () => {
+            const geo = await import('../lib/geo');
+            const real = await vi.importActual<typeof import('../lib/geo')>('../lib/geo');
+            km = real.haversineDistance;
+            vi.mocked(geo.haversineDistance).mockImplementation(real.haversineDistance);
+            vi.mocked(geo.loadRadiusSettings).mockReturnValue({ ...CENTRE, radiusKm: 10, label: '10km radius' });
+        });
+        afterEach(async () => {
+            const geo = await import('../lib/geo');
+            vi.mocked(geo.haversineDistance).mockImplementation(() => 0);
+        });
+
+        it('a page of 200 that the cut left short: the next page is read, and the inside listing furthest from the rounded centre is on the map', async () => {
+            const rows = board(45, 160);
+            // The one the node answers last: 40 of the 45 fit in the first page, behind the 160 past the edge.
+            const last = rows.slice(0, 45).reduce((a, b) => (km(-28.61, 153.6, a.lat, a.lng) > km(-28.61, 153.6, b.lat, b.lng) ? a : b));
+            vi.mocked(api.getMarketplacePosts).mockImplementation(pagingNode(rows));
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} focusPostId={last.id} />); });
+            expect(await view!.findByTestId('map-preview-card')).toHaveTextContent(last.title);
+            expect(listReads()).toEqual([READ, { ...READ, offset: 200 }]);
+            expect(view!.queryByTestId('map-near-empty')).toBeNull();
+        });
+
+        it('a first page of only listings past the edge is not "nothing near": the next page holds the 45', async () => {
+            vi.mocked(api.getMarketplacePosts).mockImplementation(pagingNode(board(45, 200)));
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} focusPostId="in-0" />); });
+            expect(await view!.findByTestId('map-preview-card')).toHaveTextContent('Inside 0');
+            expect(listReads()).toEqual([READ, { ...READ, offset: 200 }]);
+            expect(view!.queryByTestId('map-near-empty')).toBeNull();
+        });
+
+        it('reads at most three pages', async () => {
+            vi.mocked(api.getMarketplacePosts).mockImplementation(pagingNode(board(0, 1000)));
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+            await view!.findByTestId('map-near-empty');
+            expect(listReads()).toEqual([READ, { ...READ, offset: 200 }, { ...READ, offset: 400 }]);
+        });
+    });
 });
 
 /*

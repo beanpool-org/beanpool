@@ -1,6 +1,6 @@
 // Where the web Market and Map read from (S5): the pure rule, every branch.
 import { describe, it, expect } from 'vitest';
-import { nearRead, nearParams, listingDistanceKm, nearestInCircle } from './listings-near';
+import { nearRead, nearParams, listingDistanceKm, nearestInCircle, readNearestInCircle, NEAR_PAGES_MAX, NODE_PAGE_MAX } from './listings-near';
 import { haversineDistance } from './geo';
 
 const NEARBY = { radiusKm: 250 };
@@ -150,5 +150,78 @@ describe('nearestInCircle: what a read from the setting brought back, cut to the
         const area = nearRead({ nearbyListings: NEARBY, setting: null, area: AREA, visitor: false })!;
         expect(nearestInCircle(sent, area)).toBe(sent);
         expect(nearestInCircle(sent, null)).toBe(sent);
+    });
+});
+
+// The node answers a read from the setting nearest first from the ROUNDED centre, within the WIDER radius: once its page
+// fills, listings past the exact edge on the rounded centre's side can take places the ones inside the circle needed,
+// and the cut then leaves the list short (deciding review of #2363). The read asks for more than it keeps, and reads on.
+describe('readNearestInCircle: a read from the setting keeps as many from inside the exact circle as it is asked for', () => {
+    const near = nearRead({ nearbyListings: NEARBY, setting: { lat: -28.612345, lng: 153.598765, radiusKm: 5, label: '5km radius' }, area: null, visitor: false })!;
+    // Inside: 1.10 km from the exact centre and on, each a little further east. Ring: 5.20 km, past the 5 km edge.
+    const inside = (i: number) => ({ id: `in-${String(i).padStart(4, '0')}`, lat: -28.612345, lng: 153.61 + i * 0.0001 });
+    const ring = (i: number) => ({ id: `ring-${i}`, lat: -28.612345, lng: 153.652 });
+    const many = <T>(n: number, row: (i: number) => T) => Array.from({ length: n }, (_, i) => row(i));
+    /** A node that answers `rows`, in that order, a page at a time as the posts route does (limit 50 unless asked). */
+    const pagedNode = <T>(rows: T[]) => {
+        const reads: { limit?: number; offset?: number }[] = [];
+        const read = async (page: { limit?: number; offset?: number }) => {
+            reads.push(page);
+            const from = page.offset ?? 0;
+            return rows.slice(from, from + (page.limit ?? 50));
+        };
+        return { reads, read };
+    };
+
+    it('asks for twice what it keeps, cuts, and keeps the nearest that many', async () => {
+        const node = pagedNode([...many(10, ring), ...many(60, inside)]);
+        const kept = await readNearestInCircle(near, 50, node.read);
+        expect(node.reads).toEqual([{ limit: 100 }]);
+        expect(kept.map(p => p.id)).toEqual(many(50, inside).map(p => p.id));
+    });
+
+    it('a full page the cut left short is followed by the next, until the list is full or the node has no more', async () => {
+        const node = pagedNode([...many(150, ring), ...many(45, inside)]);
+        const kept = await readNearestInCircle(near, 50, node.read);
+        expect(node.reads).toEqual([{ limit: 100 }, { limit: 100, offset: 100 }]);
+        expect(kept.map(p => p.id)).toEqual(many(45, inside).map(p => p.id));
+
+        const full = pagedNode([...many(150, ring), ...many(500, inside)]);
+        expect(await readNearestInCircle(near, 50, full.read)).toHaveLength(50);
+        expect(full.reads).toEqual([{ limit: 100 }, { limit: 100, offset: 100 }]);
+    });
+
+    it('a full page that already fills the list is the only read', async () => {
+        const node = pagedNode(many(300, inside));
+        expect(await readNearestInCircle(near, 50, node.read)).toHaveLength(50);
+        expect(node.reads).toEqual([{ limit: 100 }]);
+    });
+
+    it('never more than NEAR_PAGES_MAX pages, and never past the node\'s page cap', async () => {
+        const node = pagedNode(many(5000, ring));
+        expect(await readNearestInCircle(near, 50, node.read)).toEqual([]);
+        expect(node.reads).toEqual([{ limit: 100 }, { limit: 100, offset: 100 }, { limit: 100, offset: 200 }]);
+        expect(NEAR_PAGES_MAX).toBe(3);
+
+        const map = pagedNode([...many(450, ring), ...many(5, inside)]);
+        expect(await readNearestInCircle(near, NODE_PAGE_MAX, map.read)).toHaveLength(5);
+        expect(map.reads).toEqual([{ limit: 200 }, { limit: 200, offset: 200 }, { limit: 200, offset: 400 }]);
+    });
+
+    it('a listing the node moved from one page into the next is kept once', async () => {
+        const rows = [...many(99, ring), inside(0), inside(0), inside(1)];
+        const node = pagedNode(rows);
+        expect((await readNearestInCircle(near, 50, node.read)).map(p => p.id)).toEqual([inside(0).id, inside(1).id]);
+        expect(node.reads).toHaveLength(2);
+    });
+
+    it('a read from the area, and no read, are one read as before, as the node sent them', async () => {
+        const area = nearRead({ nearbyListings: NEARBY, setting: null, area: AREA, visitor: false })!;
+        const rows = [...many(150, ring), ...many(5, inside)];
+        for (const n of [area, null]) {
+            const node = pagedNode(rows);
+            expect(await readNearestInCircle(n, 50, node.read)).toEqual(rows.slice(0, 50));
+            expect(node.reads).toEqual([{}]);
+        }
     });
 });

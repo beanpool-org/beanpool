@@ -100,4 +100,18 @@ describe('PeoplePage tabs follow the WAI-ARIA tabs pattern (#674)', () => {
         fireEvent.click(screen.getByRole('tab', { name: /Community/ }));
         await waitFor(() => expect(api.getMembers).toHaveBeenCalled());
     });
+
+    it('shows 💬 message button on community rows and opens DM when clicked (S0)', async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(api, 'getMembersWhole').mockResolvedValue([
+            { publicKey: 'bob-pubkey', callsign: 'Bob', joinedAt: '2026-01-01', invitedBy: '', inviteCode: '', avatarUrl: null },
+        ] as any);
+        render(<PeoplePage identity={identity} onNavigate={onNavigate} />);
+        fireEvent.click(screen.getByRole('tab', { name: /Community/ }));
+        expect(await screen.findByText('Bob')).toBeInTheDocument();
+        const msgBtn = screen.getByRole('button', { name: /Message Bob/i });
+        expect(msgBtn).toBeInTheDocument();
+        fireEvent.click(msgBtn);
+        expect(onNavigate).toHaveBeenCalledWith('messages', 'bob-pubkey');
+    });
 });

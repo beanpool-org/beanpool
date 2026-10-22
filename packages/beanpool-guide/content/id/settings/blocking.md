@@ -4,7 +4,7 @@ title: Memblokir seseorang
 summary: Sembunyikan kiriman dan pesan seseorang darimu, dan batalkan pemblokiran nanti jika diinginkan.
 related: reporting, messages, privacy, getting-help
 help: Orang yang telah kamu blokir. Kiriman dan pesan mereka disembunyikan; buka blokir di sini.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Memblokir
@@ -58,5 +58,6 @@ Komunitasmu melakukan ini untuk pemblokiran yang disimpannya untukmu. Saat ini i
 
 - Buka **Pengaturan**. Di bawah **HUKUM & PRIVASI**, ketuk **Kelola Pengguna yang Diblokir**.
 - Ketuk **Buka blokir** di samping nama, atau **Buka Blokir Semua**.
+- Di aplikasi ponsel kamu juga bisa membuka blokir seseorang dari profilnya. Di bawah namanya tertulis "Kamu memblokir" dan namanya. Ketuk **Buka blokir** di sana.
 
 Di aplikasi web, memblokir dan membuka blokir memerlukan koneksi ke komunitasmu. Tanpa koneksi, aplikasi akan memberitahukan hal itu dan tidak ada yang berubah. Coba lagi saat kamu kembali online.

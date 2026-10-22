@@ -2,10 +2,10 @@
   "_meta": {
     "language": "id",
     "name": "Indonesian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, shop and tool shed top-up 23 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-23",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "kacang",
@@ -712,5 +712,24 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "Di bagian atas: ikon kacang adalah komunitasmu dan panduan, ? menjelaskan layar ini, penggeser adalah Pengaturan.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "Di bagian atas: ? menjelaskan layar yang sedang kamu buka; Pengaturan adalah tempat seluruh panduan berada.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "Tambahkan kartu pertamamu: ketuk satu untuk menaruhnya di Beranda. Atau ketuk Selesai dan Beranda dimulai dengan lima kartu biasa.",
-  "Step {n} of {total}": "Langkah {n} dari {total}"
+  "Step {n} of {total}": "Langkah {n} dari {total}",
+  "Things you own and might lend, and who has them.": "Barang yang kamu punya dan mungkin kamu pinjamkan, serta siapa yang memegangnya.",
+  "Tool shed": "Gudang alat",
+  "When something lent outside BeanPool is due back": "Saat barang yang dipinjamkan di luar BeanPool harus kembali",
+  "Your shop and tools": "Tokomu dan peralatan",
+  "Your shop, and things you can do on your own.": "Tokomu, dan hal-hal yang bisa kamu lakukan sendiri.",
+  "Your things, and what is out.": "Barang-barangmu, dan mana yang sedang dipinjam.",
+  "a drill": "bor",
+  "a ladder": "tangga",
+  "a tent": "tenda",
+  "{name} is due back": "{name} harus kembali",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "other": "{n} barang · semua di gudangmu"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "other": "{n} barang · {listed} di tokomu · {out} sedang dipinjam"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "other": "{n} barang · {out} sedang dipinjam"
+  }
 }

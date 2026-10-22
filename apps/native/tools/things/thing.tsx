@@ -60,6 +60,8 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const [hint, setHint] = useState<ToolPriceHint | null>(null);
     const beans = host.node.features?.beans !== false;
     const postId = thing?.postId;
+    /** Its Offer, in the shop or taken out of it: what Lend and Delete pause. */
+    const linked = postId ?? thing?.pausedPostId;
     /** Whether the member has left this screen: a Delete that lands after they have doesn't go back again. */
     const left = useRef(false);
     // Set again on each mount: StrictMode mounts twice.
@@ -68,14 +70,15 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         return () => { left.current = true; };
     }, []);
 
-    // A linked Offer as the Market has it now: gone (ended, deleted) or paused from elsewhere is said.
+    // A linked Offer as the Market has it now: gone (ended, deleted) or paused from elsewhere is said, and so is a taken-out
+    // one put back up without the Tool shed (its shop's reopen, the Market's own resume).
     useEffect(() => {
         setOfferStatus(null);
-        if (!postId) return;
+        if (!linked) return;
         let gone = false;
-        host.posts.status(postId).then((s) => { if (!gone) setOfferStatus(s); }).catch(() => {});
+        host.posts.status(linked).then((s) => { if (!gone) setOfferStatus(s); }).catch(() => {});
         return () => { gone = true; };
-    }, [postId]);
+    }, [linked]);
 
     // The community's price guide, where Beans are on: a hint for a fee per day or week, never a price set.
     const name = thing?.name;
@@ -96,14 +99,12 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         );
     }
     const id = thing.id;
-    /** Its Offer, in the shop or taken out of it: what Lend and Delete pause. */
-    const linked = postId ?? thing.pausedPostId;
     const state = thingState(thing, open);
     const cat = thingCategory(thing.category);
     const condition = thingConditionName(thing.condition);
-    // A thing in the shop may be out on a loan through BeanPool: until its deals are known, nothing that would pause its
-    // Offer or delete the thing is offered.
-    const held = state === 'listed' && (deals === null || failed);
+    // A thing in the shop, or taken out of it (its Offer may be up again), may be out on a loan through BeanPool: until its
+    // deals are known, nothing that would pause its Offer or delete the thing is offered.
+    const held = (state === 'listed' || state === 'taken-out') && (deals === null || failed);
 
     /** One change: whatever it asks of the server first, then the document; any failure says so and changes nothing. */
     const act = async (change: () => Promise<void>) => {
@@ -158,14 +159,16 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
      * one already paused alike: a paused one may be its shop's ("closed for now"), which the shop's reopen would put back
      * up, and the owner's pause makes it theirs, so it stays down. One gone is left as the Market has it. What it returns
      * puts back a pause it made of a live Offer: the Offer resumed, or, when the server can't be reached then, the screen
-     * says it is paused, with Put back.
+     * says it is paused, with Put back. The screen holds the Offer as paused once it is (Take out keeps the same Offer, so
+     * nothing reads it again): never "up in the Market again" over a pause just made.
      */
     const pauseOffer = async (offerId: string): Promise<(() => Promise<void>) | undefined> => {
         const status = await host.posts.status(offerId);
         if (status === 'gone') return undefined;
         await host.posts.pause(offerId);
+        setOfferStatus('paused');
         if (status === 'paused') return undefined;
-        return () => host.posts.resume(offerId).then(() => {}, () => setOfferStatus('paused'));
+        return () => host.posts.resume(offerId).then(() => setOfferStatus('active'), () => {});
     };
 
     const list = () => {
@@ -252,6 +255,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         { value: 'none', label: t('No date') },
         ...BACK_AROUND_DAYS.map((d) => ({ value: String(d), label: backAroundChip(d) })),
     ];
+    const canLend = state === 'shelf' || ((state === 'listed' || state === 'taken-out') && !held);
     const lendButton = <ToolButton text={t('Lent to someone outside BeanPool')} onPress={() => { setRefused(null); setLending({ name: '', days: null }); }} disabled={busy} testID="thing-lend" />;
     const editButton = <ToolButton text={t('Edit')} onPress={() => host.navigate('edit', { key: id })} testID="thing-edit" />;
     const deleteButton = <ToolButton text={t('Delete')} onPress={() => { setRefused(null); setAsking(true); }} disabled={busy} testID="thing-delete" />;
@@ -265,6 +269,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                 {held && failed ? <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testID="thing-unchecked" /> : null}
                 {refused ? <ToolNote tone="danger" text={refused} testID="thing-refused" /> : null}
                 {goneNote ? <ToolNote text={t('Its Offer has gone from the Market, so it is back on your shelf. List it again to make a new one.')} testID="thing-gone-note" /> : null}
+                {state === 'taken-out' && offerStatus === 'active' ? <ToolNote text={t('Its Offer is up in the Market again.')} testID="thing-offer-live" /> : null}
                 {state === 'out' ? <ToolNote text={t('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.')} testID="thing-deal-note" /> : null}
                 {state === 'asked' ? <ToolNote text={t('Answer them in My Deals, at the top of the Market.')} testID="thing-deal-note" /> : null}
                 {lending ? (
@@ -292,9 +297,9 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                         {state === 'listed' && !held && offerStatus !== 'gone' && offerStatus !== 'paused'
                             ? <ToolButton text={t('Take out of your shop')} onPress={() => { void takeOut(); }} disabled={busy} testID="thing-take-out" /> : null}
                         {state === 'lent' ? <ToolButton text={t("It's back")} primary onPress={() => { void backHome(); }} disabled={busy} testID="thing-back-home" /> : null}
-                        {state === 'shelf' || state === 'taken-out' || (state === 'listed' && !held) ? lendButton : null}
+                        {canLend ? lendButton : null}
                         {editButton}
-                        {state === 'shelf' || state === 'taken-out' || (state === 'listed' && !held) ? deleteButton : null}
+                        {canLend ? deleteButton : null}
                     </ToolButtons>
                 )}
                 {listedNote && state === 'shelf' ? <ToolNote text={t('Once you have posted it, link it to its Offer below, so the Tool shed knows it is in your shop.')} testID="thing-listed-note" /> : null}

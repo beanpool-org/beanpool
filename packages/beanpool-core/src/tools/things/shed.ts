@@ -59,15 +59,22 @@ export function openDealsByPost(deals: readonly ToolDealSummary[] | null | undef
     return out;
 }
 
+/**
+ * A thing's open deal (openDealsByPost), on its Offer in the shop or on the one taken out of it: a taken-out thing's Offer
+ * can be put back up without the Tool shed (its shop's reopen, the Market's own resume) and lent from there.
+ */
+function dealOf(thing: Thing, deals: ReadonlyMap<string, ToolDealSummary>): ToolDealSummary | undefined {
+    const offer = typeof thing.postId === 'string' ? thing.postId : thing.pausedPostId;
+    return typeof offer === 'string' ? deals.get(offer) : undefined;
+}
+
 /** A thing's state, from the document and the owner's open deals (openDealsByPost). */
 export function thingState(thing: Thing, deals: ReadonlyMap<string, ToolDealSummary> = new Map()): ThingState {
     if (isLentTo(thing.lentTo)) return 'lent';
-    if (typeof thing.postId === 'string') {
-        const deal = deals.get(thing.postId);
-        if (deal?.status === 'pending') return 'out';
-        if (deal?.status === 'requested') return 'asked';
-        return 'listed';
-    }
+    const deal = dealOf(thing, deals);
+    if (deal?.status === 'pending') return 'out';
+    if (deal?.status === 'requested') return 'asked';
+    if (typeof thing.postId === 'string') return 'listed';
     if (typeof thing.pausedPostId === 'string') return 'taken-out';
     return 'shelf';
 }
@@ -116,7 +123,7 @@ export function thingStateLine(thing: Thing, deals: ReadonlyMap<string, ToolDeal
             return validTime(lent.since) ? t('With {name} since {date}', { name: lent.name, date: day(lent.since) }) : t('With {name}', { name: lent.name });
         }
         case 'out': {
-            const back = deals.get(thing.postId!)?.backAround;
+            const back = dealOf(thing, deals)?.backAround;
             if (validTime(back)) {
                 return Date.parse(back) < now ? t('Out on a loan · was due back {date}', { date: day(back) }) : t('Out on a loan · back around {date}', { date: day(back) });
             }
@@ -144,7 +151,7 @@ export function thingRowLine(thing: Thing, deals: ReadonlyMap<string, ToolDealSu
                 : t('Due {date} · with {name}', { name: lent.name, date: day(lent.backAround) });
         }
         case 'out': {
-            const back = deals.get(thing.postId!)?.backAround;
+            const back = dealOf(thing, deals)?.backAround;
             if (!validTime(back)) return t('Out on a loan');
             return Date.parse(back) < now ? t('Out · overdue') : t('Out · due {date}', { date: day(back) });
         }
@@ -427,7 +434,7 @@ export function thingsLoans(doc: ThingsDoc, deals: readonly ToolDealSummary[] | 
             const back = validTime(thing.lentTo!.backAround) ? thing.lentTo!.backAround! : null;
             out.push({ thing, state, since: validTime(thing.lentTo!.since) ? thing.lentTo!.since : null, backAround: back, overdue: back !== null && Date.parse(back) < now });
         } else if (state === 'out' || state === 'asked') {
-            const deal = open.get(thing.postId!)!;
+            const deal = dealOf(thing, open)!;
             const back = state === 'out' && validTime(deal.backAround) ? deal.backAround : null;
             out.push({ thing, state, since: validTime(deal.updatedAt) ? deal.updatedAt : null, backAround: back, overdue: back !== null && Date.parse(back) < now });
         }

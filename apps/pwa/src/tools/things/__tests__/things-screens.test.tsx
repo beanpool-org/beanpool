@@ -954,6 +954,11 @@ describe('A thing', () => {
         expect(byTestId('thing-state')?.textContent).toBe('In your shop');
         expect(byTestId('thing-offer-live')).toBeNull();
         expect(server.asks).toEqual([]);
+        // Taken out again: the same Offer, paused; never "up in the Market again" over the pause just made.
+        await click('thing-take-out');
+        expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+        expect(byTestId('thing-offer-live')).toBeNull();
+        expect(server.asks).toEqual(['pause post-1']);
     });
 
     it("taken out, its deals not yet known: Lend and Delete wait for them, as for a thing in the shop", async () => {

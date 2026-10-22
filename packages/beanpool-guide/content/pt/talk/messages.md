@@ -4,7 +4,7 @@ title: Mensagens
 summary: Iniciar uma conversa, enviar fotos, responder, reagir, editar, apagar, silenciar e o que é privado.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Suas conversas. Conversas individuais têm proteção de ponta a ponta. Toque para abrir ou inicie uma a partir de um anúncio ou amigos.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Suas conversas
@@ -23,11 +23,12 @@ No app web, essa é a aba **Bate-papo**. Ela lista todas as suas conversas, de g
 
 ## Iniciando uma conversa
 
-- A partir de uma publicação: toque em **Mensagem** e no nome da pessoa.
+- A partir de um perfil: abra o perfil da pessoa e toque em **Mensagem**. Você também pode adicioná-la aos amigos ali.
 - A partir de **Conversas**: toque no botão de lápis e encontre a pessoa pelo nome. Na comunidade global, Nova Mensagem lista as pessoas com quem você já negociou e seus amigos. Para encontrar qualquer outra pessoa, digite pelo menos 2 letras do nome dela.
-- A partir dos seus amigos: **Conversas**, depois **Pessoas**, depois **Amigos**, e toque no botão de mensagem ao lado de um nome.
+- A partir da lista de membros: **Conversas**, depois **Pessoas**, e toque em 💬 ao lado do nome de um membro em **Comunidade** ou **Amigos**.
+- A partir de uma publicação: toque em **Mensagem** e no nome da pessoa.
 
-No app web, use **✉️ Nova mensagem direta** ou o botão **💬 Mensagem** em uma publicação. Seus amigos ficam sob a aba **Pessoas**.
+No app web, use **Mensagem** no perfil da pessoa, 💬 na linha dela em **Pessoas**, **✉️ Nova mensagem direta** ou o botão **💬 Mensagem** em uma publicação.
 
 ## Enviando
 

@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "No topo: o feijão é sua comunidade e o guia, ? explica esta tela, as barras de ajuste são Configurações.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "No topo: ? explica a tela atual; Configurações é onde fica o guia completo.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "Adicione seus primeiros cartões: toque em um para colocá-lo no Início. Ou toque em Concluído e o Início começa com os cinco habituais.",
-  "Step {n} of {total}": "Passo {n} de {total}"
+  "Step {n} of {total}": "Passo {n} de {total}",
+  "Things you own and might lend, and who has them.": "Coisas que você tem e pode emprestar, e quem está com elas.",
+  "Tool shed": "Galpão de ferramentas",
+  "When something lent outside BeanPool is due back": "Quando algo emprestado fora do BeanPool deve voltar",
+  "Your shop and tools": "Sua loja e ferramentas",
+  "Your shop, and things you can do on your own.": "Sua loja e o que você pode fazer por conta própria.",
+  "Your things, and what is out.": "Suas coisas e o que está emprestado.",
+  "a drill": "uma furadeira",
+  "a ladder": "uma escada",
+  "a tent": "uma barraca",
+  "{name} is due back": "{name} deve voltar",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} coisa · no seu galpão",
+    "other": "{n} coisas · todas no seu galpão"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} coisa · {listed} na sua loja · {out} fora",
+    "other": "{n} coisas · {listed} na sua loja · {out} fora"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} coisa · {out} fora",
+    "other": "{n} coisas · {out} fora"
+  }
 }

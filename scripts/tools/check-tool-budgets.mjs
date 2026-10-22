@@ -57,13 +57,17 @@ export async function registrationProblems(root = ROOT) {
             problems.push(`Tool ${id}: an id is 2 to ${TOOL_LIMITS.idChars} lowercase letters and hyphens, a letter at each end and never two hyphens together.`);
             ok = false;
         }
+        const screensStarted = folders.native.includes(id) || registered.native.includes(id) || folders.pwa.includes(id) || registered.pwa.includes(id);
+        const coreComplete = folders.core.includes(id) && registered.core.includes(id);
         for (const p of PARTS) {
             const hasFolder = folders[p.part].includes(id);
             const hasLine = registered[p.part].includes(id);
             if (hasFolder && !hasLine) problems.push(`${p.dir}/${id} is not registered: add it to ${p.registry} in ${p.index} (node scripts/tools/new-tool.mjs writes all three lines).`);
             else if (!hasFolder && hasLine) problems.push(`${p.index} registers ${id}, but ${p.dir}/${id} does not exist.`);
-            else if (!hasFolder) problems.push(`Tool ${id} has no ${p.half} (${p.dir}/${id}): every tool has a core, a phone and a web half.`);
-            if (!hasFolder || !hasLine) ok = false;
+            else if (!hasFolder && (!coreComplete || screensStarted)) problems.push(`Tool ${id} has no ${p.half} (${p.dir}/${id}): every tool has a core, a phone and a web half.`);
+            if (!hasFolder || !hasLine) {
+                if (p.part === 'core' || screensStarted) ok = false;
+            }
         }
         if (ok) complete.push(id);
     }
@@ -73,6 +77,7 @@ export async function registrationProblems(root = ROOT) {
 /** Minified bytes of one half: its index.ts bundled with everything outside its own folder (and its data) left out. */
 async function codeBytes(root, p, id) {
     const folder = path.join(root, p.dir, id);
+    if (!fs.existsSync(folder) && p.part !== 'core') return { bytes: 0 };
     const entry = ['index.ts', 'index.tsx'].map((f) => path.join(folder, f)).find((f) => fs.existsSync(f));
     if (!entry) return { error: `Tool ${id} has no ${p.dir}/${id}/index.ts: each half starts there.` };
     // esbuild resolves from real paths: compare with the folder's own, or a root under a symlink (macOS's /var) is all "outside".

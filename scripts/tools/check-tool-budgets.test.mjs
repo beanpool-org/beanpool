@@ -23,6 +23,11 @@ function tree() {
         fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
         fs.copyFileSync(path.join(ROOT, rel), path.join(root, rel));
     }
+    const coreIndex = path.join(root, PARTS[0].index);
+    fs.writeFileSync(coreIndex, fs.readFileSync(coreIndex, 'utf8')
+        .replace(/import { THINGS } from '\.\/things\/index\.js';\n/, '')
+        .replace(/export \* from '\.\/things\/index\.js';\n/, '')
+        .replace(/ {4}THINGS,\n/, ''));
     return root;
 }
 const write = (root, rel, text) => {

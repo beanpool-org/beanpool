@@ -33,7 +33,7 @@ import {
 import { formatNumber, offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, tn, zoneLabelFor, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields, eventRepeatProblem } from '../components/EventRepeatFields';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
-import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
+import { nearRead, nearParams, listingDistanceKm, readNearestInCircle } from '../lib/listings-near';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -755,9 +755,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         () => everywhere ? nearRead({ nearbyListings, setting: radiusSetting, area: memberArea, visitor: !!visitor }) : null,
         [everywhere, nearbyListings, radiusSetting, memberArea, visitor],
     );
-    // A pin pushed over the live feed joins the map only inside the radius the map was read with.
+    // A pin pushed over the live feed joins the map only inside the circle the map was read for.
     const fitsMap = useCallback((p: MarketplacePost): boolean => fitsMapList(p) && (!near
-        || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm)), [near]);
+        || (p.lat != null && p.lng != null && haversineDistance(near.circle.lat, near.circle.lng, p.lat, p.lng) <= near.circle.radiusKm)), [near]);
 
     // Load marketplace posts (home + enabled peers from localStorage)
     const refreshPosts = useCallback(async () => {
@@ -791,8 +791,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 const [pinsRes, localData, ownData] = await Promise.all([
                     visitor ? Promise.resolve({ enterprises: [] }) : getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
                     // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them. Where the node
-                    // reads by area, the nearest within the radius, and the viewer's own pins wherever they are.
-                    getMarketplacePosts(near ? { ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT } : { ...MAP_LIST_FILTER }),
+                    // reads by area, the nearest within the radius, and the viewer's own pins wherever they are. Read from
+                    // the distance setting: cut to the exact circle (the node was asked for a wider one), page after page
+                    // while a full one leaves fewer than MAP_NEAR_LIMIT or one not yet read could be nearer (lib/listings-near
+                    // readNearestInCircle).
+                    near
+                        ? readNearestInCircle(near, MAP_NEAR_LIMIT, page => getMarketplacePosts({ ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT, ...page }))
+                        : getMarketplacePosts({ ...MAP_LIST_FILTER }),
                     near && identity ? getMarketplacePosts({ ...MAP_LIST_FILTER, author: identity.publicKey, limit: MAP_NEAR_LIMIT }).catch(() => []) : Promise.resolve([]),
                     // No read for online events (the Market makes one beside its radius read): they have no place, so the
                     // map has nothing to draw for them (review of #1952, finding 8).
@@ -1971,8 +1976,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 >
                     <span>
                         {near.from === 'area'
-                            ? t('Nothing within {distance} of your area yet.', { distance: formatDistance(near.radiusKm) })
-                            : t('Nothing within {distance} of the place you picked yet.', { distance: formatDistance(near.radiusKm) })}
+                            ? t('Nothing within {distance} of your area yet.', { distance: formatDistance(near.circle.radiusKm) })
+                            : t('Nothing within {distance} of the place you picked yet.', { distance: formatDistance(near.circle.radiusKm) })}
                     </span>
                     <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">{t('Show everywhere')}</button>
                 </p>
@@ -2115,11 +2120,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         post={previewPost}
                         identity={identity}
                         visitor={visitor}
-                        // From where the member is, once they tapped the target (as before); else the node's number,
-                        // from their area or the place they picked.
+                        // From where the member is, once they tapped the target (as before); else the node's number from
+                        // their area, or measured here from the exact place they picked (the node had it rounded).
                         distanceKm={userLocation && previewPost.lat != null && previewPost.lng != null
                             ? haversineDistance(userLocation.lat, userLocation.lng, previewPost.lat, previewPost.lng)
-                            : listingDistanceKm(previewPost, null)}
+                            : listingDistanceKm(previewPost, near?.from === 'setting'
+                                ? (lat, lng) => haversineDistance(near.circle.lat, near.circle.lng, lat, lng) : null, near)}
                         onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                         onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
                     />

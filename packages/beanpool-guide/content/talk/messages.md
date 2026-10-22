@@ -22,11 +22,12 @@ In the web app this is the **Chat** tab. It lists all your chats, groups' and ev
 
 ## Starting a chat
 
-- From a post: tap **Message** and the person's name.
+- From a profile: open their profile and tap **Message**. You can also add them as a friend there.
 - From **Talk**: tap the pencil button, then find the person by name. On the worldwide community, New Message lists the people you've dealt with and your friends. To find anyone else, type at least 2 letters of their name.
-- From your friends: **Talk**, then **People**, then **Friends**, and tap the message button next to a name.
+- From the members list: **Talk**, then **People**, and tap 💬 next to a member's name in **Community** or **Friends**.
+- From a post: tap **Message** and the person's name.
 
-In the web app, use **✉️ New DM**, or the **💬 Message** button on a post. Your friends are under the **People** tab.
+In the web app, use **Message** on their profile, 💬 on their row under **People**, **✉️ New DM**, or the **💬 Message** button on a post.
 
 ## Sending
 

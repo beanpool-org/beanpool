@@ -4,7 +4,9 @@
 //
 // The connector runs it through setTunnelConnectorForTests({ command: process.execPath, prefixArgs: [this file, folder] }),
 // so it sees exactly the arguments and the environment the real one would. It:
-//   - appends { pid, argv, env, at } to <folder>/runs.jsonl as it starts;
+//   - waits <folder>/start-delay-ms first, when it exists (a loaded machine's slow start: FAKE_CLOUDFLARED_START_DELAY_MS);
+//   - appends { pid, argv, env, at, started } to <folder>/runs.jsonl as it starts (`started`: when its process began, before
+//     any start-up delay);
 //   - exits at once with code 1 while <folder>/crash exists (a crash);
 //   - serves GET /ready on the --metrics address: <folder>/ready.json's { status, readyConnections }, else 503;
 //   - prints each line of <folder>/say.jsonl to stderr, as cloudflared prints its log, then deletes the file;
@@ -14,8 +16,9 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import process from 'node:process';
-import { setInterval } from 'node:timers';
+import { setInterval, setTimeout } from 'node:timers';
 
 const [dir, ...argv] = process.argv.slice(2);
 const at = (f) => path.join(dir, f);
@@ -29,7 +32,10 @@ process.on('SIGTERM', () => {
 });
 
 fs.mkdirSync(dir, { recursive: true });
-fs.appendFileSync(at('runs.jsonl'), JSON.stringify({ pid: process.pid, argv, env: { ...process.env }, at: Date.now() }) + '\n');
+// The connector's spawn resolves on the 'spawn' event; on a loaded CI runner this process records itself well after that.
+const startDelayMs = Number(readJson('start-delay-ms')) || 0;
+if (startDelayMs > 0) await new Promise((r) => setTimeout(r, startDelayMs));
+fs.appendFileSync(at('runs.jsonl'), JSON.stringify({ pid: process.pid, argv, env: { ...process.env }, at: Date.now(), started: Math.round(performance.timeOrigin) }) + '\n');
 
 if (fs.existsSync(at('crash'))) {
     process.stderr.write(JSON.stringify({ level: 'error', message: 'fake cloudflared crashed on purpose' }) + '\n');

@@ -176,10 +176,17 @@ describe('nearest first', () => {
 
     it('the Market search asks for distance order only where the node sorts by it and the phone knows where it is', () => {
         expect(sortsByDistance(GLOBAL)).toBe(true);
-        expect(marketSearchDistanceParams(GLOBAL, here)).toBe('&lat=-28.5500&lng=153.5000&sort=distance');
+        expect(marketSearchDistanceParams(GLOBAL, here)).toBe('&lat=-28.55&lng=153.50&sort=distance');
         expect(marketSearchDistanceParams(GLOBAL, null)).toBe('');
         expect(marketSearchDistanceParams(LOCAL, here)).toBe('');
         expect(marketSearchDistanceParams(null as unknown as NodeProfile, here)).toBe('');
+    });
+
+    // scratch/fable-redo/verdict-privacy.md §6 (N5): the read sends no radius, the phone orders the list itself
+    // (nearestFirst) and shows its own distances, so the node needs only to about a kilometre of the last GPS fix.
+    it('the phone\'s position goes to the node to two decimals (about a kilometre), never its GPS precision', () => {
+        expect(marketSearchDistanceParams(GLOBAL, { lat: -28.612345678, lng: 153.598765432 })).toBe('&lat=-28.61&lng=153.60&sort=distance');
+        expect(marketSearchDistanceParams(GLOBAL, { lat: 51.507351, lng: -0.127758 })).toBe('&lat=51.51&lng=-0.13&sort=distance');
     });
 });
 

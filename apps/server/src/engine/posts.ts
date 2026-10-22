@@ -24,6 +24,7 @@ import { nudgeOrphanSweep } from './storage-health.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import { assertMayStorePhotoBytes, incomingPhotosBytes, recordStoredPhotoBytes } from './photo-upload-budget.js';
 import { assertLendFields, type LendFieldsIn } from './post-fields.js';
+import { assertShopForPost, assertShopOpenForResume, forgetPausedPost, shopOnEdit } from './shops.js';
 import {
     canonicalZone,
     parseRepeatPattern,
@@ -491,6 +492,8 @@ export function createPost(
         lendMaxDays?: unknown;
         lendTerms?: unknown;
         replacementValue?: unknown;
+        /** The shop to put it in, as sent: its author's own (engine/shops.ts assertShopForPost). */
+        shopId?: unknown;
         /**
          * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
          * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
@@ -578,6 +581,9 @@ export function createPost(
             }
         }
     }
+
+    // The shop it goes in: an Offer for everyone here, in its author's own open shop, or refused before anything is written.
+    const shopId = assertShopForPost(authorPublicKey, type, audienceScope, options?.shopId);
 
     // Before a poll's or an event's fields are forced: a poll or an event asked to be lent is refused, not quietly made one.
     const lend = lendColumnsOnCreate(type, priceType, options);
@@ -752,8 +758,8 @@ export function createPost(
             event_start_at, event_end_at, event_place_name, event_private_note, event_state,
             event_start_local, event_end_local, event_tz, event_online, event_link, event_host_lets_in,
             event_repeat, event_repeat_until, event_repeat_skips,
-            lendable, lend_max_days, lend_terms, replacement_value
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+            lendable, lend_max_days, lend_terms, replacement_value, shop_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
@@ -771,7 +777,7 @@ export function createPost(
             eventStartLocal, eventEndLocal, eventTz, type === 'event' ? (eventOnline ? 1 : 0) : null, eventLink,
             eventHostLetsIn,
             series.repeat, series.until, series.skips,
-            lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value
+            lend.lendable, lend.lend_max_days, lend.lend_terms, lend.replacement_value, shopId
         );
 
         if (photoColumns.length > 0) {
@@ -1288,6 +1294,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
 
     assertPriceNotFrozen(id, existingPost, updates);
     const lendCells = lendColumnsOnEdit(id, existingPost, updates as Record<string, any>);
+    // Its shop (the edit's "Put this in your shop" toggle, engine/shops.ts): put in, held to the create's rules; taken out
+    // (null); or, unnamed, left as it is.
+    const nextShop = shopOnEdit(existingPost, (updates as { shopId?: unknown }).shopId);
 
     let uploadPhotoBytes: number | undefined;
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
@@ -1353,6 +1362,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         fields.push('lendable = ?', 'lend_max_days = ?', 'lend_terms = ?', 'replacement_value = ?');
         values.push(lendCells.lendable, lendCells.lend_max_days, lendCells.lend_terms, lendCells.replacement_value);
     }
+    if (nextShop !== undefined) { fields.push('shop_id = ?'); values.push(nextShop); }
 
     // The creator may still change the ballot while nobody has voted (refused above once anyone has). Only `true` opens it.
     if (existingPost.type === 'poll' && updates.pollOpenVote !== undefined) {
@@ -1418,6 +1428,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     let openedLine: EventThreadMessage | null = null;
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
+        // Out of a shop that is closed for now: its reopen no longer puts this one back up.
+        if (nextShop !== undefined && existingPost.shopId && nextShop !== existingPost.shopId) forgetPausedPost(existingPost.shopId, id);
         if (occurrenceMove) moveOccurrence(id, occurrenceMove.from, occurrenceMove.to);
         if (stampSeriesAt) stampUndatedRsvps(id, stampSeriesAt);
         if (hostLetsInChanged) {
@@ -1988,6 +2000,8 @@ export function resumePost(broadcast: BroadcastFn, postId: string, authorPublicK
     // Putting a post back up publishes it again, an event for everyone going: only from an author who is still a member
     // here (4109713263). A post that isn't theirs stays a plain false. Suspended and disabled authors pass, as before.
     if (postRow?.author_pubkey === authorPublicKey) assertNodeMember(authorPublicKey);
+    // One of a shop's Offers, while the shop is closed for now: back up with the shop's reopen, never alone (engine/shops.ts).
+    if (postRow?.author_pubkey === authorPublicKey) assertShopOpenForResume(postId);
     const res = db.prepare(`UPDATE posts SET status = 'active', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND author_pubkey = ? AND status = 'paused'`).run(postId, authorPublicKey);
     if (res.changes > 0) {
         let recipients: string[] | undefined;

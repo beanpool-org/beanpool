@@ -148,7 +148,7 @@ vi.mock('../node-post', () => ({
     signedPost: (_url: string, path: string) => { net.calls.push(`signedPost ${path}`); return new Promise(() => {}); },
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
-vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
+vi.mock('../blocklist', () => ({ getBlockedUsers: async () => [], isUserBlocked: async () => false, BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 // The net spy.
 const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string, args: unknown[]) => Promise<unknown> | undefined) }));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, (name, args) => net.answer?.(name, args)));

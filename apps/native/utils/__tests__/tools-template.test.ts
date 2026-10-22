@@ -723,6 +723,18 @@ describe('the route around a tool', () => {
         for (const f of files) expect(fs.readFileSync(path.join(tools, f), 'utf8'), f).not.toMatch(/<KeyboardProvider\b/);
     });
 
+    it('the Tools screen opens Your shop (slice S4′), above the shelves, in xx at 320 dp × 1.3', async () => {
+        setLanguage('xx');
+        OTHERS = [];
+        await act(async () => { root.render(createElement(ToolsScreen) as any); });
+        await settle();
+        expect(byTestId('tools-shop-card')).not.toBeNull();
+        expect(bypassing()).toEqual([]);
+        expect(tooWide()).toEqual([]);
+        await click(byTestId('tools-shop'), 'Your shop');
+        expect(nav.pushed).toEqual(['/shop/mine']);
+    });
+
     it('"Remove my data from this phone" on a later screen goes back to the first, where the doors are', async () => {
         await writeToolDoc(ME.publicKey, KIT, KIT_FIXTURES.docs.small, NOW);
         await drawTool('fixture-kit', { screen: 'item', key: 't0' }, 'en');

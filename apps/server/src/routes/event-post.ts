@@ -54,6 +54,9 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             // Passed so the engine refuses them (engine/posts.ts lendColumnsOnCreate): an event asked to be lent, or
             // sent a term no listing may hold, is a 400, not one quietly made without them.
             lendable: b.lendable, lendMaxDays: b.lendMaxDays, lendTerms: b.lendTerms, replacementValue: b.replacementValue,
+            // The same for a shop (engine/shops.ts assertShopForPost): an event is never in one, so one sent is a 400
+            // shop_offers_only, not an event quietly made in no shop.
+            shopId: b.shopId,
             createdBy,
             beforeWrite,
             out,

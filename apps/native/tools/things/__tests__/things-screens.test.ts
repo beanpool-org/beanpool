@@ -718,7 +718,8 @@ describe('A thing', () => {
             source: 'tool', tool: 'things',
         });
         expect(nav.pushed.at(-1)).toBe('/(tabs)/map?newPost=offer');
-        expect(market.requests.filter((r) => !r.endsWith('/api/tools/things'))).toEqual([]);
+        // The sheet reads the member's shop each time it opens ("Put this in your shop", slice S4′); nothing is posted.
+        expect(market.requests.filter((r) => !r.endsWith('/api/tools/things'))).toEqual(['GET /api/shops/mine', 'GET /api/shops/mine']);
         // Nothing posted, so nothing is said to be in the shop.
         expect((await keptThing('t-1'))?.postId).toBeUndefined();
     });

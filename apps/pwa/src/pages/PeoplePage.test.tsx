@@ -4,6 +4,7 @@ import React from 'react';
 import { PeoplePage } from './PeoplePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
+import * as membersOnDemand from '../lib/members-on-demand';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -99,5 +100,19 @@ describe('PeoplePage tabs follow the WAI-ARIA tabs pattern (#674)', () => {
         expect(api.getMembers).not.toHaveBeenCalled();
         fireEvent.click(screen.getByRole('tab', { name: /Community/ }));
         await waitFor(() => expect(api.getMembers).toHaveBeenCalled());
+    });
+
+    it('shows 💬 message button on community rows and opens DM when clicked (S0)', async () => {
+        const onNavigate = vi.fn();
+        vi.spyOn(membersOnDemand, 'getMembersWhole').mockResolvedValue([
+            { publicKey: 'bob-pubkey', callsign: 'Bob', joinedAt: '2026-01-01', invitedBy: '', inviteCode: '', avatarUrl: null },
+        ] as any);
+        render(<PeoplePage identity={identity} onNavigate={onNavigate} />);
+        fireEvent.click(screen.getByRole('tab', { name: /Community/ }));
+        expect(await screen.findByText('Bob')).toBeInTheDocument();
+        const msgBtn = screen.getByRole('button', { name: /Message Bob/i });
+        expect(msgBtn).toBeInTheDocument();
+        fireEvent.click(msgBtn);
+        expect(onNavigate).toHaveBeenCalledWith('messages', 'bob-pubkey');
     });
 });

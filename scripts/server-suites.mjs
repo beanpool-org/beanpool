@@ -441,6 +441,7 @@ export const SUITES = [
     'test-member-blocks',
     'test-member-blocks-standby',
     'test-tool-store',
+    'test-shops',
     'test-blocks-on-messaging',
     'test-messaging-idor',
     'test-probation',

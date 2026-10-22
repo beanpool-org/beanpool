@@ -56,8 +56,9 @@ describe('a typed town (Marty, 14 Oct: "or enter your location manually")', () =
         const p = (await saveTypedPlace(lismore))!;
         await fetchCommunities({ point: p, limit: 20 });
         await fetchGlobalHome(p);
-        expect(urls[0]).toMatch(/\/api\/global\/communities\?lat=-28\.8100&lng=153\.2800&limit=20$/);
-        expect(urls[1]).toMatch(/\/api\/global\/home\?lat=-28\.8100&lng=153\.2800$/);
+        // Sent at 2 dp, the typed place's own precision (#2363: a near-me point goes only as precisely as its use needs).
+        expect(urls[0]).toMatch(/\/api\/global\/communities\?lat=-28\.81&lng=153\.28&limit=20$/);
+        expect(urls[1]).toMatch(/\/api\/global\/home\?lat=-28\.81&lng=153\.28$/);
     });
 
     it('location off or failed: the note offers typing the town, and searching by name', () => {

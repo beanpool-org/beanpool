@@ -1474,6 +1474,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN lend_max_days INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN lend_terms TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN replacement_value TEXT`).run(); } catch { }
+    // The shop a listing is in (schema.sql; DESIGN-shops-and-tools-fable.md §12 S1). Before the schema.sql exec, which
+    // indexes it (idx_posts_shop). NULL on every existing row: nothing is in a shop until its author puts it there.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN shop_id TEXT REFERENCES shops(id)`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
     // A person's coarse area (G4, engine/member-area.ts). Before the schema.sql exec, whose members_touch_updated_at
     // (dropped below, so the exec recreates it) lists all three. NULL on every existing row: nobody has an area.

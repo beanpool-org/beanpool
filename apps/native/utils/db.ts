@@ -53,6 +53,7 @@ import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 import { languageHeader } from './language-choice';
+import { SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, sayOutsideShop, shopChoiceFor } from './shop-choice';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -1972,6 +1973,39 @@ export async function getReachablePeers(): Promise<{ peerId: string; callsign: s
     }
 }
 
+/**
+ * The shop an Offer from the map's composer goes in, when the List sheet said "Put this in your shop" for it (slice S4′,
+ * utils/shop-choice.ts: map.tsx is read and never edited, so the choice rides beside its draft and knows its Offer by the
+ * tool's title, words and photos): the member's own shop, opened first if they have none yet, as the sheet said.
+ * Undefined on a node from before shops. Any other answer throws, so the choice's Offer is never posted outside the shop
+ * the sheet promised; so does no answer within {@link SHOP_COMPOSER_WAIT_MS}.
+ */
+async function composerShopId(): Promise<string | undefined> {
+    const unreadable = () => new Error(t("Your shop couldn't be read just now. Try again."));
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), SHOP_COMPOSER_WAIT_MS);
+    try {
+        const res = await signedGet('/api/shops/mine', { signal: stop.signal });
+        if (res.status === 404) return undefined;
+        const held = res.ok ? await res.json().catch(() => null) : null;
+        if (typeof held?.shop?.id === 'string') return held.shop.id;
+        if (held && held.shop === null) {
+            const opened = await signedRequestWithMethod('PUT', '/api/shops/mine', {}, { withStatus: true, signal: stop.signal });
+            if (typeof opened?.shop?.id === 'string') return opened.shop.id;
+        }
+    } catch (e) {
+        if (stop.signal.aborted) throw unreadable();
+        // The PUT answered without the node's words (a proxy's 502 page): never "Request failed: 502", in English, as
+        // utils/shop.ts says it for the same answer.
+        const err = e as { unsaid?: unknown; status?: unknown; code?: unknown } | null;
+        if (err?.unsaid !== true) throw e;
+        throw Object.assign(new Error(t("Your community couldn't be reached. Try again.")), { status: err.status, unsaid: true }, typeof err.code === 'string' ? { code: err.code } : {});
+    } finally {
+        clearTimeout(timer);
+    }
+    throw unreadable();
+}
+
 export async function createPost(post: any) {
     const database = await getDb();
 
@@ -1985,6 +2019,8 @@ export async function createPost(post: any) {
     if (!identity) {
         throw new Error('No identity found.');
     }
+    const shopChoice = post.type === 'offer' ? shopChoiceFor(await peekShopChoice(), post, anchorUrl, Date.now()) : 'none';
+    const shopId = shopChoice === 'shop' ? await composerShopId() : undefined;
 
     const body = {
         id: post.id,
@@ -2029,7 +2065,8 @@ export async function createPost(post: any) {
         ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
         ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
-        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {})
+        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {}),
+        ...(shopId ? { shopId } : {}),
     };
     // "Post as → an enterprise" on the event form (NewEventModal). An enterprise's event goes through the
     // enterprise's OWN route, with the enterprise in the PATH and never in the body: the node's signature
@@ -2101,6 +2138,13 @@ export async function createPost(post: any) {
     } catch (e: any) {
         // If it fails (e.g., no internet or server error), bubble it up to the UI so we DON'T lose the drafted post!
         throw new Error(e.message || 'Network request failed. You must be connected to a node to post.');
+    }
+    // In the shop: the sheet's choice has had its Offer. Up outside it while the choice waited here: the member is told, now
+    // that it is up, and the choice is forgotten (the composer's one draft has gone with this post).
+    if (shopId) await clearShopChoice();
+    else if (shopChoice === 'say') {
+        await clearShopChoice();
+        sayOutsideShop(String(post.title ?? ''));
     }
 
     // 2. Local Database Confirmation
@@ -3348,7 +3392,9 @@ export async function updatePost(id: string, updates: any) {
         credits: updates.credits,
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
-        photos: updates.photos ? JSON.parse(updates.photos) : undefined
+        photos: updates.photos ? JSON.parse(updates.photos) : undefined,
+        // The edit's "Put this in your shop" (slice S4′): the shop's id puts it in, null takes it out; unnamed, it stays.
+        ...(updates.shopId !== undefined ? { shopId: updates.shopId } : {}),
     });
 
     // 2. Erase from local SQLite Cache (or gracefully update it)
@@ -7964,7 +8010,8 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
         const errJson = await res.json().catch(() => ({}));
         const words = errJson.error || errJson.message;
         const error = new Error(words || `Request failed: ${res.status}`);
-        if (opts?.withStatus) Object.assign(error, { status: res.status }, words ? {} : { unsaid: true });
+        // The node's code beside its sentence (a shop's `shop_deals_open`, say), so a screen can say what to do next.
+        if (opts?.withStatus) Object.assign(error, { status: res.status }, words ? {} : { unsaid: true }, typeof errJson.code === 'string' ? { code: errJson.code } : {});
         throw error;
     }
     return await res.json();

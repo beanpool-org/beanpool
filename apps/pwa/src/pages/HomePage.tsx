@@ -55,6 +55,7 @@ import { onSocketOpen, onSyncActivity, onSystemAnnouncement } from '../lib/sync'
 import { onLivePostChange } from '../lib/live-posts';
 import { withJitter } from '../lib/jitter';
 import { loadRadiusSettings } from '../lib/geo';
+import { sentCentre } from '../lib/listings-near';
 import { resolveImageUrl } from '../lib/avatar';
 import { resolvePulseThumbnailUrl } from '../lib/pulse';
 import { getBundledGuide } from '../lib/guide';
@@ -152,10 +153,30 @@ function reducedMotion(): boolean {
     try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return true; }
 }
 
-/** The point "near you" is measured from: the one the visitor shared here, else the centre the Market was given. */
-function marketPoint(): { lat: number; lng: number } | null {
+/**
+ * The point "near you" is measured from: one shared or typed here (`coarse` already), or the centre the Market was given,
+ * held as picked with its radius (`radiusKm`) and only ever sent through sentPoint.
+ */
+type HomePoint = { lat: number; lng: number; radiusKm?: number };
+
+/** The centre the Market was given in Distance, with its radius; one with no radius kept is measured by Home's own. */
+function marketPoint(): HomePoint | null {
     const r = loadRadiusSettings();
-    return r && Number.isFinite(r.lat) && Number.isFinite(r.lng) ? { lat: r.lat, lng: r.lng } : null;
+    if (!r || !Number.isFinite(r.lat) || !Number.isFinite(r.lng)) return null;
+    return { lat: r.lat, lng: r.lng, radiusKm: Number.isFinite(r.radiusKm) && r.radiusKm > 0 ? r.radiusKm : Infinity };
+}
+
+/**
+ * Home's point as the node is sent it. The Market's centre goes only as precisely as the least Home measures from it
+ * needs, by the Market's and the Map's own rule (lib/listings-near sentCentre): its radius, or a saved search's distance
+ * on `list` when that is less (a 10 km setting goes to 2 decimals, a search within 1 km to 3). Never as picked: the read
+ * is a query string, every landing and every 2 minutes (N5, review of #2363). One shared or typed here goes as it is.
+ */
+function sentPoint(p: HomePoint | null, list: HomeLayoutV2 | null): { lat: number; lng: number } | null {
+    if (!p) return null;
+    if (p.radiusKm === undefined) return { lat: p.lat, lng: p.lng };
+    const searchKms = (list?.cards ?? []).flatMap(c => (c.type === 'search' ? [readSearchSettings(c.settings).km ?? Infinity] : []));
+    return sentCentre(p, Math.min(p.radiusKm, ...searchKms));
 }
 
 /** A shared position, rounded to 0.1° (about 11 km): enough for "near you", never a doorstep. */
@@ -219,7 +240,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // The node refused the version-2 layout (a node from before the frame): Edit home says the cards stay here (§2.3).
     const [notOnAccount, setNotOnAccount] = useState(false);
     const [fewerOpen, setFewerOpen] = useState(false);
-    const [point, setPoint] = useState<{ lat: number; lng: number } | null>(() => marketPoint());
+    const [point, setPoint] = useState<HomePoint | null>(() => marketPoint());
     const [pointProblem, setPointProblem] = useState<string | null>(null);
     // "Or type your town" (Marty, 14 Oct): the shared address search, open; and the town picked, by its short name.
     const [townOpen, setTownOpen] = useState(false);
@@ -403,7 +424,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         inFlight.current = true;
         lastStart.current = Date.now();
         try {
-            const p = pointRef.current;
+            const p = sentPoint(pointRef.current, drawnRef.current);
             // `cards=` from the list drawn (lib/home-layout.ts cardsToAsk), the newcomer's for a member with none; none only on
             // a first read with no answer in hand, so the node draws the account's own list (review of #1697, note a). Never
             // left off after that: the node would build its whole old catalogue every read (review of #1701, finding 6).
@@ -484,10 +505,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             // node refused as a shape it doesn't know yet only at the next landing.
             const saving = unsavedRef.current && layoutRef.current && !refusedLanding.current && savingLayout.current === 0
                 ? saveLayout(layoutRef.current) : null;
-            // The list drawn asks for cards this answer wasn't built for (a first landing here, or another device's edit):
-            // one more read for them, once a landing, after the save's answer.
+            // The list drawn asks for cards this answer wasn't built for (a first landing here, or another device's edit), or
+            // has Home's point go otherwise (a saved search closer than the list it was read by): one more read for them,
+            // once a landing, after the save's answer.
             const built = builtForRef.current ?? [];
-            if (member && !extraRead.current && cardsToAsk(pick.layout, askPinned(a, Date.now()), frameOf(a)).some(id => !built.includes(id))) {
+            const goes = sentPoint(pointRef.current, pick.layout);
+            const moved = !!p && !!goes && (goes.lat !== p.lat || goes.lng !== p.lng);
+            if (member && !extraRead.current && (moved || cardsToAsk(pick.layout, askPinned(a, Date.now()), frameOf(a)).some(id => !built.includes(id)))) {
                 extraRead.current = true;
                 if (saving) void saving.then(() => fetchHomeRef.current?.('layout'));
                 else again.current = true;

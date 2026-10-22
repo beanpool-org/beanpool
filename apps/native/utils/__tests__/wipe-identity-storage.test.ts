@@ -37,6 +37,8 @@ describe('wipeIdentityScopedStorage', () => {
             [`bp_offline_invites_${'ab'.repeat(32)}`]: JSON.stringify([{ code: 'INV-ABC', intendedFor: 'Robin' }]),
             // An unfinished post, kept per community: the next account there would be offered it to finish as its own.
             beanpool_offer_draft: JSON.stringify({ anchorUrl: 'https://test.beanpool.org', postTitle: 'Tomatoes', postPhotos: ['bundled://koala'], postLat: -28.55, postLng: 153.5 }),
+            // The List sheet's "in your shop" choice beside that draft: the next account would be put in a shop it never chose.
+            beanpool_offer_shop_choice: JSON.stringify({ anchorUrl: 'https://test.beanpool.org', title: 'cordless drill', inShop: true, at: Date.now() }),
             // Reports this key queued while offline. A node files a report as whoever signs it, so the next account's
             // retry would file them in its own name.
             beanpool_pending_abuse_reports: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),

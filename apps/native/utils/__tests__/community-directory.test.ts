@@ -77,11 +77,13 @@ describe('a community’s address', () => {
 });
 
 describe('the requests', () => {
-    it('communities near a point go to the global node, public, nearest first by the point', async () => {
+    it('communities near a point go to the global node, public, nearest first by the point, sent to two decimals (N5)', async () => {
         answer = () => ({ status: 200, body: { communities: [row()], total: 1, fetchedAt: '2026-10-14T08:00:00.000Z' } });
         const r = await fetchCommunities({ point: { lat: -28.55123, lng: 153.49876 }, q: ' Mullum ', limit: 20 });
         expect(r).toEqual({ ok: true, value: { communities: [readCommunity(row())], total: 1, fetchedAt: '2026-10-14T08:00:00.000Z' } });
-        expect(sent[0].url).toBe(`${GLOBAL_NODE_URL}/api/global/communities?lat=-28.5512&lng=153.4988&q=Mullum&limit=20`);
+        // About a kilometre: the directory orders in 25 km bands and counts posts within 50 km, as the phone's Home and
+        // Market send theirs (home-store.ts, market-global.ts). A query string is what proxies and CDNs log.
+        expect(sent[0].url).toBe(`${GLOBAL_NODE_URL}/api/global/communities?lat=-28.55&lng=153.50&q=Mullum&limit=20`);
         expect(sent[0].headers['X-Signature']).toBeUndefined();
     });
 
@@ -99,17 +101,18 @@ describe('the requests', () => {
         answer = () => ({ status: 200, body: { point: 'request', communities: [row()], communityCount: 10, nearbyPosts: { radiusKm: 50, count: 3, more: false }, watches: [], knock: null } });
         const r = await fetchGlobalHome({ lat: 1, lng: 2 }, me);
         expect(r.ok).toBe(true);
-        expect(sent[0].url).toBe(`${GLOBAL_NODE_URL}/api/global/home?lat=1.0000&lng=2.0000`);
+        expect(sent[0].url).toBe(`${GLOBAL_NODE_URL}/api/global/home?lat=1.00&lng=2.00`);
         expect(sent[0].headers['X-Public-Key']).toBe(me.publicKey);
         expect(sent[0].headers['X-Signature']).toBeTruthy();
     });
 
-    it('watching a place is a signed POST of the point; stopping is a signed DELETE of the watch', async () => {
+    it('watching a place is a signed POST of the point\'s 0.1° cell, all the node keeps; stopping is a signed DELETE of the watch', async () => {
         const me = await member();
         answer = () => ({ status: 200, body: { success: true, watch: { id: 'w1', lat: -28.6, lng: 153.5, radiusKm: 50, createdAt: 'x' }, created: true } });
-        expect(await watchPlace(me, { lat: -28.55, lng: 153.5 })).toEqual({ ok: true, value: { id: 'w1', lat: -28.6, lng: 153.5, radiusKm: 50, createdAt: 'x' } });
+        expect(await watchPlace(me, { lat: -28.55123, lng: 153.49876 })).toEqual({ ok: true, value: { id: 'w1', lat: -28.6, lng: 153.5, radiusKm: 50, createdAt: 'x' } });
         expect(sent[0]).toMatchObject({ url: `${GLOBAL_NODE_URL}/api/global/watches`, method: 'POST' });
-        expect(JSON.parse(sent[0].body!)).toEqual({ lat: -28.55, lng: 153.5 });
+        // The phone's place leaves it as the cell (@beanpool/core roundToArea, the node's own rule), never the spot.
+        expect(JSON.parse(sent[0].body!)).toEqual({ lat: -28.6, lng: 153.5 });
         expect(sent[0].headers['X-Public-Key']).toBe(me.publicKey);
         answer = () => ({ status: 409, body: { error: 'You can watch up to 3 places. Remove one to watch another.', code: 'watch_limit' } });
         expect(await watchPlace(me, { lat: 0.1, lng: 0.1 })).toEqual({ ok: false, kind: 'refused', status: 409, message: 'You can watch up to 3 places. Remove one to watch another.' });

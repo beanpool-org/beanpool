@@ -55,7 +55,10 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const thing = (id: string, name: string, extra: Partial<Thing> = {}): Thing => ({ id, name, category: 'tools', createdAt: iso(NOW - DAY), updatedAt: iso(NOW - DAY), ...extra });
 const shed = (...things: Thing[]): ThingsDoc => ({ v: 1, things });
 
-/** The community's server, as these screens use it; `down` when it can't be reached. */
+/**
+ * The community's server, as these screens use it; `down` when it can't be reached, `dealsDown` when only the deals
+ * can't be read, and `dealsGate` holds a read of the deals until it settles.
+ */
 const server = {
     posts: new Map<string, Record<string, unknown>>(),
     deals: [] as Array<Record<string, unknown>>,
@@ -63,6 +66,8 @@ const server = {
     paused: [] as string[], resumed: [] as string[],
     requests: [] as string[],
     down: false,
+    dealsDown: false,
+    dealsGate: null as Promise<void> | null,
 };
 function offer(id: string, title: string, status = 'active', extra: Record<string, unknown> = {}) {
     server.posts.set(id, { id, title, status, type: 'offer', authorPublicKey: OWNER, priceType: 'fixed', ...extra });
@@ -91,6 +96,8 @@ async function answer(input: RequestInfo | URL, init?: RequestInit): Promise<Res
             return json(id ? all.filter((p) => p.id === id) : page(all.filter((p) => !author || p.authorPublicKey === author), url));
         }
         case 'GET /api/marketplace/transactions': {
+            if (server.dealsGate) await server.dealsGate;
+            if (server.dealsDown) throw new TypeError('Failed to fetch');
             const who = url.searchParams.get('publicKey');
             const status = url.searchParams.get('status');
             return json(page(server.deals.filter((d) => (d.sellerPublicKey === who || d.buyerPublicKey === who) && (!status || d.status === status)), url));
@@ -130,6 +137,8 @@ beforeEach(() => {
     server.resumed.length = 0;
     server.requests.length = 0;
     server.down = false;
+    server.dealsDown = false;
+    server.dealsGate = null;
     info.value = { profile: 'local', features: { beans: true } };
     picked.count = 0;
     picked.cancel = false;
@@ -241,6 +250,25 @@ describe('Your things', () => {
         await click('tools-back');
         await click('thing-row-t-3');
         expect(byTestId('thing-screen')).not.toBeNull();
+    });
+
+    it(`Loans gives no count until the deals are known, and says when they couldn't be read: never "nothing out" unchecked`, async () => {
+        let release!: () => void;
+        server.dealsGate = new Promise<void>((r) => { release = r; });
+        offer('post-1', 'Drill', 'pending', { lendable: true, acceptedAt: iso(NOW - DAY) });
+        server.deals.push({ id: 'tx1', postId: 'post-1', sellerPublicKey: OWNER, buyerPublicKey: 'b', status: 'pending', hours: 3, createdAt: iso(NOW - 2 * DAY) });
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' })));
+        await open('main');
+        expect(words(byTestId('things-loans'))).toBe('Loans');
+        release();
+        await waitFor(() => expect(words(byTestId('things-loans'))).toBe('LoansOut or asked for: 1'));
+        expect(byTestId('things-loans-unchecked')).toBeNull();
+        cleanup();
+        server.dealsGate = null;
+        server.dealsDown = true;
+        await open('main');
+        await waitFor(() => expect(byTestId('things-loans-unchecked')?.textContent).toBe("Loans through BeanPool couldn't be checked just now."));
+        expect(words(byTestId('things-loans'))).toBe('Loans');
     });
 
     it('after "I already do this", an empty shed says what goes in it, with Add', async () => {
@@ -465,6 +493,26 @@ describe('A thing', () => {
         expect((await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
         expect(byTestId('things-main')).not.toBeNull();
         expect(server.paused).toEqual([]);
+    });
+
+    it("in the shop: until its deals are known, nothing that would pause its Offer or delete it; deals that can't be read say so", async () => {
+        let release!: () => void;
+        server.dealsGate = new Promise<void>((r) => { release = r; });
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' })));
+        await open('thing', 't-1');
+        expect(['thing-take-out', 'thing-lend', 'thing-delete'].map((id) => byTestId(id))).toEqual([null, null, null]);
+        expect(byTestId('thing-edit')).not.toBeNull();
+        release();
+        await waitFor(() => expect(['thing-take-out', 'thing-lend', 'thing-delete'].filter((id) => byTestId(id) === null)).toEqual([]));
+        expect(byTestId('thing-unchecked')).toBeNull();
+        cleanup();
+        server.dealsGate = null;
+        server.dealsDown = true;
+        await open('thing', 't-1');
+        await waitFor(() => expect(byTestId('thing-unchecked')?.textContent).toBe("Loans through BeanPool couldn't be checked just now."));
+        expect(['thing-take-out', 'thing-lend', 'thing-delete'].map((id) => byTestId(id))).toEqual([null, null, null]);
+        expect(byTestId('thing-edit')).not.toBeNull();
     });
 
     it("out on a BeanPool loan: the deal's words, its back-around from the deal, and no delete", async () => {

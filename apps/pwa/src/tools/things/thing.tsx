@@ -30,7 +30,7 @@ const notKept = () => t("Couldn't save it in this browser. Try again.");
 export function ThingScreen({ host, params }: ThingsScreenProps) {
     const doc = host.doc.get();
     const thing = findThing(doc, params.key);
-    const { deals } = useDeals(host);
+    const { deals, failed } = useDeals(host);
     const open = useMemo(() => openDealsByPost(deals), [deals]);
     const [busy, setBusy] = useState(false);
     const [refused, setRefused] = useState<string | null>(null);
@@ -75,6 +75,9 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const state = thingState(thing, open);
     const cat = thingCategory(thing.category);
     const condition = thingConditionName(thing.condition);
+    // A thing in the shop may be out on a loan through BeanPool: until its deals are known, nothing that would pause its
+    // Offer or delete the thing is offered.
+    const held = state === 'listed' && (deals === null || failed);
 
     /** One change: whatever it asks of the server first, then the document; any failure says so and changes nothing. */
     const act = async (change: () => Promise<void>) => {
@@ -178,7 +181,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         { id: 'none', label: t('No date') },
         ...BACK_AROUND_DAYS.map((d) => ({ id: String(d), label: backAroundChip(d) })),
     ];
-    const canLend = state === 'shelf' || state === 'taken-out' || state === 'listed';
+    const canLend = state === 'shelf' || state === 'taken-out' || (state === 'listed' && !held);
 
     return (
         <div data-testid="thing-screen" className="min-w-0">
@@ -186,6 +189,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                 {thing.photo ? <ToolPhoto uri={host.photos.uri(thing.photo)} label={t('Photo of {name}', { name: thing.name })} testId="thing-photo" /> : null}
                 <ToolRow icon={cat.emoji} title={thing.name} wrap />
                 <ToolNote text={thingStateLine(thing, open, host.now())} testId="thing-state" />
+                {held && failed ? <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testId="thing-unchecked" /> : null}
                 {refused ? <ToolNote tone="danger" text={refused} testId="thing-refused" /> : null}
                 {goneNote ? <ToolNote text={t('Its Offer has gone from the Market, so it is back on your shelf. List it again to make a new one.')} testId="thing-gone-note" /> : null}
                 {state === 'out' ? <ToolNote text={t('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.')} testId="thing-deal-note" /> : null}
@@ -214,7 +218,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                     <div className={BUTTONS}>
                         {state === 'shelf' ? <ToolButton kind="primary" onClick={list} disabled={busy} testId="thing-list">{t('List in your shop')}</ToolButton> : null}
                         {state === 'taken-out' ? <ToolButton kind="primary" onClick={() => { void putBack(); }} disabled={busy} testId="thing-put-back">{t('Put back in your shop')}</ToolButton> : null}
-                        {state === 'listed' && offerStatus !== 'gone' && offerStatus !== 'paused'
+                        {state === 'listed' && !held && offerStatus !== 'gone' && offerStatus !== 'paused'
                             ? <ToolButton onClick={() => { void takeOut(); }} disabled={busy} testId="thing-take-out">{t('Take out of your shop')}</ToolButton> : null}
                         {state === 'lent' ? <ToolButton kind="primary" onClick={() => { void backHome(); }} disabled={busy} testId="thing-back-home">{t("It's back")}</ToolButton> : null}
                         {canLend ? <ToolButton onClick={() => { setRefused(null); setLending({ name: '', days: null }); }} disabled={busy} testId="thing-lend">{t('Lent to someone outside BeanPool')}</ToolButton> : null}

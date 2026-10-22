@@ -14,12 +14,15 @@ import { BUTTONS, useDeals } from './parts';
 export function Main({ host }: ThingsScreenProps) {
     const doc = host.doc.get();
     const [filter, setFilter] = useState<ThingFilter>('all');
-    const { deals } = useDeals(host);
+    const { deals, failed } = useDeals(host);
     const open = useMemo(() => openDealsByPost(deals), [deals]);
     const now = host.now();
     const things = shedThings(doc);
     const shown = things.filter((thing) => thingInFilter(thingState(thing, open), filter));
     const loans = thingsLoans(doc, deals, now).length;
+    // No count until the deals are known: before they arrive, or when they couldn't be read, it could leave out a loan.
+    const loansLine = deals === null || failed ? null
+        : loans > 0 ? t('Out or asked for: {count}', { count: loans }) : t('Nothing out right now');
     const filters = [
         { id: 'all', label: t('All') },
         { id: 'shop', label: t('In your shop') },
@@ -58,10 +61,11 @@ export function Main({ host }: ThingsScreenProps) {
                     <ToolRow
                         icon="🤝"
                         title={t('Loans')}
-                        state={loans > 0 ? t('Out or asked for: {count}', { count: loans }) : t('Nothing out right now')}
+                        state={loansLine}
                         onClick={() => host.navigate('loans')}
                         testId="things-loans"
                     />
+                    {failed ? <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testId="things-loans-unchecked" /> : null}
                 </ToolSection>
             ) : null}
         </div>

@@ -120,13 +120,15 @@ vi.mock('../../../utils/canonical-profile', () => ({ getCanonicalAvatar: async (
 
 const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
 /**
- * The member's Offers and deals as the phone holds them; `down` when the community's server can't be reached, and
- * `dealsUnread` when the phone's copy of the deals can't be read.
+ * The member's Offers and deals as the phone holds them; `down` when the community's server can't be reached,
+ * `dealsUnread` when the phone's copy of the deals can't be read, and `dealsGate` holds a read of the deals until it
+ * settles.
  */
 const market = vi.hoisted(() => ({
     rows: new Map<string, Record<string, unknown>>(),
     deals: [] as Array<Record<string, unknown>>,
     paused: [] as string[], resumed: [] as string[], down: false, dealsUnread: false,
+    dealsGate: null as Promise<void> | null,
     requests: [] as string[],
 }));
 vi.mock('../../../utils/db', () => ({
@@ -136,6 +138,7 @@ vi.mock('../../../utils/db', () => ({
     getMyPosts: async (pubkey: string) => [...market.rows.values()].filter((p) => p.author_pubkey === pubkey),
     // As the phone's own copy answers (utils/db.ts): by status when asked, `limit` rows from `offset`.
     getMarketplaceTransactions: async (pubkey: string, filter?: { status?: string }, limit = 50, offset = 0) => {
+        if (market.dealsGate) await market.dealsGate;
         if (market.dealsUnread) throw new Error('database is locked');
         return market.deals.filter((d) => (d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey) && (!filter?.status || d.status === filter.status))
             .slice(offset, offset + limit);
@@ -260,6 +263,7 @@ beforeEach(() => {
     market.requests.length = 0;
     market.down = false;
     market.dealsUnread = false;
+    market.dealsGate = null;
     node.profile = { profile: 'local', features: { beans: true } };
     node.needsPhoto = true;
     node.avatar = null;
@@ -458,6 +462,28 @@ describe('Your things', () => {
         await click('things-filter-shelf');
         expect(rows()).toEqual([]);
         expect(text('things-none')).toBe('Nothing to show here.');
+    });
+
+    it(`Loans gives no count until the deals are known, and says when they couldn't be read: never "nothing out" unchecked`, async () => {
+        let release!: () => void;
+        market.dealsGate = new Promise<void>((r) => { release = r; });
+        offer('post-1', 'Drill', 'pending', { lendable: 1, price_type: 'fixed', accepted_at: iso(NOW - DAY) });
+        market.deals.push({ id: 'tx1', postId: 'post-1', sellerPublicKey: ME.publicKey, buyerPublicKey: 'b', status: 'pending', hours: 3, createdAt: iso(NOW - 2 * DAY) });
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' })));
+        await open('main');
+        expect(byTestId('things-loans')?.getAttribute('aria-label')).toBe('Loans');
+        release();
+        await settle();
+        expect(byTestId('things-loans')?.getAttribute('aria-label')).toBe('Loans, Out or asked for: 1');
+        expect(byTestId('things-loans-unchecked')).toBeNull();
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        market.dealsGate = null;
+        market.dealsUnread = true;
+        await open('main');
+        expect(byTestId('things-loans')?.getAttribute('aria-label')).toBe('Loans');
+        expect(text('things-loans-unchecked')).toBe("Loans through BeanPool couldn't be checked just now.");
     });
 
     it('after "I already do this", an empty shed says what goes in it, with Add', async () => {
@@ -735,6 +761,29 @@ describe('A thing', () => {
         expect(readThingsDoc(await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
         expect(nav.backs).toBe(1);
         expect(market.paused).toEqual([]);
+    });
+
+    it("in the shop: until its deals are known, nothing that would pause its Offer or delete it; deals that can't be read say so", async () => {
+        let release!: () => void;
+        market.dealsGate = new Promise<void>((r) => { release = r; });
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' })));
+        await open('thing', { key: 't-1' });
+        expect(['thing-take-out', 'thing-lend', 'thing-delete'].map((id) => byTestId(id))).toEqual([null, null, null]);
+        expect(byTestId('thing-edit')).not.toBeNull();
+        release();
+        await settle();
+        expect(['thing-take-out', 'thing-lend', 'thing-delete'].filter((id) => byTestId(id) === null)).toEqual([]);
+        expect(byTestId('thing-unchecked')).toBeNull();
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        market.dealsGate = null;
+        market.dealsUnread = true;
+        await open('thing', { key: 't-1' });
+        expect(['thing-take-out', 'thing-lend', 'thing-delete'].map((id) => byTestId(id))).toEqual([null, null, null]);
+        expect(text('thing-unchecked')).toBe("Loans through BeanPool couldn't be checked just now.");
+        expect(byTestId('thing-edit')).not.toBeNull();
     });
 
     it("out on a BeanPool loan: the deal's words, and no delete", async () => {

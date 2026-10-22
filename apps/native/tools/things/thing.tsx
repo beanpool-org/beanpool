@@ -30,7 +30,7 @@ const unreached = () => t("Couldn't reach your community's server, so nothing ch
 export function ThingScreen({ host, params }: ThingsScreenProps) {
     const doc = host.doc.get();
     const thing = findThing(doc, params.key);
-    const { deals } = useDeals(host);
+    const { deals, failed } = useDeals(host);
     const open = useMemo(() => openDealsByPost(deals), [deals]);
     const [busy, setBusy] = useState(false);
     const [refused, setRefused] = useState<string | null>(null);
@@ -75,6 +75,9 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const state = thingState(thing, open);
     const cat = thingCategory(thing.category);
     const condition = thingConditionName(thing.condition);
+    // A thing in the shop may be out on a loan through BeanPool: until its deals are known, nothing that would pause its
+    // Offer or delete the thing is offered.
+    const held = state === 'listed' && (deals === null || failed);
 
     /** One change: whatever it asks of the server first, then the document; any failure says so and changes nothing. */
     const act = async (change: () => Promise<void>) => {
@@ -188,6 +191,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                 {thing.photo ? <ToolPhoto uri={host.photos.uri(thing.photo)} label={t('Photo of {name}', { name: thing.name })} testID="thing-photo" /> : null}
                 <ToolRow icon={cat.emoji} title={thing.name} wrap />
                 <ToolNote text={thingStateLine(thing, open, host.now())} testID="thing-state" />
+                {held && failed ? <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testID="thing-unchecked" /> : null}
                 {refused ? <ToolNote tone="danger" text={refused} testID="thing-refused" /> : null}
                 {goneNote ? <ToolNote text={t('Its Offer has gone from the Market, so it is back on your shelf. List it again to make a new one.')} testID="thing-gone-note" /> : null}
                 {state === 'out' ? <ToolNote text={t('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.')} testID="thing-deal-note" /> : null}
@@ -214,12 +218,12 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                     <ToolButtons>
                         {state === 'shelf' ? <ToolButton text={t('List in your shop')} primary onPress={list} disabled={busy} testID="thing-list" /> : null}
                         {state === 'taken-out' ? <ToolButton text={t('Put back in your shop')} primary onPress={() => { void putBack(); }} disabled={busy} testID="thing-put-back" /> : null}
-                        {state === 'listed' && offerStatus !== 'gone' && offerStatus !== 'paused'
+                        {state === 'listed' && !held && offerStatus !== 'gone' && offerStatus !== 'paused'
                             ? <ToolButton text={t('Take out of your shop')} onPress={() => { void takeOut(); }} disabled={busy} testID="thing-take-out" /> : null}
                         {state === 'lent' ? <ToolButton text={t("It's back")} primary onPress={() => { void backHome(); }} disabled={busy} testID="thing-back-home" /> : null}
-                        {state === 'shelf' || state === 'taken-out' || state === 'listed' ? lendButton : null}
+                        {state === 'shelf' || state === 'taken-out' || (state === 'listed' && !held) ? lendButton : null}
                         {editButton}
-                        {state === 'shelf' || state === 'taken-out' || state === 'listed' ? deleteButton : null}
+                        {state === 'shelf' || state === 'taken-out' || (state === 'listed' && !held) ? deleteButton : null}
                     </ToolButtons>
                 )}
                 {listedNote && state === 'shelf' ? <ToolNote text={t('Once you have posted it, link it to its Offer below, so the Tool shed knows it is in your shop.')} testID="thing-listed-note" /> : null}

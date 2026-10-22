@@ -131,7 +131,10 @@ vi.mock('../../../utils/db', () => ({
     getMemberProfile: async () => ({ avatar_url: node.avatar }),
     getPost: async (id: string) => market.rows.get(id) ?? null,
     getMyPosts: async (pubkey: string) => [...market.rows.values()].filter((p) => p.author_pubkey === pubkey),
-    getMarketplaceTransactions: async (pubkey: string) => market.deals.filter((d) => d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey),
+    // As the phone's own copy answers (utils/db.ts): by status when asked, `limit` rows from `offset`.
+    getMarketplaceTransactions: async (pubkey: string, filter?: { status?: string }, limit = 50, offset = 0) => market.deals
+        .filter((d) => (d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey) && (!filter?.status || d.status === filter.status))
+        .slice(offset, offset + limit),
     // As the node has them (posts.ts): only a live Offer is paused and only a paused one resumed; anything else is a 400,
     // which the phone's signed request throws.
     pausePost: async (id: string) => {
@@ -737,6 +740,16 @@ describe('A thing', () => {
         expect(text('thing-deal-note')).toBe('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.');
         expect(byTestId('thing-delete')).toBeNull();
         expect(byTestId('thing-take-out')).toBeNull();
+    });
+
+    it('a loan still out is out, however many deals are done before it in the list', async () => {
+        for (let i = 1; i <= 250; i++) market.deals.push({ id: `done-${i}`, postId: `old-${i}`, sellerPublicKey: ME.publicKey, buyerPublicKey: 'c', status: 'completed', createdAt: iso(NOW - DAY) });
+        offer('post-1', 'Drill', 'pending', { lendable: 1, price_type: 'fixed', accepted_at: iso(NOW - DAY) });
+        market.deals.push({ id: 'tx-out', postId: 'post-1', sellerPublicKey: ME.publicKey, buyerPublicKey: 'b', status: 'pending', hours: 3, createdAt: iso(NOW - 30 * DAY) });
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' })));
+        await open('thing', { key: 't-1' });
+        expect(text('thing-state')).toMatch(/^Out on a loan · back around /);
+        expect(byTestId('thing-delete')).toBeNull();
     });
 
     it("the community's price guide: a hint where Beans are on, none where they are off; never a price set", async () => {

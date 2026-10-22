@@ -72,13 +72,29 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
     };
 }
 
+/** Rows read at a time from the phone's own copy of the deals. */
+const PAGE_ROWS = 200;
+
+type DealRow = Awaited<ReturnType<typeof getMarketplaceTransactions>>[number];
+
+/** Every deal of the owner's the phone holds, newest first, page after page until a short one. */
+async function everyDeal(owner: string): Promise<DealRow[]> {
+    const rows: DealRow[] = [];
+    for (let offset = 0; ; offset += PAGE_ROWS) {
+        const page = await getMarketplaceTransactions(owner, undefined, PAGE_ROWS, offset);
+        rows.push(...page);
+        if (page.length < PAGE_ROWS) return rows;
+    }
+}
+
 /**
  * `deals`: the owner's deals as the phone holds them where the owner is the seller or lender (on their own Offers; the
- * tool matches the ones its records are linked to), never a deal they are buying in. A loan that is out says when it is
- * due back, from its Offer's hand-over and the deal's days (core's lendBackAroundOf), when the phone holds both.
+ * tool matches the ones its records are linked to), never a deal they are buying in, every one of them: one page would
+ * let newer deals push an older loan still out off it. A loan that is out says when it is due back, from its Offer's
+ * hand-over and the deal's days (core's lendBackAroundOf), when the phone holds both.
  */
 export async function ownerDeals(owner: string): Promise<ToolDealSummary[]> {
-    const rows = await getMarketplaceTransactions(owner, undefined, 200).catch(() => []);
+    const rows = await everyDeal(owner).catch(() => []);
     const mine = rows.filter((r) => r && r.sellerPublicKey === owner && typeof r.postId === 'string' && typeof r.id === 'string');
     return Promise.all(mine.map(async (r): Promise<ToolDealSummary> => {
         const post = r.status === 'pending' ? await getPost(r.postId).catch(() => null) : null;

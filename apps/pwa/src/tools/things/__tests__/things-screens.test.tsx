@@ -68,6 +68,13 @@ function offer(id: string, title: string, status = 'active', extra: Record<strin
     server.posts.set(id, { id, title, status, type: 'offer', authorPublicKey: OWNER, priceType: 'fixed', ...extra });
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+/** One page of a list, as the node pages one (clampLimit, clampOffset in https-server.ts): 50 rows unless asked, at most 200. */
+function page<T>(rows: T[], url: URL): T[] {
+    const asked = Math.floor(Number(url.searchParams.get('limit')));
+    const limit = Number.isFinite(asked) && asked > 0 ? Math.min(asked, 200) : 50;
+    const offset = Math.max(0, Math.floor(Number(url.searchParams.get('offset'))) || 0);
+    return rows.slice(offset, offset + limit);
+}
 async function answer(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
     const url = new URL(String(input), 'https://mullum.example');
     const method = (init?.method ?? 'GET').toUpperCase();
@@ -81,9 +88,13 @@ async function answer(input: RequestInfo | URL, init?: RequestInit): Promise<Res
             const id = url.searchParams.get('id');
             const author = url.searchParams.get('author');
             const all = [...server.posts.values()];
-            return json(id ? all.filter((p) => p.id === id) : all.filter((p) => !author || p.authorPublicKey === author));
+            return json(id ? all.filter((p) => p.id === id) : page(all.filter((p) => !author || p.authorPublicKey === author), url));
         }
-        case 'GET /api/marketplace/transactions': return json(server.deals.filter((d) => d.sellerPublicKey === url.searchParams.get('publicKey') || d.buyerPublicKey === url.searchParams.get('publicKey')));
+        case 'GET /api/marketplace/transactions': {
+            const who = url.searchParams.get('publicKey');
+            const status = url.searchParams.get('status');
+            return json(page(server.deals.filter((d) => (d.sellerPublicKey === who || d.buyerPublicKey === who) && (!status || d.status === status)), url));
+        }
         // As the node has them (posts.ts, routes/marketplace.ts): only a live Offer is paused and only a paused one
         // resumed; anything else is a 400.
         case 'POST /api/marketplace/posts/pause': {
@@ -465,6 +476,23 @@ describe('A thing', () => {
         expect(byTestId('thing-deal-note')?.textContent).toBe('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.');
         expect(byTestId('thing-delete')).toBeNull();
         expect(byTestId('thing-take-out')).toBeNull();
+    });
+
+    it("past the node's page of 50: every Offer is offered to link, and a loan still out is out, with its date", async () => {
+        for (let i = 1; i <= 60; i++) offer(`old-${i}`, `Old offer ${i}`);
+        offer('post-1', 'Drill', 'pending', { lendable: true, acceptedAt: iso(NOW - DAY) });
+        offer('post-2', 'Ladder');
+        for (let i = 1; i <= 60; i++) server.deals.push({ id: `done-${i}`, postId: `old-${i}`, sellerPublicKey: OWNER, buyerPublicKey: 'c', status: 'completed', createdAt: iso(NOW - DAY) });
+        server.deals.push({ id: 'tx-out', postId: 'post-1', sellerPublicKey: OWNER, buyerPublicKey: 'b', status: 'pending', hours: 3, createdAt: iso(NOW - 30 * DAY) });
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' }), thing('t-2', 'Ladder')));
+        await open('thing', 't-1');
+        await waitFor(() => expect(byTestId('thing-state')?.textContent).toMatch(/^Out on a loan · back around /));
+        expect(byTestId('thing-delete')).toBeNull();
+        cleanup();
+        await open('thing', 't-2');
+        await click('thing-link');
+        expect(byTestId('thing-link-post-2')).not.toBeNull();
+        expect(screen.queryAllByTestId(/^thing-link-(old|post)-/)).toHaveLength(61);
     });
 
     it("the community's price guide: a hint where Beans are on, none where they are off; never a price set", async () => {

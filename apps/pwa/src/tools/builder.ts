@@ -199,10 +199,29 @@ async function ownOffer(owner: string, id: string): Promise<MarketplacePost | nu
     return post && post.id === id && post.authorPublicKey === owner && post.type === 'offer' ? post : null;
 }
 
-/** The owner's own Offers, live, in a deal or paused (the node shows its author the paused ones). */
+/** The most rows the node gives in one page (MAX_PAGE_LIMIT in https-server.ts); asked for no number, it gives 50. */
+const PAGE_ROWS = 200;
+
+/**
+ * Every row of a list the node pages, newest first: page after page until a short one, so the older rows don't fall off
+ * the first page. A page with nothing new in it (a node that took no offset) ends it too; a row seen twice, pushed down a
+ * page by a new one meanwhile, is kept once.
+ */
+async function everyPage<T extends { id: string }>(read: (limit: number, offset: number) => Promise<T[]>): Promise<T[]> {
+    const rows = new Map<string, T>();
+    for (let offset = 0; ; offset += PAGE_ROWS) {
+        const page = await read(PAGE_ROWS, offset);
+        const list = Array.isArray(page) ? page : [];
+        const before = rows.size;
+        for (const row of list) if (row && typeof row.id === 'string' && !rows.has(row.id)) rows.set(row.id, row);
+        if (list.length < PAGE_ROWS || rows.size === before) return [...rows.values()];
+    }
+}
+
+/** The owner's own Offers, live, in a deal or paused (the node shows its author the paused ones), every one of them. */
 async function ownOffers(owner: string): Promise<MarketplacePost[]> {
-    const posts = await getMarketplacePosts({ author: owner, type: 'offer' });
-    return (Array.isArray(posts) ? posts : []).filter((p) => p && p.authorPublicKey === owner && p.type === 'offer' && postStatusOf(p) !== 'gone');
+    const posts = await everyPage((limit, offset) => getMarketplacePosts({ author: owner, type: 'offer', limit, offset }));
+    return posts.filter((p) => p && p.authorPublicKey === owner && p.type === 'offer' && postStatusOf(p) !== 'gone');
 }
 
 /** `posts`: pause and resume the owner's own Offers only, say how one stands, and list them. */
@@ -220,13 +239,17 @@ export function webPosts(owner: string): ToolHostGrants['posts'] {
 
 /**
  * `deals`: the owner's deals where they are the seller or lender (on their own Offers; the tool matches the ones its
- * records are linked to), never one they are buying in. A loan that is out says when it is due back, from its Offer's
- * hand-over and the deal's days (core's lendBackAroundOf).
+ * records are linked to), never one they are buying in, every one of them: the node's one page would let newer deals push
+ * an older loan still out off it. A loan that is out says when it is due back, from its Offer's hand-over and the deal's
+ * days (core's lendBackAroundOf).
  */
 export async function webDeals(owner: string): Promise<ToolDealSummary[]> {
-    const [deals, offers] = await Promise.all([getMyMarketplaceTransactions(owner), ownOffers(owner).catch(() => [] as MarketplacePost[])]);
+    const [deals, offers] = await Promise.all([
+        everyPage((limit, offset) => getMyMarketplaceTransactions(owner, undefined, limit, offset)),
+        ownOffers(owner).catch(() => [] as MarketplacePost[]),
+    ]);
     const byId = new Map(offers.map((p) => [p.id, p]));
-    return (Array.isArray(deals) ? deals : []).filter((d) => d && d.sellerPublicKey === owner).map((d): ToolDealSummary => {
+    return deals.filter((d) => d && d.sellerPublicKey === owner).map((d): ToolDealSummary => {
         const post = byId.get(d.postId);
         const backAround = d.status === 'pending' && post?.lendable ? lendBackAroundOf(post.acceptedAt, post.priceType, d.hours) : null;
         const updatedAt = (d.status === 'pending' && post?.acceptedAt) || d.completedAt || d.createdAt;

@@ -23,7 +23,7 @@ import {
     thingConditionName, thingListDraft, thingState, thingStateLine, tn,
     type ThingsDoc, type ThingsScreenProps, type ToolOwnOffer, type ToolPostStatus, type ToolPriceHint,
 } from '@beanpool/core';
-import { ToolButton, ToolChips, ToolEmpty, ToolField, ToolInput, ToolNote, ToolPhoto, ToolRow, ToolSection } from '../ui';
+import { ToolButton, ToolChips, ToolEmpty, ToolField, ToolInput, ToolLive, ToolNote, ToolPhoto, ToolRow, ToolSection } from '../ui';
 import { BUTTONS, keep, useDeals } from './parts';
 
 /** Said when the community's server didn't answer: nothing changed. */
@@ -243,8 +243,10 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                 {thing.photo ? <ToolPhoto uri={host.photos.uri(thing.photo)} label={t('Photo of {name}', { name: thing.name })} testId="thing-photo" /> : null}
                 <ToolRow icon={cat.emoji} title={thing.name} wrap />
                 <ToolNote text={thingStateLine(thing, open, host.now())} testId="thing-state" />
-                {held && failed ? <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testId="thing-unchecked" /> : null}
-                {refused ? <ToolNote tone="danger" text={refused} testId="thing-refused" /> : null}
+                <ToolLive testId="thing-unchecked-live">
+                    {held && failed ? <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testId="thing-unchecked" /> : null}
+                </ToolLive>
+                <ToolLive testId="thing-refused-live">{refused ? <ToolNote tone="danger" text={refused} testId="thing-refused" /> : null}</ToolLive>
                 {goneNote ? <ToolNote text={t('Its Offer has gone from the Market, so it is back on your shelf. List it again to make a new one.')} testId="thing-gone-note" /> : null}
                 {state === 'out' ? <ToolNote text={t('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.')} testId="thing-deal-note" /> : null}
                 {state === 'asked' ? <ToolNote text={t('Answer them in My Deals, at the top of the Market.')} testId="thing-deal-note" /> : null}

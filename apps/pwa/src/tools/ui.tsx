@@ -11,7 +11,7 @@
  *
  * A tool's folder imports this file as `../ui` (the fence in eslint.config.mjs allows it and the host, nothing else).
  */
-import { useId, type ReactNode } from 'react';
+import { createContext, useContext, useId, type ReactNode } from 'react';
 import { useToolPhotoSrc } from './photos';
 
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand';
@@ -181,13 +181,33 @@ export function ToolPhoto({ uri, label, testId }: { uri: string; label: string; 
     );
 }
 
+/** Inside a ToolLive, whose region announces a note: the note isn't a region of its own too, or it is read out twice. */
+const InLive = createContext(false);
+
 /**
  * A sentence under a section: a note, a hint. Wraps; never cut. `warning` for what needs the member's eye before they go
- * on, `danger` for what stopped (both announced as they show).
+ * on, `danger` for what stopped. One that comes and goes as the member acts is drawn in a ToolLive, so it is announced as
+ * it shows (as the phone's twin is); one drawn with the screen is a status.
  */
 export function ToolNote({ text, tone, testId }: { text: string; tone?: 'warning' | 'danger'; testId?: string }) {
+    const live = useContext(InLive);
     const look = tone === 'danger' ? 'font-semibold text-bp-ink-danger' : tone === 'warning' ? 'font-semibold text-bp-ink-warning' : 'text-nature-700 dark:text-nature-200';
-    return <p role={tone ? 'status' : undefined} data-testid={testId} className={`m-0 px-3 py-2 text-sm break-words min-w-0 ${look}`}>{text}</p>;
+    return <p role={tone && !live ? 'status' : undefined} data-testid={testId} className={`m-0 px-3 py-2 text-sm break-words min-w-0 ${look}`}>{text}</p>;
+}
+
+/**
+ * Where a note that comes and goes is drawn (what stopped a change, what couldn't be checked): a region that is there,
+ * empty, before the note is, so its words are announced as it shows; one made with its words in it is often not read out
+ * (ToolInput's error does the same). Polite, as the phone's notes are. Empty, it draws nothing, not even a section's
+ * divider.
+ */
+export function ToolLive({ children, testId }: { children?: ReactNode; testId?: string }) {
+    const empty = children === null || children === undefined || children === false;
+    return (
+        <div aria-live="polite" data-testid={testId} className={`min-w-0${empty ? ' !border-0' : ''}`}>
+            <InLive.Provider value>{children}</InLive.Provider>
+        </div>
+    );
 }
 
 /** A button: `primary` the screen's one main action, `quiet` the rest, `danger` what takes something away. */

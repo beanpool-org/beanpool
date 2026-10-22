@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import { openDealsByPost, t, thingCategory, thingRowLine, thingsLoans, type ThingLoan, type ThingsScreenProps } from '@beanpool/core';
-import { ToolEmpty, ToolNote, ToolRow, ToolSection } from '../ui';
+import { ToolEmpty, ToolLive, ToolNote, ToolRow, ToolSection } from '../ui';
 import { useDeals } from './parts';
 
 export function LoansScreen({ host }: ThingsScreenProps) {
@@ -38,11 +38,13 @@ export function LoansScreen({ host }: ThingsScreenProps) {
             {lent.length > 0 ? <ToolSection title={t('Lent outside BeanPool')} testId="loans-outside">{lent.map(row)}</ToolSection> : null}
             {out.length > 0 ? <ToolSection title={t('Out on a loan through BeanPool')} testId="loans-beanpool">{out.map(row)}</ToolSection> : null}
             {asked.length > 0 ? <ToolSection title={t('Asked to borrow')} testId="loans-asked">{asked.map(row)}</ToolSection> : null}
-            {failed ? (
-                <ToolSection>
-                    <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testId="loans-unchecked" />
-                </ToolSection>
-            ) : null}
+            <ToolLive testId="loans-unchecked-live">
+                {failed ? (
+                    <ToolSection>
+                        <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testId="loans-unchecked" />
+                    </ToolSection>
+                ) : null}
+            </ToolLive>
         </div>
     );
 }

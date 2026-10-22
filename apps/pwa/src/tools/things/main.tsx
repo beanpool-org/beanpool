@@ -8,7 +8,7 @@ import {
     openDealsByPost, shedThings, t, thingCategory, thingInFilter, thingRowLine, thingState, thingsLoans,
     type ThingFilter, type ThingsScreenProps,
 } from '@beanpool/core';
-import { ToolButton, ToolChips, ToolNote, ToolRow, ToolSection } from '../ui';
+import { ToolButton, ToolChips, ToolLive, ToolNote, ToolRow, ToolSection } from '../ui';
 import { BUTTONS, useDeals } from './parts';
 
 export function Main({ host }: ThingsScreenProps) {
@@ -65,7 +65,9 @@ export function Main({ host }: ThingsScreenProps) {
                         onClick={() => host.navigate('loans')}
                         testId="things-loans"
                     />
-                    {failed ? <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testId="things-loans-unchecked" /> : null}
+                    <ToolLive testId="things-loans-unchecked-live">
+                        {failed ? <ToolNote tone="warning" text={t("Loans through BeanPool couldn't be checked just now.")} testId="things-loans-unchecked" /> : null}
+                    </ToolLive>
                 </ToolSection>
             ) : null}
         </div>

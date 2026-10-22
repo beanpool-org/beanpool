@@ -15,7 +15,7 @@ import {
     t, thingCategories, thingCategory, thingConditionName, thingInput, thingInputProblems,
     type ThingCondition, type ThingInput, type ThingsScreenProps, type ToolPhoto as Photo,
 } from '@beanpool/core';
-import { ToolButton, ToolChips, ToolEmpty, ToolInput, ToolNote, ToolPhoto, ToolRow, ToolSection } from '../ui';
+import { ToolButton, ToolChips, ToolEmpty, ToolInput, ToolLive, ToolNote, ToolPhoto, ToolRow, ToolSection } from '../ui';
 import { BUTTONS, newThingId } from './parts';
 
 export function EditScreen({ host, params }: ThingsScreenProps) {
@@ -146,10 +146,13 @@ export function EditScreen({ host, params }: ThingsScreenProps) {
                     testId="edit-note" />
             </ToolSection>
             <ToolSection>
-                {problem ? <ToolNote tone="danger" text={problem} testId="edit-problem" /> : null}
-                <div className={BUTTONS}>
-                    <ToolButton kind="primary" onClick={() => { void save(); }} disabled={busy} testId="edit-save">{t('Save')}</ToolButton>
-                    <ToolButton onClick={() => { void cancel(); }} testId="edit-cancel">{t('Cancel')}</ToolButton>
+                {/* One child of the section, so the region, there and empty above the buttons, draws no divider over them. */}
+                <div className="min-w-0">
+                    <ToolLive testId="edit-problem-live">{problem ? <ToolNote tone="danger" text={problem} testId="edit-problem" /> : null}</ToolLive>
+                    <div className={BUTTONS}>
+                        <ToolButton kind="primary" onClick={() => { void save(); }} disabled={busy} testId="edit-save">{t('Save')}</ToolButton>
+                        <ToolButton onClick={() => { void cancel(); }} testId="edit-cancel">{t('Cancel')}</ToolButton>
+                    </div>
                 </div>
             </ToolSection>
         </div>

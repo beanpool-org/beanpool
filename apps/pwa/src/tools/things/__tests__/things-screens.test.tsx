@@ -454,6 +454,22 @@ describe('Edit', () => {
         expect(byTestId('edit-problem')?.textContent).toBe('Your Tool shed is full: it keeps up to 64 KB. Delete something you no longer have, or shorten some notes.');
         expect((await kept()).things).toHaveLength(full.length);
     });
+
+    it("a refusal on Save is announced as it shows, from a polite region there before Save; never read out twice", async () => {
+        await keep(shed(...Array.from({ length: THINGS_MAX_ITEMS }, (_, i) => thing(`t-${i}`, `Thing ${i}`))));
+        await open('edit');
+        // The region is there, empty, before the sentence goes in it: one made with its words in it is often not read out.
+        const region = byTestId('edit-problem-live')!;
+        expect(region.getAttribute('aria-live')).toBe('polite');
+        expect(region.textContent).toBe('');
+        await type('edit-name', 'One more');
+        await click('edit-save');
+        expect(byTestId('edit-problem-live')).toBe(region);
+        expect(region.textContent).toBe('Your Tool shed holds 100 things. Delete one first.');
+        // In the region, the sentence isn't a status of its own as well.
+        expect(byTestId('edit-problem')?.closest('[aria-live]')).toBe(region);
+        expect(byTestId('edit-problem')?.getAttribute('role')).toBeNull();
+    });
 });
 
 describe('A thing', () => {
@@ -610,6 +626,37 @@ describe('A thing', () => {
         await click('thing-lend-save');
         expect(byTestId('thing-refused')?.textContent).toBe("Couldn't reach your community's server, so nothing changed. Try again when you're online.");
         expect(await keptThing('t-1')).toEqual(thing('t-1', 'Ladder', { postId: 'post-1' }));
+    });
+
+    it("the sentence that says nothing changed, and that its loans couldn't be checked, are announced as they show, from polite regions there before them", async () => {
+        let release!: () => void;
+        server.dealsGate = new Promise<void>((r) => { release = r; });
+        offer('post-1', 'Ladder');
+        await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1' })));
+        await open('thing', 't-1');
+        // Each region is there, empty, before its sentence goes in it: one made with its words in it is often not read out.
+        const [unchecked, refused] = ['thing-unchecked-live', 'thing-refused-live'].map((id) => byTestId(id)!);
+        for (const region of [unchecked, refused]) {
+            expect(region.getAttribute('aria-live')).toBe('polite');
+            expect(region.textContent).toBe('');
+        }
+        server.dealsDown = true;
+        release();
+        await waitFor(() => expect(unchecked.textContent).toBe("Loans through BeanPool couldn't be checked just now."));
+        expect(byTestId('thing-unchecked-live')).toBe(unchecked);
+        server.dealsDown = false;
+        cleanup();
+
+        await open('thing', 't-1');
+        const region = byTestId('thing-refused-live')!;
+        expect(region.textContent).toBe('');
+        server.down = true;
+        await click('thing-take-out');
+        expect(byTestId('thing-refused-live')).toBe(region);
+        expect(region.textContent).toBe("Couldn't reach your community's server, so nothing changed. Try again when you're online.");
+        // In the region, the sentence isn't a status of its own as well.
+        expect(byTestId('thing-refused')?.closest('[aria-live]')).toBe(region);
+        expect(byTestId('thing-refused')?.getAttribute('role')).toBeNull();
     });
 
     it('delete: asked first; its Offer is taken out of the Market and its photo goes; then back to the list', async () => {
@@ -979,5 +1026,27 @@ describe('Loans', () => {
         await open('loans');
         await waitFor(() => expect(byTestId('loans-unchecked')).not.toBeNull());
         expect(byTestId('loans-none')).toBeNull();
+    });
+
+    it("loans that couldn't be checked are announced as they show, on the list and on Loans, from polite regions there before them", async () => {
+        await keep(shed(thing('t-1', 'Saw')));
+        for (const [screenName, id] of [['main', 'things-loans-unchecked'], ['loans', 'loans-unchecked']] as const) {
+            let release!: () => void;
+            server.dealsGate = new Promise<void>((r) => { release = r; });
+            await open(screenName);
+            // The region is there, empty, before the sentence goes in it: one made with its words in it is often not read out.
+            const region = byTestId(`${id}-live`)!;
+            expect(region.getAttribute('aria-live')).toBe('polite');
+            expect(region.textContent).toBe('');
+            server.dealsDown = true;
+            release();
+            await waitFor(() => expect(region.textContent).toBe("Loans through BeanPool couldn't be checked just now."));
+            expect(byTestId(`${id}-live`)).toBe(region);
+            // In the region, the sentence isn't a status of its own as well.
+            expect(byTestId(id)?.closest('[aria-live]')).toBe(region);
+            expect(byTestId(id)?.getAttribute('role')).toBeNull();
+            server.dealsDown = false;
+            cleanup();
+        }
     });
 });

@@ -20,6 +20,11 @@ const DEFAULT_LNG = 153.4991;
 
 const RADIUS_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 25, 50];
 
+// Android shrinks a label only while it takes more lines than numberOfLines. One word wider than its button is broken by
+// character instead, and if that still fits in 2 lines it is never shrunk: German "Zurücksetzen" was drawn "Zurücksetze" /
+// "n". A one-word label gets 1 line, so the shrink starts; a label with a space keeps 2 (Malayalam's Reset needs them).
+const labelLines = (label: string) => (label.includes(' ') ? 2 : 1);
+
 interface RadiusPickerModalProps {
     visible: boolean;
     initialRadius: number | null;
@@ -114,10 +119,10 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
             <View style={styles.container}>
                 <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
                     <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel={t('Cancel location picker')} style={styles.headerBtn}>
-                        <Text style={styles.cancelText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
+                        <Text style={styles.cancelText} numberOfLines={labelLines(t('Cancel'))} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
                     </Pressable>
                     <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel={t('Reset location and radius')} style={styles.headerBtn}>
-                        <Text style={styles.resetText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Reset')}</Text>
+                        <Text style={styles.resetText} numberOfLines={labelLines(t('Reset'))} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Reset')}</Text>
                     </Pressable>
                     <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📍 Location & Radius')}</Text>
                 </View>

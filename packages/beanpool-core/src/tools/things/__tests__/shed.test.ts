@@ -11,7 +11,7 @@ import { THINGS_MAX_ITEMS, THINGS_NAME_CHARS, readThingsDoc, type Thing, type Th
 import { FIXTURES } from '../fixtures.js';
 import { thingsCounts } from '../manifest.js';
 import {
-    BACK_AROUND_DAYS, THING_FILTERS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, markBack, offersToLink,
+    BACK_AROUND_DAYS, THING_FILTERS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack, offersToLink,
     openDealsByPost, removeThing, saveThing, setListed, shedFits, shedFullLine, shedHasRoom, shedThings, shedTooBigLine,
     takeOutOfShop, thingCategories, thingCategory, thingConditionName, thingInFilter, thingInput, thingInputProblems,
     thingListDraft, thingState, thingStateLine, thingsLoans, type ThingInput,
@@ -221,6 +221,17 @@ describe('the changes a thing\'s screen makes', () => {
         expect(offersToLink(d, offers, 'a').map((o) => o.id)).toEqual(['p3', 'p4']);
         // Its own link is offered back to itself.
         expect(offersToLink(d, offers, 'b').map((o) => o.id)).toEqual(['p1', 'p3', 'p4']);
+    });
+
+    it('linked to a live Offer (or one in a deal) it is in the shop; to a paused one, taken out, so Put back resumes it', () => {
+        const d = doc(thing('a', 'Drill', { pausedPostId: 'old' }));
+        expect(linkOffer(d, 'a', { id: 'p1', status: 'active' }, NOW).things[0]).toMatchObject({ postId: 'p1' });
+        expect(linkOffer(d, 'a', { id: 'p1', status: 'active' }, NOW).things[0]).not.toHaveProperty('pausedPostId');
+        expect(linkOffer(d, 'a', { id: 'p2', status: 'pending' }, NOW).things[0]).toMatchObject({ postId: 'p2' });
+        const paused = linkOffer(doc(thing('a', 'Drill', { postId: 'x' })), 'a', { id: 'p3', status: 'paused' }, NOW);
+        expect(paused.things[0]).toMatchObject({ pausedPostId: 'p3' });
+        expect(paused.things[0]).not.toHaveProperty('postId');
+        expect(thingState(paused.things[0] as Thing)).toBe('taken-out');
     });
 });
 

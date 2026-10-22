@@ -321,6 +321,16 @@ export function forgetOffer(doc: ThingsDoc, id: string, now: number): ThingsDoc 
     return changeThing(doc, id, now, (t) => without(t, 'postId', 'pausedPostId'));
 }
 
+/**
+ * The document with a thing linked to one of the owner's Offers (host.posts.mine): a live one, or one in a deal, puts it
+ * in the shop; a paused one is kept as taken out, so Put back resumes it.
+ */
+export function linkOffer(doc: ThingsDoc, id: string, offer: { id: string; status: string }, now: number): ThingsDoc {
+    return offer.status === 'paused'
+        ? changeThing(doc, id, now, (t) => ({ ...without(t, 'postId'), pausedPostId: offer.id }))
+        : setListed(doc, id, offer.id, now);
+}
+
 /** The Offers a thing may be linked to: the owner's own, live or paused, that no other thing the member has is linked to. */
 export function offersToLink<O extends { id: string; status: string }>(doc: ThingsDoc, offers: readonly O[], id: string): O[] {
     const taken = new Set<string>();

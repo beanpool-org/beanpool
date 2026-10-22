@@ -276,8 +276,10 @@ async function ownerOrAdminAsking(ctx: any): Promise<boolean> {
 
 router.get('/api/node/config', async (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    const ownerOrAdmin = await ownerOrAdminAsking(ctx);
+    // Read after checkAdminAuth: a key session (the manager's, which isn't a signed request) names its member there.
     const signer = ctx.state.actor as string | undefined;
-    const config = publicNodeConfig(getNodeConfig(), placeShownTo({ ownerOrAdmin: await ownerOrAdminAsking(ctx), signer }));
+    const config = publicNodeConfig(getNodeConfig(), placeShownTo({ ownerOrAdmin, signer }));
     // A private preview (config/private-preview.ts): the phone map reads this unsigned for the community's service area
     // (apps/native map.tsx, which can't change here), so it is open, and a reader who is no member here (as that read
     // is) gets the area alone: the place the community serves (null with "Share Location & Radius" off), no member's

@@ -166,10 +166,10 @@ async function main() {
         assert(cfg.status === 200 && cfg.body?.serviceRadius === null && cfg.text === cfgUnsigned.text,
             `${who}'s signed GET /api/node/config: no place, the stranger's answer byte for byte (${cfg.status} ${show(cfg.body?.serviceRadius)})`);
     }
-    const wholeConfig: Record<string, string> = {};
+    const wholeConfig: Record<string, any> = {};
     for (const [who, headers] of [['an owner', OWNER], ['an admin', ADMIN]] as const) {
         const cfg = await get('/api/node/config', null, headers);
-        wholeConfig[who] = cfg.text;
+        wholeConfig[who] = cfg.body;
         assert(cfg.status === 200 && same(cfg.body?.serviceRadius, AREA),
             `${who}'s key session, GET /api/node/config: the exact centre (${cfg.status} ${show(cfg.body?.serviceRadius)})`);
         const dash = await get('/api/local/dashboard', null, headers);
@@ -208,8 +208,11 @@ async function main() {
             `a disabled member's: no place (${previewDisabled.status} ${show(previewDisabled.body?.serviceRadius)})`);
         for (const [who, headers] of [['an owner', OWNER], ['an admin', ADMIN]] as const) {
             const cfg = await get('/api/node/config', null, headers);
-            assert(cfg.status === 200 && cfg.text === wholeConfig[who] && cfg.body?.publishLocation === false && typeof cfg.body?.acceptKnocks === 'boolean',
-                `${who}'s key session: the whole config, as off a preview, so a save from the Node Identity screen keeps the switch off (${cfg.status} ${cfg.text.slice(0, 200)})`);
+            // Every field as off a preview but `door`, which a private preview sets itself (config/door.ts).
+            const notDoor = (b: any) => ({ ...b, door: undefined });
+            assert(cfg.status === 200 && same(notDoor(cfg.body), notDoor(wholeConfig[who])) && typeof cfg.body?.door === 'string'
+                && cfg.body?.publishLocation === false && typeof cfg.body?.acceptKnocks === 'boolean',
+                `${who}'s key session: the whole config, as off a preview, so a save from the Node Identity screen keeps the switch off (${cfg.status} ${cfg.text} vs ${show(wholeConfig[who])})`);
         }
     } finally {
         delete process.env.PRIVATE_PREVIEW;

@@ -38,7 +38,9 @@ import { palette } from '../constants/colors';
 import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
-import { pairingRequestUrls, readPairingCode, refusalJoin, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
+import { isAppCommunity, pairingRequestUrls, readPairingCode, refusalJoin, transferTarget, type PairingQr, type TransferTarget } from '../utils/pair-device-target';
+import { pairingAccountLabel, pairingPayload } from '../utils/pair-device-payload';
+import { getMemberProfile } from '../utils/db';
 import { getSavedNodes } from '../utils/nodes';
 import { pairLinkFromRoute } from '../utils/pair-link';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -67,6 +69,12 @@ export default function PairDeviceScreen() {
     const isScanningLocked = useRef(false);
     const scannedDataRef = useRef(scannedData);
     scannedDataRef.current = scannedData;
+    /** The member record's name for the account where one scan would send it (pair-device-payload.ts), for that scan only. */
+    const [memberName, setMemberName] = useState<{ scan: ParsedPairingData; name: string | null } | null>(null);
+    const scannedName = memberName && memberName.scan === scannedData ? memberName.name : null;
+    /** The latest lookup, for handleConfirmLink: it seals after the unlock, and its press's render can be from before the lookup answered. */
+    const memberNameRef = useRef(memberName);
+    memberNameRef.current = memberName;
     /** The scanned code was refused (another server, or not readable): its sentence goes first in the sheet. */
     const refusedFirst = !!scannedData?.target && scannedData.target.kind !== 'ok';
     const lockBusyRef = useRef(false);
@@ -91,6 +99,23 @@ export default function PairDeviceScreen() {
         if (!isTransferringRef.current && !confirmCodeRef.current && !lockBusyRef.current && !scannedDataRef.current && !isScanningLocked.current) void readCode(linkCode, 'link');
         navigation.setParams({ qr: undefined } as never);
     }, [linkCode]);
+
+    // A phone's copy of the account with no name: the sheet shows, and the account carries, the name its member record
+    // gives it on the community the code sends to, when that is the one this phone is on (its rows are that one's).
+    // Read only: the stored account is not written.
+    useEffect(() => {
+        const scan = scannedData;
+        const target = scan?.target;
+        if (!scan || !identity?.publicKey || identity.callsign?.trim() || target?.kind !== 'ok') return;
+        let live = true;
+        (async () => {
+            const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+            if (!isAppCommunity(target, anchor)) return;
+            const row = await getMemberProfile(identity.publicKey).catch(() => null);
+            if (live) setMemberName({ scan, name: typeof row?.callsign === 'string' ? row.callsign : null });
+        })();
+        return () => { live = false; };
+    }, [scannedData, identity?.publicKey, identity?.callsign]);
 
     useEffect(() => {
         return () => {
@@ -449,17 +474,11 @@ export default function PairDeviceScreen() {
             // Retrieve full mnemonic recovery words if available
             const mnemonic = await getMnemonic(identity);
 
-            const payloadToEncrypt = {
-                callsign: identity.callsign,
-                publicKey: identity.publicKey,
-                privateKey: identity.privateKey,
-                mnemonic: mnemonic || undefined,
-                createdAt: identity.createdAt,
-                version: 1,
-            };
-
+            // The name the sheet shows (pairingPayload): the stored one, or with none the member record's for this code. Read
+            // now, not from the press: Confirm can be tapped before the lookup answers, and it often answers while the unlock asks.
+            const found = memberNameRef.current;
             const encrypted = encryptPairingPayload(
-                payloadToEncrypt,
+                pairingPayload(identity, mnemonic, found && found.scan === scanned ? found.name : null),
                 scanned.desktopPubHex,
                 scanned.sessionId
             );
@@ -587,7 +606,7 @@ export default function PairDeviceScreen() {
                             <View style={styles.infoBox}>
                                 <View style={styles.infoRow}>
                                     <Text style={styles.infoLabel}>{t('Account')}</Text>
-                                    <Text style={styles.infoValue}>{identity?.callsign}</Text>
+                                    <Text style={styles.infoValue}>{identity ? pairingAccountLabel(identity, scannedName) : ''}</Text>
                                 </View>
                                 <View style={styles.infoRow}>
                                     <Text style={styles.infoLabel}>{t('Target Host')}</Text>

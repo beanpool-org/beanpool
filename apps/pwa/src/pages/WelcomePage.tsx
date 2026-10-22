@@ -24,7 +24,7 @@ import {
 import { validateMnemonic } from '../lib/mnemonic';
 
 import {
-    redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile, checkMembership,
+    redeemInvite, redeemOfflineTicket, registerMember, updateMemberProfile,
     recordOnboardingEvent, initPairingApi, pollPairingApi, confirmPairingApi, cancelPairingApi, getNodeApiUrl,
     getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
@@ -39,7 +39,7 @@ import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { AddSignIn } from '../components/OneWayBack';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, PRIVATE_PREVIEW_MESSAGE, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { privatePreviewOn } from '../lib/visitor-lobby';
-import { adoptNodeName, nodeNameFor } from '../lib/member-name';
+import { nodeNameFor, withNodeName } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { QRCodeSVG } from 'qrcode.react';
@@ -738,19 +738,24 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             pairingSession.sessionId
                         );
 
-                        if (!decrypted.publicKey || !decrypted.privateKey || !decrypted.callsign) {
+                        if (!decrypted.publicKey || !decrypted.privateKey) {
                             throw new Error(t('Received incomplete identity payload'));
                         }
+                        // A phone's copy of the account can hold no name (some joins and restores save none), and phones
+                        // already installed send it as it is: the key comes in, and the node's member record names it, as
+                        // for the 12 words (tester report, 22 Oct). No name there: none, never one made up.
+                        const paired = { ...decrypted, callsign: typeof decrypted.callsign === 'string' ? decrypted.callsign : '' };
 
                         if (doorOpen) {
                             setPairingStatus('success');
-                            await finishRestoreAtDoor(decrypted);
+                            await finishRestoreAtDoor(paired);
                             return;
                         }
-                        await importIdentity(decrypted, sentJoinGuard());
+                        await importIdentity(paired, sentJoinGuard());
+                        const named = paired.callsign.trim() ? paired : await withNodeName(paired);
                         setPairingStatus('success');
                         setTimeout(() => {
-                            onComplete(decrypted);
+                            onComplete(named);
                         }, 600);
                     } catch (decryptErr: any) {
                         if (decryptErr instanceof SentJoinWaitingError) {
@@ -1393,11 +1398,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // from the node on this app). We never push a typed/placeholder name
             // back up. If the node can't be reached the account still restores and
             // adopts its real name on the first online membership check.
-            let identity = await createIdentityFromMnemonic(words, '', sentJoinGuard());
-            try {
-                const mem = await checkMembership(identity.publicKey);
-                identity = (await adoptNodeName(identity, mem?.callsign)) || identity;
-            } catch { /* offline — name lands on next boot */ }
+            const identity = await withNodeName(await createIdentityFromMnemonic(words, '', sentJoinGuard()));
 
             onComplete(identity);
         } catch (e) {

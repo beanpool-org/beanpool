@@ -34,6 +34,19 @@ export async function adoptNodeName(identity: BeanPoolIdentity, nodeName: string
 }
 
 /**
+ * A key brought here without its name (the 12 words; a phone whose copy of the account has none), named as the node's
+ * member record names it. The identity unchanged when the node names no one, or can't be asked or kept: the name then
+ * lands on the next open (openWithNodeName). Never throws.
+ */
+export async function withNodeName(identity: BeanPoolIdentity): Promise<BeanPoolIdentity> {
+    try {
+        const mem = await checkMembership(identity.publicKey);
+        return (await adoptNodeName(identity, mem?.callsign)) || identity;
+    } catch { /* offline — name lands on next boot */ }
+    return identity;
+}
+
+/**
  * What the app does with its identity as it opens (App.tsx). A member: the node's name is theirs, and this browser takes
  * it. No register goes, because for a member it can only rename them to this browser's copy. A key the node does not
  * have as a member: the no-invite register, as before, and the name its answer gives this key. Throws, having sent

@@ -2330,6 +2330,11 @@ export interface ViewerTrustProfile {
         avatarUrl: string | null;
     } | null;
     risk: TradeRiskAssessment;
+    /**
+     * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
+     * and replaces itself with the enterprise page on it (MemberProfile.isTreasury, slice E0). A member's has no such key.
+     */
+    isTreasury?: true;
 }
 
 /**
@@ -2497,6 +2502,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         vouchedInBy,
         elderVouch,
         risk,
+        ...(member.isTreasury ? { isTreasury: true as const } : {}),
     };
 }
 
@@ -5419,7 +5425,12 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
     if (!getActingMember(voucherPubkey)) throw new Error('Voucher not found');
     // can_vouch outlasts a prune, and a pending re-key leaves it on the old key: neither hands out a credit floor.
     assertNodeMember(voucherPubkey);
-    if (!getMember(targetPubkey)) throw new Error('Member not found');
+    const target = getMember(targetPubkey);
+    if (!target) throw new Error('Member not found');
+    // An enterprise or a project is kept by its keepers, not vouched for (DESIGN-shops-round3 §0 row 11): its credit line
+    // is its keepers' pledges, so a vouch's floor does nothing for it, and the profile it opened showed one as trust. A
+    // vouch an enterprise already has is left as it is.
+    if (target.isTreasury) throw new Error('An enterprise is kept, not vouched for.');
     if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
     const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
     const vouchCredit = vouchCreditForLevel(lvl);

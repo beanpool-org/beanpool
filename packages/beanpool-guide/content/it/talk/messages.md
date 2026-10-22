@@ -4,7 +4,7 @@ title: Messaggi
 summary: Avvia una chat, invia foto, rispondi, invia reazioni, modifica, elimina, silenzia e gestisci la privacy.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Le tue chat. Le chat individuali sono protette da crittografia end-to-end. Tocca una chat per aprirla.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Le tue chat
@@ -23,11 +23,12 @@ Nella web app questa è la scheda **Chat**. Elenca tutte le tue chat, comprese q
 
 ## Avviare una chat
 
-- Da un annuncio: tocca **Messaggio** e il nome della persona.
+- Da un profilo: apri il suo profilo e tocca **Invia messaggio**. Lì puoi anche aggiungere la persona come amica.
 - Da **Parla**: tocca il pulsante con la matita, poi trova la persona per nome. Nella comunità globale, Nuovo messaggio elenca le persone con cui hai fatto scambi e i tuoi amici. Per trovare chiunque altro, digita almeno 2 lettere del suo nome.
-- Dai tuoi amici: **Parla**, poi **Persone**, poi **Amici**, e tocca il pulsante del messaggio accanto a un nome.
+- Dall'elenco dei membri: **Parla**, poi **Persone**, e tocca 💬 accanto al nome di un membro in **Comunità** o **Amici**.
+- Da un annuncio: tocca **Messaggio** e il nome della persona.
 
-Nella web app, usa **✉️ Nuovo MD**, oppure il pulsante **💬 Messaggio** su un annuncio. I tuoi amici si trovano sotto la scheda **Persone**.
+Nella web app, usa **Invia messaggio** sul profilo, 💬 sulla sua riga sotto **Persone**, **✉️ Nuovo MD**, oppure il pulsante **💬 Messaggio** su un annuncio.
 
 ## Inviare
 

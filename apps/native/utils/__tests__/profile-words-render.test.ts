@@ -88,7 +88,8 @@ vi.mock('../db', () => ({
 }));
 vi.mock('../blocklist', () => ({
     BLOCKLIST_UPDATED_EVENT: 'beanpool_blocklist_updated',
-    blockUser: vi.fn(async () => undefined),
+    // A block that happened, as blocklist.ts answers one: the screen reads the answer before it says so.
+    blockUser: vi.fn(async () => true),
     unblockUser: vi.fn(async () => true),
     isUserBlocked: vi.fn(async () => false),
 }));

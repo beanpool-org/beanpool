@@ -60,6 +60,7 @@ const data = vi.hoisted(() => ({
     friends: [] as Array<{ publicKey: string }>,
     addedFriends: [] as string[],
     blockedUsers: new Set<string>(),
+    blockFails: false,
     unblockedUsers: [] as string[],
     unblockFails: false,
     conversationsCreated: [] as any[],
@@ -93,7 +94,12 @@ vi.mock('../db', () => ({
 
 vi.mock('../blocklist', () => ({
     BLOCKLIST_UPDATED_EVENT: 'beanpool_blocklist_updated',
-    blockUser: vi.fn(async (target: string) => { data.blockedUsers.add(target); }),
+    // As blocklist.ts answers: false for someone already listed, or when the list was not written.
+    blockUser: vi.fn(async (target: string) => {
+        if (data.blockFails || data.blockedUsers.has(target)) return false;
+        data.blockedUsers.add(target);
+        return true;
+    }),
     unblockUser: vi.fn(async (target: string) => {
         if (data.unblockFails) return false;
         data.blockedUsers.delete(target);
@@ -126,6 +132,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', async () => {
 
 import { LanguageProvider } from '../../components/LanguageProvider';
 import PublicProfileScreen from '../../app/public-profile';
+import { blockUser } from '../blocklist';
 
 let host: HTMLDivElement;
 let root: Root;
@@ -147,6 +154,7 @@ beforeEach(() => {
     data.friends = [];
     data.addedFriends = [];
     data.blockedUsers.clear();
+    data.blockFails = false;
     data.unblockedUsers = [];
     data.unblockFails = false;
     data.conversationsCreated = [];
@@ -274,6 +282,71 @@ describe('Phone public profile message and friend actions (S0)', () => {
 
         expect(host.textContent).toContain('You blocked Kofi.');
         expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent?.includes('Message'))).toBe(false);
+    });
+
+    it('someone already blocked is offered no second block: the footer Block is gone, the header Block asks nothing', async () => {
+        data.blockedUsers.add(KOFI);
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderProfile();
+        vi.mocked(blockUser).mockClear();
+
+        expect(host.textContent).toContain('You blocked Kofi.');
+        const blocks = Array.from(host.querySelectorAll('button')).filter(b => b.getAttribute('aria-label') === 'Block user Kofi');
+        // The header's alone: the footer's "Block Kofi … and notify moderation" would promise a report that never goes.
+        expect(blocks.length).toBe(1);
+        expect(host.textContent).not.toContain('Block Kofi');
+        expect(host.textContent).not.toContain('notify moderation');
+
+        await act(async () => {
+            blocks[0].click();
+        });
+        await settle();
+
+        expect(alerts.said).toEqual([]);
+        expect(blockUser).not.toHaveBeenCalled();
+        expect(host.textContent).toContain('You blocked Kofi.');
+    });
+
+    it('a block that did not happen is never announced', async () => {
+        data.blockFails = true;
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderProfile();
+
+        const headerBlock = Array.from(host.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Block user Kofi');
+        await act(async () => {
+            headerBlock!.click();
+        });
+        expect(alerts.said).toContain('Block Kofi?');
+        const confirm = alerts.buttons.find(b => b.text === 'Block User');
+        alerts.said.length = 0;
+        await act(async () => {
+            await confirm!.onPress?.();
+        });
+        await settle();
+
+        expect(alerts.said).toContain('Failed to block user. Please try again.');
+        expect(alerts.said.some(s => s.includes('User Blocked') || s.includes('has been blocked'))).toBe(false);
+        expect(host.textContent).not.toContain('You blocked Kofi.');
+    });
+
+    it('a block that happens is still announced', async () => {
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderProfile();
+
+        const headerBlock = Array.from(host.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Block user Kofi');
+        await act(async () => {
+            headerBlock!.click();
+        });
+        const confirm = alerts.buttons.find(b => b.text === 'Block User');
+        alerts.said.length = 0;
+        await act(async () => {
+            await confirm!.onPress?.();
+        });
+        await settle();
+
+        expect(data.blockedUsers.has(KOFI)).toBe(true);
+        expect(alerts.said).toContain('User Blocked');
+        expect(alerts.said).toContain('Kofi has been blocked and removed from your feed.');
     });
 
     const tapMessageFailing = async (err: Error) => {

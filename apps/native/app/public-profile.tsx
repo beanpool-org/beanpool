@@ -809,7 +809,9 @@ export default function PublicProfileScreen() {
     };
 
     const handleBlockUser = () => {
-        if (!pubKeyStr || isBlocking) return;
+        // Someone already blocked: the row under the banner says so and offers Unblock. A second block changes nothing and
+        // files no report, so it is never confirmed or announced.
+        if (!pubKeyStr || isBlocking || isBlocked) return;
         // Whole sentences with the member's name or without it ("this user"), never a stand-in glued into a sentence.
         const name = callsignStr;
         Alert.alert(
@@ -826,7 +828,10 @@ export default function PublicProfileScreen() {
                         try {
                             setIsBlocking(true);
                             // The reason goes to the node as written (moderators read it), not in the member's language.
-                            await blockUser(pubKeyStr, identity?.publicKey, 'Abusive user reported via Trust Profile', undefined);
+                            const blocked = await blockUser(pubKeyStr, identity?.publicKey, 'Abusive user reported via Trust Profile', undefined);
+                            // blockUser says false rather than throwing (no account on the phone, the list not written): the
+                            // list is read back, so a block that didn't happen is never announced.
+                            if (!blocked && !(await isUserBlocked(pubKeyStr))) throw new Error('Not blocked');
                             Alert.alert(t('User Blocked'), name
                                 ? t('{name} has been blocked and removed from your feed.', { name })
                                 : t('this user has been blocked and removed from your feed.'), [
@@ -892,9 +897,9 @@ export default function PublicProfileScreen() {
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={callsignStr ? t('Block user {name}', { name: callsignStr }) : t('Block user')}
-                        accessibilityState={{ busy: isBlocking }}
+                        accessibilityState={{ busy: isBlocking, disabled: isBlocked }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        disabled={isBlocking}
+                        disabled={isBlocking || isBlocked}
                         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, minWidth: 44, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, opacity: isBlocking ? 0.6 : 1 }}
                         onPress={handleBlockUser}
                     >
@@ -1690,7 +1695,8 @@ export default function PublicProfileScreen() {
                                 )}
                             </View>
                         )}
-                        {!isSelf && (
+                        {/* Not for someone already blocked: their row offers Unblock, and this would promise a block and a report that never happen. */}
+                        {!isSelf && !isBlocked && (
                             <View style={{ marginHorizontal: 16, marginTop: 24, marginBottom: 32 }}>
                                 <Pressable
                                     accessibilityRole="button"

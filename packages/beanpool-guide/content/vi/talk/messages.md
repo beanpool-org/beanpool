@@ -4,7 +4,7 @@ title: Tin nhắn
 summary: Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Các đoạn chat. Chat 1-1 được mã hóa đầu cuối. Nhấn để mở, hoặc bắt đầu từ một bài đăng hay từ bạn bè.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Cuộc trò chuyện của bạn
@@ -23,11 +23,12 @@ Trong ứng dụng web, đây là thẻ **Chat**. Thẻ này liệt kê tất c�
 
 ## Bắt đầu cuộc trò chuyện
 
-- Từ một bài đăng: nhấn vào **Tin nhắn** và tên của người đó.
+- Từ một hồ sơ: mở hồ sơ của họ và nhấn **Nhắn tin**. Bạn cũng có thể kết bạn với họ tại đó.
 - Từ **Trò chuyện**: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ.
-- Từ bạn bè của bạn: **Trò chuyện**, sau đó chọn **Mọi người**, rồi **Bạn bè**, và nhấn vào nút tin nhắn bên cạnh một cái tên.
+- Từ danh sách thành viên: **Trò chuyện**, sau đó chọn **Mọi người**, và nhấn 💬 bên cạnh tên một thành viên trong **Cộng đồng** hoặc **Bạn bè**.
+- Từ một bài đăng: nhấn vào **Nhắn tin** và tên của người đó.
 
-Trong ứng dụng web, hãy sử dụng **✉️ Tin nhắn trực tiếp mới**, hoặc nút **💬 Nhắn tin** trên một bài đăng. Bạn bè của bạn nằm dưới thẻ **Mọi người**.
+Trong ứng dụng web, hãy dùng **Nhắn tin** trên hồ sơ của họ, 💬 trên hàng của họ trong **Mọi người**, **✉️ Tin nhắn trực tiếp mới**, hoặc nút **💬 Nhắn tin** trên một bài đăng.
 
 ## Gửi
 

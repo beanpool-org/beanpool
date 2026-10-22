@@ -4,7 +4,7 @@ title: Chặn một người
 summary: Ẩn bài đăng và tin nhắn của ai đó khỏi bạn và bỏ chặn bất cứ lúc nào.
 related: reporting, messages, privacy, getting-help
 help: Những người bạn đã chặn. Bài đăng và tin nhắn của họ bị ẩn; bỏ chặn tại đây.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Chặn
@@ -58,5 +58,6 @@ Cộng đồng của bạn thực hiện điều này đối với các lệnh c
 
 - Mở **Cài đặt**. Dưới mục **Pháp lý & quyền riêng tư**, nhấn **Quản lý người dùng bị chặn**.
 - Nhấn **Bỏ chặn** bên cạnh một cái tên, hoặc **Bỏ chặn tất cả**.
+- Trong ứng dụng điện thoại, bạn cũng có thể bỏ chặn ai đó từ hồ sơ của họ. Dưới tên họ có dòng "Bạn đã chặn" kèm tên của họ. Nhấn **Bỏ chặn** ở đó.
 
 Trong ứng dụng web, việc chặn và bỏ chặn cần có kết nối tới cộng đồng của bạn. Nếu không có kết nối, ứng dụng sẽ thông báo điều đó và không có gì thay đổi. Hãy thử lại khi bạn trực tuyến trở lại.

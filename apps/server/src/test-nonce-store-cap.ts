@@ -22,7 +22,7 @@
  *     to its own bucket, never the address's.
  *  5. The members' region full: a member is refused "very busy", its public read answered as unsigned; strangers go on.
  *  6. The alert (requests.flood): raised once with counts only, raised again when members are affected, cleared after
- *     the 15-minute hold.
+ *     the 15-minute hold; one address held to its own share raises nothing.
  *
  * Run: node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-nonce-store-cap
  */
@@ -461,6 +461,22 @@ async function alertChecks(): Promise<void> {
         setAlertsClockForTests(19 * MINUTE);
         const told = flood(await checkServerAlerts());
         assert(told.length === 1 && told[0].kind === 'cleared', `15 minutes later it is told cleared (${JSON.stringify(told.map((e) => e.kind))})`);
+        setAlertsClockForTests(0);
+    });
+    await section('6d. one address held to its own share raises nothing; one member key at its share does', async () => {
+        // On a clock 40 minutes on, so every refusal above is long past and only these count.
+        const at = Date.now() + 40 * MINUTE;
+        setAlertsClockForTests(40 * MINUTE);
+        requestNonces.setLimitsForTests({ membersMax: 250_000, strangersMax: 100_000, keyMax: 2, addressMax: 2 });
+        const spend = (id: Id, client: string) => verifyMemberSignature(parts(id, freshNonce(), at), { consumeNonce: true, now: at, client }).ok ? 200 : 503;
+        const scanner = [0, 1, 2, 3].map(() => spend(newKey(), 'scanner'));
+        assert(scanner.join(' ') === '200 200 503 503', `a scanner's address is held to its share of 2 (${scanner.join(' ')})`);
+        assert(flood(await checkServerAlerts()).length === 0, 'and that raises nothing: one noisy address harms nobody else');
+        const member = makeMember();
+        const own = [0, 1, 2].map(() => spend(member, 'hall'));
+        const told = flood(await checkServerAlerts());
+        assert(own[2] === 503 && told.length === 1 && told[0].priority === 4,
+            `a member key at its share does, at priority 4 (${own.join(' ')}; ${JSON.stringify(told.map((e) => [e.kind, e.priority]))})`);
         setAlertsClockForTests(0);
     });
 }

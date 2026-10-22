@@ -59,9 +59,8 @@ export function OwnerWordsChecksPanel({ activeNode, now = Date.now() }: { active
         // An older server without the route, or a moderator's session: say nothing rather than alarm.
         return null;
     }
-    if (!owners) return null;
 
-    const checked = owners.filter((o) => o.wordsCheckedAt && now - o.wordsCheckedAt < RENEW_MS).length;
+    const checked = owners ? owners.filter((o) => o.wordsCheckedAt && now - o.wordsCheckedAt < RENEW_MS).length : 0;
 
     return (
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-3" data-testid="owner-words-checks">
@@ -73,7 +72,12 @@ export function OwnerWordsChecksPanel({ activeNode, now = Date.now() }: { active
                 locked backup. Each owner checks theirs in the BeanPool app, on their own device; this shows what they
                 reported. The words never reach this server.
             </p>
-            {owners.length === 0 ? (
+            {!owners ? (
+                <div className="flex items-center gap-2 text-xs text-nature-400" data-testid="owner-words-loading">
+                    <span className="animate-spin text-bp-ink-terra">🔄</span>
+                    <span>Loading owner 12-words checks…</span>
+                </div>
+            ) : owners.length === 0 ? (
                 <p className="text-sm text-nature-400 m-0">This community has no owner yet.</p>
             ) : (
                 <>

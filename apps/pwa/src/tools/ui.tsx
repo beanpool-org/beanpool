@@ -129,7 +129,8 @@ export function ToolChips({ chips, picked, onPick, label, heading, testId }: {
 /**
  * A text box with its label over it, one column: one line, or several (`lines`) for longer words; the number keyboard
  * for `numeric`. At most `max` characters (the document holds each field to its bound in code points, so this is never
- * looser). A hint under it, or what is wrong with it in its place; both are read with it.
+ * looser). A hint under it, or what is wrong with it in its place; both are read with it, and what is wrong is announced
+ * as it shows (as the phone's twin does), the hint never.
  */
 export function ToolInput({ label, value, onChange, max, lines, numeric, hint, error, testId }: {
     label: string;
@@ -157,9 +158,11 @@ export function ToolInput({ label, value, onChange, max, lines, numeric, hint, e
             {lines && lines > 1
                 ? <textarea {...common} rows={lines} onChange={(e) => onChange(e.target.value)} className={`${cls} resize-y`} />
                 : <input {...common} type="text" inputMode={numeric ? 'numeric' : undefined} onChange={(e) => onChange(e.target.value)} className={cls} />}
-            {error
-                ? <p id={noteId} className="m-0 mt-1 text-xs font-semibold text-bp-ink-danger break-words">{error}</p>
-                : hint ? <p id={noteId} className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">{hint}</p> : null}
+            {/* What is wrong goes in a region that is there, empty, before it does: one made with its words in it is often not read out. */}
+            <div aria-live="polite">
+                {error ? <p id={noteId} className="m-0 mt-1 text-xs font-semibold text-bp-ink-danger break-words">{error}</p> : null}
+            </div>
+            {!error && hint ? <p id={noteId} className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">{hint}</p> : null}
         </div>
     );
 }

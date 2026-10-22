@@ -332,6 +332,33 @@ describe('Edit', () => {
         expect(rows()[0]).toBe('WheelbarrowOn your shelf');
     });
 
+    it("a box's error is announced as it shows, from a polite live region there before Save; a hint never is", async () => {
+        await keep(shed(thing('t-1', 'Ladder')));
+        await open('main');
+        await click('things-add');
+        // The region is there, empty, before the error goes in it: one made with its words in it is often not read out.
+        const regions = () => ['edit-name', 'edit-days'].map((id) => byTestId(`${id}-field`)?.querySelector('[aria-live="polite"]') ?? null);
+        const [nameRegion, daysRegion] = regions();
+        expect(nameRegion?.textContent).toBe('');
+        expect(daysRegion?.textContent).toBe('');
+        await click('edit-save');
+        expect(regions()).toEqual([nameRegion, daysRegion]);
+        expect(nameRegion?.textContent).toBe('Give it a name.');
+        const name = byTestId('edit-name')!;
+        expect(name.getAttribute('aria-invalid')).toBe('true');
+        expect(document.getElementById(name.getAttribute('aria-describedby')!)?.textContent).toBe('Give it a name.');
+        await type('edit-name', 'Wheelbarrow');
+        expect(nameRegion?.textContent).toBe('');
+        await type('edit-days', '400');
+        expect(regions()).toEqual([nameRegion, daysRegion]);
+        expect(daysRegion?.textContent).toBe('A number of days from 1 to 365.');
+        // A hint is read with its box (aria-describedby), never announced: it isn't in a live region.
+        const replacement = byTestId('edit-replacement')!;
+        const hint = document.getElementById(replacement.getAttribute('aria-describedby')!);
+        expect(hint?.textContent).toContain('BeanPool never holds or collects it.');
+        expect(hint?.closest('[aria-live]')).toBeNull();
+    });
+
     it('a photo is chosen, drawn at 800 px and kept in this browser; Remove takes it out, and it goes from the store once saved', async () => {
         await keep(shed(thing('t-1', 'Tent')));
         await open('edit', 't-1');

@@ -71,8 +71,9 @@ export default function YourShopScreen() {
     const loadListings = useCallback(async (shop: MyShop) => {
         if (me) setListings(await readShopListings(shop.id, me));
     }, [me]);
-    const load = useCallback(async () => {
-        setRead(null);
+    /** Read again: on every return to the screen, keeping what it shows meanwhile; from Try again, showing it is reading. */
+    const load = useCallback(async (afresh = false) => {
+        if (afresh) setRead(null);
         const r = await readMyShop();
         setRead(r);
         if (r.state === 'open') await loadListings(r.shop);
@@ -174,7 +175,7 @@ export default function YourShopScreen() {
                 {read?.state === 'offline' ? (
                     <ToolSection testID="shop-offline">
                         <ToolEmpty icon="📡" text={t("Your shop couldn't be read just now. Try again.")}
-                            action={<ToolButton text={t('Try again')} onPress={() => { void load(); }} testID="shop-retry" />} />
+                            action={<ToolButton text={t('Try again')} onPress={() => { void load(true); }} testID="shop-retry" />} />
                     </ToolSection>
                 ) : null}
 

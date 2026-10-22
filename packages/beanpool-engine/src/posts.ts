@@ -101,6 +101,12 @@ export interface MarketplacePost {
     replacementValue?: string;
     /** While it is out: when it is due back (the hand-over plus the loan's days, @beanpool/core lendBackAroundOf). Never a name. */
     lendBackAround?: string;
+    /**
+     * The shop it is in (DESIGN-shops-and-tools-fable.md §9.1, slice S1; apps/server engine/shops.ts): an Offer its author put
+     * in their shop, or an enterprise's in the enterprise's. Only on a post in one, so every other post reads byte for byte
+     * as before, and an app that predates shops shows it as the Offer it is.
+     */
+    shopId?: string;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -246,6 +252,17 @@ export interface PostFilter {
     beansOnly?: boolean;
     /** Lendable Offers only (the list route's `lendable=1`): a member's shop, things to borrow. */
     lendable?: boolean;
+    /** The listings in this shop only (the list route's `shop=`, apps/server engine/shops.ts). */
+    shopId?: string;
+    /** The listings in any shop only: the shops near a place are read from them (apps/server routes/shops.ts). */
+    inShop?: boolean;
+    /**
+     * Each shop once, by its nearest listing (needs `near` and `sortByDistance`, as the shops near a place read it with
+     * `inShop`, apps/server routes/shops.ts): of each shop's listings the read would give, only the first in its order,
+     * so `limit` and `offset` count shops, and a shop with many listings near the reader hides none past it. A listing
+     * in no shop is its own. Ranked on ids and distances in the one pass, as every read with a point is (postRowsNear).
+     */
+    nearestPerShop?: boolean;
     includeInactive?: boolean;
     includeAllScopes?: boolean;
     audienceScope?: AudienceScope | string;
@@ -686,6 +703,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         repeatable: Boolean(row.repeatable),
         cashAlsoNeeded: Boolean(row.cash_also_needed),
         ...lendFieldsOf(db, row),
+        ...(typeof row.shop_id === 'string' && row.shop_id ? { shopId: row.shop_id } : {}),
         acceptedBy: row.accepted_by,
         acceptedByCallsign: row.accepted_callsign,
         acceptedAt: row.accepted_at,
@@ -1192,7 +1210,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
-    lendable: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
+    lendable: null, shopId: null, inShop: null, nearestPerShop: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
 /** Whether a nearest-first read may search circles before its one pass (CIRCLE_FIELDS). */
@@ -1233,12 +1251,22 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     // neighbourhood read every post in it or whose neighbourhood is (neighbourhoodBox).
     const boxFor = (exact: ReturnType<typeof boundingBox>) => filter.coarse ? areaBox(exact)
         : neighbourhood ? neighbourhoodBox(exact) : exact;
+    // Each shop once (PostFilter.nearestPerShop): a ranking that also carries each listing's shop and the order's columns
+    // is kept to the first of each shop's listings in NEAREST_ORDER, before the order and the page, so both count shops.
+    // Every other read's SQL is as it was.
+    const perShop = byDistance && !!filter.nearestPerShop;
+    const shopColumns = (t: string) => perShop ? `, ${t}.shop_id, ${t}.updated_at, ${t}.created_at` : '';
+    const firstOfEachShop = (ranking: string) => perShop ? `
+        SELECT p.id, p.distance_km FROM (
+            SELECT p.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(p.shop_id, p.id)${NEAREST_ORDER}) AS shop_rank FROM (${ranking}
+            ) p
+        ) p WHERE p.shop_rank = 1` : ranking;
 
     // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
     // POST_ROW_SELECT adds, so no join changes which posts there are.
     const rank = (withinKm: number | undefined, limit: number | undefined, skip: number, circle: boolean) => {
         let sql = `
-        SELECT p.id, ${km('p')} AS distance_km`;
+        SELECT p.id, ${km('p')} AS distance_km${shopColumns('p')}`;
         const params: unknown[] = [...kmParams];
         if (withinKm === undefined) {
             sql += `
@@ -1271,6 +1299,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         }
         sql += where;
         params.push(...whereParams);
+        sql = firstOfEachShop(sql);
         sql += byDistance ? NEAREST_ORDER : recentOrder(filter);
         if (limit) {
             sql += " LIMIT ? OFFSET ?";
@@ -1288,7 +1317,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
         const params: unknown[] = [...kmParams];
         let inner = `
-                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at${neighbourhood ? ', p.author_pubkey' : ''}
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at${neighbourhood ? ', p.author_pubkey' : ''}${perShop ? ', p.shop_id' : ''}
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
                 WHERE 1=1`;
@@ -1300,16 +1329,17 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         // "Coming up" keeps the soonest `cap` (PostFilter.upcomingUntil), every other read the newest.
         inner += where + (filter.upcomingUntil ? START_ORDER : ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC') + ' LIMIT ?';
         params.push(...whereParams, cap);
-        let sql = `
-        WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, q.event_start_at, ${km('q')} AS distance_km FROM (${inner}
-            ) q
-        )
-        SELECT p.id, p.distance_km FROM measured p`;
+        let ranking = `
+        SELECT p.id, p.distance_km${shopColumns('p')} FROM measured p`;
         if (withinKm !== undefined) {
-            sql += ' WHERE p.distance_km <= ?';
+            ranking += ' WHERE p.distance_km <= ?';
             params.push(withinKm);
         }
+        let sql = `
+        WITH measured AS MATERIALIZED (
+            SELECT q.id, q.updated_at, q.created_at, q.event_start_at${perShop ? ', q.shop_id' : ''}, ${km('q')} AS distance_km FROM (${inner}
+            ) q
+        )${firstOfEachShop(ranking)}`;
         sql += byDistance ? NEAREST_ORDER : recentOrder(filter);
         if (limit) {
             sql += " LIMIT ? OFFSET ?";
@@ -1777,6 +1807,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     // rather than vanishing from the filtered view.
     if (filter?.beansOnly) { where += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
     if (filter?.lendable) { where += " AND p.type = 'offer' AND p.lendable = 1"; }
+    if (filter?.shopId) { where += " AND p.shop_id = ?"; params.push(filter.shopId); }
+    if (filter?.inShop) { where += " AND p.shop_id IS NOT NULL"; }
 
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
@@ -2235,6 +2267,10 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
     // was taken.
     lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',
+    // The shop it is in: a visitor sees a shop's card, its kind and its counts, and never its name or owner
+    // (DESIGN-shops-and-tools-fable.md §4, §9.4; apps/server routes/shops.ts). So the id links the listings its owner
+    // put in the one front window, as the shop card does, and no others: their listings outside it stay apart.
+    shopId: 'keep',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.

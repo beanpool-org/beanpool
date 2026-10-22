@@ -90,7 +90,7 @@ function isSentence(text) {
     return /^[A-Z]/.test(text) && /\s/.test(text) && /[a-z]/.test(text) && !SQL.test(text);
 }
 
-const WORDS_FNS = new Set(['t', 'tn', 'word']);
+const WORDS_FNS = new Set(['t', 'tn', 'word', 'wordn']);
 const FUNCTION_LIKE = (n) => ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n) || ts.isMethodDeclaration(n)
     || ts.isConstructorDeclaration(n) || ts.isGetAccessorDeclaration(n) || ts.isSetAccessorDeclaration(n)
     || (ts.isPropertyDeclaration(n) && !n.modifiers?.some((m) => m.kind === ts.SyntaxKind.StaticKeyword));
@@ -132,10 +132,10 @@ function isFragment(node, isPlus) {
 }
 
 /**
- * One file's t()/tn()/word() calls, the English a member reads outside them, and how the file reaches the words layer.
+ * One file's t()/tn()/word()/wordn() calls, the English a member reads outside them, and how the file reaches the words layer.
  *
  * What counts as a words call (N7: the extractor SEES these rather than refusing them):
- *   - `t` / `tn` / `word` imported by name from ANY module (core, a words module, or a module that re-exports them);
+ *   - `t` / `tn` / `word` / `wordn` imported by name from ANY module (core, a words module, or a module that re-exports them);
  *     an alias is followed (`import { t as tr }`);
  *   - `X.t(…)` where X is a namespace import (`import * as core from '@beanpool/core'`), a variable bound to a hook or
  *     to wordsFor (`const w = useWords()`, `const w = wordsFor(lang)`), or `wordsFor(lang).t(…)` itself;
@@ -192,7 +192,7 @@ export function extractFromSource(file, text) {
         counted.add(node);
         found.push({ kind, text: value, at: at(node) });
     };
-    /** 't' | 'tn' | 'word' when this call goes to the words layer, else null. */
+    /** 't' | 'tn' | 'word' | 'wordn' when this call goes to the words layer, else null. */
     const wordsFn = (callee) => {
         if (ts.isIdentifier(callee)) return tNames.get(callee.text) ?? null;
         if (ts.isPropertyAccessExpression(callee) && WORDS_FNS.has(callee.name.text)) {
@@ -223,11 +223,14 @@ export function extractFromSource(file, text) {
             if (fn) {
                 const concatenated = isFragment(node, isPlus);
                 const args = node.arguments;
-                const first = unwrap(args[0]);
-                const keyed = fn === 't' && !!first && (ts.isPropertyAccessExpression(first) || ts.isElementAccessExpression(first));
+                const fromTable = (a) => { const e = unwrap(a); return !!e && (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)); };
+                // t(KINDS[kind].body) takes a word() key; tn(n, line.key.one, line.key.other) the two keys of a wordn() pair.
+                const keyed = fn === 't' ? fromTable(args[0]) : fn === 'tn' && fromTable(args[1]) && fromTable(args[2]);
                 const call = fn === 'tn'
                     ? { fn, text: lit(args[1]), other: lit(args[2]), concatenated, at: at(node) }
-                    : { fn, text: lit(args[0]), context: lit(args[fn === 'word' ? 1 : 2]) ?? undefined, concatenated, at: at(node) };
+                    : fn === 'wordn'
+                        ? { fn, text: lit(args[0]), other: lit(args[1]), concatenated, at: at(node) }
+                        : { fn, text: lit(args[0]), context: lit(args[fn === 'word' ? 1 : 2]) ?? undefined, concatenated, at: at(node) };
                 if (keyed) call.keyed = true;
                 if (isModuleLevel(node)) call.moduleLevel = true;
                 calls.push(call);
@@ -339,7 +342,7 @@ export async function checkRepo({ root = ROOT, extracted = extractRepo(root), ca
             const key = callKey(call);
             if (!key) continue;
             entry.keys.add(key);
-            if (call.fn === 'tn') entry.plural.add(key);
+            if (call.fn === 'tn' || call.fn === 'wordn') entry.plural.add(key);
         }
         byFolder.set(pkg.words, entry);
     }

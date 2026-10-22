@@ -187,7 +187,7 @@ describe('home frame §5.2 (4): the default and the words', () => {
         const on = (a: HomeNodeFacts, role?: 'admin' | null) => HOME_CARD_TYPES.filter(t => t.onNode(a, role)).map(t => t.id);
         // A tool's card (tools/index.ts) is wherever its tool is, by its own manifest: the built-in types are pinned here.
         const toolCards = new Set(toolHomeCardTypes().map(t => t.id));
-        expect(on(global).filter(id => !toolCards.has(id))).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'sky', 'notices', 'community']);
+        expect(on(global).filter(id => !toolCards.has(id))).toEqual(['needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'shop', 'events', 'market', 'search', 'groups', 'joined', 'pulse', 'sky', 'notices', 'community']);
         expect(on(global).filter(id => toolCards.has(id))).toEqual(toolHomeCardTypes().filter(t => t.onNode(global)).map(t => t.id));
         expect(on(local)).toEqual(HOME_CARD_TYPES.map(t => t.id).filter(id => id !== 'safety' && id !== 'find'));
         const adminsInvite = { ...local, features: { ...local.features, door: 'admins' } };
@@ -207,5 +207,23 @@ describe('home frame §5.2 (4): the default and the words', () => {
         expect(added.ok && added.layout.cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
         expect(added.ok && addCard(added.layout, 'sky', { now: NOW })).toEqual({ ok: false, refused: 'on-home' });
         expect(added.ok && cardsToAsk(added.layout)).not.toContain('sky');
+    });
+
+    it('your shop and tools (S4′): one of a kind, For you, on every node (a shop is no enterprise), asked of the node; no settings', () => {
+        const shop = HOME_CARD_TYPES.find(t => t.id === 'shop')!;
+        expect(shop).toMatchObject({ name: 'Your shop and tools', group: 'you', asks: 'node' });
+        expect(shop.multiple).toBeUndefined();
+        expect(shop.fixed).toBeUndefined();
+        expect(shop.readSettings).toBeUndefined();
+        expect(shop.onNode({ profile: 'global', features: { beans: false, escrow: false, enterprises: false } })).toBe(true);
+        expect(shop.onNode({ profile: 'local', features: {} })).toBe(true);
+        // Next to the account's other own cards: after Your enterprise, before what is around.
+        const ids = HOME_CARD_TYPES.map(t => t.id);
+        expect(ids.indexOf('shop')).toBe(ids.indexOf('enterprise') + 1);
+        const added = addCard(layout([one('steps')]), 'shop', { now: NOW });
+        expect(added.ok && added.layout.cards[0]).toEqual({ id: 'shop', type: 'shop' });
+        expect(added.ok && cardsToAsk(added.layout)).toContain('shop');
+        // Not in the newcomer's starter set: a member adds it, or opens their shop from Tools.
+        expect(HOME_STARTER_SET).not.toContain('shop');
     });
 });

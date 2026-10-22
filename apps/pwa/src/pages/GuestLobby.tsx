@@ -196,7 +196,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
             <aside className="hidden md:flex flex-col w-64 shrink-0 bg-nature-50 dark:bg-nature-950 border-r border-nature-200 dark:border-nature-800 z-50">
                 <div className="p-4 border-b border-nature-200 dark:border-nature-800 flex items-center gap-2">
                     <img src="/bean.png" alt={t('BeanPool Icon')} className="w-9 h-9 object-contain drop-shadow-sm" />
-                    <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
+                    <span className="font-extrabold text-xl tracking-tight text-rainbow">{t('BeanPool')}</span>
                 </div>
                 <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
                     {tabs.map((tb) => (

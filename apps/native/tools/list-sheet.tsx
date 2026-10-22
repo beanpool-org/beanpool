@@ -6,8 +6,10 @@
  *
  * Never a false success: nothing is posted here, so nothing is said to be. What would stop the post is said before the
  * member goes on (the community asks for a profile photo first; an unfinished post on the map would be replaced), and the
- * node's own refusals (probation, the day limit) are the composer's, in the node's words. "Put this in your shop" joins
- * the sheet with slice S1. Keyboard: lifted by useModalKeyboardLift from the root provider; never a KeyboardProvider here.
+ * node's own refusals (probation, the day limit) are the composer's, in the node's words. "Put this in your shop" (slice
+ * S4′, components/shop/ShopToggle.tsx) is on by default where the member has a shop, or none yet (it opens with the
+ * Offer), unless the tool's draft says `shop: false`; never offered while the shop is closed for now (a sentence says
+ * why) or can't be read. Keyboard: lifted by useModalKeyboardLift from the root provider; never a KeyboardProvider here.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, Modal, ScrollView, TextInput, StyleSheet } from 'react-native';
@@ -18,6 +20,7 @@ import type { AppColors } from '../constants/colors';
 import { HOME_TARGET_DP, homeStyles } from '../components/home/HomeParts';
 import { editHomeStyles } from '../components/home/EditHomeSheet';
 import { useModalKeyboardLift } from '../components/useModalKeyboardLift';
+import { ShopToggle, shopTakesOffers, type ShopToggleState } from '../components/shop/ShopToggle';
 import type { ToolListFee } from './doors';
 
 /** The fee choices, in the order shown. */
@@ -37,7 +40,7 @@ export function startingFee(draft: ToolOfferDraft): ToolListFee {
 /** Whether the member can go on: free, or a fee with a number of Beans. */
 export const feeReady = (fee: ToolListFee) => fee.kind === 'free' || fee.beans > 0;
 
-export function ToolListSheet({ draft, beans, needsProfilePhoto, unfinishedPost, colors, onList, onClose }: {
+export function ToolListSheet({ draft, beans, needsProfilePhoto, unfinishedPost, shop = { kind: 'hidden' }, colors, onList, onClose }: {
     /** The tool's draft, or null when the sheet is closed. */
     draft: ToolOfferDraft | null;
     /** Beans are on in this community: the fee shows. Off: the listing is at 0 and the fee isn't asked. */
@@ -46,15 +49,21 @@ export function ToolListSheet({ draft, beans, needsProfilePhoto, unfinishedPost,
     needsProfilePhoto: boolean;
     /** The member has an unfinished post on the map that going on would replace. */
     unfinishedPost: boolean;
+    /** The member's shop, for "Put this in your shop" (components/shop/ShopToggle.tsx); hidden when it can't be read. */
+    shop?: ShopToggleState;
     colors: AppColors;
-    onList: (fee: ToolListFee) => void;
+    /** The fee, and whether the Offer goes in the member's shop. */
+    onList: (fee: ToolListFee, inShop: boolean) => void;
     onClose: () => void;
 }) {
     const insets = useSafeAreaInsets();
     const lift = useModalKeyboardLift(insets.top + 8);
     const s = homeStyles(colors);
     const [fee, setFee] = useState<ToolListFee>({ kind: 'free', beans: 0 });
+    const [inShop, setInShop] = useState(false);
     useEffect(() => { if (draft) setFee(beans ? startingFee(draft) : { kind: 'free', beans: 0 }); }, [draft, beans]);
+    // On by default where something can go in, unless the tool's draft starts it off.
+    useEffect(() => { if (draft) setInShop(shopTakesOffers(shop) && draft.shop !== false); }, [draft, shop.kind]);
     const ready = !needsProfilePhoto && (!beans || feeReady(fee));
     const feeWords: Record<ToolListFee['kind'], string> = {
         free: t('Free'), daily: t('Beans per day'), weekly: t('Beans per week'), fixed: t('A fixed number of Beans'),
@@ -105,6 +114,7 @@ export function ToolListSheet({ draft, beans, needsProfilePhoto, unfinishedPost,
                                 ) : null}
                             </View>
                         ) : null}
+                        <ShopToggle state={shop} on={inShop} onChange={setInShop} colors={colors} testID="tool-list-shop" />
                         <Text style={[s.note, { marginTop: 12 }]}>{t('It shows in the Market as an Offer.')}</Text>
                         <Text style={s.note}>{t('Next you check it and tap Post. Nothing is posted before that.')}</Text>
                         {unfinishedPost ? (
@@ -120,7 +130,7 @@ export function ToolListSheet({ draft, beans, needsProfilePhoto, unfinishedPost,
                         ) : null}
                         <Pressable
                             disabled={!ready}
-                            onPress={() => onList(beans ? fee : { kind: 'free', beans: 0 })}
+                            onPress={() => onList(beans ? fee : { kind: 'free', beans: 0 }, inShop && shopTakesOffers(shop))}
                             style={[list.button, { backgroundColor: ready ? colors.brand.fill : colors.surface.subtle }]}
                             accessibilityRole="button"
                             accessibilityLabel={t('Go on to post')}

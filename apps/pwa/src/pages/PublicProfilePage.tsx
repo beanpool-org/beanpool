@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     getMemberProfile, updateMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
-    submitRating, vouchMemberApi, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
+    addFriendApi, submitRating, vouchMemberApi, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
     type PublicCreatorChannel
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -33,9 +33,15 @@ interface Props {
     onNavigatePost: (postId: string) => void;
     onEditProfile?: () => void;
     onNavigateTab?: (tab: string, subView?: string) => void;
+    /**
+     * Opens the enterprise page instead, for a key that is an enterprise's or a project's: the profile says `isTreasury`
+     * (DESIGN-shops-round3-enterprise-shopfront §1.1, slice E1). Every door that opens someone by key lands on this page
+     * (App.tsx's one profile overlay), so this is where an enterprise is told apart, and no Trust Profile is drawn for it.
+     */
+    onOpenTreasury?: (pubkey: string) => void;
 }
 
-export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab }: Props) {
+export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab, onOpenTreasury }: Props) {
     // Beans live in a local community here (preview or read-only): the trust card's slot carries the line (§1 row 9).
     const beansMarked = marked(useFeatureMode('beans'));
     const [profile, setProfile] = useState<MemberProfile | null>(null);
@@ -60,6 +66,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [vouching, setVouching] = useState(false);
     const [given, setGiven] = useState<Rating[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
+    const [isFriend, setIsFriend] = useState(false);
+    const [addingFriend, setAddingFriend] = useState(false);
     const [activeTab, setActiveTab] = useState<'listings' | 'reviews' | 'given'>('listings');
     const [editingReview, setEditingReview] = useState<Rating | null>(null);
     const [reviewStars, setReviewStars] = useState(5);
@@ -68,6 +76,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
 
     const isSelf = pubkey === identity.publicKey;
+    // The key whose profile has answered and is no enterprise's (or couldn't be read): until then nothing of a member's
+    // profile is drawn, since the key may be an enterprise's (onOpenTreasury). The member's own is never one.
+    const [kindFor, setKindFor] = useState<string | null>(null);
+    const openTreasury = useRef(onOpenTreasury);
+    openTreasury.current = onOpenTreasury;
     const [isBlocked, setIsBlocked] = useState(() => isUserBlocked(pubkey));
     /** Said where they block while blocks wait in this browser because their list on the community is full (lib/blocklist). */
     const [blocklistFullNote, setBlocklistFullNote] = useState(() => getBlocklistFullNote());
@@ -168,13 +181,23 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         // The reader's own balance (their trust card, or the vouch button on someone else's) is Beans: where they are in
         // preview (the global node) it is never asked (lib/features readsOwn), and the line takes the card's slot.
         const ownBalance = (key: string) => readsOwn('beans').then((reads) => (reads ? getBalance(key) : null)).catch(() => null);
+        // The profile first, on its own: an enterprise's key goes to its page as soon as the node has said what it is.
+        const profileRead = getMemberProfile(pubkey, identity.publicKey).catch(() => null);
+        void profileRead.then((prof) => {
+            if (cancelled) return;
+            if (prof?.isTreasury && openTreasury.current) {
+                openTreasury.current(pubkey);
+                return;
+            }
+            setKindFor(pubkey);
+        });
         Promise.all([
-            getMemberProfile(pubkey, identity.publicKey).catch(() => null),
+            profileRead,
             getMemberRatings(pubkey).catch(() => null),
             getMarketplacePosts({ author: pubkey }).catch(() => []),
             isSelf ? ownBalance(pubkey) : Promise.resolve(null),
             isSelf ? getRatingsGiven(pubkey).catch(() => ({ ratings: [] })) : Promise.resolve({ ratings: [] }),
-            isSelf ? getFriends(pubkey).catch(() => []) : Promise.resolve([]),
+            isSelf ? getFriends(pubkey).catch(() => []) : getFriends(identity.publicKey).catch(() => []),
             // Viewer's own balance (when viewing someone else) — drives the Elder vouch button.
             isSelf ? Promise.resolve(null) : ownBalance(identity.publicKey),
             // Viewer's own profile (when viewing someone else) — drives Collaboration Chemistry synergy card.
@@ -198,7 +221,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
             if (bal) setBalanceInfo(bal);
             if (givenRatings) setGiven(givenRatings.ratings || []);
             if (Array.isArray(friends)) {
-                setFriendsCount(friends.length);
+                if (isSelf) {
+                    setFriendsCount(friends.length);
+                } else {
+                    setIsFriend(friends.some(f => f.publicKey === pubkey));
+                }
             }
             setLoading(false);
         });
@@ -231,8 +258,38 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         }
     };
 
+    const handleAddFriend = async () => {
+        if (addingFriend) return;
+        setAddingFriend(true);
+        try {
+            await addFriendApi(identity.publicKey, pubkey);
+            setIsFriend(true);
+        } catch (e) {
+            alert(e instanceof Error ? e.message : t('Your community did not add them.'));
+        } finally {
+            setAddingFriend(false);
+        }
+    };
+
     const initial = profile?.callsign?.charAt(0).toUpperCase() || '?';
     const avatarResolved = resolveAvatarUrl(profile?.avatar);
+
+    if (!isSelf && kindFor !== pubkey) {
+        // Not known yet whether the key is a member's or an enterprise's: Back, and the page's own ground, nothing more.
+        return (
+            <div className="page-overlay z-[110] overflow-y-auto" data-testid="page-overlay">
+                <div className="sticky top-0 bg-nature-100/90 dark:bg-black/90 backdrop-blur-md border-b border-nature-200 dark:border-nature-800 px-4 py-2 sm:p-4 flex items-center gap-2 z-10">
+                    <button onClick={onBack} className="shrink-0 min-h-[48px] text-nature-500 dark:text-nature-400 font-bold hover:text-nature-900 dark:hover:text-white transition-colors bg-transparent border-none cursor-pointer flex items-center gap-1">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        {t('Back')}
+                    </button>
+                </div>
+                <div className="py-20 text-center text-nature-500 dark:text-nature-400 font-medium" role="status">{t('Loading…')}</div>
+            </div>
+        );
+    }
 
     return (
         <div className="page-overlay z-[110] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300" data-testid="page-overlay">
@@ -340,6 +397,41 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         </div>
                     )}
 
+                    {!isSelf && (
+                        isBlocked ? (
+                            <div className="mt-4 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-bold flex flex-wrap items-center gap-2 break-words">
+                                <span>🚫</span> <span className="min-w-0 flex-1 break-words">{t('You have blocked this member. Messaging is disabled.')}</span>
+                            </div>
+                        ) : (
+                            <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+                                <button 
+                                    type="button"
+                                    onClick={() => onMessage(pubkey)}
+                                    className="min-h-[44px] bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none rounded-xl px-5 py-2 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2 text-sm"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                    {t('Message', undefined, 'button: write to')}
+                                </button>
+                                {isFriend ? (
+                                    <span className="min-h-[44px] inline-flex items-center text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-4 py-2 rounded-xl border border-transparent shadow-sm">
+                                        {t('✓ Friend')}
+                                    </span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleAddFriend}
+                                        disabled={addingFriend}
+                                        className="min-h-[44px] bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 text-nature-800 dark:text-nature-100 border border-nature-300 dark:border-nature-700 rounded-xl px-4 py-2 text-xs font-bold cursor-pointer shadow-sm transition-all"
+                                    >
+                                        {t('+ Add friend')}
+                                    </button>
+                                )}
+                            </div>
+                        )
+                    )}
+
                     {profile?.bio && (
                         <div className="mt-4 text-sm text-nature-600 dark:text-nature-300 italic text-center max-w-sm">
                             "{profile.bio}"
@@ -348,24 +440,6 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
                     {/* Syndicated Creator Channels (The Pulse, Phase 1) */}
                     <ChannelChips channels={channels} />
-
-                    {!isSelf && (
-                        isBlocked ? (
-                            <div className="mt-6 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-bold flex flex-wrap items-center gap-2 break-words">
-                                <span>🚫</span> <span className="min-w-0 flex-1 break-words">{t('You have blocked this member. Messaging is disabled.')}</span>
-                            </div>
-                        ) : (
-                            <button 
-                                onClick={() => onMessage(pubkey)}
-                                className="mt-6 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
-                            >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                </svg>
-                                {t('Send Message')}
-                            </button>
-                        )
-                    )}
 
                     {canVouch && (
                         <div className="mt-3 w-full max-w-sm">

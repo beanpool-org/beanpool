@@ -159,10 +159,15 @@ export function sortsByDistance(profile: NodeProfile | null | undefined): boolea
 
 export interface Point { lat: number; lng: number }
 
-/** The Market search's distance parameters (G4, routes/distance-query.ts): a point and `sort=distance`, or none. */
+/**
+ * The Market search's distance parameters (G4, routes/distance-query.ts): a point and `sort=distance`, or none. The
+ * point is the phone's last GPS fix, sent to two decimals (under a kilometre): the read has no radius, the phone orders
+ * what comes back itself (nearestFirst) and shows its own distances, so only which listings come back can move
+ * (scratch/fable-redo/verdict-privacy.md §6, N5).
+ */
 export function marketSearchDistanceParams(profile: NodeProfile | null | undefined, point: Point | null): string {
     if (!sortsByDistance(profile) || !point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return '';
-    return `&lat=${point.lat.toFixed(4)}&lng=${point.lng.toFixed(4)}&sort=distance`;
+    return `&lat=${point.lat.toFixed(2)}&lng=${point.lng.toFixed(2)}&sort=distance`;
 }
 
 const toRad = (d: number) => (d * Math.PI) / 180;

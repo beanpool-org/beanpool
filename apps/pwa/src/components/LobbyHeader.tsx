@@ -1,7 +1,9 @@
+import { t } from '@beanpool/core';
+
 /** The lobby's "?" (DESIGN-getting-started-fable.md §4): the sidebar's and the mobile header's, each with its own size. */
 export function LobbyHelpButton({ onClick, className }: { onClick: () => void; className: string }) {
     return (
-        <button type="button" onClick={onClick} aria-label="Help for this screen" title="Help for this screen" data-testid="lobby-help"
+        <button type="button" onClick={onClick} aria-label={t('Help for this screen')} title={t('Help for this screen')} data-testid="lobby-help"
             className={`${className} flex items-center justify-center border-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400`}>
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" />
@@ -15,7 +17,7 @@ export function LobbyJoin({ onClick, disabled, className }: { onClick: () => voi
     return (
         <button type="button" data-testid="header-join" onClick={onClick} disabled={disabled}
             className={`border-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 ${className}`}>
-            Join
+            {t('Join')}
         </button>
     );
 }

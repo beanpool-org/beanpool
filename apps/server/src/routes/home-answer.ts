@@ -16,8 +16,8 @@
  *
  * Nothing here is anything the reader couldn't already read from the card's own screen, and each card is computed for
  * the verified signer only (never a key from the query):
- *   - the reader's OWN cards (`needs`, `safety`, `steps`, `deals`, `enterprise`, `groups`, `beans`, `notices`, and `me`
- *     and `layout`): for a key that passes the read gate (passesReadGate: a member, a suspended one included, as for
+ *   - the reader's OWN cards (`needs`, `safety`, `steps`, `deals`, `enterprise`, `shop`, `groups`, `beans`, `notices`, and
+ *     `me` and `layout`): for a key that passes the read gate (passesReadGate: a member, a suspended one included, as for
  *     their own messages, trades and Beans). Each is about the signer and nobody else: no other member's balance, deal,
  *     notice or vote is ever read for it (privacy-defaults-2026-09-28).
  *   - the COMMUNITY's cards, what other members post and do (`events`, `market`, `decide`, `joined`, `pulse`): for a
@@ -50,7 +50,7 @@
  */
 import {
     PRICING_CATEGORIES, avatarUrlOf, cardSettings, compareForAsk, normalizeCategory, readHomeLayout as readFrameLayout, readSearchSettings, searchTermsFor,
-    HOME_FRAME_LIMITS, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings,
+    HOME_FRAME_LIMITS, type HomeCardInstance, type HomeLayoutV2, type HomeSearchSettings, type ShopCounts,
     type TourRecord,
 } from '@beanpool/core';
 import { ONE_PASS_MAX_MEASURED, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
@@ -72,6 +72,7 @@ import { getInterestsUpdatedAt, getTourRecord } from '../engine/home-preferences
 import { chatHiddenFrom } from '../engine/event-thread.js';
 import { publicRepeatPattern } from '../engine/event-series-roll.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
+import { memberShop, shopOf } from '../engine/shops.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
 import { decisionsOn, madeWithoutVote, getOpenDecisions, getOwnDecisionVotes, hasCompletedTrade, getVoiceCredits, openScopedDecisionsFor } from '../decisions-engine.js';
 import { landingCardFor, type LandingCard } from './global-directory.js';
@@ -86,6 +87,13 @@ export type HomeCardId = typeof HOME_CARD_IDS[number];
 // assembled here (no builder): it is in the catalogue so a layout that hides or moves it is kept.
 const CARD_IDS: ReadonlySet<string> = new Set(HOME_CARD_IDS);
 export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'string' && CARD_IDS.has(id);
+/**
+ * The one-of-a-kind cards built when `cards=` names them, whether or not the member's stored layout holds them yet:
+ * version 1's catalogue, and the newer ones with no settings, whose id is their type (`shop`, slice S4′). An app that
+ * has just added one asks for it before its layout reaches the node; a version-1 app never asks for it, and with no
+ * `cards=` it is built only from a version-2 layout that holds it.
+ */
+const BUILT_WHEN_ASKED: ReadonlySet<string> = new Set([...HOME_CARD_IDS, 'shop']);
 
 /** Cards a member can't hide (§4.1): `needs` costs them something if missed, `community` holds "Edit home". `find` too, for its first 30 days on the global node. */
 const UNHIDEABLE: ReadonlySet<string> = new Set(['needs', 'community']);
@@ -213,6 +221,8 @@ export interface HomeCards {
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
     /** `lifecycle` 'bounded': the first one kept is a project, and the card says "Your project" (group decisions §3.1). */
     enterprise?: { id: string; name: string; requests: number; others: number; lifecycle: 'ongoing' | 'bounded' };
+    /** "Your shop and tools" (slice S4′): the reader's own shop, or none yet (the card still shows, with the tools). */
+    shop?: { shop: ShopHomeCard | null };
     events?: { items: EventItem[]; radiusKm: number | null };
     market?: { items: MarketItem[]; total14d: number; more: boolean; examples?: true };
     decide?: { open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean };
@@ -229,6 +239,12 @@ export interface HomeCards {
      */
     [instanceId: string]: unknown;
 }
+
+/**
+ * The reader's own shop on "Your shop and tools" (engine/shops.ts memberShop, as their own GET /api/shops/mine reads it):
+ * its own name or none (the apps say "<ownerName>'s shop"), its kind, its counts, and whether it is closed for now.
+ */
+export interface ShopHomeCard { id: string; name: string | null; ownerName: string; kind: string | null; counts: ShopCounts; paused: boolean; backOn: string | null }
 
 /** A saved search's card (type `search`): the words and distance it was saved with, and the first listings that match. */
 export interface SearchCard { q: string; kind: HomeSearchSettings['kind']; category: string | null; km: number | null; items: MarketItem[]; more: boolean }
@@ -609,6 +625,23 @@ function postsFor(c: Ctx, filter: Parameters<typeof getPosts>[0]): MarketplacePo
     return c.member ? posts : posts.map(guestPost);
 }
 
+/**
+ * "Your shop and tools" (DESIGN-shops-and-tools-fable.md §8, slice S4′): the reader's own shop as their own read of it says
+ * (memberShop), or none yet. Always a body: the card is also the door to the tools, which need no shop.
+ */
+function shopCard(c: Ctx): NonNullable<HomeCards['shop']> {
+    built('shop');
+    const row = shopOf(c.me!);
+    if (!row) return { shop: null };
+    const shop = memberShop(row, c.me!, c.now);
+    return {
+        shop: {
+            id: shop.id, name: shop.name === null ? null : clip(shop.name, NAME_CHARS), ownerName: clip(shop.ownerName, NAME_CHARS),
+            kind: shop.kind, counts: shop.counts, paused: shop.paused, backOn: shop.backOn,
+        },
+    };
+}
+
 function eventsCard(c: Ctx): HomeCards['events'] | undefined {
     built('events');
     // "Within 50 km" where the listings come nearest first (the global profile) and there is a point; elsewhere every event.
@@ -805,7 +838,7 @@ function communityCard(c: Ctx): HomeCards['community'] {
 // ── the answer ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Which cards each part of a reader may have (the module's header). */
-const OWN_CARDS: ReadonlySet<string> = new Set(['needs', 'safety', 'steps', 'deals', 'enterprise', 'groups', 'beans', 'notices']);
+const OWN_CARDS: ReadonlySet<string> = new Set(['needs', 'safety', 'steps', 'deals', 'enterprise', 'shop', 'groups', 'beans', 'notices']);
 const COMMUNITY_CARDS: ReadonlySet<string> = new Set(['find', 'events', 'market', 'search', 'decide', 'joined', 'pulse']);
 
 /** A card type's builder: the reader, and the instance's settings through its type's reader (absent for a type with none). */
@@ -813,7 +846,7 @@ type Builder = (c: Ctx, settings?: Record<string, unknown>) => unknown;
 /** By type. A type with no builder here (one the apps draw, or one newer than this node) is kept in the layout and not built. */
 const BUILDERS: Partial<Record<string, Builder>> = {
     search: searchCard,
-    needs: needsCard, safety: safetyCard, find: findCard, steps: stepsCard, deals: dealsCard, enterprise: enterpriseCard,
+    needs: needsCard, safety: safetyCard, find: findCard, steps: stepsCard, deals: dealsCard, enterprise: enterpriseCard, shop: shopCard,
     events: eventsCard, market: marketCard, decide: decideCard, groups: groupsCard, joined: joinedCard, pulse: pulseCard,
     beans: beansCard, notices: noticesCard, community: communityCard,
 };
@@ -846,7 +879,7 @@ function cardsToBuild(c: Ctx, asked: string[] | undefined, layout: HomeLayout | 
             const card = stored(id);
             // A card type's id is built as today's apps ask it (with the member's settings for it, if their layout has them);
             // any other id only when it names an instance in the member's stored layout: the settings are the node's to read.
-            if (isHomeCardId(id)) out.push(asBuilt(id, card));
+            if (BUILT_WHEN_ASKED.has(id)) out.push(asBuilt(id, card));
             else if (card) out.push(card);
         }
         return out.sort(compareForAsk);

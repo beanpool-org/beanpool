@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { t } from '@beanpool/core';
 
 /**
  * "Finish your profile first" prompt — shown when a member tries to list or
@@ -33,7 +34,7 @@ export function ProfileGateModal({ message, onSetup, onClose }: Props) {
                 className="bg-white dark:bg-nature-900 rounded-2xl shadow-xl max-w-sm w-full p-6"
                 onClick={(e) => e.stopPropagation()}
             >
-                <h3 id="profile-gate-title" className="text-lg font-bold text-nature-950 dark:text-white mb-2">Finish your profile first</h3>
+                <h3 id="profile-gate-title" className="text-lg font-bold text-nature-950 dark:text-white mb-2">{t('Finish your profile first')}</h3>
                 <p className="text-sm text-nature-600 dark:text-nature-400 mb-5 leading-relaxed">{message}</p>
                 <div className="flex gap-3">
                     <button
@@ -41,14 +42,14 @@ export function ProfileGateModal({ message, onSetup, onClose }: Props) {
                         onClick={onClose}
                         className="flex-1 py-3 rounded-xl border border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-200 font-semibold cursor-pointer bg-transparent hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                     >
-                        Not now
+                        {t('Not now')}
                     </button>
                     <button
                         type="button"
                         onClick={onSetup}
                         className="flex-1 py-3 rounded-xl bg-nature-900 dark:bg-white text-white dark:text-nature-900 font-bold cursor-pointer border-none hover:opacity-90 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                     >
-                        Set up profile
+                        {t('Set up profile')}
                     </button>
                 </div>
             </div>

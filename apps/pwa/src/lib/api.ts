@@ -20,8 +20,10 @@ import {
     type PublicCreatorChannel,
     type ChannelPlatform,
     type ChannelCategory,
+    roundPointToArea,
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
+import { wrapLng } from './listings-near';
 import { NOTICES_SEEN_EVENT, type HomeAnswer } from './home-cards';
 import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
@@ -587,6 +589,11 @@ export interface MemberProfile {
     elderVouchedBy?: string | null;
     elderVouchedByCallsign?: string | null;
     archetype?: string | null;
+    /**
+     * True only on an enterprise's or a project's profile (the node's MemberProfile.isTreasury, slice E0): the key is
+     * kept by its keepers, not a person, and PublicProfilePage hands it to the enterprise page. Absent on a member's.
+     */
+    isTreasury?: true;
 }
 
 export async function updateMemberProfile(publicKey: string, update: {
@@ -1702,10 +1709,12 @@ export async function getRatingsGiven(publicKey: string): Promise<{ ratings: Rat
 
 /**
  * "Tell me when a community starts near here" on the global node (`POST /api/global/watches`): a member's, signed; the
- * node keeps the ~10 km cell, never the exact point. The phone's is utils/community-directory.ts watchPlace.
+ * node keeps the ~10 km cell, never the exact point, so that cell is all that is sent (@beanpool/core roundPointToArea,
+ * the node's own rule), its longitude wrapped first: Home's point can be a Distance centre past the date line, which the
+ * node refuses (listings-near.ts wrapLng). The phone's is utils/community-directory.ts watchPlace.
  */
 export async function watchPlace(lat: number, lng: number): Promise<{ success: boolean }> {
-    return request('POST', '/api/global/watches', { lat, lng });
+    return request('POST', '/api/global/watches', roundPointToArea(lat, wrapLng(lng)));
 }
 
 // ===================== REPORTS =====================

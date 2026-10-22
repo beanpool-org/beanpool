@@ -4,7 +4,7 @@ import React from 'react';
 import { PublicProfilePage } from './PublicProfilePage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getMemberProfile, type MemberProfile, type BalanceInfo } from '../lib/api';
+import { getMemberProfile, getFriends, addFriendApi, type MemberProfile, type BalanceInfo } from '../lib/api';
 import { ARCHETYPES } from '@beanpool/core';
 import { blockUser, unblockUser, isUserBlocked, getBlocklistFullNote } from '../lib/blocklist';
 
@@ -91,6 +91,8 @@ vi.mock('../lib/api', () => ({
     getBalance: vi.fn(async () => mockBalance),
     getRatingsGiven: vi.fn(async () => []),
     getFriends: vi.fn(async () => []),
+    addFriendApi: vi.fn(async () => ({ success: true })),
+    removeFriendApi: vi.fn(async () => ({ success: true })),
     submitRating: vi.fn(),
     vouchMemberApi: vi.fn(),
     getPublicChannels: vi.fn(async () => []),
@@ -312,5 +314,84 @@ describe('PublicProfilePage: a block or an unblock the community did not take is
         renderProfile();
         await screen.findByRole('button', { name: 'Block user Bob' });
         expect(screen.queryByText(/Your block list is full/)).toBeNull();
+    });
+});
+
+describe('PublicProfilePage: Message and Add friend/Friend toggle at the top of the profile (S0)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('renders Message and + Add friend buttons directly under the name (above bio)', async () => {
+        const onMessage = vi.fn();
+        render(
+            <PublicProfilePage
+                identity={mockIdentity}
+                pubkey="peer-pubkey-123"
+                onBack={vi.fn()}
+                onMessage={onMessage}
+                onNavigatePost={vi.fn()}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByText('Trust Profile')).toBeInTheDocument());
+
+        const msgBtn = screen.getByRole('button', { name: /Message/i });
+        expect(msgBtn).toBeInTheDocument();
+        // Label must be 'Message', not 'Send Message'
+        expect(msgBtn.textContent).toContain('Message');
+        expect(msgBtn.textContent).not.toContain('Send Message');
+
+        // Check Add friend button exists
+        const addBtn = screen.getByRole('button', { name: /\+ Add friend/i });
+        expect(addBtn).toBeInTheDocument();
+
+        // Message and Add friend appear before the bio in DOM order
+        const bioEl = screen.getByText(`"${mockProfile.bio}"`);
+        expect(msgBtn.compareDocumentPosition(bioEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        // Clicking Message invokes onMessage
+        fireEvent.click(msgBtn);
+        expect(onMessage).toHaveBeenCalledWith('peer-pubkey-123');
+    });
+
+    it('clicking + Add friend calls addFriendApi and toggles to ✓ Friend', async () => {
+        render(
+            <PublicProfilePage
+                identity={mockIdentity}
+                pubkey="peer-pubkey-123"
+                onBack={vi.fn()}
+                onMessage={vi.fn()}
+                onNavigatePost={vi.fn()}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByText('Trust Profile')).toBeInTheDocument());
+        const addBtn = screen.getByRole('button', { name: /\+ Add friend/i });
+        fireEvent.click(addBtn);
+
+        await waitFor(() => {
+            expect(screen.getByText('✓ Friend')).toBeInTheDocument();
+        });
+        expect(addFriendApi).toHaveBeenCalledWith(mockIdentity.publicKey, 'peer-pubkey-123');
+    });
+
+    it('displays ✓ Friend when viewing a friend', async () => {
+        vi.mocked(getFriends).mockResolvedValueOnce([
+            { publicKey: 'peer-pubkey-123', callsign: 'Bob', addedAt: '2026-01-01' } as any,
+        ]);
+        render(
+            <PublicProfilePage
+                identity={mockIdentity}
+                pubkey="peer-pubkey-123"
+                onBack={vi.fn()}
+                onMessage={vi.fn()}
+                onNavigatePost={vi.fn()}
+            />
+        );
+
+        await waitFor(() => expect(screen.getByText('Trust Profile')).toBeInTheDocument());
+        expect(screen.getByText('✓ Friend')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /\+ Add friend/i })).toBeNull();
     });
 });

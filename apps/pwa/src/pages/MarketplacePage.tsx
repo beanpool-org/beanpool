@@ -33,7 +33,7 @@ import { exampleListingsOn, showExampleListings } from '../lib/example-listings'
 import { pollsInformal } from '../lib/informal-polls';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { useMembersOnDemand } from '../lib/members-on-demand';
-import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
+import { nearRead, nearParams, listingDistanceKm, readNearestInCircle, NODE_PAGE_DEFAULT } from '../lib/listings-near';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
@@ -446,14 +446,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             : null,
         [nearKnown, typeFilter, nearbyListings, radiusSettings, memberArea, isVisitor, everywhere],
     );
-    // How far a listing is: the node's word when it measured from `near`, else from the picked centre in the browser.
-    const measureFrom = near ?? radiusSettings;
+    // How far a listing is: the node's word when it measured from the member's area, else from the picked centre in the
+    // browser (exact: the node was sent it rounded, lib/listings-near).
+    const measureFrom = near ? near.circle : radiusSettings;
     const distanceOf = (p: MarketplacePost): number | null => listingDistanceKm(
-        p, measureFrom ? (lat, lng) => haversineDistance(measureFrom.lat, measureFrom.lng, lat, lng) : null,
+        p, measureFrom ? (lat, lng) => haversineDistance(measureFrom.lat, measureFrom.lng, lat, lng) : null, near,
     );
-    // A listing pushed over the live feed joins the list only inside the radius the list was read with.
+    // A listing pushed over the live feed joins the list only inside the circle the list was read for.
     const fitsNear = useCallback((p: MarketplacePost): boolean => !near
-        || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm), [near]);
+        || (p.lat != null && p.lng != null && haversineDistance(near.circle.lat, near.circle.lng, p.lat, p.lng) <= near.circle.radiusKm), [near]);
 
     // Layout configuration — default to 'grid' (Card View)
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>(() => {
@@ -741,7 +742,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const refresh = useCallback(async () => {
         // Not before this node's way of reading is known (NEAR_WAIT_MS at most), so the first read is made once.
         if (!nearKnown) return;
-        const refreshKey = `${typeFilter}|${categoryFilter}|${groupFilter}|${near ? `${near.lat},${near.lng},${near.radiusKm}` : ''}`;
+        // The exact circle, not the rounded read: two centres that round alike still cut and order differently.
+        const refreshKey = `${typeFilter}|${categoryFilter}|${groupFilter}|${near ? `${near.from},${near.circle.lat},${near.circle.lng},${near.circle.radiusKm}` : ''}`;
         if (refreshPromiseRef.current && refreshKeyRef.current === refreshKey) {
             return refreshPromiseRef.current;
         }
@@ -762,8 +764,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const wantsEvents = filter.type === 'event' || (filter.types ?? '').split(',').includes('event');
                 const [homeData, myOwnPosts, statusesData, fallbackTreasuries, onlineEvents] = await Promise.all([
                     // Nearest first within the radius where the node reads by area (lib/listings-near); the viewer's own
-                    // listings wherever they are.
-                    getMarketplacePosts({ ...filter, ...nearParams(near) }),
+                    // listings wherever they are. Read from the distance setting: cut to the exact circle and nearest
+                    // first from its centre, as many as the node's page without a limit.
+                    readNearestInCircle(near, NODE_PAGE_DEFAULT, page => getMarketplacePosts({ ...filter, ...nearParams(near), ...page })),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
                     // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock),
@@ -2672,6 +2675,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <RadiusPickerPage
                         initial={radiusSettings}
                         defaultRadius={nodeConfig?.serviceRadius?.radiusKm}
+                        nodeCenter={
+                            typeof nodeConfig?.serviceRadius?.lat === 'number' && typeof nodeConfig?.serviceRadius?.lng === 'number'
+                                ? { lat: nodeConfig.serviceRadius.lat, lng: nodeConfig.serviceRadius.lng }
+                                : null
+                        }
                         onApply={(settings) => {
                             setRadiusSettings(settings);
                             saveRadiusSettings(settings);
@@ -3089,12 +3097,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <p data-testid="market-near-line" className="m-0 mb-2 px-1 text-sm text-nature-600 dark:text-nature-300 flex flex-wrap items-center gap-x-2 gap-y-1">
                         {near?.from === 'area' ? (
                             <>
-                                <span>{t('Nearest to your area first, within {distance}.', { distance: formatDistance(near.radiusKm) })}</span>
+                                <span>{t('Nearest to your area first, within {distance}.', { distance: formatDistance(near.circle.radiusKm) })}</span>
                                 <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">{t('Show everywhere')}</button>
                             </>
                         ) : near ? (
                             // Not the setting's label: the picker sets it to "<n>km radius", never a place's name.
-                            <span>{t('Nearest first, within {distance} of the place you picked.', { distance: formatDistance(near.radiusKm) })}</span>
+                            <span>{t('Nearest first, within {distance} of the place you picked.', { distance: formatDistance(near.circle.radiusKm) })}</span>
                         ) : areaStanding ? (
                             <span>{areaStanding}</span>
                         ) : areaFailed && !everywhere ? (

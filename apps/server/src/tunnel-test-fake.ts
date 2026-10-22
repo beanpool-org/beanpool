@@ -2,6 +2,9 @@
  * The fake cloudflared (__fixtures__/fake-cloudflared.mjs), wired into the tunnel connector for a test process. Not a suite
  * itself: test-tunnel-connector.ts, test-public-address.ts and takeover-test-harness.ts (every node process it starts) use
  * it, so no test ever starts a real cloudflared, whatever this machine has installed.
+ *
+ * FAKE_CLOUDFLARED_START_DELAY_MS (in the suite's environment): every fake waits that long before it records itself, as
+ * one does on a loaded CI runner, to show a suite waits for its child rather than for a fixed time.
  */
 
 import crypto from 'node:crypto';
@@ -13,7 +16,8 @@ import { setTunnelConnectorForTests } from './services/tunnel-connector.js';
 
 export const FAKE_CLOUDFLARED = path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'fake-cloudflared.mjs');
 
-export interface FakeRun { pid: number; argv: string[]; env: Record<string, string>; at: number }
+/** `at`: when it recorded itself; `started`: when its process began (a loaded machine's start-up lies between). */
+export interface FakeRun { pid: number; argv: string[]; env: Record<string, string>; at: number; started: number }
 
 export interface FakeTunnel {
     dir: string;
@@ -61,6 +65,8 @@ async function freePort(): Promise<number> {
 export async function useFakeCloudflared(dir: string, timings: Parameters<typeof setTunnelConnectorForTests>[0] = {}): Promise<FakeTunnel> {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(dir, { recursive: true });
+    const startDelayMs = Number(process.env.FAKE_CLOUDFLARED_START_DELAY_MS) || 0;
+    if (startDelayMs > 0) fs.writeFileSync(path.join(dir, 'start-delay-ms'), String(startDelayMs));
     const port = await freePort();
     setTunnelConnectorForTests({ command: process.execPath, prefixArgs: [FAKE_CLOUDFLARED, dir], metricsPort: port, ...timings });
     const runs = () => lines(path.join(dir, 'runs.jsonl')) as FakeRun[];

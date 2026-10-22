@@ -18,7 +18,7 @@ import {
     canonicalLang, capitalFirst, currentLanguage, DATE_WORDS, formatCount, formatDate, formatNumber, inCapitalsOf, isLang, isMachineDraft, isMachineDraftCatalog, LANGS, LANGUAGE_HEADER,
     normaliseLang, PLURAL_CATEGORIES, PLURAL_RULES, pluralCategory, pluralKey, PSEUDO_LANG, pseudoLocalise, setLanguage, t, timeAgo, tn, upperCase,
     withDigits, word,
-    wordKey, wordsFor, type Lang, type UiLang,
+    wordKey, wordn, wordsFor, type Lang, type UiLang,
 } from '../words.js';
 import { allowedPluralForms, callKey, callProblem, checkCatalog } from '../words-check.js';
 import { BIP39_ENGLISH, normaliseRecoveryWords, packRecoveryWords, recoveryWordsMatchPublicKey } from '../recovery-words.js';
@@ -125,6 +125,14 @@ describe('t and tn', () => {
         expect(tn(5, '{n} bean', '{n} beans')).toBe('5 боба');
         setLanguage('ru', []);
         expect(tn(5, '{n} bean', '{n} beans')).toBe('5 beans');
+    });
+
+    it('a wordn() pair kept in a table is written by tn() as if the literals were there: the same key, the same forms', () => {
+        const BEANS = wordn('{n} bean', '{n} beans');
+        expect(BEANS).toEqual({ one: '{n} bean', other: '{n} beans' });
+        expect([1, 5].map((n) => tn(n, BEANS.one, BEANS.other))).toEqual(['1 bean', '5 beans']);
+        setLanguage('ru', [{ [pluralKey('{n} bean', '{n} beans')]: { one: '{n} боб', few: '{n} боба', many: '{n} бобов', other: '{n} боба' } }]);
+        expect([1, 2, 5, 21].map((n) => tn(n, BEANS.one, BEANS.other))).toEqual(['1 боб', '2 боба', '5 бобов', '21 боб']);
     });
 
     it('ar plurals take all six forms; uk takes ru\'s three', () => {
@@ -333,6 +341,17 @@ describe('words:check (structural only)', () => {
         expect(callKey({ fn: 't', text: null, keyed: true, concatenated: false, at })).toBeNull();
         expect(callProblem({ fn: 't', text: 'Save', concatenated: false, at, moduleLevel: true })).toContain('module level');
         expect(callProblem({ fn: 'tn', text: '{n} a', other: '{n} b', concatenated: false, at, moduleLevel: true })).toContain('module level');
+    });
+
+    it('wordn() is collected like tn(), as one plural key; tn(n, pair.one, pair.other) is checked by tsc', () => {
+        const at = 'x.ts:1';
+        expect(callKey({ fn: 'wordn', text: '{n} a', other: '{n} b', concatenated: false, at })).toBe('{n} a|{n} b');
+        expect(callProblem({ fn: 'wordn', text: '{n} a', other: '{n} b', concatenated: false, at, moduleLevel: true })).toBeNull();
+        expect(callProblem({ fn: 'wordn', text: '{n} a', other: null, concatenated: false, at })).toContain('string literal');
+        expect(callProblem({ fn: 'wordn', text: '{n} a', other: '{n} b ', concatenated: false, at })).toContain('starts or ends with a space');
+        expect(callProblem({ fn: 'tn', text: null, other: null, keyed: true, concatenated: false, at })).toBeNull();
+        expect(callKey({ fn: 'tn', text: null, other: null, keyed: true, concatenated: false, at })).toBeNull();
+        expect(callProblem({ fn: 'tn', text: null, other: null, concatenated: false, at })).toContain('not a variable');
     });
 });
 

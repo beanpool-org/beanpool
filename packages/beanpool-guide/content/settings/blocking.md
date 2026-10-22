@@ -57,5 +57,6 @@ Your community does this for blocks it keeps for you. Today that is a block made
 
 - Open **Settings**. Under **Legal & Privacy**, tap **Manage Blocked Users**.
 - Tap **Unblock** next to a name, or **Unblock All**.
+- In the phone app you can also unblock someone from their profile. Under their name it says "You blocked" and their name. Tap **Unblock** there.
 
 In the web app, blocking and unblocking need a connection to your community. Without one, the app says so and nothing changes. Try again when you are back online.

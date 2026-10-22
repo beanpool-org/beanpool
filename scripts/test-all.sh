@@ -258,15 +258,17 @@ run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 # folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
 # a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
 # e2e/in-page-confirm.mjs: every in-page question is on top and answerable, from a modal (Keepers → Revoke) or the page.
-# The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
-run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions && pnpm --filter @beanpool/manager test:fresh-proof && pnpm --filter @beanpool/manager test:in-page-confirm'
+# The browser is downloaded once and cached. On CI it and its system libraries are installed once, before any check starts
+# (.github/workflows/ci.yml): apt takes one install at a time, and these checks each running `--with-deps` side by side
+# failed on dpkg's lock (run 39768723431). So no check here installs system libraries, on CI or off it.
+run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions && pnpm --filter @beanpool/manager test:fresh-proof && pnpm --filter @beanpool/manager test:in-page-confirm'
 
 # The web app in dark mode, every class string at once (PR #1833: five review rounds each found a new shape of the same
 # fault). apps/pwa/e2e/dark-class-check.mjs builds src/index.css with the app's vite config (the shipped rules, byte for
 # byte, and no other package needs building), draws every class string in apps/pwa/src in headless Chromium in dark mode,
 # each inside its JSX parents, and fails if its words read under 4.5:1 (3:1 large) at rest, under the pointer or with
 # keyboard focus. Canaries of each known shape must fail first, so a check gone blind fails too. No node; about 30 s.
-run_check "pwa_dark_classes" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/pwa dark-class-check'
+run_check "pwa_dark_classes" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && pnpm --filter @beanpool/pwa dark-class-check'
 
 # The group-history screens on a phone (the group-history-after-rekey design, section 7): apps/native/e2e/locked-history-320.mjs
 # renders the real components through react-native-web in Chromium at 320 wide with 1.3x text, light and dark, and fails on
@@ -274,7 +276,7 @@ run_check "pwa_dark_classes" bash -c 'pnpm --filter @beanpool/pwa exec playwrigh
 # It bundles @beanpool/core from its dist, so like the server suites it starts once build has finished.
 run_native_phone_width() {
   wait_for_build || return 1
-  pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node apps/native/e2e/locked-history-320.mjs
+  pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node apps/native/e2e/locked-history-320.mjs
 }
 run_check "native_phone_width" run_native_phone_width
 
@@ -371,7 +373,7 @@ run_website_colours() {
   node --test scripts/website-colours.test.mjs
 }
 run_check "website_colours" run_website_colours
-run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && node scripts/website-contrast.mjs'
+run_check "website_contrast" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium && node scripts/website-contrast.mjs'
 # beanpool.org/status, the public status line of our servers (mothership slice A8): drawn from a stubbed status.json at
 # 320 px, light and dark, each state in words and its token colour, nothing wider than the screen; a late, missing or
 # unknown status said in words; nothing from the status drawn as markup. Its Chromium is the one website_contrast

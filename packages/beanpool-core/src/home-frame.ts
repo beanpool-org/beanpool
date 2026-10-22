@@ -180,6 +180,9 @@ export const HOME_CARD_TYPES: readonly HomeCardType[] = [
         id: 'enterprise', name: word('Your enterprise'), line: word('Requests for the enterprise you keep.'), group: 'you', asks: 'node',
         onNode: (a) => notGlobal(a) && a.features.enterprises !== false,
     },
+    // The member's own shop and their tools (DESIGN-shops-and-tools-fable.md §8, slice S4′): on every node, since a shop is
+    // no enterprise and works where Beans are off. Built by the node from the member's own shop row.
+    { id: 'shop', name: word('Your shop and tools'), line: word('Your shop, and things you can do on your own.'), group: 'you', asks: 'node', onNode: everywhere },
     { id: 'events', name: word('Coming up'), line: word('Events coming up soon.'), group: 'around', asks: 'node', onNode: everywhere },
     { id: 'market', name: word('New in the Market'), globalName: word('Near you'), line: word('The newest listings near you.'), group: 'around', asks: 'node', onNode: everywhere },
     {

@@ -82,6 +82,8 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/pricing-guide\/(report|reports\/[^/]+\/status|admin\/(item(\/[^/]+)?|pin|reset|aggregate))\/?$/,
     // A tool's private copy written or deleted, a member's own or an enterprise's by a keeper (engine/tool-state.ts).
     /^\/api\/(treasury\/[^/]+\/)?tools\/[^/]+\/?$/,
+    // A shop opened, changed, paused, closed or filled, a member's own or an enterprise's by a keeper (engine/shops.ts).
+    /^\/api\/(shops\/mine|treasury\/[^/]+\/shop)(\/(close|offers))?\/?$/,
     // The names list (engine/names-list.ts): an entry, the list's key, a confirmation, the owner's settings. Its reads are
     // refused on a standby too, by its own routes (routes/names-list.ts): a read writes the access log.
     /^\/api\/names(\/|$)/,

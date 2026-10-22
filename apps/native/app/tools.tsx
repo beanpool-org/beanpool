@@ -4,14 +4,15 @@
  * shelves from core's `toolsOnShelf` (Stock · Trade · Books): every tool this build has that this community can have,
  * each a row with its emoji, its name and its state line (the manifest's `row()` on the document on this phone). "More
  * tools" appears for a shop of a kind (S1), with the tools that aren't for it. Nothing here names a tool; nothing is
- * shown locked. The two doors are each tool's own (tools/frame.tsx), since only a tool knows what its Add is.
+ * shown locked. The two doors are each tool's own (tools/frame.tsx), since only a tool knows what its Add is. Above the
+ * shelves, Your shop (app/shop/mine.tsx, slice S4′): the shop the tools fill, on every node.
  */
 import React, { useCallback, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t, toolsMore, type HomeNodeFacts, type ToolManifest } from '@beanpool/core';
+import { t, toolLineText, toolsMore, type HomeNodeFacts, type ToolManifest } from '@beanpool/core';
 import { useIdentity } from './IdentityContext';
 import { useTheme } from './ThemeContext';
 import { useNodeProfile } from '../utils/use-node-profile';
@@ -42,7 +43,7 @@ export default function ToolsScreen() {
         void Promise.all(manifests.map(async (m) => {
             const { doc } = await readToolDoc(owner, m).catch(() => ({ doc: m.doc.empty() }));
             const line = safeLine(() => m.row(doc, Date.now()));
-            return [m.id, line ? t(line.key, line.values) : null] as const;
+            return [m.id, line ? toolLineText(line) : null] as const;
         })).then((pairs) => { if (!gone) setStates(Object.fromEntries(pairs)); });
         return () => { gone = true; };
     }, [identity?.publicKey, manifests.map((m) => m.id).join(',')]));
@@ -61,6 +62,9 @@ export default function ToolsScreen() {
             </View>
             <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 24 + insets.bottom }]}>
                 <Text style={[styles.lead, { color: colors.text.secondary }]}>{t('Things you can do on your own, that make your community stronger.')}</Text>
+                <View style={s.card} testID="tools-shop-card">
+                    <ToolRow icon="🏪" title={t('Your shop')} state={t('Your Offers under one name')} onPress={() => router.push('/shop/mine')} testID="tools-shop" />
+                </View>
                 {shelves.map(({ shelf, tools: list }) => (
                     <View key={shelf} style={s.card} testID={`tools-shelf-${shelf}`}>
                         <View style={s.captionRow}>

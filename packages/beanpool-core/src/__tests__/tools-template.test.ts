@@ -10,10 +10,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { word } from '../words.js';
+import { word, wordn, type WordKey } from '../words.js';
 import { HOME_FRAME_LIMITS } from '../home-frame.js';
 import {
-    TOOLS, TOOL_LIMITS, toolFixtureProblems, toolHomeCardType, toolManifestProblems,
+    TOOLS, TOOL_LIMITS, toolFixtureProblems, toolHomeCardType, toolLineText, toolManifestProblems,
     type ToolFixtures, type ToolManifest,
 } from '../tools/index.js';
 
@@ -196,5 +196,21 @@ describe('the checks bite', () => {
         one(toolFixtureProblems({ ...good, row: () => ({ key: word('Kept here: {count}'), screen: 'elsewhere' }) }, { ...fixtures, docs: { ...fixtures.docs, small: fixtures.docs.empty, full: fixtures.docs.empty } }).slice(0, 1), /opens elsewhere/);
         const reminders = { list: [{ id: 'back', name: word('A reminder'), defaultOn: true }], due: () => Array.from({ length: 11 }, () => ({ reminder: 'back', at: 1, key: word('One more') })) };
         one(toolFixtureProblems({ ...good, permissions: ['reminders'], reminders }, { ...fixtures, docs: { ...fixtures.docs, small: fixtures.docs.empty, full: fixtures.docs.empty } }).slice(0, 1), /due\(\) returns 11 on the empty document, over 10/);
+    });
+
+    it('a line with a count is a wordn() pair with its n, drawn by toolLineText; a reminder is never one', () => {
+        const ITEMS = wordn('{n} item kept here', '{n} items kept here');
+        const counted: ToolManifest<Doc> = { ...good, row: (d) => ({ key: ITEMS, n: d.items.length }) };
+        expect(toolFixtureProblems(counted, fixtures)).toEqual([]);
+        expect([0, 1, 2].map((n) => toolLineText({ key: ITEMS, n }))).toEqual(['0 items kept here', '1 item kept here', '2 items kept here']);
+        expect(toolLineText({ key: word('Kept here: {count}'), values: { count: 1 } })).toBe('Kept here: 1');
+
+        const onEmpty = { ...fixtures, docs: { ...fixtures.docs, small: fixtures.docs.empty, full: fixtures.docs.empty } };
+        one(toolFixtureProblems({ ...good, row: () => ({ key: ITEMS }) }, onEmpty).slice(0, 1), /row\(\) on the empty document has a wordn\(\) key and no count n/);
+        one(toolFixtureProblems({ ...good, row: () => ({ key: ITEMS, n: Number.NaN }) }, onEmpty).slice(0, 1), /no count n/);
+        one(toolFixtureProblems({ ...good, row: () => ({ key: { one: ITEMS.one, other: '' as WordKey }, n: 1 }) }, onEmpty).slice(0, 1), /is not \{ key: wordn/);
+        one(toolFixtureProblems({ ...good, row: () => ({ key: word('Kept here: {count}'), n: 1 }) }, onEmpty).slice(0, 1), /has a count n, but its key is not a wordn\(\) pair/);
+        const reminders = { list: [{ id: 'back', name: word('A reminder'), defaultOn: true }], due: () => [{ reminder: 'back', at: 1, key: ITEMS as unknown as WordKey }] };
+        one(toolFixtureProblems({ ...good, permissions: ['reminders'], reminders }, onEmpty).slice(0, 1), /a reminder due on the empty document is not \{ key, values\? \}/);
     });
 });

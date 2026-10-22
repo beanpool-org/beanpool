@@ -21,6 +21,7 @@
  * modal: Tab stays inside it, and when the last one is put away focus goes back to where the member was.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { t } from '@beanpool/core';
 import { onSystemAnnouncement, onSocketOpen } from '../lib/sync';
 import { getUnseenNotices, markNoticesSeen, type KeptNotice } from '../lib/api';
 
@@ -316,7 +317,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                 <div style={{ flex: '0 0 auto', padding: '0.75rem 1.25rem 1.25rem' }}>
                     {several && (
                         <p data-testid="system-alert-count" style={{ margin: '0 0 0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                            1 of {waiting}
+                            {t('1 of {waiting}', { waiting })}
                         </p>
                     )}
                     <button
@@ -329,7 +330,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                             fontSize: '1.1rem', fontWeight: 600, cursor: 'pointer'
                         }}
                     >
-                        Acknowledge
+                        {t('Acknowledge')}
                     </button>
                     {several && (
                         <button
@@ -343,7 +344,7 @@ export function SystemAlerts({ memberPubkey, isGuest, onShown, rereadGapMs = RER
                                 fontSize: '0.95rem', cursor: 'pointer'
                             }}
                         >
-                            Close all {waiting}
+                            {t('Close all {waiting}', { waiting })}
                         </button>
                     )}
                 </div>

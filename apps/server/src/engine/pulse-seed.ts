@@ -47,6 +47,15 @@ export const CURATED_LEARN_ITEMS: readonly CuratedItemDef[] = [
     { externalId: 'zFFc_81kPzk', publishedAt: '2026-08-01T00:00:00Z', title: 'The BeanPool Blueprint' },
 ] as const;
 
+/** The BeanPool treasury's public key, or null on a node that has none yet. A read: it never creates one. */
+export function getBeanPoolPubkey(): string | null {
+    const row = db.prepare(
+        `SELECT public_key FROM members
+          WHERE callsign_fold = ? AND is_treasury = 1 AND status NOT IN ('migrated', 'pruned')`
+    ).get(foldName(BEANPOOL_CALLSIGN)) as { public_key: string } | undefined;
+    return row?.public_key ?? null;
+}
+
 /** The BeanPool treasury's public key, creating it if this node has none yet. */
 export function ensureBeanPoolIdentity(): string {
     const existing = db.prepare(

@@ -4,6 +4,7 @@
  * splits the node's text where it already breaks, and joined the parts are the text again. The phone has the same
  * (apps/native/components/ConsentText.tsx).
  */
+import { t } from '@beanpool/core';
 import { consentTextParts } from '../lib/known-consent';
 
 export function ConsentText({ text, fontSize }: { text: string; fontSize: string }) {
@@ -18,7 +19,7 @@ export function ConsentText({ text, fontSize }: { text: string; fontSize: string
                         className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         style={{ fontSize, fontWeight: 700, cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}
                     >
-                        Read all of it
+                        {t('Read all of it')}
                     </summary>
                     {rest.map((b, i) => b.item
                         ? <ul key={i} style={{ ...p, paddingLeft: '1.25rem' }}><li>{b.text}</li></ul>

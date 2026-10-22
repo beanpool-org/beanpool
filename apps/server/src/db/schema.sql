@@ -331,8 +331,15 @@ CREATE TABLE IF NOT EXISTS posts (
     -- What it would cost to replace, in the lender's own words and currency ("$120", "like for like"), ≤ 40 characters.
     -- Shown, never parsed, never moved: settled between the two people, as the cash flag above is.
     replacement_value TEXT,
+    -- The shop it is in (section 29, shops; DESIGN-shops-and-tools-fable.md §9.1, slice S1): an Offer only, public, in its
+    -- author's own shop, or an enterprise's in the enterprise's (engine/shops.ts assertShopForPost). NULL on every other row.
+    -- Foreign keys are off on this database, and a standby may hold a listing a moment before the shop its copy names, so
+    -- every reader takes an id with no shop row as no shop. Added to an older database by db.ts, before this file runs.
+    shop_id TEXT REFERENCES shops(id),
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
+-- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).
+CREATE INDEX IF NOT EXISTS idx_posts_shop ON posts(shop_id) WHERE shop_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_hidden_by_reports ON posts(hidden_by_reports_at) WHERE hidden_by_reports_at IS NOT NULL;
 -- Distance search (G4): the box a radius query searches before the exact distance (beanpool-engine geo.ts, posts.ts).
 CREATE INDEX IF NOT EXISTS idx_posts_lat_lng ON posts(lat, lng);
@@ -2756,3 +2763,39 @@ CREATE TABLE IF NOT EXISTS member_tool_state (
     updated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (public_key, tool)
 );
+
+-- 29. Shops (scratch/tools/DESIGN-shops-and-tools-fable.md §2.1, §9.1, slice S1, and Marty's answers of 19 Oct 2026): a front
+-- window on an account, a member's or an enterprise's, one each (engine/shops.ts openShop). Its listings name it
+-- (posts.shop_id). A member opens theirs; an enterprise's is made with it (state-engine.ts createTreasury). Read through
+-- routes/shops.ts: a member sees it whole, a visitor its kind and counts only. Copied to a standby verbatim (a plain
+-- table, engine/replication-manifest.ts); a close deletes it with a tombstone keyed by its id (engine/shops.ts).
+CREATE TABLE IF NOT EXISTS shops (
+    id            TEXT PRIMARY KEY,
+    -- Not UNIQUE: one each is the main server's rule (openShop reads the owner's first), and a standby holds two for a moment.
+    -- A delta writes its rows before its tombstones (engine/sync.ts importRemoteState), so a member's new shop goes in while
+    -- the one they closed in the same delta is still here; a unique index would refuse it, and the tombstone then take the
+    -- old one, leaving none. Both are there only inside that one import.
+    owner_pubkey  TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    -- Its own name, ≤ 60 characters (@beanpool/core SHOP_NAME_LIMIT). NULL: none chosen, and the apps say "<the owner's
+    -- name>'s shop" in the reader's language. Always NULL on an enterprise's: its name is the enterprise's, read from
+    -- members, so it follows every rename.
+    name          TEXT CHECK (name IS NULL OR length(CAST(name AS BLOB)) BETWEEN 1 AND 180),
+    -- One of the fourteen kinds (@beanpool/core SHOP_KINDS, checked by engine/shops.ts), or NULL. The shape only here, so a
+    -- kind added later needs no rebuild.
+    kind          TEXT CHECK (kind IS NULL OR (length(kind) BETWEEN 1 AND 24 AND kind NOT GLOB '*[^a-z-]*')),
+    -- What it is, and "how I deal", each ≤ 300 characters in its owner's words. NULL: none. An enterprise's blurb reads as
+    -- its purpose until a keeper writes one.
+    blurb         TEXT CHECK (blurb IS NULL OR length(CAST(blurb AS BLOB)) <= 900),
+    how_to_deal   TEXT CHECK (how_to_deal IS NULL OR length(CAST(how_to_deal AS BLOB)) <= 900),
+    -- When it was opened.
+    opened_at     TEXT NOT NULL,
+    -- "Closed for now" (Marty, 19 Oct): when it was paused, the day it says it is back (YYYY-MM-DD, optional), and the
+    -- Offers the pause took off the board (a JSON array of their ids), which a reopen puts back. NULL when it is open.
+    paused_at     TEXT,
+    back_on       TEXT CHECK (back_on IS NULL OR back_on GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'),
+    paused_posts  TEXT,
+    -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
+    updated_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- An account's shop (shopOf).
+CREATE INDEX IF NOT EXISTS idx_shops_owner ON shops(owner_pubkey);

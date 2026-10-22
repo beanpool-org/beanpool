@@ -58,6 +58,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { dropToolStateOf } from './engine/tool-state.js';
+import { dropShopOf, openShop } from './engine/shops.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
@@ -75,7 +76,8 @@ import {
     evaluateAutoMute, liftMute as liftMuteEngine,
 } from './engine/auto-moderation.js';
 import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
-import { seedPulseCurated } from './engine/pulse-seed.js';
+import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
+import { getPulseTreasuryPubkey } from './daily-pulse.js';
 import {
     nodeRoleOf,
     heldNodeRoleOf,
@@ -2020,12 +2022,31 @@ export type { InviteCheckResult, InviteTreeNode };
 
 // ===================== PROFILES =====================
 
+/**
+ * The node's own accounts: BeanPool, which owns the curated learn channel and every channel an admin adds
+ * (engine/pulse-seed.ts), and Daily Pulse (daily-pulse.ts). They are treasury rows, so the People directory leaves them
+ * out, but neither is an enterprise or a project (no keepers, no purpose): their profile and trust profile carry no
+ * `isTreasury`, so both apps open the profile, with its channels, and not an empty enterprise page (review of #2367).
+ * Found by the same lookups their owners use, and never created here. Not `createTreasury`'s `systemCreated`: a
+ * member's enterprise made without a photo passes it too (routes/treasury.ts), and so does a federation link.
+ */
+function nodeOwnAccountKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const pk of [getBeanPoolPubkey(), getPulseTreasuryPubkey()]) if (pk) keys.add(pk);
+    return keys;
+}
+
 export function getProfile(publicKey: string, requesterPubkey?: string): MemberProfile | null {
-    return getProfileEngine(db, publicKey, requesterPubkey);
+    const profile = getProfileEngine(db, publicKey, requesterPubkey);
+    if (profile?.isTreasury && nodeOwnAccountKeys().has(publicKey)) delete profile.isTreasury;
+    return profile;
 }
 
 export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
-    return getAllProfilesEngine(db, requesterPubkey);
+    const profiles = getAllProfilesEngine(db, requesterPubkey);
+    const own = nodeOwnAccountKeys();
+    for (const profile of profiles) if (profile.isTreasury && own.has(profile.publicKey)) delete profile.isTreasury;
+    return profiles;
 }
 
 // Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member
@@ -2330,6 +2351,12 @@ export interface ViewerTrustProfile {
         avatarUrl: string | null;
     } | null;
     risk: TradeRiskAssessment;
+    /**
+     * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
+     * and replaces itself with the enterprise page on it (MemberProfile.isTreasury, slice E0). A member's has no such key,
+     * nor has the node's own BeanPool or Daily Pulse account (nodeOwnAccountKeys).
+     */
+    isTreasury?: true;
 }
 
 /**
@@ -2497,6 +2524,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         vouchedInBy,
         elderVouch,
         risk,
+        ...(member.isTreasury && !nodeOwnAccountKeys().has(targetPubkey) ? { isTreasury: true as const } : {}),
     };
 }
 
@@ -5419,7 +5447,12 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
     if (!getActingMember(voucherPubkey)) throw new Error('Voucher not found');
     // can_vouch outlasts a prune, and a pending re-key leaves it on the old key: neither hands out a credit floor.
     assertNodeMember(voucherPubkey);
-    if (!getMember(targetPubkey)) throw new Error('Member not found');
+    const target = getMember(targetPubkey);
+    if (!target) throw new Error('Member not found');
+    // An enterprise or a project is kept by its keepers, not vouched for (DESIGN-shops-round3 §0 row 11): its credit line
+    // is its keepers' pledges, so a vouch's floor does nothing for it, and the profile it opened showed one as trust. A
+    // vouch an enterprise already has is left as it is.
+    if (target.isTreasury) throw new Error('An enterprise is kept, not vouched for.');
     if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
     const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
     const vouchCredit = vouchCreditForLevel(lvl);
@@ -5438,7 +5471,8 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
  * the new floor of 0) — they must return to >= 0 first. Idempotent when not currently vouched.
  */
 export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: true } {
-    if (!getMember(targetPubkey)) throw new Error('Member not found');
+    const target = getMember(targetPubkey);
+    if (!target) throw new Error('Member not found');
     const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
     const vouchedBy = row?.elder_vouched_by || null;
     if (!vouchedBy) return { ok: true };
@@ -5447,7 +5481,10 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     // Nor a pruned voucher, nor the old key of one being re-keyed (whose node role, if any, waits on the old key
     // until the re-key completes). An admin key with no member row at all, the legacy single-admin setting, is as before.
     if (!isAdmin || getMember(actorPubkey)) assertNodeMember(actorPubkey);
-    if (!isAdmin && getBalance(targetPubkey).balance < 0) {
+    // An enterprise's or a project's line is its keepers' pledges, never the vouch (the treasury branch of
+    // getMemberTrustProfile returns before it reads vouch_credit): withdrawing one leaves its floor where it was, so its
+    // voucher is not held until it is back at 0 (an enterprise trades below 0 as a matter of course).
+    if (!isAdmin && !target.isTreasury && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
     }
     // profile_updated_at too, for the directory's delta (vouchMember).
@@ -5492,6 +5529,8 @@ export function createPost(
         lendMaxDays?: unknown;
         lendTerms?: unknown;
         replacementValue?: unknown;
+        /** The shop to put it in (engine/shops.ts assertShopForPost). */
+        shopId?: unknown;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
     }
@@ -8275,6 +8314,10 @@ export function createTreasury(
         db.prepare(`INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
                     VALUES (?, 'enterprise_thread', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(pubKeyHex, trimmed, opts.leadKeeperPubkey || pubKeyHex);
+        // Its shop, made with it (DESIGN-shops-and-tools-fable.md §9.1): named by the enterprise, so a rename carries over
+        // (engine/shops.ts). For one a member starts, who leads it; not for one the node makes for itself (a federation
+        // link, the Pulse's own), which sells nothing. One the admin makes gets its shop when a keeper opens it.
+        if (opts.leadKeeperPubkey) openShop(pubKeyHex);
     })();
 
     if (incomingBytes > 0 && opts.leadKeeperPubkey) {
@@ -8497,6 +8540,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropBlocksOf(publicKey);
         // Their tools' private copies, tombstoned: nobody can read them now (engine/tool-state.ts). Their phone keeps its own.
         dropToolStateOf(publicKey);
+        // And their shop, with a tombstone; their listings name it no more (engine/shops.ts).
+        dropShopOf(publicKey);
         // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
         dropWithheldOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
@@ -8676,6 +8721,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropBlocksOf(publicKey);
         // And their tools' private copies, a tombstone each (engine/tool-state.ts).
         dropToolStateOf(publicKey);
+        // And their shop, with a tombstone; their listings name it no more (engine/shops.ts).
+        dropShopOf(publicKey);
         // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
         dropWithheldOf(publicKey);
         // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.

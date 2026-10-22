@@ -36,6 +36,9 @@
  *      carries a dressing, a new shop, a close's tombstone and the listings it cleared; a member's close and new shop in
  *      one delta leave the standby the new shop, not none; the standby answers each shop read as the main server does,
  *      and an enterprise's shop's name follows the enterprise's row
+ *  12. Home's "Your shop and tools" (slice S4′, built by the node): asked by its id, the reader's own shop (its name or
+ *      none, its owner's name, kind, counts as their own read says, closed for now and back on), or none in it, never left
+ *      out; nothing of another member's; not asked, not built; with no `cards=`, built when the member's layout holds it
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
  *
@@ -689,6 +692,53 @@ async function main(): Promise<void> {
     setNodeRole('primary');
     assert(importError === '' && sRenamed.status === 200 && sRenamed.body?.name === 'Fay Seed Circle',
         `an enterprise's shop's name follows the enterprise's row on the standby (${importError || show(sRenamed)})`);
+
+    // ── 12. Home's "Your shop and tools" ────────────────────────────────────────────────────────
+    console.log('\n── 12. Home\'s "Your shop and tools": the reader\'s own shop, built by the node ──');
+    const homeModule: any = await import('./routes/home-answer.js');
+    const builds = () => homeModule.homeCardBuilds?.shop ?? 0;
+    const ida = member('IdaSentinel');
+    const jo = member('JoSentinel');
+    const home = (who: Id, cards: string | null) => call('GET', who, `/api/home${cards === null ? '' : `?cards=${cards}`}`);
+    const idaHome = await home(ida, 'needs,shop,community');
+    assert(idaHome.status === 200 && same(idaHome.body?.cards?.shop, { shop: null }),
+        `asked by its id, a member with no shop gets the card with none in it, never left out (${show(idaHome)})`);
+    const joShop: string = (await call('PUT', jo, MINE, { name: "Jo's Bike Fixes", kind: 'repairs' })).body?.shop?.id;
+    await offerId(jo, 'Puncture fix', { shopId: joShop });
+    await offerId(jo, 'Pump to borrow', { shopId: joShop, lendable: true, lendMaxDays: 7 });
+    await offerId(jo, 'Old saddle'); // not in the shop
+    const joRead = await call('GET', jo, MINE);
+    const joHome = await home(jo, 'shop');
+    const card = joHome.body?.cards?.shop?.shop;
+    assert(joHome.status === 200 && card?.id === joShop && card.name === "Jo's Bike Fixes" && card.ownerName === 'JoSentinel' && card.kind === 'repairs'
+        && card.paused === false && card.backOn === null && same(card.counts, joRead.body?.shop?.counts) && card.counts?.things === 2 && card.counts?.toBorrow === 1,
+        `a member's own shop: its name, kind and counts as their own read of it says (${show(joHome)})`);
+    const unnamed: string = (await call('PUT', ida, MINE, {})).body?.shop?.id;
+    const idaOpened = (await home(ida, 'shop')).body?.cards?.shop?.shop;
+    assert(idaOpened?.id === unnamed && idaOpened.name === null && idaOpened.ownerName === 'IdaSentinel',
+        'a shop with no name of its own: none, and its owner\'s name for the apps to say "<name>\'s shop"');
+    const joBack = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
+    await call('PUT', jo, MINE, { paused: true, backOn: joBack });
+    const joPaused = (await home(jo, 'shop')).body?.cards?.shop?.shop;
+    assert(joPaused?.paused === true && joPaused.backOn === joBack && joPaused.counts?.things === 0,
+        `closed for now: said, with its back-on day, and nothing on the board (${JSON.stringify(joPaused)})`);
+    await call('PUT', jo, MINE, { paused: false });
+    const idaSeesOwn = (await home(ida, 'shop')).body?.cards?.shop?.shop;
+    assert(idaSeesOwn?.id === unnamed && !JSON.stringify((await home(ida, 'shop')).body).includes(jo.pk) && !JSON.stringify((await home(ida, 'shop')).body).includes("Jo's Bike"),
+        "each member's card is their own shop: nothing of another member's is in it");
+    const longName = await call('PUT', jo, MINE, { name: 'W'.repeat(60) });
+    const clipped = (await home(jo, 'shop')).body?.cards?.shop?.shop;
+    assert(longName.status === 200 && clipped?.name === 'W'.repeat(60), 'a name of the longest a shop keeps (60) comes through whole, never cut');
+    const beforeSkip = builds();
+    await home(jo, 'needs,community');
+    assert(builds() === beforeSkip, `not asked, not built (${beforeSkip} → ${builds()})`);
+    db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'home.layout', ?)`)
+        .run(jo.pk, JSON.stringify({ v: 2, cards: [{ id: 'shop', type: 'shop' }], dismissed: {}, updatedAt: new Date().toISOString() }));
+    const fromLayout = await home(jo, null);
+    assert(fromLayout.status === 200 && fromLayout.body?.cards?.shop?.shop?.id === joShop && builds() === beforeSkip + 1,
+        `with no cards=, built when the member's own layout holds it (${show(fromLayout)})`);
+    const joNoCard = await home(ida, null);
+    assert(joNoCard.status === 200 && joNoCard.body?.cards?.shop === undefined, 'and not when it doesn\'t');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) process.exit(1);

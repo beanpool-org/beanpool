@@ -89,7 +89,8 @@ import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '..
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
-import { avatarUrlOf, postRulesFor } from '@beanpool/core';
+import { avatarUrlOf, postRulesFor, wordsFor } from '@beanpool/core';
+import { isPausedMember } from '../engine/invites.js';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { communityNameSaved } from '../services/directory-publisher.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
@@ -119,6 +120,8 @@ function joiningAtOpenDoor(ctx: any): string | null {
  */
 const OWNER_ONLY: readonly AdminRole[] = ['owner'];
 const OWNER_OR_ADMIN: readonly AdminRole[] = ['owner', 'admin'];
+// The words layer in English: a node never writes in the device language (core words.test N11).
+const { t: tr } = wordsFor('en');
 
 export function createCommunityRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -1158,7 +1161,10 @@ router.post('/api/invite/generate', async (ctx) => {
     try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!invite) {
         ctx.status = 403;
-        ctx.body = { error: 'Only registered members can generate invites' };
+        // A member whose account is paused brings nobody in while it lasts (removal by vote S1), and is told so.
+        ctx.body = isPausedMember(publicKey)
+            ? { error: tr('Your account here is paused for now, so you can’t invite anyone.'), code: 'paused' }
+            : { error: 'Only registered members can generate invites' };
         return;
     }
     ctx.body = { success: true, invite };

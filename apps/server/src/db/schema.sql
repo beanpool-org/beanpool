@@ -103,8 +103,8 @@ CREATE TABLE IF NOT EXISTS members (
     -- cleared: the row stays 'pruned', and nothing brings such an account back (no reinstate vote, no admin path;
     -- state-engine.ts isDeletedByOwner). In members_touch_updated_at's list, so delta sync carries it.
     deleted_by_owner_at TEXT,
-    -- When what decides whether the board shows this member's listings last changed: holiday (setHolidayMode), or an
-    -- enterprise's `paused` or off-board `status` (members_touch_board_standing); and, while an enterprise is off the
+    -- When what decides whether the board shows this member's listings last changed: holiday (setHolidayMode), an
+    -- enterprise's `paused` or an off-board `status`, an account's pause among them (members_touch_board_standing); and, while an enterprise is off the
     -- board, a keeper bound or unbound, who reads its listings as they are (engine posts.ts keepersChanged, in the
     -- engine and not a trigger, so a standby's import never stamps it). A phone's Market delta carries a
     -- local author's listings by it (engine posts.ts getPosts), so it tells a delta reader little the board doesn't:
@@ -129,11 +129,13 @@ CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 -- the index alone.
 CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(board_standing_changed_at, public_key);
 -- A member's set on a node that syncs by area (engine posts.ts getNearbySet), which reads no author's row. The authors
--- the board leaves off for a paused or finished enterprise (ENTERPRISE_ON_BOARD_BY_KEY_SQL: the same expression, so the
--- planner takes this index), and the standing of the authors whose standing ever moved, by key (the set's ETag), each
--- from the few rows they hold. Joined per listing instead, the busy town's set took 18 ms at 100k posts (2026-10-10).
+-- the board leaves off for a paused or finished enterprise or a paused account (ENTERPRISE_ON_BOARD_BY_KEY_SQL: the same
+-- expression, so the planner takes this index), and the standing of the authors whose standing ever moved, by key (the
+-- set's ETag), each from the few rows they hold. Joined per listing instead, the busy town's set took 18 ms at 100k
+-- posts (2026-10-10). A node from before 'disabled' was in it has the older one replaced at boot (db.ts
+-- replaceOffBoardShapes).
 CREATE INDEX IF NOT EXISTS idx_members_off_board ON members(public_key)
-    WHERE NOT ((paused IS NULL OR paused = 0) AND (status IS NULL OR status NOT IN ('winding_up', 'completed')));
+    WHERE NOT ((paused IS NULL OR paused = 0) AND (status IS NULL OR status NOT IN ('winding_up', 'completed', 'disabled')));
 CREATE INDEX IF NOT EXISTS idx_members_standing_by_key ON members(public_key, board_standing_changed_at)
     WHERE board_standing_changed_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
@@ -1342,19 +1344,20 @@ BEGIN
 END;
 
 -- members.board_standing_changed_at, for the two columns the board reads off an author's row (engine posts.ts
--- ENTERPRISE_ON_BOARD_SQL): moved when `paused` goes on or off, or `status` goes into, out of or between 'winding_up'
--- and 'completed' (a pause, a resume and the automatic pause; a wind-up, its cancel and its finalise, where the keepers'
--- own view of the listings ends; a re-key that ends one), whichever writer does it. Nothing else a status says
--- (suspended, pruned, funded…) changes what the board shows. The WHEN guard skips a write that sets the column itself:
--- a standby taking its main server's. Holiday isn't on this row: setHolidayMode stamps it. Both columns are in
--- members_touch_updated_at's list, so updated_at moves in the same statement.
+-- ENTERPRISE_ON_BOARD_SQL): moved when `paused` goes on or off, or `status` goes into, out of or between 'winding_up',
+-- 'completed' and 'disabled' (a pause, a resume and the automatic pause; a wind-up, its cancel and its finalise, where the
+-- keepers' own view of the listings ends; a re-key that ends one; an account paused and its pause ending, removal by vote
+-- S1), whichever writer does it. Nothing else a status says (suspended, pruned, funded…) changes what the board shows.
+-- The WHEN guard skips a write that sets the column itself: a standby taking its main server's. Holiday isn't on this
+-- row: setHolidayMode stamps it. Both columns are in members_touch_updated_at's list, so updated_at moves in the same
+-- statement. A node from before 'disabled' was in it has the older one replaced at boot (db.ts replaceOffBoardShapes).
 CREATE TRIGGER IF NOT EXISTS members_touch_board_standing
 AFTER UPDATE OF paused, status ON members
 FOR EACH ROW
 WHEN NEW.board_standing_changed_at IS OLD.board_standing_changed_at
     AND ((OLD.paused IS NULL OR OLD.paused = 0) IS NOT (NEW.paused IS NULL OR NEW.paused = 0)
-        OR (CASE WHEN OLD.status IN ('winding_up', 'completed') THEN OLD.status END)
-            IS NOT (CASE WHEN NEW.status IN ('winding_up', 'completed') THEN NEW.status END))
+        OR (CASE WHEN OLD.status IN ('winding_up', 'completed', 'disabled') THEN OLD.status END)
+            IS NOT (CASE WHEN NEW.status IN ('winding_up', 'completed', 'disabled') THEN NEW.status END))
 BEGIN
     UPDATE members SET board_standing_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
 END;

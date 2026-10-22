@@ -818,13 +818,22 @@ function hiddenAsRemoved(post: MarketplacePost): MarketplacePost {
 }
 
 /**
- * The board leaves out every listing of an author on holiday, and of an enterprise that is paused, winding up or wound
- * up (the list read in getPostsRankedBy, with `m` the author's row). A sync read keeps those rows, so that a phone
- * holding one can take it off: each goes as paused (see the output loop), which every app leaves off its Market and map.
- * A change of either moves the author's members.board_standing_changed_at (apps/server schema.sql), which the delta reads.
+ * The board leaves out every listing of an author on holiday, of an enterprise that is paused, winding up or wound up,
+ * and of a member whose account is paused (the list read in getPostsRankedBy, with `m` the author's row). A sync read
+ * keeps those rows, so that a phone holding one can take it off: each goes as paused (see the output loop), which every
+ * app leaves off its Market and map. A change of any of them moves the author's members.board_standing_changed_at
+ * (apps/server schema.sql), which the delta reads.
  */
 export const ON_HOLIDAY_SQL = "SELECT public_key FROM member_preferences WHERE pref_key = 'holiday_mode' AND pref_value = 'true'";
-export const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed'))";
+/**
+ * The half of the board's rule read off the author's own row, named for the enterprise it was first written for: an
+ * enterprise's pause and wind-up, and an account that is 'disabled' (an admin's or a report's pause, a suspension the
+ * community voted, a removal's grace window: removal by vote S1, scratch/fable-design/DESIGN-removal-by-vote-fable.md
+ * §3.1, G2). A paused member can't answer a request on a listing, so it isn't offered; nothing is written to the
+ * listings, so they are back as they were the moment the account is active again, and a listing the member paused
+ * themselves stays paused. idx_members_off_board (schema.sql) holds the same expression.
+ */
+export const ENTERPRISE_ON_BOARD_SQL = "(m.paused IS NULL OR m.paused = 0) AND (m.status IS NULL OR m.status NOT IN ('winding_up', 'completed', 'disabled'))";
 /**
  * ENTERPRISE_ON_BOARD_SQL as a test of the listing's author key alone, for a pass that reads many listings and no author
  * (getNearbySet). The authors it leaves off the board are the few rows of idx_members_off_board (schema.sql, the same

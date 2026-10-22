@@ -383,7 +383,8 @@ export function completeRekey(
         throw new Error('Old member record not found');
     }
 
-    // A suspension the code didn't make (a report's, before or while it waited) stays on the new key. The key move
+    // A suspension the code didn't make (a report's from before it was a pause, before or while it waited) stays on the
+    // new key. A pause, 'disabled', moves with the key as it is (engine/key-move.ts). The key move
     // makes the new key 'active' unless 'disabled', which is right only for the code's own 'suspended'.
     const keepSuspended = member.status === 'suspended' && !suspendedOnlyByRekeyCode(cleanOld);
     const nowIso = new Date().toISOString();
@@ -523,9 +524,9 @@ function reportMaySuspend(publicKey: string): boolean {
 /**
  * Whether a member's 'suspended' is a re-key code's alone: their key is held for the re-key (a code waiting, or expired
  * with the hold left), and the status the code recorded from before it isn't a report's 'suspended' (for a code made
- * before that was kept, no report may have suspended them, reportMaySuspend). An admin's emergency suspension may be made
- * over it (decisions-engine.ts adminEmergencySuspend): its 'disabled' replaces the code's 'suspended', and a cancel
- * leaves it alone.
+ * before that was kept, no report may have suspended them, reportMaySuspend). A pause may be made over it, an admin's or
+ * a report's (decisions-engine.ts mayBePaused): its 'disabled' replaces the code's 'suspended', and a cancel leaves it
+ * alone.
  */
 export function suspendedOnlyByRekeyCode(publicKey: string): boolean {
     const cleanPub = publicKey.trim().toLowerCase();
@@ -553,8 +554,9 @@ function refusal(status: number, message: string): Error {
  * Who may make the code may cancel it (assertMayRekey: an owner for an owner's or admin's). A code made before the
  * prior status was kept puts the member back to 'active' only if the code is what suspended them ('suspended' with the
  * key held for the re-key) and no report on them may have (reportMaySuspend), and the answer says so. A member a report
- * suspended, before or while the code waited, stays suspended (the answer says why), and Lift suspension on their page
- * lifts it (decisions-engine.ts adminLiftSuspension). The sessions issue ended stay ended; the key signs in again.
+ * suspended before its suspension was a pause, before or while the code waited, stays suspended (the answer says why),
+ * and Lift suspension on their page lifts it (decisions-engine.ts adminLiftSuspension); a pause, an admin's or a
+ * report's, is 'disabled', which the cancel leaves as it is. The sessions issue ended stay ended; the key signs in again.
  *
  * One transaction, and each write must touch exactly the rows it expects, or nothing is changed. A used ('completed')
  * or expired code is refused: there is nothing waiting to cancel.
@@ -604,11 +606,11 @@ export function cancelRekeyCode(
         // applyTombstoneLocally), and a server that takes over lets the key in, as this one now does.
         writeTombstone('invalidated_keys', cleanOld);
         // issueRekeyCode wrote 'suspended' unless the member was 'disabled'; only that 'suspended' is put back. A report's
-        // suspension writes the same 'suspended' (state-engine.ts actionReport), and records it on a waiting code's
-        // prior_status, so the recorded status is the answer: a report's action that suspended nobody changes nothing.
-        // Any other suspension (an admin's, a Decision's, an offboarding) writes another status, which is left alone. A
-        // code made before prior_status was kept has only the reports to go on (reportMaySuspend), and on doubt the
-        // member stays suspended, which Lift suspension lifts.
+        // suspension wrote the same 'suspended' before it was a pause, and recorded it on a waiting code's prior_status,
+        // so the recorded status is the answer: a report's action that suspended nobody changes nothing. Any other
+        // suspension (a pause, an admin's or a report's since, a Decision's, an offboarding) writes another status, which
+        // is left alone. A code made before prior_status was kept has only the reports to go on (reportMaySuspend), and
+        // on doubt the member stays suspended, which Lift suspension lifts.
         const now = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanOld) as { status: string } | undefined)?.status;
         let target: string | null = req.prior_status ?? null;
         if (now === 'suspended' && target === 'suspended') {

@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, wordsFor, type PushNoticeKind } from '@beanpool/core';
 import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
@@ -38,6 +38,9 @@ import {
     overlayOf, setOverlayReaction, setOverlayEdit, clearOverlayEdit, dropOverlaysOn, withOwnReaction, withOwnOverlay,
 } from './withheld-lines.js';
 
+// The words layer in English: a node never writes in the device language (core words.test N11).
+const { t: tr } = wordsFor('en');
+
 type BroadcastFn = (event: any, recipients?: string[]) => void;
 type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
 type RegisterVisitorFn = (pubkey: string) => void;
@@ -72,11 +75,17 @@ export class MessagingError extends Error {
     }
 }
 
+/**
+ * The one who writes a direct conversation's line, edits or deletes their own, or opens one: a member here, not closed.
+ * A member whose account is paused ('disabled': decisions-engine.ts pauseMember, or a suspension the community voted)
+ * answers in the conversations they are already in and edits and deletes their own lines, as a report's suspension let
+ * them before it was a pause (removal by vote S1, DESIGN-removal-by-vote-fable.md §3.1); they open no new one
+ * (assertMayOpenConversation). A group's, an event's and an enterprise's chat each refuse them under their own rule.
+ */
 function assertMemberActive(publicKey: string): void {
     if (isSyntheticAccount(publicKey) || publicKey.toLowerCase() === 'system') return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new MessagingError('Member not found');
-    if (member.status === 'disabled') throw new MessagingError('Account is disabled');
     if (member.status === 'pruned') throw new MessagingError('Account has been pruned');
     // The old key of a member being re-keyed (a lost or stolen phone): its row is 'suspended', which the lines above
     // let write, so it would go on messaging people as them.
@@ -243,14 +252,19 @@ function findDirectConversationRow(a: string, b: string): any {
 }
 
 /**
- * Who may open a conversation over the route: a visitor's row (isLiveVisitor) opens none. It may ask again for a
- * direct conversation it is already in (an app asks before it writes), and is refused a new one in the words a key with
- * no row is refused in, so it makes no row for anyone. Federation's relay opens one for a member of another community
- * by calling createConversation itself.
+ * Who may open a conversation over the route: a visitor's row (isLiveVisitor) opens none, nor does a member whose
+ * account is paused ('disabled', assertMemberActive). Either may ask again for a direct conversation it is already in
+ * (an app asks before it writes). A visitor is refused a new one in the words a key with no row is refused in, so it
+ * makes no row for anyone; a paused member is told why. Federation's relay opens one for a member of another community,
+ * and the node one for a deal, by calling createConversation itself.
  */
 export function assertMayOpenConversation(createdBy: string, participants: string[]): void {
-    if (!isLiveVisitor(db, createdBy)) return;
-    if (!findDirectConversationRow(participants[0], participants[1])) throw new MessagingError(VISITOR_SEND_REFUSAL);
+    const visitor = isLiveVisitor(db, createdBy);
+    const paused = !visitor && (db.prepare('SELECT status FROM members WHERE public_key = ?').get(createdBy) as { status: string | null } | undefined)?.status === 'disabled';
+    if (!visitor && !paused) return;
+    if (findDirectConversationRow(participants[0], participants[1])) return;
+    if (visitor) throw new MessagingError(VISITOR_SEND_REFUSAL);
+    throw new MessagingError(tr('Your account here is paused for now, so you can’t start a new conversation. You can still answer the ones you’re in.'), 403, 'paused');
 }
 
 export function createConversation(

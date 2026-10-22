@@ -41,6 +41,7 @@
 import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
+import type { Member } from '@beanpool/engine';
 import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
 import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone, isWholeCents, WHOLE_CENTS_ERROR } from './db/db.js';
@@ -1807,6 +1808,9 @@ export function isAdminActor(actor: string | null | undefined): boolean {
 
 export const EMERGENCY_SUSPENSION_DAYS = 7;
 
+/** An enterprise's account is not paused (pauseMember): its keepers pause it, or an admin does (state-engine.ts pauseEnterprise). */
+export const ENTERPRISE_NOT_PAUSED = 'An enterprise account cannot be suspended this way';
+
 /**
  * The owner or admin role held aside for any of these Decisions, if one is — what lifting them would restore.
  */
@@ -1833,7 +1837,7 @@ export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 
 
 /**
  * Whether this admin action on this member (suspend, lift, prune, prune-branch: its root), Decision (halt,
- * accelerate) or report (report-suspend: actioning it with suspendUser, which takes the subject's role) is one only an
+ * accelerate) or report (report-suspend: actioning it with suspendUser, whose pause holds the subject's role aside) is one only an
  * owner may make: the conditions on which the engine refuses it to an admin
  * (adminEmergencySuspend, adminLiftSuspension, adminHaltDecision, adminAccelerateDecision, state-engine assertMayPrune
  * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard, member-wizards assertMayRekey for rekey),
@@ -1987,21 +1991,80 @@ export function suspendReasonProblem(reason: unknown): string | null {
 }
 
 /**
- * An admin suspends a member at once (answer L). In the same transaction the node opens a 7-day
- * "Keep this suspension?" Decision — member-touching rules: one member one vote, the usual quorum, 60%.
- * If it does not pass, or misses quorum, the suspension lifts by itself on the tick.
- *
- * The reason is shown to members on the Decision card, so they can judge it.
- *
- * With formal Decisions off (the global node) the moderators decide, not a vote: the suspension still starts at
- * once and lasts 7 days, and nothing can keep it longer. The same row records it (its end, the reason, the node
- * role held aside), titled as a suspension rather than a question, and nobody can vote on it; it is not announced
- * as a new Decision. At its end the tick lifts it (executeDecision); an admin can lift it sooner as anywhere. A
- * moderator who wants the member kept out longer suspends them again, or removes the account. Its params carry
- * `noVote`, so it stays so if the switch goes back on before it ends (madeWithoutVote).
- *
- * A member whom only a re-key code holds suspended is not suspended by anyone (member-wizards.ts
- * suspendedOnlyByRekeyCode): they can be suspended, and its 'disabled' outlasts the code's cancel or completion.
+ * Whether this member may be paused now (pauseMember): an account that is active, or one only a re-key code holds
+ * 'suspended' (member-wizards.ts suspendedOnlyByRekeyCode: suspended by nobody, and the pause's 'disabled' outlasts the
+ * code's cancel or completion). Not one already paused or held ('disabled'), nor closed, nor a report's suspension from
+ * before the pause.
+ */
+export function mayBePaused(member: { publicKey: string; status?: string | null }): boolean {
+    return member.status === 'active' || (member.status === 'suspended' && suspendedOnlyByRekeyCode(member.publicKey));
+}
+
+/**
+ * Pause a member (removal by vote, slice S1: scratch/fable-design/DESIGN-removal-by-vote-fable.md §3): the one act an
+ * admin's emergency suspension and a report actioned with a suspension both make (adminEmergencySuspend, state-engine.ts
+ * actionReport). Call inside the caller's transaction, after its own guards (who may pause whom, mayBePaused, the reason).
+ * In it:
+ *  - the member's node role is held aside under the record's id (suspended_node_roles), so a pause that ends gives it back
+ *    exactly (liftEmergencySuspensionRow, adminLiftSuspension) and one the community keeps drops it (executeDecision);
+ *  - the account is 'disabled', the one status of a pause: it reads what a non-member reads (@beanpool/engine
+ *    readsAsMember), does only what a suspension leaves it (close its open deals, answer its messages, take its own
+ *    things down, delete itself), brings nobody in (mayBringSomeoneIn), and its listings are off the board (engine
+ *    posts.ts ENTERPRISE_ON_BOARD_SQL) until the account is active again, with nothing written to them;
+ *  - the record everyone sees opens, with the reason: a 7-day "Keep …'s suspension?" Decision (member-touching rules: one
+ *    member one vote, the usual quorum, 60%), which lifts the pause on the tick if it doesn't pass or misses quorum. With
+ *    formal Decisions off (the global node) the moderators decide, not a vote: the same row records it, titled as a
+ *    suspension rather than a question, nobody can vote on it, and the tick lifts it when the 7 days end
+ *    (executeDecision); its params carry `noVote`, so it stays so if the switch goes back on before it ends
+ *    (madeWithoutVote).
+ * Moves no Beans: nothing here touches an account's balance, so it runs in the caller's plain transaction. Returns the
+ * record; announcePause tells everyone once the caller's transaction has committed.
+ */
+export function pauseMember(subject: Member, actor: string | null, reason: string, by: RoleChangeBy): Decision {
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const opensAt = now.toISOString();
+    const closesAt = new Date(now.getTime() + EMERGENCY_SUSPENSION_DAYS * DAY_MS).toISOString();
+    const memberName = subject.callsign || subject.publicKey.slice(0, 8);
+    const votes = decisionsOn();
+    const params = { memberName, suspendedAt: opensAt, ...(actor ? { suspendedBy: actor } : {}), reason, ...(votes ? {} : { noVote: true }) };
+    const title = votes ? `Keep ${memberName}'s suspension?` : `${memberName} is suspended until ${closesAt.slice(0, 10)}`;
+    const description = votes
+        ? `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Keep the suspension? Reason given: ${reason}`
+        : `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Community votes are switched off on this node, so `
+            + `the suspension lifts by itself on ${closesAt.slice(0, 10)}, or sooner if a moderator lifts it. Reason given: ${reason}`;
+    // Hold the member's node role aside before the pause deletes it, so a pause the community does not keep gives it
+    // back exactly.
+    db.prepare(`
+        INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
+        SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
+        FROM node_roles WHERE member_pubkey = ?
+    `).run(id, subject.publicKey);
+    setUserStatusRow(subject.publicKey, 'disabled', by);
+    db.prepare(`
+        INSERT INTO decisions (
+            id, author_pubkey, title, description, touches, effect, subject, params,
+            franchise, status, opens_at, closes_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'member', 'keep_suspension', ?, ?, '1m1v', 'open', ?, ?, ?, ?)
+    `).run(id, SYSTEM_AUTHOR, title, description, subject.publicKey, JSON.stringify(params), opensAt, closesAt, opensAt, opensAt);
+    return getDecision(id)!;
+}
+
+/**
+ * A pause, told once its transaction has committed (a broadcast can't be rolled back): the member's standing changed, so
+ * their open sockets are asked again on it and stop getting the member feed (state-engine.ts deliverBroadcast), and a
+ * vote is announced. Their listings' doorbell went with the status (state-engine.ts setUserStatusRow).
+ */
+export function announcePause(decision: Decision): void {
+    broadcast({ type: 'profile_updated', publicKey: decision.subject });
+    // Only a vote is announced: with formal Decisions off there is nothing for members to open or vote on.
+    if (!madeWithoutVote(decision)) broadcast({ type: 'decision_created', decision: publicDecision(decision) });
+}
+
+/**
+ * An admin pauses a member at once (answer L; pauseMember). The reason is shown to members on the record, so they can
+ * judge it. A moderator who wants the member kept out longer than a vote that lapses pauses them again, or removes the
+ * account.
  */
 export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
     assertPlainTablesWritable();
@@ -2013,8 +2076,8 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     if (!subjectPubkey || subjectPubkey === SYSTEM_AUTHOR) return { success: false, status: 400, error: 'Member not found' };
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
-    if (member.isTreasury) return { success: false, status: 400, error: 'An enterprise account cannot be suspended this way' };
-    if (member.status !== 'active' && !(member.status === 'suspended' && suspendedOnlyByRekeyCode(subjectPubkey))) {
+    if (member.isTreasury) return { success: false, status: 400, error: ENTERPRISE_NOT_PAUSED };
+    if (!mayBePaused(member)) {
         return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
     }
     if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: SOLE_OWNER_SUSPEND_REFUSAL };
@@ -2027,51 +2090,11 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
         return { success: false, status: 403, error: 'Only an owner can suspend an owner' };
     }
 
-    const id = crypto.randomUUID();
-    const now = new Date();
-    const opensAt = now.toISOString();
-    const closesAt = new Date(now.getTime() + EMERGENCY_SUSPENSION_DAYS * DAY_MS).toISOString();
-    const memberName = member.callsign || subjectPubkey.slice(0, 8);
-    const votes = decisionsOn();
-    const params = { memberName, suspendedAt: opensAt, suspendedBy: adminActor, reason: cleanReason, ...(votes ? {} : { noVote: true }) };
-    const title = votes ? `Keep ${memberName}'s suspension?` : `${memberName} is suspended until ${closesAt.slice(0, 10)}`;
-    const description = votes
-        ? `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Keep the suspension? Reason given: ${cleanReason}`
-        : `An admin suspended ${memberName} on ${opensAt.slice(0, 10)}. Community votes are switched off on this node, so `
-            + `the suspension lifts by itself on ${closesAt.slice(0, 10)}, or sooner if a moderator lifts it. Reason given: ${cleanReason}`;
-
+    let decision!: Decision;
     db.transaction(() => {
-        // Hold the member's node role aside before the suspension deletes it, so a suspension the
-        // community does not keep gives it back exactly.
-        db.prepare(`
-            INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
-            SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
-            FROM node_roles WHERE member_pubkey = ?
-        `).run(id, subjectPubkey);
-        setUserStatusRow(subjectPubkey, 'disabled', { actor: adminActor, how: 'suspended' });
-        db.prepare(`
-            INSERT INTO decisions (
-                id, author_pubkey, title, description, touches, effect, subject, params,
-                franchise, status, opens_at, closes_at, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'member', 'keep_suspension', ?, ?, '1m1v', 'open', ?, ?, ?, ?)
-        `).run(
-            id,
-            SYSTEM_AUTHOR,
-            title,
-            description,
-            subjectPubkey,
-            JSON.stringify(params),
-            opensAt,
-            closesAt,
-            opensAt,
-            opensAt,
-        );
+        decision = pauseMember(member, adminActor, cleanReason, { actor: adminActor, how: 'suspended' });
     })();
-
-    const decision = getDecision(id)!;
-    broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
-    // Only a vote is announced: with formal Decisions off there is nothing for members to open or vote on.
-    if (votes) broadcast({ type: 'decision_created', decision: publicDecision(decision) });
+    announcePause(decision);
     return { success: true, decision };
 }
 
@@ -2079,10 +2102,11 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
  * An admin lifts a suspension by hand. An open "Keep this suspension?" vote about it has nothing left to
  * decide, so it closes as halted, with the lift recorded as the reason.
  *
- * It lifts a report's 'suspended' as well as an admin's or a Decision's 'disabled': a cancelled re-key code leaves a
- * member a report may have suspended 'suspended', and tells the admin to lift it here (member-wizards.ts
- * cancelRekeyCode). Not while a re-key code holds their key: its cancel decides their status, and a lift under it would
- * be undone by the code (the code is cancelled first).
+ * It lifts a pause, an admin's or a report's (pauseMember), and a Decision's 'disabled', each with its listings back on
+ * the board and its invites (the status decides both), and a report's 'suspended' from before its suspension was a pause:
+ * a cancelled re-key code leaves a member a report may have suspended 'suspended', and tells the admin to lift it here
+ * (member-wizards.ts cancelRekeyCode). Not that 'suspended' while a re-key code holds their key: its cancel decides their
+ * status, and a lift under it would be undone by the code (the code is cancelled first).
  */
 export function adminLiftSuspension(subjectPubkey: string, adminActor: string): { success: boolean; error?: string; status?: number } {
     assertPlainTablesWritable();

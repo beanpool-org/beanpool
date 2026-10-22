@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY, wordsFor } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
@@ -51,7 +51,7 @@ import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-cha
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
-import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason } from './engine/moderation-notices.js';
+import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyReportDismissed, normaliseRemovalReason, REMOVAL_REASON_LABELS } from './engine/moderation-notices.js';
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
@@ -145,6 +145,11 @@ import {
     adminEmergencySuspend,
     adminLiftSuspension,
     isAdminActor,
+    pauseMember,
+    announcePause,
+    mayBePaused,
+    suspendReasonProblem,
+    ENTERPRISE_NOT_PAUSED,
     type Decision,
     type DecisionVote,
     type DecisionTally,
@@ -7491,9 +7496,10 @@ function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id
 }
 
 /**
- * Whether actioning this report with suspendUser takes an owner's or admin's role away: actionReport deletes the
- * subject's node_roles row, and only an owner may take away an owner or admin role (engine/node-roles.ts), so actionReport
- * refuses it to anyone else. The route asks the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly).
+ * Whether actioning this report with suspendUser takes an owner's or admin's role away: its pause deletes the subject's
+ * node_roles row, holding it aside until the pause ends (decisions-engine.ts pauseMember), and only an owner may take away
+ * an owner or admin role (engine/node-roles.ts), so actionReport refuses it to anyone else. The route asks the phone's
+ * step-up on it (routes/admin.ts stepUpIfOwnerOnly).
  */
 export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
     return !!reportSuspensionTakesRole(reportId);
@@ -7508,12 +7514,34 @@ export function reportSuspensionTakesRole(reportId: string): 'owner' | 'admin' |
     return subject && !isClosedAccountKey(subject) ? heldPrivilegedRole(subject) : null;
 }
 
+// The words layer in English, for the sentences below written into what members read (a node never writes in the device
+// language: core words.test N11).
+const { t: tr } = wordsFor('en');
+
+/**
+ * The reason a report's pause gives on its record when the admin wrote none: that a report about the member was upheld,
+ * with the category the admin chose (REMOVAL_REASON_LABELS), and nothing the reporter wrote, nor who they are.
+ */
+function reportPauseReason(name: string, reasonCategory: string | null | undefined): string {
+    const category = normaliseRemovalReason(reasonCategory);
+    return category
+        ? tr('A report about {name} was upheld: {reason}.', { name, reason: REMOVAL_REASON_LABELS[category] })
+        : tr('A report about {name} was upheld.', { name });
+}
+
+/**
+ * Action a report: take its post or Pulse item down, and with `suspendUser` pause the member it is about. That pause is
+ * an admin's emergency suspension's (decisions-engine.ts pauseMember; removal by vote S1, scratch/fable-design/
+ * DESIGN-removal-by-vote-fable.md §2 row 4): 'disabled', the node role held aside, the record everyone sees opened, with
+ * `opts.reason` or reportPauseReason's, and its listings off the board until it ends. It ended with no vote and no end
+ * before (the design's G1), wrote 'suspended' (G3) and took an owner's or admin's role for good.
+ */
 export function actionReport(
     reportId: string,
     deletePost: boolean = false,
     suspendUser: boolean = false,
     removePulseItem: boolean = false,
-    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void; actor?: string | null },
+    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void; actor?: string | null; reason?: string | null },
 ): boolean {
     // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
     let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
@@ -7522,13 +7550,13 @@ export function actionReport(
     // not just the two direct removal routes; a shortfall only `console.warn` knows about is how the
     // rows-vs-ledger discrepancy stays invisible. Reported only once the removal has actually committed.
     const shortfalls: EscrowRefundShortfall[] = [];
-    // The member suspended, announced after the commit as an admin's suspension is (adminSetUserStatus): their standing
-    // changed, and their open sockets are asked again on it (deliverBroadcast), so they stop getting the member feed.
-    let suspended: string | null = null;
+    // The pause's record, announced after the commit as an admin's emergency suspension's is (announcePause): their
+    // standing changed, and their open sockets are asked again on it (deliverBroadcast), so they stop getting the member feed.
+    let paused: Decision | null = null;
     const ok = db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
-        // Suspending takes the subject's node role away (below), and only an owner may take away an owner's or admin's
+        // Pausing holds the subject's node role aside (pauseMember), and only an owner may take away an owner's or admin's
         // role (node-roles; adminEmergencySuspend refuses an owner target the same way). Refused, 403, before any write,
         // so the report stays as it was; actioning it without suspendUser is untouched. `actor` is the authenticated
         // admin actor (routes/admin.ts resolveAdminActor), a pubkey or 'owner:password'; none given counts as no owner.
@@ -7543,6 +7571,24 @@ export function actionReport(
         if (subjectToSuspend && !isClosedAccountKey(subjectToSuspend) && heldPrivilegedRole(subjectToSuspend) && !isOwnerLevelActor(opts?.actor)) {
             const err: any = new Error('Only an owner can suspend an owner or admin');
             err.status = 403;
+            throw err;
+        }
+        // The member to pause: a closed account (removed, or deleted by its owner) has nothing to pause, and 'disabled'
+        // would give its key back everything a paused member may still sign, a way back with no vote. Its report is still
+        // actioned. Nor an enterprise's account, as adminEmergencySuspend refuses one, before any write. One already
+        // paused, or held by a vote, is left as it is, and its report actioned: a second record would only race the first.
+        const toPause = subjectToSuspend && !isClosedAccountKey(subjectToSuspend) ? getMember(subjectToSuspend) : undefined;
+        if (toPause?.isTreasury) {
+            const err: any = new Error(ENTERPRISE_NOT_PAUSED);
+            err.status = 400;
+            throw err;
+        }
+        // The admin's own reason, when they give one, is held to an emergency suspension's rule (suspendReasonProblem).
+        const givenReason = opts?.reason == null ? null : String(typeof opts.reason === 'string' ? opts.reason : '').trim();
+        const reasonProblem = toPause && givenReason !== null ? suspendReasonProblem(givenReason) : null;
+        if (reasonProblem) {
+            const err: any = new Error(reasonProblem);
+            err.status = 400;
             throw err;
         }
         const wasOpen = report.status === 'pending' || report.status == null;
@@ -7566,38 +7612,22 @@ export function actionReport(
         }
 
         // The member the report is about: a post's author, read from the post, never the key the reporter wrote
-        // (reportSubjectOf). A closed account (removed, or deleted by its owner) has nothing to suspend: 'suspended'
-        // would give its key back everything a suspended member may still sign, a way back with no vote. Its report is
-        // still actioned.
-        const subject = reportSubjectOf(report);
-        if (suspendUser && subject && !isClosedAccountKey(subject)) {
-            // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
-            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(subject);
-            // A re-key code waiting for them (or an expired one still holding their key, which a new code inherits from)
-            // writes the same 'suspended', and a cancel puts back the status it recorded (member-wizards.ts
-            // cancelRekeyCode). From now on that status is this report's 'suspended', which no cancel may undo.
-            db.prepare("UPDATE rekey_requests SET prior_status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE old_pubkey = ? AND status IN ('pending', 'expired')").run(subject);
-            try { dropNodeRoleRow(subject, { actor: opts?.actor ?? undefined, how: 'suspended on a report' }); } catch { }
-            noteTakeoverInputsChanged('member suspended by a report');
-            // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
-            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(subject);
-            bumpMembersVersion();
-            bumpPostsVersion();
-            suspended = subject;
+        // (reportSubjectOf). The pause writes 'disabled', which no re-key code's cancel or completion undoes
+        // (member-wizards.ts cancelRekeyCode puts back only its own 'suspended'), so a code waiting for them needs no word
+        // of it; one that alone holds them 'suspended' is paused over (mayBePaused), as an admin's suspension is.
+        if (toPause && mayBePaused(toPause)) {
+            paused = pauseMember(toPause, opts?.actor ?? null, givenReason || reportPauseReason(toPause.callsign || toPause.publicKey.slice(0, 8), opts?.reasonCategory),
+                { actor: opts?.actor ?? undefined, how: 'suspended on a report' });
         }
         // Whether this report suspended its member, read by a cancel of a code with no prior status (cancelRekeyCode).
         // Recorded on the first action; a later one (a takedown after the fact sends no suspendUser) only ever raises
         // it, and leaves a report actioned before the node kept it (NULL, not known) as it is.
-        const record = suspended ? 1 : (report.suspended_member ?? (wasOpen ? 0 : null));
+        const record = paused ? 1 : (report.suspended_member ?? (wasOpen ? 0 : null));
         db.prepare('UPDATE abuse_reports SET suspended_member = ? WHERE id = ?').run(record, reportId);
         return true;
     })();
-    const suspendedKey = suspended as string | null;
-    if (ok && suspendedKey) {
-        broadcast({ type: 'profile_updated', publicKey: suspendedKey });
-        // Their listings, paused above, leave the board.
-        ringListingDoorbell('post_removed');
-    }
+    const pause = paused as Decision | null;
+    if (ok && pause) announcePause(pause);
     const done = takedown as { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null;
     if (ok && done) {
         notifyPostTakedown(moderationNoticeCb, done.post, done.reporters, normaliseRemovalReason(opts?.reasonCategory));
@@ -8101,14 +8131,23 @@ export function isAdminPubkey(publicKey: string): boolean {
  * would tell every connected client the member was pruned while the database reverted — the clients would
  * be showing a state the node does not have, until something refreshed them.
  *
- * The row write and the announcement are therefore separate, and the prune announces after it commits.
+ * The row write and the announcement are therefore separate, and the prune announces after it commits. The one thing
+ * asked from here is the listings' doorbell when a pause starts or ends, which only asks the apps to read again and goes
+ * once the work in hand is done (ringListingDoorbell).
  */
 export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned', by?: RoleChangeBy) {
     // An account its owner deleted stays closed, whoever asks (isDeletedByOwner). Each path that could ask answers first in
     // its own words (a reinstate vote, an admin halting a removal); this is the last line, and throws inside the caller's
     // transaction so nothing it wrote alongside stays either.
     if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
+    const was = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(publicKey) as { status: string | null } | undefined)?.status;
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    // A paused account's listings are off the board (engine posts.ts ENTERPRISE_ON_BOARD_SQL), and back when it is active
+    // again; members_touch_board_standing moves its standing, which a phone's delta reads. Every other socket hears the
+    // listings' doorbell, as for a holiday (setHolidayMode). Asked inside the caller's transaction, it goes once that is
+    // done (ringListingDoorbell). A closed account's listings close with it, and its prune rings its own.
+    if (status === 'disabled' && was !== 'disabled') ringListingDoorbell('post_removed');
+    else if (status === 'active' && was === 'disabled') ringListingDoorbell('post_updated');
     // A role it takes away is told to the owners (engine/node-roles.ts dropNodeRoleRow), as by whom the caller says.
     if (status !== 'active') {
         try { dropNodeRoleRow(publicKey, by ?? { how: status === 'pruned' ? 'removed from the community' : 'suspended' }); } catch { }

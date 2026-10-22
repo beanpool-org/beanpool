@@ -18,8 +18,10 @@
  *     moderator role held aside, no Bean moved. Her listings leave the board and a delta carries them as paused, but as
  *     they are to Bea, who has a deal open on one, and to Pia herself. She can't invite: no new code, a ticket she signs
  *     admits nobody, and a code she made before is refused (the check says so, the redeem in words that don't say she
- *     left), unused. She still can't answer a knock (403 not_active). She CAN close the deals she has open: Bea completes
- *     hers and Pia is paid, Pia completes one she bought, and cancels another; and she can take her own listing down.
+ *     left), unused. She still can't answer a knock (403 not_active). She answers in the conversation she is in, and gets
+ *     it again when her app asks, but starts no new one (403 `paused`), as §3.1 has it: an admin's suspension refused her
+ *     every line before, a report's let her open any. She CAN close the deals she has open: Bea completes hers and Pia
+ *     is paid, Pia completes one she bought, and cancels another; and she can take her own listing down.
  *  2. A report actioned with suspendUser (POST /api/local/admin/reports/:id/action) is the same pause: Al, an admin,
  *     reported and paused by an owner, is 'disabled', not 'suspended'; the report opens the record (a default reason that
  *     names no reporter, or the admin's own); his admin role is held aside, not dropped; the report says it paused him;
@@ -50,6 +52,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { setMemberPhoto } from '@beanpool/engine';
+import { lockedDm } from './dm-test-payload.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -313,6 +316,7 @@ async function main() {
     const madeBefore = await post('/api/invite/generate', { publicKey: pia.pubKeyHex }, pia);
     const piaCode = madeBefore.body?.invite?.code as string;
     assert(madeBefore.status === 200 && !!piaCode, `setup: Pia makes an invite before her pause (${madeBefore.status})`);
+    const oliveDm = se.createConversation('dm', [olive.pubKeyHex, pia.pubKeyHex], olive.pubKeyHex)!.id;
     const kay = keypair('KnockingKay');
     const knocked = await post('/api/join/knock', { callsign: kay.callsign, message: 'Hello, I live nearby and grow beans.', fromNode: 'https://global.beanpool.org/' }, kay);
     const kayKnock = (db.prepare('SELECT id FROM join_requests WHERE pubkey = ?').get(kay.pubKeyHex) as { id: string } | undefined)?.id ?? '';
@@ -358,6 +362,15 @@ async function main() {
         `and its redeem is refused, in words that don't say she left, the code unused (${viaCode.status} ${viaCode.text.slice(0, 140)})`);
     const piaAnswers = await post(`/api/join/knocks/${kayKnock}/approve`, {}, pia);
     assert(piaAnswers.status === 403 && piaAnswers.body?.code === 'not_active', `she can't answer a knock: 403 not_active, as before (${piaAnswers.status} ${piaAnswers.body?.code})`);
+    const piaReplies = await post('/api/messages/send', { conversationId: oliveDm, authorPubkey: pia.pubKeyHex, ...lockedDm() }, pia);
+    assert(piaReplies.status === 200, `she answers in the conversation she is in with Olive (${piaReplies.status} ${piaReplies.text.slice(0, 100)})`);
+    const piaAsksAgain = await post('/api/messages/conversation', { type: 'dm', participants: [pia.pubKeyHex, olive.pubKeyHex], createdBy: pia.pubKeyHex }, pia);
+    assert(piaAsksAgain.status === 200 && piaAsksAgain.body?.conversation?.id === oliveDm, `and gets it again when her app asks for it (${piaAsksAgain.status})`);
+    const piaOpens = await post('/api/messages/conversation', { type: 'dm', participants: [pia.pubKeyHex, rita.pubKeyHex], createdBy: pia.pubKeyHex }, pia);
+    const ritaDms = (db.prepare(`SELECT COUNT(*) AS n FROM conversation_participants a JOIN conversation_participants b ON a.conversation_id = b.conversation_id
+                                 WHERE a.public_key = ? AND b.public_key = ?`).get(pia.pubKeyHex, rita.pubKeyHex) as { n: number }).n;
+    assert(piaOpens.status === 403 && piaOpens.body?.code === 'paused' && PAUSED_INVITE.test(piaOpens.body?.error ?? '') && ritaDms === 0,
+        `but starts no new one, told why, and none is made (${piaOpens.status} ${piaOpens.text.slice(0, 120)})`);
 
     const piaBefore = balanceOf(pia);
     const beaCompletes = await post('/api/marketplace/transactions/complete', { transactionId: beaDeal, confirmerPublicKey: bea.pubKeyHex }, bea);

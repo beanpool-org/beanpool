@@ -12,10 +12,12 @@ import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
 import { isMemberKeySpelling, BAD_KEY_ERROR } from './member-key.js';
-import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS } from '@beanpool/core';
+import { getGenesisEarnedCredit, getTier, PROTOCOL_CONSTANTS, wordsFor } from '@beanpool/core';
 import {
     getMember,
     mayBringSomeoneIn,
+    isNodeMember,
+    isSuspendedAccount,
     isInvalidatedKey,
     isVisitorKey,
     generateShortCode,
@@ -29,15 +31,28 @@ import { ticketJoinRefusal } from './writer-bounds.js';
 import { inviteLogTag } from '../sanitize-message.js';
 import { assertMayBindInvite, confirmByInvite } from './names-list.js';
 
+// The words layer in English: a node never writes in the device language (core words.test N11).
+const { t: tr } = wordsFor('en');
+
 /**
  * Whether a code's maker can still bring someone in (the engine's mayBringSomeoneIn): a member of this node, not just a
  * row. A pruned account keeps its row, and so does the old key of a member being re-keyed (a lost or stolen phone); a
  * code from either would let its holder straight back in as someone new, so neither makes one, and one made before is
  * refused. Nor a visitor's row (a key a member messaged or sent Beans to, or a member of another community): it never
  * joined, and its code would admit anyone, itself included. A code a visitor made before this version is refused too.
+ * Nor a member while their account is paused: none made, and one made before admits nobody until the pause ends.
  */
 function canInvite(inviterPubkey: string): boolean {
     return mayBringSomeoneIn(db, inviterPubkey);
+}
+
+/**
+ * A member here whose account is paused or suspended (@beanpool/engine isSuspendedAccount): the invite test refuses them
+ * while it lasts (mayBringSomeoneIn), and they are told so (routes/community.ts, redeemInvite) rather than that they are
+ * no member.
+ */
+export function isPausedMember(pubkey: string): boolean {
+    return isNodeMember(db, pubkey) && isSuspendedAccount(db, pubkey);
 }
 
 /** Whether an invite row is an owner's or admin's (a private preview admits no other: redeemInvite). */
@@ -260,6 +275,12 @@ export function redeemInvite(
     }
 
     if (!canInvite(invite.created_by)) {
+        // A maker whose account is paused is still in the community, and their code admits someone again once the pause
+        // ends (within its 30 days): the words say it can't be used now, and nothing of why.
+        if (isPausedMember(invite.created_by)) {
+            recordFunnelEvent('invite_failed', 'inviter_paused');
+            return { success: false, error: tr('The member who made this invite can’t bring anyone in for now, so it can’t be used. Ask another member for a fresh one.') };
+        }
         recordFunnelEvent('invite_failed', 'inviter_gone');
         return { success: false, error: INVITER_GONE };
     }

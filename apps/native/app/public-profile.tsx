@@ -6,7 +6,7 @@ import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
+import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, isFriendLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
 import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
@@ -753,10 +753,10 @@ export default function PublicProfileScreen() {
     useEffect(() => {
         let active = true;
         if (identity?.publicKey && pubKeyStr && !isSelf) {
-            getFriendsLocal(identity.publicKey).then(friends => {
-                if (active && Array.isArray(friends)) {
-                    setIsFriend(friends.some(f => f.publicKey === pubKeyStr));
-                }
+            // The friends table alone: getFriendsLocal joins members, and drops a friend whose card this phone doesn't hold
+            // (the friends delta writes friends only; on a community with members on demand cards come later, by key).
+            isFriendLocal(identity.publicKey, pubKeyStr).then(friend => {
+                if (active) setIsFriend(friend);
             }).catch(() => {});
         }
         return () => { active = false; };

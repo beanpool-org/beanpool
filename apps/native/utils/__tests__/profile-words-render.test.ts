@@ -79,6 +79,7 @@ vi.mock('../db', () => ({
     getBalance: vi.fn(async () => data.balance),
     getRatingsGiven: vi.fn(async () => data.given),
     getFriendsLocal: vi.fn(async () => data.friends),
+    isFriendLocal: vi.fn(async () => false),
     addFriendLocal: vi.fn(async () => undefined),
     removeFriendLocal: vi.fn(async () => undefined),
     createConversationApi: vi.fn(async (_type: string, _participants: string[], _createdBy: string) => ({ id: 'conv-dm-kofi' })),

@@ -89,6 +89,7 @@ vi.mock('../db', () => ({
     getBalance: vi.fn(async () => data.balance),
     getRatingsGiven: vi.fn(async () => data.given),
     getFriendsLocal: vi.fn(async () => data.friends),
+    isFriendLocal: vi.fn(async () => false),
     getTrustProfile: vi.fn(async () => data.trust),
     vouchMember: vi.fn(async () => undefined),
     updateMemberProfile: vi.fn(async () => undefined),

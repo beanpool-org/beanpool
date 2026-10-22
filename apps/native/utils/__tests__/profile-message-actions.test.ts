@@ -57,7 +57,10 @@ vi.mock('../../app/ThemeContext', async () => {
 
 const data = vi.hoisted(() => ({
     profiles: {} as Record<string, Record<string, unknown> | null>,
+    /** The phone's friends table. */
     friends: [] as Array<{ publicKey: string }>,
+    /** Friends whose card (members row) this phone doesn't hold yet: getFriendsLocal's join drops them. */
+    cardless: new Set<string>(),
     addedFriends: [] as string[],
     blockedUsers: new Set<string>(),
     blockFails: false,
@@ -74,7 +77,8 @@ vi.mock('../db', () => ({
     getMemberPosts: vi.fn(async () => []),
     getBalance: vi.fn(async () => null),
     getRatingsGiven: vi.fn(async () => []),
-    getFriendsLocal: vi.fn(async () => data.friends),
+    getFriendsLocal: vi.fn(async () => data.friends.filter(f => !data.cardless.has(f.publicKey))),
+    isFriendLocal: vi.fn(async (me: string, them: string) => data.friends.some(f => f.publicKey === them)),
     addFriendLocal: vi.fn(async (me: string, them: string) => {
         data.addedFriends.push(them);
         data.friends.push({ publicKey: them });
@@ -152,6 +156,7 @@ beforeEach(() => {
         [OWN]: { public_key: OWN, callsign: 'Wren', avatar_url: null, bio: null, joined_at: '2026-01-05T00:00:00.000Z', archetype: null },
     };
     data.friends = [];
+    data.cardless.clear();
     data.addedFriends = [];
     data.blockedUsers.clear();
     data.blockFails = false;
@@ -220,6 +225,18 @@ describe('Phone public profile message and friend actions (S0)', () => {
         });
         await settle();
         expect(data.friends.length).toBe(0);
+    });
+
+    it('a friend whose card this phone does not hold yet still reads ✓ Friend', async () => {
+        // The friends delta writes the friends table alone; on a community with members on demand the card comes later.
+        data.friends = [{ publicKey: KOFI }];
+        data.cardless.add(KOFI);
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderProfile();
+
+        const buttons = Array.from(host.querySelectorAll('button'));
+        expect(buttons.some(b => b.textContent?.includes('✓ Friend'))).toBe(true);
+        expect(buttons.some(b => b.textContent?.includes('+ Add friend'))).toBe(false);
     });
 
     it('tapping + Add friend adds friend locally and changes button to ✓ Friend', async () => {

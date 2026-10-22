@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "Πάνω: το φασόλι είναι η κοινότητά σου και ο οδηγός, το ? εξηγεί αυτή την οθόνη, οι ρυθμιστές είναι οι Ρυθμίσεις.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "Στην κορυφή: το ? εξηγεί την οθόνη στην οποία βρίσκεσαι· στις Ρυθμίσεις βρίσκεται ολόκληρος ο οδηγός.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "Πρόσθεσε τις πρώτες σου κάρτες: πάτα μία για να την βάλεις στην Αρχική. Ή πάτα «Τέλος» και η Αρχική ξεκινά με τις συνήθεις πέντε.",
-  "Step {n} of {total}": "Βήμα {n} από {total}"
+  "Step {n} of {total}": "Βήμα {n} από {total}",
+  "Things you own and might lend, and who has them.": "Πράγματα που έχετε και ίσως δανείσετε, και ποιος τα έχει.",
+  "Tool shed": "Αποθήκη εργαλείων",
+  "When something lent outside BeanPool is due back": "Πότε πρέπει να επιστραφεί κάτι που δανείσατε εκτός BeanPool",
+  "Your shop and tools": "Το κατάστημα και τα εργαλεία σας",
+  "Your shop, and things you can do on your own.": "Το κατάστημά σας και ό,τι μπορείτε να κάνετε ατομικά.",
+  "Your things, and what is out.": "Τα πράγματά σας και όσα είναι δανεισμένα.",
+  "a drill": "ένα τρυπάνι",
+  "a ladder": "μια σκάλα",
+  "a tent": "μια σκηνή",
+  "{name} is due back": "Προθεσμία επιστροφής: {name}",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} πράγμα · στην αποθήκη σας",
+    "other": "{n} πράγματα · όλα στην αποθήκη σας"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} πράγμα · {listed} στο κατάστημά σας · {out} δανεισμένα",
+    "other": "{n} πράγματα · {listed} στο κατάστημά σας · {out} δανεισμένα"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} πράγμα · {out} δανεισμένα",
+    "other": "{n} πράγματα · {out} δανεισμένα"
+  }
 }

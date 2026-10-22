@@ -694,6 +694,10 @@ describe('the blocks the phone held before this build', () => {
         await app.syncBlocks();
         expect(blockChanges()).toHaveLength(30);
         expect(blockChanges()[0].body).toEqual({ targetPubkeys: strangers });
+        // A return to the app within that minute starts another sync: the minute's room is spent all the same.
+        await vi.advanceTimersByTimeAsync(10_000);
+        await app.syncBlocks();
+        expect(blockChanges()).toHaveLength(30);
 
         // A minute at a time, with no sync asked for: every one reaches the community.
         for (let minute = 1; minute <= 4; minute++) {

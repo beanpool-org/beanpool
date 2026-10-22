@@ -11,7 +11,7 @@
 /**
  * Whose a refused nonce was (scratch/fable-design/DESIGN-nonce-store-3-fable.md): `member`, an established member
  * (engine/probation.ts isEstablishedMember); `newcomer`, any other key with a row that acts here (a member in their first
- * days, on the global node one on probation or with 12 words alone, a visitor's row); `stranger`, any other verified key.
+ * days or with 12 words alone, on the global node one on probation, a visitor's row); `stranger`, any other verified key.
  */
 export type NonceClass = 'member' | 'newcomer' | 'stranger';
 

@@ -6,8 +6,8 @@
  * Round 1 drew the members' region at "acts here" (isNodeMember or isLiveVisitor), so keys that cost nothing (84
  * open-door accounts on the global node, or 20 fresh keys a day a member gives a visitor's row by opening DMs) filled
  * it and every member was refused 503 (measured on 49aa3028). Now:
- *   - an ESTABLISHED member (a node role, or a member row 72 hours old; where probation is on, also off probation and not
- *     12 words alone: engine/probation.ts isEstablishedMember) spends from the rows' region, 3,000 a key, refused only
+ *   - an ESTABLISHED member (a node role, or a member row 72 hours old and not 12 words alone; where probation is on, also
+ *     off probation: engine/probation.ts isEstablishedMember) spends from the rows' region, 3,000 a key, refused only
  *     when the region holds 600,000;
  *   - a NEWCOMER (a key with a row that is not established: a member in their first days, a visitor's row) spends from
  *     the same region, 600 a key, refused once the region holds 350,000 (the line), so established members keep 250,000
@@ -23,7 +23,8 @@
  *     defaults and the shares by the gateway's allowance; the real sizes at the floor shares, as at 120 a minute (584
  *     newcomer keys reach the line, 200 established keys fill the region).
  *  2. The verifier, with stores of its own: the four sentences and the scope for the three classes; who is established
- *     (a member of 4 days, a role holder joined today) and who is not (a member joined today, a visitor's row); a replay
+ *     (a member of 4 days, a role holder joined today, a 12-words member of 4 days once a sign-in is added) and who is not
+ *     (a member joined today, a visitor's row, a 12-words member of 4 days with probation off here); a replay
  *     and a forgery 403 with every region full; a route that spends no nonce never refused; a caller with no client held
  *     to one address's share; a caller with no perMinute held to the floor shares.
  *  3. Over HTTPS, the real node and the gateway limiter on at its defaults, attackers sent as X-Forwarded-For from
@@ -42,6 +43,7 @@
  *
  * Fail-first: run against 49aa3028 (round 1), checks 1, 2, 5, 6 and 7 fail. Round 1 had one members' ceiling,
  * `membersMax`; the HTTPS checks set it to the rows' ceiling too (scaled()), so they measure round 1 at the same size.
+ * Against 4ea231fd, check 2's 12-words member of 4 days fails: the words rule was read only where probation is on.
  *
  * Run: node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-nonce-store-cap
  */
@@ -49,7 +51,7 @@
 // Self-signed cert in LAN mode → relax TLS verification for the test client only.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME; // force self-signed / LAN mode
-delete process.env.NODE_PROFILE; // a local community: probation off, so established is a row 72 hours old
+delete process.env.NODE_PROFILE; // a local community: probation off, so established is a row 72 hours old, not 12 words alone
 // The community's one name, so a format-2 request signed for it is this community's whatever the switch date.
 const HOST = 'nonce-cap.test';
 process.env.BEANPOOL_ADDRESSES = HOST;
@@ -59,6 +61,7 @@ import WebSocket from 'ws';
 import { SIGNED_FOR_HEADER, signedRequestBytes, signedRequestText } from '@beanpool/core';
 import { isLiveVisitor } from '@beanpool/engine';
 import { db } from './db/db.js';
+import { getProfileSwitches } from './config/node-profile.js';
 import { initTls } from './services/tls.js';
 import { initStateEngine, registerVisitor } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -335,6 +338,21 @@ function verifierChecks(T0: number): void {
     const moved = [0, 1, 2].map(() => verify(s3, parts(N, freshNonce(), t), t, { client: 'c1' }));
     assert(moved[0].ok && moved[1].ok && !moved[2].ok && moved[2].scope === 'member',
         `the member joined today, its join moved 4 days back, is established: 2 spent, the third refused as a member's (${moved.map((v) => `${v.status} ${v.scope ?? ''}`).join(', ')})`);
+
+    // 12 words alone is read from the member's open_joins row, not from the probation switch: the door and probation are
+    // separate switches (nodeProfile.<switch>), so a node may take 12-words joins with probation off (#2359 review).
+    const Wd = makeMember(4);
+    db.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)`)
+        .run(Wd.pubKeyHex, `hash-${Wd.pubKeyHex}`, new Date(Date.now() - 4 * DAY).toISOString());
+    const s4 = storeWith(SMALL);
+    const words = [0, 1].map(() => verify(s4, parts(Wd, freshNonce(), t), t, { client: 'c1' }));
+    assert(!getProfileSwitches().probation && words[0].ok && !words[1].ok && words[1].error === KEY_SHARE_ERROR && words[1].scope === 'newcomer',
+        `probation off here, a member of 4 days who came in with 12 words alone is a newcomer: its second is refused at its share of 1 (probation ${getProfileSwitches().probation}; ${words.map((v) => `${v.status} ${v.scope ?? ''}`).join(', ')})`);
+    db.prepare(`UPDATE open_joins SET provider = 'google' WHERE member_pubkey = ?`).run(Wd.pubKeyHex);
+    const s5 = storeWith(SMALL);
+    const linked = [0, 1, 2].map(() => verify(s5, parts(Wd, freshNonce(), t), t, { client: 'c1' }));
+    assert(linked[0].ok && linked[1].ok && !linked[2].ok && linked[2].scope === 'member',
+        `the same member once a sign-in is added is established: 2 spent, the third refused as a member's (${linked.map((v) => `${v.status} ${v.scope ?? ''}`).join(', ')})`);
 
     // Every region full now.
     const replay = verify(s, kept, t, { client: 'c2' });

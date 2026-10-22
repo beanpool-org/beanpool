@@ -117,8 +117,8 @@ export const SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
  * Every nonce has an owner, in one of two regions (scratch/fable-design/DESIGN-nonce-store-3-fable.md §3, §6): a key
  * that acts here (`rows`: isNodeMember or isLiveVisitor, by its key) or a stranger's address (`stranger`: any other
  * verified key, by its limiter key, IPv6 by its /64). The rows' region holds two classes of key in one memory budget:
- * an established member (engine/probation.ts isEstablishedMember: a node role, or a member row 72 hours old, and where
- * probation is on, off it and not 12 words alone) is refused only at its own share and the region's ceiling; a newcomer
+ * an established member (engine/probation.ts isEstablishedMember: a node role, or a member row 72 hours old and not 12
+ * words alone, and where probation is on, off it) is refused only at its own share and the region's ceiling; a newcomer
  * (any other key with a row) at its own smaller share and at the line, the ceiling less the reserve kept for established
  * members, which no newcomer can take. The verifier asks {@link room} before spending a new one.
  *
@@ -428,13 +428,13 @@ export const NONCE_SWEEP_ABOVE = 10_000;
  * from any member's DMs), so every member was refused. Now one line can refuse an established member, set by memory;
  * every other line refuses only keys that are cheap to make:
  *
- *   - An established member (engine/probation.ts isEstablishedMember: a node role, or a member row 72 hours old; where
- *     probation is on, also off it and not 12 words alone): NONCE_KEY_MAX in flight, or NONCE_KEY_MINUTES × the
+ *   - An established member (engine/probation.ts isEstablishedMember: a node role, or a member row 72 hours old and not
+ *     12 words alone; where probation is on, also off it): NONCE_KEY_MAX in flight, or NONCE_KEY_MINUTES × the
  *     gateway's minute allowance where that is more (nonceKeyShare; its honest most is the allowance over the 10-minute
  *     hold), refused only when the rows' region holds NONCE_ROWS_MAX: 200 established keys flooding at once at 120 a
  *     minute, fewer at a higher allowance (below).
- *   - A newcomer (any other key with a row: a member in their first days, on the global node one on probation or with
- *     12 words alone, a visitor's row): NONCE_NEW_KEY_MAX, or NONCE_NEW_KEY_MINUTES × the allowance (nonceNewKeyShare:
+ *   - A newcomer (any other key with a row: a member in their first days or with 12 words alone, on the global node one
+ *     on probation, a visitor's row): NONCE_NEW_KEY_MAX, or NONCE_NEW_KEY_MINUTES × the allowance (nonceNewKeyShare:
  *     twice an honest newcomer's worst case), from the same region, refused once it holds NONCE_ROWS_MAX less
  *     NONCE_MEMBERS_RESERVE (the line, 350,000: 584 newcomer keys at 120 a minute), so established members keep the
  *     reserve.

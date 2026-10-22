@@ -36,8 +36,9 @@
  * ## Established members (isEstablishedMember)
  *
  * On every profile, not only where probation is on: a member who holds a node role, or whose row is at least 72 hours
- * old and, where the probation switch is on, who is off probation and did not come in with 12 words alone (the polls'
- * own test, pollVoterNewOrWords). It gates nothing a member can do (tiers and probation gate nothing either): only how
+ * old, who did not come in with 12 words alone (read from their `open_joins` row whatever the probation switch says, as
+ * the door is a switch of its own) and, where the probation switch is on, who is off probation (with the words rule,
+ * the polls' own test, pollVoterNewOrWords). It gates nothing a member can do (tiers and probation gate nothing either): only how
  * many of their app's signed requests the server holds in flight at once (engine/member-signature.ts NonceStore, the
  * third nonce-store decision, scratch/fable-design/DESIGN-nonce-store-3-fable.md). A newer account gets a smaller share,
  * and its requests are turned away first when the server is flooded with accounts that cost nothing to make.
@@ -198,7 +199,8 @@ export function installPollVoteOriginsAtBoot(): void {
     configurePollVoteOrigins((conn, pollIds) => pollVotesFromNewOrWords(conn, pollIds));
 }
 
-/** A member row this old is established (where probation is on, with the rest of isEstablishedMember). */
+/** A member row this old is established (unless it came in with 12 words alone; where probation is on, with the rest of
+ *  isEstablishedMember). */
 export const ESTABLISHED_AFTER_HOURS = PROBATION.hours;
 
 /**
@@ -207,10 +209,12 @@ export const ESTABLISHED_AFTER_HOURS = PROBATION.hours;
  *   2. else it is a member here (isNodeMember: not a visitor's row, not closed, not a re-keyed old key), or it is not;
  *   3. its row is at least ESTABLISHED_AFTER_HOURS old (a join time that can't be read counts as old, as probation
  *      reads it), on every profile;
- *   4. where the probation switch is on: it is off probation (a: the ordinary rules, which with 3 above leaves its 3
- *      kept posts), and it did not come in with 12 words alone (b: probationRuleSet). A 12-words account costs nothing
- *      to make and a patient person can age a thousand of them, so age alone does not earn it; adding a sign-in does,
- *      counted from the first join.
+ *   4. it did not come in with 12 words alone (probationRuleSet), on every profile: the 12-words door (`openJoin`,
+ *      `ssoRequiredForJoin`) and probation are separate switches, so a node may take 12-words joins with probation off.
+ *      A 12-words account costs nothing to make and a patient person can age a thousand of them, so age alone does not
+ *      earn it; adding a sign-in does, counted from the first join. A node that never opened the door has no such row;
+ *   5. where the probation switch is on: it is off probation (the ordinary rules, which with 3 above leaves its 3 kept
+ *      posts).
  * At most four indexed reads, and the kept posts read stops at the third (keptPostCount would count every one). A read
  * that throws reads as not established: the smaller share, never a refusal of a request that has room. Called only
  * when a key's nonces pass the newer accounts' share or the store reaches their line, and kept 60 s (NonceStore).
@@ -221,8 +225,8 @@ export function isEstablishedMember(pubkey: string, now: number = Date.now()): b
         if (!isNodeMember(db, pubkey)) return false;
         const joined = joinedAtMs(pubkey);
         if (joined !== null && now < joined + ESTABLISHED_AFTER_HOURS * HOUR_MS) return false;
-        if (!getProfileSwitches().probation) return true;
         if (probationRuleSet(pubkey) === 'words') return false;
+        if (!getProfileSwitches().probation) return true;
         const kept = db.prepare(
             `SELECT COUNT(*) AS c FROM (SELECT 1 FROM posts
               WHERE author_pubkey = ? AND origin_node IS NULL

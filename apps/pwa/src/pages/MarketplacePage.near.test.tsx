@@ -110,7 +110,8 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         expect(screen.queryByText('Ring offer')).toBeNull();
         const shown = screen.getAllByTestId('card-distance').map(e => e.textContent?.replace('📍', '').trim());
         expect(shown).toEqual(['1.1 km', '2.1 km']);
-        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 5 km of the place you picked.');
+        // The setting's radius, not the 5.5 km the node was asked for (lib/events formatDistance writes 5 as 5.0).
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 5.0 km of the place you picked.');
     });
 
     it('a member with no area and no distance setting reads the newest, with a way to what is near', async () => {

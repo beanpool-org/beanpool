@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
+    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, t, type ShowcaseFeature,
 } from '@beanpool/core';
 import { StartCommunityScreen } from './StartCommunityScreen';
 import { useDialogFocus } from './dialog-focus';
@@ -79,7 +79,7 @@ export function LocalCommunitySheet({
                         ref={closeRef}
                         type="button"
                         onClick={onClose}
-                        aria-label="Close"
+                        aria-label={t('Close')}
                         className="-mr-2 -mt-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800 dark:hover:text-nature-200"
                     >✕</button>
                 </div>
@@ -175,14 +175,14 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
             {(open, start) => collapsed ? (
                 <div className={`${TONE} mb-4 flex items-center gap-1 rounded-xl pl-3 text-sm font-bold`} data-testid="local-community-strip-collapsed">
                     <button type="button" onClick={open} className="min-h-[44px] min-w-0 flex-1 py-2 text-left">{LOCAL_COMMUNITY_STRIP.collapsed}</button>
-                    <button type="button" onClick={() => collapse(false)} aria-label="Show the whole note" data-testid="local-community-strip-open"
+                    <button type="button" onClick={() => collapse(false)} aria-label={t('Show the whole note')} data-testid="local-community-strip-open"
                         className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 rounded-lg">▾</button>
                 </div>
             ) : (
                 <section className={`${TONE} mb-4 rounded-2xl p-4`} data-testid="local-community-strip" aria-label={LOCAL_COMMUNITY_MARK}>
                     <div className="mb-2 flex items-start justify-between gap-2">
                         <LocalCommunityPill />
-                        <button type="button" onClick={() => collapse(true)} aria-label="Make this note one line" data-testid="local-community-strip-close"
+                        <button type="button" onClick={() => collapse(true)} aria-label={t('Make this note one line')} data-testid="local-community-strip-close"
                             className="-mr-3 -mt-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 rounded-lg">✕</button>
                     </div>
                     <p className="text-sm text-nature-800 dark:text-nature-100">

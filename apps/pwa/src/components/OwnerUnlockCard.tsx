@@ -166,7 +166,7 @@ export function OwnerUnlockCard({ identity, communityName }: {
                         autoCorrect="off"
                         autoCapitalize="none"
                         spellCheck={false}
-                        placeholder="beanpool://unlock-keys?…"
+                        placeholder={t('beanpool://unlock-keys?…')}
                         className="w-full min-h-[96px] p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-sm break-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     />
                     {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300 break-words">{keyLineWords(error)}</p>}

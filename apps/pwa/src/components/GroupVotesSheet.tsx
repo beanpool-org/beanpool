@@ -6,7 +6,7 @@
  */
 import { getGroup, getGroupDecisions, type Group } from '../lib/api';
 import { GroupDecisions } from './EnterpriseDecisions';
-import { votesOnlyWords } from '@beanpool/core';
+import { t, votesOnlyWords } from '@beanpool/core';
 
 export type GroupLanding = { kind: 'group'; group: Group } | { kind: 'votes'; groupId: string; canVote: boolean } | { kind: 'commons' };
 
@@ -53,12 +53,12 @@ export function GroupVotesSheet({ groupId, canVote, myPubkey, onClose }: Props) 
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="sticky top-0 bg-nature-100/90 dark:bg-[#0d0d0d]/90 backdrop-blur-md p-4 border-b border-nature-200 dark:border-nature-800 flex items-center justify-between z-10">
-                    <h2 id="group-votes-title" className="text-lg font-black text-nature-950 dark:text-white">Group votes</h2>
+                    <h2 id="group-votes-title" className="text-lg font-black text-nature-950 dark:text-white">{t('Group votes')}</h2>
                     <button
                         type="button"
                         onClick={onClose}
                         className="min-w-[44px] min-h-[44px] rounded-lg text-nature-500 hover:text-nature-900 dark:hover:text-white hover:bg-nature-200 dark:hover:bg-nature-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                        aria-label="Close"
+                        aria-label={t('Close')}
                     >
                         ✕
                     </button>

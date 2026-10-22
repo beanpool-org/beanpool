@@ -116,7 +116,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                 onClick={onBack}
                 className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 dark:hover:text-nature-200 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
             >
-                <span className="text-xl leading-none" aria-hidden="true">←</span> Back to Market
+                <span className="text-xl leading-none" aria-hidden="true">←</span> {t('Back to Market')}
             </button>
 
             {post.type === 'poll' ? (
@@ -140,7 +140,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
                                     <img
                                         key={i}
                                         src={photo}
-                                        alt={`Photo ${i + 1} of ${photos.length}: ${post.title}`}
+                                        alt={t('Photo {current} of {total}: {title}', { current: i + 1, total: photos.length, title: post.title })}
                                         className="h-40 w-auto max-w-[85%] rounded-xl object-cover border border-nature-200 dark:border-nature-800 shrink-0 snap-start"
                                     />
                                 ))}
@@ -172,7 +172,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
 
                         {distanceKm != null && (
                             <p data-testid="visitor-detail-distance" className="m-0 text-sm font-semibold text-nature-600 dark:text-nature-300">
-                                {`About ${visitorDistanceText(distanceKm).replace(/^about /, '')} away · area only`}
+                                {t('About {distance} away · area only', { distance: visitorDistanceText(distanceKm).replace(/^about /, '') })}
                             </p>
                         )}
                     </div>

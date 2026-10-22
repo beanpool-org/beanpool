@@ -176,7 +176,7 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
                 {t('Lost your phone and your 12 words? An admin of this community checked it’s you and made a code. This device takes over your account: your Beans, your name and your history.')}
             </p>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginTop: '0.75rem', marginBottom: '0.25rem' }} htmlFor="web-rekey-code">{t('The code')}</label>
-            <input id="web-rekey-code" style={box} value={code} onChange={(e) => setCode(e.target.value)} placeholder="RK-XXXX-XXXX" autoCapitalize="characters" autoComplete="off" spellCheck={false} />
+            <input id="web-rekey-code" style={box} value={code} onChange={(e) => setCode(e.target.value)} placeholder={t('RK-XXXX-XXXX')} autoCapitalize="characters" autoComplete="off" spellCheck={false} />
             {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem', marginTop: '0.5rem', lineHeight: 1.5 }}>{saidWords(error)}</p>}
             <button type="button" style={primary} onClick={ask} disabled={phase === 'asking'}>{phase === 'asking' ? t('One moment…') : t('Continue')}</button>
             <button type="button" style={secondary} onClick={onBack}>{t('← Back')}</button>

@@ -1,5 +1,5 @@
 import { useId, useRef } from 'react';
-import type { HelpSheet } from '@beanpool/core';
+import { t, type HelpSheet } from '@beanpool/core';
 import { useDialogFocus } from './dialog-focus';
 
 const row = 'w-full min-h-[44px] px-1 text-left bg-transparent border-0 border-b border-nature-200 dark:border-nature-800 text-[0.9375rem] font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
@@ -29,14 +29,14 @@ export function HelpDialog({ sheet, tourOpen, canTour, onReadPage, onSearch, onT
             <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={id} data-testid="help-dialog"
                 className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0">
                 <div className="flex items-start gap-2 mb-2">
-                    <h2 id={id} tabIndex={-1} data-testid="help-title" className="m-0 flex-1 min-w-0 break-words text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">{sheet.title ?? 'Help'}</h2>
-                    <button type="button" data-testid="help-close" onClick={onClose} className={plain}>Close</button>
+                    <h2 id={id} tabIndex={-1} data-testid="help-title" className="m-0 flex-1 min-w-0 break-words text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">{sheet.title ?? t('Help')}</h2>
+                    <button type="button" data-testid="help-close" onClick={onClose} className={plain}>{t('Close')}</button>
                 </div>
                 {sheet.text && <p data-testid="help-text" className="m-0 mb-3 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{sheet.text}</p>}
                 <div className="border-t border-nature-200 dark:border-nature-800">
-                    {(sheet.slug || sheet.section) && <button type="button" className={row} onClick={onReadPage} data-testid="help-read-page">Read the guide page ›</button>}
-                    <button type="button" className={row} onClick={onSearch} data-testid="help-search">Search the guide</button>
-                    {canTour && <button type="button" className={row} onClick={onTour} data-testid="help-tour">{tourOpen ? 'Pick up the tour' : 'Take the tour again'}</button>}
+                    {(sheet.slug || sheet.section) && <button type="button" className={row} onClick={onReadPage} data-testid="help-read-page">{t('Read the guide page ›')}</button>}
+                    <button type="button" className={row} onClick={onSearch} data-testid="help-search">{t('Search the guide')}</button>
+                    {canTour && <button type="button" className={row} onClick={onTour} data-testid="help-tour">{tourOpen ? t('Pick up the tour') : t('Take the tour again')}</button>}
                 </div>
             </div>
         </div>

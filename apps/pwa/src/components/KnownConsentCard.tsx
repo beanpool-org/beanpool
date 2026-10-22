@@ -5,8 +5,20 @@
  * (GDPR Art. 7(3)). Renders nothing for an older node, a guest, or offline.
  */
 import { useEffect, useState } from 'react';
+import { t } from '@beanpool/core';
 import { agreeToConsent, canWithdrawConsent, consentHeading, fetchMyConsent, shouldOfferConsent, showsConsentCard, withdrawConsent, type KnownConsent } from '../lib/known-consent';
 import { ConsentText } from './ConsentText';
+
+function agreedWords(on: string | null, earlier: boolean): string {
+    if (on) {
+        return earlier
+            ? t("You agreed on {date} to the earlier text. You can take it back at any time: from that moment the admins don't see your balance.", { date: on })
+            : t("You agreed on {date}. You can take it back at any time: from that moment the admins don't see your balance.", { date: on });
+    }
+    return earlier
+        ? t("You agreed to the earlier text. You can take it back at any time: from that moment the admins don't see your balance.")
+        : t("You agreed. You can take it back at any time: from that moment the admins don't see your balance.");
+}
 
 export function KnownConsentCard() {
     const [consent, setConsent] = useState<KnownConsent | null>(null);
@@ -49,12 +61,12 @@ export function KnownConsentCard() {
             border: '1px solid var(--border-color)', borderRadius: 12, padding: '1rem', marginBottom: '1rem',
             background: 'var(--bg-secondary)', overflowWrap: 'anywhere',
         }}>
-            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>{offer ? consentHeading(consent) : 'What you agreed the admins can see'}</h3>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '1rem' }}>{offer ? consentHeading(consent) : t('What you agreed the admins can see')}</h3>
             <ConsentText text={consent.text} fontSize="0.9rem" />
             <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', lineHeight: 1.45, color: 'var(--text-secondary)' }}>
                 {agreed
-                    ? <>You agreed{agreedOn ? ` on ${agreedOn}` : ''}{offer ? ' to the earlier text' : ''}. You can take it back at any time: from that moment the admins don&apos;t see your balance.</>
-                    : <>Agreeing is up to you. If you don&apos;t, nothing else changes: the admins just never see your balance. You can take it back at any time, here in Settings.</>}
+                    ? agreedWords(agreedOn, offer)
+                    : t("Agreeing is up to you. If you don't, nothing else changes: the admins just never see your balance. You can take it back at any time, here in Settings.")}
             </p>
             {note && <p role="status" style={{ margin: '0 0 0.75rem', fontSize: '0.85rem' }}>{note}</p>}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -62,21 +74,21 @@ export function KnownConsentCard() {
                     <button type="button" onClick={() => { void agree(); }} disabled={busy} aria-busy={busy}
                         className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         style={{ ...button, border: 'none', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)', fontWeight: 700 }}>
-                        {busy ? 'Saving…' : 'I agree'}
+                        {busy ? t('Saving…') : t('I agree')}
                     </button>
                 )}
                 {agreed && (
                     <button type="button" onClick={() => { void withdraw(); }} disabled={busy} aria-busy={busy} data-testid="known-consent-withdraw"
                         className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         style={{ ...button, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)' }}>
-                        {busy ? 'Saving…' : 'Withdraw'}
+                        {busy ? t('Saving…') : t('Withdraw')}
                     </button>
                 )}
                 {offer && !agreed && (
                     <button type="button" onClick={() => setHidden(true)}
                         className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         style={{ ...button, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)' }}>
-                        Not now
+                        {t('Not now')}
                     </button>
                 )}
             </div>

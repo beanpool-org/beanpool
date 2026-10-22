@@ -2,7 +2,7 @@
 slug: people
 title: People and friends
 summary: Find members of your community, add friends, and vouch for someone.
-help: The members of your community and your friends. Tap someone to see their profile, or tap 💬 next to a friend to message them.
+help: The members of your community and your friends. Tap someone to see their profile, or tap 💬 next to a member to message them.
 related: messages, your-profile, joining, blocking
 ---
 
@@ -14,12 +14,12 @@ Tap **Talk**, then **People**. In the web app, tap **People** in the row of tabs
 - **Community:** every member. Search by name. On the phone, sort by **Newest**, **Name**, **Friends**, **Trusted** or **Active**. On the global community it shows the members nearest your area: type at least 2 letters of a name to find anyone else.
 - **Invites:** invite someone new. See "Joining BeanPool". If you have not joined yet, this button says **Register**. When people have asked to join your community, it shows how many, and they are listed under **Wants to join**. In the web app this button is always **🎟️ Invites**, with no count and no **Wants to join** list.
 
-Tap a person to see their profile: their reviews and posts, and, on the phone in a community with Beans, their trust badge and trades. See "Your profile".
+Tap a person to see their profile: their reviews and posts, and, on the phone in a community with Beans, their trust badge and trades. You can message them straight from their profile with **Message**, or add them as a friend with **+ Add friend**. See "Your profile".
 
 ## Friends
 
-- In **Community**, tap **+ Add** next to a name. It changes to **Added**. Tap **Added** to take them off again. In the web app it changes to **✓ Friend**, which you can't tap: to take someone off, use **Remove** under **Friends**.
-- In **Friends**, tap the message button to start a chat, or the remove button, then **Remove**, to take someone off.
+- In **Community**, tap 💬 to start a chat, or tap **+ Add** next to a name. It changes to **Added**. Tap **Added** to take them off again. In the web app it changes to **✓ Friend**, which you can't tap: to take someone off, use **Remove** under **Friends**. You can also message someone or add them as a friend straight from their profile.
+- In **Friends**, tap 💬 to start a chat, or the remove button, then **Remove**, to take someone off.
 - When someone adds you, the top of **Friends** says who, such as "Sam added you", with **Add back**. Tap their name to see their profile first. There is no notification. The line goes when you add them back, or after 30 days. Up to 20 are shown, then how many more.
 - You can add up to 100 people in any 24 hours. Taking someone off counts too. If you reach it, the app says so and when you can add someone again.
 - You can't add someone you have blocked: unblock them first. See "Blocking someone".

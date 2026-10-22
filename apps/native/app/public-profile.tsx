@@ -6,8 +6,8 @@ import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
-import { blockUser } from '../utils/blocklist';
+import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, isFriendLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
+import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
@@ -112,6 +112,59 @@ export default function PublicProfileScreen() {
         joinedText: { fontSize: 12, color: colors.text.muted, fontWeight: '600', marginTop: 6 },
         // The way on when no card is held offline: read at 4.5:1 in both schemes, unlike the muted lines around it.
         unreachableText: { fontSize: 13, color: colors.text.secondary, fontWeight: '600', marginTop: 6, textAlign: 'center' },
+
+        // Profile top actions (other members)
+        actionRow: {
+            flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center',
+            gap: 10, marginHorizontal: 16, marginTop: 16,
+        },
+        messageBtn: {
+            flexGrow: 1, flexBasis: 180, minHeight: 48,
+            backgroundColor: colors.brand.fill, borderRadius: 12,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+            paddingHorizontal: 16, paddingVertical: 12,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2,
+        },
+        messageBtnText: {
+            fontSize: 15, fontWeight: '800', color: colors.text.inverse, flexShrink: 1,
+        },
+        friendToggleBtn: {
+            flexGrow: 1, flexBasis: 120, minHeight: 48,
+            backgroundColor: colors.surface.card, borderRadius: 12,
+            borderWidth: 1, borderColor: colors.border.strong,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            paddingHorizontal: 16, paddingVertical: 12,
+        },
+        friendToggleBtnActive: {
+            backgroundColor: colors.surface.subtle, borderColor: colors.border.default,
+        },
+        friendToggleBtnText: {
+            fontSize: 14, fontWeight: '700', color: colors.text.heading, flexShrink: 1,
+        },
+        friendToggleBtnTextActive: {
+            color: colors.brand.primary,
+        },
+        blockedRow: {
+            marginHorizontal: 16, marginTop: 16, padding: 14, borderRadius: 14,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50,
+            borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        },
+        blockedEmoji: {
+            fontSize: 16,
+        },
+        blockedText: {
+            fontSize: 14, fontWeight: '600', color: colors.feedback.danger.fg, flexShrink: 1,
+        },
+        unblockBtn: {
+            minHeight: 44, minWidth: 44, paddingHorizontal: 14, paddingVertical: 8,
+            borderRadius: 8, backgroundColor: colors.surface.card,
+            borderWidth: 1, borderColor: colors.border.strong,
+            alignItems: 'center', justifyContent: 'center',
+        },
+        unblockBtnText: {
+            fontSize: 13, fontWeight: '700', color: colors.text.heading,
+        },
 
         // Quick stats strip (self)
         statStrip: { flexDirection: 'row', backgroundColor: colors.surface.card, marginHorizontal: 16, marginTop: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 14, alignItems: 'center' },
@@ -685,9 +738,96 @@ export default function PublicProfileScreen() {
     };
 
     const [isBlocking, setIsBlocking] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(false);
+    const [isFriend, setIsFriend] = useState(false);
+    const [isMessaging, setIsMessaging] = useState(false);
+    const [togglingFriend, setTogglingFriend] = useState(false);
+
+    useEffect(() => {
+        let sub: any;
+        if (pubKeyStr) {
+            isUserBlocked(pubKeyStr).then(setIsBlocked).catch(() => {});
+            sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => {
+                if (Array.isArray(list)) {
+                    setIsBlocked(list.includes(pubKeyStr));
+                } else {
+                    isUserBlocked(pubKeyStr).then(setIsBlocked).catch(() => {});
+                }
+            });
+        }
+        return () => {
+            sub?.remove?.();
+        };
+    }, [pubKeyStr]);
+
+    useEffect(() => {
+        let active = true;
+        if (identity?.publicKey && pubKeyStr && !isSelf) {
+            // The friends table alone: getFriendsLocal joins members, and drops a friend whose card this phone doesn't hold
+            // (the friends delta writes friends only; on a community with members on demand cards come later, by key).
+            isFriendLocal(identity.publicKey, pubKeyStr).then(friend => {
+                if (active) setIsFriend(friend);
+            }).catch(() => {});
+        }
+        return () => { active = false; };
+    }, [identity?.publicKey, pubKeyStr, isSelf]);
+
+    const handleUnblock = async () => {
+        if (!pubKeyStr) return;
+        // unblockUser says false rather than throwing: the list is read back, so the row never shows an unblock that didn't happen.
+        await unblockUser(pubKeyStr);
+        isUserBlocked(pubKeyStr).then(setIsBlocked).catch(() => {});
+    };
+
+    const handleOpenDm = async (prefill?: string) => {
+        if (!pubKeyStr || !identity?.publicKey || isMessaging || isBlocked) return;
+        setIsMessaging(true);
+        try {
+            // Read the list again: until the screen's first read answers, the actions row is drawn for a blocked member too,
+            // and the node would make a thread nobody can write in.
+            if (await isUserBlocked(pubKeyStr)) {
+                setIsBlocked(true);
+                return;
+            }
+            const conv = await createConversationApi('dm', [identity.publicKey, pubKeyStr], identity.publicKey);
+            if (prefill) {
+                router.push({
+                    pathname: `/chat/${conv.id}`,
+                    params: { prefill },
+                });
+            } else {
+                router.push(`/chat/${conv.id}`);
+            }
+        } catch (e: any) {
+            const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
+            Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
+        } finally {
+            setIsMessaging(false);
+        }
+    };
+
+    const handleToggleFriend = async () => {
+        if (!identity?.publicKey || !pubKeyStr || togglingFriend) return;
+        setTogglingFriend(true);
+        try {
+            if (isFriend) {
+                await removeFriendLocal(identity.publicKey, pubKeyStr);
+                setIsFriend(false);
+            } else {
+                await addFriendLocal(identity.publicKey, pubKeyStr);
+                setIsFriend(true);
+            }
+        } catch (e: any) {
+            Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+        } finally {
+            setTogglingFriend(false);
+        }
+    };
 
     const handleBlockUser = () => {
-        if (!pubKeyStr || isBlocking) return;
+        // Someone already blocked: the row under the banner says so and offers Unblock. A second block changes nothing and
+        // files no report, so it is never confirmed or announced.
+        if (!pubKeyStr || isBlocking || isBlocked) return;
         // Whole sentences with the member's name or without it ("this user"), never a stand-in glued into a sentence.
         const name = callsignStr;
         Alert.alert(
@@ -704,7 +844,10 @@ export default function PublicProfileScreen() {
                         try {
                             setIsBlocking(true);
                             // The reason goes to the node as written (moderators read it), not in the member's language.
-                            await blockUser(pubKeyStr, identity?.publicKey, 'Abusive user reported via Trust Profile', undefined);
+                            const blocked = await blockUser(pubKeyStr, identity?.publicKey, 'Abusive user reported via Trust Profile', undefined);
+                            // blockUser says false rather than throwing (no account on the phone, the list not written): the
+                            // list is read back, so a block that didn't happen is never announced.
+                            if (!blocked && !(await isUserBlocked(pubKeyStr))) throw new Error('Not blocked');
                             Alert.alert(t('User Blocked'), name
                                 ? t('{name} has been blocked and removed from your feed.', { name })
                                 : t('this user has been blocked and removed from your feed.'), [
@@ -807,9 +950,9 @@ export default function PublicProfileScreen() {
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={callsignStr ? t('Block user {name}', { name: callsignStr }) : t('Block user')}
-                        accessibilityState={{ busy: isBlocking }}
+                        accessibilityState={{ busy: isBlocking, disabled: isBlocked }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        disabled={isBlocking}
+                        disabled={isBlocking || isBlocked}
                         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, minWidth: 44, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border, opacity: isBlocking ? 0.6 : 1 }}
                         onPress={handleBlockUser}
                     >
@@ -854,6 +997,59 @@ export default function PublicProfileScreen() {
                     {/* Syndicated Creator Channels (The Pulse, Phase 1) */}
                     <ChannelChips channels={channels} />
                 </View>
+
+                {!isSelf && (
+                    // Keyed so Unblock mounts a fresh row: reusing the blocked row's views kept "Unblock" as the toggle's label and squeezed both buttons onto one line (320 dp × 1.3).
+                    isBlocked ? (
+                        <View key="blocked" style={styles.blockedRow}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+                                <Text style={styles.blockedEmoji}>🚫</Text>
+                                <Text style={styles.blockedText}>
+                                    {t('You blocked {name}.', { name: callsignStr || '…' })}
+                                </Text>
+                            </View>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Unblock')}
+                                style={styles.unblockBtn}
+                                onPress={handleUnblock}
+                            >
+                                <Text style={styles.unblockBtnText}>{t('Unblock')}</Text>
+                            </Pressable>
+                        </View>
+                    ) : (
+                        <View key="actions" style={styles.actionRow}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Message', undefined, 'button: write to')}
+                                disabled={isMessaging}
+                                style={styles.messageBtn}
+                                onPress={() => handleOpenDm()}
+                            >
+                                {isMessaging ? (
+                                    <ActivityIndicator size="small" color={colors.text.inverse} />
+                                ) : (
+                                    <>
+                                        <MaterialCommunityIcons name="message-text-outline" size={18} color={colors.text.inverse} />
+                                        <Text style={styles.messageBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Message', undefined, 'button: write to')}</Text>
+                                    </>
+                                )}
+                            </Pressable>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={isFriend ? t('✓ Friend') : t('+ Add friend')}
+                                accessibilityState={{ selected: isFriend }}
+                                disabled={togglingFriend}
+                                style={[styles.friendToggleBtn, isFriend && styles.friendToggleBtnActive]}
+                                onPress={handleToggleFriend}
+                            >
+                                <Text style={[styles.friendToggleBtnText, isFriend && styles.friendToggleBtnTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                    {isFriend ? t('✓ Friend') : t('+ Add friend')}
+                                </Text>
+                            </Pressable>
+                        </View>
+                    )
+                )}
 
                 {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel. Its verdict, tier,
                     Trust Points, track record, vouch and Vouch action are all Beans: gated like the own card (`showsBeans`).
@@ -1029,7 +1225,8 @@ export default function PublicProfileScreen() {
                                     );
                                 }
 
-                                if (!isSelf && viewerArchetype && !targetArchetype) {
+                                // Blocked: no nudge, as there is no Message.
+                                if (!isSelf && !isBlocked && viewerArchetype && !targetArchetype) {
                                     return (
                                         <View style={styles.synergyInviteCard}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -1048,14 +1245,10 @@ export default function PublicProfileScreen() {
                                                 onPress={() => {
                                                     if (pubKeyStr) {
                                                         // The message starts in the sender's language; they can change it before it goes.
-                                                        router.push({
-                                                            pathname: `/chat/${pubKeyStr}`,
-                                                            params: {
-                                                                prefill: callsignStr
-                                                                    ? t('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡', { name: callsignStr })
-                                                                    : t('Hey there! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡'),
-                                                            }
-                                                        });
+                                                        const prefill = callsignStr
+                                                            ? t('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡', { name: callsignStr })
+                                                            : t('Hey there! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡');
+                                                        handleOpenDm(prefill);
                                                     }
                                                 }}
                                             >
@@ -1556,7 +1749,8 @@ export default function PublicProfileScreen() {
                                 )}
                             </View>
                         )}
-                        {!isSelf && (
+                        {/* Not for someone already blocked: their row offers Unblock, and this would promise a block and a report that never happen. */}
+                        {!isSelf && !isBlocked && (
                             <View style={{ marginHorizontal: 16, marginTop: 24, marginBottom: 32 }}>
                                 <Pressable
                                     accessibilityRole="button"

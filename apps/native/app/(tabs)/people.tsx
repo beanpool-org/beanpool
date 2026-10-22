@@ -281,6 +281,10 @@ export default function PeopleScreen() {
     const [friends, setFriends] = useState<any[]>([]);
     const [friendPubkeys, setFriendPubkeys] = useState<Set<string>>(new Set());
     const [friendsLoading, setFriendsLoading] = useState(false);
+    // A Community row's 💬 asks for one chat at a time: the ask can take 12 s, and a second tap would open a second copy
+    // of the chat over the first. The ref stops a tap before the re-render that disables the buttons.
+    const openingDmRef = useRef(false);
+    const [openingDmKey, setOpeningDmKey] = useState<string | null>(null);
 
     useEffect(() => {
         if (view === 'friends') {
@@ -1023,39 +1027,70 @@ export default function PeopleScreen() {
                                     )}
                                 </View>
                                 <View style={styles.textStack}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                        <Text style={styles.callsign} numberOfLines={1}>{item.callsign}</Text>
+                                    <Text style={styles.callsign} numberOfLines={1}>{item.callsign}</Text>
+                                    {/* The Friend chip shares the date's line: beside the name, with 💬 and ✓ Added on the row, it cut the name to ".." at 320 dp × 1.3. */}
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                                         {isFriend && <Text style={styles.friendChip} numberOfLines={1}>{t('Friend')}</Text>}
+                                        <Text style={[styles.dateText, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
+                                            {joinDateText}{typeof item.distance_km === 'number' ? <Text style={styles.distanceText}>{' · '}<Text>{t('about {km} km', { km: formatNumber(item.distance_km) })}</Text></Text> : null}
+                                        </Text>
                                     </View>
-                                    <Text style={styles.dateText} numberOfLines={1}>
-                                        {joinDateText}{typeof item.distance_km === 'number' ? <Text style={styles.distanceText}>{' · '}<Text>{t('about {km} km', { km: formatNumber(item.distance_km) })}</Text></Text> : null}
-                                    </Text>
                                 </View>
                             </Pressable>
                             {!isSelf && (
-                                <Pressable
-                                    accessibilityRole="button"
-                                    accessibilityState={{ selected: isFriend }}
-                                    style={[styles.addBtn, isFriend && styles.addBtnFriended]}
-                                    onPress={async () => {
-                                        if (!identity?.publicKey) return;
-                                        if (isFriend) {
-                                            await removeFriendLocal(identity.publicKey, item.public_key);
-                                        } else {
-                                            // Refused by the node (100 adds a day, or someone you blocked): said, not dropped.
+                                <View style={styles.friendActions}>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Message', undefined, 'button: write to')}
+                                        accessibilityState={{ busy: openingDmKey === item.public_key, disabled: openingDmKey !== null }}
+                                        disabled={openingDmKey !== null}
+                                        style={styles.msgBtn}
+                                        onPress={async () => {
+                                            if (!identity?.publicKey || openingDmRef.current) return;
+                                            openingDmRef.current = true;
+                                            setOpeningDmKey(item.public_key);
                                             try {
-                                                await addFriendLocal(identity.publicKey, item.public_key);
+                                                const conv = await createConversationApi('dm', [identity.publicKey, item.public_key], identity.publicKey);
+                                                router.push(`/chat/${conv.id}`);
                                             } catch (e: any) {
-                                                Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+                                                const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
+                                                Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
+                                            } finally {
+                                                openingDmRef.current = false;
+                                                setOpeningDmKey(null);
                                             }
-                                        }
-                                        loadFriends();
-                                    }}
-                                >
-                                    <Text style={[styles.addBtnText, isFriend && styles.addBtnTextFriended]}>
-                                        {isFriend ? t('✓ Added') : t('+ Add')}
-                                    </Text>
-                                </Pressable>
+                                        }}
+                                    >
+                                        {openingDmKey === item.public_key ? (
+                                            <ActivityIndicator size="small" color={colors.brand.primary} />
+                                        ) : (
+                                            <Text style={styles.msgBtnText}>💬</Text>
+                                        )}
+                                    </Pressable>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityState={{ selected: isFriend }}
+                                        style={[styles.addBtn, { marginLeft: 0 }, isFriend && styles.addBtnFriended]}
+                                        onPress={async () => {
+                                            if (!identity?.publicKey) return;
+                                            if (isFriend) {
+                                                await removeFriendLocal(identity.publicKey, item.public_key);
+                                            } else {
+                                                // Refused by the node (100 adds a day, or someone you blocked): said, not dropped.
+                                                try {
+                                                    await addFriendLocal(identity.publicKey, item.public_key);
+                                                } catch (e: any) {
+                                                    Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+                                                }
+                                            }
+                                            loadFriends();
+                                        }}
+                                    >
+                                        <Text style={[styles.addBtnText, isFriend && styles.addBtnTextFriended]}>
+                                            {isFriend ? t('✓ Added') : t('+ Add')}
+                                        </Text>
+                                    </Pressable>
+                                </View>
                             )}
                         </View>
                     );

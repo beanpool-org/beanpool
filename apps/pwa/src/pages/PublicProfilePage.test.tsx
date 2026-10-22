@@ -4,7 +4,7 @@ import React from 'react';
 import { PublicProfilePage } from './PublicProfilePage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getMemberProfile, getFriends, type MemberProfile, type BalanceInfo } from '../lib/api';
+import { getMemberProfile, getFriends, addFriendApi, type MemberProfile, type BalanceInfo } from '../lib/api';
 import { ARCHETYPES } from '@beanpool/core';
 import { blockUser, unblockUser, isUserBlocked, getBlocklistFullNote } from '../lib/blocklist';
 
@@ -373,6 +373,7 @@ describe('PublicProfilePage: Message and Add friend/Friend toggle at the top of 
         await waitFor(() => {
             expect(screen.getByText('✓ Friend')).toBeInTheDocument();
         });
+        expect(addFriendApi).toHaveBeenCalledWith(mockIdentity.publicKey, 'peer-pubkey-123');
     });
 
     it('displays ✓ Friend when viewing a friend', async () => {

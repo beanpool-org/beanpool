@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Anggota komunitasmu. Ketuk seseorang untuk melihat profil, Penawaran, Permintaan, dan lencana.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Anggota komunitasmu dan teman-temanmu. Ketuk seseorang untuk melihat profilnya, atau ketuk 💬 di samping anggota untuk mengirim pesan.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Untuk pemilik komunitas. Memeriksa 12 katamu, mengambil alih atau memulihkan server dengan ponselmu, dan pemeriksaan otomatis oleh ponsel.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Tokomu",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Etalase di akunmu sendiri, untuk Penawaran yang kamu pilih, dalam satu nama.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Penawaranmu dalam satu nama. Beri nama, tentukan jenisnya, tutup untuk sementara, atau tutup sepenuhnya.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

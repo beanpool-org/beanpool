@@ -1173,6 +1173,15 @@ function postLending(rp: any): [number, number | null, string | null, string | n
     ];
 }
 
+/**
+ * shop_id: the shop a listing is in (S1, engine/shops.ts), plain assignment, so a listing taken out of its shop, or one
+ * whose shop closed, is out of it here too. A payload from a main server older than shops says nothing, and it held no
+ * listing in one.
+ */
+function postShop(rp: any): [string | null] {
+    return [typeof rp.shopId === 'string' && rp.shopId !== '' ? rp.shopId : null];
+}
+
 // members.area_lat / area_lng / area_updated_at (G4) come from importedArea (engine/member-area.ts): plain assignment,
 // so a member who clears their area on the main server has none here either.
 
@@ -1947,8 +1956,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -1990,6 +1999,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postModeration(rp),
                         ...postSearch(rp),
                         ...postLending(rp),
+                        ...postShop(rp),
                     );
                     newPosts++;
                 } else {
@@ -2045,6 +2055,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         lend_max_days = ?,
                         lend_terms = ?,
                         replacement_value = ?,
+                        shop_id = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2079,6 +2090,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postModeration(rp),
                         ...postSearch(rp),
                         ...postLending(rp),
+                        ...postShop(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );

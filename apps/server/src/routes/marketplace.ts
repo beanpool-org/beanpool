@@ -42,6 +42,7 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE, LET_IN_ONLY_HOST, POST_PHOTO_FORMAT_ERROR } from '../engine/posts.js';
 import { routePhotosRefusal, photoRefusalText } from '../engine/avatar.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
+import { respondShopRefusal } from './shop-refusal.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches, nearbyListingsLimits } from '../config/node-profile.js';
 import { nearbySetHash, nearbySetMemory } from '../engine/nearby-set-memory.js';
@@ -316,7 +317,7 @@ function photoKeysSince(): string {
 
 /** The posts route's parameters read as one value each. Given twice (`q=a&q=b`), one arrives as an array, which made
  *  getPosts throw or reached SQL as one, and answered 500 to anyone (#1808 review, finding 4): it is a 400. */
-const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo', 'lendable'] as const;
+const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo', 'lendable', 'shop'] as const;
 
 /**
  * A by-area read's query as its ETag describes it: without where the read starts, its page, the hash the phone holds, or
@@ -364,6 +365,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const assignedTo = ctx.query.assignedTo as string | undefined;
     // `lendable=1`: lendable Offers only (S3), a member's shop with `author=`. Anything else reads as without it.
     const lendableOnly = ctx.query.lendable === '1';
+    // `shop=<id>`: that shop's listings only (S1, engine/shops.ts), as any read of the board reads them for this reader; with
+    // `author=` its owner's paused ones too. A visitor reads a shop's listings with nobody in them, as every listing.
+    const shopId = typeof ctx.query.shop === 'string' && ctx.query.shop !== '' ? ctx.query.shop : undefined;
     // A few listings by id at once (`ids=a,b,c`, at most IDS_MAX), each read as `id=` reads one: a phone fetches the
     // listings of its set it doesn't hold (DESIGN-global-sync-by-area §2.3). Garbage is a 400, never a quiet empty list.
     let ids: string[] | undefined;
@@ -390,7 +394,8 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
         && !!ctx.state.actor && viewerTier(ctx) === 'member';
     if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
-        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined || ctx.query.lendable !== undefined)) {
+        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true' || ctx.query.online !== undefined || ctx.query.lendable !== undefined
+        || ctx.query.shop !== undefined)) {
         ctx.status = 400;
         ctx.body = { error: 'nearby=1 reads your own set of listings: it takes types, limit, updatedAfter and the paging parameters only' };
         return;
@@ -413,7 +418,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // counts went to the pull it threw away (review of fe4c27ce, finding 1). A later one (a new install, an emptied
     // cache) doesn't: it holds no old URL (restartPhotoHealFor; review of 1bc39eb0, finding 2). Here, not in photoHealFor: the
     // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
-    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo && !lendableOnly) {
+    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo && !lendableOnly && !shopId) {
         restartPhotoHealFor(ctx.state.actor as string | undefined);
     }
 
@@ -582,7 +587,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const listing = {
         id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined, eventOnline,
-        neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined,
+        neighbourhood: neighbourhood || undefined, lendable: lendableOnly || undefined, shopId,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
     // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,
@@ -671,7 +676,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 router.post('/api/marketplace/posts', async (ctx) => {
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
     const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo,
-        lendable, lendMaxDays, lendTerms, replacementValue } =
+        lendable, lendMaxDays, lendTerms, replacementValue, shopId } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -741,6 +746,8 @@ router.post('/api/marketplace/posts', async (ctx) => {
                 reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts,
                 // A lendable Offer and its terms, raw: the engine checks each (engine/post-fields.ts assertLendFields).
                 lendable, lendMaxDays, lendTerms, replacementValue,
+                // The shop to put it in, raw: the engine checks it is the author's own (engine/shops.ts assertShopForPost).
+                shopId,
             }
         );
         if (!post) {
@@ -756,6 +763,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
     } catch (e: any) {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
         if (respondProfileRefusal(ctx, e)) return;
+        if (respondShopRefusal(ctx, e)) return;
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, 'Failed to create post') };
     }
@@ -863,6 +871,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
+        if (respondShopRefusal(ctx, e)) return;
         // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.
         ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
         ctx.body = { error: memberErrorText(e, 'Failed to update post') };
@@ -1397,6 +1406,8 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
         ctx.body = { success: false, error: 'Post not found, not paused, or not owned by author' };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
+        // One of a shop's Offers while the shop is closed for now: 409 shop_paused (engine/shops.ts).
+        if (respondShopRefusal(ctx, e)) return;
         ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
         ctx.body = { error: memberErrorText(e, 'Failed to resume post') };
     }

@@ -36,6 +36,9 @@
  *      every drop, converges on the lone listing's area centre, never the listing
  *  7c. the communities (/api/global/communities, and the card's): each distance and the order are from the place each
  *      community shows in the body (the public directory's), and from nothing else
+ *  7e. the shops near a place (/api/shops, S1): from 50 points, each with two radii, the visitors' list is the shops of the
+ *      listings' own visitors' read at that point (section 7), in its order, each once at its nearest listing's distance,
+ *      and each shop its id, kind, counts and that distance, and nobody
  *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset), which
  *      runs section 2's sweep too (nothing public there names a member to a guest), and then its own: the listings and
  *      every other read that names people (the Commons decisions, the Pulse feed, the enterprises, crowdfunds and
@@ -240,6 +243,8 @@ function openSocket(url: string): Promise<{ ws: WebSocket; raw: string[] }> {
 
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 const PLACE_NAME = 'Sentinel Hall, 42 Quartzite Crescent';
+/** Alice's shop's name, blurb and "how I deal" (S1): her own words, which would name her, so no visitor ever reads them. */
+const SHOP_WORDS = ["SentinelAlice's Tool Shed", 'Sentinel drills from Alice', 'Sentinel pick up at 42 Quartzite Crescent'];
 const OFFER_AT = { lat: -28.53417, lng: 153.49871 };
 const EVENT_AT = { lat: -28.64213, lng: 153.61237 };
 const TRADE_AT = { lat: -28.70061, lng: 153.40389 };
@@ -401,6 +406,16 @@ async function main(): Promise<void> {
     for (let i = 0; i < places.length; i++) post(grid, `Grid post ${i}`, places[i], {}, 'offer', 'grid');
     // Grid posts: one each; later ones updated later, so ties break the same way on both sides.
     const lone = post(grid, 'Sentinel lone offer', LONE_AT);
+    // Shops (S1, engine/shops.ts): Alice's, in words that would name her, with two of her Offers; Bob's with his, the one
+    // hidden by reports among them; the grid's with every other grid post, so the shops near a place (7e) span the world.
+    const shopsEngine = await import('./engine/shops.js');
+    const aliceShop = shopsEngine.changeShop(alice.pk, { name: SHOP_WORDS[0], kind: 'tools', blurb: SHOP_WORDS[1], howToDeal: SHOP_WORDS[2] }, { enterprise: false }).shop.id;
+    const bobShop = shopsEngine.openShop(bob.pk).id;
+    const gridShop = shopsEngine.openShop(grid.pk).id;
+    const inShop = db.prepare('UPDATE posts SET shop_id = ? WHERE id = ?');
+    for (const p of [offer, pendingPost]) inShop.run(aliceShop, p.id);
+    for (const p of [bobOffer, hiddenPost]) inShop.run(bobShop, p.id);
+    db.prepare("UPDATE posts SET shop_id = ? WHERE author_pubkey = ? AND category = 'grid' AND rowid % 2 = 0").run(gridShop, grid.pk);
     writeDirectoryRows(COMMUNITIES.map(c => ({ key: c.key, name: c.name, url: `https://${c.key}.example`, lat: c.lat, lng: c.lng, radiusKm: c.radiusKm,
         memberCount: 5, contactEmail: null, contactPhone: null, registryUpdatedAt: now, promise: null, acceptingKnocks: null, closingOn: null })), now);
 
@@ -414,7 +429,7 @@ async function main(): Promise<void> {
     /** What must never reach a guest: every member's key and name, the typed place, the event's note, and every place finer than its area. */
     const sentinels: string[] = [
         ...memberRows.flatMap(m => [m.public_key, m.callsign]),
-        PLACE_NAME, 'Quartzite', 'side gate code',
+        PLACE_NAME, 'Quartzite', 'side gate code', ...SHOP_WORDS,
         ...[...placed, ENTERPRISE_AT].flatMap(p => [String(p.lat), String(p.lng), p.lat.toFixed(3), p.lng.toFixed(3)])
             .filter(s => !/^-?\d+\.\d?0*$/.test(s)),
     ];
@@ -474,13 +489,15 @@ async function main(): Promise<void> {
         { path: `/api/avatar/${alice.pk}`, echoes: [alice.pk] },
         // A group's own picture, without the key only a group read hands out (#1486): 404 to anyone (section 9).
         { path: `/api/groups/${club.id}/picture` },
+        // One shop: a visitor's is its id, kind and counts (routes/shops.ts), never its name, owner or words.
+        { path: `/api/shops/${aliceShop}` },
     ];
     for (const re of PATTERNS ?? []) {
         assert(patternExamples.some(e => re.test(e.path.split('?')[0])),
             `PUBLIC_READ_PATTERNS ${re} has an example in this sweep (a new public pattern must be listed here)`);
     }
     /** The other reads that take a point (2b), each read with one as well. */
-    const withPoint = new Set(['/api/global/home', '/api/global/communities', '/api/home']);
+    const withPoint = new Set(['/api/global/home', '/api/global/communities', '/api/home', '/api/shops']);
     const exactReads = [...(EXACT ?? [])].flatMap(p => p === POSTS ? postReads
         : withPoint.has(p) ? [p, `${p}?lat=-28.55&lng=153.51`, `${p}?lat=${LONE_AT.lat}&lng=${LONE_AT.lng}`]
             : [p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p]);
@@ -544,6 +561,7 @@ async function main(): Promise<void> {
         '/api/global/home': "section 7b: the nearby count is of the listings whose area is within 50 km, and the bisection finds the area",
         '/api/global/communities': "section 7c: each distance and the order are from the place each community shows (the public directory's)",
         '/api/home': "section 7d: the find card is the landing card's own body (7b), and each listing's and event's distance the listing's visitors' read (7)",
+        '/api/shops': "section 7e: the shops, their order and each distance are those of the listings' own visitors' read (7) at that point",
     };
     /** The People lists take a point from a member only (routes/community.ts peoplePoint): gated, refused to every guest. */
     const PEOPLE_POINT_READS = ['/api/community/members', '/api/members'];
@@ -590,6 +608,7 @@ async function main(): Promise<void> {
             [path.join('routes', 'home.ts')]: 1, // Home in one read (/api/home)
             [path.join('routes', 'community.ts')]: 1, // peoplePoint: the People lists, members only
             [path.join('routes', 'events.ts')]: 2, // the event form's pin → its zone (/api/events/zone): members only, answers a zone and no listing
+            [path.join('routes', 'shops.ts')]: 1, // the shops near a place (/api/shops)
         };
         assert(JSON.stringify(Object.entries(found).sort()) === JSON.stringify(Object.entries(KNOWN).sort()),
             `the code reads a point from a query in the modules this suite knows, and no others (${JSON.stringify(found)}); a new one needs its reads in POINT_READS and measured`);
@@ -1431,6 +1450,9 @@ async function main(): Promise<void> {
             'POST /api/reports',
             // A tool's private copy of its owner's document (routes/tools.ts): the signer's own, or a keeper's for the enterprise.
             'GET /api/tools/:tool', 'PUT /api/tools/:tool', 'DELETE /api/tools/:tool',
+            // Shops (routes/shops.ts): near a place, one, the signer's own and its changes, and an enterprise's by a keeper.
+            'GET /api/shops', 'GET /api/shops/:id', 'GET /api/shops/mine', 'PUT /api/shops/mine', 'POST /api/shops/mine/close', 'POST /api/shops/mine/offers',
+            'GET /api/treasury/:treasury/shop', 'PUT /api/treasury/:treasury/shop', 'POST /api/treasury/:treasury/shop/close', 'POST /api/treasury/:treasury/shop/offers',
             'GET /api/treasuries', 'GET /api/treasuries/map', 'GET /api/treasuries/statuses',
             'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing',
             'GET /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing/release',
@@ -1467,6 +1489,7 @@ async function main(): Promise<void> {
             'POST /oauth/token', 'POST /oauth/revoke',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
+            [/^\/api\/shops\//, aliceShop],
             [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\/:id\/chat/, clubEvent.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],
             [/^\/api\/crowdfund\/projects\//, crowdfund], [/^\/api\/messages\//, 'msg-sentinel'], [/^\/api\/pulse\/items\//, 'item_sentinel'],
             [/^\/api\/member\/pulse\/items\//, 'item_sentinel'], [/^\/api\/member\/(pulse\/)?channels\//, 'chan-sentinel'],
@@ -1766,6 +1789,36 @@ async function main(): Promise<void> {
         }
         assert(homeOff.length === 0 && homeItems > 0, `50 points, ${homeItems} listings and events: the visitors' cards only, the find card the landing card's, `
             + `each distance the listing's visitors' read${homeOff.length ? ` — ${homeOff.slice(0, 5).join(' | ')}` : ''}`);
+
+        console.log('\n── 7e. /api/shops, the shops near a place: the shops of the listings\' own visitors\' read, in its order, at its distances ──');
+        const shopsOff: string[] = [];
+        let shopsListed = 0;
+        for (let i = 0; i < points.length; i += 4) {
+            const q = points[i];
+            const [, id] = guests[i % guests.length];
+            for (const km of [50, 15_000]) {
+                const at = `lat=${q.lat}&lng=${q.lng}&radiusKm=${km}`;
+                const r = await call('GET', id, `/api/shops?${at}`);
+                const shops: any[] = Array.isArray(r.body?.shops) ? r.body.shops : [];
+                // The listings' visitors' read at the same point and radius, nearest first (section 7 measures it): each shop
+                // once, where its first listing is, at that listing's distance.
+                const own = await call('GET', id, `${POSTS}?type=offer&${at}&sort=distance&limit=200`);
+                const expected: Array<[string, number]> = [];
+                for (const p of (Array.isArray(own.body) ? own.body : []) as any[]) {
+                    if (p.shopId && !expected.some(([s]) => s === p.shopId)) expected.push([p.shopId, p.distanceKm]);
+                }
+                shopsListed += shops.length;
+                if (r.status !== 200) shopsOff.push(`#${i} ${km} km: ${r.status}`);
+                if (JSON.stringify(shops.map(s => [s.id, s.distanceKm])) !== JSON.stringify(expected)) {
+                    shopsOff.push(`#${i} ${km} km: ${JSON.stringify(shops.map(s => [s.id.slice(0, 6), s.distanceKm]))}, the listings' read ${JSON.stringify(expected.map(([s, d]) => [s.slice(0, 6), d]))}`);
+                }
+                for (const s of shops) {
+                    if (JSON.stringify(Object.keys(s).sort()) !== '["counts","distanceKm","id","kind"]') shopsOff.push(`#${i}: ${s.id} carries ${Object.keys(s).join(',')}`);
+                }
+            }
+        }
+        assert(shopsOff.length === 0 && shopsListed > 0, `50 points × 2 radii, ${shopsListed} shops: each the listings' visitors' read's, in its order, `
+            + `at its distance, and each its id, kind, counts and distance alone${shopsOff.length ? ` — ${shopsOff.slice(0, 5).join(' | ')}` : ''}`);
     }
 
     async function localChecks(): Promise<void> {

@@ -149,6 +149,9 @@ export default function PublicProfileScreen() {
             borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
         },
+        blockedEmoji: {
+            fontSize: 16,
+        },
         blockedText: {
             fontSize: 14, fontWeight: '600', color: colors.feedback.danger.fg, flexShrink: 1,
         },
@@ -943,9 +946,12 @@ export default function PublicProfileScreen() {
                 {!isSelf && (
                     isBlocked ? (
                         <View style={styles.blockedRow}>
-                            <Text style={styles.blockedText}>
-                                🚫 {t('You blocked {name}.', { name: callsignStr || '…' })}
-                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+                                <Text style={styles.blockedEmoji}>🚫</Text>
+                                <Text style={styles.blockedText}>
+                                    {t('You blocked {name}.', { name: callsignStr || '…' })}
+                                </Text>
+                            </View>
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Unblock')}

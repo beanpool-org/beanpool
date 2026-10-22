@@ -3,7 +3,7 @@
  * "Also remove from friends" on Settings → Manage Blocked Users (components/BlockedFriendRemove.tsx), rendered for real,
  * over the phone's real friends table (utils/db.ts on an in-memory SQLite, as nearby-keep-db.test.ts does) and its real
  * block list (utils/blocklist.ts over an in-memory AsyncStorage). A block does not end a friendship (#1913, measured by
- * the Argon shadow), and a block made in the phone app stays on the phone: the node never hears of it, and still has
+ * the Argon shadow): the node, which a block made in the phone app reaches too (utils/blocklist.ts syncBlocks), still has
  * them as your friend. This ends it in one step:
  *   - offered only for someone blocked who is still your friend;
  *   - removing goes through the same friend route as any removal (POST /api/friends/remove, signed) and keeps the block;

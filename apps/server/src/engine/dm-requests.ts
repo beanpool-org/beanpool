@@ -46,7 +46,8 @@
  *
  * `dm_requests` (schema.sql section 30), one row per request, copied verbatim to a standby for a real conversation (a plain
  * table, engine/replication-manifest.ts). A standby makes none of its own: every decision is refused there, and so is an
- * open or a line that would write one. A removal or self-deletion of either person deletes theirs; a re-key moves them
+ * open or a line that would write one. A removal or self-deletion of either person deletes theirs, except one they made that
+ * waits in a real conversation, which is ignored so it never becomes an ordinary chat (dropRequestsOf); a re-key moves them
  * (engine/key-move.ts).
  */
 import { wordsFor } from '@beanpool/core';
@@ -486,7 +487,16 @@ export function tickRequestPushFolds(dispatch: PushFn, now: number = Date.now())
 
 // ── a member leaving ───────────────────────────────────────────────────────────────────────────────────────────
 
-/** A removal or self-deletion (state-engine.ts): every request they made or that waits for them goes, with a tombstone. */
-export function dropRequestsOf(publicKey: string): void {
-    deletePlainRows('dm_requests', 'from_pubkey = ? OR to_pubkey = ?', publicKey, publicKey);
+/**
+ * A removal or self-deletion (state-engine.ts). A request they made that nobody accepted, in a real conversation, is ignored
+ * rather than deleted: the conversation stays (and for a removal, their line in it), and with no row it would be an
+ * ordinary chat in the other person's list and unread count (PR #2392 review 4354387983). An ignored one is in neither, and
+ * is held from the badge. Every other request of theirs goes, with a tombstone: an accepted one (an ordinary chat either
+ * way), one in a conversation kept for them alone (dropWithheldOf took it), and every one waiting for them.
+ */
+export function dropRequestsOf(publicKey: string, now: number = Date.now()): void {
+    db.prepare(`UPDATE dm_requests SET state = 'ignored', decided_at = ?
+                 WHERE from_pubkey = ? AND state = 'pending' AND conversation_id IN (SELECT id FROM conversations)`).run(iso(now), publicKey);
+    deletePlainRows('dm_requests', `(from_pubkey = ? AND (state = 'accepted' OR conversation_id NOT IN (SELECT id FROM conversations)))
+                                    OR to_pubkey = ?`, publicKey, publicKey);
 }

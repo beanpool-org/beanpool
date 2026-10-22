@@ -19,7 +19,8 @@
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12)
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
  *  10. pushes: one per request, "wants to message you", folded to one an hour per person (R14)
- *  11. a removed sender's request goes; a deleted sender's line is blanked and their request goes (R15)
+ *  11. a removed sender's request goes; a deleted sender's line is blanked and their request goes (R15); neither becomes a
+ *      chat or counts as unread; one waiting for a removed member goes from the node
  *  12. Ignore all
  *  13. a re-key moves the requests to the new key
  *  14. a standby: every decision refused, and an open that would make a request; a whole copy and a delta carry the
@@ -524,14 +525,29 @@ async function globalRun(): Promise<void> {
     await send(joConv, jo);
     const kimConv: string = (await open(kim, ann)).body?.conversation?.id;
     const kimLine: string = (await send(kimConv, kim)).body?.message?.id;
-    assert(inRequests(await listOf(ann), joConv) && inRequests(await listOf(ann), kimConv), 'both wait under her requests');
+    // And one waiting FOR a member who is then removed: Ann's to Lin.
+    const lin = member('Lin');
+    const linConv: string = (await open(ann, lin)).body?.conversation?.id;
+    await send(linConv, ann);
+    const annList11a = await listOf(ann);
+    assert(inRequests(annList11a, joConv) && inRequests(annList11a, kimConv) && !inChats(annList11a, joConv) && !inChats(annList11a, kimConv)
+        && rowOf(linConv)?.state === 'pending', 'both wait under her requests, and hers waits for Lin');
+    const unreadBefore11 = annList11a?.totalUnread;
     attempt(() => adminPruneUser(jo.pk, 'owner:password'));
     const purged = attempt(() => purgeMemberSelf(kim.pk));
+    attempt(() => adminPruneUser(lin.pk, 'owner:password'));
     const annList11 = await listOf(ann);
     const kimRow = db.prepare('SELECT type FROM messages WHERE id = ?').get(kimLine) as { type?: string } | undefined;
-    assert(!rowOf(joConv) && !inRequests(annList11, joConv), 'a removed member\'s request goes, from the node and her list');
-    assert(purged?.ok === true && !rowOf(kimConv) && !inRequests(annList11, kimConv) && kimRow?.type === 'removed',
-        `a deleted member's goes too, and their line is blanked (${purged?.message}; ${kimRow?.type})`);
+    // The conversation stays (a removed member's line with it), so the request is ignored, never deleted: with no row it would
+    // be an ordinary chat in her list and her unread count (PR #2392 review 4354387983).
+    assert(rowOf(joConv)?.state === 'ignored' && !inRequests(annList11, joConv) && !inChats(annList11, joConv),
+        `a removed member's request goes from her list, and is not a chat either (row ${rowOf(joConv)?.state})`);
+    assert(purged?.ok === true && rowOf(kimConv)?.state === 'ignored' && !inRequests(annList11, kimConv) && !inChats(annList11, kimConv)
+        && kimRow?.type === 'removed', `a deleted member's goes too, and their line is blanked (${purged?.message}; ${kimRow?.type})`);
+    const counts11 = attempt(() => getListedUnreadCounts(ann.pk)) ?? { [joConv]: 1, [kimConv]: 1 };
+    assert(annList11?.totalUnread === unreadBefore11 && !(joConv in counts11) && !(kimConv in counts11),
+        `neither is in her unread count or her badge (unread ${unreadBefore11} → ${annList11?.totalUnread})`);
+    assert(!rowOf(linConv), 'the request waiting for a removed member goes, from the node');
 
     // ── 12. Ignore all ──────────────────────────────────────────────────────────────────────────
     console.log('── 12. Ignore all ──');

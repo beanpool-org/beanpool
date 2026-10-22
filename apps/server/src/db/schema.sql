@@ -2808,7 +2808,8 @@ CREATE INDEX IF NOT EXISTS idx_shops_owner ON shops(owner_pubkey);
 -- the real one, so the opener's answers are the same either way. Its own table, not columns on `conversations`: a delta
 -- picks conversations by `created_at`, so a decision made later would reach a standby only in a whole copy. Copied
 -- verbatim (a plain table, engine/replication-manifest.ts), but only for a conversation that is real; a removal of the
--- opener or of the person it is for deletes it with a tombstone.
+-- opener or of the person it is for deletes it with a tombstone, except the opener's own still waiting in a real
+-- conversation, which is ignored instead, so it never becomes an ordinary chat.
 CREATE TABLE IF NOT EXISTS dm_requests (
     conversation_id TEXT PRIMARY KEY,
     -- Who opened it, and who it waits for.

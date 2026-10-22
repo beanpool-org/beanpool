@@ -104,6 +104,37 @@ function linesNeeded(text: string, fontSize: number, width: number): number {
     }
     return lines;
 }
+/**
+ * Lines Android's StaticLayout draws `text` in: wrapped at spaces, and a word wider than the line goes on a line of its
+ * own and is broken by character there, with no hyphen ("Zurücksetze" / "n").
+ */
+function linesDrawn(text: string, fontSize: number, width: number): number {
+    let lines = 1;
+    let line = '';
+    for (const word of text.split(' ')) {
+        const next = line ? `${line} ${word}` : word;
+        if (textWidth(next, fontSize) <= width) { line = next; continue; }
+        if (line) { lines += 1; line = ''; }
+        for (const ch of word) {
+            if (line && textWidth(line + ch, fontSize) > width) { lines += 1; line = ''; }
+            line += ch;
+        }
+    }
+    return lines;
+}
+// One pixel at the floor phone's density (1.5, as useWindowDimensions reports below), in style units.
+const PIXEL = 1 / (1.5 * SCALE);
+/**
+ * The size Android draws an adjustsFontSizeToFit label at (RN 0.83, TextLayoutManager.adjustSpannableFontToFit): laid
+ * out at full size, then a pixel smaller at a time, but only while it takes more lines than numberOfLines, down to
+ * minimumFontScale. A word broken by character that still fits in numberOfLines is never shrunk.
+ */
+function androidFitSize(text: string, fontSize: number, minScale: number, maxLines: number, width: number): number {
+    const floor = fontSize * minScale;
+    let size = fontSize;
+    while (size > floor && linesDrawn(text, size, width) > maxLines) size = Math.max(floor, size - PIXEL);
+    return size;
+}
 type FlexItem = { el: Element; basis: number };
 /**
  * How Yoga places a row's children: in order, by their basis; with flexWrap a child that would run past the row starts
@@ -188,13 +219,16 @@ describe.each(['light', 'dark'] as const)('at 320 dp and 1.3x, %s', (theme) => {
         expect(lineOf(cancel), 'Reset is never pushed onto a line of its own').toBe(lineOf(reset));
         for (const line of lines) expect(lineWidth(line, gap), 'nothing runs past the row').toBeLessThanOrEqual(inner);
 
-        // Each button's word fits inside its button, at its smallest size, in the lines it may take.
+        // Each button's word fits inside its button, whole, in the lines it may take, at the size Android settles on.
+        // Review of #2369: checked only at the 0.7 floor, German "Zurücksetzen" passed, but at full size it breaks into
+        // 2 lines, 2 are allowed, so Android never shrinks it and draws "Zurücksetze" / "n".
         for (const el of [cancel, reset]) {
             const word = el.firstElementChild!;
-            const smallestWord = style(word).fontSize * Number(word.getAttribute('data-fit') ?? 1);
+            const allowedLines = Number(word.getAttribute('data-lines') ?? Infinity);
             const box = button(el) - 2 * (style(el).padding ?? 0);
-            expect(linesNeeded(word.textContent!, smallestWord, box), `"${word.textContent}"`)
-                .toBeLessThanOrEqual(Number(word.getAttribute('data-lines') ?? Infinity));
+            const size = androidFitSize(word.textContent!, style(word).fontSize, Number(word.getAttribute('data-fit') ?? 1), allowedLines, box);
+            expect(linesNeeded(word.textContent!, size, box), `"${word.textContent}" at ${(size * SCALE).toFixed(1)} dp in ${box.toFixed(2)} dp, never cut mid-word`)
+                .toBeLessThanOrEqual(allowedLines);
         }
 
         // Width left for the title: its line less the gaps and whatever else shares it.

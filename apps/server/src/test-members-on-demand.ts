@@ -51,6 +51,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { localFetch } from './keepalive-test-fetch.js';
+import { requestNonces } from './engine/member-signature.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -125,6 +126,9 @@ async function main() {
     stopPricingAggregatorWorker();
     // About 1,500 signed reads from one address: the gateway's minute throttle is another suite's (test-global-server-limits).
     updateGatewayConfig({ ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: false, maxRequestsPerMinute: 120 } });
+    // So is the nonce store's share of one key's signed requests in flight (engine/member-signature.ts NonceStore: a newer
+    // account's 600, which these reads from a member who joined today pass; test-nonce-store-cap measures it).
+    requestNonces.setLimitsForTests({ keyMax: 1_000_000, newKeyMax: 1_000_000 });
     // This suite reads the whole directory and its delta as the bytes the small forms must match, and makes hundreds of nearest reads. Where `openMembership` is on (the global node's default) those reads are refused, which
     // test-open-membership-reads proves; here the operator's override keeps them, and nothing this suite measures depends on it.
     db.prepare("INSERT INTO node_config (key, value) VALUES ('nodeProfile.openMembership', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();

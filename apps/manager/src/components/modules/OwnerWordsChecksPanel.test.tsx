@@ -16,13 +16,6 @@ const DAY = 24 * 3600_000;
 describe('OwnerWordsChecksPanel (Settings → Backups & Restore)', () => {
     beforeEach(() => vi.clearAllMocks());
 
-    it('shows a loading indicator while owner 12-words check data is fetching', () => {
-        vi.mocked(nodeClient.getOwnerWordsChecks).mockImplementation(() => new Promise(() => {}));
-        render(<OwnerWordsChecksPanel activeNode={node} now={NOW} />);
-        expect(screen.getByTestId('owner-words-loading')).toBeInTheDocument();
-        expect(screen.getByText('Loading owner 12-words checks…')).toBeInTheDocument();
-    });
-
     it('lists each owner with "12 words checked: <date>" or "not yet", and a plain summary', async () => {
         vi.mocked(nodeClient.getOwnerWordsChecks).mockResolvedValue({
             owners: [

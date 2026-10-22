@@ -36,6 +36,7 @@ Flow's domain is `apps/manager/` ONLY. Do NOT touch `apps/server`, `apps/native`
 
 ## ✅ Resolved — do NOT re-file
 - 2026-10-18 #2116: DoorSettingPanel needs no loading state (third filing; #1670, #1820).
+- 2026-12-13: OwnerWordsChecksPanel needs no loading state (same as #1957/#2076/#2116; hides until first read).
 
 ### 2026-10-16 — "typed catch in OffboardMemberWizard" (#2006) — CLOSED: `String(err) || fallback` never falls back; see POLICY.md for the shape to re-file.
 ### 2026-09-09 — MembersModule catch block unknown typing LANDED in #675.
@@ -151,6 +152,4 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 **Learning:** `OffboardMemberWizard.tsx` used `catch (err: any)` in async preview loading and offboard execution handlers, weakening error handling type safety.
 **Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error && err.message ? err.message : ...` guards.
 
-## 2026-12-13 - Add loading indicator for OwnerWordsChecksPanel
-**Learning:** `OwnerWordsChecksPanel.tsx` returned `null` prior to data fetching completion (`!owners && !error`), leaving operators without visual loading feedback.
-**Action:** Render an explicit loading indicator and spinner when `!owners` before data or error arrives.
+- 2026-12-13: OwnerWordsChecksPanel needs no loading state (same as #1957/#2076/#2116; hides until first read).

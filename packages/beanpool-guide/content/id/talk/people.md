@@ -3,8 +3,8 @@ slug: people
 title: Orang dan teman
 summary: Mencari anggota komunitas, profil dan lencana mereka, serta menandai teman agar kamu tahu jika ada yang keluar.
 related: messages, your-profile, joining, blocking
-help: Anggota komunitasmu. Ketuk seseorang untuk melihat profil, Penawaran, Permintaan, dan lencana.
-source-hash: 7720f543f516d9dc
+help: Anggota komunitasmu dan teman-temanmu. Ketuk seseorang untuk melihat profilnya, atau ketuk 💬 di samping anggota untuk mengirim pesan.
+source-hash: 44b66169497e9909
 ---
 
 ## Menemukan orang
@@ -15,12 +15,12 @@ Ketuk **Obrolan**, lalu **Orang**. Di aplikasi web, ketuk **Orang** pada deretan
 - **Komunitas:** setiap anggota. Cari berdasarkan nama. Di ponsel, urutkan berdasarkan **Terbaru**, **Nama**, **Teman**, **Tepercaya**, atau **Aktif**. Pada komunitas global, daftar ini menampilkan anggota yang paling dekat dengan wilayahmu: ketik setidaknya 2 huruf dari nama untuk menemukan orang lain.
 - **Undangan:** undang orang baru. Lihat "Bergabung dengan BeanPool". Jika kamu belum bergabung, tombol ini bertuliskan **Daftar**. Ketika ada orang yang meminta untuk bergabung dengan komunitasmu, tombol ini menunjukkan berapa banyak, dan mereka tercantum di bawah **Ingin bergabung**. Di aplikasi web tombol ini selalu bertuliskan **🎟️ Undangan**, tanpa jumlah hitungan dan tanpa daftar **Ingin bergabung**.
 
-Ketuk seseorang untuk melihat profil mereka: ulasan dan postingan mereka, serta, di ponsel pada komunitas dengan Kacang, lencana percaya dan transaksi mereka. Lihat "Profilmu".
+Ketuk seseorang untuk melihat profil mereka: ulasan dan postingan mereka, serta, di ponsel pada komunitas dengan Kacang, lencana percaya dan transaksi mereka. Kamu bisa langsung mengirim pesan dari profil mereka dengan **Kirim Pesan**, atau menambahkan mereka sebagai teman dengan **+ Tambah teman**. Lihat "Profilmu".
 
 ## Teman
 
-- Di **Komunitas**, ketuk **+ Tambah** di samping sebuah nama. Tombol berubah menjadi **Ditambahkan**. Ketuk **Ditambahkan** untuk menghapus mereka kembali. Di aplikasi web tombol berubah menjadi **✓ Teman**, yang tidak dapat diketuk: untuk menghapus seseorang, gunakan **Hapus** di bawah **Teman**.
-- Di **Teman**, ketuk tombol pesan untuk memulai obrolan, atau tombol hapus, lalu **Hapus**, untuk menghapus seseorang.
+- Di **Komunitas**, ketuk 💬 untuk memulai obrolan, atau ketuk **+ Tambah** di samping sebuah nama. Tombol berubah menjadi **Ditambahkan**. Ketuk **Ditambahkan** untuk menghapus mereka kembali. Di aplikasi web tombol berubah menjadi **✓ Teman**, yang tidak dapat diketuk: untuk menghapus seseorang, gunakan **Hapus** di bawah **Teman**. Kamu juga bisa mengirim pesan kepada seseorang atau menambahkannya sebagai teman langsung dari profilnya.
+- Di **Teman**, ketuk 💬 untuk memulai obrolan, atau tombol hapus, lalu **Hapus**, untuk menghapus seseorang.
 - Ketika seseorang menambahkanmu, bagian atas tab **Teman** menyebutkan siapa, seperti "Sam menambahkanmu", dengan tombol **Tambahkan balik**. Ketuk nama mereka untuk melihat profil mereka terlebih dahulu. Tidak ada notifikasi. Baris tersebut akan hilang saat kamu menambahkan mereka balik, atau setelah 30 hari. Hingga 20 orang ditampilkan, lalu berapa banyak lagi.
 - Kamu dapat menambahkan hingga 100 orang dalam rentang 24 jam mana pun. Menghapus seseorang juga dihitung. Jika kamu mencapai batas tersebut, aplikasi akan memberitahukan hal itu dan kapan kamu dapat menambahkan seseorang lagi.
 - Kamu tidak dapat menambahkan seseorang yang telah kamu blokir: buka blokir mereka terlebih dahulu. Lihat "Memblokir seseorang".

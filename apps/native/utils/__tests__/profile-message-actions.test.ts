@@ -255,6 +255,9 @@ describe('Phone public profile message and friend actions (S0)', () => {
         expect(data.unblockedUsers).toContain(KOFI);
         expect(host.textContent).not.toContain('You blocked Kofi.');
         expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent?.includes('Message'))).toBe(true);
+        // The toggle names itself: on Android the reused Unblock view kept "Unblock" for TalkBack.
+        const toggle = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('+ Add friend'));
+        expect(toggle?.getAttribute('aria-label')).toBe('+ Add friend');
     });
 
     it('an Unblock that did not happen keeps the blocked row', async () => {

@@ -111,7 +111,7 @@ changed, here in `apps/reddit-watcher` only (the `devvit.json` test keeps it fro
 `.git`):
 
 ```sh
-[ -f devvit.json ] && [ -d .git ] && rm -rf .git; git checkout -- package.json devvit.json
+[ -f devvit.json ] && [ -d .git ] && rm -rf .git; git checkout -- package.json package-lock.json devvit.json
 ```
 
 **4. Set the topic.**

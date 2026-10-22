@@ -37,6 +37,8 @@ export interface ShopfrontListing {
     shopId: string | null;
     /** Its first photo, on the node (the node's own 800 px copy, never a new one), or null. */
     photo: string | null;
+    /** The least credit of its author's tier, as every member reads it on a listing; null when not sent. */
+    authorTierCredit: number | null;
 }
 
 const LIVE = new Set(['active', 'pending']);
@@ -63,6 +65,7 @@ export function readShopfrontListing(raw: unknown, anchor: string): ShopfrontLis
         featuredAt: text(p.featuredAt),
         shopId: text(p.shopId),
         photo,
+        authorTierCredit: typeof p.authorEnergyCycled === 'number' && Number.isFinite(p.authorEnergyCycled) ? p.authorEnergyCycled : null,
     };
 }
 
@@ -218,6 +221,8 @@ export function readsAsMember(detail: unknown): boolean {
 export interface ShopfrontShop extends MyShop {
     ownerPublicKey: string;
     enterprise: boolean;
+    /** When it opened, or null. */
+    openedAt: string | null;
 }
 
 /** A member's view of a shop (GET /api/shops/:id), or null when it is none (a visitor's view included). */
@@ -225,7 +230,7 @@ export function readShopfrontShop(raw: unknown): ShopfrontShop | null {
     const shop = readShop(raw);
     const s = raw as Record<string, unknown> | null;
     if (!shop || typeof s?.ownerPublicKey !== 'string' || !s.ownerPublicKey) return null;
-    return { ...shop, ownerPublicKey: s.ownerPublicKey, enterprise: s.enterprise === true };
+    return { ...shop, ownerPublicKey: s.ownerPublicKey, enterprise: s.enterprise === true, openedAt: text(s.openedAt) };
 }
 
 /** A shop's kind, when it is one of the fourteen. */

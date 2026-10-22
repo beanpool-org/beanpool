@@ -942,6 +942,26 @@ describe('A thing', () => {
         expect(nav.backs).toBe(1);
     });
 
+    it("a Delete that lands after the member went back goes back no further: one Back, the member's own", async () => {
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' }), thing('t-2', 'Ladder')));
+        await open('thing', { key: 't-1' });
+        let answer = () => {};
+        market.marketGate = new Promise<void>((r) => { answer = r; });
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(market.marketAsks).toEqual(['pause post-1']);
+        // The header's ← while the pause is still asked: the stack takes the screen away before the Delete lands.
+        await click('tool-back');
+        expect(nav.backs).toBe(1);
+        act(() => root.unmount());
+        root = createRoot(host);
+        answer();
+        await settle();
+        expect(readThingsDoc(await kept()).things.find((t) => (t as Thing).id === 't-1')).toMatchObject({ gone: true });
+        expect(nav.backs).toBe(1);
+    });
+
     it("an Offer already paused or gone from the Market is left as it is: lend and delete still do what they say", async () => {
         offer('post-1', 'Ladder', 'paused');
         await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1' }), thing('t-2', 'Drill', { postId: 'post-9' })));

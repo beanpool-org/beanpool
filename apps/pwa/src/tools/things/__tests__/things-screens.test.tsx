@@ -711,6 +711,28 @@ describe('A thing', () => {
         expect(byTestId('things-main')).not.toBeNull();
     });
 
+    it("a Delete that lands after the member went back leaves them where they went: the page drawn, Your things showing", async () => {
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' }), thing('t-2', 'Ladder')));
+        await open('main');
+        await click('thing-row-t-1');
+        let answer = () => {};
+        server.marketGate = new Promise<void>((r) => { answer = r; });
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        await waitFor(() => expect(server.asks).toEqual(['pause post-1']));
+        // The page's ← while the pause is still asked: Your things shows before the Delete lands.
+        await click('tools-back');
+        expect(byTestId('things-main')).not.toBeNull();
+        answer();
+        await waitFor(async () => expect(shedThings(await kept()).map((t) => t.id)).toEqual(['t-2']));
+        await settle();
+        expect(byTestId('tools-page')).not.toBeNull();
+        expect(byTestId('things-main')).not.toBeNull();
+        expect(byTestId('thing-row-t-1')).toBeNull();
+        expect(byTestId('thing-row-t-2')).not.toBeNull();
+    });
+
     it('an Offer already paused or gone from the Market is left as it is: lend and delete still do what they say', async () => {
         offer('post-1', 'Ladder', 'paused');
         await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1' }), thing('t-2', 'Drill', { postId: 'post-9' })));

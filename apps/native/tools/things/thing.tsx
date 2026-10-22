@@ -16,7 +16,7 @@
  * What is written is made from the document as it is once the server has answered, so a sync that took the server's
  * newer copy meanwhile is never undone.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     BACK_AROUND_DAYS, THINGS_NAME_CHARS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack,
     isShopClosedRefusal, offersToLink, openDealsByPost, removeThing, setListed, shedFits, shedTooBigLine, shopClosedLine, t,
@@ -60,6 +60,13 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const [hint, setHint] = useState<ToolPriceHint | null>(null);
     const beans = host.node.features?.beans !== false;
     const postId = thing?.postId;
+    /** Whether the member has left this screen: a Delete that lands after they have doesn't go back again. */
+    const left = useRef(false);
+    // Set again on each mount: StrictMode mounts twice.
+    useEffect(() => {
+        left.current = false;
+        return () => { left.current = true; };
+    }, []);
 
     // A linked Offer as the Market has it now: gone (ended, deleted) or paused from elsewhere is said.
     useEffect(() => {
@@ -211,7 +218,8 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
                 make: (d: ThingsDoc) => removeThing(d, id, host.now()),
                 kept: async () => {
                     if (photo) await host.photos.remove(photo).catch(() => {});
-                    host.back();
+                    // The member went back while it was asked: back again would go a screen too far.
+                    if (!left.current) host.back();
                 },
             };
         });

@@ -101,7 +101,7 @@ export function EditScreen({ host, params }: ThingsScreenProps) {
     };
     const cancel = async () => {
         await letGo();
-        host.back();
+        if (!left.current) host.back();
     };
 
     return (

@@ -8,6 +8,7 @@ import {
     THINGS_OWNER_NOTE_CHARS,
     THINGS_REPLACEMENT_VALUE_CHARS,
     emptyThingsDoc,
+    isThing,
     readThingsDoc,
     type Thing,
     type ThingsDoc,
@@ -35,6 +36,12 @@ import {
     thingsCounts,
     thingsHomeLines,
 } from '../manifest.js';
+
+/** A document of this build's version: every item in it is a Thing (only a newer version keeps an UnreadThing). */
+function ownThings(doc: ThingsDoc): Thing[] {
+    expect(doc.things.every(isThing)).toBe(true);
+    return doc.things.filter(isThing);
+}
 
 describe('Tool shed (things) manifest and fixtures (generic checks)', () => {
     it('manifest passes all template bounds and rules', () => {
@@ -90,8 +97,8 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
         };
         const read = readThingsDoc(raw);
         expect(read.things.length).toBe(1);
-        expect(read.things[0].id).toBe('3');
-        expect(read.things[0].name).toBe('Ladder');
+        expect(ownThings(read)[0].id).toBe('3');
+        expect(ownThings(read)[0].name).toBe('Ladder');
     });
 
     it('clamps string fields to bounds on v1 documents', () => {
@@ -108,7 +115,7 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
             },
         };
         const read = readThingsDoc({ v: 1, things: [longItem] });
-        const item = read.things[0];
+        const item = ownThings(read)[0];
         expect(item.name.length).toBe(THINGS_NAME_CHARS);
         expect(item.replacementValue?.length).toBe(THINGS_REPLACEMENT_VALUE_CHARS);
         expect(item.lendTerms?.length).toBe(THINGS_LEND_TERMS_CHARS);
@@ -125,8 +132,8 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
         }));
         const read = readThingsDoc({ v: 1, things });
         expect(read.things.length).toBe(THINGS_MAX_ITEMS);
-        expect(read.things[0].id).toBe('t-0');
-        expect(read.things[99].id).toBe('t-99');
+        expect(ownThings(read)[0].id).toBe('t-0');
+        expect(ownThings(read)[99].id).toBe('t-99');
     });
 
     it('preserves unknown fields on v1 document and items', () => {
@@ -185,7 +192,7 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
             ],
         };
         const read = readThingsDoc(raw);
-        const item1 = read.things[0];
+        const item1 = ownThings(read)[0];
         expect(item1.id).toBe('t-1');
         expect(item1.name).toBe('Hammer');
         expect(item1.category).toBeUndefined();
@@ -200,7 +207,7 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
         expect(item1.lentTo).toBeUndefined();
         expect(item1.genuineExtensionProp).toBe('preserved');
 
-        const item2 = read.things[1];
+        const item2 = ownThings(read)[1];
         expect(item2.id).toBe('t-2');
         expect(item2.lentTo).toBeDefined();
         expect(item2.lentTo?.name).toBe('Alice');
@@ -229,6 +236,38 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
         expect(readThings.length).toBe(105);
         expect(readThings[0].name.length).toBe(120);
         expect(readThings[0].futureField).toBe('future-0');
+    });
+
+    it('a newer version keeps the items this build cannot read, as they were and in their places', () => {
+        const raw = {
+            v: 2,
+            things: [
+                { id: 7, name: 'n' }, // numeric id
+                { id: 'b', title: 'renamed' }, // name moved to title
+                { id: 'c', name: 'ok', extra: 1, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' },
+                null,
+                'text',
+            ],
+        };
+        const read = readThingsDoc(raw);
+        expect(read.things.length).toBe(5);
+        expect(read.things[0]).toEqual({ id: 7, name: 'n' });
+        expect(read.things[1]).toEqual({ id: 'b', title: 'renamed' });
+        expect(read.things[2]).toEqual(raw.things[2]);
+        expect(read.things[3]).toBeNull();
+        expect(read.things[4]).toBe('text');
+        expect(read.things.map(isThing)).toEqual([false, false, true, false, false]);
+
+        // Written back (stored as JSON) and read again: nothing lost, nothing moved.
+        const written = JSON.parse(JSON.stringify(read));
+        expect(written.things).toEqual(raw.things);
+        expect(readThingsDoc(written)).toEqual(read);
+    });
+
+    it('the current version still drops what it cannot read', () => {
+        const read = readThingsDoc({ v: 1, things: [{ id: 7, name: 'n' }, { id: 'b', title: 'renamed' }, null, { id: 'c', name: 'ok' }] });
+        expect(read.things.length).toBe(1);
+        expect(ownThings(read)[0].id).toBe('c');
     });
 
     it('idempotency: reading twice is identical to reading once', () => {
@@ -291,6 +330,35 @@ describe('thingsCounts / countsOf (state partitioning and invariant)', () => {
         expect(counts.out).toBe(2);
         // Invariant: things === listed + out + shelf
         expect(counts.things).toBe(counts.listed + counts.out + counts.shelf);
+    });
+});
+
+describe('unread items of a newer version are in no count, line or reminder', () => {
+    const NOW = Date.parse('2026-10-20T09:00:00.000Z');
+    const newer = readThingsDoc({
+        v: 2,
+        things: [
+            null,
+            'text',
+            { id: 7, name: 'n', lentTo: { name: 'Ann', since: '2026-10-01', backAround: new Date(NOW + 86_400_000).toISOString() } },
+            { id: 'b', title: 'renamed', postId: 'post-b' },
+            { id: 'c', name: 'Ladder', lentTo: { name: 'Bob', since: '2026-10-01', backAround: new Date(NOW + 2 * 86_400_000).toISOString() } },
+            { id: 'd', name: 'Saw' },
+        ],
+    });
+
+    it('counts only the things this build reads', () => {
+        expect(newer.things.length).toBe(6);
+        expect(thingsCounts(newer)).toEqual({ things: 2, listed: 0, out: 1, shelf: 1 });
+    });
+
+    it('Home lines and reminders read past them without throwing', () => {
+        const lines = thingsHomeLines(newer, NOW);
+        expect(lines.length).toBe(1);
+        expect(lines[0].values).toEqual({ things: 2, out: 1 });
+        expect(lines[0].screen).toBe('loans');
+        const dues = loansDue(newer, NOW);
+        expect(dues.map((d) => d.values?.name)).toEqual(['Ladder']);
     });
 });
 
@@ -559,12 +627,12 @@ describe('Loans maths and validations (against S3 lendable Offers semantics)', (
             createdAt: '2026-10-01T00:00:00.000Z',
             updatedAt: '2026-10-01T00:00:00.000Z',
         };
-        const kept = readThingsDoc({ v: 1, things: [atBound] }).things[0];
+        const kept = ownThings(readThingsDoc({ v: 1, things: [atBound] }))[0];
         expect(kept.replacementValue).toBe(atBound.replacementValue);
         expect(kept.lendTerms).toBe(atBound.lendTerms);
         expect(kept.ownerNote).toBe(atBound.ownerNote);
         const over = { ...atBound, replacementValue: emoji.repeat(THINGS_REPLACEMENT_VALUE_CHARS + 1) };
-        const cut = readThingsDoc({ v: 1, things: [over] }).things[0];
+        const cut = ownThings(readThingsDoc({ v: 1, things: [over] }))[0];
         expect(isValidReplacementValue(over.replacementValue)).toBe(false);
         expect(cut.replacementValue).toBe(atBound.replacementValue);
         expect(isValidReplacementValue(cut.replacementValue)).toBe(true);
@@ -697,7 +765,7 @@ describe('Mutation testing on loans maths and size bounds', () => {
 
             const read101 = readThingsDoc({ v: 1, things: exactly101 });
             expect(read101.things.length).toBe(100);
-            expect(read101.things.some((t) => t.id === 't-100')).toBe(false);
+            expect(ownThings(read101).some((t) => t.id === 't-100')).toBe(false);
         });
 
         it('mutant: off-by-one on character limits (80, 40, 300, 500) is caught', () => {
@@ -710,7 +778,7 @@ describe('Mutation testing on loans maths and size bounds', () => {
                 createdAt: '',
                 updatedAt: '',
             };
-            const readAtLimits = readThingsDoc({ v: 1, things: [itemAtLimits] }).things[0];
+            const readAtLimits = ownThings(readThingsDoc({ v: 1, things: [itemAtLimits] }))[0];
             expect(readAtLimits.name.length).toBe(80);
             expect(readAtLimits.replacementValue?.length).toBe(40);
             expect(readAtLimits.lendTerms?.length).toBe(300);
@@ -725,7 +793,7 @@ describe('Mutation testing on loans maths and size bounds', () => {
                 createdAt: '',
                 updatedAt: '',
             };
-            const readOverLimits = readThingsDoc({ v: 1, things: [itemOverLimits] }).things[0];
+            const readOverLimits = ownThings(readThingsDoc({ v: 1, things: [itemOverLimits] }))[0];
             expect(readOverLimits.name.length).toBe(80);
             expect(readOverLimits.replacementValue?.length).toBe(40);
             expect(readOverLimits.lendTerms?.length).toBe(300);

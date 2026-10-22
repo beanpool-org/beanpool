@@ -14,6 +14,7 @@ import {
 import {
     THINGS_DOC_VERSION,
     emptyThingsDoc,
+    isThing,
     readThingsDoc,
     type ThingsDoc,
 } from './doc.js';
@@ -46,7 +47,7 @@ export interface ThingsCounts {
  * - out: things currently lent out (lentTo != null)
  * - listed: things in your shop ready to lend (postId != null && lentTo == null)
  * - shelf: things at home not listed or lent (postId == null && lentTo == null)
- * Invariant: things === listed + out + shelf.
+ * Invariant: things === listed + out + shelf. A newer version's item this build can't read is in none of them.
  */
 export function thingsCounts(doc: ThingsDoc, _now?: number): ThingsCounts {
     let things = 0;
@@ -55,7 +56,7 @@ export function thingsCounts(doc: ThingsDoc, _now?: number): ThingsCounts {
     let shelf = 0;
 
     for (const t of doc.things ?? []) {
-        if (t.gone === true) continue;
+        if (!isThing(t) || t.gone === true) continue;
         things++;
         if (t.lentTo != null) {
             out++;
@@ -108,7 +109,7 @@ export function loansDue(doc: ThingsDoc, now: number): ToolDue[] {
     const dues: ToolDue[] = [];
 
     for (const t of doc.things ?? []) {
-        if (t.gone === true || !t.lentTo?.backAround) continue;
+        if (!isThing(t) || t.gone === true || !t.lentTo?.backAround) continue;
         const at = Date.parse(t.lentTo.backAround);
         if (!Number.isFinite(at) || at < now) continue;
         dues.push({

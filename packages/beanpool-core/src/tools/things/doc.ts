@@ -50,15 +50,27 @@ export interface Thing {
     [key: string]: unknown;
 }
 
+declare const unreadThing: unique symbol;
+/**
+ * An item of a newer version's list that this build can't read (not an object, or no string id and name), kept as it was
+ * and where it was, so writing the document back loses nothing. This build never makes one; {@link isThing} tells a
+ * Thing from it, and nothing shows, counts or edits it.
+ */
+export type UnreadThing = { readonly [unreadThing]: true };
+
 export interface ThingsDoc {
     v: number;
-    things: Thing[];
+    /** This build's things; on a newer version, also the items it can't read, each in its place (readThingsDoc). */
+    things: (Thing | UnreadThing)[];
     [key: string]: unknown;
 }
 
 export const emptyThingsDoc = (): ThingsDoc => ({ v: THINGS_DOC_VERSION, things: [] });
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Whether an item of the list is one this build reads, not a newer version's {@link UnreadThing}. */
+export const isThing = (t: unknown): t is Thing => isPlainObject(t) && typeof t.id === 'string' && typeof t.name === 'string';
 
 function readLentTo(raw: unknown, ours: boolean): ThingLentTo | undefined {
     if (!isPlainObject(raw) || typeof raw.name !== 'string' || typeof raw.since !== 'string') return undefined;
@@ -144,9 +156,9 @@ function readThing(raw: unknown, ours: boolean): Thing | null {
 /**
  * Any stored value as this build's document: tolerant, never throws, empty() for anything unreadable.
  * This build's version and older are held to its bounds. A newer version (from a newer app on another
- * device) is read for what this build knows and kept whole, every key at the top and on each item and
- * every item past this build's bound, so writing it back loses nothing; the bounds of a newer version
- * are the newer app's.
+ * device) is read for what this build knows and kept whole, every key at the top and on each item, every
+ * item past this build's bound, and every item this build can't read (an {@link UnreadThing}, left as it
+ * was in its place), so writing it back loses nothing; the bounds of a newer version are the newer app's.
  */
 export function readThingsDoc(raw: unknown): ThingsDoc {
     if (!isPlainObject(raw) || typeof raw.v !== 'number' || !Number.isInteger(raw.v) || raw.v < 1) {
@@ -154,9 +166,12 @@ export function readThingsDoc(raw: unknown): ThingsDoc {
     }
     const ours = raw.v <= THINGS_DOC_VERSION;
     const rawThings = Array.isArray(raw.things) ? raw.things : [];
-    const things = rawThings
-        .map((t) => readThing(t, ours))
-        .filter((t): t is Thing => t !== null);
+    // This build's version and older drop what can't be read; a newer version's list keeps it, as it was, in its place.
+    const things = rawThings.flatMap((t): (Thing | UnreadThing)[] => {
+        const read = readThing(t, ours);
+        if (read) return [read];
+        return ours ? [] : [t as UnreadThing];
+    });
 
     return {
         ...raw,

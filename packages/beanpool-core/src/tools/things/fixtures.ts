@@ -12,6 +12,7 @@ import {
     emptyThingsDoc,
     type Thing,
     type ThingsDoc,
+    type UnreadThing,
 } from './doc.js';
 
 const NOW = Date.parse('2026-10-20T09:00:00.000Z');
@@ -68,6 +69,16 @@ const full: ThingsDoc = {
     things: fullThings,
 };
 
+/** A newer app's items this build can't read: kept as they were, so the fixture says so with a cast. */
+const unread = (item: unknown) => item as UnreadThing;
+const newerItems = [
+    { id: 7, name: 'numeric id' },
+    { id: 'renamed', title: 'name moved to title' },
+    null,
+    'a string item',
+];
+const newerReadable = { ...thing(1, 'Cordless drill'), extra: 1 };
+
 export const FIXTURES: ToolFixtures<ThingsDoc> = {
     stored: [
         { name: 'version 1', raw: small, reads: small },
@@ -96,6 +107,11 @@ export const FIXTURES: ToolFixtures<ThingsDoc> = {
                     }),
                 ],
             },
+        },
+        {
+            name: 'a newer version with items this build cannot read, kept in their places',
+            raw: { v: 2, things: [newerItems[0], newerReadable, newerItems[1], newerItems[2], newerItems[3]] },
+            reads: { v: 2, things: [unread(newerItems[0]), newerReadable, unread(newerItems[1]), unread(newerItems[2]), unread(newerItems[3])] },
         },
         { name: 'not a document', raw: 'garbage', reads: emptyThingsDoc() },
         { name: 'empty object', raw: {}, reads: emptyThingsDoc() },

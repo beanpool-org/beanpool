@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { t } from '@beanpool/core';
 import { getMyEvents, isRouteMissing, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sortMyEvents, type MyEvent } from '../lib/event-extras';
@@ -79,7 +80,7 @@ export function YourEvents({ identity, onOpen, refreshKey = 0 }: YourEventsProps
     return (
         <div data-testid="your-events" className="mb-6">
             <h3 className="m-0 mb-2 text-xs font-black uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                Your events
+                {t('Your events')}
             </h3>
             <div className="flex flex-col gap-3">
                 {rows.map(row => (

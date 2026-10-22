@@ -5,7 +5,7 @@ import { Stack, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
-import { DOOR_WORK_PARTS, doorWorkExpectedTries, makeDoorWorkChallenge } from '@beanpool/core';
+import { DOOR_WORK_PARTS, doorWorkExpectedTries, makeDoorWorkChallenge, t } from '@beanpool/core';
 import { solveOnPhone } from '../utils/door-work';
 import { useTheme } from './ThemeContext';
 
@@ -87,35 +87,34 @@ export default function DoorWorkProbe(): React.JSX.Element {
     const s = styles(colors);
     return (
         <SafeAreaView style={s.page} edges={['top', 'left', 'right', 'bottom']}>
-            <Stack.Screen options={{ title: 'Door work on this phone' }} />
+            <Stack.Screen options={{ title: t('Door work on this phone') }} />
             <ScrollView contentContainerStyle={s.scroll}>
-                <Text style={s.title} accessibilityRole="header">Door work on this phone</Text>
+                <Text style={s.title} accessibilityRole="header">{t('Door work on this phone')}</Text>
                 <Text style={s.body}>
-                    How long setting up a 12-words account takes on this phone, at each level the global community can ask
-                    for. Nothing is sent anywhere, and nothing is kept.
+                    {t('How long setting up a 12-words account takes on this phone, at each level the global community can ask for. Nothing is sent anywhere, and nothing is kept.')}
                 </Text>
                 <Pressable style={[s.button, running !== null && s.disabled]} onPress={() => measure([0, 1, 2, 3])} disabled={running !== null} accessibilityRole="button">
-                    <Text style={s.buttonText}>Measure levels 0 to 3</Text>
+                    <Text style={s.buttonText}>{t('Measure levels 0 to 3')}</Text>
                 </Pressable>
                 <Pressable style={[s.secondary, running !== null && s.disabled]} onPress={() => measure([4, 5])} disabled={running !== null} accessibilityRole="button">
-                    <Text style={s.secondaryText}>Measure levels 4 and 5 (slow)</Text>
+                    <Text style={s.secondaryText}>{t('Measure levels 4 and 5 (slow)')}</Text>
                 </Pressable>
                 {running !== null && (
                     <View style={s.busy} accessibilityLiveRegion="polite">
                         <ActivityIndicator color={colors.brand.primary} />
-                        <Text style={s.small}>Measuring level {running}…</Text>
+                        <Text style={s.small}>{t('Measuring level {level}…', { level: running })}</Text>
                     </View>
                 )}
                 {error && <Text style={s.error}>{error}</Text>}
                 {results.map(r => (
-                    <View key={r.level} style={s.result} accessible accessibilityLabel={`Level ${r.level}: ${(r.totalMs / 1000).toFixed(1)} seconds`}>
-                        <Text style={s.resultTitle}>Level {r.level}: {(r.totalMs / 1000).toFixed(2)} s</Text>
+                    <View key={r.level} style={s.result} accessible accessibilityLabel={t('Level {level}: {seconds} seconds', { level: r.level, seconds: (r.totalMs / 1000).toFixed(1) })}>
+                        <Text style={s.resultTitle}>{t('Level {level}: {seconds} s', { level: r.level, seconds: (r.totalMs / 1000).toFixed(2) })}</Text>
                         <Text style={s.small}>
-                            {r.tries} tries, {(r.totalMs / r.tries).toFixed(3)} ms a try ({doorWorkExpectedTries(r.level)} expected on average)
+                            {t('{tries} tries, {ms} ms a try ({expected} expected on average)', { tries: r.tries, ms: (r.totalMs / r.tries).toFixed(3), expected: doorWorkExpectedTries(r.level) })}
                         </Text>
-                        <Text style={s.small}>Each of the {DOOR_WORK_PARTS} parts, ms: {r.partMs.join(', ')}</Text>
-                        <Text style={s.small}>Estimate from the first part: {r.estimateMs === null ? 'none' : `${(r.estimateMs / 1000).toFixed(2)} s`}</Text>
-                        <Text style={s.small}>Longest the screen waited for a turn: {r.longestPauseMs} ms</Text>
+                        <Text style={s.small}>{t('Each of the {parts} parts, ms: {partMs}', { parts: DOOR_WORK_PARTS, partMs: r.partMs.join(', ') })}</Text>
+                        <Text style={s.small}>{t('Estimate from the first part: {estimate}', { estimate: r.estimateMs === null ? 'none' : `${(r.estimateMs / 1000).toFixed(2)} s` })}</Text>
+                        <Text style={s.small}>{t('Longest the screen waited for a turn: {ms} ms', { ms: r.longestPauseMs })}</Text>
                     </View>
                 ))}
             </ScrollView>

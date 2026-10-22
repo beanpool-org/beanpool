@@ -206,8 +206,8 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.restore': { title: 'restored from a backup', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** A change to where backups go or who copies this server: one line each, folded hourly past the actor's bound. */
     'sec.backups': { title: 'a backup setting changed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
-    /** Members removed by an admin, branches pruned by an owner: a day's count. */
-    'sec.members': { title: 'members removed', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
+    /** Members removed by an admin, branches pruned by an owner, accounts moved to a new phone by a re-key: a day's count. */
+    'sec.members': { title: 'members removed or moved', priority: 3, webhook: true, pushEveryMs: EACH, banner: true },
     /** The community's name, callsign or contacts changed by an admin. */
     'sec.settings': { title: "the community's details changed", priority: 2, webhook: true, pushEveryMs: EACH, banner: true },
     /**

@@ -17,7 +17,9 @@
  * ## What each side can do
  *
  * - The opener writes ONE line (a photo with its caption is one), then every line and every reaction is refused in words
- *   (403 `dm_request_pending`) until it is accepted. Their own line edits and deletes as any line.
+ *   (403 `dm_request_pending`) until it is accepted. Their own line edits and deletes as any line. The request is made by
+ *   that line, not by the open: until the opener writes, nobody is asked anything (the apps open the chat when someone
+ *   taps Message, before they type), so it isn't listed, counted or ignored, and its 30 days start at the line.
  * - The person it is for has it in their list apart (`requests`, newest first), not in their chats, their unread count or
  *   the badge their pushes carry. They accept or ignore it (routes/messaging.ts), or Ignore all. Their own line in it, their
  *   own open of the chat (Message on the opener's profile), adding the opener as a friend, or a trade between the two
@@ -262,6 +264,11 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
         return { kind: 'request', to: row.to_pubkey };
     }
     if (openerLinesSince(row) > 0) return { kind: 'refused', message: waitingFor(row.to_pubkey, 'write') };
+    // The request's line: the request is made by it, so its 30 days run from it, not from the open (PR #2392 review
+    // 4354580417). Stored after this, so it is a line since the request was made (OPENER_WROTE). A standby stamps nothing.
+    if (!standbyWritesNothing()) {
+        db.prepare('UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
+    }
     return { kind: 'request', to: row.to_pubkey };
 }
 
@@ -300,8 +307,17 @@ export function acceptOnTrade(conversationId: string, now: number = Date.now()):
 // ── the lists ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The requests waiting for `viewer`, newest first: in a real conversation they are in, made in the last 30 days, from a
- * member still here (not removed, not deleted) whom the viewer hasn't blocked. A blocked member's request never lists.
+ * The opener of request `r` has a line stored in it since it was made. Until then it asks nothing of anyone: the apps ask
+ * for the chat when someone taps Message, before they type, so an open alone is no request to list, count or ignore
+ * (PR #2392 review 4354580417).
+ */
+const OPENER_WROTE = `EXISTS (SELECT 1 FROM messages mm WHERE mm.conversation_id = r.conversation_id
+                                  AND mm.author_pubkey = r.from_pubkey AND mm.timestamp >= r.requested_at)`;
+
+/**
+ * The requests waiting for `viewer`, newest first: in a real conversation they are in, made in the last 30 days, with the
+ * opener's line in it, from a member still here (not removed, not deleted) whom the viewer hasn't blocked. A blocked
+ * member's request never lists.
  */
 function waitingRows(viewer: string, now: number, onlyId?: string): RequestRow[] {
     return db.prepare(`
@@ -311,6 +327,7 @@ function waitingRows(viewer: string, now: number, onlyId?: string): RequestRow[]
            AND (@only IS NULL OR r.conversation_id = @only)
            AND r.conversation_id IN (SELECT conversation_id FROM conversation_participants WHERE public_key = @viewer)
            AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = @viewer AND b.blocked_pubkey = r.from_pubkey)
+           AND ${OPENER_WROTE}
          ORDER BY r.requested_at DESC, r.conversation_id
     `).all({ viewer, since: iso(now - REQUEST_MS), only: onlyId ?? null }) as RequestRow[];
 }
@@ -389,8 +406,8 @@ export class RequestDecisionError extends Error {
 
 /**
  * The person a request is for accepts or ignores it. The opener may do neither (403), whether their conversation is real or
- * kept for them alone; to anyone else, and for a conversation with no request waiting for them, it is a request nobody has
- * (404, the same answer as an id nobody has). Accepting an accepted one, or ignoring an ignored one, changes nothing; an
+ * kept for them alone; to anyone else, and for a conversation with no request waiting for them (one its opener hasn't
+ * written in yet among them), it is a request nobody has (404, the same answer as an id nobody has). Accepting an accepted one, or ignoring an ignored one, changes nothing; an
  * accepted one can't be ignored (409). Ignoring rings only the ignorer's own sockets: the opener is never told.
  */
 export function decideRequest(conversationId: string, actor: string, decision: 'accept' | 'ignore', now: number = Date.now()): RequestView {
@@ -399,7 +416,10 @@ export function decideRequest(conversationId: string, actor: string, decision: '
         throw new RequestDecisionError(403, 'not_request_recipient', t('Only the person a message request was sent to can accept or ignore it.'));
     }
     const real = !!row && !!db.prepare('SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND public_key = ?').get(row.conversation_id, actor);
-    if (!row || row.to_pubkey !== actor || !real) {
+    // An open with nothing written in it yet asks nothing (OPENER_WROTE): ignoring it would swallow the line after it.
+    const asked = !!row && (row.state === 'accepted'
+        || !!db.prepare(`SELECT 1 FROM dm_requests r WHERE r.conversation_id = ? AND ${OPENER_WROTE}`).get(row.conversation_id));
+    if (!row || row.to_pubkey !== actor || !real || !asked) {
         throw new RequestDecisionError(404, 'request_not_found', t('There is no message request for you in this chat.'));
     }
     if (decision === 'accept') {

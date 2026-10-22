@@ -9,7 +9,8 @@
  *
  * Global (requests on):
  *   1. a stranger's open is a request; their first line is stored, and the person it is for reads it under `requests`,
- *      not in their chats, their unread count or their badge; a second line and a reaction are refused in words (R2)
+ *      not in their chats, their unread count or their badge; a second line and a reaction are refused in words (R2); an
+ *      open with no line yet asks nothing (not listed, counted or ignorable), and the 30 days run from the line
  *   2. someone the person has added, and a node role, go straight through (R3, R6)
  *   3. Accept: the sender hears it and their next line arrives, pushed; only the person it was sent to decides (R8, R17)
  *   4. the person's own first line accepts it, and so does adding the sender as a friend (R11)
@@ -257,6 +258,11 @@ async function globalRun(): Promise<void> {
         `Bo's open is a request from him, waiting (${show(bOpen)})`);
     assert(rowOf(boConv)?.state === 'pending' && rowOf(boConv)?.from_pubkey === bo.pk && rowOf(boConv)?.to_pubkey === ann.pk,
         'the node holds it: from Bo, to Ann, waiting');
+    // The apps ask for the chat when someone taps Message, before they type: an open with no line asks Ann nothing yet
+    // (PR #2392 review 4354580417).
+    const annList0 = await listOf(ann);
+    assert(!inChats(annList0, boConv) && !inRequests(annList0, boConv) && annList0?.requests?.count === 0 && annList0?.totalUnread === 0,
+        `until he writes, it is in neither of her lists, nor counted (${annList0?.requests?.count} waiting)`);
     const pushedBefore = pushesTo(ann).length;
     const b1 = await send(boConv, bo);
     const boLine: string = b1.body?.message?.id;
@@ -285,6 +291,27 @@ async function globalRun(): Promise<void> {
     const boList1 = await listOf(bo);
     assert(inChats(boList1, boConv) && entryOf(boList1, boConv)?.request?.state === 'pending' && !boList1?.requests?.count,
         'his own list has the chat, marked as his waiting request');
+    // An open with no line can't be ignored, so it never swallows the line that comes after it; and the 30 days run from
+    // that line, not from the open (PR #2392 review 4354580417).
+    const rae = member('Rae');
+    const sol = member('Sol');
+    const raeConv: string = (await open(rae, sol)).body?.conversation?.id;
+    ageRequest(raeConv, 29);
+    const solAll = await call('POST', sol, '/api/messages/request/ignore-all', {});
+    const solIgnore = await decide(sol, raeConv, 'ignore');
+    const solNobody = await decide(sol, crypto.randomUUID(), 'ignore');
+    assert(solAll.status === 200 && solAll.body?.ignored === 0 && solIgnore.status === 404 && JSON.stringify(solIgnore.body) === JSON.stringify(solNobody.body)
+        && rowOf(raeConv)?.state === 'pending',
+        `Sol can't ignore Rae's open before she writes: Ignore all finds nothing, and Ignore answers as for a chat nobody has (${show(solAll)}; ${show(solIgnore)})`);
+    const solPushed = noticesTo(sol).length;
+    const r1 = await send(raeConv, rae);
+    await sleep(150);
+    const solList = await listOf(sol);
+    assert(r1.status === 200 && inRequests(solList, raeConv) && solList?.requests?.count === 1 && rowOf(raeConv)?.state === 'pending'
+        && JSON.stringify(noticesTo(sol).slice(solPushed)) === JSON.stringify(['Rae wants to message you']),
+        `her first line is the request Sol sees, and is pushed as one (${show(r1)}; ${JSON.stringify(noticesTo(sol).slice(solPushed))})`);
+    assert(Date.parse(rowOf(raeConv)?.requested_at) > Date.now() - HOUR && entryOf(solList, raeConv)?.request?.at === rowOf(raeConv)?.requested_at,
+        `opened 29 days ago, it is made by her line, so its 30 days run from then (${rowOf(raeConv)?.requested_at})`);
 
     // ── 2. who goes straight through ────────────────────────────────────────────────────────────
     console.log('── 2. a friend and a node role go straight through ──');

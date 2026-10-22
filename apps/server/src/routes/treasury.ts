@@ -32,6 +32,7 @@ import {
     passesReadGate, broadcast, type KeeperJoinRequest,
 } from '../state-engine.js';
 import { changeEnterpriseFace, EnterpriseFaceRefusal, shopfrontOf } from '../engine/enterprise-shopfront.js';
+import { memberShop, shopOf, visitorShop } from '../engine/shops.js';
 import { getChatMute } from '../engine/chat-mutes.js';
 import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR, WHOLE_CENTS_ERROR } from '../db/db.js';
@@ -394,6 +395,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // The shopfront's data (round 3 §4, §5): each keeper's badges and their live Offers' categories, and the
         // enterprise's, to a member of this node only, whatever ENFORCE_READ_AUTH says (engine/enterprise-shopfront.ts).
         const shopfront = shopfrontOf(treasury, treasuryKeepersForReader(treasury, backingReader), actor);
+        // Its shop, for the kind chip and "How we deal" on its page (round 3 §3, S5): to a member of this node what they read
+        // of it at GET /api/shops/:id, and to anyone else its kind and counts, as that route answers a visitor (round 2 §9.4).
+        const shopRow = shopOf(treasury);
+        const shop = !shopRow ? null : actor && passesReadGate(actor) ? memberShop(shopRow, actor) : visitorShop(shopRow);
         // The amounts in and out are everyone's to see; a line's memo is the words of the trade behind it, which only its
         // two people read (ledgerForReader): the keepers, and the member who wrote it or was paid.
         const flow = (db.prepare(
@@ -490,6 +495,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // live Offers' categories; and the enterprise's categories, absent for anyone else.
             keepers: shopfront.keepers,
             ...(shopfront.offerCategories ? { offerCategories: shopfront.offerCategories } : {}),
+            shop,
             // Every known pledge as one total, unless the reader is an owner or admin (getEnterprisePledgesForReader).
             pledges: getEnterprisePledgesForReader(treasury, backingReader),
             isLeadOrSoleKeeperOrAdmin: actor ? isLeadOrSoleKeeperOrAdmin(treasury, actor) : false,

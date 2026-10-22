@@ -4,7 +4,7 @@ title: Pag-block sa isang tao
 summary: Itago ang mga post at mensahe ng isang tao mula sa iyo, at bawiin ito sa ibang pagkakataon.
 related: reporting, messages, privacy, getting-help
 help: Mga taong na-block mo. Nakatago sa iyo ang kanilang mga post at mensahe; mag-unblock ng tao rito.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Pag-block
@@ -58,5 +58,6 @@ Ginagawa ito ng iyong komunidad para sa mga block na itinatago nito para sa iyo.
 
 - Buksan ang **Mga Setting**. Sa ilalim ng **Legal at Privacy**, i-tap ang **Pamahalaan ang mga Na-block na User**.
 - I-tap ang **I-unblock** sa tabi ng pangalan, o **I-unblock Lahat**.
+- Sa app sa telepono, maaari mo ring i-unblock ang isang tao mula sa kanilang profile. Sa ilalim ng kanilang pangalan, nakasulat ang "Na-block mo" at ang kanilang pangalan. I-tap doon ang **I-unblock**.
 
 Sa web app, ang pag-block at pag-unblock ay nangangailangan ng koneksyon sa iyong komunidad. Kung wala nito, sasabihin ito ng app at walang magbabago. Subukang muli kapag online ka na muli.

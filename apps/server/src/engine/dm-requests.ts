@@ -35,6 +35,9 @@
  * the request's age and its acceptance only ({@link viewOf}): 'pending', 'expired' once 30 days have passed (an ignored
  * request too, or ignoring would show), or 'accepted', which is visible because the opener can write again.
  *
+ * A block lifted is the one exception, as lifting it is meant to be: the line kept for the opener during it never reaches
+ * the other person, so it no longer counts as the request's one line, and the opener's next line is (openerLinesSince).
+ *
  * ## Pushes
  *
  * The request's first line pushes "{name} wants to message you" instead of "sent you a message", at most once an hour per
@@ -55,6 +58,7 @@ import { db, deletePlainRows, afterTransactionCommit } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { nodeRoleOf } from './node-roles.js';
+import { hasBlocked } from './member-blocks.js';
 
 // The words layer in English: a node never writes in the device language (core words.test N11).
 const { t } = wordsFor('en');
@@ -201,12 +205,20 @@ export type LineThroughRequest =
     | { kind: 'refused'; message: string };
 const DIRECT: LineThroughRequest = { kind: 'direct' };
 
-/** The opener's lines in the conversation since the request was made: stored, or kept for them alone. */
+/**
+ * The opener's lines in the conversation since the request was made: stored, and, while the person it is for still blocks
+ * them, kept for them alone. A line kept during a block never reaches that person, not even once it is lifted
+ * (engine/withheld-lines.ts), so after an unblock only a stored line is the request's: the opener's next line is, and it
+ * makes a conversation kept for them the real one (PR #2392 review 4354388176). Counted otherwise, the request would wait
+ * 30 days with nothing for the person to accept, nor any chat to find it in.
+ */
 function openerLinesSince(row: RequestRow): number {
-    return (db.prepare(`
-        SELECT (SELECT COUNT(*) FROM messages WHERE conversation_id = @c AND author_pubkey = @a AND timestamp >= @at)
-             + (SELECT COUNT(*) FROM withheld_lines WHERE conversation_id = @c AND author_pubkey = @a AND timestamp >= @at) AS n
-    `).get({ c: row.conversation_id, a: row.from_pubkey, at: row.requested_at }) as { n: number }).n;
+    const args = { c: row.conversation_id, a: row.from_pubkey, at: row.requested_at };
+    const stored = (db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = @c AND author_pubkey = @a AND timestamp >= @at')
+        .get(args) as { n: number }).n;
+    if (stored > 0 || !hasBlocked(row.to_pubkey, row.from_pubkey)) return stored;
+    return (db.prepare('SELECT COUNT(*) AS n FROM withheld_lines WHERE conversation_id = @c AND author_pubkey = @a AND timestamp >= @at')
+        .get(args) as { n: number }).n;
 }
 
 /** The refusal of the opener's line or reaction while their request waits for `to`. */

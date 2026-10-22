@@ -14,7 +14,8 @@
  *   3. Accept: the sender hears it and their next line arrives, pushed; only the person it was sent to decides (R8, R17)
  *   4. the person's own first line accepts it, and so does adding the sender as a friend (R11)
  *   5. Ignore: every answer the sender gets is the one a waiting request gets; the person's lists drop it (R9)
- *   6. Block, after the request or before it: the same answers again, and nothing listed (R10)
+ *   6. Block, after the request or before it: the same answers again, and nothing listed (R10); once a block is lifted, the
+ *      line kept during it doesn't count, and the opener's next line is the request Ann sees
  *   7. read receipts: neither side's read marker reaches the other until it is accepted
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12)
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
@@ -437,6 +438,39 @@ async function globalRun(): Promise<void> {
     const idaSees = await senderSees(ida, idaConv, idaLine, ann);
     assert(gusSees === idaSees, `Gus, blocked after his request, reads what a waiting request reads\n    blocked: ${gusSees}\n    waiting: ${idaSees}`);
     assert(huSees === idaSees, `Hu, blocked before he wrote, reads the same\n    blocked: ${huSees}\n    waiting: ${idaSees}`);
+    // A block lifted (PR #2392 review 4354388176): the line kept for the opener during it never reaches Ann, so it isn't the
+    // request's one line. The opener's next line is, and a conversation kept for them becomes the real one with it.
+    const uma = member('Uma');   // blocked before she opens: her conversation is kept for her alone
+    const vic = member('Vic');   // opens, then is blocked before he writes
+    const blockUma = await call('POST', ann, '/api/blocks', { targetPubkey: uma.pk });
+    const umaConv: string = (await open(uma, ann)).body?.conversation?.id;
+    const u1 = await send(umaConv, uma);
+    const vicConv: string = (await open(vic, ann)).body?.conversation?.id;
+    const blockVic = await call('POST', ann, '/api/blocks', { targetPubkey: vic.pk });
+    const v1 = await send(vicConv, vic);
+    const uBlocked = await send(umaConv, uma);
+    const vBlocked = await send(vicConv, vic);
+    assert(blockUma.status === 200 && blockVic.status === 200 && u1.status === 200 && v1.status === 200
+        && uBlocked.status === 403 && uBlocked.body?.code === 'dm_request_pending' && vBlocked.status === 403 && vBlocked.body?.code === 'dm_request_pending'
+        && rowOf(umaConv)?.state === 'pending' && rowOf(vicConv)?.state === 'pending',
+        `while blocked, each first line is kept for its sender alone and the next is refused, as any request's (${show(uBlocked)}; ${show(vBlocked)})`);
+    const unUma = await call('POST', ann, '/api/blocks/remove', { targetPubkey: uma.pk });
+    const unVic = await call('POST', ann, '/api/blocks/remove', { targetPubkey: vic.pk });
+    const u2 = await send(umaConv, uma);
+    const v2 = await send(vicConv, vic);
+    await sleep(150);
+    assert(unUma.status === 200 && unVic.status === 200 && u2.status === 200 && v2.status === 200,
+        `Ann lifts both blocks: each one's next line goes through (${show(u2)}; ${show(v2)})`);
+    const annList6b = await listOf(ann);
+    const annReadUma = await call('GET', ann, `/api/messages/${umaConv}`);
+    const annReadVic = await call('GET', ann, `/api/messages/${vicConv}`);
+    assert(inRequests(annList6b, umaConv) && inRequests(annList6b, vicConv) && !inChats(annList6b, umaConv) && !inChats(annList6b, vicConv)
+        && annReadUma.body?.messages?.length === 1 && annReadVic.body?.messages?.length === 1,
+        `as the request Ann sees, with that line and not the kept one (Uma ${annReadUma.status}/${annReadUma.body?.messages?.length}, Vic ${annReadVic.body?.messages?.length})`);
+    const u3 = await send(umaConv, uma);
+    const v3 = await send(vicConv, vic);
+    assert(u3.status === 403 && u3.body?.code === 'dm_request_pending' && v3.status === 403 && v3.body?.code === 'dm_request_pending',
+        `and the line after it waits, as any request's (${show(u3)}; ${show(v3)})`);
 
     // ── 7. read receipts ────────────────────────────────────────────────────────────────────────
     console.log('── 7. no read receipt either way until accepted ──');

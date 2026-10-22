@@ -22,6 +22,7 @@ import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { ADMIN_SESSION_COOKIE, revokeAdminSession, setAdminSessionCookie } from '../admin-key-auth.js';
 import { verifyMemberSignature } from '../engine/member-signature.js';
+import { getGatewayConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { SIGNED_FOR_HEADER } from '@beanpool/core';
 import {
@@ -162,7 +163,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             path: ctx.path,
             body: '',
             signedFor: ctx.get(SIGNED_FOR_HEADER) || null,
-        }, { consumeNonce: true, client: clientLimiterKey(ctx) });
+        }, { consumeNonce: true, client: clientLimiterKey(ctx), perMinute: getGatewayConfig().rateLimiting?.maxRequestsPerMinute ?? 120 });
         return verdict.ok ? verdict.signer : null;
     }
 

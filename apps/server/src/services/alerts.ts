@@ -22,9 +22,9 @@
  * the banner for a day, or until an owner acknowledges it. Each says what happened and how, never who.
  *
  * And signed requests turned away because the store of their single-use numbers has no room (engine/member-signature.ts
- * NonceStore, engine/nonce-pressure.ts): the strangers' share full (priority 3), or members affected, one member's app
- * at its own share or the members' share full (4). Counts only, never an address or a key; over 15 minutes after the
- * last request turned away (the usual hold after a quiet tick).
+ * NonceStore, engine/nonce-pressure.ts), by class: the strangers' share full, or one newer account's app at its share
+ * (priority 3); the newer accounts' share full, one member's app at its share, or everyone's share full (4). Counts only,
+ * never an address or a key; over 15 minutes after the last request turned away (the usual hold after a quiet tick).
  *
  * And reports coming in (the launch-readiness review's B9): the first report is told at once, and those that follow
  * inside the fold window (an hour, or ALERTS_REPORT_FOLD_MINUTES in .env) are counted and told as one line when it is
@@ -240,7 +240,7 @@ const ROWS: Record<AlertKey, Row> = {
     'reports.child-more': { title: 'more child-safety reports waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
     /** More new members in a day than DOOR_BUSY_NEW_MEMBERS_PER_DAY (engine/door-signal.ts doorBusy): told when it rises. */
     'door.busy': { title: 'sign-ups busier than usual', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
-    /** Signed requests turned away for room in the nonce store (nonceConditions): 4 when members are affected. */
+    /** Signed requests turned away for room in the nonce store (nonceConditions): 4 when a member is, or the newer accounts' share is full. */
     'requests.flood': { title: 'signed requests turned away', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
 };
 
@@ -1156,35 +1156,49 @@ function securityQuietConditions(s: BookState, t: number): Condition[] {
 const FLOOD_RECENT_MS = 2 * ALERT_TICK_MS;
 
 /**
- * Signed requests turned away for room in the nonce store (requests.flood, DESIGN-nonce-store-2-fable.md §5): on while a
- * region refused within the last two ticks, or a member's key was refused for its own share. An address held to its own
- * share raises nothing: one noisy source is routine, and harms nobody else. Priority 4 when members are affected, 3 when
- * only strangers are. The counts are the region's at its last refusal; never an address or a key.
+ * Signed requests turned away for room in the nonce store (requests.flood, DESIGN-nonce-store-3-fable.md §7): on while a
+ * class's ceiling refused within the last two ticks (the strangers' region, the newer accounts' line, the rows' region),
+ * or a key was refused for its own share. An address held to its own share raises nothing: one noisy source is routine,
+ * and harms nobody else. Priority 4 when an established member is affected or the newer accounts' share is full (a wave
+ * of accounts, which the moderators' burst tool is for); 3 when only strangers, or one newer account's app, are. The
+ * counts are the region's at its last refusal, formatted as the security line formats them; never an address or a key.
  */
 function nonceConditions(t: number): Condition[] {
     const p = requestNoncePressure;
     const recent = (at: number | null) => at !== null && t - at <= FLOOD_RECENT_MS;
+    const n = (x: number) => x.toLocaleString('en');
     const strangers = recent(p.stranger.regionAt);
-    const members = recent(p.member.regionAt);
-    const keys = keysAtShareSince(p, t - FLOOD_RECENT_MS);
-    if (!strangers && !members && keys === 0) {
+    const newcomers = recent(p.newcomer.regionAt);
+    const everyone = recent(p.member.regionAt);
+    const memberKeys = keysAtShareSince(p, t - FLOOD_RECENT_MS, 'member');
+    const newKeys = keysAtShareSince(p, t - FLOOD_RECENT_MS, 'newcomer');
+    if (!strangers && !newcomers && !everyone && memberKeys === 0 && newKeys === 0) {
         return [{ key: 'requests.flood', active: false, detail: tr('No signed request has been turned away for room for a few minutes: requests are answered as usual.') }];
     }
     const lines: string[] = [];
-    if (members) {
-        lines.push(tr("Members' signed requests have filled their share of this server's store of single-use request numbers: {n} in flight from {keys} keys. Every member's new request is answered busy (503) until older numbers expire, within 10 minutes; public reads are still answered.",
-            { n: p.member.live, keys: p.member.owners }));
-    } else if (keys > 0) {
-        lines.push(keys === 1
-            ? tr("1 member's app is at its share of request numbers ({share} in flight) and is answered busy until they expire, within 10 minutes. Other members are not affected.", { share: p.member.share })
-            : tr("{n} members' apps are at their share of request numbers ({share} in flight each) and are answered busy until they expire, within 10 minutes. Other members are not affected.", { n: keys, share: p.member.share }));
+    if (newcomers) {
+        lines.push(tr("Signed requests from newer accounts (accounts in their first days, 12-words accounts without a sign-in, and people a member wrote to) have filled their share of this server's store of single-use request numbers: {n} in flight from {apps} apps. Their new requests are answered busy (503) until older numbers expire, within 10 minutes; established members are not affected; public reads are still answered.",
+            { n: n(p.newcomer.live), apps: n(p.newcomer.owners) }));
+    } else if (newKeys > 0 && !everyone) {
+        lines.push(newKeys === 1
+            ? tr("1 newer account's app is at its share of request numbers ({share} in flight) and is answered busy until they expire, within 10 minutes. Nobody else is affected.", { share: n(p.newcomer.share) })
+            : tr("{n} newer accounts' apps are at their share of request numbers ({share} in flight each) and are answered busy until they expire, within 10 minutes. Nobody else is affected.", { n: n(newKeys), share: n(p.newcomer.share) }));
     }
+    if (everyone) {
+        lines.push(tr("Signed requests from members' apps have filled this server's store of single-use request numbers: {n} in flight from {apps} apps. Every request from an account is answered busy (503) until older numbers expire, within 10 minutes; public reads are still answered.",
+            { n: n(p.member.live), apps: n(p.member.owners) }));
+    } else if (memberKeys > 0) {
+        lines.push(memberKeys === 1
+            ? tr("1 member's app is at its share of request numbers ({share} in flight) and is answered busy until they expire, within 10 minutes. Other members are not affected.", { share: n(p.member.share) })
+            : tr("{n} members' apps are at their share of request numbers ({share} in flight each) and are answered busy until they expire, within 10 minutes. Other members are not affected.", { n: n(memberKeys), share: n(p.member.share) }));
+    }
+    const accounts = newcomers || everyone || memberKeys > 0 || newKeys > 0;
     if (strangers) {
-        lines.push(tr("Signed requests from people who are not members (someone joining, a guest) have filled their share of this server's store of single-use request numbers: {n} in flight from {addresses} addresses. Their new requests are answered busy (503) until older numbers expire, within 10 minutes; public reads are still answered.",
-            { n: p.stranger.live, addresses: p.stranger.owners }));
-        if (!members && keys === 0) lines.push(tr("Members' requests are not affected."));
+        lines.push(tr("Signed requests from people with no account here (someone joining, a guest) have filled their share of this server's store of single-use request numbers: {n} in flight from {addresses} addresses. Their new requests are answered busy (503) until older numbers expire, within 10 minutes; public reads are still answered.",
+            { n: n(p.stranger.live), addresses: n(p.stranger.owners) }));
+        if (!accounts) lines.push(tr('Accounts are not affected.'));
     }
-    return [{ key: 'requests.flood', active: true, detail: lines.join(' '), priority: members || keys > 0 ? 4 : 3 }];
+    return [{ key: 'requests.flood', active: true, detail: lines.join(' '), priority: newcomers || everyone || memberKeys > 0 ? 4 : 3 }];
 }
 
 /**

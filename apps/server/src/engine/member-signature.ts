@@ -12,9 +12,11 @@
  *   5. the old format: accepted and counted until the switch, 426 app_too_old after it;
  *   6. THEN the nonce is spent. Before this the signature middleware spent it first, so a forged request could burn a
  *      real one; and a request refused here for naming another community leaves its nonce unspent. A new nonce is
- *      spent from its signer's region: a key that acts here (isNodeMember or isLiveVisitor) from the members', any other
- *      from the strangers', by its address (VerifyOptions.client). Past its owner's share or its region's ceiling
- *      (NonceStore) it is refused as busy, 503 store_full; a spent one is still a replay, never busy.
+ *      spent from its signer's region: a key that acts here (isNodeMember or isLiveVisitor) from the rows', by its key,
+ *      with an established member's share or a newer account's (engine/probation.ts isEstablishedMember, asked only
+ *      when it matters); any other from the strangers', by its address (VerifyOptions.client). Past its owner's share,
+ *      the newer accounts' line or its region's ceiling (NonceStore) it is refused as busy, 503 store_full; a spent one
+ *      is still a replay, never busy.
  *
  * The switch is {@link UNBOUND_SIGNATURES_UNTIL}, overridable per node by env ACCEPT_UNBOUND_SIGNATURES_UNTIL. It is a
  * date, not a version, so a stranger's node that never touches its config closes on its own.
@@ -32,8 +34,9 @@ import { BAD_KEY_CODE, BAD_SIGNER_KEY_ERROR, provenKeySpelling } from './member-
 import { isNodeAdmin } from './node-roles.js';
 import { audienceStanding, isLostAddress } from './own-addresses.js';
 import {
-    emptyNoncePressure, noteRoomRefusal, requestNoncePressure, type NoncePressure, type NonceScope, type RegionPressure,
+    emptyNoncePressure, noteRoomRefusal, requestNoncePressure, type NoncePressure, type NonceClass, type RegionPressure,
 } from './nonce-pressure.js';
+import { isEstablishedMember } from './probation.js';
 
 // ─── The switch ─────────────────────────────────────────────────────────────────────────────
 
@@ -111,11 +114,23 @@ export const SIGNATURE_FRESHNESS_MS = 5 * 60 * 1000;
  * (a client may reuse a nonce string) is swept out first, so the heap holds exactly one pair per entry (a NaN expiry, from
  * a NaN `now`, is never spent and never freed, as before, and is not on the heap: there it would block every sweep).
  *
- * Every nonce has an owner, in one of two scopes (scratch/fable-design/DESIGN-nonce-store-2-fable.md §3): a member's key
- * (`member`: a key that acts here) or a stranger's address (`stranger`: any other verified key, by its limiter key, IPv6
- * by its /64). The verifier asks {@link room} before spending a new one: under its owner's share and its region's
- * ceiling, else it is refused. A pair's owner is one object per owner, shared by its nonces, so the sweep that pops a pair
- * counts it off its owner and its region, and forgets the owner at zero: the counts are exact, and the map, the heap and
+ * Every nonce has an owner, in one of two regions (scratch/fable-design/DESIGN-nonce-store-3-fable.md §3, §6): a key
+ * that acts here (`rows`: isNodeMember or isLiveVisitor, by its key) or a stranger's address (`stranger`: any other
+ * verified key, by its limiter key, IPv6 by its /64). The rows' region holds two classes of key in one memory budget:
+ * an established member (engine/probation.ts isEstablishedMember: a node role, or a member row 72 hours old, and where
+ * probation is on, off it and not 12 words alone) is refused only at its own share and the region's ceiling; a newcomer
+ * (any other key with a row) at its own smaller share and at the line, the ceiling less the reserve kept for established
+ * members, which no newcomer can take. The verifier asks {@link room} before spending a new one.
+ *
+ * Which class a key is takes up to four reads, so it is asked lazily: never while the key holds less than a newer
+ * account's share and the region is under the line (the two classes differ only past those, and nobody with a row is
+ * refused under them), then once, and the answer kept on the key's owner object for NONCE_CLASS_KEPT_MS. In a flood
+ * each key with nonces is asked once a minute; on an honest day never. A key with no nonces held has no owner object to
+ * keep it on: past the line its every request asks again, each one first charged by the gateway (`sig:` an address,
+ * `m:` the key).
+ *
+ * A pair's owner is one object per owner, shared by its nonces, so the sweep that pops a pair counts it off its owner
+ * and its region, and forgets the owner (and its kept class) at zero: the counts are exact, and the map, the heap and
  * the owners hold no more than the two ceilings together.
  */
 export class NonceStore {
@@ -124,15 +139,20 @@ export class NonceStore {
     private readonly heapExp: number[] = [];
     private readonly heapNonce: string[] = [];
     private readonly heapOwner: NonceOwner[] = [];
-    /** Each owner with a nonce on the heap, by its id: `k:<key>` for a member's, `a:<limiter key>` for a stranger's. */
+    /** Each owner with a nonce on the heap, by its id: `k:<key>` for a key that acts here, `a:<limiter key>` for a stranger's. */
     private readonly owners = new Map<string, NonceOwner>();
-    private readonly held: Record<NonceScope, { live: number; owners: number }> = {
-        member: { live: 0, owners: 0 }, stranger: { live: 0, owners: 0 },
+    private readonly held: Record<NonceRegion, { live: number; owners: number }> = {
+        rows: { live: 0, owners: 0 }, stranger: { live: 0, owners: 0 },
     };
     private readonly base: NonceLimits;
     private shares: NonceLimits;
-    /** A suite's limits: a member key's share is `shares.keyMax` exactly, whatever the gateway's minute allowance. */
+    /** A suite's limits: a key's shares are `keyMax` and `newKeyMax` exactly, whatever the gateway's minute allowance. */
     private fixedShares = false;
+    /**
+     * A key with no owner object yet, classified by {@link room} just now and given room: its class goes onto the owner
+     * object its nonce makes (acquire), so its next request does not ask again. Any other spend clears it unread.
+     */
+    private classifiedNew: { id: string; established: boolean; at: number } | null = null;
     /** Heap entries the sweeps have looked at, freed or not: what a test counts the forgetting's work by. */
     sweepVisits = 0;
 
@@ -162,32 +182,49 @@ export class NonceStore {
     }
 
     /**
-     * Whether `spender` may spend a new nonce now: null when it may, `owner` when its own share is full (a member's key, a
-     * stranger's address), `region` when its scope's region is. When either is at its line the expired nonces are
-     * forgotten first and it is asked again, never a live one forgotten: that would let its request be replayed. A
-     * refusal is noted (pressure). `keyMax`: a member key's share for the gateway's minute allowance now (nonceKeyShare),
-     * never below the store's own.
+     * Whether `spender` may spend a new nonce now (the order: DESIGN-nonce-store-3-fable.md §6): null when it may, `owner`
+     * when its own share is full (a key's, a stranger's address's), `line` when it is a newcomer and the rows' region
+     * holds the line (its ceiling less the reserve), `region` when its region is full. When any is at its line the
+     * expired nonces are forgotten first and it is asked again, never a live one forgotten: that would let its request be
+     * replayed. A refusal is noted (pressure), by class. `perMinute`: the gateway's minute allowance now, which a key's
+     * shares follow (nonceKeyShare, nonceNewKeyShare), never below the store's own.
      */
-    room(spender: NonceSpender, now: number, keyMax?: number): NonceRoom {
-        let why = this.noRoom(spender, keyMax);
-        if (!why) return null;
-        this.forgetExpired(now);
-        why = this.noRoom(spender, keyMax);
-        if (!why) return null;
-        const { live, owners } = this.held[spender.scope];
-        noteRoomRefusal(this.refusals, spender.scope, why, spender.owner, now,
-            { live, owners, ceiling: this.ceiling(spender.scope), share: this.share(spender.scope, keyMax) });
-        return why;
+    room(spender: NonceSpender, now: number, perMinute?: number): NonceRoom {
+        return this.roomFor(spender, now, perMinute)?.why ?? null;
     }
 
-    /** What the store turned away for room, per scope (engine/nonce-pressure.ts). */
+    /** {@link room}, with the class of the key refused (the verifier's sentence and `scope`); null when it has room. */
+    roomFor(spender: NonceSpender, now: number, perMinute?: number): NonceRefusal | null {
+        // One classification for this request at most, however many times it is asked below.
+        const asked: { established?: boolean } = {};
+        let no = this.noRoom(spender, now, perMinute, asked);
+        if (no) {
+            this.forgetExpired(now);
+            no = this.noRoom(spender, now, perMinute, asked);
+        }
+        if (!no) {
+            this.classifiedNew = asked.established !== undefined && !this.owners.has(spender.owner)
+                ? { id: spender.owner, established: asked.established, at: now } : null;
+            return null;
+        }
+        const region = this.held[spender.region];
+        const newcomer = no.cls === 'newcomer';
+        noteRoomRefusal(this.refusals, no.cls, no.why, spender.owner, now, {
+            live: region.live, owners: region.owners,
+            ceiling: no.cls === 'stranger' ? this.shares.strangersMax : newcomer ? this.line() : this.shares.rowsMax,
+            share: no.cls === 'stranger' ? this.shares.addressMax : newcomer ? this.newKeyShare(perMinute) : this.keyShare(perMinute),
+        });
+        return no;
+    }
+
+    /** What the store turned away for room, per class (engine/nonce-pressure.ts). */
     pressure(): NoncePressure {
         return this.refusals;
     }
 
-    /** The nonces on the heap in each scope (expired ones not swept yet included), and their owners. */
-    counts(): Record<NonceScope, { live: number; owners: number }> {
-        return { member: { ...this.held.member }, stranger: { ...this.held.stranger } };
+    /** The nonces on the heap in each region (expired ones not swept yet included), and their owners. */
+    counts(): Record<NonceRegion, { live: number; owners: number }> {
+        return { rows: { ...this.held.rows }, stranger: { ...this.held.stranger } };
     }
 
     /** The shares this store holds nonces to. */
@@ -195,7 +232,7 @@ export class NonceStore {
         return { ...this.shares };
     }
 
-    /** Tests: these limits over the store's own, a member key's share fixed at `keyMax` (null: the store's own again). */
+    /** Tests: these limits over the store's own, a key's shares fixed at `keyMax` and `newKeyMax` (null: the store's own again). */
     setLimitsForTests(limits: Partial<NonceLimits> | null): void {
         this.shares = limits ? { ...this.base, ...limits } : this.base;
         this.fixedShares = !!limits;
@@ -217,39 +254,87 @@ export class NonceStore {
         return this.seen.size;
     }
 
-    private noRoom(spender: NonceSpender, keyMax: number | undefined): NonceRoom {
-        if ((this.owners.get(spender.owner)?.live ?? 0) >= this.share(spender.scope, keyMax)) return 'owner';
-        return this.held[spender.scope].live >= this.ceiling(spender.scope) ? 'region' : null;
+    /** Why `spender` has no room now, in the order of {@link room}, or null when it has. `asked`: this request's class. */
+    private noRoom(spender: NonceSpender, now: number, perMinute: number | undefined, asked: { established?: boolean }): NonceRefusal | null {
+        const owner = this.owners.get(spender.owner);
+        const live = owner?.live ?? 0;
+        if (spender.region === 'stranger') {
+            if (live >= this.shares.addressMax) return { why: 'owner', cls: 'stranger' };
+            return this.held.stranger.live >= this.shares.strangersMax ? { why: 'region', cls: 'stranger' } : null;
+        }
+        const keyShare = this.keyShare(perMinute);
+        const newShare = Math.min(this.newKeyShare(perMinute), keyShare);
+        const rows = this.held.rows.live;
+        // Under a newer account's share and the line, either class has room: nobody is asked.
+        if (live < newShare && rows < this.line()) return null;
+        if (this.isEstablished(spender, owner, now, asked)) {
+            if (live >= keyShare) return { why: 'owner', cls: 'member' };
+            return rows >= this.shares.rowsMax ? { why: 'region', cls: 'member' } : null;
+        }
+        if (live >= newShare) return { why: 'owner', cls: 'newcomer' };
+        return rows >= this.line() ? { why: 'line', cls: 'newcomer' } : null;
     }
 
-    private share(scope: NonceScope, keyMax: number | undefined): number {
-        if (scope === 'stranger') return this.shares.addressMax;
-        return this.fixedShares || keyMax === undefined ? this.shares.keyMax : Math.max(this.shares.keyMax, keyMax);
+    /** The key's class: this request's answer, else the one kept on its owner object if young enough, else asked now. */
+    private isEstablished(spender: RowsSpender, owner: NonceOwner | undefined, now: number, asked: { established?: boolean }): boolean {
+        if (asked.established !== undefined) return asked.established;
+        if (owner?.classifiedAt !== undefined && Math.abs(now - owner.classifiedAt) < NONCE_CLASS_KEPT_MS) {
+            return asked.established = !!owner.established;
+        }
+        let established: boolean;
+        try {
+            established = spender.established();
+        } catch {
+            established = false; // a class that can't be read is the smaller share, never a refusal of a request with room
+        }
+        asked.established = established;
+        if (owner) {
+            owner.established = established;
+            owner.classifiedAt = now;
+        }
+        return established;
     }
 
-    private ceiling(scope: NonceScope): number {
-        return scope === 'member' ? this.shares.membersMax : this.shares.strangersMax;
+    /** The rows' region's line: at it, a newcomer has no room. The ceiling less the reserve, never set on its own. */
+    private line(): number {
+        return Math.max(0, this.shares.rowsMax - this.shares.membersReserve);
     }
 
-    /** Count one more nonce for `spender`'s owner, made when it has none on the heap. */
+    private keyShare(perMinute: number | undefined): number {
+        return this.fixedShares || perMinute === undefined || !Number.isFinite(perMinute)
+            ? this.shares.keyMax : Math.max(this.shares.keyMax, NONCE_KEY_MINUTES * perMinute);
+    }
+
+    private newKeyShare(perMinute: number | undefined): number {
+        return this.fixedShares || perMinute === undefined || !Number.isFinite(perMinute)
+            ? this.shares.newKeyMax : Math.max(this.shares.newKeyMax, NONCE_NEW_KEY_MINUTES * perMinute);
+    }
+
+    /** Count one more nonce for `spender`'s owner, made when it has none on the heap (with its class, if just asked). */
     private acquire(spender: NonceSpender): NonceOwner {
         let owner = this.owners.get(spender.owner);
         if (!owner) {
-            owner = { id: spender.owner, scope: spender.scope, live: 0 };
+            owner = { id: spender.owner, region: spender.region, live: 0 };
+            const c = this.classifiedNew;
+            if (c && c.id === owner.id) {
+                owner.established = c.established;
+                owner.classifiedAt = c.at;
+            }
             this.owners.set(owner.id, owner);
-            this.held[owner.scope].owners++;
+            this.held[owner.region].owners++;
         }
+        this.classifiedNew = null;
         owner.live++;
-        this.held[owner.scope].live++;
+        this.held[owner.region].live++;
         return owner;
     }
 
-    /** Count one of `owner`'s nonces off, and forget the owner at zero. */
+    /** Count one of `owner`'s nonces off, and forget the owner (and its kept class) at zero. */
     private release(owner: NonceOwner): void {
-        this.held[owner.scope].live--;
+        this.held[owner.region].live--;
         if (--owner.live > 0) return;
         this.owners.delete(owner.id);
-        this.held[owner.scope].owners--;
+        this.held[owner.region].owners--;
     }
 
     private forgetExpired(now: number): void {
@@ -308,100 +393,144 @@ export class NonceStore {
     }
 }
 
-/** Who spends a nonce: its scope, and its owner's id (`k:<key>` for a member's key, `a:<limiter key>` for an address). */
-export interface NonceSpender { scope: NonceScope; owner: string }
-/** One owner with nonces on the heap, shared by all of its pairs. */
-interface NonceOwner { readonly id: string; readonly scope: NonceScope; live: number }
+/** The store's two regions: every key that acts here, by its key, and strangers, by their address. */
+export type NonceRegion = 'rows' | 'stranger';
+/**
+ * Who spends a nonce: a key that acts here (`k:<key>`), with how to ask whether it is an established member (asked
+ * lazily: NonceStore), or a stranger's address (`a:<limiter key>`).
+ */
+export type NonceSpender = RowsSpender | { region: 'stranger'; owner: string };
+interface RowsSpender { region: 'rows'; owner: string; established: () => boolean }
+/** One owner with nonces on the heap, shared by all of its pairs, with its class while it is kept (a key's only). */
+interface NonceOwner { readonly id: string; readonly region: NonceRegion; live: number; established?: boolean; classifiedAt?: number }
 /** Why a new nonce has no room (NonceStore room), or null when it has. */
-export type NonceRoom = 'owner' | 'region' | null;
-export type { NonceScope, NoncePressure };
+export type NonceRoom = 'owner' | 'line' | 'region' | null;
+/** A refusal for room, and whose: the class decides its sentence and its alert. */
+export interface NonceRefusal { why: Exclude<NonceRoom, null>; cls: NonceClass }
+export type { NonceClass, NoncePressure };
 
 /** A spender no caller named: every one of them shares one address's share, so leaving it out only tightens. */
-const UNKNOWN_SPENDER: NonceSpender = { scope: 'stranger', owner: 'a:unknown' };
+const UNKNOWN_SPENDER: NonceSpender = { region: 'stranger', owner: 'a:unknown' };
+
+/** A key's class is kept on its owner object this long (NonceStore): in a flood, each key is asked once a minute. */
+export const NONCE_CLASS_KEPT_MS = 60_000;
 
 /** A store this small is not swept on `consume`: the minute timer's `prune` (https-server.ts) is enough for it. */
 export const NONCE_SWEEP_ABOVE = 10_000;
 
 /**
- * How many nonces the store holds, by whose they are (NB1 of #2038's deciding review; re-decided by Fable 2026-10-22,
- * scratch/fable-design/DESIGN-nonce-store-2-fable.md, after the deciding review of #2359 measured ~15 addresses keeping
- * one shared cap of 250,000 full, and every member refused 503 while it was). Without a bound the store was the one map
- * a stranger with fresh keypairs could grow without end: one address is held to ~18,000 live nonces by the gateway
- * limiter, but a flood rotating IPv6 /64s, one request each, spent ~5,200 a second on a Mac, ~3 M held over the
- * 10-minute hold, past the 512 MB heap.
+ * How many nonces the store holds, by whose they are (NB1 of #2038's deciding review; re-decided by Fable after each
+ * deciding review of #2359: scratch/fable-design/DESIGN-nonce-store-3-fable.md, 2026-10-22). Without a bound the store
+ * was the one map a stranger with fresh keypairs could grow without end: one address is held to ~18,000 live nonces by
+ * the gateway limiter, but a flood rotating IPv6 /64s, one request each, spent ~5,200 a second on a Mac, ~3 M held over
+ * the 10-minute hold, past the 512 MB heap. Round 1 shared one members' ceiling of 250,000 among every key with a row,
+ * and keys that cost nothing filled it (84 open-door accounts made in 6 s on the global node; 20 visitors' rows a day
+ * from any member's DMs), so every member was refused. Now one line can refuse an established member, set by memory;
+ * every other line refuses only keys that are cheap to make:
  *
- *   - A key that acts here (isNodeMember or isLiveVisitor, the gateway's own test): NONCE_KEY_MAX in flight, or
- *     NONCE_KEY_MINUTES × the gateway's minute allowance where that is more (nonceKeyShare; its honest most is the
- *     allowance over the 10-minute hold), and NONCE_MEMBERS_MAX for every member together: 10 × the 1,000-member load
- *     model's honest hold, which only 84 member keys flooding at once fill.
+ *   - An established member (engine/probation.ts isEstablishedMember: a node role, or a member row 72 hours old; where
+ *     probation is on, also off it and not 12 words alone): NONCE_KEY_MAX in flight, or NONCE_KEY_MINUTES × the
+ *     gateway's minute allowance where that is more (nonceKeyShare; its honest most is the allowance over the 10-minute
+ *     hold), refused only when the rows' region holds NONCE_ROWS_MAX: 200 established keys flooding at once.
+ *   - A newcomer (any other key with a row: a member in their first days, on the global node one on probation or with
+ *     12 words alone, a visitor's row): NONCE_NEW_KEY_MAX, or NONCE_NEW_KEY_MINUTES × the allowance (nonceNewKeyShare:
+ *     twice an honest newcomer's worst case), from the same region, refused once it holds NONCE_ROWS_MAX less
+ *     NONCE_MEMBERS_RESERVE (the line, 350,000: 584 newcomer keys), so established members keep the reserve.
  *   - Any other verified key: NONCE_ADDRESS_MAX an address (IPv6 by its /64), NONCE_STRANGERS_MAX together, which 34
- *     addresses fill. A stranger flood of any size never touches a member: while it fills the strangers' region, new
+ *     addresses fill. A stranger flood of any size never touches an account: while it fills the strangers' region, new
  *     joins and strangers' gated reads wait, and their public reads are answered as unsigned.
  *
- * Measured with the owners tracked (2026-10-22, Node 26 on a Mac): the members' region full of apps' nonces (32 hex)
- * from 1,000 keys, +30 MB of heap (118 B a nonce); the strangers' full of the longest (MAX_NONCE_LENGTH), each from a
- * different /64, +35 MB; both full of the longest, +92 MB of the 512 MB heap; one address at its share, 0.4 MB.
+ * Where NONCE_ROWS_MAX comes from: a third of the 512 MB heap (docker-compose.yml) at 209–225 B a nonce, a flood's
+ * 128-character ones (the design's replica, Node 26): the rows' region full of those, 120–135 MB; both regions full,
+ * 135–165 MB, on top of the 58–110 MB a node of 200–1,000 members holds. Of apps' nonces (32 hex) from 1,000 keys, the
+ * region full is 65–71 MB; honestly 1,000 members hold 26,000–53,000. A bigger heap does not raise it yet: the numbers
+ * are constants, so the suites and every node read the same ones.
  *
  * Past a share, a request that needs a new nonce is refused as busy (503 store_full, Retry-After) until entries expire;
  * the member sees the sentence and tries again by hand (no app retries an ordinary request on its own). A nonce still in
  * its window is never forgotten to make room. A shorter freshness window was the other way, and was not taken: no app
  * corrects for its phone's clock, and old phones' clocks are minutes out.
  */
-export const NONCE_MEMBERS_MAX = 250_000;
+export const NONCE_ROWS_MAX = 600_000;
+export const NONCE_MEMBERS_RESERVE = 250_000;
 export const NONCE_STRANGERS_MAX = 100_000;
 export const NONCE_KEY_MAX = 3_000;
+export const NONCE_NEW_KEY_MAX = 600;
 export const NONCE_ADDRESS_MAX = 3_000;
 export const NONCE_KEY_MINUTES = 25;
+export const NONCE_NEW_KEY_MINUTES = 5;
 
-/** A store's shares: each region's ceiling, and an owner's share in each (a member's key, a stranger's address). */
-export interface NonceLimits { membersMax: number; strangersMax: number; keyMax: number; addressMax: number }
+/**
+ * A store's limits: the rows' region's ceiling and the reserve kept in it for established members (the newcomers' line
+ * is the one less the other), the strangers' region's ceiling, and an owner's share: an established member's key, a
+ * newcomer's key, a stranger's address.
+ */
+export interface NonceLimits { rowsMax: number; membersReserve: number; keyMax: number; newKeyMax: number; strangersMax: number; addressMax: number }
 const NONCE_LIMITS: Readonly<NonceLimits> = Object.freeze({
-    membersMax: NONCE_MEMBERS_MAX, strangersMax: NONCE_STRANGERS_MAX, keyMax: NONCE_KEY_MAX, addressMax: NONCE_ADDRESS_MAX,
+    rowsMax: NONCE_ROWS_MAX, membersReserve: NONCE_MEMBERS_RESERVE, keyMax: NONCE_KEY_MAX, newKeyMax: NONCE_NEW_KEY_MAX,
+    strangersMax: NONCE_STRANGERS_MAX, addressMax: NONCE_ADDRESS_MAX,
 });
 
-/** A member key's share for the gateway's minute allowance (`maxRequestsPerMinute`): 25 × it, at least NONCE_KEY_MAX. */
+/** An established member's share for the gateway's minute allowance (`maxRequestsPerMinute`): 25 × it, at least NONCE_KEY_MAX. */
 export function nonceKeyShare(perMinute: number): number {
     return Number.isFinite(perMinute) ? Math.max(NONCE_KEY_MAX, NONCE_KEY_MINUTES * perMinute) : NONCE_KEY_MAX;
 }
 
+/** A newcomer's share for the gateway's minute allowance: 5 × it, at least NONCE_NEW_KEY_MAX. */
+export function nonceNewKeyShare(perMinute: number): number {
+    return Number.isFinite(perMinute) ? Math.max(NONCE_NEW_KEY_MAX, NONCE_NEW_KEY_MINUTES * perMinute) : NONCE_NEW_KEY_MAX;
+}
+
 export const STORE_FULL_CODE = 'store_full';
-/** The members' region is full. */
+/** The rows' region is full: every account's new request waits. */
 export const STORE_FULL_ERROR = 'This community is very busy right now. Please try again in a minute.';
-/** One member's key is at its own share. */
+/** One key, either class, is at its own share. */
 export const KEY_SHARE_FULL_ERROR = 'Your app has sent more requests than this community holds at once. Please wait a minute and try again.';
+/** The rows' region holds the newcomers' line: a newcomer's new request waits. */
+export const NEWCOMERS_FULL_ERROR = 'This community is busy with new members right now. Please try again in a minute.';
 /** The strangers' region is full, or one address's share of it. */
 export const STRANGERS_FULL_ERROR = 'This community is busy with new visitors right now. Please try again in a minute.';
 export const STORE_FULL_RETRY_AFTER_SEC = 60;
-/** The security line about a share refused is written at most this often for each scope, never per request (#1807 B1:
+/** The security line about a share refused is written at most this often for each class, never per request (#1807 B1:
  *  under a flood, a write per request is itself the outage). */
 const STORE_FULL_LOG_EVERY_MS = 60 * 60_000;
-const storeFullLoggedAt: Record<NonceScope, number> = { member: -Infinity, stranger: -Infinity };
+const storeFullLoggedAt: Record<NonceClass, number> = { member: -Infinity, newcomer: -Infinity, stranger: -Infinity };
 
-/** The refusal for a new nonce `nonces` has no room for, and its scope's security line for the hour if not written yet. */
-function roomRefusal(nonces: NonceStore, why: 'owner' | 'region', spender: NonceSpender, signer: string, now: number): SignatureRefusal {
-    const scope = spender.scope;
-    if (now - storeFullLoggedAt[scope] >= STORE_FULL_LOG_EVERY_MS) {
-        storeFullLoggedAt[scope] = now;
-        logger.security('AUTH', roomRefusalLine(nonces.pressure()[scope], why, scope, signer));
+/** The refusal for a new nonce `nonces` has no room for, and its class's security line for the hour if not written yet. */
+function roomRefusal(nonces: NonceStore, no: NonceRefusal, signer: string, now: number): SignatureRefusal {
+    const { why, cls } = no;
+    if (now - storeFullLoggedAt[cls] >= STORE_FULL_LOG_EVERY_MS) {
+        storeFullLoggedAt[cls] = now;
+        logger.security('AUTH', roomRefusalLine(nonces.pressure()[cls], why, cls, signer));
     }
-    const error = scope === 'stranger' ? STRANGERS_FULL_ERROR : why === 'owner' ? KEY_SHARE_FULL_ERROR : STORE_FULL_ERROR;
-    return { ok: false, status: 503, error, code: STORE_FULL_CODE, retryAfterSec: STORE_FULL_RETRY_AFTER_SEC, scope, signer };
+    const error = cls === 'stranger' ? STRANGERS_FULL_ERROR : why === 'owner' ? KEY_SHARE_FULL_ERROR
+        : why === 'line' ? NEWCOMERS_FULL_ERROR : STORE_FULL_ERROR;
+    return { ok: false, status: 503, error, code: STORE_FULL_CODE, retryAfterSec: STORE_FULL_RETRY_AFTER_SEC, scope: cls, signer };
 }
 
-/** The security line: counts, and a member's key by its first 12 characters only (as the gateway's trip line names one). */
-function roomRefusalLine(p: RegionPressure, why: 'owner' | 'region', scope: NonceScope, signer: string): string {
+/**
+ * The security line: counts, and an established member's key by its first 12 characters only (as the gateway's trip
+ * line names one). A newcomer's names nothing: a visitor's key is somebody else's.
+ */
+function roomRefusalLine(p: RegionPressure, why: Exclude<NonceRoom, null>, cls: NonceClass, signer: string): string {
     const n = (x: number) => x.toLocaleString('en');
     const store = 'the store of nonces (each signed request\'s single-use number)';
     const busy = `answered busy (503 ${STORE_FULL_CODE}) until older ones expire, within 10 minutes`;
-    if (scope === 'stranger') {
+    if (cls === 'stranger') {
         return (why === 'owner'
-            ? `Signed requests: one internet address signing with keys that are not members here reached its share of ${store}, ${n(p.share)} in flight, so its new ones are ${busy}.`
-            : `Signed requests from keys that are not members here filled their share of ${store}: ${n(p.live)} in flight from ${n(p.owners)} addresses, so their new ones are ${busy}; public reads are answered as unsigned.`)
-            + ' Members are not affected. Written at most once an hour for keys that are not members here.';
+            ? `Signed requests: one internet address signing with keys that have no account here reached its share of ${store}, ${n(p.share)} in flight, so its new ones are ${busy}.`
+            : `Signed requests from keys that have no account here filled their share of ${store}: ${n(p.live)} in flight from ${n(p.owners)} addresses, so their new ones are ${busy}; public reads are answered as unsigned.`)
+            + ' Accounts are not affected. Written at most once an hour for keys with no account here.';
+    }
+    if (cls === 'newcomer') {
+        return (why === 'owner'
+            ? `Signed requests: a newer account's app reached its share of ${store}, ${n(p.share)} in flight, so its new ones are ${busy}. Nobody else is affected.`
+            : `Signed requests from newer accounts (accounts in their first days, 12-words accounts without a sign-in, and people a member wrote to) filled their share of ${store}: ${n(p.live)} in flight from ${n(p.owners)} apps, so their new ones are ${busy}; established members are not affected, and public reads are answered as unsigned.`)
+            + ' Written at most once an hour for newer accounts.';
     }
     return (why === 'owner'
         ? `Signed requests: member ${signer.slice(0, 12)}…'s app reached its share of ${store}, ${n(p.share)} in flight, so its new ones are ${busy}. Other members are not affected.`
-        : `Members' signed requests filled their share of ${store}: ${n(p.live)} in flight from ${n(p.owners)} keys, so every member's new one is ${busy}; public reads are answered as unsigned.`)
+        : `Signed requests from members' apps filled ${store}: ${n(p.live)} in flight from ${n(p.owners)} apps, so every account's new one is ${busy}; public reads are answered as unsigned.`)
         + ' A member sees the busy sentence and tries again by hand. Written at most once an hour for members.';
 }
 
@@ -434,12 +563,12 @@ export interface SignedRequestParts {
 
 /**
  * `retryAfterSec`: how long to wait before trying again, sent as Retry-After (503 store_full). `scope` and `signer`, on a
- * 503 store_full: whose region it was refused in, and the verified key, so the caller can charge and answer it (a
- * member's to its own gateway bucket, a stranger's /ws token as unsigned).
+ * 503 store_full: whose it was (an established member's, a newcomer's, a stranger's), and the verified key, so the
+ * caller can charge and answer it (a key that acts here to its own gateway bucket, a stranger's /ws token as unsigned).
  */
 export type SignatureRefusal = {
     ok: false; status: 400 | 401 | 403 | 421 | 426 | 503; error: string; code?: string; retryAfterSec?: number;
-    scope?: NonceScope; signer?: string;
+    scope?: NonceClass; signer?: string;
 };
 
 export type MemberSignatureVerdict =
@@ -466,8 +595,11 @@ export interface VerifyOptions {
      * can only tighten.
      */
     client?: string;
-    /** A member key's share for the gateway's minute allowance now (nonceKeyShare); the store's own when not given. */
-    keyMax?: number;
+    /**
+     * The gateway's minute allowance now (`maxRequestsPerMinute`), which a key's shares follow (nonceKeyShare,
+     * nonceNewKeyShare); the store's own shares when not given.
+     */
+    perMinute?: number;
 }
 
 /**
@@ -595,15 +727,17 @@ export function verifyMemberSignature(parts: SignedRequestParts, opts: VerifyOpt
     let member: boolean | undefined;
     if (opts.consumeNonce) {
         const nonces = opts.nonces ?? requestNonces;
-        // A new nonce needs room in its signer's region: the key's own share when it acts here, else its address's. A
-        // spent one is still a replay, never busy.
+        // A new nonce needs room in its signer's region: the key's own share when it acts here (an established member's
+        // or a newcomer's, asked only when it matters), else its address's. A spent one is still a replay, never busy.
         let spender: NonceSpender | undefined;
         if (!nonces.isSpent(parts.nonce, now)) {
             const standing = standingHere(signer);
             member = standing.member;
-            spender = standing.acts ? { scope: 'member', owner: `k:${signer}` } : { scope: 'stranger', owner: `a:${opts.client ?? 'unknown'}` };
-            const why = nonces.room(spender, now, opts.keyMax);
-            if (why) return roomRefusal(nonces, why, spender, signer, now);
+            spender = standing.acts
+                ? { region: 'rows', owner: `k:${signer}`, established: () => isEstablishedMember(signer, now) }
+                : { region: 'stranger', owner: `a:${opts.client ?? 'unknown'}` };
+            const no = nonces.roomFor(spender, now, opts.perMinute);
+            if (no) return roomRefusal(nonces, no, signer, now);
         }
         if (!nonces.consume(parts.nonce, now, ts, spender)) {
             return { ok: false, status: 403, error: 'Replay detected: nonce already used' };

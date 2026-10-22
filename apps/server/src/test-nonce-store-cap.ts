@@ -698,6 +698,8 @@ async function alertChecks(): Promise<void> {
         const told = flood(await checkServerAlerts());
         assert(own[2] === 503 && told.length === 1 && told[0].priority === 4,
             `a member key at its share is told at priority 4 (${own.join(' ')}; ${JSON.stringify(told.map((e) => [e.kind, e.priority]))})`);
+        // These nonces were spent on the clock 40 minutes on: forget them, so the checks after this start from nothing.
+        requestNonces.prune(at + 11 * MINUTE);
         setAlertsClockForTests(0);
     });
     await section('7e. the alert at the real sizes: counts with thousands separators', async () => {

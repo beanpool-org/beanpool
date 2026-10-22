@@ -183,7 +183,7 @@ import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
-import { nonceKeyShare, requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
+import { requestNonces, STORE_FULL_CODE, STORE_FULL_RETRY_AFTER_SEC, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
 import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
@@ -239,8 +239,9 @@ type WsConnectResult =
     | { kind: 'unsigned' }
     | { kind: 'invalid' }
     /**
-     * A key that acts here, whose token found no room in the members' region of the nonce store (its own share, or the
-     * region: engine/member-signature.ts NonceStore): turned away as busy, 503, and charged to its own bucket.
+     * A key that acts here (an established member's or a newcomer's), whose token found no room in the rows' region of
+     * the nonce store (its own share, the newcomers' line, or the region: engine/member-signature.ts NonceStore): turned
+     * away as busy, 503, and charged to its own bucket.
      */
     | { kind: 'busy'; pubkey: string }
     /**
@@ -256,12 +257,13 @@ type WsConnectResult =
  * format 2 (@beanpool/core request-signing.ts). `unsigned` when none of them is present, and for a token signed for
  * another community or, after the switch, one in the old format (engine/member-signature.ts): no member feed, public
  * doorbells in the default mode and 401 under ENFORCE_WS_AUTH=true, and the app still opens. `invalid` for a partial,
- * stale, replayed or forged token; `busy` for a member's good one with a new nonce its region of the nonce store has no
- * room for (a stranger's reads as `unsigned`, as one for another community does: its public doorbells still open);
- * otherwise whether the proven key belongs to a known member. `client` is the upgrade's limiter key, whose share a
- * stranger's nonce is spent from; `keyMax` a member key's share (nonceKeyShare).
+ * stale, replayed or forged token; `busy` for a good one from a key with a row (an established member's or a newcomer's)
+ * with a new nonce its region of the nonce store has no room for (a stranger's reads as `unsigned`, as one for another
+ * community does: its public doorbells still open); otherwise whether the proven key belongs to a known member.
+ * `client` is the upgrade's limiter key, whose share a stranger's nonce is spent from; `perMinute` the gateway's minute
+ * allowance, which a key's shares follow.
  */
-function verifyWsConnect(pathname: string, params: URLSearchParams, client: string, keyMax: number): WsConnectResult {
+function verifyWsConnect(pathname: string, params: URLSearchParams, client: string, perMinute: number): WsConnectResult {
     const pubKeyHex = params.get('pubkey');
     const sigB64 = params.get('sig');
     const ts = params.get('ts');
@@ -279,10 +281,12 @@ function verifyWsConnect(pathname: string, params: URLSearchParams, client: stri
         // with) nonces it does not own, and one signed for another community leaves its nonce unspent.
         const verdict = verifyMemberSignature(
             { pubKeyHex, signature: sigB64, timestamp: ts, nonce, method: 'WS', path: pathname, body: '', signedFor },
-            { consumeNonce: true, client, keyMax },
+            { consumeNonce: true, client, perMinute },
         );
         if (!verdict.ok) {
-            if (verdict.code === STORE_FULL_CODE) return verdict.scope === 'member' && verdict.signer ? { kind: 'busy', pubkey: verdict.signer } : { kind: 'unsigned' };
+            if (verdict.code === STORE_FULL_CODE) {
+                return verdict.scope && verdict.scope !== 'stranger' && verdict.signer ? { kind: 'busy', pubkey: verdict.signer } : { kind: 'unsigned' };
+            }
             return verdict.status === 421 || verdict.status === 426 ? { kind: 'unsigned' } : { kind: 'invalid' };
         }
         const signerKey = verdict.signer;
@@ -961,7 +965,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false, charge: null };
             if (admitted.wait) { refuseUpgrade(socket, 429, admitted.wait); return; }
             // SRV-4: see WS_AUTH_MODE for what each kind of connect gets.
-            const connect = verifyWsConnect(pathname, parsedUrl.searchParams, client, nonceKeyShare(maxReqs));
+            const connect = verifyWsConnect(pathname, parsedUrl.searchParams, client, maxReqs);
             let settled: GatewayCharge | null = null;
             if (limited) {
                 // A verified key is charged as HTTP charges it: its own bucket if it acts here (a member's turned away as
@@ -1286,7 +1290,7 @@ export async function startHttpsServer(port: number): Promise<number> {
 
     app.use(async (ctx, next) => {
         const gwConfig = getGatewayConfig();
-        // A member key's share of the nonce store follows the minute allowance (requireSignature, below).
+        // A key's shares of the nonce store follow the minute allowance (requireSignature, below).
         ctx.state.gatewayPerMinute = gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120;
         // The real client (client-ip.ts): the socket peer, unless that peer is our own tunnel/proxy, in which case
         // the address it forwards. In tunnel mode the socket peer is the cloudflared container for everyone, so
@@ -1628,13 +1632,15 @@ export async function startHttpsServer(port: number): Promise<number> {
         }, {
             consumeNonce: true,
             client: clientLimiterKey(ctx),
-            keyMax: nonceKeyShare(ctx.state.gatewayPerMinute ?? 120),
+            perMinute: ctx.state.gatewayPerMinute ?? 120,
         });
         // Refused for room in the nonce store (503 store_full): the signature was good, so the claim is given back and the
-        // request charged as a verified key's, here: a key that acts here to its own bucket, never to its address's
-        // unsigned one, and any other to that (gateway-rate-limit.ts), which answers 429 when it is full.
+        // request charged as a verified key's, here: a key that acts here (an established member's or a newcomer's) to
+        // its own bucket, never to its address's unsigned one, and a stranger's to that (gateway-rate-limit.ts), which
+        // answers 429 when it is full.
         const roomRefused = !verdict.ok && verdict.code === STORE_FULL_CODE;
-        if (roomRefused && !gatewayRefusedForRoom(ctx, verdict.signer, verdict.scope === 'member', ctx.state.gatewayPerMinute ?? 120)) return;
+        const actsHere = roomRefused && !!verdict.scope && verdict.scope !== 'stranger';
+        if (roomRefused && !gatewayRefusedForRoom(ctx, verdict.signer, actsHere, ctx.state.gatewayPerMinute ?? 120)) return;
         // An old app's signature on a PUBLIC read after the switch is answered as that read unsigned, which anyone
         // may send: every app before binding signs its GETs to its node (native node-request-signing.ts), and it
         // reads its "update BeanPool" banner's minimum version from /api/community/health. A 426 there would hide

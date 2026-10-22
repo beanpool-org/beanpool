@@ -14,11 +14,12 @@
  *
  *  1. "84 open-door accounts flooding: a member off probation still writes": 84 real 12-words joins, 9 from each address
  *     so every one is at work level 0; each sends 25 signed writes: 80 store their 20 (1,600, the line) and the 21st of
- *     each is 503 "Your app"; the last 4 are 503 "busy with new members" from their first. The owner (a role, joined
- *     today) and an established member (a sign-in join 4 days old with 3 kept posts) write, read /api/members and open
- *     /ws; a 12-words member 10 days old with 3 kept posts (off probation, words only) and a sign-in member 4 days old
- *     with no kept post (on probation) are "busy with new members"; a stranger still writes, in its own region. The
- *     alert tells priority 4, "1,600 in flight from 80 apps", naming nothing.
+ *     each is 503 "Your app"; the last 4 are 503 "busy with new members" from their first. The alert tells priority 4,
+ *     "1,600 in flight from 80 apps", naming nothing. The owner (a role, joined today) and an established member (a
+ *     sign-in join 4 days old with 3 kept posts) write, make a gated read (/api/community/me: the global node lists
+ *     nobody whole) and open /ws; a 12-words member 10 days old with 3 kept posts (off probation, words only) and a
+ *     sign-in member 4 days old with no kept post (on probation) are "busy with new members"; a stranger still writes, in
+ *     its own region.
  *  2. The same 12-words member adds a sign-in (POST /api/join/link) once the flood's numbers expire, and under the same
  *     flood again writes.
  *
@@ -237,13 +238,19 @@ async function main(): Promise<void> {
             assert(first80, `accounts 1 to 80 store their 20 each, and from the 21st each is 503 in the words for its own app (account 1: ${show(answers[0])}; account 80: ${show(answers[79])})`);
             assert(last4, `accounts 81 to 84 are 503 "busy with new members" from their first write (account 81: ${show(answers[80])}: "${answers[80][0].error ?? ''}")`);
             assert(rowsLive() === 1_600, `the rows' region holds 1,600, the line, of its 2,000 (${rowsLive()})`);
+            // Told now, while the counts are the flood's own (each later refusal brings its region's count up to date).
+            const told = flood(await checkServerAlerts());
+            const detail = told[0]?.detail ?? '';
+            assert(told.length === 1 && told[0].priority === 4 && detail.includes('1,600 in flight from 80 apps') && !ADDRESS_OR_KEY.test(detail),
+                `the alert tells priority 4, "1,600 in flight from 80 apps", naming nothing (${JSON.stringify(told.map((e) => [e.kind, e.priority]))} "${detail}")`);
 
+            // A gated read here: the global node lists nobody whole (/api/members is 403 there), so a member's own record.
             for (const [who, id, ip] of [['the owner', owner, '203.0.113.20'], ['Sid, a sign-in member off probation', settled, '203.0.113.21']] as const) {
                 const w = await write(id, ip);
-                const g = await request(id, 'GET', '/api/members', ip);
+                const g = await request(id, 'GET', '/api/community/me', ip);
                 const ws = await socket(id, ip);
                 assert(w.status === 200 && g.status === 200 && ws.opened,
-                    `${who}: the write is 200, /api/members 200, /ws opens (${w.status} ${w.error ?? ''}, ${g.status} ${g.error ?? ''}, ${ws.status})`);
+                    `${who}: the write is 200, the gated read /api/community/me 200, /ws opens (${w.status} ${w.error ?? ''}, ${g.status} ${g.error ?? ''}, ${ws.status})`);
             }
             const wil = await write(words.id, '203.0.113.22');
             assert(wil.status === 503 && wil.error === NEWCOMERS_FULL_ERROR,
@@ -254,11 +261,6 @@ async function main(): Promise<void> {
             const before = strangersLive();
             const stranger = await write(newKey(), '203.0.113.24');
             assert(stranger.status !== 503 && strangersLive() === before + 1, `a stranger's write still stores, in its own region (${stranger.status}, ${before} → ${strangersLive()})`);
-
-            const told = flood(await checkServerAlerts());
-            const detail = told[0]?.detail ?? '';
-            assert(told.length === 1 && told[0].priority === 4 && detail.includes('1,600 in flight from 80 apps') && !ADDRESS_OR_KEY.test(detail),
-                `the alert tells priority 4, "1,600 in flight from 80 apps", naming nothing (${JSON.stringify(told.map((e) => [e.kind, e.priority]))} "${detail}")`);
         });
 
         await section('2. the same 12-words member adds a sign-in, and under the same flood again writes', async () => {

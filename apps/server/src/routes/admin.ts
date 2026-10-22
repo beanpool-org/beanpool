@@ -382,7 +382,10 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
                 pubKeyHex, signature: signatureBase64, timestamp: timestampHeader, nonce,
                 method: ctx.method, path: ctx.path, body: (ctx as any).rawBody ?? '',
                 signedFor: typeof signedForHeader === 'string' ? signedForHeader : null,
-            }, { consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces, client: clientLimiterKey(ctx) });
+            }, {
+                consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces, client: clientLimiterKey(ctx),
+                perMinute: getGatewayConfig().rateLimiting?.maxRequestsPerMinute ?? 120,
+            });
             if (verdict.ok) {
                 targetPubkey = verdict.signer;
                 selfPubkey = verdict.signer;

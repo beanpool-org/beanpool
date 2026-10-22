@@ -330,8 +330,9 @@ export async function clearBlocklist(): Promise<boolean> {
             cached = { owner, list: [] };
             DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, []);
         }
-        // Takes off the community's list the blocks this phone put there, and no other (a block made in the web app stays),
-        // one request each: not waited for, so the list on screen empties at once.
+        // Takes off the community's list each block this phone sent there, even one the web app had made too (the community
+        // keeps one list), and no other: a block made only in the web app stays. One request each, not waited for, so the
+        // list on screen empties at once.
         void syncBlocks();
         return true;
     } catch (e) {
@@ -390,8 +391,9 @@ let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
 /**
  * Brings the block list the community the phone is set to keeps for the account on the phone (routes/blocks.ts) in line
  * with the phone's: each key on the phone's list that the community hasn't answered it holds is added, and each this
- * phone put there that is no longer on the phone's list is taken off. A key on the community's list that this phone
- * never put there (a block made in the web app) is never touched. Nothing is sent when nothing changed.
+ * phone put there that is no longer on the phone's list is taken off. A key this phone never sent (a block made only in
+ * the web app) is never touched; one it sent comes off when the member unblocks it on the phone, even if the web app had
+ * blocked it too, since the community keeps one list for the member. Nothing is sent when nothing changed.
  *
  * - Each community the member is on with this phone gets the phone's list; the first time, every block from before this
  *   build, in one request (a key the community has no row for, which a list skips, goes again on its own, as the web

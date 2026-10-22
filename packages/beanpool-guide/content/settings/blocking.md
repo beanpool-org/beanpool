@@ -26,7 +26,7 @@ In the phone app, confirm with **Block User**. In the web app, your browser asks
 
 Your community keeps your blocks for you, from the phone app and from the web app. A block made in the phone app reaches your community as soon as the phone is connected. Without a connection, the phone blocks them at once and tells your community when it is back online.
 
-If you use more than one community on the phone, your blocks reach each one when you next use it on that phone.
+If you belong to more than one community on the phone, your blocks reach each one when you next use it on that phone. A community you are only looking around as a guest gets none of them. If you join it, they reach it then.
 
 If your community's server is too old to keep blocks, a block made in the phone app stays on that phone. The phone tries again each day, until the server is updated.
 
@@ -64,6 +64,6 @@ If your community's server is too old to keep blocks, a block made in the phone 
 - Tap **Unblock** next to a name, or **Unblock All**.
 - In the phone app you can also unblock someone from their profile. Under their name it says "You blocked" and their name. Tap **Unblock** there.
 
-In the phone app, blocking and unblocking work without a connection. The phone tells your community when it is back online.
+In the phone app, blocking and unblocking work without a connection. The phone tells your community when it is back online. If you tap **Unblock All** after blocking a lot of people, the phone tells your community about them a few at a time, so it can take some minutes.
 
 In the web app, blocking and unblocking need a connection to your community. Without one, the app says so and nothing changes. Try again when you are back online.

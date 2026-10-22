@@ -352,6 +352,14 @@ const BLOCKS_WAIT_MS = 24 * 60 * 60 * 1000;
 const MEMBER_KEY = /^[0-9a-f]{64}$/;
 /** A change's 403 from a community the account is no member of (yet): apps/server engine/members.ts NOT_A_MEMBER_CODE. */
 const NOT_A_MEMBER_CODE = 'not_a_member';
+/**
+ * At most this many block requests a minute: a quarter of what a community takes from one member (the gateway's 120 a
+ * minute, apps/server gateway-rate-limit.ts), so a first sync with many keys the community has no row for, each sent on
+ * its own, or an Unblock All, never leaves the app's own requests answered 429. Measured on a real node before this: 150
+ * such keys sent 121 requests in 0.6 s, and the 121st, and the member's next read of their chats, were answered 429.
+ */
+const BLOCK_REQUESTS_PER_MINUTE = 30;
+const MINUTE_MS = 60 * 1000;
 
 /**
  * What this phone knows of one community's list for one account: `on`, keys this phone put there that the community's
@@ -374,6 +382,10 @@ interface BlocksAt {
 type ChangeAnswer = string[] | 'later' | 'no list' | 'refused';
 
 let syncing: Promise<void> = Promise.resolve();
+/** When each block request of the last minute went, oldest first. */
+let requestsSentAt: number[] = [];
+/** The sync set for when there is room for another request, if one is. */
+let syncWhenRoom: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Brings the block list the community the phone is set to keeps for the account on the phone (routes/blocks.ts) in line
@@ -397,6 +409,8 @@ let syncing: Promise<void> = Promise.resolve();
  *   unblock: it is asked nothing for a day. The phone's own block stands throughout.
  * - Only ever the account's own: sent to the community the phone is set to as the sync starts, each request signed by the
  *   key of the account whose list it is, and only while that account is on the phone. One sync at a time.
+ * - At most {@link BLOCK_REQUESTS_PER_MINUTE} requests a minute: past that, the sync stops, and the next one starts by
+ *   itself as soon as there is room.
  */
 export function syncBlocks(): Promise<void> {
     // After the one before it, however that ended: a sync that failed never stops the next.
@@ -490,6 +504,7 @@ async function syncBlocksOnce(): Promise<void> {
 async function sendBlockChange(owner: string, community: string, path: string, body: Record<string, unknown>): Promise<ChangeAnswer> {
     const signer = await loadIdentity();
     if (!signer?.privateKey || signer.publicKey !== owner) return 'later';
+    if (!roomForARequest()) return 'later';
     // One deadline over the request and the reading of its answer, and the request aborted at it (as purgeAccountOnNode
     // does, node-post.ts): fetch can settle as the headers arrive, and React Native's never gives up by itself, so an
     // answer whose body stalled after them would hold this sync, and every one queued behind it, until the app closed.
@@ -522,6 +537,27 @@ async function sendBlockChange(owner: string, community: string, path: string, b
     // No member there yet: nothing about the change itself, and a member who joins has it sent at the next sync.
     if (res.status === 403 && changeErrorCode(text) === NOT_A_MEMBER_CODE) return 'later';
     return res.status >= 400 && res.status < 500 && ![401, 408, 425, 429].includes(res.status) ? 'refused' : 'later';
+}
+
+/**
+ * Room for one more block request this minute ({@link BLOCK_REQUESTS_PER_MINUTE}), counted when there is. When there
+ * isn't, a sync is set for the moment there will be, and the change waits for it.
+ */
+function roomForARequest(): boolean {
+    const now = Date.now();
+    // A clock set back counts nothing sent in the future it came from.
+    requestsSentAt = requestsSentAt.filter(t => t <= now && now - t < MINUTE_MS);
+    if (requestsSentAt.length < BLOCK_REQUESTS_PER_MINUTE) {
+        requestsSentAt.push(now);
+        return true;
+    }
+    if (!syncWhenRoom) {
+        syncWhenRoom = setTimeout(() => {
+            syncWhenRoom = null;
+            void syncBlocks();
+        }, requestsSentAt[0] + MINUTE_MS - now);
+    }
+    return false;
 }
 
 /** The `code` in a block route's JSON refusal (routes/blocks.ts), or null for anything else. */

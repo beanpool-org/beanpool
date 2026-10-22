@@ -18,7 +18,7 @@ import * as Crypto from 'expo-crypto';
 import { t, type ToolNeedDraft, type ToolOfferDraft, type ToolPhoto } from '@beanpool/core';
 import { keepToolPhoto, toolPhotoDataUri } from './photos';
 import { communityKey } from './community';
-import { rememberShopChoice } from '../utils/shop-choice';
+import { clearShopChoice, rememberShopChoice } from '../utils/shop-choice';
 
 /** The Offer composer's draft key (app/(tabs)/map.tsx `OFFER_DRAFT_KEY`, read there and never changed here). */
 export const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
@@ -84,23 +84,25 @@ export async function unfinishedPostHere(): Promise<boolean> {
     }
 }
 
-async function writeDraftAndOpen(type: 'offer' | 'need', owner: string, tool: string, draft: ToolOfferDraft | ToolNeedDraft, fee: ToolListFee | null): Promise<void> {
+/** The composer's draft written from the tool's; its community and the photos it holds, as the composer will post them. */
+async function writeDraft(type: 'offer' | 'need', owner: string, tool: string, draft: ToolOfferDraft | ToolNeedDraft, fee: ToolListFee | null): Promise<{ anchorUrl: string | null; photos: string[] }> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     const community = communityKey(anchorUrl);
     const refs = type === 'offer' ? ((draft as ToolOfferDraft).photos ?? []) : [];
     const photos = (await Promise.all(refs.slice(0, DRAFT_PHOTOS).map((ref) => toolPhotoDataUri(community, owner, tool, ref)))).filter((p): p is string => !!p);
     await AsyncStorage.setItem(OFFER_DRAFT_KEY, JSON.stringify(composerDraft(type, draft, anchorUrl, photos, fee, Date.now(), tool)));
-    router.push(`/(tabs)/map?newPost=${type}`);
+    return { anchorUrl, photos };
 }
 
 /**
  * The List sheet's button: the draft written for the map's composer, which opens it. Nothing is posted here. "Put this in
- * your shop" (`inShop`) is kept beside the draft for this Offer's title (utils/shop-choice.ts), since the composer carries
- * only its own fields; off, any earlier choice is forgotten.
+ * your shop" (`inShop`) is kept beside the draft, known by the title, words and photos it hands the composer
+ * (utils/shop-choice.ts), since the composer carries only its own fields; off, any earlier choice is forgotten.
  */
 export async function openOfferComposer(owner: string, tool: string, draft: ToolOfferDraft, fee: ToolListFee, inShop = false): Promise<void> {
-    await rememberShopChoice(await AsyncStorage.getItem('beanpool_anchor_url'), draft.title, inShop);
-    return writeDraftAndOpen('offer', owner, tool, draft, fee);
+    const { anchorUrl, photos } = await writeDraft('offer', owner, tool, draft, fee);
+    await rememberShopChoice(anchorUrl, { title: draft.title, description: draft.description, photos }, inShop);
+    router.push('/(tabs)/map?newPost=offer');
 }
 
 /** Asked before a door replaces the member's unfinished post on the map (the composer keeps one draft): true to go on. */
@@ -115,9 +117,12 @@ function replaceUnfinishedPost(): Promise<boolean> {
 
 /**
  * `needDoor`: the Need composer, prefilled. Nothing is posted until the member taps Post. It has no sheet, so an
- * unfinished post on the map that it would replace is asked about first, as the List sheet says it for an Offer.
+ * unfinished post on the map that it would replace is asked about first, as the List sheet says it for an Offer. The
+ * composer keeps one draft, so a List sheet's "Put this in your shop" goes with the Offer this replaces.
  */
 export async function openNeedComposer(owner: string, tool: string, draft: ToolNeedDraft): Promise<void> {
     if (await unfinishedPostHere() && !await replaceUnfinishedPost()) return;
-    return writeDraftAndOpen('need', owner, tool, draft, null);
+    await writeDraft('need', owner, tool, draft, null);
+    await clearShopChoice();
+    router.push('/(tabs)/map?newPost=need');
 }

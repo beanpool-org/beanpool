@@ -53,7 +53,7 @@ import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 import { languageHeader } from './language-choice';
-import { SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, shopChoiceHolds } from './shop-choice';
+import { SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, sayOutsideShop, shopChoiceFor } from './shop-choice';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -1975,13 +1975,12 @@ export async function getReachablePeers(): Promise<{ peerId: string; callsign: s
 
 /**
  * The shop an Offer from the map's composer goes in, when the List sheet said "Put this in your shop" for it (slice S4′,
- * utils/shop-choice.ts: map.tsx is read and never edited, so the choice rides beside its draft): the member's own shop,
- * opened first if they have none yet, as the sheet said. Undefined when the choice doesn't hold for this post, or on a
- * node from before shops. Any other answer throws, so the Offer is never posted outside the shop the sheet promised; so
- * does no answer within {@link SHOP_COMPOSER_WAIT_MS}.
+ * utils/shop-choice.ts: map.tsx is read and never edited, so the choice rides beside its draft and knows its Offer by the
+ * tool's title, words and photos): the member's own shop, opened first if they have none yet, as the sheet said.
+ * Undefined on a node from before shops. Any other answer throws, so the choice's Offer is never posted outside the shop
+ * the sheet promised; so does no answer within {@link SHOP_COMPOSER_WAIT_MS}.
  */
-async function composerShopId(post: any, anchorUrl: string): Promise<string | undefined> {
-    if (post.type !== 'offer' || !shopChoiceHolds(await peekShopChoice(), post, anchorUrl, Date.now())) return undefined;
+async function composerShopId(): Promise<string | undefined> {
     const unreadable = () => new Error(t("Your shop couldn't be read just now. Try again."));
     const stop = new AbortController();
     const timer = setTimeout(() => stop.abort(), SHOP_COMPOSER_WAIT_MS);
@@ -2020,7 +2019,8 @@ export async function createPost(post: any) {
     if (!identity) {
         throw new Error('No identity found.');
     }
-    const shopId = await composerShopId(post, anchorUrl);
+    const shopChoice = post.type === 'offer' ? shopChoiceFor(await peekShopChoice(), post, anchorUrl, Date.now()) : 'none';
+    const shopId = shopChoice === 'shop' ? await composerShopId() : undefined;
 
     const body = {
         id: post.id,
@@ -2139,8 +2139,13 @@ export async function createPost(post: any) {
         // If it fails (e.g., no internet or server error), bubble it up to the UI so we DON'T lose the drafted post!
         throw new Error(e.message || 'Network request failed. You must be connected to a node to post.');
     }
-    // In the shop: the sheet's choice has had its Offer.
+    // In the shop: the sheet's choice has had its Offer. Up outside it while the choice waited here: the member is told, now
+    // that it is up, and the choice is forgotten (the composer's one draft has gone with this post).
     if (shopId) await clearShopChoice();
+    else if (shopChoice === 'say') {
+        await clearShopChoice();
+        sayOutsideShop(String(post.title ?? ''));
+    }
 
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft

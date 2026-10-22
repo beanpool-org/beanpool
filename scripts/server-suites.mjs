@@ -302,6 +302,7 @@ export const SUITES = [
     'test-api-path-auth',
     'test-request-binding',
     'test-nonce-store',
+    'test-nonce-store-cap',
     'test-loopback-audience',
     'test-address-offers',
     'test-staff-seen-prune',

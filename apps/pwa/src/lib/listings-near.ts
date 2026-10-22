@@ -59,7 +59,7 @@ const wrapLng = (lng: number): number => (lng >= -180 && lng <= 180 ? lng : ((((
 /**
  * How many decimals of a setting's centre the node is sent: the shift is at most half a unit on each axis, 7.9 m at
  * 4 dp, 79 m at 3 dp and 786 m at 2 dp on the equator (less towards the poles), so it stays under 8 % of the radius.
- * The picker's radii run from 100 m to 50 km.
+ * The picker's radii run from 100 m to 50 km; Home's saved searches from 1 to 25 km. No radius at all (Infinity): 2 dp.
  */
 const centreDecimals = (radiusKm: number): number => (radiusKm < 1 ? 4 : radiusKm < 10 ? 3 : 2);
 
@@ -68,16 +68,22 @@ const round = (n: number, decimals: number): number => Number(n.toFixed(decimals
 /** A setting's radius a tenth wider, to the metre: more than the rounded centre can shift, so no edge is lost. */
 const widened = (radiusKm: number): number => round(radiusKm * 1.1, 3);
 
+/**
+ * A distance setting's centre as it is sent to a node that measures within `radiusKm` of it: rounded by that radius
+ * (centreDecimals), the longitude wrapped. The Market and the Map send it by the setting's own radius (nearRead); Home
+ * by the least it measures from it (HomePage, review of #2363). Never the exact centre.
+ */
+export function sentCentre(centre: { lat: number; lng: number }, radiusKm: number): { lat: number; lng: number } {
+    const decimals = centreDecimals(radiusKm);
+    return { lat: round(centre.lat, decimals), lng: round(wrapLng(centre.lng), decimals) };
+}
+
 /** The point and radius to read from, or null to read as before. */
 export function nearRead({ nearbyListings, setting, area, visitor, everywhere }: NearInputs): NearRead | null {
     if (visitor || everywhere || !nearbyListings) return null;
     if (setting && finite(setting.lat) && finite(setting.lng) && finite(setting.radiusKm) && setting.radiusKm > 0) {
         const circle = { lat: setting.lat, lng: wrapLng(setting.lng), radiusKm: setting.radiusKm };
-        const decimals = centreDecimals(circle.radiusKm);
-        return {
-            lat: round(circle.lat, decimals), lng: round(circle.lng, decimals), radiusKm: widened(circle.radiusKm),
-            sort: 'distance', from: 'setting', circle,
-        };
+        return { ...sentCentre(circle, circle.radiusKm), radiusKm: widened(circle.radiusKm), sort: 'distance', from: 'setting', circle };
     }
     if (area && finite(area.lat) && finite(area.lng) && finite(nearbyListings.radiusKm) && nearbyListings.radiusKm > 0) {
         const circle = { lat: area.lat, lng: area.lng, radiusKm: nearbyListings.radiusKm };

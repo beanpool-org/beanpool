@@ -1,6 +1,6 @@
 // Where the web Market and Map read from (S5): the pure rule, every branch.
 import { describe, it, expect } from 'vitest';
-import { nearRead, nearParams, listingDistanceKm, nearestInCircle, readNearestInCircle, NEAR_PAGES_MAX, NODE_PAGE_MAX } from './listings-near';
+import { nearRead, nearParams, listingDistanceKm, nearestInCircle, readNearestInCircle, sentCentre, NEAR_PAGES_MAX, NODE_PAGE_MAX } from './listings-near';
 import { haversineDistance } from './geo';
 
 const NEARBY = { radiusKm: 250 };
@@ -105,6 +105,28 @@ describe('nearRead: the centre sent is rounded by the radius, and the radius wid
         const near = nearRead({ nearbyListings: NEARBY, setting: null, area: { lat: -28.6, lng: 153.6 }, visitor: false })!;
         expect(nearParams(near)).toEqual({ lat: -28.6, lng: 153.6, radiusKm: 250, sort: 'distance' });
         expect(near.circle).toEqual({ lat: -28.6, lng: 153.6, radiusKm: 250 });
+    });
+});
+
+describe('sentCentre: the one rounding a setting\'s centre goes out by, the Market\'s, the Map\'s and Home\'s (review of #2363)', () => {
+    const PICKED = { lat: -28.612345678, lng: 153.598765432 };
+
+    it('by the radius measured within: 4 decimals under 1 km, 3 under 10 km, 2 from 10 km or with no radius', () => {
+        expect(sentCentre(PICKED, 0.5)).toEqual({ lat: -28.6123, lng: 153.5988 });
+        expect(sentCentre(PICKED, 1)).toEqual({ lat: -28.612, lng: 153.599 });
+        expect(sentCentre(PICKED, 10)).toEqual({ lat: -28.61, lng: 153.6 });
+        expect(sentCentre(PICKED, Infinity)).toEqual({ lat: -28.61, lng: 153.6 });
+    });
+
+    it('a longitude past 180 goes wrapped, as the node takes it', () => {
+        expect(sentCentre({ lat: -21.2, lng: 184.8 }, 10)).toEqual({ lat: -21.2, lng: -175.2 });
+    });
+
+    it('is what nearRead sends for the setting\'s own radius', () => {
+        for (const radiusKm of [0.1, 0.5, 1, 5, 10, 50]) {
+            const near = nearRead({ nearbyListings: NEARBY, setting: { ...PICKED, radiusKm, label: '' }, area: null, visitor: false })!;
+            expect({ lat: near.lat, lng: near.lng }).toEqual(sentCentre(PICKED, radiusKm));
+        }
     });
 });
 

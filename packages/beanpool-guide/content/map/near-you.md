@@ -15,7 +15,7 @@ related: browsing-the-market, map-pins, pin-locations, events, your-area
 
 On the phone, posts with no location are always shown. In the web app a **Distance** hides them, except polls. On the global community the web app also leaves them out while the list is near you (below).
 
-In the web app, the picker opens on the last centre you chose, or else on the community's own place (a view of the world if it has none). Check the pin, or tap the map, drag the pin or tap the target button to choose the centre, before you tap **Apply**. It asks for your location only when you tap the target button. On the global community the web app sends the centre you chose to the community, rounded to about a kilometre, or closer when you pick a small radius.
+In the web app, the picker opens on the last centre you chose, or else on the community's own place (a view of the world if it has none). Check the pin, or tap the map, drag the pin or tap the target button to choose the centre, before you tap **Apply**. It asks for your location only when you tap the target button. On the global community the web app sends the centre you chose to the community, for the Market, the Map and Home, rounded to about a kilometre. It goes closer when you pick a small radius, or when a search you saved to Home looks within a small distance.
 
 On the phone the picker opens on the last centre you chose, or on a fixed spot, so tap the target button first.
 

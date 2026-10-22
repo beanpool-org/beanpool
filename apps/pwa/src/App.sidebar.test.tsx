@@ -56,18 +56,33 @@ vi.mock('./lib/api', () => ({
     getMemberProfile: vi.fn(async () => ({ publicKey: 'my-user-pubkey', avatar: null, bio: '', contact: null })),
 }));
 
-// The pages that open over the tabs, as App mounts them: each its own fixed layer at z-[110], with its own Back.
+// The pages that open over the tabs, as App mounts them: each its own fixed layer at z-[110], with its own Back and
+// its ways out to the rest of the app.
+type ProfileWays = {
+    pubkey: string; onBack: () => void; onOpenTreasury: (pk: string) => void; onMessage: (pk: string) => void;
+    onNavigatePost: (id: string) => void; onEditProfile: () => void; onNavigateTab: (tab: string, subView?: string) => void;
+};
 vi.mock('./pages/PublicProfilePage', () => ({
-    PublicProfilePage: ({ pubkey, onBack }: { pubkey: string; onBack: () => void }) => (
+    PublicProfilePage: ({ pubkey, onBack, onOpenTreasury, onMessage, onNavigatePost, onEditProfile, onNavigateTab }: ProfileWays) => (
         <div data-testid="profile-overlay" data-pubkey={pubkey} className="page-overlay z-[110]">
             <button onClick={onBack}>Back from profile</button>
+            <button onClick={() => onOpenTreasury('some-treasury-pubkey')}>Profile: open an enterprise</button>
+            <button onClick={() => onMessage('someone-pubkey')}>Profile: Message</button>
+            <button onClick={() => onNavigatePost('post-1')}>Profile: open a post</button>
+            <button onClick={onEditProfile}>Profile: Edit profile</button>
+            <button onClick={() => onNavigateTab('people', 'friends')}>Profile: People</button>
+            <button onClick={() => onNavigateTab('guide', 'some-page')}>Profile: How it works</button>
         </div>
     ),
 }));
+type EnterpriseWays = { onBack: () => void; onNearYou: () => void; onGuide: (slug: string) => void; onNavigatePost: (id: string) => void };
 vi.mock('./pages/TreasuryDetailPage', () => ({
-    TreasuryDetailPage: ({ onBack }: { onBack: () => void }) => (
+    TreasuryDetailPage: ({ onBack, onNearYou, onGuide, onNavigatePost }: EnterpriseWays) => (
         <div data-testid="treasury-overlay" className="page-overlay z-[110]">
             <button onClick={onBack}>Back from enterprise</button>
+            <button onClick={onNearYou}>Enterprise: Near you</button>
+            <button onClick={() => onGuide('some-page')}>Enterprise: How it works</button>
+            <button onClick={() => onNavigatePost('post-1')}>Enterprise: open a post</button>
         </div>
     ),
 }));
@@ -94,6 +109,8 @@ vi.mock('./pages/ProjectsPage', () => ({
     ),
 }));
 vi.mock('./pages/MarketplacePage', () => ({ MarketplacePage: () => <div data-testid="marketplace-page" /> }));
+vi.mock('./pages/MessagesPage', () => ({ MessagesPage: () => <div data-testid="messages-page" /> }));
+vi.mock('./pages/PeoplePage', () => ({ PeoplePage: () => <div data-testid="people-page" /> }));
 vi.mock('./pages/SettingsPage', () => ({
     SettingsPage: ({ onBack }: { onBack: () => void }) => <button onClick={onBack}>← Back</button>,
 }));
@@ -221,6 +238,67 @@ describe('the sidebar\'s Settings cog opens Settings where the member sees it', 
         fireEvent.click(within(sidebar()).getByRole('button', { name: /Home/ }));
         await waitFor(() => expect(screen.queryByTestId('treasury-overlay')).toBeNull());
         expect(screen.getByTestId('home-page')).toBeInTheDocument();
+    });
+});
+
+// Review (22 Oct): a tool is drawn at z-[110] from the sidebar's edge, so the sidebar's profile button is tapped with
+// one open, and the profile (or an enterprise's page opened from it) is drawn over the tool. Their ways out to the rest
+// of the app closed only themselves: the tool stayed on top, over the tab they opened, and over Settings at z 100.
+describe('a profile or an enterprise\'s page opened over a tool: leaving it for the app closes the tool too', () => {
+    beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); standing.isMember = true; });
+
+    async function profileOverATool() {
+        await landed();
+        fireEvent.click(screen.getByText('Open Tools'));
+        await screen.findByTestId('tools-overlay');
+        fireEvent.click(profileButton());
+        await screen.findByTestId('profile-overlay');
+    }
+    async function enterpriseOverATool() {
+        await profileOverATool();
+        fireEvent.click(screen.getByText('Profile: open an enterprise'));
+        await screen.findByTestId('treasury-overlay');
+        expect(screen.queryByTestId('profile-overlay')).toBeNull();
+        expect(screen.getByTestId('tools-overlay')).toBeInTheDocument();
+    }
+
+    it.each([
+        ['Profile: Edit profile', 'settings-overlay'],
+        ['Profile: How it works', 'settings-overlay'],
+        ['Profile: Message', 'messages-page'],
+        ['Profile: open a post', 'marketplace-page'],
+        ['Profile: People', 'people-page'],
+    ])('the profile\'s %s: lands on %s with nothing over it', async (exit, landing) => {
+        await profileOverATool();
+        fireEvent.click(screen.getByText(exit));
+        expect(await screen.findByTestId(landing)).toBeInTheDocument();
+        expect(screen.queryByTestId('profile-overlay')).toBeNull();
+        expect(screen.queryByTestId('tools-overlay')).toBeNull();
+    });
+
+    it.each([
+        ['Enterprise: Near you', 'home-page'],
+        ['Enterprise: How it works', 'settings-overlay'],
+        ['Enterprise: open a post', 'marketplace-page'],
+    ])('the enterprise\'s %s: lands on %s with nothing over it', async (exit, landing) => {
+        await enterpriseOverATool();
+        fireEvent.click(screen.getByText(exit));
+        expect(await screen.findByTestId(landing)).toBeInTheDocument();
+        expect(screen.queryByTestId('treasury-overlay')).toBeNull();
+        expect(screen.queryByTestId('tools-overlay')).toBeNull();
+    });
+
+    it('Back from either keeps the tool, the layer it was opened over', async () => {
+        await enterpriseOverATool();
+        fireEvent.click(screen.getByText('Back from enterprise'));
+        await waitFor(() => expect(screen.queryByTestId('treasury-overlay')).toBeNull());
+        expect(screen.getByTestId('tools-overlay')).toBeInTheDocument();
+
+        fireEvent.click(profileButton());
+        await screen.findByTestId('profile-overlay');
+        fireEvent.click(screen.getByText('Back from profile'));
+        await waitFor(() => expect(screen.queryByTestId('profile-overlay')).toBeNull());
+        expect(screen.getByTestId('tools-overlay')).toBeInTheDocument();
     });
 });
 

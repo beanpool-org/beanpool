@@ -7,11 +7,11 @@
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    TOOL_PERMISSION_GRANTS, lendBackAroundOf, narrowHost, pricingHintFor,
+    TOOL_PERMISSION_GRANTS, lendBackAroundOf, narrowHost, pricingHintFor, withinAnswerTime,
     type PricingGuideItem, type ToolDealSummary, type ToolHost, type ToolHostBase, type ToolHostGrants, type ToolManifest, type ToolOfferDraft,
     type ToolOwnOffer, type ToolPermission, type ToolPostStatus,
 } from '@beanpool/core';
-import { getMarketplaceTransactions, getMyPosts, getPost, pausePost, resumePost } from '../utils/db';
+import { getMyPosts, getPost, pausePost, resumePost, signedGet } from '../utils/db';
 import { keepPicked, openNeedComposer } from './doors';
 import { removeToolPhoto, toolPhotoUri } from './photos';
 import { communityKey } from './community';
@@ -72,34 +72,50 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
     };
 }
 
-/** Rows read at a time from the phone's own copy of the deals. */
+/** The most rows the node gives in one page (MAX_PAGE_LIMIT in https-server.ts); asked for no number, it gives 50. */
 const PAGE_ROWS = 200;
 
-type DealRow = Awaited<ReturnType<typeof getMarketplaceTransactions>>[number];
+/** A deal as the node's GET /api/marketplace/transactions answers it, every field unchecked. */
+interface NodeDeal { id?: unknown; postId?: unknown; sellerPublicKey?: unknown; status?: unknown; hours?: unknown; createdAt?: unknown; completedAt?: unknown }
 
-/** Every deal of the owner's the phone holds, newest first, page after page until a short one. */
-async function everyDeal(owner: string): Promise<DealRow[]> {
-    const rows: DealRow[] = [];
+/**
+ * Every deal of the owner's, newest first, as the node answers them, signed as the member: page after page until a short
+ * one, a row seen twice (pushed down a page by a new one meanwhile) kept once, and a page with nothing new in it ends it.
+ * No answer, a refusal or one that isn't a list rejects; each page is let go at core's withinAnswerTime.
+ */
+async function nodeDeals(owner: string): Promise<NodeDeal[]> {
+    const rows = new Map<string, NodeDeal>();
     for (let offset = 0; ; offset += PAGE_ROWS) {
-        const page = await getMarketplaceTransactions(owner, undefined, PAGE_ROWS, offset);
-        rows.push(...page);
-        if (page.length < PAGE_ROWS) return rows;
+        const query = new URLSearchParams({ publicKey: owner, limit: String(PAGE_ROWS), offset: String(offset) });
+        const page = await withinAnswerTime(async (signal) => {
+            const res = await signedGet(`/api/marketplace/transactions?${query}`, { signal });
+            if (!res.ok) throw new Error(`The deals weren't read (${res.status}).`);
+            return res.json() as Promise<unknown>;
+        });
+        if (!Array.isArray(page)) throw new Error("The deals weren't read.");
+        const before = rows.size;
+        for (const row of page as NodeDeal[]) if (row && typeof row.id === 'string' && !rows.has(row.id)) rows.set(row.id, row);
+        if (page.length < PAGE_ROWS || rows.size === before) return [...rows.values()];
     }
 }
 
 /**
- * `deals`: the owner's deals as the phone holds them where the owner is the seller or lender (on their own Offers; the
- * tool matches the ones its records are linked to), never a deal they are buying in, every one of them: one page would
- * let newer deals push an older loan still out off it. A loan that is out says when it is due back, from its Offer's
- * hand-over and the deal's days (core's lendBackAroundOf), when the phone holds both. Deals that can't be read reject,
- * so a screen says it couldn't check rather than that nothing is out.
+ * `deals`: the owner's deals where they are the seller or lender (on their own Offers; the tool matches the ones its
+ * records are linked to), never one they are buying in, every one of them, asked of the community's server each time as
+ * the web asks it. Not the phone's own table: the sync fills that with the newest 50 deals only, so a phone just set up
+ * wouldn't hold an older loan still out, and a row that has since dropped out of those 50 is never brought up to date. A
+ * loan that is out says when it is due back, from its Offer's hand-over and the deal's days (core's lendBackAroundOf),
+ * when the phone holds the Offer. Deals that can't be read (offline, no answer, a refusal) reject, so a screen says it
+ * couldn't check rather than that nothing is out.
  */
 export async function ownerDeals(owner: string): Promise<ToolDealSummary[]> {
-    const rows = await everyDeal(owner);
-    const mine = rows.filter((r) => r && r.sellerPublicKey === owner && typeof r.postId === 'string' && typeof r.id === 'string');
+    const rows = await nodeDeals(owner);
+    const mine = rows.filter((r): r is NodeDeal & { id: string; postId: string } =>
+        r.sellerPublicKey === owner && typeof r.postId === 'string' && typeof r.id === 'string');
     return Promise.all(mine.map(async (r): Promise<ToolDealSummary> => {
         const post = r.status === 'pending' ? await getPost(r.postId).catch(() => null) : null;
-        const backAround = post?.lendable ? lendBackAroundOf(post.accepted_at, post.price_type, r.hours) : null;
+        const hours = typeof r.hours === 'number' ? r.hours : null;
+        const backAround = post?.lendable ? lendBackAroundOf(post.accepted_at, post.price_type, hours) : null;
         const updatedAt = (r.status === 'pending' && typeof post?.accepted_at === 'string' && post.accepted_at)
             || (typeof r.completedAt === 'string' && r.completedAt) || String(r.createdAt ?? '');
         return { postId: r.postId, transactionId: r.id, status: String(r.status), updatedAt, ...(backAround ? { backAround } : {}) };

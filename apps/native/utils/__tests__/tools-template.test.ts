@@ -165,8 +165,16 @@ vi.mock('../db', () => ({
     getMarketplaceTransactions: async (pubkey: string) => posts.deals.filter((d) => d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey),
     pausePost: async (id: string) => { posts.paused.push(id); },
     resumePost: async (id: string) => { posts.resumed.push(id); },
-    // The app's signed helpers, as the node copy calls them (tools/node-copy.ts).
+    // The app's signed helpers, as the node copy calls them (tools/node-copy.ts), and the member's deals as the node
+    // answers the phone's `deals` (tools/builder.ts): theirs, `limit` rows from `offset`.
     signedGet: async (path: string) => {
+        const url = new URL(path, 'https://mullum.example');
+        if (url.pathname === '/api/marketplace/transactions') {
+            const who = url.searchParams.get('publicKey');
+            const offset = Number(url.searchParams.get('offset') ?? 0);
+            const rows = posts.deals.filter((d) => d.sellerPublicKey === who || d.buyerPublicKey === who).slice(offset, offset + Number(url.searchParams.get('limit') ?? 50));
+            return { ok: true, status: 200, json: async () => rows };
+        }
         const a = server.answer('GET', path);
         if (!a) throw new TypeError('Network request failed');
         return { status: a.status, json: async () => a.json };

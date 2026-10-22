@@ -3,7 +3,7 @@ slug: near-you
 title: Paghahanap ng bagay sa malapit
 summary: Ipakita lamang ang mga post sa loob ng partikular na distansya mula sa iyo, o sa anumang lugar na piliin mo.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: e02b25e45f78d9fe
+source-hash: 2db25a661f8751ec
 ---
 
 ## Sa tab ng Merkado
@@ -16,7 +16,7 @@ source-hash: e02b25e45f78d9fe
 
 Sa telepono, ang mga post na walang lokasyon ay palaging ipinapakita. Sa web app itinatago ang mga ito ng **Distansya**, maliban sa mga botohan. Sa pandaigdigang komunidad iniiwan din ng web app ang mga ito habang ang listahan ay malapit sa iyo (sa ibaba).
 
-Kung pinapayagan na ng iyong browser ang BeanPool na gamitin ang iyong lokasyon, maaaring magbukas ang tagapili sa kung nasaan ka ngayon. Kung hindi, bubukas ito sa isang takdang lugar. Suriin ang pin, o i-tap ang target button o ang mapa, bago mo i-tap ang **Ilapat**. Sa pandaigdigang komunidad ipinapadala ng web app ang gitnang pinili mo sa komunidad, na ni-round sa humigit-kumulang 11 metro.
+Sa web app, bubukas ang tagapili sa huling gitnang pinili mo, o kung wala, sa sariling lugar ng komunidad (isang tanaw ng mundo kung wala itong lugar). Suriin ang pin, o i-tap ang mapa, hilahin ang pin o i-tap ang target button para piliin ang gitna, bago mo i-tap ang **Ilapat**. Humihingi lang ito ng lokasyon mo kapag na-tap mo ang target button. Sa pandaigdigang komunidad ipinapadala ng web app ang gitnang pinili mo sa komunidad, para sa Merkado, sa Mapa at sa Home, na ni-round sa humigit-kumulang isang kilometro. Mas malapit ito kapag pumili ka ng maliit na saklaw, o kapag ang isang paghahanap na na-save mo sa Home ay tumitingin sa loob ng maliit na distansya.
 
 Sa telepono ang tagapili ay bubukas sa huling gitnang pinili mo, o sa isang takdang lugar, kaya i-tap muna ang target button.
 

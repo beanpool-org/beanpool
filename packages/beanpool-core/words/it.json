@@ -2,10 +2,10 @@
   "_meta": {
     "language": "it",
     "name": "Italian",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-23",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "fagioli",
@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "In alto: il fagiolo è la tua comunità e la guida, ? spiega questa schermata, i cursori sono le Impostazioni.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "In alto: ? spiega la schermata in cui ti trovi; in Impostazioni trovi l'intera guida.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "Aggiungi le tue prime schede: toccane una per metterla su Home. Oppure tocca Fatto e Home inizierà con le solite cinque.",
-  "Step {n} of {total}": "Passaggio {n} di {total}"
+  "Step {n} of {total}": "Passaggio {n} di {total}",
+  "Things you own and might lend, and who has them.": "Le cose che possiedi e che potresti prestare, e chi le ha.",
+  "Tool shed": "Ripostiglio degli attrezzi",
+  "When something lent outside BeanPool is due back": "Quando va restituito qualcosa prestato fuori da BeanPool",
+  "Your shop and tools": "Il tuo negozio e i tuoi attrezzi",
+  "Your shop, and things you can do on your own.": "Il tuo negozio e le cose che puoi fare da solo o da sola.",
+  "Your things, and what is out.": "Le tue cose e quelle che sono fuori.",
+  "a drill": "un trapano",
+  "a ladder": "una scala",
+  "a tent": "una tenda",
+  "{name} is due back": "{name} va restituito",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} cosa · nel tuo ripostiglio",
+    "other": "{n} cose · tutte nel tuo ripostiglio"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} cosa · {listed} nel tuo negozio · {out} fuori",
+    "other": "{n} cose · {listed} nel tuo negozio · {out} fuori"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} cosa · {out} fuori",
+    "other": "{n} cose · {out} fuori"
+  }
 }

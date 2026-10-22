@@ -4,7 +4,7 @@ title: Kuzuia mtu
 summary: Ficha matangazo na ujumbe wa mtu usikuonekanie, na ubadilishe baadaye.
 related: reporting, messages, privacy, getting-help
 help: Watu uliowazuia. Matangazo na ujumbe wao vimefichwa kwako; ondoa kizuizi cha mtu hapa.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Kuzuia
@@ -58,5 +58,6 @@ Jumuiya yako hufanya hivi kwa vizuizi inavyokuwekea. Leo hilo ni kizuizi kilicho
 
 - Fungua **Mipangilio**. Chini ya **KISHERIA & FARAGHA**, gusa **Dhibiti Watumiaji Waliozuiwa**.
 - Gusa **Ondoa kizuizi** kando ya jina, au **Ondoa Vizuizi Vyote**.
+- Kwenye programu ya simu unaweza pia kumwondolea mtu kizuizi kutoka kwenye wasifu wake. Chini ya jina lake imeandikwa "Umemzuia" na jina lake. Gusa **Ondoa kizuizi** hapo.
 
 Kwenye programu ya wavuti, kuzuia na kuondoa kizuizi kunahitaji muunganisho kwenye jumuiya yako. Bila muunganisho, programu inasema hivyo na hakuna kinachobadilika. Jaribu tena ukiwa mtandaoni tena.

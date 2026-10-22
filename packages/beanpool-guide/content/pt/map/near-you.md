@@ -3,7 +3,7 @@ slug: near-you
 title: Encontrar coisas por perto
 summary: Mostrar apenas anúncios a uma certa distância de você ou de qualquer lugar que escolher.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: e02b25e45f78d9fe
+source-hash: 2db25a661f8751ec
 ---
 
 ## Na aba Mercado
@@ -16,7 +16,7 @@ source-hash: e02b25e45f78d9fe
 
 No celular, publicações sem localização são sempre exibidas. No aplicativo web, definir uma **Distância** as oculta, exceto enquetes. Na comunidade global, o aplicativo web também as omite enquanto a lista estiver configurada para perto de você (veja abaixo).
 
-Se o seu navegador já permite que o BeanPool use sua localização, o seletor pode abrir diretamente onde você está agora. Caso contrário, abre em um ponto fixo. Confira o marcador, ou toque no botão da mira ou no mapa, antes de tocar em **Aplicar**. Na comunidade global, o aplicativo web envia o centro escolhido para a comunidade, arredondado para cerca de 11 metros.
+No aplicativo web, o seletor abre no último centro que você escolheu ou, se não houver, no próprio local da comunidade (uma visão do mundo, se ela não tiver um). Confira o marcador, ou toque no mapa, arraste o marcador ou toque no botão da mira para escolher o centro, antes de tocar em **Aplicar**. O aplicativo só pede sua localização quando você toca no botão da mira. Na comunidade global, o aplicativo web envia à comunidade o centro que você escolheu, para o Mercado, o Mapa e o Início, arredondado para cerca de um quilômetro. O arredondamento fica mais preciso quando você escolhe um raio pequeno ou quando uma busca salva no Início procura a uma distância pequena.
 
 No celular, o seletor abre no último centro escolhido ou em um ponto fixo, então toque primeiro no botão da mira.
 
@@ -34,7 +34,7 @@ A comunidade global reúne anúncios de todos os lugares, por isso o **Mercado**
 - Cada anúncio indica a que distância se encontra, como **📍 12 km**. Seus próprios anúncios estão sempre no Mapa e no Mercado perto da sua região, onde quer que estejam. Com uma **Distância** definida, o Mercado mostra apenas o que estiver dentro dela, incluindo os seus.
 - Enquanto a lista estiver configurada para perto de você, publicações sem localização são omitidas. Uma enquete de alguém que não definiu sua região é uma delas. Para vê-las, redefina a **Distância** se tiver escolhido uma, e toque em **Mostrar de qualquer lugar**.
 - Sob **Eventos**, a lista nunca é restrita pela sua região ou pela sua **Distância**, como antes.
-- Se não houver nada por perto, o Mapa avisa, com **Mostrar de qualquer lugar**. Depois, **Perto da sua área** (ou **Mais próximos primeiro, dentro do local escolhido**) traz de volta os mais próximos.
+- Se não houver nada por perto, o Mapa avisa, com **Mostrar de qualquer lugar**. Depois, **Perto da sua área** (ou **Perto do lugar que você escolheu**) traz de volta os mais próximos.
 
 A busca do aplicativo web pesquisa apenas entre os anúncios exibidos na tela. **Mostrar de qualquer lugar** exibe os anúncios mais recentes de todos os lugares, não todos eles; portanto, um anúncio distante e antigo não aparecerá na busca. Em qualquer outra comunidade, o aplicativo web não restringe o Mercado nem o Mapa pela sua região. Eles exibem os 50 anúncios alterados mais recentemente e os seus próprios, e a pesquisa busca apenas entre eles.
 

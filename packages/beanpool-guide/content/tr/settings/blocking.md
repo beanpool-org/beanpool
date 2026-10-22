@@ -4,7 +4,7 @@ title: Birini engelleme
 summary: Birinin ilanlarını ve mesajlarını sizden gizleyin ve daha sonra bu işlemi geri alın.
 related: reporting, messages, privacy, getting-help
 help: Engellediğiniz kişiler. İlanları ve mesajları sizden gizlenir; engeli buradan kaldırabilirsiniz.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Engelleme
@@ -58,5 +58,6 @@ Topluluğunuz bunu sizin için tuttuğu engellemeler için yapar. Bugün bu, web
 
 - **Ayarlar**'ı açın. **YASAL VE GİZLİLİK** altında **Engellenen Kullanıcıları Yönet** seçeneğine dokunun.
 - Bir adın yanındaki **Engeli Kaldır** seçeneğine veya **Tümünün Engelini Kaldır** seçeneğine dokunun.
+- Telefon uygulamasında birinin engelini profilinden de kaldırabilirsiniz. Adının altında "Engellediniz" ve adı yazar. Orada **Engeli Kaldır**'a dokunun.
 
 Web uygulamasında engelleme ve engeli kaldırma işlemleri için topluluğunuza bağlantı gerekir. Bağlantı yoksa uygulama bunu belirtir ve hiçbir şey değişmez. Tekrar çevrimiçi olduğunuzda yeniden deneyin.

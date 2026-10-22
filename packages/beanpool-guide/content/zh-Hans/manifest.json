@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "社区成员与你的好友。点击某人查看其个人资料，或点击好友旁的 💬 发送消息。",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "社区成员与你的好友。点击某人查看其个人资料，或点击成员旁的 💬 向其发送消息。",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "适用于社区所有者。核对 12 个助记词、用手机接管或恢复服务器，以及手机自身的自动检查。",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "你的店铺",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "你自己账户上的一扇门面窗口，用来展示你选择的提供，集中在同一个名称下。",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "以同一个名称展示你的提供。可以为它命名、说明它的类型、暂时关店，或关闭它。",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

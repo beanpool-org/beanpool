@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Thành viên cộng đồng và bạn bè. Nhấn vào ai đó để xem hồ sơ, hoặc nhấn 💬 bên cạnh bạn bè để nhắn tin.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Thành viên cộng đồng và bạn bè của bạn. Nhấn vào ai đó để xem hồ sơ, hoặc nhấn 💬 bên cạnh một thành viên để nhắn tin cho họ.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Dành cho chủ sở hữu cộng đồng. Kiểm tra 12 từ, tiếp quản hoặc khôi phục máy chủ bằng điện thoại và tự động kiểm tra.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Cửa hàng",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Một ô cửa sổ trước tài khoản của riêng bạn, dành cho những Chia sẻ bạn chọn, dưới một cái tên.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Các Chia sẻ của bạn dưới một cái tên. Đặt tên, cho biết đó là loại gì, tạm đóng hoặc đóng hẳn.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

@@ -50,6 +50,7 @@ import { initStateEngine, seedGenesisMember, setNodeRole } from './state-engine.
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit, gatewayAdmitDayBudget, pruneGatewayBuckets, dayBudgetKeyCount, DAY_BUDGET_MAX_KEYS } from './gateway-rate-limit.js';
+import { requestNonces } from './engine/member-signature.js';
 import { resetChatRateLimit } from './chat-rate-limit.js';
 import { updateGatewayConfig } from './config/local-config.js';
 import { DEFAULT_GATEWAY_CONFIG } from './config/gateway.js';
@@ -206,6 +207,9 @@ async function main(): Promise<void> {
 
     // The rest runs with the minute throttle off, so what refuses is the rule under test. The day budget is on anyway.
     minuteThrottle(false);
+    // Nor the nonce store's share of one key's signed requests in flight (engine/member-signature.ts NonceStore: 3,000 for
+    // a member, test-nonce-store-cap measures it), which a day's 5,000 writes sent in seconds would reach first.
+    requestNonces.setLimitsForTests({ keyMax: 1_000_000, newKeyMax: 1_000_000 });
 
     // ── 2. The day budget ─────────────────────────────────────────────────────────────────────────────────────
     console.log('\n--- 2. the day budget: 5,000 signed writes a key a day ---');

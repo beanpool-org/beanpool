@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 152,
-  "hash": "c510396e6cecf2ceda45753a242c74a70f9b195f8615fee140f1984b70c9108f",
+  "version": 153,
+  "hash": "f4dc513bbd9ff7064b0d0c74f8528085877e97071cfda3d697fc0cfdad4c1744",
   "sections": [
     {
       "id": "about",
@@ -40,6 +40,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3185,6 +3186,122 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Your Shop",
+      "summary": "A front window on your own account, for the Offers you choose, under one name.",
+      "help": "Your Offers under one name. Name it, say what kind it is, close it for now, or close it.",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What a shop is"
+        },
+        {
+          "type": "p",
+          "text": "Your shop is a front window on your own account. It holds the Offers you put in it, under one name, with a few words about it. Beans from them are yours, as for any Offer. It is not an enterprise: nobody else keeps it, and it shows nothing your Offers don't already show."
+        },
+        {
+          "type": "p",
+          "text": "You have one shop in each community you are in."
+        },
+        {
+          "type": "h2",
+          "text": "Opening it"
+        },
+        {
+          "type": "p",
+          "text": "Open **Your shop** from the Home card **Your shop and tools**, or from **Tools**. To put the card on Home, use **Edit home** and add **Your shop and tools**."
+        },
+        {
+          "type": "p",
+          "text": "Tap **Open my shop**. Until you give it a name, it is called after you: \"Ana's shop\"."
+        },
+        {
+          "type": "h2",
+          "text": "Its name, kind and words"
+        },
+        {
+          "type": "p",
+          "text": "Each of these is one field. Fill them in any order, or not at all:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Name**: up to 60 characters. Leave it empty to be called after you again.",
+            "**Kind**: one of fourteen, such as **Tools and equipment**, **Repairs** or **Food from the garden or farm**. It helps neighbours find you and picks the tools shown. It changes nothing else.",
+            "**About**: what it is, in a few words.",
+            "**How I deal**: where to pick things up, and when they come back."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Putting Offers in it"
+        },
+        {
+          "type": "p",
+          "text": "Only your own Offers for everyone here go in a shop. A Need, or an Offer for a group or one person, stays out."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**When you edit an Offer:** tick **Put this in your shop**, or untick it to take the Offer out.",
+            "**Add my live Offers:** on Your shop, tick the Offers you already have up and tap **Put them in my shop**.",
+            "**From a tool:** when you list something from a tool, **Put this in your shop** is ticked. If you have no shop yet, it opens with that Offer. You can change its title or words on the new Offer form and it still goes in. If you change it completely, or post something else instead, it goes up outside your shop and the app tells you. To put it in, open it, tap **Edit Post** and tick **Put this in your shop**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The new Offer form on the map has no tick yet. Post the Offer, then put it in from its edit screen or from Your shop."
+        },
+        {
+          "type": "h2",
+          "text": "Closing it for now"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Close for now**. You can say when you are back: in a week, in two weeks or in a month. Its Offers come off the Market and wait. Nothing goes in while it is closed, and none of its Offers can be put back up on its own."
+        },
+        {
+          "type": "p",
+          "text": "Tap **Reopen my shop** to put them all back. An Offer you had paused yourself stays paused."
+        },
+        {
+          "type": "h2",
+          "text": "Closing it"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Close my shop**. Its Offers stay in the Market as ordinary Offers, or end too if you choose **End its Offers too**. Your private tool lists stay on your phone. You can open a new shop any time."
+        },
+        {
+          "type": "p",
+          "text": "You can't close it, or close it for now, while a deal on one of its things is asked for or under way. The app says how many deals are open, with a button to **My Deals**."
+        },
+        {
+          "type": "h2",
+          "text": "On the global community"
+        },
+        {
+          "type": "p",
+          "text": "A shop works the same on the global community. Someone who has not joined sees what kind of shop it is and how many things are in it, never its name or yours."
+        },
+        {
+          "type": "h2",
+          "text": "In the web app"
+        },
+        {
+          "type": "p",
+          "text": "The web app does not show shops yet."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "My Deals",
       "summary": "One place for every trade you are in, every post you have up, and your past trades.",
@@ -3631,7 +3748,7 @@
         },
         {
           "type": "p",
-          "text": "If your browser already lets BeanPool use your location, the picker can open on where you are now. If not, it opens on a fixed spot. Check the pin, or tap the target button or the map, before you tap **Apply**. On the global community the web app sends the centre you chose to the community, rounded to about 11 metres."
+          "text": "In the web app, the picker opens on the last centre you chose, or else on the community's own place (a view of the world if it has none). Check the pin, or tap the map, drag the pin or tap the target button to choose the centre, before you tap **Apply**. It asks for your location only when you tap the target button. On the global community the web app sends the centre you chose to the community, for the Market, the Map and Home, rounded to about a kilometre. It goes closer when you pick a small radius, or when a search you saved to Home looks within a small distance."
         },
         {
           "type": "p",
@@ -3738,14 +3855,15 @@
         {
           "type": "ul",
           "items": [
-            "From a post: tap **Message** and the person's name.",
+            "From a profile: open their profile and tap **Message**. You can also add them as a friend there.",
             "From **Talk**: tap the pencil button, then find the person by name. On the worldwide community, New Message lists the people you've dealt with and your friends. To find anyone else, type at least 2 letters of their name.",
-            "From your friends: **Talk**, then **People**, then **Friends**, and tap the message button next to a name."
+            "From the members list: **Talk**, then **People**, and tap 💬 next to a member's name in **Community** or **Friends**.",
+            "From a post: tap **Message** and the person's name."
           ]
         },
         {
           "type": "p",
-          "text": "In the web app, use **✉️ New DM**, or the **💬 Message** button on a post. Your friends are under the **People** tab."
+          "text": "In the web app, use **Message** on their profile, 💬 on their row under **People**, **✉️ New DM**, or the **💬 Message** button on a post."
         },
         {
           "type": "h2",
@@ -4255,7 +4373,7 @@
       "slug": "people",
       "title": "People and friends",
       "summary": "Find members of your community, add friends, and vouch for someone.",
-      "help": "The members of your community and your friends. Tap someone to see their profile, or tap 💬 next to a friend to message them.",
+      "help": "The members of your community and your friends. Tap someone to see their profile, or tap 💬 next to a member to message them.",
       "section": "talk",
       "related": [
         "messages",
@@ -4282,7 +4400,7 @@
         },
         {
           "type": "p",
-          "text": "Tap a person to see their profile: their reviews and posts, and, on the phone in a community with Beans, their trust badge and trades. See \"Your profile\"."
+          "text": "Tap a person to see their profile: their reviews and posts, and, on the phone in a community with Beans, their trust badge and trades. You can message them straight from their profile with **Message**, or add them as a friend with **+ Add friend**. See \"Your profile\"."
         },
         {
           "type": "h2",
@@ -4291,8 +4409,8 @@
         {
           "type": "ul",
           "items": [
-            "In **Community**, tap **+ Add** next to a name. It changes to **Added**. Tap **Added** to take them off again. In the web app it changes to **✓ Friend**, which you can't tap: to take someone off, use **Remove** under **Friends**.",
-            "In **Friends**, tap the message button to start a chat, or the remove button, then **Remove**, to take someone off.",
+            "In **Community**, tap 💬 to start a chat, or tap **+ Add** next to a name. It changes to **Added**. Tap **Added** to take them off again. In the web app it changes to **✓ Friend**, which you can't tap: to take someone off, use **Remove** under **Friends**. You can also message someone or add them as a friend straight from their profile.",
+            "In **Friends**, tap 💬 to start a chat, or the remove button, then **Remove**, to take someone off.",
             "When someone adds you, the top of **Friends** says who, such as \"Sam added you\", with **Add back**. Tap their name to see their profile first. There is no notification. The line goes when you add them back, or after 30 days. Up to 20 are shown, then how many more.",
             "You can add up to 100 people in any 24 hours. Taking someone off counts too. If you reach it, the app says so and when you can add someone again.",
             "You can't add someone you have blocked: unblock them first. See \"Blocking someone\"."
@@ -6708,7 +6826,8 @@
           "type": "ul",
           "items": [
             "Open **Settings**. Under **Legal & Privacy**, tap **Manage Blocked Users**.",
-            "Tap **Unblock** next to a name, or **Unblock All**."
+            "Tap **Unblock** next to a name, or **Unblock All**.",
+            "In the phone app you can also unblock someone from their profile. Under their name it says \"You blocked\" and their name. Tap **Unblock** there."
           ]
         },
         {

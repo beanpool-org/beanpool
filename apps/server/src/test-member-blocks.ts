@@ -68,6 +68,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { requestNonces } from './engine/member-signature.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
@@ -186,6 +187,10 @@ async function main(): Promise<void> {
     initAdminPassword();
     await initTls();
     initStateEngine();
+    // The ceiling's rounds send one member's 1,200 signed requests in seconds, the gateway reset before each (call): the
+    // nonce store would hold a member who joined today to a newer account's 600 in flight first (engine/member-signature.ts
+    // NonceStore; test-nonce-store-cap measures it). Lifted, so only the rules under test refuse.
+    requestNonces.setLimitsForTests({ keyMax: 1_000_000, newKeyMax: 1_000_000 });
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     // Absent on a tree without them: every check that needs one fails, and the rest still run.

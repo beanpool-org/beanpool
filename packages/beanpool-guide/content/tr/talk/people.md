@@ -3,8 +3,8 @@ slug: people
 title: Kişiler ve arkadaşlar
 summary: Topluluk üyelerini bulma, arkadaş ekleme ve birine kefil olma.
 related: messages, your-profile, joining, blocking
-help: Topluluk üyeleri ve arkadaşlarınız. Profilini görmek için birine dokunun veya mesaj atmak için 💬 simgesine dokunun.
-source-hash: 7720f543f516d9dc
+help: Topluluğunuzun üyeleri ve arkadaşlarınız. Profilini görmek için birine dokunun veya bir üyeye mesaj atmak için yanındaki 💬 simgesine dokunun.
+source-hash: 44b66169497e9909
 ---
 
 ## Kişileri bulma
@@ -15,12 +15,12 @@ source-hash: 7720f543f516d9dc
 - **Topluluk:** her üye. Ada göre arayın. Telefonda **En Yeni**, **Ad**, **Arkadaşlar**, **Güvenilen** veya **Aktif** seçeneğine göre sıralayın. Küresel toplulukta bölgenize en yakın üyeleri gösterir: başka birini bulmak için bir adın en az 2 harfini yazın.
 - **Davetler:** yeni birini davet edin. Bkz. "BeanPool'a Katılma". Henüz katılmadıysanız bu düğmede **Kaydol** yazar. İnsanlar topluluğunuza katılmak istediğinde kaç kişi olduğunu gösterir ve **Katılmak istiyor** altında listelenirler. Web uygulamasında bu düğme her zaman, sayı ve **Katılmak istiyor** listesi olmadan **🎟️ Davetler** şeklindedir.
 
-Profillerini görmek için bir kişiye dokunun: değerlendirmeleri ve ilanları ile telefonda Fasulye kullanılan bir toplulukta güven rozeti ve takasları. Bkz. "Profiliniz".
+Profillerini görmek için bir kişiye dokunun: değerlendirmeleri ve ilanları ile telefonda Fasulye kullanılan bir toplulukta güven rozeti ve takasları. Doğrudan profilinden **Mesaj** ile ona mesaj atabilir veya **+ Arkadaş ekle** ile onu arkadaş olarak ekleyebilirsiniz. Bkz. "Profiliniz".
 
 ## Arkadaşlar
 
-- **Topluluk** içinde bir adın yanındaki **+ Ekle** seçeneğine dokunun. **Eklendi** olarak değişir. Onları tekrar çıkarmak için **Eklendi** seçeneğine dokunun. Web uygulamasında dokunamayacağınız **✓ Arkadaş** olarak değişir: birini çıkarmak için **Arkadaşlar** altındaki **Kaldır** seçeneğini kullanın.
-- **Arkadaşlar** içinde, bir sohbet başlatmak için mesaj düğmesine veya birini çıkarmak için kaldır düğmesine, ardından **Kaldır** seçeneğine dokunun.
+- **Topluluk** içinde bir sohbet başlatmak için 💬 simgesine dokunun ya da bir adın yanındaki **+ Ekle** seçeneğine dokunun. **Eklendi** olarak değişir. Onları tekrar çıkarmak için **Eklendi** seçeneğine dokunun. Web uygulamasında dokunamayacağınız **✓ Arkadaş** olarak değişir: birini çıkarmak için **Arkadaşlar** altındaki **Kaldır** seçeneğini kullanın. Birine mesaj atmayı ya da onu arkadaş olarak eklemeyi doğrudan profilinden de yapabilirsiniz.
+- **Arkadaşlar** içinde, bir sohbet başlatmak için 💬 simgesine veya birini çıkarmak için kaldır düğmesine, ardından **Kaldır** seçeneğine dokunun.
 - Biri sizi eklediğinde **Arkadaşlar**'ın üst kısmında "Sam seni ekledi" gibi kimin eklediği ve **Sen de ekle** seçeneği yazar. Önce profilini görmek için adına dokunun. Bildirim yoktur. Onları siz de eklediğinizde veya 30 gün sonra bu satır kaybolur. En fazla 20 kişi gösterilir, ardından kaç kişi daha olduğu belirtilir.
 - Herhangi bir 24 saat içinde en fazla 100 kişi ekleyebilirsiniz. Birini çıkarmak da sayılır. Bu sınıra ulaşırsanız uygulama bunu ve ne zaman tekrar birini ekleyebileceğinizi söyler.
 - Engellediğiniz birini ekleyemezsiniz: önce engelini kaldırın. Bkz. "Birini engelleme".

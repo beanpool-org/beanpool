@@ -3,7 +3,7 @@ slug: near-you
 title: Dinge in der Nähe finden
 summary: Nur Beiträge in einem bestimmten Umkreis um dich oder einen gewählten Ort anzeigen.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: e02b25e45f78d9fe
+source-hash: 2db25a661f8751ec
 ---
 
 ## Auf dem Tab „Markt“
@@ -16,7 +16,7 @@ source-hash: e02b25e45f78d9fe
 
 Auf dem Smartphone werden Beiträge ohne Ortsangabe immer angezeigt. In der Web-App blendet eine gewählte **Entfernung** diese aus, mit Ausnahme von Umfragen. In der globalen Community lässt die Web-App sie auch weg, solange die Liste auf deine Nähe eingestellt ist (siehe unten).
 
-Wenn dein Browser BeanPool bereits erlaubt, deinen Standort zu verwenden, kann sich die Auswahl direkt an deinem aktuellen Standort öffnen. Wenn nicht, öffnet sie sich an einem festen Ort. Prüfe die Stecknadel oder tippe auf das Fadenkreuz bzw. die Karte, bevor du auf **Anwenden** tippst. In der globalen Community sendet die Web-App den von dir gewählten Mittelpunkt an die Community, gerundet auf etwa 11 Meter.
+In der Web-App öffnet sich die Auswahl am zuletzt gewählten Mittelpunkt oder sonst am Ort der Community selbst (an einer Weltansicht, falls sie keinen hat). Prüfe die Stecknadel, oder tippe auf die Karte, ziehe die Stecknadel oder tippe auf das Fadenkreuz, um den Mittelpunkt zu wählen, bevor du auf **Anwenden** tippst. Deinen Standort erfragt sie nur, wenn du auf das Fadenkreuz tippst. In der globalen Community sendet die Web-App den von dir gewählten Mittelpunkt an die Community, für Markt, Karte und Startseite, gerundet auf etwa einen Kilometer. Er geht näher heran, wenn du einen kleinen Umkreis wählst oder wenn eine auf der Startseite gespeicherte Suche in kleiner Entfernung schaut.
 
 Auf dem Smartphone öffnet sich die Auswahl am zuletzt gewählten Mittelpunkt oder an einem festen Ort; tippe daher zuerst auf das Fadenkreuz-Symbol.
 

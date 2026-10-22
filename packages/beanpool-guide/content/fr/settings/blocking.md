@@ -4,7 +4,7 @@ title: Bloquer quelqu'un
 summary: Masquer les publications et messages d'une personne, et annuler ce blocage plus tard.
 related: reporting, messages, privacy, getting-help
 help: Personnes que vous avez bloquées. Leurs annonces et messages vous sont masqués ; débloquez une personne ici.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Bloquer
@@ -58,5 +58,6 @@ Votre communauté applique ces mesures pour les blocages qu'elle conserve pour v
 
 - Ouvrez les **Paramètres**. Sous **Mentions légales et confidentialité**, touchez **Gérer les utilisateurs bloqués**.
 - Touchez **Débloquer** à côté d'un nom, ou **Tout débloquer**.
+- Dans l'application mobile, vous pouvez aussi débloquer une personne depuis son profil. Sous son nom, il est écrit « Vous avez bloqué » suivi de son nom. Touchez **Débloquer** à cet endroit.
 
 Dans l'application web, bloquer et débloquer nécessitent une connexion à votre communauté. Sans connexion, l'application vous l'indique et rien ne change. Réessayez dès que vous êtes de nouveau en ligne.

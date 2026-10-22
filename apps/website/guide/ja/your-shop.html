@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ja by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>あなたのお店 — BeanPool members' guide</title>
+    <meta name="description" content="自分のアカウントの店先に、選んだ提供をひとつの名前で並べます。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市場</a></p>
+        <h1>あなたのお店</h1>
+        <p class="lede">自分のアカウントの店先に、選んだ提供をひとつの名前で並べます。</p>
+        <h2>お店とは</h2>
+        <p>お店は、自分のアカウントの店先です。お店に入れた提供を、ひとつの名前と、お店についての短いひと言でまとめて見せます。そこから得た豆は、ほかの提供と同じようにあなたのものです。お店は事業体ではありません。ほかの誰かが管理するものではなく、あなたの提供がすでに見せている以上のことは何も見せません。</p>
+        <p>お店は、参加しているコミュニティごとに1つ持てます。</p>
+        <h2>お店を開く</h2>
+        <p>ホームのカード<strong>お店と道具</strong>から、または<strong>工具・道具</strong>から<strong>あなたのお店</strong>を開きます。カードをホームに置くには、<strong>ホームを編集</strong>を使って<strong>お店と道具</strong>を追加します。</p>
+        <p><strong>お店を開く</strong>をタップします。名前を付けるまでは、あなたの名前にちなんで「Anaさんのお店」のように呼ばれます。</p>
+        <h2>名前、種類、ひと言</h2>
+        <p>どれも1つの欄です。好きな順に入力しても、入力しなくてもかまいません：</p>
+        <ul>
+            <li><strong>名前：</strong>60文字まで。空のままにすると、また自分の名前にちなんだ呼び名になります。</li>
+            <li><strong>種類：</strong>14種類から1つ選びます。たとえば<strong>工具と機材</strong>、<strong>修理</strong>、<strong>庭や畑の食べもの</strong>などです。近所の人があなたを見つけやすくなり、表示される道具が決まります。それ以外は何も変わりません。</li>
+            <li><strong>紹介：</strong>どんなお店か、ひとことで。</li>
+            <li><strong>取引のしかた：</strong>受け取り場所と、返却の時期。</li>
+        </ul>
+        <h2>提供をお店に入れる</h2>
+        <p>お店に入れられるのは、ここの全員に向けたあなた自身の提供だけです。求め、またはグループや特定の1人に向けた提供は、お店の外に残ります。</p>
+        <ul>
+            <li><strong>提供を編集するとき：</strong>「<strong>これをお店に入れる</strong>」にチェックを入れます。外すにはチェックを外します。</li>
+            <li><strong>公開中の提供を追加：</strong>あなたのお店で、すでに掲載している提供にチェックを入れ、<strong>お店に入れる</strong>をタップします。</li>
+            <li><strong>道具から：</strong>道具から何かを出品するとき、「<strong>これをお店に入れる</strong>」にはチェックが入っています。まだお店がない場合は、その提供と一緒にお店が開きます。新しい提供のフォームでタイトルや説明を変えても、お店には入ります。大きく変えたり、別のものを投稿したりすると、お店の外に掲載され、アプリがそのことを知らせます。お店に入れるには、投稿を開いて<strong>投稿を編集</strong>をタップし、「<strong>これをお店に入れる</strong>」にチェックを入れてください。</li>
+        </ul>
+        <p>地図の新しい提供のフォームには、まだチェック欄がありません。提供を投稿してから、その編集画面かお店から入れてください。</p>
+        <h2>しばらく休業する</h2>
+        <p><strong>しばらく休業</strong>をタップします。再開の時期を伝えることもできます：1週間後、2週間後、または1か月後です。お店の提供はマーケットから外れて待機します。休業中は何も入れられず、お店の提供を単独でマーケットに戻すこともできません。</p>
+        <p><strong>お店を再開</strong>をタップすると、すべて元に戻ります。自分で一時停止していた提供は、一時停止のままです。</p>
+        <h2>お店を閉じる</h2>
+        <p><strong>お店を閉じる</strong>をタップします。お店の提供は、ふつうの提供としてマーケットに残ります。<strong>提供も終了する</strong>を選ぶと、提供も終了します。非公開の道具リストはスマートフォンに残ります。新しいお店はいつでも開けます。</p>
+        <p>お店の品物について取引が申し込まれている間や進行中の間は、お店を閉じることも、しばらく休業にすることもできません。アプリが、いくつの取引が進行中かを知らせ、<strong>自分の取引</strong>へのボタンを表示します。</p>
+        <h2>グローバルコミュニティでは</h2>
+        <p>お店はグローバルコミュニティでも同じように使えます。まだ参加していない人には、どんな種類のお店か、いくつの品物があるかだけが見え、お店の名前もあなたの名前も見えません。</p>
+        <h2>Webアプリでは</h2>
+        <p>Webアプリでは、まだお店は表示されません。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>提供や求めの投稿</strong><span>自分ができること・提供できるもの、または探しているものを投稿します。</span></a></li>
+            <li><a href="my-deals.html"><strong>自分の取引</strong><span>参加中のすべての取引、公開中の投稿、過去の取引を一か所で管理します。</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>マーケットの閲覧</strong><span>検索、フィルター、距離を利用して提供と求めを探します。</span></a></li>
+            <li><a href="holiday-mode.html"><strong>お休み</strong><span>お休みモードは、不在中に提供を非表示にし、新しいリクエストを一時停止します。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 6.</p>
+    </main>
+</body>
+</html>

@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Miembros de tu comunidad y tus amistades. Toca a alguien para ver su perfil o toca 💬 junto a una amistad para escribirle.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Los miembros de tu comunidad y tus amistades. Toca a alguien para ver su perfil o toca 💬 junto a un miembro para escribirle.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Para propietarios de una comunidad. Revisar tus 12 palabras, tomar el control o restaurar el servidor con tu teléfono y la verificación automática de tu teléfono.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Tu tienda",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Un escaparate en tu propia cuenta, para las Ofertas que elijas, bajo un solo nombre.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Tus Ofertas bajo un solo nombre. Ponle nombre, di de qué tipo es, ciérrala por ahora o ciérrala del todo.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

@@ -390,6 +390,22 @@ export function gatewayClaimVerified(ctx: Koa.Context): void {
 }
 
 /**
+ * The signature verified, but the nonce store had no room for its nonce (engine/member-signature.ts, 503 store_full):
+ * the claim is given back as for any verified signature, and the request is charged as gatewayAdmitMember charges a
+ * verified key, here, before it is answered: a key that acts here (`acts`) to its own bucket, never to the address's
+ * unsigned one, so members behind one NAT retrying during a flood keep that address's allowance; any other key to the
+ * address's (M-4), so a public read answered as unsigned (https-server.ts) gets no more a minute than unsigned ones do.
+ * False (and 429 set) when that bucket is already full.
+ */
+export function gatewayRefusedForRoom(ctx: Koa.Context, key: string | undefined, acts: boolean, maxPerMinute: number, now = Date.now()): boolean {
+    gatewayClaimVerified(ctx);
+    if (!key || !ctx.state.gatewaySignedClaim || ctx.state.gatewayMemberCharged) return true;
+    ctx.state.gatewayMemberCharged = true;
+    return acts ? take(ctx, `m:${key}`, maxPerMinute, now)
+        : take(ctx, `ip:${clientLimiterKey(ctx)}`, nonMemberPerMinute(maxPerMinute), now);
+}
+
+/**
  * After signature verification: charge the verified key. A member of this node (or a visitor's row), `acts`, has its
  * own bucket; any other key is charged to the address's unsigned bucket (M-4), as if it had not signed.
  */

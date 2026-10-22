@@ -3,8 +3,8 @@ slug: people
 title: Membres et amis
 summary: Trouver des membres de votre communauté, ajouter des amis et parrainer quelqu'un.
 related: messages, your-profile, joining, blocking
-help: Les membres de votre communauté et vos amis. Touchez une personne pour voir son profil ou touchez 💬 près d'un ami pour lui écrire.
-source-hash: 7720f543f516d9dc
+help: Les membres de votre communauté et vos amis. Touchez une personne pour voir son profil ou touchez 💬 près d'un membre pour lui écrire.
+source-hash: 44b66169497e9909
 ---
 
 ## Trouver des personnes
@@ -15,12 +15,12 @@ Touchez **Échanges**, puis **Membres**. Dans l'application web, touchez **Membr
 - **Communauté :** chaque membre. Recherchez par nom. Sur le téléphone, triez par **Récents**, **Nom**, **Amis**, **De confiance** ou **Actifs**. Sur la communauté globale, cela affiche les membres les plus proches de votre zone : saisissez au moins 2 lettres d'un nom pour trouver n'importe qui d'autre.
 - **Invitations :** inviter une nouvelle personne. Voir « Rejoindre BeanPool ». Si vous n'avez pas encore adhéré, ce bouton indique **S'inscrire**. Lorsque des personnes ont demandé à rejoindre votre communauté, il indique leur nombre, et elles sont listées sous **Demandes à rejoindre**. Dans l'application web, ce bouton est toujours **🎟️ Invitations**, sans décompte ni liste **Demandes à rejoindre**.
 
-Touchez une personne pour voir son profil : ses évaluations et ses annonces, et, sur le téléphone dans une communauté avec des Beans, son badge de confiance et ses échanges. Voir « Votre profil ».
+Touchez une personne pour voir son profil : ses évaluations et ses annonces, et, sur le téléphone dans une communauté avec des Beans, son badge de confiance et ses échanges. Vous pouvez lui écrire directement depuis son profil avec **Message**, ou l'ajouter comme ami avec **+ Ajouter aux amis**. Voir « Votre profil ».
 
 ## Amis
 
-- Dans **Communauté**, touchez **+ Ajouter** à côté d'un nom. Il se transforme en **Ajouté**. Touchez **Ajouté** pour retirer cette personne. Dans l'application web, il se transforme en **✓ Ami**, sur lequel vous ne pouvez pas appuyer : pour retirer quelqu'un, utilisez **Retirer** sous **Amis**.
-- Dans **Amis**, touchez le bouton de message pour démarrer une discussion, ou le bouton de suppression, puis **Retirer**, pour retirer quelqu'un.
+- Dans **Communauté**, touchez 💬 pour démarrer une discussion, ou touchez **+ Ajouter** à côté d'un nom. Il se transforme en **Ajouté**. Touchez **Ajouté** pour retirer cette personne. Dans l'application web, il se transforme en **✓ Ami**, sur lequel vous ne pouvez pas appuyer : pour retirer quelqu'un, utilisez **Retirer** sous **Amis**. Vous pouvez aussi écrire à quelqu'un ou l'ajouter comme ami directement depuis son profil.
+- Dans **Amis**, touchez 💬 pour démarrer une discussion, ou le bouton de suppression, puis **Retirer**, pour retirer quelqu'un.
 - Quand quelqu'un vous ajoute, le haut de **Amis** indique qui, comme « Sam vous a ajouté », avec **Ajouter en retour**. Touchez son nom pour voir d'abord son profil. Il n'y a pas de notification. La ligne disparaît quand vous l'ajoutez en retour, ou après 30 jours. Jusqu'à 20 personnes sont affichées, puis le nombre de personnes restantes.
 - Vous pouvez ajouter jusqu'à 100 personnes par tranche de 24 heures. En retirer compte également. Si vous atteignez cette limite, l'application vous l'indique ainsi que le moment où vous pourrez à nouveau ajouter quelqu'un.
 - Vous ne pouvez pas ajouter une personne que vous avez bloquée : débloquez-la d'abord. Voir « Bloquer quelqu'un ».

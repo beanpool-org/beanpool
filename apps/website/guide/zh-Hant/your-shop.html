@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/zh-Hant by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>你的小店 — BeanPool members' guide</title>
+    <meta name="description" content="你自己帳號的一扇櫥窗,把你挑選的「提供」集中在同一個名稱下。">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">市集</a></p>
+        <h1>你的小店</h1>
+        <p class="lede">你自己帳號的一扇櫥窗,把你挑選的「提供」集中在同一個名稱下。</p>
+        <h2>小店是什麼</h2>
+        <p>你的小店是你自己帳號的一扇櫥窗。你放進去的「提供」會集中在同一個名稱下，並附上幾句說明。它們賺到的豆子屬於你，和其他任何「提供」一樣。它不是事業：沒有其他人與你共同經營，它也不會顯示你的「提供」本來沒有顯示的任何內容。</p>
+        <p>你在每個所屬的社群裡各有一間小店。</p>
+        <h2>開張</h2>
+        <p>從首頁的<strong>你的小店與工具</strong>卡片，或從<strong>工具借用</strong>開啟<strong>你的小店</strong>。要把這張卡片放到首頁，請使用<strong>編輯首頁</strong>並加入<strong>你的小店與工具</strong>。</p>
+        <p>點<strong>開啟我的小店</strong>。在你幫它命名之前，它會以你命名：例如「Ana 的小店」。</p>
+        <h2>名稱、類型與簡介</h2>
+        <p>下面每一項都是一個欄位。可以依任何順序填寫，也可以完全不填：</p>
+        <ul>
+            <li><strong>名稱</strong>：最多 60 個字元。留空的話，它會再度以你命名。</li>
+            <li><strong>類型</strong>：十四種之一，例如<strong>工具與設備</strong>、<strong>修理</strong>或<strong>來自菜園或農場的食物</strong>。它能讓鄰居更容易找到你，也決定要顯示哪些工具。除此之外不會改變任何東西。</li>
+            <li><strong>簡介</strong>：用幾句話說明它是什麼。</li>
+            <li><strong>我的交易方式</strong>：在哪裡取貨，以及物品何時歸還。</li>
+        </ul>
+        <h2>把「提供」放進去</h2>
+        <p>只有你自己、對這裡所有人開放的「提供」才能放進小店。「需求」，或是只給某個群組或某一個人的「提供」，都不能放進去。</p>
+        <ul>
+            <li><strong>編輯「提供」時：</strong> 勾選<strong>放進你的小店</strong>，或取消勾選，把這項「提供」拿出來。</li>
+            <li><strong>加入我目前的「提供」：</strong> 在「你的小店」中，勾選你已經上架的「提供」，然後點<strong>放進我的小店</strong>。</li>
+            <li><strong>從工具：</strong> 當你從工具刊登物品時，<strong>放進你的小店</strong>會是勾選的。如果你還沒有小店，小店會隨著這項「提供」一起開張。你可以在新的「提供」表單中修改標題或文字，它仍然會放進去。如果你把它整個改掉，或改發布別的東西，它就會在小店之外上架，應用程式會告訴你。若要放進去，請開啟它，點<strong>編輯貼文</strong>，並勾選<strong>放進你的小店</strong>。</li>
+        </ul>
+        <p>地圖上的新「提供」表單還沒有這個勾選項。請先發布「提供」，再從它的編輯畫面或「你的小店」把它放進去。</p>
+        <h2>暫時休息</h2>
+        <p>點<strong>暫時休息</strong>。你可以說明何時回來：一週後、兩週後或一個月後。它的「提供」會從市集下架並等待。休息期間不會放入任何東西，它的任何「提供」也不能單獨重新上架。</p>
+        <p>點<strong>重新開張我的小店</strong>，就能把它們全部放回去。你自己先前暫停的「提供」會維持暫停。</p>
+        <h2>關閉小店</h2>
+        <p>點<strong>關閉我的小店</strong>。它的「提供」會作為一般的「提供」留在市集中；如果你選擇<strong>同時結束它的「提供」</strong>，它們也會一併結束。你的私人工具清單只會保留在你的手機上。你隨時可以再開一間新的小店。</p>
+        <p>如果小店裡某件物品有交易正在被請求或進行中，你就無法關閉它，也無法讓它暫時休息。應用程式會告訴你有多少筆交易尚未完成，並附上前往<strong>我的交易</strong>的按鈕。</p>
+        <h2>在全球社群</h2>
+        <p>小店在全球社群裡的運作方式相同。尚未加入的人只會看到這是哪一種小店，以及裡面有多少件物品，絕不會看到它的名稱，也看不到你的名字。</p>
+        <h2>在網頁版應用程式中</h2>
+        <p>網頁版應用程式目前還不顯示小店。</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>發布提供或需求</strong><span>發布你能做或能給予的事情，或者你正在尋找的東西。</span></a></li>
+            <li><a href="my-deals.html"><strong>我的交易</strong><span>集中管理你參與的每一筆交易、發布的每一則刊登以及過去的交易紀錄。</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>瀏覽市集</strong><span>透過搜尋、分類篩選和距離範圍尋找提供與需求。</span></a></li>
+            <li><a href="holiday-mode.html"><strong>休假模式</strong><span>在外出時，休假模式會隱藏你的「提供」並暫停接收新的請求。</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 6.</p>
+    </main>
+</body>
+</html>

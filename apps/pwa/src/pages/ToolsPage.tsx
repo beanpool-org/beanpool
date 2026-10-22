@@ -278,21 +278,26 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     }, [store.remove, copyOf, owner, manifest]);
 
     const step = stack[stack.length - 1];
-    const back = useCallback(() => {
-        if (panel !== 'tool') { setPanel('tool'); return; }
+    /** The tool's own back (a Save, a Delete that lands): its screens', even under a panel, which stays where it is. */
+    const toolBack = useCallback(() => {
         if (stack.length > 1) { setStack((s) => s.slice(0, -1)); return; }
         onBack();
-    }, [panel, stack.length, onBack]);
+    }, [stack.length, onBack]);
+    /** The page's ←: a panel first, then the tool's screens. */
+    const back = useCallback(() => {
+        if (panel !== 'tool') { setPanel('tool'); return; }
+        toolBack();
+    }, [panel, toolBack]);
 
     const ctx: WebHostContext = useMemo(() => ({
         owner: { kind: 'member', publicKey: owner, name: identity.callsign },
         node: { url: getNodeApiUrl() || null, profile: info?.profile ?? 'local', features: (info?.features as Record<string, unknown> | undefined) ?? null },
         navigate: (screen, params) => setStack((s) => [...s, { screen, params: { ...(params ?? {}) } }]),
-        back,
+        back: toolBack,
         openComposer: onComposer,
         now,
         nodeCopy: !!copyOf && copy.setting !== false && copy.note !== 'older-node',
-    }), [owner, identity.callsign, info, back, onComposer, now, copyOf, copy.setting, copy.note]);
+    }), [owner, identity.callsign, info, toolBack, onComposer, now, copyOf, copy.setting, copy.note]);
     const docHandle = useMemo(() => ({ get: store.get, set: store.set }), [store.get, store.set]);
     const host = useMemo(() => (manifest ? webHostFor(manifest, ctx, docHandle) : null), [manifest, ctx, docHandle]);
 
@@ -333,10 +338,14 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
                 {panel === 'tool' && ready && empty && !pastDoors && step.screen === 'main' && (
                     <EmptyDoors manifest={manifest} owner={owner} onIn={() => setPastDoors(true)} onGuide={onGuide} onAddHomeCard={onAddHomeCard} />
                 )}
-                {panel === 'tool' && ready && (!empty || pastDoors || step.screen !== 'main') && (
-                    <ScreenBoundary key={`${step.screen}:${stack.length}`}>
-                        <Screen host={host as unknown as AnyToolScreenProps['host']} params={step.params} />
-                    </ScreenBoundary>
+                {ready && (!empty || pastDoors || step.screen !== 'main') && (
+                    // Drawn under a panel too, only hidden, as the phone's sheet sits over its screen: Settings or About is no
+                    // leave, so what Edit holds (what was typed, a photo chosen) and a change under way are there on ←.
+                    <div hidden={panel !== 'tool'} className="min-w-0">
+                        <ScreenBoundary key={`${step.screen}:${stack.length}`}>
+                            <Screen host={host as unknown as AnyToolScreenProps['host']} params={step.params} />
+                        </ScreenBoundary>
+                    </div>
                 )}
             </div>
         </>

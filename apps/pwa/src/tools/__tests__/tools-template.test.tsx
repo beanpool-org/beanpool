@@ -216,12 +216,13 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         expect(await axeProblems(page), 'the menu').toEqual([]);
         await act(async () => { fireEvent.click(one.getByTestId('tool-menu-settings')); });
         await act(async () => { fireEvent.click(one.getByTestId('tool-remove')); });
-        expect(bypassing(page), 'Settings').toEqual([]);
+        // The tool's screen is still there under a panel, hidden (a panel is no leave): its words are the member's.
+        expect(bypassing(page, { others: memberText(c.fixtures.docs.small) }), 'Settings').toEqual([]);
         expect(layoutProblems(page), 'Settings').toEqual([]);
         expect(await axeProblems(page), 'Settings').toEqual([]);
         await act(async () => { fireEvent.click(one.getByTestId('tool-menu')); });
         await act(async () => { fireEvent.click(one.getByTestId('tool-menu-about')); });
-        expect(bypassing(page), 'About').toEqual([]);
+        expect(bypassing(page, { others: memberText(c.fixtures.docs.small) }), 'About').toEqual([]);
         expect(await axeProblems(page), 'About').toEqual([]);
         one.unmount();
 
@@ -631,7 +632,8 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
             await settings(view);
             expect(view.getByTestId('tool-kept-line')).toHaveTextContent(xx(REMOVED));
             expect(view.getByTestId('tool-node-copy')).toHaveAttribute('aria-checked', 'false');
-            expect(bypassing(page)).toEqual([]);
+            // The tool's screen is still there under Settings, hidden: its words are the member's.
+            expect(bypassing(page, { others })).toEqual([]);
             expect(layoutProblems(page)).toEqual([]);
             expect(await axeProblems(page)).toEqual([]);
             expect(server.log.map((r) => r.method)).toEqual(['GET']);
@@ -658,7 +660,8 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
         await waitFor(() => expect(view.getByTestId('tool-kept-line')).toHaveTextContent(xx(OLDER)));
         expect(view.getByTestId('tool-node-copy-note')).toHaveTextContent(xx(OLDER));
         const page = view.getByTestId('tools-page');
-        expect(bypassing(page)).toEqual([]);
+        // The tool's screen is still there under Settings, hidden: its words are the member's.
+        expect(bypassing(page, { others: memberText(scaffold.fixtures.docs.small) })).toEqual([]);
         expect(layoutProblems(page)).toEqual([]);
         expect(await axeProblems(page)).toEqual([]);
         view.unmount();
@@ -682,7 +685,8 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
         expect(toggle).toHaveAttribute('aria-checked', 'true');
         expect(await readToolSettings(OWNER, 'kept')).toEqual({});
         const page = view.getByTestId('tools-page');
-        expect(bypassing(page)).toEqual([]);
+        // The tool's screen is still there under Settings, hidden: its words are the member's.
+        expect(bypassing(page, { others: memberText(scaffold.fixtures.docs.small) })).toEqual([]);
         expect(layoutProblems(page)).toEqual([]);
         expect(await axeProblems(page)).toEqual([]);
 

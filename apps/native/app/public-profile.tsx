@@ -567,13 +567,16 @@ export default function PublicProfileScreen() {
         // 3. Load trust profile asynchronously in the background (if not self)
         if (!isSelf) {
             setTrustLoading(true);
+            // A late answer for a key the screen has left never lands on the next one (it would stand for it, or leave
+            // the next key waiting on an answer already in).
             const asked = pubKeyStr;
             getTrustProfile(asked)
                 .then(trustProfile => {
-                    if (trustProfile) setTrust(trustProfile);
+                    if (!cancelled && trustProfile) setTrust(trustProfile);
                 })
                 .catch(() => null)
                 .finally(() => {
+                    if (cancelled) return;
                     setTrustLoading(false);
                     setTrustFor(asked);
                 });
@@ -716,8 +719,10 @@ export default function PublicProfileScreen() {
     // an enterprise or a project, and this screen hands over to /treasury-detail on it. The member directory never
     // carries an enterprise, so a key with no card on this phone may be one: where the community has enterprises at all,
     // nothing of a member's profile is drawn for it until the node has said (or couldn't: offline, it is drawn as before).
+    // A card still held from the last key (the screen handed a new one in place) is not this key's.
+    const hasCard = !!profile && profile.public_key === pubKeyStr;
     const isEnterprise = !isSelf && !!pubKeyStr && !!trust?.isTreasury && trust?.publicKey === pubKeyStr;
-    const kindUnknown = !isSelf && !!pubKeyStr && !profile && trustFor !== pubKeyStr && enterprisesOn(nodeProfile?.features);
+    const kindUnknown = !isSelf && !!pubKeyStr && !hasCard && trustFor !== pubKeyStr && enterprisesOn(nodeProfile?.features);
     const enterpriseName = (isEnterprise && trust?.callsign) || (Array.isArray(callsign) ? callsign[0] : callsign);
     useEffect(() => {
         if (!isEnterprise || !pubKeyStr) return;

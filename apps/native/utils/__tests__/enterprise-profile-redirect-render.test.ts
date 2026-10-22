@@ -196,11 +196,18 @@ const node = {
     trust: new Map<string, Record<string, unknown>>(),
     /** While set, every trust profile waits for it: the moment before the node has said what the key is. */
     trustGate: null as Promise<void> | null,
+    /** The same, for one key only: its answer comes late while another key's comes at once. */
+    trustGates: new Map<string, Promise<void>>(),
     addedYou: [] as Array<{ publicKey: string; callsign: string; avatarUrl: null; addedAt: string }>,
 };
 function holdTrust(): () => void {
     let open!: () => void;
     node.trustGate = new Promise<void>(r => { open = r; });
+    return open;
+}
+function holdTrustFor(publicKey: string): () => void {
+    let open!: () => void;
+    node.trustGates.set(publicKey, new Promise<void>(r => { open = r; }));
     return open;
 }
 async function nodeFetch(input: unknown, init?: { body?: unknown }): Promise<Response> {
@@ -209,8 +216,10 @@ async function nodeFetch(input: unknown, init?: { body?: unknown }): Promise<Res
     node.requests.push(`${url.pathname}${url.search}`);
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
     if (url.pathname === '/api/trust/profile') {
-        if (node.trustGate) await node.trustGate;
         const { targetPubkey } = JSON.parse(String(init?.body ?? '{}'));
+        if (node.trustGate) await node.trustGate;
+        const gate = node.trustGates.get(targetPubkey);
+        if (gate) await gate;
         const answer = node.trust.get(targetPubkey);
         return answer ? json(answer) : json({ error: 'Member not found' }, 404);
     }
@@ -242,6 +251,7 @@ beforeEach(async () => {
     node.requests.length = 0;
     node.trust = new Map<string, Record<string, unknown>>([[ENTERPRISE, ENTERPRISE_TRUST], [KOFI, memberTrust(KOFI, 'Kofi')]]);
     node.trustGate = null;
+    node.trustGates = new Map<string, Promise<void>>();
     node.addedYou = [];
     community.features = { beans: true, escrow: true, invites: true, decisions: true, enterprises: true, exampleListings: false };
     nav.params = {};
@@ -352,6 +362,44 @@ for (const dark of [false, true]) {
             await act(async () => { open(); });
             await settle(20);
             expect(nav.replaced).toEqual([]);
+        });
+
+        // The screen can be handed a new key in place (a voucher or mutual link on a profile opens another): what it holds
+        // for the last key never stands for the new one (review of #2367).
+        it("a key changed in place from a member's held card to an enterprise's: the member's card is not drawn for it while the node is asked", async () => {
+            await holdCard(KOFI, 'Kofi');
+            nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+            await render(createElement(PublicProfileScreen));
+            await settle(20);
+            expect(text()).toContain('Trust Profile');
+            expect(text()).toContain('Kofi');
+            const open = holdTrust();
+            nav.params = { publicKey: ENTERPRISE, callsign: ENTERPRISE_NAME };
+            await render(createElement(PublicProfileScreen));
+            expectNoTrustProfile('the new key, before the node answers');
+            expect(text()).not.toContain('Kofi');
+            expect(host.querySelector('[data-testid="profile-kind-pending-back"]')).not.toBeNull();
+            await act(async () => { open(); });
+            await settle(20);
+            expect(nav.replaced).toEqual([toEnterprisePage]);
+        });
+
+        it("a key changed in place while the last key's trust profile is out: its late answer never lands on the new key", async () => {
+            const openEnterprise = holdTrustFor(ENTERPRISE);
+            nav.params = { publicKey: ENTERPRISE, callsign: ENTERPRISE_NAME };
+            await render(createElement(PublicProfileScreen));
+            nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+            await render(createElement(PublicProfileScreen));
+            await settle(20);
+            expect(text()).toContain('Trust Profile');
+            expect(text()).toContain('Newcomer');
+            await act(async () => { openEnterprise(); });
+            await settle(20);
+            expect(nav.replaced).toEqual([]);
+            expect(host.querySelector('[data-testid="profile-kind-pending-back"]')).toBeNull();
+            expect(text()).toContain('Trust Profile');
+            expect(text()).toContain('Kofi');
+            expect(text()).toContain('Newcomer');
         });
 
         it("the member's own profile: never waits on the node, never replaced", async () => {

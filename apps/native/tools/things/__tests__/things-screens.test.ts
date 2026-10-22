@@ -119,11 +119,14 @@ vi.mock('../../../utils/market-global', () => ({ composerNeedsProfilePhoto: asyn
 vi.mock('../../../utils/canonical-profile', () => ({ getCanonicalAvatar: async () => null }));
 
 const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
-/** The member's Offers and deals as the phone holds them; `down` when the community's server can't be reached. */
+/**
+ * The member's Offers and deals as the phone holds them; `down` when the community's server can't be reached, and
+ * `dealsUnread` when the phone's copy of the deals can't be read.
+ */
 const market = vi.hoisted(() => ({
     rows: new Map<string, Record<string, unknown>>(),
     deals: [] as Array<Record<string, unknown>>,
-    paused: [] as string[], resumed: [] as string[], down: false,
+    paused: [] as string[], resumed: [] as string[], down: false, dealsUnread: false,
     requests: [] as string[],
 }));
 vi.mock('../../../utils/db', () => ({
@@ -132,9 +135,11 @@ vi.mock('../../../utils/db', () => ({
     getPost: async (id: string) => market.rows.get(id) ?? null,
     getMyPosts: async (pubkey: string) => [...market.rows.values()].filter((p) => p.author_pubkey === pubkey),
     // As the phone's own copy answers (utils/db.ts): by status when asked, `limit` rows from `offset`.
-    getMarketplaceTransactions: async (pubkey: string, filter?: { status?: string }, limit = 50, offset = 0) => market.deals
-        .filter((d) => (d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey) && (!filter?.status || d.status === filter.status))
-        .slice(offset, offset + limit),
+    getMarketplaceTransactions: async (pubkey: string, filter?: { status?: string }, limit = 50, offset = 0) => {
+        if (market.dealsUnread) throw new Error('database is locked');
+        return market.deals.filter((d) => (d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey) && (!filter?.status || d.status === filter.status))
+            .slice(offset, offset + limit);
+    },
     // As the node has them (posts.ts): only a live Offer is paused and only a paused one resumed; anything else is a 400,
     // which the phone's signed request throws.
     pausePost: async (id: string) => {
@@ -254,6 +259,7 @@ beforeEach(() => {
     market.resumed.length = 0;
     market.requests.length = 0;
     market.down = false;
+    market.dealsUnread = false;
     node.profile = { profile: 'local', features: { beans: true } };
     node.needsPhoto = true;
     node.avatar = null;
@@ -803,5 +809,13 @@ describe('Loans', () => {
         await keep(shed(thing('t-1', 'Saw')));
         await open('loans');
         expect(text('loans-none')).toContain('Nothing of yours is out or asked for right now.');
+    });
+
+    it("deals that couldn't be read are said, never shown as nothing out", async () => {
+        market.dealsUnread = true;
+        await keep(shed(thing('t-1', 'Saw')));
+        await open('loans');
+        expect(text('loans-unchecked')).toBe("Loans through BeanPool couldn't be checked just now.");
+        expect(byTestId('loans-none')).toBeNull();
     });
 });

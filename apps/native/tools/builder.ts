@@ -91,10 +91,11 @@ async function everyDeal(owner: string): Promise<DealRow[]> {
  * `deals`: the owner's deals as the phone holds them where the owner is the seller or lender (on their own Offers; the
  * tool matches the ones its records are linked to), never a deal they are buying in, every one of them: one page would
  * let newer deals push an older loan still out off it. A loan that is out says when it is due back, from its Offer's
- * hand-over and the deal's days (core's lendBackAroundOf), when the phone holds both.
+ * hand-over and the deal's days (core's lendBackAroundOf), when the phone holds both. Deals that can't be read reject,
+ * so a screen says it couldn't check rather than that nothing is out.
  */
 export async function ownerDeals(owner: string): Promise<ToolDealSummary[]> {
-    const rows = await everyDeal(owner).catch(() => []);
+    const rows = await everyDeal(owner);
     const mine = rows.filter((r) => r && r.sellerPublicKey === owner && typeof r.postId === 'string' && typeof r.id === 'string');
     return Promise.all(mine.map(async (r): Promise<ToolDealSummary> => {
         const post = r.status === 'pending' ? await getPost(r.postId).catch(() => null) : null;

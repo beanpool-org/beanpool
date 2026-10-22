@@ -23,6 +23,7 @@ import { useGuide, useLearnVideos } from '../lib/guide';
 import { getCommunityHealth } from '../lib/api';
 
 type View = { kind: 'home' } | { kind: 'section'; id: string } | { kind: 'page'; slug: string };
+const BEANPOOL_DOMAIN = 'beanpool.org';
 
 interface Props {
     onBack: () => void;
@@ -183,7 +184,7 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
                                     <a key={entry} href={BEANPOOL_WEBSITE_URL} target="_blank" rel="noopener noreferrer" className={rowBtn}>
                                         <span className="text-xl shrink-0" aria-hidden="true">🌐</span>
                                         <span className="flex-1 min-w-0">
-                                            <span className="block text-[15px] font-bold">{t('beanpool.org')}</span>
+                                            <span className="block text-[15px] font-bold">{BEANPOOL_DOMAIN}</span>
                                             <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 mt-0.5">{t('The public website, to share with friends')}</span>
                                         </span>
                                         <span className="text-nature-400 dark:text-nature-300 shrink-0" aria-hidden="true">↗</span>

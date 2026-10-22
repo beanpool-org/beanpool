@@ -292,6 +292,28 @@ async function main(): Promise<void> {
     const same = await call('PUT', kit, profilePath(ent), { about: sixHundred });
     assert(same.status === 200 && JSON.stringify(faceOf(ent)) === stillStamp, 'a PUT that changes nothing stamps nothing');
 
+    // A field sent back as it was stored is no change, though the form sends it trimmed and the row holds it as it was
+    // written (#2391 review): a crowdfund's description keeps its textarea's newline as its purpose (db.ts
+    // createCrowdfundProject), and a row an older seed filled keeps an About past 600 that nobody here wrote.
+    const cfTrail = (await call('POST', lou, '/api/crowdfund/projects', { creatorPubkey: lou.pk, title: 'Lou Trail Sentinel', description: 'Fix bikes for the street.\n', goalAmount: 100 })).body?.project?.id ?? '';
+    if (!cfTrail) throw new Error('setup: Lou could not start the crowdfund with a trailing newline');
+    adminAssignTreasuryOperator(cfTrail, kit.pk, 'admin');
+    const trailStored = faceOf(cfTrail);
+    const trailForm = await call('GET', kit, `/api/treasury/${cfTrail}`);
+    const kitForm = await call('PUT', kit, profilePath(cfTrail), { name: trailForm.body?.name ?? trailStored.callsign, purpose: trailForm.body?.purpose ?? trailStored.purpose, about: 'Open Saturdays.' });
+    assert(trailStored.purpose === 'Fix bikes for the street.\n' && kitForm.status === 200 && faceOf(cfTrail).bio === 'Open Saturdays.'
+        && faceOf(cfTrail).purpose === 'Fix bikes for the street.\n' && faceOf(cfTrail).callsign === 'Lou Trail Sentinel',
+        `a keeper who doesn't lead sends the whole form back with only a new About: About is written, the purpose stays as stored (${show(kitForm)}; ${JSON.stringify(faceOf(cfTrail).purpose)})`);
+    const legacyAbout = `${'Mended wheels. '.repeat(69)}\n`;
+    db.prepare('UPDATE members SET bio = ? WHERE public_key = ?').run(legacyAbout, cfTrail);
+    const legacyStamp = JSON.stringify(faceOf(cfTrail));
+    const louForm = await call('PUT', lou, profilePath(cfTrail), { name: trailStored.callsign, purpose: trailStored.purpose, about: legacyAbout });
+    assert(legacyAbout.length > 600 && louForm.status === 200 && JSON.stringify(faceOf(cfTrail)) === legacyStamp,
+        `the lead's untouched form over an About an older seed left past 600 is no change, not a refusal (${show(louForm)})`);
+    const louLogo = await call('PUT', lou, profilePath(cfTrail), { name: trailStored.callsign, purpose: trailStored.purpose, about: legacyAbout, avatar: png(90, 160, 90) });
+    assert(louLogo.status === 200 && faceOf(cfTrail).bio === legacyAbout && faceOf(cfTrail).photo?.startsWith('data:image/png;base64,') === true,
+        `and that form with a new logo saves the logo, leaving the About as it was (${show(louLogo)})`);
+
     // ── 3. the shop follows a rename ────────────────────────────────────────────────────────────
     console.log('\n── 3. the shop and the chat follow a rename ──');
     const chatBefore = await call('GET', kit, `/api/treasury/${ent}/thread`); // opened under the name it has now

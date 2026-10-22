@@ -440,11 +440,13 @@ export const NONCE_SWEEP_ABOVE = 10_000;
  *     addresses fill. A stranger flood of any size never touches an account: while it fills the strangers' region, new
  *     joins and strangers' gated reads wait, and their public reads are answered as unsigned.
  *
- * Where NONCE_ROWS_MAX comes from: a third of the 512 MB heap (docker-compose.yml) at 209–225 B a nonce, a flood's
- * 128-character ones (the design's replica, Node 26): the rows' region full of those, 120–135 MB; both regions full,
- * 135–165 MB, on top of the 58–110 MB a node of 200–1,000 members holds. Of apps' nonces (32 hex) from 1,000 keys, the
- * region full is 65–71 MB; honestly 1,000 members hold 26,000–53,000. A bigger heap does not raise it yet: the numbers
- * are constants, so the suites and every node read the same ones.
+ * Where NONCE_ROWS_MAX comes from: the most whose worst case stays within about a third of the 512 MB heap
+ * (docker-compose.yml), beside the 58–110 MB a node of 200–1,000 members holds. Measured on this store (2026-10-23, Node
+ * 26 on a Mac, heap after GC): both regions full of a flood's 128-character nonces, +162 MB (232 B a nonce); the rows'
+ * region alone full of them from 200 keys, +146 MB; the line (350,000 from 584 keys), +80 MB; the rows' region full of
+ * apps' nonces (32 hex) from 1,000 keys, +89 MB; 84 open-door accounts each at its 600, +6.4 MB. Honestly 1,000 members
+ * hold 26,000–53,000. A bigger heap does not raise it yet: the numbers are constants, so the suites and every node read
+ * the same ones.
  *
  * Past a share, a request that needs a new nonce is refused as busy (503 store_full, Retry-After) until entries expire;
  * the member sees the sentence and tries again by hand (no app retries an ordinary request on its own). A nonce still in

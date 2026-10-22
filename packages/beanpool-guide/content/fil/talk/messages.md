@@ -4,7 +4,7 @@ title: Mga Mensahe
 summary: Magsimula ng chat, magpadala ng larawan, sumagot, mag-react, mag-edit, magbura, mag-mute, at ano ang pribado.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Iyong mga chat. Naka-lock nang end-to-end ang chat sa isang tao. I-tap ang chat para buksan ito.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Iyong mga chat
@@ -23,11 +23,12 @@ Sa web app ito ang tab na **Usapan**. Inililista nito ang lahat ng iyong mga cha
 
 ## Pagsisimula ng chat
 
-- Mula sa isang post: i-tap ang **Mensahe** at ang pangalan ng tao.
+- Mula sa isang profile: buksan ang kanilang profile at i-tap ang **Mensahe**. Maaari mo rin silang idagdag bilang kaibigan doon.
 - Mula sa **Usapan**: i-tap ang button na lapis, pagkatapos ay hanapin ang tao ayon sa pangalan. Sa pandaigdigang komunidad, inililista ng Bagong Mensahe ang mga taong nakatransaksyon mo at ang iyong mga kaibigan. Upang makahanap ng sinumang iba pa, mag-type ng hindi bababa sa 2 titik ng kanilang pangalan.
-- Mula sa iyong mga kaibigan: **Usapan**, pagkatapos ay **Mga Tao**, pagkatapos ay **Mga kaibigan**, at i-tap ang button ng mensahe sa tabi ng pangalan.
+- Mula sa listahan ng mga miyembro: **Usapan**, pagkatapos ay **Mga Tao**, at i-tap ang 💬 sa tabi ng pangalan ng miyembro sa **Komunidad** o **Mga kaibigan**.
+- Mula sa isang post: i-tap ang **Mensahe** at ang pangalan ng tao.
 
-Sa web app, gamitin ang **✉️ Bagong DM**, o ang button na **💬 Mensahe** sa isang post. Ang iyong mga kaibigan ay nasa ilalim ng tab na **Mga Tao**.
+Sa web app, gamitin ang **Mensahe** sa kanilang profile, ang 💬 sa kanilang hanay sa ilalim ng **Mga Tao**, ang **✉️ Bagong DM**, o ang button na **💬 Mensahe** sa isang post.
 
 ## Pagpapadala
 

@@ -25,6 +25,7 @@ const node = vi.hoisted(() => ({
     get: null as null | ((path: string) => { status: number; json?: unknown } | 'down' | 'never'),
     signals: [] as Array<AbortSignal | undefined>,
     write: null as null | ((method: string, path: string, body: unknown) => unknown),
+    writeSignals: [] as Array<AbortSignal | undefined>,
 }));
 vi.mock('../db', () => ({
     signedGet: async (path: string, options?: { signal?: AbortSignal }) => {
@@ -38,9 +39,14 @@ vi.mock('../db', () => ({
         }
         return { ok: a.status >= 200 && a.status < 300, status: a.status, json: async () => a.json ?? null };
     },
-    signedRequestWithMethod: async (method: string, path: string, body: unknown) => {
+    signedRequestWithMethod: async (method: string, path: string, body: unknown, opts?: { signal?: AbortSignal }) => {
         node.writes.push({ method, path, body });
-        return node.write?.(method, path, body);
+        node.writeSignals.push(opts?.signal);
+        const a = node.write?.(method, path, body);
+        if (a === 'never') {
+            return new Promise<never>((_, reject) => opts?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+        }
+        return a;
     },
 }));
 
@@ -48,7 +54,7 @@ import {
     SHOP_KIND_WORDS, addOffersToMyShop, backOnChoices, changeMyShop, closeMyShop, localDay, movedCount, offersToAdd, readListingShopId,
     SHOP_TOGGLE_READ_MS, readMyLiveOffers, readMyShop, readShop, readShopListings, shopCountsLine, shopStateLine, shopTitle,
 } from '../shop';
-import { SHOP_CHOICE_HOLDS_MS, SHOP_CHOICE_KEY, clearShopChoice, peekShopChoice, rememberShopChoice, shopChoiceHolds } from '../shop-choice';
+import { SHOP_CHOICE_HOLDS_MS, SHOP_CHOICE_KEY, SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, rememberShopChoice, shopChoiceFor } from '../shop-choice';
 import { SHOP_KINDS } from '@beanpool/core';
 
 const COUNTS = { things: 3, available: 2, toBorrow: 1, toBuy: 2, out: 1, newThisWeek: 1 };
@@ -62,6 +68,7 @@ beforeEach(() => {
     node.gets.length = 0;
     node.signals.length = 0;
     node.writes.length = 0;
+    node.writeSignals.length = 0;
     node.get = null;
     node.write = null;
     setLanguage('en');
@@ -183,6 +190,29 @@ describe('the member\'s own shop, changed', () => {
         expect(done.shop.name).toBeNull();
     });
 
+    it("with a limit, a change that never answers (a stalled line) is let go at it and says the community couldn't be reached", async () => {
+        vi.useFakeTimers();
+        try {
+            node.write = () => 'never';
+            let settled: unknown = 'waiting';
+            const opening = changeMyShop({}, { timeoutMs: SHOP_COMPOSER_WAIT_MS }).then((r) => { settled = r; }, (e) => { settled = e; });
+            expect(node.writeSignals[0]).toBeInstanceOf(AbortSignal);
+            await vi.advanceTimersByTimeAsync(SHOP_COMPOSER_WAIT_MS - 1);
+            expect(settled).toBe('waiting');
+            await vi.advanceTimersByTimeAsync(1);
+            await vi.waitFor(() => expect(settled).toBeInstanceOf(Error));
+            await opening;
+            expect((settled as Error).message).toBe("Your community couldn't be reached. Try again.");
+            expect(node.writeSignals[0]?.aborted).toBe(true);
+            // An answer in time: no timer is left behind.
+            node.write = () => ({ success: true, shop: SHOP, paused: [], resumed: [] });
+            expect((await changeMyShop({}, { timeoutMs: SHOP_COMPOSER_WAIT_MS })).shop.id).toBe('shop-1');
+            expect(vi.getTimerCount()).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('a close says how many, as numbers or as ids, and sends endOffers only when asked', async () => {
         node.write = () => ({ success: true, shopId: 'shop-1', cleared: 4, ended: 0, resumed: 2 });
         expect(await closeMyShop(false)).toEqual({ cleared: 4, ended: 0, resumed: 2 });
@@ -253,31 +283,72 @@ describe('"Put this in your shop" from the List sheet to the composer\'s Offer',
     const NOW = Date.parse('2026-10-23T08:00:00.000Z');
     const HERE = 'https://mullum.example';
     const offer = { type: 'offer', title: 'Cordless drill' };
+    // Two of the tool's photos as the composer carries them (data URIs, tools/photos.ts toolPhotoDataUri).
+    const PHOTO_A = `data:image/jpeg;base64,/9j/4AAQ${'A'.repeat(4000)}QUJD`;
+    const PHOTO_B = `data:image/jpeg;base64,/9j/4AAQ${'A'.repeat(4000)}REVG`;
+    /** What the List sheet handed the composer: the tool's title, its words and its photos. */
+    const LISTED = { title: 'Cordless drill', description: 'Makita 18V, two batteries.', photos: [PHOTO_A] };
+    /** The composer's Offer as createPost gets it (map.tsx handleSubmit: its photos as a JSON list, or null). */
+    const composed = (o: Record<string, unknown> = {}) => ({ type: 'offer', title: LISTED.title, description: LISTED.description, photos: JSON.stringify([PHOTO_A]), ...o });
+    const kept = async () => { await rememberShopChoice(HERE, LISTED, true, NOW); return peekShopChoice(); };
 
-    it('remembered beside the draft, for this community; off forgets it', async () => {
-        await rememberShopChoice(HERE, 'Cordless drill', true, NOW);
-        expect(JSON.parse(store.map.get(SHOP_CHOICE_KEY)!)).toEqual({ anchorUrl: HERE, title: 'Cordless drill', savedAt: NOW });
-        expect(await peekShopChoice()).toEqual({ anchorUrl: HERE, title: 'Cordless drill', savedAt: NOW });
-        await rememberShopChoice(HERE, 'Cordless drill', false, NOW);
+    it("remembered beside the draft, for this community, by the tool's title, words and a key for each photo; off forgets it", async () => {
+        await rememberShopChoice(HERE, LISTED, true, NOW);
+        const choice = JSON.parse(store.map.get(SHOP_CHOICE_KEY)!);
+        expect(choice).toEqual({ anchorUrl: HERE, title: 'Cordless drill', words: 'Makita 18V, two batteries.', photos: [expect.any(String)], savedAt: NOW });
+        // A key, never the photo itself: the choice stays small. Another photo has another key.
+        expect(choice.photos[0].length).toBeLessThan(40);
+        expect(await peekShopChoice()).toEqual(choice);
+        await rememberShopChoice(HERE, { ...LISTED, photos: [PHOTO_B] }, true, NOW);
+        expect(JSON.parse(store.map.get(SHOP_CHOICE_KEY)!).photos[0]).not.toBe(choice.photos[0]);
+        await rememberShopChoice(HERE, LISTED, false, NOW);
         expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
-        await rememberShopChoice(HERE, 'Ladder', true, NOW);
+        await rememberShopChoice(HERE, { title: 'Ladder' }, true, NOW);
+        expect(JSON.parse(store.map.get(SHOP_CHOICE_KEY)!)).toEqual({ anchorUrl: HERE, title: 'Ladder', words: '', photos: [], savedAt: NOW });
         await clearShopChoice();
         expect(await peekShopChoice()).toBeNull();
     });
 
     it('holds only for that Offer: same community, same title (spaces and case aside), for everyone, within a day', () => {
+        // A choice kept by a build from before its words and photos: known by its title alone.
         const choice = { anchorUrl: HERE, title: 'Cordless drill', savedAt: NOW };
-        expect(shopChoiceHolds(choice, offer, HERE, NOW + 60_000)).toBe(true);
-        expect(shopChoiceHolds(choice, { ...offer, title: '  cordless  DRILL ' }, HERE, NOW)).toBe(true);
-        expect(shopChoiceHolds(choice, offer, HERE, NOW + SHOP_CHOICE_HOLDS_MS)).toBe(true);
-        expect(shopChoiceHolds(choice, offer, HERE, NOW + SHOP_CHOICE_HOLDS_MS + 1)).toBe(false);
-        expect(shopChoiceHolds(choice, offer, 'https://castlemaine.example', NOW)).toBe(false);
-        expect(shopChoiceHolds(choice, { ...offer, title: 'Couch' }, HERE, NOW)).toBe(false);
-        expect(shopChoiceHolds(choice, { ...offer, type: 'need' }, HERE, NOW)).toBe(false);
-        expect(shopChoiceHolds(choice, { ...offer, audienceScope: 'group' }, HERE, NOW)).toBe(false);
-        expect(shopChoiceHolds(choice, { ...offer, targetPubkey: 'someone' }, HERE, NOW)).toBe(false);
-        // A choice from a clock ahead of this one, or anything that isn't one, holds for nothing.
-        expect(shopChoiceHolds({ ...choice, savedAt: NOW + 3_600_000 }, offer, HERE, NOW)).toBe(false);
-        for (const bad of [null, 'x', {}, { ...choice, title: '' }, { ...choice, savedAt: 'soon' }]) expect(shopChoiceHolds(bad, offer, HERE, NOW)).toBe(false);
+        expect(shopChoiceFor(choice, offer, HERE, NOW + 60_000)).toBe('shop');
+        expect(shopChoiceFor(choice, { ...offer, title: '  cordless  DRILL ' }, HERE, NOW)).toBe('shop');
+        expect(shopChoiceFor(choice, offer, HERE, NOW + SHOP_CHOICE_HOLDS_MS)).toBe('shop');
+        // Not in the shop, and the member is told: its Offer past the day, or another Offer posted here while it waited.
+        expect(shopChoiceFor(choice, offer, HERE, NOW + SHOP_CHOICE_HOLDS_MS + 1)).toBe('say');
+        expect(shopChoiceFor(choice, { ...offer, title: 'Couch' }, HERE, NOW)).toBe('say');
+        // Nothing to say: another community's choice, a Need, a group's or one person's Offer (another form posts those).
+        expect(shopChoiceFor(choice, offer, 'https://castlemaine.example', NOW)).toBe('none');
+        expect(shopChoiceFor(choice, { ...offer, type: 'need' }, HERE, NOW)).toBe('none');
+        expect(shopChoiceFor(choice, { ...offer, audienceScope: 'group' }, HERE, NOW)).toBe('none');
+        expect(shopChoiceFor(choice, { ...offer, targetPubkey: 'someone' }, HERE, NOW)).toBe('none');
+        // A choice from a clock ahead of this one puts nothing in, and is said; anything that isn't one is nothing.
+        expect(shopChoiceFor({ ...choice, savedAt: NOW + 3_600_000 }, offer, HERE, NOW)).toBe('say');
+        for (const bad of [null, 'x', {}, { ...choice, title: '' }, { ...choice, savedAt: 'soon' }]) expect(shopChoiceFor(bad, offer, HERE, NOW)).toBe('none');
+    });
+
+    it("an edit in the composer keeps it: with its title changed, the Offer is still known by the tool's words or photos", async () => {
+        const choice = await kept();
+        expect(shopChoiceFor(choice, composed(), HERE, NOW + 60_000)).toBe('shop');
+        // The review's case: "Cordless drill" listed from a tool, its title changed in the composer.
+        expect(shopChoiceFor(choice, composed({ title: 'Cordless drill (Makita)' }), HERE, NOW)).toBe('shop');
+        expect(shopChoiceFor(choice, composed({ title: 'Drill', description: 'Lent out by the day.' }), HERE, NOW)).toBe('shop');
+        expect(shopChoiceFor(choice, composed({ title: 'Drill', photos: JSON.stringify([PHOTO_B, PHOTO_A]) }), HERE, NOW)).toBe('shop');
+        expect(shopChoiceFor(choice, composed({ title: 'Drill', photos: [PHOTO_A] }), HERE, NOW)).toBe('shop');
+        expect(shopChoiceFor(choice, composed({ title: 'Drill', photos: null }), HERE, NOW)).toBe('shop');
+        expect(shopChoiceFor(choice, composed({ title: 'Drill', description: '  makita 18V,   two BATTERIES. ', photos: null }), HERE, NOW)).toBe('shop');
+        expect(shopChoiceFor(choice, composed({ description: 'x', photos: null }), HERE, NOW)).toBe('shop');
+    });
+
+    it('changed past knowing: title, words and photos all different, it is up outside the shop and the member is told', async () => {
+        const choice = await kept();
+        expect(shopChoiceFor(choice, composed({ title: 'Couch', description: 'Comfy.', photos: JSON.stringify([PHOTO_B]) }), HERE, NOW)).toBe('say');
+        expect(shopChoiceFor(choice, composed({ title: 'Couch', description: 'Comfy.', photos: null }), HERE, NOW)).toBe('say');
+        // Empty words know nothing: a tool with no words and no photos is known by its title alone.
+        const bare = { anchorUrl: HERE, title: 'Cordless drill', words: '', photos: [], savedAt: NOW };
+        expect(shopChoiceFor(bare, composed({ title: 'Drill', description: '', photos: null }), HERE, NOW)).toBe('say');
+        // Past the day, an Offer that isn't its own is nothing to say: the choice is stale.
+        expect(shopChoiceFor(choice, composed({ title: 'Couch', description: 'Comfy.', photos: null }), HERE, NOW + SHOP_CHOICE_HOLDS_MS + 1)).toBe('none');
     });
 });

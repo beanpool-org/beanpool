@@ -30,7 +30,7 @@ import { createRoot, type Root } from 'react-dom/client';
 
 const SCREEN = 320;
 const FONT_SCALE = 1.3;
-const alerts = vi.hoisted(() => ({ said: [] as string[] }));
+const alerts = vi.hoisted(() => ({ said: [] as string[], buttons: [] as Array<{ text?: string; onPress?: () => void }> }));
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', radiogroup: 'radiogroup', checkbox: 'checkbox' };
@@ -61,7 +61,7 @@ vi.mock('react-native', () => {
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), ActivityIndicator: el('div'),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
-        Alert: { alert: (title: string, body?: string) => { alerts.said.push(title); if (body) alerts.said.push(body); } },
+        Alert: { alert: (title: string, body?: string, buttons?: Array<{ text?: string; onPress?: () => void }>) => { alerts.said.push(title); if (body) alerts.said.push(body); alerts.buttons = buttons ?? []; } },
         AccessibilityInfo: { announceForAccessibility: () => {} },
         useWindowDimensions: () => ({ width: SCREEN, height: 569, scale: 1.5, fontScale: FONT_SCALE }),
         Dimensions: { get: () => ({ width: SCREEN, height: 569, scale: 1.5, fontScale: FONT_SCALE }) },
@@ -106,7 +106,8 @@ vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: ME
 // ── the node: one member's shop, as routes/shops.ts keeps and answers it ─────────────────────────
 type Listing = { id: string; title: string; type: string; status: string; shopId?: string; lendable?: boolean; audienceScope?: string; originNode?: string };
 const node = vi.hoisted(() => ({
-    mode: 'up' as 'up' | 'down' | 'older',
+    /** `stall`: a write is taken and never answered (a captive portal, a stalled 2G line); only its signal lets it go. */
+    mode: 'up' as 'up' | 'down' | 'older' | 'stall',
     shop: null as null | Record<string, any>,
     listings: [] as Listing[],
     log: [] as Array<{ method: string; path: string; body?: any }>,
@@ -133,9 +134,10 @@ vi.mock('../db', () => ({
         }
         return { ok: false, status: 404, json: async () => null };
     },
-    signedRequestWithMethod: async (method: string, p: string, body: any) => {
+    signedRequestWithMethod: async (method: string, p: string, body: any, opts?: { signal?: AbortSignal }) => {
         node.log.push({ method, path: p, body });
         if (node.mode === 'down') throw new TypeError('Network request failed');
+        if (node.mode === 'stall') return new Promise<never>((_, reject) => opts?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
         if (node.refuse) { const r = node.refuse; node.refuse = null; throw Object.assign(new Error(r.error), { status: r.status }, r.code ? { code: r.code } : {}, r.unsaid ? { unsaid: true } : {}); }
         if (method === 'PUT' && p === '/api/shops/mine') {
             if (!node.shop) node.shop = { id: 'shop-1', name: null, ownerName: ME.callsign, kind: null, blurb: null, howToDeal: null, paused: false, backOn: null };
@@ -170,8 +172,9 @@ import { ShopToggle, shopToggleState, shopIdForEdit } from '../../components/sho
 import { ShopHomeBody } from '../../components/shop/ShopHomeBody';
 import { ToolListSheet } from '../../tools/list-sheet';
 import { readMyShop } from '../shop';
-import { SHOP_CHOICE_KEY } from '../shop-choice';
-import { openOfferComposer } from '../../tools/doors';
+import { SHOP_CHOICE_KEY, SHOP_COMPOSER_WAIT_MS, shopChoiceFor } from '../shop-choice';
+import { openNeedComposer, openOfferComposer } from '../../tools/doors';
+import * as FileSystem from 'expo-file-system/legacy';
 
 // ── drawing and what it checks ───────────────────────────────────────────────────────────────────
 let host: HTMLDivElement;
@@ -187,6 +190,7 @@ beforeEach(() => {
     store.map.set('beanpool_anchor_url', 'https://mullum.example');
     nav.pushed.length = 0; nav.navigated.length = 0; nav.backs = 0;
     alerts.said.length = 0;
+    alerts.buttons = [];
     theme.dark = false;
     node.mode = 'up';
     node.shop = null;
@@ -577,6 +581,31 @@ describe('"Put this in your shop"', () => {
         expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
     });
 
+    it("the choice knows its Offer by the tool's words and the photos the composer was handed, so a changed title keeps it", async () => {
+        vi.mocked(FileSystem.readAsStringAsync).mockResolvedValueOnce('QUJDREVG');
+        await openOfferComposer('me-key', 'fixture-kit', { ...DRAFT, photos: ['ref-1'] }, { kind: 'free', beans: 0 }, true);
+        const choice = JSON.parse(store.map.get(SHOP_CHOICE_KEY)!);
+        expect(choice).toMatchObject({ anchorUrl: 'https://mullum.example', title: 'Cordless drill', words: 'Barely used.' });
+        const draft = JSON.parse(store.map.get('beanpool_offer_draft')!);
+        expect(draft.postPhotos).toEqual(['data:image/jpeg;base64,QUJDREVG']);
+        // What the composer posts (map.tsx handleSubmit) with its title and words changed: still the sheet's Offer, by its photo.
+        const posted = { type: 'offer', title: 'Cordless drill (Makita)', description: 'Lent by the day.', photos: JSON.stringify(draft.postPhotos) };
+        expect(shopChoiceFor(choice, posted, 'https://mullum.example', Date.now())).toBe('shop');
+    });
+
+    it("the Need door replaces the composer's one draft, and the choice that waited for its Offer goes with it", async () => {
+        await openOfferComposer('me-key', 'fixture-kit', DRAFT, { kind: 'free', beans: 0 }, true);
+        expect(store.map.has(SHOP_CHOICE_KEY)).toBe(true);
+        const opening = openNeedComposer('me-key', 'fixture-kit', { title: 'A ladder for the weekend' });
+        // The tool's Offer is an unfinished post on the map: replacing it is asked first.
+        await vi.waitFor(() => expect(alerts.buttons.length).toBeGreaterThan(0));
+        alerts.buttons.find((b) => b.text === t('Go on'))?.onPress?.();
+        await opening;
+        expect(JSON.parse(store.map.get('beanpool_offer_draft')!).postType).toBe('need');
+        expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
+        expect(nav.pushed.at(-1)).toBe('/(tabs)/map?newPost=need');
+    });
+
     it('the edit toggle starts where the listing is, and an edit sends an id in, null out, nothing when unchanged', async () => {
         OTHERS = ["Ana's Tool Shed"];
         const onChange = vi.fn();
@@ -609,6 +638,29 @@ describe('"Put this in your shop"', () => {
         expect(err.message).toBe("Your community couldn't be reached. Try again.");
         expect(err.message).not.toContain('Request failed');
         expect(node.log.filter((r) => r.method === 'PUT')).toEqual([{ method: 'PUT', path: '/api/shops/mine', body: {} }]);
+    });
+
+    it("the edit toggle opening a first shop on a line that never answers: Save is let go at the composer's limit, and says the community couldn't be reached", async () => {
+        // Before this round the PUT had no signal and no limit, so Save stayed on "Saving…" (still waiting at 120 s); the edit
+        // screen's own updatePost gives up at 12 s, but only starts once this settles. Its alert keeps the edit form open.
+        node.shop = null;
+        node.mode = 'stall';
+        vi.useFakeTimers();
+        try {
+            let settled: unknown = 'waiting';
+            const saving = shopIdForEdit({ kind: 'none' }, false, true).then((id) => { settled = id; }, (e) => { settled = e; });
+            await vi.advanceTimersByTimeAsync(SHOP_COMPOSER_WAIT_MS - 1);
+            expect(settled).toBe('waiting');
+            await vi.advanceTimersByTimeAsync(1);
+            await vi.waitFor(() => expect(settled).toBeInstanceOf(Error));
+            await saving;
+            expect((settled as Error).message).toBe("Your community couldn't be reached. Try again.");
+            expect(node.log.filter((r) => r.method === 'PUT')).toEqual([{ method: 'PUT', path: '/api/shops/mine', body: {} }]);
+            expect(vi.getTimerCount()).toBe(0);
+            expect(SHOP_COMPOSER_WAIT_MS).toBeLessThanOrEqual(12_000);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('closed for now, a listing in it can still be taken out; one not in it is told why it stays out', async () => {

@@ -34,6 +34,9 @@ vi.mock('expo-file-system/legacy', () => ({
 vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ publicKey: 'me-pub', privateKey: 'aa', callsign: 'Me' })) }));
 vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn().mockReturnValue('beanpool_test.db'), addSavedNode: vi.fn() }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
+// What the member is told after posting (utils/app-alert.ts reaches React Native's Alert, which plain Node has none of).
+const told = vi.hoisted(() => ({ alerts: [] as Array<{ title: string; body: string }> }));
+vi.mock('../app-alert', () => ({ showAppAlert: (title: string, body: string) => { told.alerts.push({ title, body }); } }));
 vi.mock('../crypto', async (orig) => ({
     ...(await orig<any>()),
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
@@ -58,6 +61,7 @@ beforeEach(() => {
     store.map.clear();
     store.map.set('beanpool_anchor_url', HERE);
     sent.length = 0;
+    told.alerts.length = 0;
     mockDb.runAsync.mockClear();
     routes = {
         'GET /api/shops/mine': () => reply(200, { shop: { id: 'shop-1', name: null, ownerName: 'Me', paused: false } }),
@@ -82,13 +86,15 @@ const composerOffer = (title: string, extra: Record<string, unknown> = {}) => ({
     repeatable: 0, cash_also_needed: 0, author_pubkey: 'me-pub', lat: -28.5, lng: 153.5, photos: null, created_at: '2026-10-23T08:00:00.000Z',
     reach: 'local', ...extra,
 });
+/** One of the tool's photos, as the List sheet hands it to the composer and the composer posts it (a data URI). */
+const PHOTO = `data:image/jpeg;base64,/9j/4AAQ${'B'.repeat(2000)}QUJD`;
 const postBody = () => sent.find((r) => r.method === 'POST' && r.path === '/api/marketplace/posts')?.body;
 /** The shop's and the listing's requests, in order (createPost also reads the balance after: not these). */
 const shopAndPost = () => sent.filter((r) => r.path.startsWith('/api/shops') || r.path === '/api/marketplace/posts').map((r) => `${r.method} ${r.path}`);
 
 describe("the composer's Offer and the List sheet's choice", () => {
     it('the choice holds: the Offer goes in the member\'s shop, and the choice is forgotten once it is posted', async () => {
-        await rememberShopChoice(HERE, 'Cordless drill', true);
+        await rememberShopChoice(HERE, { title: 'Cordless drill' }, true);
         await createPost(composerOffer('Cordless drill'));
         expect(postBody()?.shopId).toBe('shop-1');
         expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
@@ -97,33 +103,69 @@ describe("the composer's Offer and the List sheet's choice", () => {
     it('no shop yet: it is opened first (a PUT with nothing in it), and the Offer goes in it', async () => {
         routes['GET /api/shops/mine'] = () => reply(200, { shop: null });
         routes['PUT /api/shops/mine'] = () => reply(200, { success: true, shop: { id: 'shop-new', name: null, ownerName: 'Me' }, paused: [], resumed: [] });
-        await rememberShopChoice(HERE, 'Ladder', true);
+        await rememberShopChoice(HERE, { title: 'Ladder' }, true);
         await createPost(composerOffer('Ladder'));
         expect(shopAndPost()).toEqual(['GET /api/shops/mine', 'PUT /api/shops/mine', 'POST /api/marketplace/posts']);
         expect(sent[1].body).toEqual({});
         expect(postBody()?.shopId).toBe('shop-new');
     });
 
-    it('no choice, or one for another Offer: no shop is asked about and none is sent; another\'s choice is kept', async () => {
+    it("no choice, or another community's: no shop is asked about, none is sent, nothing is said; another community's is kept", async () => {
         await createPost(composerOffer('Couch'));
         expect(shopAndPost()).toEqual(['POST /api/marketplace/posts']);
         expect(postBody()).not.toHaveProperty('shopId');
         sent.length = 0;
-        await rememberShopChoice(HERE, 'Cordless drill', true);
+        await rememberShopChoice('https://castlemaine.example', { title: 'Couch' }, true);
         await createPost(composerOffer('Couch'));
+        expect(shopAndPost()).toEqual(['POST /api/marketplace/posts']);
         expect(postBody()).not.toHaveProperty('shopId');
         expect(store.map.has(SHOP_CHOICE_KEY)).toBe(true);
+        expect(told.alerts).toEqual([]);
+    });
+
+    it("its title changed in the composer: the Offer is still known by the tool's words and photos, and goes in the shop", async () => {
+        await rememberShopChoice(HERE, { title: 'Cordless drill', description: 'In good order', photos: [PHOTO] }, true);
+        await createPost(composerOffer('Cordless drill (Makita)', { photos: JSON.stringify([PHOTO]) }));
+        expect(postBody()?.shopId).toBe('shop-1');
+        expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
+        expect(told.alerts).toEqual([]);
+        // Its words changed too: still known by the tool's photo.
+        sent.length = 0;
+        await rememberShopChoice(HERE, { title: 'Cordless drill', description: 'Makita 18V', photos: [PHOTO] }, true);
+        await createPost(composerOffer('Drill for the day', { photos: JSON.stringify([PHOTO]) }));
+        expect(postBody()?.shopId).toBe('shop-1');
+        expect(told.alerts).toEqual([]);
+    });
+
+    it("an Offer here while the choice waited that isn't known as its own: up outside the shop, the member told once it is up, the choice forgotten", async () => {
+        // (Before this round the choice was kept, and nothing was said: a promise dropped in silence.)
+        await rememberShopChoice(HERE, { title: 'Cordless drill', description: 'Makita 18V', photos: [PHOTO] }, true);
+        routes['POST /api/marketplace/posts'] = () => reply(409, { error: 'You can post 5 a day.', code: 'post_day_limit' });
+        await expect(createPost(composerOffer('Couch'))).rejects.toThrow('You can post 5 a day.');
+        // Refused: nothing is up, so nothing is said, and the choice is kept for the retry.
+        expect(told.alerts).toEqual([]);
+        expect(store.map.has(SHOP_CHOICE_KEY)).toBe(true);
+        routes['POST /api/marketplace/posts'] = (body) => reply(200, { success: true, post: { id: body.id } });
+        sent.length = 0;
+        await createPost(composerOffer('Couch'));
+        expect(shopAndPost()).toEqual(['POST /api/marketplace/posts']);
+        expect(postBody()).not.toHaveProperty('shopId');
+        expect(told.alerts).toEqual([{
+            title: 'Not in your shop',
+            body: '“Couch” is up, but not in your shop. To put it in, open it, tap Edit Post and tick Put this in your shop.',
+        }]);
+        expect(store.map.has(SHOP_CHOICE_KEY)).toBe(false);
     });
 
     it('a Need is never put in a shop, whatever the choice says', async () => {
-        await rememberShopChoice(HERE, 'Cordless drill', true);
+        await rememberShopChoice(HERE, { title: 'Cordless drill' }, true);
         await createPost(composerOffer('Cordless drill', { type: 'need' }));
         expect(postBody()).not.toHaveProperty('shopId');
     });
 
     it("refused (the shop closed for now since): the node's sentence, nothing posted, and the choice kept for a retry", async () => {
         routes['POST /api/marketplace/posts'] = () => reply(409, { error: 'This shop is closed for now. Reopen it first, then put things in it.', code: 'shop_paused' });
-        await rememberShopChoice(HERE, 'Cordless drill', true);
+        await rememberShopChoice(HERE, { title: 'Cordless drill' }, true);
         await expect(createPost(composerOffer('Cordless drill'))).rejects.toThrow('This shop is closed for now. Reopen it first, then put things in it.');
         expect(store.map.has(SHOP_CHOICE_KEY)).toBe(true);
         expect(mockDb.runAsync.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO posts'))).toBe(false);
@@ -164,7 +206,7 @@ describe("the composer's Offer and the List sheet's choice", () => {
             store.map.delete(SHOP_CHOICE_KEY);
             mockDb.runAsync.mockClear();
             c.set();
-            await rememberShopChoice(HERE, 'Cordless drill', true);
+            await rememberShopChoice(HERE, { title: 'Cordless drill' }, true);
             await expect(createPost(composerOffer('Cordless drill')), c.name).rejects.toThrow(c.says);
             expect(shopAndPost(), c.name).not.toContain('POST /api/marketplace/posts');
             expect(store.map.has(SHOP_CHOICE_KEY), c.name).toBe(true);
@@ -190,7 +232,7 @@ describe("the composer's Offer and the List sheet's choice", () => {
                 store.map.delete(SHOP_CHOICE_KEY);
                 mockDb.runAsync.mockClear();
                 c.set();
-                await rememberShopChoice(HERE, 'Cordless drill', true);
+                await rememberShopChoice(HERE, { title: 'Cordless drill' }, true);
                 let settled: unknown = 'waiting';
                 const posting = createPost(composerOffer('Cordless drill')).then(() => { settled = 'posted'; }, (e) => { settled = e; });
                 await vi.advanceTimersByTimeAsync(SHOP_COMPOSER_WAIT_MS - 1);
@@ -213,7 +255,7 @@ describe("the composer's Offer and the List sheet's choice", () => {
     it("the PUT that opens it answered without the node's words (a proxy's 502 page): the reachable sentence, never \"Request failed: 502\"", async () => {
         routes['GET /api/shops/mine'] = () => reply(200, { shop: null });
         routes['PUT /api/shops/mine'] = () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('Unexpected token <'); }, text: async () => '<html>Bad gateway</html>' });
-        await rememberShopChoice(HERE, 'Cordless drill', true);
+        await rememberShopChoice(HERE, { title: 'Cordless drill' }, true);
         const err = await createPost(composerOffer('Cordless drill')).catch((e) => e);
         expect(err).toBeInstanceOf(Error);
         expect(err.message).toBe("Your community couldn't be reached. Try again.");
@@ -224,7 +266,7 @@ describe("the composer's Offer and the List sheet's choice", () => {
 
     it('a node from before shops: the Offer posts on its own', async () => {
         routes['GET /api/shops/mine'] = () => reply(404, {});
-        await rememberShopChoice(HERE, 'Cordless drill', true);
+        await rememberShopChoice(HERE, { title: 'Cordless drill' }, true);
         await createPost(composerOffer('Cordless drill'));
         expect(postBody()).not.toHaveProperty('shopId');
     });

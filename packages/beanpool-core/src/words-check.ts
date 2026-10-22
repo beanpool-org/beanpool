@@ -16,20 +16,21 @@ export interface WordProblem {
     problem: string;
 }
 
-/** One `t()` / `tn()` / `word()` call as the extractor found it. */
+/** One `t()` / `tn()` / `word()` / `wordn()` call as the extractor found it. */
 export interface WordCall {
-    /** 't', 'tn', or 'word' (a sentence marked where it is written and translated where it is shown). */
-    fn: 't' | 'tn' | 'word';
-    /** The first string argument (t, word) or the singular (tn); null when the argument is not a plain string literal. */
+    /** 't', 'tn', 'word' or 'wordn' (a sentence, or one with a count, marked where it is written and translated where it is shown). */
+    fn: 't' | 'tn' | 'word' | 'wordn';
+    /** The first string argument (t, word) or the singular (tn, wordn); null when the argument is not a plain string literal. */
     text: string | null;
     /**
-     * t() was given a `word()` key from a table (a property or element access, e.g. `t(KINDS[kind].body)`): its
-     * sentence was collected where word() marked it, and tsc refuses anything but a WordKey there.
+     * t() was given a `word()` key from a table (a property or element access, e.g. `t(KINDS[kind].body)`), or tn() the two
+     * keys of a `wordn()` pair (`tn(n, line.key.one, line.key.other)`): its sentence was collected where word() or wordn()
+     * marked it, and tsc refuses anything but a WordKey there.
      */
     keyed?: boolean;
     /** The call runs when its module is imported (no enclosing function), so it would freeze the starting language. */
     moduleLevel?: boolean;
-    /** tn's plural argument. */
+    /** The plural argument of tn and wordn. */
     other?: string | null;
     /** t's context argument, when it is a literal. */
     context?: string;
@@ -44,14 +45,14 @@ export interface WordCall {
 
 /** Why one extracted call cannot be a whole sentence, or null when it is fine. */
 export function callProblem(call: WordCall): string | null {
-    if (call.moduleLevel && call.fn !== 'word') {
+    if (call.moduleLevel && call.fn !== 'word' && call.fn !== 'wordn') {
         return `${call.fn}() at module level runs once, at import, and keeps the language the app started in; call it where the text is shown, or mark the sentence with word('…') and t() it there`;
     }
     if (call.concatenated) return `${call.fn}() is joined to other text (+, a template literal, a joined array or JSX beside it): a fragment; put the whole sentence in one string with {placeholders}`;
-    if (call.fn === 't' && call.keyed) return null;
-    const texts = call.fn === 'tn' ? [call.text, call.other] : [call.text];
+    if ((call.fn === 't' || call.fn === 'tn') && call.keyed) return null;
+    const texts = call.fn === 'tn' || call.fn === 'wordn' ? [call.text, call.other] : [call.text];
     if (texts.some((s) => s === null || s === undefined)) {
-        return `${call.fn}() takes a string literal (a sentence the extractor can read), or for t() a word('…') key from a table; not a variable`;
+        return `${call.fn}() takes a string literal (a sentence the extractor can read), or for t() a word('…') key from a table and for tn() the keys of a wordn('…', '…') pair; not a variable`;
     }
     for (const s of texts as string[]) {
         if (s.trim().length === 0) return `${call.fn}() with an empty sentence`;
@@ -63,7 +64,7 @@ export function callProblem(call: WordCall): string | null {
 /** The key an extracted call is looked up by. */
 export function callKey(call: WordCall): string | null {
     if (call.keyed) return null;
-    if (call.fn === 'tn') return call.text != null && call.other != null ? `${call.text}${PLURAL_SEPARATOR}${call.other}` : null;
+    if (call.fn === 'tn' || call.fn === 'wordn') return call.text != null && call.other != null ? `${call.text}${PLURAL_SEPARATOR}${call.other}` : null;
     if (call.text == null) return null;
     return call.context ? `${call.text}${CONTEXT_SEPARATOR}${call.context}` : call.text;
 }

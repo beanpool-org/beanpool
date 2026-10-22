@@ -159,6 +159,35 @@ test('word() marks a sentence in a table; t(table.key) is accepted (tsc checks i
     assert.deepEqual(stale, []);
 });
 
+test('wordn() marks a sentence with a count in a table: one plural entry; tn(n, pair.one, pair.other) is accepted, a bare variable is not', async () => {
+    const src = [
+        "import { tn, wordn } from '@beanpool/core';",
+        "const LINE = { key: wordn('{n} thing · {out} out', '{n} things · {out} out'), n: 1 };",
+        'export const say = (out: number) => tn(LINE.n, LINE.key.one, LINE.key.other, { out });',
+        'export const half = (w: string) => tn(2, LINE.key.one, w);',
+        "export const bad = wordn('{n} thing', ' things');",
+    ].join('\n');
+    const { calls } = extractFromSource('fixture/n.ts', src);
+    assert.deepEqual(calls.map((c) => [c.fn, c.text, c.other ?? null, !!c.keyed, !!c.moduleLevel]), [
+        ['wordn', '{n} thing · {out} out', '{n} things · {out} out', false, true],
+        ['tn', null, null, true, false], ['tn', null, null, false, false],
+        ['wordn', '{n} thing', ' things', false, true],
+    ]);
+    const problems = await problemsOf('fixture/n.ts', src);
+    assert.equal(problems.length, 2);
+    assert.match(problems[0], /^fixture\/n\.ts:4: .*not a variable/);
+    assert.match(problems[1], /^fixture\/n\.ts:5: .*starts or ends with a space/);
+    // The pair is ONE plural entry, checked for the forms its language needs: a Russian entry without `many` is refused.
+    const ok = src.split('\n').slice(0, 3).join('\n');
+    const key = '{n} thing · {out} out|{n} things · {out} out';
+    const ru = (forms) => ({ 'fixture/words': { ...EMPTY['fixture/words'], ru: { [key]: forms } } });
+    const full = { one: '{n} вещь · {out} у других', few: '{n} вещи · {out} у других', many: '{n} вещей · {out} у других', other: '{n} вещи · {out} у других' };
+    assert.deepEqual((await checkRepo({ extracted: [pkgOf('fixture/n.ts', ok)], catalogs: ru(full) })).problems, []);
+    const { problems: short } = await checkRepo({ extracted: [pkgOf('fixture/n.ts', ok)], catalogs: ru({ ...full, many: undefined }) });
+    assert.equal(short.length, 1);
+    assert.match(short[0], /^fixture\/words\/ru\.json: .*many/);
+});
+
 test('t()/tn() at module level is refused: it would freeze the language the app started in (N5)', async () => {
     const src = "import { t, tn } from '@beanpool/core';\nexport const LABEL = t('Save changes');\nexport const N = tn(2, '{n} bean', '{n} beans');\nexport class X { label = t('Fine per instance'); static S = t('Not fine'); }\n";
     const problems = await problemsOf('fixture/m.ts', src);

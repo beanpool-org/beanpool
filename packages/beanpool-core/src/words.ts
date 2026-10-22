@@ -10,7 +10,8 @@
  *   tn(n, '{n} new message', '{n} new messages')            plurals: a catalog entry holds the forms its language needs
  *   const SAVED = word('Saved');  …  t(SAVED)               a sentence kept in a table: marked where it is written,
  *                                                           translated where it is shown (never t() at module level)
- *   wordsFor('fr', catalogs).t('Save')                      an explicit language (a server rendering for one recipient)
+ *   const N = wordn('{n} thing', '{n} things');  …  tn(n, N.one, N.other)    the same for a sentence with a count
+ *   wordsFor('fr', catalogs).t('Save')                    an explicit language (a server rendering for one recipient)
  *
  * Whole sentences only: never `t('You have') + n + t('messages')` (`words:check` refuses a fragment).
  *
@@ -227,6 +228,20 @@ export type Sentence<S extends string> = IsAny<S> extends true ? never : string 
  */
 export function word<S extends string>(source: S & Sentence<S>, context?: string): WordKey {
     return wordKey(source, context) as WordKey;
+}
+
+/** A sentence with a count, marked with `wordn('…', '…')`: its English singular and plural, the two keys tn() takes. */
+export interface PluralWord {
+    readonly one: WordKey;
+    readonly other: WordKey;
+}
+
+/**
+ * word() for a sentence with a count: `wordn('{n} thing', '{n} things')` marks the pair where it is written (the
+ * extractor collects it as one plural entry, like a `tn()` call), and `tn(n, w.one, w.other)` writes it where it is shown.
+ */
+export function wordn<A extends string, B extends string>(one: A & Sentence<A>, other: B & Sentence<B>): PluralWord {
+    return { one: one as WordKey, other: other as WordKey };
 }
 
 // ── Dates and numbers ──────────────────────────────────────────────────────────────────────────────────────────

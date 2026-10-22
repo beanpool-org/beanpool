@@ -464,16 +464,26 @@ async function syncBlocksOnce(): Promise<void> {
 async function sendBlockChange(owner: string, community: string, path: string, body: Record<string, unknown>): Promise<ChangeAnswer> {
     const signer = await loadIdentity();
     if (!signer?.privateKey || signer.publicKey !== owner) return 'later';
+    // One deadline over the request and the reading of its answer, and the request aborted at it (as purgeAccountOnNode
+    // does, node-post.ts): fetch can settle as the headers arrive, and React Native's never gives up by itself, so an
+    // answer whose body stalled after them would hold this sync, and every one queued behind it, until the app closed.
+    const controller = new AbortController();
     let res: Response;
+    let text: string;
     try {
-        res = await withTimeout(signedPost(community, path, body, signer), REPORT_TIMEOUT_MS);
+        ({ res, text } = await withTimeout((async () => {
+            const answer = await signedPost(community, path, body, signer, controller.signal);
+            return { res: answer, text: answer.ok ? await answer.text() : '' };
+        })(), REPORT_TIMEOUT_MS));
     } catch {
+        // Not left running behind the next sync.
+        controller.abort();
         return 'later';
     }
     if (res.ok) {
         // Only the node's own answer counts: a 200 from something in front of it (a Wi-Fi login page) took nothing.
         try {
-            const parsed = JSON.parse(await res.text());
+            const parsed = JSON.parse(text);
             if (parsed?.success === true && Array.isArray(parsed.blocked)) {
                 return parsed.blocked.map((b: { publicKey?: unknown } | null) => b?.publicKey).filter((k: unknown): k is string => typeof k === 'string');
             }

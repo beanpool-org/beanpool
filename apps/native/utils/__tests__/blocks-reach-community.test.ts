@@ -106,6 +106,10 @@ const net = {
     portal: false,
     /** Held: the next block request waits for it before the community sees it. */
     hold: null as Promise<void> | null,
+    /** The next block request is taken, and its answer's headers arrive, but its body never does: only an abort ends it. */
+    stallBody: false,
+    /** The request whose body stalled, with its signal, to see that the phone aborted it. */
+    stalled: undefined as { signal?: AbortSignal } | undefined,
     sent: [] as { url: string; signedBy: string; body: any }[],
     lists: new Map<string, Set<string>>(),
     known: new Set<string>(),
@@ -134,6 +138,8 @@ beforeEach(async () => {
     net.loseNextAnswer = false;
     net.portal = false;
     net.hold = null;
+    net.stallBody = false;
+    net.stalled = undefined;
     net.sent = [];
     net.lists.clear();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -180,6 +186,15 @@ beforeEach(async () => {
         if (net.loseNextAnswer) {
             net.loseNextAnswer = false;
             throw new TypeError('Network request failed');
+        }
+        if (net.stallBody) {
+            net.stallBody = false;
+            const signal = init?.signal ?? undefined;
+            net.stalled = { signal };
+            const never = () => new Promise<never>((_, reject) => {
+                signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+            });
+            return { ok: true, status: 200, json: never, text: never } as unknown as Response;
         }
         return reply(200, { success: true, ...extra, blocked: [...list].map((publicKey) => ({ publicKey, blockedAt: 'x' })), max: 500 });
     }));
@@ -391,6 +406,34 @@ describe('a community that is slow to answer', () => {
             { at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } },
         ]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
+    });
+});
+
+describe('a community whose answer stops after its headers', () => {
+    it('the sync gives up at the deadline and aborts the request, and the next Block still reaches the community', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        net.stallBody = true;
+        await app.blockUser(HARASSER, ana.publicKey);
+        await vi.waitFor(() => expect(net.stalled).toBeDefined());
+        let ended = false;
+        void app.blockSyncsEndedForTests().then(() => { ended = true; });
+
+        // The reports' 12 s: not before it, and at it.
+        await vi.advanceTimersByTimeAsync(11_000);
+        expect(ended).toBe(false);
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(ended).toBe(true);
+        expect(net.stalled!.signal?.aborted).toBe(true);
+        vi.useRealTimers();
+
+        // Nothing is stuck behind it: the next Block goes, with the one whose answer never came.
+        net.sent = [];
+        await app.blockUser(SPAMMER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkeys: [HARASSER, SPAMMER] } }]);
+        expect([...listAt(NODE, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
     });
 });
 

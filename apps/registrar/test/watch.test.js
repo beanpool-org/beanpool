@@ -354,6 +354,44 @@ test('the vault: locked two looks is urgent; open again is resolved; a raised re
     } finally { r.done(); }
 });
 
+test('the vault: locked is cleared only by an open answer: a failed look between locked looks is never "open again"', async () => {
+    const r = await room();
+    try {
+        await r.tick();
+        // One locked look, then open (unlocked within the interval): nothing.
+        r.vault.state = 'locked';
+        await r.tick();
+        r.vault.state = 'open';
+        await r.tick();
+        assert.deepEqual(r.titles(), [], 'one locked look, then open: nothing said');
+        // Unreachable: its own alert only, never "locked".
+        r.vault.fail = 'unreachable';
+        await r.tick(); await r.tick();
+        assert.deepEqual(r.titles(), ['vault down']);
+        // Back, locked (as a vault is after a restart): down is resolved at its first answer, locked after a second look.
+        r.vault.fail = null;
+        r.vault.state = 'locked';
+        await r.tick();
+        assert.deepEqual(r.titles().slice(1), ['Resolved: vault down']);
+        await r.tick();
+        assert.deepEqual(r.titles().slice(2), ['vault locked']);
+        assert.equal(r.sent[2].headers.priority, '5');
+        assert.match(r.sent[2].body, /^vault \(vault\.watch\.test\) answers locked, 2 looks in a row: deposits and restores wait until two custodians unlock it\./);
+        // Still locked, a failed look (gone, or not a BeanPool answer) between: no "answers open again", no second "locked".
+        r.vault.fail = 'unreachable'; await r.tick();
+        r.vault.fail = null; await r.tick();
+        r.vault.fail = 'html'; await r.tick();
+        r.vault.fail = null; await r.tick(); await r.tick();
+        assert.deepEqual(r.titles().slice(3), [], 'still locked: nothing more said');
+        assert.ok(r.w.sqlite.prepare("SELECT 1 FROM alert_state WHERE key='watch:vault:locked'").get(), 'still raised');
+        // Open: resolved, once.
+        r.vault.state = 'open';
+        await r.tick(); await r.tick();
+        assert.deepEqual(r.titles().slice(3), ['Resolved: vault locked']);
+        assert.match(r.sent[3].body, /vault \(vault\.watch\.test\) answers open again\.$/);
+    } finally { r.done(); }
+});
+
 test('no VAULT_TICKET_KEYS: the report is "not checked", never "fine", and nothing about it is raised', async () => {
     const r = await room({ ticketKey: false });
     try {

@@ -1,13 +1,8 @@
 {
   "_about": "English a member reads outside t() (JSX text, text props, alert arguments), per directory. scripts/words/words.mjs lint fails when a count rises; S3 sweeps take each to 0. `lint --update` lowers it; a rise needs `--update --raise \"<reason>\"`, which is recorded in `raises` (words.test.mjs compares with origin/main).",
   "counts": {
-    "apps/native/app": 71,
+    "apps/native/app": 5,
     "apps/native/app/(tabs)": 4,
-    "apps/native/components": 1,
-    "apps/native/components/showcase": 6,
-    "apps/native/utils": 3,
-    "apps/pwa/src": 4,
-    "apps/pwa/src/components": 49,
-    "apps/pwa/src/pages": 116
+    "apps/native/components": 1
   }
 }

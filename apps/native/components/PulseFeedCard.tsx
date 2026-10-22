@@ -90,6 +90,10 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
     const compactHeader = windowWidth / fontScale < 360;
     const [imageFailed, setImageFailed] = useState(false);
     const thumbnailUri = resolvePulseThumbnailUrl(nodeUrl, item);
+
+    useEffect(() => {
+        setImageFailed(false);
+    }, [item.id, thumbnailUri]);
     const [showReport, setShowReport] = useState(false);
     const [reportReason, setReportReason] = useState<string | null>(null);
     const [submittingReport, setSubmittingReport] = useState(false);
@@ -107,6 +111,8 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
 
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
     const canReport = Boolean(onReport) && canReportPulseItem(item, currentPubkey);
+    const isInstagram = item.platform === 'instagram';
+    const isInstagramFallback = isInstagram && (!thumbnailUri || imageFailed);
     const platMeta = platformMeta(item.platform);
     const platName = platformName(item.platform);
     const catMeta = categoryMeta(item.category);
@@ -114,6 +120,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
     const canPlayInApp = media.kind === 'poster' && media.canPlayInApp;
     const timeAgo = publishedWords(item.publishedAt);
     const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : t('Neighbour'));
+    const postTitle = item.title?.trim() || t('View post on {platform}', { platform: platName });
+    const titleFirstLine =
+        item.title?.split('\n').map((l) => l.trim()).find(Boolean) || postTitle;
 
     const handleOpenPost = async () => {
         if (!item.url) return;
@@ -315,8 +324,38 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
             {/* The media area: YouTube's player once the member has tapped ▶, a plain line if that
                 player failed, and otherwise the facade poster this feed has always shown. The
                 three are mutually exclusive, which is how "nothing is drawn over a playing player"
-                is guaranteed structurally rather than by a z-index. */}
-            {media.kind === 'player' ? (
+                is guaranteed structurally rather than by a z-index.
+                For Instagram with no thumbnail (or failed image), we render a designed link card
+                with title, author, and one clear button to open on Instagram. */}
+            {isInstagramFallback ? (
+                <View style={styles.instagramCardBody}>
+                    <View style={styles.instagramBadgeRow}>
+                        <View style={styles.instagramBadge}>
+                            <Text style={styles.instagramGlyph}>{platMeta.icon}</Text>
+                            <Text style={styles.instagramBadgeText}>{platName}</Text>
+                        </View>
+                    </View>
+                    <Text style={styles.instagramTitle} numberOfLines={3}>
+                        {titleFirstLine}
+                    </Text>
+                    <Text style={styles.instagramAuthor} numberOfLines={1}>
+                        {authorName}
+                    </Text>
+                    {item.url ? (
+                        <Pressable
+                            onPress={handleOpenPost}
+                            style={({ pressed }) => [
+                                styles.instagramButton,
+                                pressed && styles.contentPressed,
+                            ]}
+                            accessibilityRole="link"
+                            accessibilityLabel={t('Open on Instagram')}
+                        >
+                            <Text style={styles.instagramButtonText}>{t('Open on Instagram')}</Text>
+                        </Pressable>
+                    ) : null}
+                </View>
+            ) : media.kind === 'player' ? (
                 // Grown to at least 200px tall while playing: at 320dp a 16:9 card is about 162px,
                 // and YouTube's terms require a viewport of at least 200x200. The player letterboxes
                 // inside it rather than the video being cropped.
@@ -398,37 +437,48 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
             )}
 
             {/* Title and permalink action. "Open on YouTube ↗" stays under every card, playing or
-                not: playing here is an extra, never the only way to reach the video. */}
-            <Pressable
-                disabled={!item.url}
-                onPress={item.url ? handleOpenPost : undefined}
-                style={({ pressed }) => [
-                    styles.contentPressable,
-                    item.url && pressed && styles.contentPressed,
-                ]}
-                accessibilityRole={item.url ? 'link' : undefined}
-                accessibilityLabel={item.url ? t('Open {post} on {platform}', { post: cardAccessibilityLabel, platform: platName }) : undefined}
-                accessibilityHint={item.url ? t('Opens external post in browser or app') : undefined}
-            >
-                <View style={styles.bodyWrap}>
-                    <Text style={styles.title} numberOfLines={3}>
-                        {item.title || t('View post on {platform}', { platform: platName })}
-                    </Text>
-                    {item.url ? (
-                        <View style={styles.footerLinkRow}>
-                            <Text style={styles.footerLinkText}>
-                                <Sentence text={t('Open on {platform} {arrow}', { platform: platName })} parts={{ arrow: <Text style={styles.arrowIcon}>↗</Text> }} />
+                not: playing here is an extra, never the only way to reach the video.
+                On Instagram cards, we drop the duplicate second link (keep one way out). */}
+            {!isInstagramFallback && (
+                isInstagram ? (
+                    <View style={styles.bodyWrap}>
+                        <Text style={styles.title} numberOfLines={3}>
+                            {titleFirstLine}
+                        </Text>
+                    </View>
+                ) : (
+                    <Pressable
+                        disabled={!item.url}
+                        onPress={item.url ? handleOpenPost : undefined}
+                        style={({ pressed }) => [
+                            styles.contentPressable,
+                            item.url && pressed && styles.contentPressed,
+                        ]}
+                        accessibilityRole={item.url ? 'link' : undefined}
+                        accessibilityLabel={item.url ? t('Open {post} on {platform}', { post: cardAccessibilityLabel, platform: platName }) : undefined}
+                        accessibilityHint={item.url ? t('Opens external post in browser or app') : undefined}
+                    >
+                        <View style={styles.bodyWrap}>
+                            <Text style={styles.title} numberOfLines={3}>
+                                {item.title || t('View post on {platform}', { platform: platName })}
                             </Text>
+                            {item.url ? (
+                                <View style={styles.footerLinkRow}>
+                                    <Text style={styles.footerLinkText}>
+                                        <Sentence text={t('Open on {platform} {arrow}', { platform: platName })} parts={{ arrow: <Text style={styles.arrowIcon}>↗</Text> }} />
+                                    </Text>
+                                </View>
+                            ) : (
+                                <View style={styles.footerLinkRow}>
+                                    <Text style={styles.footerLinkText}>
+                                        {t('🌱 Daily Reflection')}
+                                    </Text>
+                                </View>
+                            )}
                         </View>
-                    ) : (
-                        <View style={styles.footerLinkRow}>
-                            <Text style={styles.footerLinkText}>
-                                {t('🌱 Daily Reflection')}
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            </Pressable>
+                    </Pressable>
+                )
+            )}
         </View>
     );
 }
@@ -766,5 +816,61 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
         },
         arrowIcon: {
             fontSize: 13,
+        },
+        instagramCardBody: {
+            padding: 14,
+            gap: 10,
+        },
+        instagramBadgeRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        instagramBadge: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: colors.surface.subtle,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            borderRadius: 8,
+            paddingVertical: 4,
+            paddingHorizontal: 8,
+            gap: 5,
+        },
+        instagramGlyph: {
+            fontSize: 14,
+        },
+        instagramBadgeText: {
+            fontSize: 12,
+            fontWeight: '700',
+            color: colors.text.secondary,
+        },
+        instagramTitle: {
+            fontSize: 16,
+            fontWeight: '600',
+            lineHeight: 22,
+            color: colors.text.heading,
+        },
+        instagramAuthor: {
+            fontSize: 13,
+            fontWeight: '500',
+            color: colors.text.secondary,
+        },
+        instagramButton: {
+            minHeight: 44,
+            minWidth: 44,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 16,
+            paddingVertical: 10,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: colors.border.default,
+            backgroundColor: colors.surface.card,
+            marginTop: 4,
+        },
+        instagramButtonText: {
+            fontSize: 14,
+            fontWeight: '700',
+            color: colors.text.heading,
         },
     });

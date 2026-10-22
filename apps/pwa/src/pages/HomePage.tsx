@@ -90,6 +90,7 @@ export const WATCH_WORDS = {
     needsPlace: word('Share your area or type your town first, so we know where "here" is.'),
 } as const;
 const TOWN_LINK = 'min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-link cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+const HOME_CARD_IN_STYLE = '@keyframes home-card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }';
 /** The safety poll while the tab is in front (§5.2: the 120 s the header runs on the phone). */
 export const HOME_SAFETY_POLL_MS = 120_000;
 /** Back in front after this long, Home asks again. */
@@ -1573,7 +1574,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
 
     return (
         <div ref={pageRef} className="max-w-xl mx-auto px-4 pt-2 pb-6 min-w-0" data-testid="home-page">
-            {reveal && <style>{'@keyframes home-card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }'}</style>}
+            {reveal && <style>{HOME_CARD_IN_STYLE}</style>}
             <p className="sr-only" aria-live="polite" data-testid="home-live">{live}</p>
             {status === 'offline' && (
                 <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>

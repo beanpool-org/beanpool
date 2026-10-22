@@ -3,7 +3,7 @@ slug: lending-and-borrowing
 title: Lending and borrowing
 summary: The Tool shed keeps what you own and might lend, and who has it. List a thing in the Market, lend it outside BeanPool, and see what is out.
 help: What you own and might lend, and who has it. Open it from Tools in the Commons.
-related: posting, a-deal-step-by-step, my-deals, when-a-deal-goes-wrong
+related: posting, your-shop, a-deal-step-by-step, my-deals, when-a-deal-goes-wrong
 ---
 
 ## Opening the Tool shed
@@ -26,7 +26,7 @@ The Tool shed holds up to 100 things. Long notes take room too: when it is full,
 
 ## Lending it through BeanPool
 
-Open a thing and tap **List in your shop**. On the phone, pick a fee first: **Free**, **Beans per day**, **Beans per week** or **A fixed number of Beans** (where Beans are off, it is free), then tap **Go on to post**. The Offer form opens with the thing's name, photo and how you lend it. Check it and tap **Post**. Nothing is posted before that, and if your community asks for a profile photo first, the form says so.
+Open a thing and tap **List in your shop**. On the phone, pick a fee first: **Free**, **Beans per day**, **Beans per week** or **A fixed number of Beans** (where Beans are off, it is free), then tap **Go on to post**. **Put this in your shop** is ticked there unless your shop is closed for now (see "Your Shop"). The Offer form opens with the thing's name, photo and how you lend it. Check it and tap **Post**. Nothing is posted before that, and if your community asks for a profile photo first, the form says so.
 
 Then open the thing again, tap **Link it to your Offer** and pick the Offer you posted. Now the Tool shed knows it is in your shop.
 
@@ -36,11 +36,13 @@ Someone who wants to borrow it asks through the Offer, as for any Offer, and you
 
 **Take out of your shop** pauses its Offer. **Put back in your shop** puts the same Offer back in the Market.
 
+If your shop is closed for now, nothing goes back in it until you reopen it: **Put back in your shop** says so, and changes nothing. A thing you take out, lend or delete while it is closed keeps its Offer off the Market when you reopen.
+
 ## Lending it outside BeanPool
 
 Tap **Lent to someone outside BeanPool**. Write who has it and when it should be back: in 3, 7, 14 or 30 days, or no date. If it is in your shop, its Offer is paused while it is away.
 
-When it comes home, tap **It's back**. If it was in your shop, its Offer goes back in the Market.
+When it comes home, tap **It's back**. If it was in your shop, its Offer goes back in the Market. If your shop is closed for now, the thing comes home taken out of your shop instead: tap **Put back in your shop** once you reopen.
 
 On the phone, the Tool shed reminds you when something lent outside BeanPool is due back. You can turn that off in the Tool shed's **Settings** (the **…** at the top).
 

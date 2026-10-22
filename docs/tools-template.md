@@ -33,7 +33,9 @@ permission nothing of it leaves the device.
 permission grants one more: `photos` and `camera` (pick or take a photo, 800 px, kept on the device, by `ref`), `offerDoor`
 and `needDoor` (the composer, prefilled; nothing is posted until the member taps Post), `posts` (pause, resume and the
 status of the owner's own Offers, and `mine()` to list them, so a record can be linked to the Offer posted from its
-draft), `deals` (the owner's deals as seller or lender, a loan's `backAround` when known), `pricingGuide` (a hint from the
+draft; the status is the server's, asked each time; a pause is the owner's own, taken for an Offer live or already paused,
+so one a shop "closed for now" paused stays down when it reopens; a resume while its shop is closed rejects with core's
+`TOOL_SHOP_CLOSED`, which `isShopClosedRefusal` tells from no answer), `deals` (the owner's deals as seller or lender, a loan's `backAround` when known), `pricingGuide` (a hint from the
 community's guide, never a price set), `nodeCopy`, and `reminders` (which grants no function: the host schedules what
 `due()` says). `place` and `eventDoor` are not built yet: a phone route refuses a tool that asks for them.
 

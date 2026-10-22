@@ -3,7 +3,7 @@ slug: near-you
 title: Tìm kiếm thứ ở gần bạn
 summary: Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: e02b25e45f78d9fe
+source-hash: 2db25a661f8751ec
 ---
 
 ## Trên tab Chợ
@@ -16,7 +16,7 @@ source-hash: e02b25e45f78d9fe
 
 Trên điện thoại, các bài đăng không có vị trí luôn luôn được hiển thị. Trong ứng dụng web, việc chọn **Khoảng cách** sẽ ẩn các bài này đi, ngoại trừ các cuộc thăm dò ý kiến. Trên cộng đồng toàn cầu, ứng dụng web cũng ẩn chúng khi danh sách đang hiển thị các mục ở gần bạn (xem bên dưới).
 
-Nếu trình duyệt của bạn đã cho phép BeanPool sử dụng thông tin vị trí của bạn, bộ chọn vị trí có thể mở ngay tại nơi bạn đang đứng. Nếu chưa, nó sẽ mở tại một điểm cố định. Hãy kiểm tra ghim, hoặc nhấn nút hồng tâm hay nhấn lên bản đồ trước khi bạn nhấn **Áp dụng**. Trên cộng đồng toàn cầu, ứng dụng web sẽ gửi điểm trung tâm bạn đã chọn đến máy chủ cộng đồng, được làm tròn trong phạm vi khoảng 11 mét.
+Trong ứng dụng web, bộ chọn mở ra tại điểm trung tâm bạn đã chọn lần gần nhất, hoặc nếu chưa có thì tại vị trí của chính cộng đồng (một góc nhìn toàn thế giới nếu cộng đồng chưa có vị trí). Hãy kiểm tra ghim, hoặc nhấn vào bản đồ, kéo ghim hay nhấn nút hồng tâm để chọn điểm trung tâm, trước khi bạn nhấn **Áp dụng**. Ứng dụng chỉ xin vị trí của bạn khi bạn nhấn nút hồng tâm. Trên cộng đồng toàn cầu, ứng dụng web gửi điểm trung tâm bạn đã chọn đến cộng đồng, cho Chợ, Bản đồ và Trang chủ, được làm tròn đến khoảng một kilômét. Nó sẽ gần hơn khi bạn chọn bán kính nhỏ, hoặc khi một tìm kiếm bạn đã lưu vào Trang chủ tìm trong một khoảng cách nhỏ.
 
 Trên điện thoại, bộ chọn vị trí mở ra tại điểm trung tâm gần nhất bạn đã chọn, hoặc tại một điểm cố định, vì vậy hãy nhấn nút hồng tâm trước.
 
@@ -29,12 +29,12 @@ Bản đồ không có bộ lọc khoảng cách riêng. Hãy nhấn vào nút h
 Cộng đồng toàn cầu có các tin đăng từ khắp mọi nơi, vì vậy các tab **Chợ** và **Bản đồ** của ứng dụng web sẽ bắt đầu bằng những bài đăng ở gần bạn:
 
 - Khi đã chọn một **Khoảng cách** trên Chợ, cả hai màn hình sẽ hiển thị các tin đăng gần nhất trong phạm vi đó, gần nhất xếp trước. Bản đồ hiển thị tối đa 200 ghim.
-- Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong **Cài đặt**, dưới mục **Khu vực bạn**. Một dòng chữ phía trên danh sách của Chợ ghi **Nearest to your area first, within 250 km.** Nhấn **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi, và nhấn **Gần khu vực của bạn** để quay lại.
+- Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong **Cài đặt**, dưới mục **Khu vực bạn**. Một dòng chữ phía trên danh sách của Chợ ghi **Gần khu vực của bạn nhất trước, trong phạm vi 250 km.** Nhấn **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi, và nhấn **Gần khu vực của bạn** để quay lại.
 - Khi không có thiết lập nào ở trên, bạn sẽ thấy những bài đăng mới nhất từ mọi nơi, và mục **Xem những gì gần bạn** sẽ mở bộ chọn khoảng cách. Một dòng phía trên danh sách của Chợ cho biết bạn đang xem theo chế độ nào. Khi đã chọn **Khoảng cách**, dòng này không có nút: hãy mở **Khoảng cách** và nhấn **Đặt lại**. Khi đó bạn sẽ quay lại chế độ gần khu vực của bạn, hoặc nếu chưa thiết lập khu vực, bạn sẽ thấy bài đăng mới nhất từ mọi nơi.
 - Mỗi tin đăng hiển thị khoảng cách xa bao nhiêu, chẳng hạn như **📍 12 km**. Các tin đăng của chính bạn luôn luôn xuất hiện trên Bản đồ, và trên Chợ ở chế độ gần khu vực của bạn, dù chúng ở bất cứ đâu. Khi đã chọn **Khoảng cách**, Chợ chỉ hiển thị những tin nằm trong khoảng cách đó, bao gồm cả tin của bạn.
 - Trong khi danh sách đang hiển thị các mục ở gần bạn, các bài đăng không có vị trí sẽ bị bỏ qua. Một cuộc thăm dò từ người chưa thiết lập khu vực của họ là một trong số đó. Để xem chúng, hãy đặt lại **Khoảng cách** nếu bạn đã chọn, sau đó nhấn **Hiện tất cả mọi nơi**.
 - Dưới mục **Sự kiện**, danh sách không bao giờ bị cắt giảm theo khu vực của bạn hay theo **Khoảng cách**, như trước đây.
-- Nếu không có gì ở gần, Bản đồ sẽ thông báo điều đó, kèm theo nút **Hiện tất cả mọi nơi**. Sau đó nút **Gần khu vực của bạn** (hoặc **Near the place you picked**) sẽ đưa các tin gần nhất quay lại.
+- Nếu không có gì ở gần, Bản đồ sẽ thông báo điều đó, kèm theo nút **Hiện tất cả mọi nơi**. Sau đó nút **Gần khu vực của bạn** (hoặc **Gần nơi bạn đã chọn**) sẽ đưa các tin gần nhất quay lại.
 
 Tính năng tìm kiếm của ứng dụng web chỉ tìm qua các tin đăng đang hiển thị trên màn hình. Nút **Hiện tất cả mọi nơi** hiển thị các tin đăng mới nhất từ mọi nơi chứ không phải tất cả mọi tin đăng, vì vậy một tin đăng ở xa và không còn mới sẽ không xuất hiện trong kết quả tìm kiếm. Trong mọi cộng đồng khác, ứng dụng web không cắt giảm Chợ hay Bản đồ theo khu vực của bạn. Chúng hiển thị 50 tin đăng được thay đổi gần đây nhất và các tin của chính bạn, và tìm kiếm chỉ duyệt qua các tin đó.
 

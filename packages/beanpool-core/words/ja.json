@@ -712,5 +712,24 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "上部：豆のアイコンはコミュニティとガイド、? はこの画面の説明、スライダーは設定です。",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "画面上部：? は表示中の画面を説明します。「設定」にはガイド全体があります。",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "最初のカードを追加：タップしてホームに配置します。「完了」をタップすると、通常の5枚からホームが始まります。",
-  "Step {n} of {total}": "ステップ {n} / {total}"
+  "Step {n} of {total}": "ステップ {n} / {total}",
+  "Things you own and might lend, and who has them.": "持っていて貸すかもしれないものと、いま誰の手元にあるか。",
+  "Tool shed": "道具小屋",
+  "When something lent outside BeanPool is due back": "BeanPool外で貸したものの返却期限が来たとき",
+  "Your shop and tools": "お店と道具",
+  "Your shop, and things you can do on your own.": "あなたのお店と、ひとりでできること。",
+  "Your things, and what is out.": "持ち物と、貸し出し中のもの。",
+  "a drill": "ドリル",
+  "a ladder": "はしご",
+  "a tent": "テント",
+  "{name} is due back": "{name}の返却期限です",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "other": "{n}点 · 道具小屋にあります"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "other": "{n}点 · お店に{listed}点 · 貸出中{out}点"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "other": "{n}点 · 貸出中{out}点"
+  }
 }

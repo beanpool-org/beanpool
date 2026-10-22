@@ -4,7 +4,7 @@ title: Mesajlar
 summary: Sohbet başlatma, fotoğraf gönderme, yanıtlama, tepki verme, düzenleme, silme, sessize alma ve gizlilik.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Sohbetleriniz. Bire bir sohbetler uçtan uca şifrelidir. Açmak için bir sohbete dokunun veya bir ilandan başlatın.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Sohbetleriniz
@@ -23,11 +23,12 @@ Web uygulamasında bu, **Sohbet** sekmesidir. Üst kısımda **Tümü**, **İşl
 
 ## Sohbet başlatma
 
-- Bir ilandan: **Mesaj** seçeneğine ve kişinin adına dokunun.
+- Bir profilden: profilini açın ve **Mesaj**'a dokunun. Orada onu arkadaş olarak da ekleyebilirsiniz.
 - **Sohbet** içinden: kalem düğmesine dokunun, ardından kişiyi adına göre bulun. Dünya çapındaki toplulukta Yeni Mesaj, anlaşma yaptığınız kişileri ve arkadaşlarınızı listeler. Başka birini bulmak için adının en az 2 harfini yazın.
-- Arkadaşlarınızdan: **Sohbet**, ardından **Kişiler**, ardından **Arkadaşlar** yolunu izleyin ve bir adın yanındaki mesaj düğmesine dokunun.
+- Üye listesinden: **Sohbet**, ardından **Kişiler**'e gidin ve **Topluluk** ya da **Arkadaşlar** içinde bir üyenin adının yanındaki 💬 simgesine dokunun.
+- Bir ilandan: **Mesaj** seçeneğine ve kişinin adına dokunun.
 
-Web uygulamasında **✉️ Yeni Doğrudan Mesaj** seçeneğini veya bir ilandaki **💬 Mesaj** düğmesini kullanın. Arkadaşlarınız **Kişiler** sekmesi altındadır.
+Web uygulamasında profilindeki **Mesaj**'ı, **Kişiler** altındaki satırındaki 💬 simgesini, **✉️ Yeni Doğrudan Mesaj** seçeneğini veya bir ilandaki **💬 Mesaj** düğmesini kullanın.
 
 ## Gönderme
 

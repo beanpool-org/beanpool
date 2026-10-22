@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "در بالا: لوبیا نشان جامعه و راهنمای شماست، علامت ؟ این صفحه را توضیح می‌دهد و لغزنده‌ها تنظیمات هستند.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "در بالا: علامت ؟ صفحه‌ای را که در آن هستید توضیح می‌دهد؛ تنظیمات جایی است که کل راهنما قرار دارد.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "اولین کارت‌های خود را اضافه کنید: برای قرار دادن روی خانه روی یکی بزنید. یا انجام شد را بزنید تا خانه با پنج کارت معمول شروع شود.",
-  "Step {n} of {total}": "مرحله {n} از {total}"
+  "Step {n} of {total}": "مرحله {n} از {total}",
+  "Things you own and might lend, and who has them.": "چیزهایی که دارید و ممکن است قرض بدهید، و اینکه الان دست چه کسی است.",
+  "Tool shed": "انبار ابزار",
+  "When something lent outside BeanPool is due back": "وقتی قرار است چیزی که بیرون از BeanPool قرض داده شده برگردد",
+  "Your shop and tools": "فروشگاه و ابزارهای شما",
+  "Your shop, and things you can do on your own.": "فروشگاه شما، و کارهایی که می‌توانید خودتان انجام دهید.",
+  "Your things, and what is out.": "وسایل شما، و آنچه بیرون است.",
+  "a drill": "یک دریل",
+  "a ladder": "یک نردبان",
+  "a tent": "یک چادر",
+  "{name} is due back": "موعد بازگشت {name} است",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} وسیله · در انبار شما",
+    "other": "{n} وسیله · همه در انبار شما"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} وسیله · {listed} در فروشگاه شما · {out} بیرون",
+    "other": "{n} وسیله · {listed} در فروشگاه شما · {out} بیرون"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} وسیله · {out} بیرون",
+    "other": "{n} وسیله · {out} بیرون"
+  }
 }

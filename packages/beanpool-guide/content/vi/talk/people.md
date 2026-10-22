@@ -3,8 +3,8 @@ slug: people
 title: Mọi người và bạn bè
 summary: Tìm thành viên trong cộng đồng, kết bạn và bảo lãnh cho một người.
 related: messages, your-profile, joining, blocking
-help: Thành viên cộng đồng và bạn bè. Nhấn vào ai đó để xem hồ sơ, hoặc nhấn 💬 bên cạnh bạn bè để nhắn tin.
-source-hash: 7720f543f516d9dc
+help: Thành viên cộng đồng và bạn bè. Nhấn vào ai đó để xem hồ sơ, hoặc nhấn 💬 bên cạnh một thành viên để nhắn tin cho họ.
+source-hash: 44b66169497e9909
 ---
 
 ## Tìm kiếm mọi người
@@ -15,12 +15,12 @@ Nhấn vào **Trò chuyện**, sau đó chọn **Mọi người**. Trong ứng d
 - **Cộng đồng:** mọi thành viên. Tìm kiếm theo tên. Trên điện thoại, sắp xếp theo **Mới nhất**, **Tên**, **Bạn bè**, **Được tin cậy** hoặc **Hoạt động**. Trên cộng đồng toàn cầu, ứng dụng hiển thị các thành viên ở gần khu vực của bạn nhất: nhập ít nhất 2 chữ cái trong tên để tìm bất kỳ ai khác.
 - **Lời mời:** mời một người mới. Xem "Tham gia BeanPool". Nếu bạn chưa tham gia, nút này ghi **Đăng ký**. Khi có người yêu cầu tham gia cộng đồng của bạn, nút sẽ hiển thị số lượng và họ được liệt kê dưới mục **Muốn tham gia**. Trong ứng dụng web, nút này luôn là **🎟️ Lời mời**, không có số đếm và không có danh sách **Muốn tham gia**.
 
-Nhấn vào một người để xem hồ sơ của họ: đánh giá và bài đăng của họ, và trên điện thoại trong cộng đồng sử dụng Đậu, huy hiệu tin cậy và các giao dịch của họ. Xem "Hồ sơ của bạn".
+Nhấn vào một người để xem hồ sơ của họ: đánh giá và bài đăng của họ, và trên điện thoại trong cộng đồng sử dụng Đậu, huy hiệu tin cậy và các giao dịch của họ. Bạn có thể nhắn tin cho họ ngay từ hồ sơ bằng **Nhắn tin**, hoặc kết bạn với họ bằng **+ Kết bạn**. Xem "Hồ sơ của bạn".
 
 ## Bạn bè
 
-- Trong phần **Cộng đồng**, nhấn vào **+ Thêm** bên cạnh một cái tên. Nút này sẽ đổi thành **Đã thêm**. Nhấn vào **Đã thêm** để gỡ họ ra lại. Trong ứng dụng web, nút đổi thành **✓ Bạn bè**, nút này không thể nhấn: để gỡ ai đó, hãy dùng nút **Xóa** trong mục **Bạn bè**.
-- Trong phần **Bạn bè**, nhấn vào nút tin nhắn để bắt đầu cuộc trò chuyện, hoặc nút gỡ, sau đó chọn **Xóa**, để gỡ ai đó ra.
+- Trong phần **Cộng đồng**, nhấn 💬 để bắt đầu cuộc trò chuyện, hoặc nhấn vào **+ Thêm** bên cạnh một cái tên. Nút này sẽ đổi thành **Đã thêm**. Nhấn vào **Đã thêm** để gỡ họ ra lại. Trong ứng dụng web, nút đổi thành **✓ Bạn bè**, nút này không thể nhấn: để gỡ ai đó, hãy dùng nút **Xóa** trong mục **Bạn bè**. Bạn cũng có thể nhắn tin hoặc kết bạn với ai đó ngay từ hồ sơ của họ.
+- Trong phần **Bạn bè**, nhấn 💬 để bắt đầu cuộc trò chuyện, hoặc nút gỡ, sau đó chọn **Xóa**, để gỡ ai đó ra.
 - Khi ai đó thêm bạn, phần trên cùng của **Bạn bè** sẽ cho biết là ai, chẳng hạn như "Sam đã thêm bạn", kèm nút **Thêm lại**. Nhấn vào tên của họ để xem hồ sơ của họ trước. Không có thông báo nào. Dòng này sẽ biến mất khi bạn thêm lại họ, hoặc sau 30 ngày. Tối đa 20 người được hiển thị, sau đó là còn lại bao nhiêu người.
 - Bạn có thể thêm tối đa 100 người trong bất kỳ khoảng thời gian 24 giờ nào. Việc gỡ ai đó cũng được tính. Nếu bạn đạt đến giới hạn, ứng dụng sẽ thông báo như vậy và cho biết khi nào bạn có thể thêm người lại.
 - Bạn không thể thêm người mà bạn đã chặn: hãy bỏ chặn họ trước. Xem "Chặn một người".

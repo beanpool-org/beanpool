@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Membri della tua comunità. Tocca una persona per visualizzarne il profilo, Offerte, Richieste e badge.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "I membri della tua comunità e i tuoi amici. Tocca una persona per vedere il suo profilo, oppure tocca 💬 accanto a un membro per scrivere un messaggio.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Per i proprietari della comunità. Verificare le 12 parole, prendere il controllo o ripristinare il server dal telefono e la verifica automatica del telefono.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Il tuo negozio",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Una vetrina sul tuo account, per le Offerte che scegli, sotto un unico nome.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Le tue Offerte sotto un unico nome. Dagli un nome, indica che tipo di negozio è, chiudilo per ora oppure chiudilo.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

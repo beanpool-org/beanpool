@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "ऊपर: बीन आपका समुदाय और गाइड है, ? इस स्क्रीन को समझाता है, स्लाइडर सेटिंग्स हैं।",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "सबसे ऊपर: ? उस स्क्रीन को समझाता है जिस पर आप हैं; सेटिंग्स में पूरी गाइड मौजूद है।",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "अपने पहले कार्ड जोड़ें: होम पर रखने के लिए किसी एक पर टैप करें। या 'हो गया' पर टैप करें और होम सामान्य पाँच कार्डों के साथ शुरू होगा।",
-  "Step {n} of {total}": "चरण {n} / {total}"
+  "Step {n} of {total}": "चरण {n} / {total}",
+  "Things you own and might lend, and who has them.": "वे चीज़ें जो आपकी हैं और जिन्हें आप उधार दे सकते हैं, और वे किसके पास हैं।",
+  "Tool shed": "टूल शेड",
+  "When something lent outside BeanPool is due back": "जब BeanPool के बाहर उधार दी गई कोई चीज़ लौटानी हो",
+  "Your shop and tools": "आपकी दुकान और उपकरण",
+  "Your shop, and things you can do on your own.": "आपकी दुकान, और वे काम जो आप अकेले कर सकते हैं।",
+  "Your things, and what is out.": "आपकी चीज़ें, और जो बाहर गई हैं।",
+  "a drill": "एक ड्रिल",
+  "a ladder": "एक सीढ़ी",
+  "a tent": "एक तंबू",
+  "{name} is due back": "{name} की वापसी का समय है",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} चीज़ · आपके शेड में",
+    "other": "{n} चीज़ें · सब आपके शेड में"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} चीज़ · {listed} आपकी दुकान में · {out} बाहर",
+    "other": "{n} चीज़ें · {listed} आपकी दुकान में · {out} बाहर"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} चीज़ · {out} बाहर",
+    "other": "{n} चीज़ें · {out} बाहर"
+  }
 }

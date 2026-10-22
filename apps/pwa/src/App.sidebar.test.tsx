@@ -172,6 +172,44 @@ describe('the sidebar\'s Settings cog opens Settings where the member sees it', 
         expect(screen.queryByTestId('profile-overlay')).toBeNull();
     });
 
+    // Review (22 Oct): the sidebar's "?" can be tapped with a page open beside it, and the Help dialog's two ways into
+    // the guide opened Settings under that page, as the cog did.
+    it('the Help dialog\'s Search the guide, from a profile: Settings shows and the profile closes', async () => {
+        await landed();
+        fireEvent.click(profileButton());
+        await screen.findByTestId('profile-overlay');
+
+        fireEvent.click(within(sidebar()).getByTestId('sidebar-help'));
+        fireEvent.click(await screen.findByTestId('help-search'));
+        expect(await screen.findByTestId('settings-overlay')).toBeInTheDocument();
+        expect(screen.queryByTestId('profile-overlay')).toBeNull();
+        expect(screen.queryByTestId('help-dialog')).toBeNull();
+    });
+
+    it('the Help dialog\'s Read the guide page, from an enterprise\'s page: Settings shows and that page closes', async () => {
+        await landed();
+        fireEvent.click(within(sidebar()).getByRole('button', { name: /Commons/ }));
+        fireEvent.click(await screen.findByText('Open Treasury'));
+        await screen.findByTestId('treasury-overlay');
+
+        fireEvent.click(within(sidebar()).getByTestId('sidebar-help'));
+        fireEvent.click(await screen.findByTestId('help-read-page'));
+        expect(await screen.findByTestId('settings-overlay')).toBeInTheDocument();
+        expect(screen.queryByTestId('treasury-overlay')).toBeNull();
+        expect(screen.queryByTestId('help-dialog')).toBeNull();
+    });
+
+    it('the Help dialog\'s Search the guide, from a tool: Settings shows and the tool closes', async () => {
+        await landed();
+        fireEvent.click(screen.getByText('Open Tools'));
+        await screen.findByTestId('tools-overlay');
+
+        fireEvent.click(within(sidebar()).getByTestId('sidebar-help'));
+        fireEvent.click(await screen.findByTestId('help-search'));
+        expect(await screen.findByTestId('settings-overlay')).toBeInTheDocument();
+        expect(screen.queryByTestId('tools-overlay')).toBeNull();
+    });
+
     // Found checking the other pages over the tabs: a sidebar tab closed a profile and a tool, but left an enterprise's
     // page drawn over the tab it opened.
     it('a sidebar tab closes an enterprise\'s page, as it closes a profile', async () => {

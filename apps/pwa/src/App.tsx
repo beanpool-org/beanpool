@@ -266,6 +266,7 @@ export function App() {
     // The cog's, the sidebar's and the pill's: Settings as the member sees it. Opened, it closes a page over the tabs as a
     // tab does, or it opened under that page and nothing seemed to happen (tester, 23 Oct: from My profile the cog didn't
     // work, from Home it did); pressed only while Settings is what is on screen, so its tap closes only what is seen.
+    // The Help dialog's ways into the guide open it so too: the sidebar's "?" is tapped with a page open beside it.
     const settingsSeen = showSettings && !pageOver;
     const setSettingsFromCog = (open: boolean) => {
         if (open) closePagesOver();
@@ -1372,13 +1373,13 @@ export function App() {
                         setHelpOpen(false);
                         setSettingsGuidePage(helpWords.slug);
                         setSettingsInitialMode('guide');
-                        setShowSettings(true);
+                        setSettingsFromCog(true);
                     }}
                     onSearch={() => {
                         setHelpOpen(false);
                         setSettingsGuidePage(null);
                         setSettingsInitialMode('guide');
-                        setShowSettings(true);
+                        setSettingsFromCog(true);
                     }}
                     onTour={() => {
                         setHelpOpen(false);

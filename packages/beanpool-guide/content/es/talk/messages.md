@@ -4,7 +4,7 @@ title: Mensajes
 summary: Iniciar un chat, enviar fotos, responder, reaccionar, editar, eliminar, silenciar y qué es privado.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Tus chats. Un chat individual tiene cifrado de extremo a extremo. Toca un chat para abrirlo, o inicia uno desde una publicación o tus amistades.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Tus chats
@@ -23,11 +23,12 @@ En la aplicación web esta es la pestaña **Chat**. Enumera todos tus chats, inc
 
 ## Iniciar un chat
 
-- Desde una publicación: toca **Mensaje** y el nombre de la persona.
+- Desde un perfil: abre su perfil y toca **Mensaje**. Ahí también puedes agregarlo como amigo.
 - Desde **Charlas**: toca el botón del lápiz, luego busca a la persona por su nombre. En la comunidad mundial, Mensaje nuevo enumera a las personas con las que has comerciado y a tus amigos. Para encontrar a cualquier otra persona, escribe al menos 2 letras de su nombre.
-- Desde tus amigos: **Charlas**, luego **Personas**, luego **Amigos**, y toca el botón de mensaje junto a un nombre.
+- Desde la lista de miembros: **Charlas**, luego **Personas**, y toca 💬 junto al nombre de un miembro en **Comunidad** o **Amigos**.
+- Desde una publicación: toca **Mensaje** y el nombre de la persona.
 
-En la aplicación web, usa **✉️ Nuevo mensaje directo**, o el botón **💬 Mensaje** en una publicación. Tus amigos están bajo la pestaña **Personas**.
+En la aplicación web, usa **Mensaje** en su perfil, 💬 en su fila bajo **Personas**, **✉️ Nuevo mensaje directo**, o el botón **💬 Mensaje** en una publicación.
 
 ## Enviar
 

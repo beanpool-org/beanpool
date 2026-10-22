@@ -72,16 +72,20 @@ export async function keepChosen(
     return await keepToolPhoto(owner, tool, ref, drawn.dataUrl) ? { ref, width: drawn.width, height: drawn.height } : null;
 }
 
-/** What an <img> draws for a uri the host gave: a token read from the store (null until it is, or when it is gone), any other uri as it is. */
-export function useToolPhotoSrc(uri: string | null | undefined): string | null {
+/**
+ * What an <img> draws for a uri the host gave: a token read from the store (undefined until it is read, null when this
+ * browser has no such photo: one taken on another device, whose ref came with the server's copy of the document), any
+ * other uri as it is, and null for none.
+ */
+export function useToolPhotoSrc(uri: string | null | undefined): string | null | undefined {
     const token = uri ? parseToolPhotoToken(uri) : null;
-    const [src, setSrc] = useState<string | null>(() => (uri && !token ? uri : null));
+    const [src, setSrc] = useState<string | null | undefined>(() => (!uri ? null : token ? undefined : uri));
     useEffect(() => {
         if (!uri) { setSrc(null); return; }
         const named = parseToolPhotoToken(uri);
         if (!named) { setSrc(uri); return; }
         let gone = false;
-        setSrc(null);
+        setSrc(undefined);
         void readToolPhoto(named.owner, named.tool, named.ref).then((s) => { if (!gone) setSrc(s); });
         return () => { gone = true; };
     }, [uri]);

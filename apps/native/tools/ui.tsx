@@ -7,7 +7,7 @@
  *
  * Words: every prop a member reads is a string the tool made with t() (or the member's own text, shown as written).
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, TextInput, Image, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -77,10 +77,14 @@ export function ToolRow({ icon, image, title, wrap, state, onPress, a11y, testID
     const colors = useToolColors();
     const s = homeStyles(colors);
     const label = a11y ?? (state ? `${title}, ${state}` : title);
+    // A photo this phone hasn't (one taken on another device, its ref brought by the server's copy) fails to load: the emoji.
+    const [failed, setFailed] = useState<string | null>(null);
+    const photo = image && image !== failed ? image : null;
     const body = (
         <>
-            {image ? (
-                <Image source={{ uri: image }} style={[ui.thumb, { backgroundColor: colors.surface.subtle }]} accessibilityElementsHidden importantForAccessibility="no" />
+            {photo ? (
+                <Image source={{ uri: photo }} onError={() => setFailed(photo)} style={[ui.thumb, { backgroundColor: colors.surface.subtle }]}
+                    accessibilityElementsHidden importantForAccessibility="no" />
             ) : icon ? <Text style={ui.rowIcon} accessibilityElementsHidden importantForAccessibility="no">{icon}</Text> : null}
             <View style={s.rowText}>
                 <Text style={[s.rowLine, s.rowStrong]} numberOfLines={wrap ? undefined : 1}>{title}</Text>
@@ -259,8 +263,11 @@ export function ToolInput({ label, value, onChange, max, lines, numeric, placeho
 /** A photo the host keeps (host.photos.uri), as wide as the column and never taller than it is wide. */
 export function ToolPhoto({ uri, label, testID }: { uri: string; label: string; testID?: string }) {
     const colors = useToolColors();
+    // Not on this phone (taken on another device): no box, rather than an empty one.
+    const [failed, setFailed] = useState<string | null>(null);
+    if (failed === uri) return null;
     return (
-        <Image source={{ uri }} resizeMode="cover" accessible accessibilityLabel={label}
+        <Image source={{ uri }} onError={() => setFailed(uri)} resizeMode="cover" accessible accessibilityLabel={label}
             style={[ui.photo, { backgroundColor: colors.surface.subtle }]} testID={testID} />
     );
 }

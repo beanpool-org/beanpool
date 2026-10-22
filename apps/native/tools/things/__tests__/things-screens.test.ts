@@ -19,7 +19,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { act, createElement } from 'react';
+import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
 (globalThis as any).__DEV__ = false;
@@ -53,9 +53,17 @@ vi.mock('react-native', () => {
         if (typeof placeholderTextColor === 'string') attrs['data-placeholder-color'] = placeholderTextColor;
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
+    // As the platform's Image: a file that isn't on the phone (a photo taken on another device) fails to load, and says so.
+    function Image(props: Record<string, any>) {
+        const uri: unknown = props.source?.uri;
+        useEffect(() => {
+            if (typeof uri === 'string' && uri.startsWith('file://') && !fs.existsSync(decodeURI(uri.slice('file://'.length)))) props.onError?.({ nativeEvent: { error: 'no such file' } });
+        }, [uri]);
+        return el('img')(props);
+    }
     return {
         Platform: { OS: 'android', select: (o: Record<string, unknown>) => o.android ?? o.default },
-        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), Switch: el('button'), ActivityIndicator: el('div'), Image: el('img'),
+        View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'), Switch: el('button'), ActivityIndicator: el('div'), Image,
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {}, absoluteFillObject: {}, flatten: (s: unknown) => flat(s) },
         Alert: { alert: () => {} },
@@ -248,8 +256,8 @@ vi.mock('../index', async () => {
 
 import { DatabaseSync } from 'node:sqlite';
 import {
-    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, setLanguage, shedThings, toolDocBytes, toolLineText,
-    type Thing, type ThingsDoc,
+    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, setLanguage, shedThings, thingCategory, toolDocBytes,
+    toolLineText, type Thing, type ThingsDoc,
 } from '@beanpool/core';
 // The Tool shed's fixtures are never shipped: from core's sources, as the template's generic tests read them.
 import { FIXTURES as SOURCE_FIXTURES } from '../../../../../packages/beanpool-core/src/tools/things/fixtures';
@@ -535,6 +543,33 @@ describe('Your things', () => {
         expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { id: 'things', screen: 'loans' } });
         await click('thing-row-t-3');
         expect(nav.pushed.at(-1)).toEqual({ pathname: '/tool/[id]', params: { key: 't-3', id: 'things', screen: 'thing' } });
+    });
+
+    it("a photo that isn't on this phone (one taken on another device): its row has the thing's emoji, and no screen draws an empty box", async () => {
+        // Ladder's photo is on this phone; Drill's ref came with the server's copy, from the member's other device.
+        await keep(shed(thing('t-1', 'Drill', { photo: 'p-elsewhere' }), thing('t-2', 'Ladder')));
+        await open('edit', { key: 't-2' });
+        await click('edit-photo-pick');
+        await click('edit-save');
+        const ladder = toolPhotoUri(communityKey('https://mullum.example'), ME.publicKey, 'things', 'photo-1');
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('main');
+        expect(byTestId('thing-row-t-2')?.querySelector('img')?.getAttribute('data-src')).toBe(ladder);
+        expect(byTestId('thing-row-t-1')?.querySelector('img')).toBeNull();
+        expect(byTestId('thing-row-t-1')?.textContent).toContain(thingCategory('tools').emoji);
+        for (const [screen, photo] of [['thing', 'thing-photo'], ['edit', 'edit-photo']] as const) {
+            act(() => root.unmount());
+            root = createRoot(host);
+            await open(screen, { key: 't-1' });
+            expect(byTestId(screen === 'thing' ? 'thing-screen' : 'thing-edit-screen'), screen).not.toBeNull();
+            expect(byTestId(photo), screen).toBeNull();
+        }
+        // Its own photo still draws on its screen.
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('thing', { key: 't-2' });
+        expect(byTestId('thing-photo')?.getAttribute('data-src')).toBe(ladder);
     });
 
     it('a thing out on a BeanPool loan says so, from the deal; a filter with nothing in it says so', async () => {

@@ -48,9 +48,13 @@ export function ToolRow({ icon, image, title, wrap, state, onClick, testId }: {
     onClick?: () => void;
     testId?: string;
 }) {
+    // A photo this device hasn't (one taken on another, its ref brought by the server's copy): the icon instead.
+    const src = useToolPhotoSrc(image);
     const inner = (
         <>
-            {image ? <RowPhoto uri={image} /> : icon && <span aria-hidden="true" className="shrink-0 w-8 text-center text-xl leading-none">{icon}</span>}
+            {image && src !== null
+                ? <RowPhoto src={src} />
+                : icon && <span aria-hidden="true" className="shrink-0 w-8 text-center text-xl leading-none">{icon}</span>}
             <span className="min-w-0 flex-1">
                 <span className={`block min-w-0 break-words ${wrap ? '' : 'line-clamp-2'} text-[0.95rem] font-semibold text-nature-900 dark:text-white`}>{title}</span>
                 {state && <span className="block min-w-0 truncate text-xs text-nature-600 dark:text-nature-300">{state}</span>}
@@ -78,9 +82,8 @@ export function ToolField({ label, children }: { label: string; children: ReactN
     );
 }
 
-/** A row's photo: a small square, decorative (the row's words name it). */
-function RowPhoto({ uri }: { uri: string }) {
-    const src = useToolPhotoSrc(uri);
+/** A row's photo: a small square, decorative (the row's words name it); empty until it is read. */
+function RowPhoto({ src }: { src: string | undefined }) {
     return (
         <span aria-hidden="true" className="shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-nature-100 dark:bg-nature-800">
             {src && <img src={src} alt="" className="w-full h-full object-cover" />}
@@ -170,6 +173,8 @@ export function ToolInput({ label, value, onChange, max, lines, numeric, hint, e
 /** A photo the host keeps (host.photos.uri), as wide as the column and never taller than it is wide. */
 export function ToolPhoto({ uri, label, testId }: { uri: string; label: string; testId?: string }) {
     const src = useToolPhotoSrc(uri);
+    // Not on this device (taken on another one): no box, rather than an empty one.
+    if (src === null) return null;
     return (
         <div className="px-3 pt-3 min-w-0">
             <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-nature-100 dark:bg-nature-800">

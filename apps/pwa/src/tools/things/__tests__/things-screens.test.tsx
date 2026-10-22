@@ -14,7 +14,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
-    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, shedThings, toolDocBytes, type Thing, type ThingsDoc,
+    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, shedThings, thingCategory, toolDocBytes,
+    type Thing, type ThingsDoc,
 } from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../../pages/ToolsPage';
 import { TOOL_APPS } from '../../index';
@@ -311,6 +312,29 @@ describe('Your things', () => {
         await click('tools-back');
         await click('thing-row-t-3');
         expect(byTestId('thing-screen')).not.toBeNull();
+    });
+
+    it("a photo that isn't in this browser (one taken on another device): its row has the thing's emoji, and no screen draws an empty box", async () => {
+        // Ladder's photo is in this browser; Drill's ref came with the server's copy, from the member's other device.
+        await keep(shed(thing('t-1', 'Drill', { photo: 'p-elsewhere' }), thing('t-2', 'Ladder')));
+        await open('edit', 't-2');
+        await click('edit-photo-pick');
+        await click('edit-save');
+        cleanup();
+        await open('main');
+        await waitFor(() => expect(byTestId('thing-row-t-2')?.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/jpeg;base64,/));
+        expect(byTestId('thing-row-t-1')?.querySelector('img')).toBeNull();
+        expect(byTestId('thing-row-t-1')?.textContent).toBe(`${thingCategory('tools').emoji}DrillOn your shelf›`);
+        for (const [screenName, photo] of [['thing', 'thing-photo'], ['edit', 'edit-photo']] as const) {
+            cleanup();
+            await open(screenName, 't-1');
+            expect(byTestId(screenName === 'thing' ? 'thing-screen' : 'thing-edit-screen'), screenName).not.toBeNull();
+            expect(byTestId(photo), screenName).toBeNull();
+        }
+        // Its own photo still draws on its screen.
+        cleanup();
+        await open('thing', 't-2');
+        await waitFor(() => expect(byTestId('thing-photo')?.getAttribute('src')).toMatch(/^data:image\/jpeg;base64,/));
     });
 
     it(`Loans gives no count until the deals are known, and says when they couldn't be read: never "nothing out" unchecked`, async () => {

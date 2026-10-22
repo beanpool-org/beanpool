@@ -2202,7 +2202,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             aria-label={t('View enlarged photo: {title}', { title: previewPost.title })}
                             className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
                         >
-                            <img src={listPhotoUrl(previewPost.photos[0])} alt={t('thumb')} className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
+                            <img src={listPhotoUrl(previewPost.photos[0])} alt="" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
                         </button>
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">

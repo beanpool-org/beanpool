@@ -1,21 +1,28 @@
 /**
- * The signed requests' nonce store has a ceiling, and says "busy" when it is full (NB1 of #2038's deciding review,
- * settled by Fable 2026-10-22: scratch/fable-redo/verdict-identity-auth.md, "## 2. Auth hardening").
+ * The signed requests' nonce store is split in two regions, members' and strangers', each with a share per owner, and
+ * says "busy" past a share (NB1 of #2038's deciding review; re-decided by Fable 2026-10-22 after #2359's deciding review:
+ * scratch/fable-design/DESIGN-nonce-store-2-fable.md).
  *
- * Before it the store had no count bound: one address is held to ~18,000 live nonces by the gateway limiter, but a flood
- * rotating IPv6 /64s, one request each with a fresh keypair, spent ~5,200 nonces a second on a Mac, ~3 M held over the
- * 10-minute hold: past the 512 MB heap. Now a request that needs a new entry is refused 503 store_full with Retry-After
- * while the store is full, and no live nonce is ever forgotten to make room (that would let its request be replayed).
+ * Before the split one cap held every signer's nonces together, refused by count alone, so about 15 addresses minting
+ * fresh keys kept it full and every member's signed request and /ws was refused 503 (measured on 235d707f). Now a key
+ * that acts here (isNodeMember or isLiveVisitor) spends from the members' region, 3,000 live nonces a key and 250,000
+ * together; any other verified key from the strangers', 3,000 an address (IPv6 by its /64) and 100,000 together. A
+ * replay of a live nonce is still 403, and no live nonce is ever forgotten to make room.
  *
- *  1. The verifier, with a store of its own capped at 3 (through the constructor; the production cap is not touched):
- *     three new nonces are spent; the fourth is refused 503 store_full, 60 seconds, and stores nothing; neither does a
- *     flood of new ones; a replay of a live one is still 403, not busy; a forged request keeps its own 403; a route that
- *     spends no nonce is not refused; once the three have expired, the next request's sweep makes room. The default
- *     store holds 250,000.
- *  2. The security line: one on the first refusal, then at most one an hour however many are refused.
- *  3. Over HTTPS, the real middleware and the process's own store (its cap lowered with setMaxForTests, put back after):
- *     503 with Retry-After: 60 and code store_full; a replay of a live nonce still 403; a /ws connect token with a new
- *     nonce is turned away 503 (not 401, not opened); with room again, the refused request is accepted.
+ *  1. The store (limits members 4, strangers 3, key 2, address 2): each owner held to its share, each region to its
+ *     ceiling, the counts exact through expiry and re-spends; the default limits; each refusal in pressure().
+ *  2. The verifier, with stores of its own: the three sentences, Retry-After 60, the refusal's scope and signer; a
+ *     replay 403 and a forgery 403 with every region full; a route that spends no nonce never refused; a caller with no
+ *     client held to one address's share; a member's key never charged to its address. The security line, at most one
+ *     an hour per scope.
+ *  3. Over HTTPS, the real node and the gateway limiter on at its defaults, attackers sent as X-Forwarded-For from
+ *     loopback: 15 addresses with fresh keys fill the strangers' region, and a member on its own address still writes,
+ *     reads, reads publicly and opens /ws; a stranger's public read answers as unsigned and its /ws opens as unsigned.
+ *  4. One member key held to its own share while another member on the same address goes on; its refusals are charged
+ *     to its own bucket, never the address's.
+ *  5. The members' region full: a member is refused "very busy", its public read answered as unsigned; strangers go on.
+ *  6. The alert (requests.flood): raised once with counts only, raised again when members are affected, cleared after
+ *     the 15-minute hold.
  *
  * Run: node scripts/run-server-suites.mjs with SERVER_SUITES_ONLY=test-nonce-store-cap
  */
@@ -34,9 +41,14 @@ import { db } from './db/db.js';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
-import {
-    NonceStore, requestNonces, SIGNATURE_FRESHNESS_MS, verifyMemberSignature, type SignedRequestParts,
-} from './engine/member-signature.js';
+import { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
+import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { checkServerAlerts, resetAlertsForTests, serverAlertsBanner, setAlertsClockForTests } from './services/alerts.js';
+// A namespace, not named imports: so this suite runs, and counts its failures, against a verifier without some of them.
+import * as sig from './engine/member-signature.js';
+import type { NonceLimits, NonceSpender, NonceStore as Store, SignedRequestParts } from './engine/member-signature.js';
+
+const { NonceStore, requestNonces, SIGNATURE_FRESHNESS_MS, verifyMemberSignature } = sig;
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -44,183 +56,429 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`  ✓ ${msg}`); } else console.log(`  ✗ ${msg}`);
 }
 
+/** A check that throws counts as one failure, and the next one still runs. */
+async function section(title: string, body: () => void | Promise<void>): Promise<void> {
+    console.log(`\n${title}`);
+    try {
+        await body();
+    } catch (e) {
+        assert(false, `ran to the end (threw: ${e instanceof Error ? e.message : String(e)})`);
+    }
+}
+
 const W = SIGNATURE_FRESHNESS_MS;
 const HOUR = 60 * 60_000;
+const MINUTE = 60_000;
+const SMALL: NonceLimits = { membersMax: 4, strangersMax: 3, keyMax: 2, addressMax: 2 };
+const KEY_SHARE_ERROR = 'Your app has sent more requests than this community holds at once. Please wait a minute and try again.';
+const MEMBERS_FULL_ERROR = 'This community is very busy right now. Please try again in a minute.';
+const STRANGERS_FULL_ERROR = 'This community is busy with new visitors right now. Please try again in a minute.';
 
-// A key that is a member of nothing: the middleware lets its signed POST through to the route, which answers 404.
-const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+interface Id { pubKeyHex: string; privateKey: crypto.KeyObject }
+
+function newKey(): Id {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    return { pubKeyHex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
+}
+
+let members = 0;
+/** A member of this node, as test-gateway-real-client makes one: a members row and an account. */
+function makeMember(): Id {
+    const id = newKey();
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pubKeyHex, `nonce-cap-${++members}`);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
+    return id;
+}
+
 const freshNonce = () => crypto.randomBytes(16).toString('hex');
 
-function sign(method: string, path: string, ts: number, nonce: string, body: string): string {
+function sign(id: Id, method: string, path: string, ts: number, nonce: string, body: string): string {
     const text = signedRequestText({ host: HOST, method, path, timestamp: String(ts), nonce, body });
-    return crypto.sign(null, Buffer.from(signedRequestBytes(text)), privateKey).toString('base64');
+    return crypto.sign(null, Buffer.from(signedRequestBytes(text)), id.privateKey).toString('base64');
 }
 
-function parts(nonce: string, ts: number, forged = false): SignedRequestParts {
+function parts(id: Id, nonce: string, ts: number, forged = false): SignedRequestParts {
     const body = '{"x":1}';
     return {
-        pubKeyHex, nonce, timestamp: String(ts), method: 'POST', path: '/api/messages/mark-read', body, signedFor: HOST,
-        signature: sign('POST', '/api/messages/mark-read', ts, nonce, forged ? '{"x":2}' : body),
+        pubKeyHex: id.pubKeyHex, nonce, timestamp: String(ts), method: 'POST', path: '/api/messages/mark-read', body, signedFor: HOST,
+        signature: sign(id, 'POST', '/api/messages/mark-read', ts, nonce, forged ? '{"x":2}' : body),
     };
 }
 
-const securityLines = (): number => (db.prepare(
-    `SELECT COUNT(*) AS n FROM system_logs WHERE level = 'SECURITY' AND message LIKE '%store_full%'`,
+const heapLength = (s: Store): number => (s as unknown as { heapExp: number[] }).heapExp.length;
+const ownersHeld = (s: Store): number => (s as unknown as { owners: Map<string, unknown> }).owners.size;
+const storeWith = (limits: Partial<NonceLimits>): Store => new NonceStore(W, limits);
+
+/** The security lines about a full share, by scope: a stranger's line says "not members here", a member's does not. */
+const securityLines = (scope: 'member' | 'stranger'): number => (db.prepare(
+    `SELECT COUNT(*) AS n FROM system_logs WHERE level = 'SECURITY' AND message LIKE '%store_full%' AND message ${scope === 'stranger' ? '' : 'NOT '}LIKE '%not members here%'`,
 ).get() as { n: number }).n;
 
-const heapLength = (s: NonceStore): number => (s as unknown as { heapExp: number[] }).heapExp.length;
-
 /** The verifier's answer, reduced to what these checks read. */
-function verify(store: NonceStore, p: SignedRequestParts, now: number, consumeNonce = true) {
-    const v = verifyMemberSignature(p, { consumeNonce, nonces: store, now });
+function verify(store: Store, p: SignedRequestParts, now: number, opts: { client?: string; consumeNonce?: boolean } = {}) {
+    const v = verifyMemberSignature(p, { consumeNonce: opts.consumeNonce ?? true, nonces: store, now, client: opts.client });
     return v.ok
-        ? { ok: true as const, status: 200, code: undefined, retryAfterSec: undefined, error: '' }
-        : { ok: false as const, status: v.status, code: v.code, retryAfterSec: (v as { retryAfterSec?: number }).retryAfterSec, error: v.error };
+        ? { ok: true as const, status: 200, code: undefined, retryAfterSec: undefined, error: '', scope: undefined, signer: undefined }
+        : { ok: false as const, status: v.status, code: v.code, retryAfterSec: v.retryAfterSec, error: v.error, scope: v.scope, signer: v.signer };
 }
 
-function verifierChecks(T0: number): void {
-    console.log('\n1. the verifier, with a store capped at 3');
-    const store = new NonceStore(W, 3);
-    const spent = [freshNonce(), freshNonce(), freshNonce()];
-    for (const [i, n] of spent.entries()) {
-        const v = verify(store, parts(n, T0), T0);
-        assert(v.ok, `new nonce ${i + 1} of 3 is spent (got ${v.status} ${v.error})`);
-    }
-    assert(store.size === 3, `the store holds 3 (${store.size})`);
+// ─── 1. The store ───────────────────────────────────────────────────────────────────────────
 
-    const t = T0 + 1000;
-    const fourth = freshNonce();
-    const busy = verify(store, parts(fourth, t), t);
-    assert(!busy.ok && busy.status === 503 && busy.code === 'store_full',
-        `a fourth new nonce is refused 503 store_full (got ${busy.status} ${busy.code ?? ''} ${busy.error})`);
-    assert(busy.retryAfterSec === 60, `with a 60-second wait (got ${busy.retryAfterSec})`);
-    assert(/busy/i.test(busy.error), `in words that say the community is busy ("${busy.error}")`);
-    assert(store.size === 3 && heapLength(store) === 3 && !store.isSpent(fourth, t),
-        `the refused nonce is not stored (map ${store.size}, heap ${heapLength(store)})`);
+function storeChecks(T0: number): void {
+    const s = storeWith(SMALL);
+    const a = (n: number): NonceSpender => ({ scope: 'stranger', owner: `a:${n}` });
+    const k = (n: number): NonceSpender => ({ scope: 'member', owner: `k:${n}` });
+    /** One spend: null when it was stored, else why there was no room (and then nothing is stored). */
+    const spend = (sp: NonceSpender, nonce = freshNonce(), at = T0): string | null => {
+        const why = s.room(sp, at);
+        if (why) return why;
+        return s.consume(nonce, at, at, sp) ? null : 'replay';
+    };
 
-    let refused = 0;
-    for (let i = 0; i < 200; i++) if (verify(store, parts(freshNonce(), t), t).status === 503) refused++;
-    assert(refused === 200 && store.size === 3 && heapLength(store) === 3,
-        `a flood of 200 more new nonces: all refused, nothing stored (${refused} refused, map ${store.size}, heap ${heapLength(store)})`);
+    assert(spend(a(1)) === null && spend(a(1)) === null, 'a:1 spends its share of 2');
+    const before = s.size;
+    assert(spend(a(1)) === 'owner' && s.size === before, `its third has no room (its own share) and stores nothing (size ${s.size})`);
+    assert(spend(a(2)) === null, 'a:2 spends 1: the strangers\' region holds its 3');
+    assert(spend(a(3)) === 'region', 'a:3 has no room: the region is full though a:3 has spent nothing');
+    assert(spend(k(1)) === null && spend(k(1)) === null, 'k:1 spends 2 with the strangers\' region full: members spend from their own');
+    assert(spend(k(1)) === 'owner', 'k:1\'s third has no room (its own share)');
+    assert(spend(k(2)) === null && spend(k(2)) === null, 'k:2 spends 2: the members\' region holds its 4');
+    assert(spend(k(3)) === 'region', 'k:3 has no room: the members\' region is full');
+    const c = s.counts();
+    assert(c.member.live === 4 && c.member.owners === 2 && c.stranger.live === 3 && c.stranger.owners === 2,
+        `counts: members 4 from 2 keys, strangers 3 from 2 addresses (${JSON.stringify(c)})`);
+    assert(s.size === 7 && heapLength(s) === 7, `the map and the heap hold one entry each per live nonce (map ${s.size}, heap ${heapLength(s)})`);
 
-    const replay = verify(store, parts(spent[0], t), t);
-    assert(!replay.ok && replay.status === 403 && /replay/i.test(replay.error),
-        `a replay of a live nonce is still 403 replay, not busy (got ${replay.status} ${replay.error})`);
-    assert(spent.every((n) => store.isSpent(n, t)), 'every live nonce is still spent: none was forgotten to make room');
+    const p = s.pressure();
+    assert(p.stranger.ownerAt === T0 && p.stranger.ownerRefusals === 1 && p.stranger.regionAt === T0 && p.stranger.regionRefusals === 1,
+        `pressure(): the strangers' refusals, one for an owner and one for the region, at their time (${JSON.stringify(p.stranger)})`);
+    assert(p.member.ownerAt === T0 && p.member.ownerRefusals === 1 && p.member.regionAt === T0 && p.member.regionRefusals === 1,
+        `pressure(): the members' refusals likewise (${JSON.stringify(p.member)})`);
+    assert(p.member.live === 4 && p.member.owners === 2 && p.stranger.live === 3 && p.stranger.owners === 2,
+        'pressure(): each region\'s count and owners at its last refusal');
 
-    const forged = verify(store, parts(freshNonce(), t, true), t);
-    assert(!forged.ok && forged.status === 403 && /signature/i.test(forged.error),
-        `a forged request keeps its own answer (got ${forged.status} ${forged.error})`);
+    // A nonce string re-spent after its expiry, by another owner, before any sweep popped it.
+    const t = T0 + W + 2;
+    const x = new NonceStore(W);
+    x.consume('same', T0, T0, a(1));
+    assert(x.consume('same', t, t, a(2)), 'a nonce re-spent after its expiry by another owner is accepted');
+    const xc = x.counts();
+    assert(xc.stranger.live === 1 && xc.stranger.owners === 1 && heapLength(x) === 1 && x.size === 1,
+        `it moved the counts to its new owner and left one heap pair (${JSON.stringify(xc)}, heap ${heapLength(x)})`);
 
-    const unspent = verify(store, parts(freshNonce(), t), t, false);
-    assert(unspent.ok, `a route that spends no nonce (the redeem routes) is not refused (got ${unspent.status} ${unspent.error})`);
+    s.prune(t);
+    const z = s.counts();
+    assert(z.member.live === 0 && z.member.owners === 0 && z.stranger.live === 0 && z.stranger.owners === 0,
+        `past the window every count is 0 (${JSON.stringify(z)})`);
+    assert(ownersHeld(s) === 0 && heapLength(s) === 0 && s.size === 0, `the owners, the heap and the map are empty (${ownersHeld(s)}, ${heapLength(s)}, ${s.size})`);
+    assert(spend(a(3), freshNonce(), t) === null && spend(k(3), freshNonce(), t) === null, 'and both regions have room again');
 
-    const later = T0 + W + 2; // past the three nonces' expiry (T0 + W + 1)
-    const v = verify(store, parts(fourth, later), later);
-    assert(v.ok, `once the three have expired, a new request is accepted (got ${v.status} ${v.error})`);
-    assert(store.size === 1 && store.isSpent(fourth, later), `the sweep freed the three expired ones (map ${store.size})`);
+    const limits = new NonceStore(W).limits;
+    assert(limits?.membersMax === 250_000 && limits.strangersMax === 100_000 && limits.keyMax === 3_000 && limits.addressMax === 3_000,
+        `the default limits: members 250,000, strangers 100,000, a key 3,000, an address 3,000 (${JSON.stringify(limits)})`);
+    const share = sig.nonceKeyShare;
+    assert(share?.(120) === 3_000 && share(600) === 15_000, `a key's share is 25 × the gateway's minute allowance, at least 3,000 (${share?.(120)}, ${share?.(600)})`);
 
+    // The default regions at their real size: strangers from 34 addresses fill 100,000; a member still has room.
     const big = new NonceStore(W);
-    for (let i = 0; i < 249_999; i++) big.consume(`d-${i}`, T0);
-    assert(!big.full(T0), 'the default store is not full at 249,999');
-    big.consume('d-last', T0);
-    assert(big.full(T0), 'and is full at 250,000');
-    assert(!big.full(T0 + W + 2), 'until they expire');
+    for (let i = 0; i < 100_000; i++) big.consume(`s-${i}`, T0, T0, a(Math.floor(i / 3_000)));
+    assert(big.room(a(0), T0) === 'owner', 'by default an address holds 3,000');
+    assert(big.room(a(99), T0) === 'region', 'and the strangers\' region 100,000 (34 addresses)');
+    assert(big.room(k(1), T0) === null, 'while a member still has room');
+    for (let i = 0; i < 250_000; i++) big.consume(`m-${i}`, T0, T0, k(Math.floor(i / 3_000)));
+    assert(big.room(k(0), T0) === 'owner', 'by default a key holds 3,000');
+    assert(big.room(k(999), T0) === 'region', 'and the members\' region 250,000 (84 keys)');
+    assert(big.room(k(999), T0 + W + 2) === null && big.room(a(99), T0 + W + 2) === null, 'until they expire');
 }
 
-function securityLineChecks(first: number, before: number): void {
-    console.log('\n2. the security line: at most one an hour');
-    assert(securityLines() === before + 1, `the first refusal wrote one line (${securityLines() - before})`);
-    /** One refusal at `at`, from a store of one. */
+// ─── 2. The verifier ────────────────────────────────────────────────────────────────────────
+
+function verifierChecks(T0: number, M: Id[]): void {
+    const s = storeWith(SMALL);
+    const t = T0 + 1000;
+    const okStranger = (client: string) => verify(s, parts(newKey(), freshNonce(), t), t, { client });
+
+    const s1 = [okStranger('c1'), okStranger('c1')];
+    assert(s1.every((v) => v.ok), `a stranger address spends its share of 2 (${s1.map((v) => v.status)})`);
+    const kept = parts(newKey(), freshNonce(), t);
+    const keptStatus = verify(s, kept, t, { client: 'c2' }).status;
+    const own = okStranger('c1');
+    assert(!own.ok && own.status === 503 && own.code === 'store_full' && own.retryAfterSec === 60,
+        `its third, with a fresh key, is 503 store_full, 60 s (got ${own.status} ${own.code ?? ''} ${own.retryAfterSec})`);
+    assert(own.error === STRANGERS_FULL_ERROR && own.scope === 'stranger', `in the strangers' words, scope stranger ("${own.error}", ${own.scope})`);
+    assert(keptStatus === 200, 'another address spends 1: the strangers\' region holds its 3');
+    const region = okStranger('c3');
+    assert(!region.ok && region.status === 503 && region.error === STRANGERS_FULL_ERROR,
+        `a third address is 503 in the same words: the strangers' region is full (got ${region.status} "${region.error}")`);
+
+    const m0 = [0, 1].map(() => verify(s, parts(M[0], freshNonce(), t), t, { client: 'c1' }));
+    assert(m0.every((v) => v.ok), `a member on that full address spends its share of 2: its key owns them, not the address (${m0.map((v) => v.status)})`);
+    const keyFull = verify(s, parts(M[0], freshNonce(), t), t, { client: 'c9' });
+    assert(!keyFull.ok && keyFull.status === 503 && keyFull.error === KEY_SHARE_ERROR && keyFull.retryAfterSec === 60,
+        `its third, from another address, is 503 in the words for its own app (got ${keyFull.status} "${keyFull.error}")`);
+    assert(keyFull.scope === 'member' && keyFull.signer === M[0].pubKeyHex, `with scope member and the signer (${keyFull.scope}, ${keyFull.signer?.slice(0, 8)})`);
+    const m1 = [0, 1].map(() => verify(s, parts(M[1], freshNonce(), t), t, { client: 'c9' }));
+    assert(m1.every((v) => v.ok), 'a second member spends 2: the members\' region holds its 4');
+    const busy = verify(s, parts(M[2], freshNonce(), t), t, { client: 'c9' });
+    assert(!busy.ok && busy.status === 503 && busy.error === MEMBERS_FULL_ERROR && busy.retryAfterSec === 60 && busy.scope === 'member',
+        `a third member is 503 "very busy": the members' region is full (got ${busy.status} "${busy.error}" ${busy.scope})`);
+
+    // Every region full now.
+    const replay = verify(s, kept, t, { client: 'c2' });
+    assert(!replay.ok && replay.status === 403 && /replay/i.test(replay.error), `a replay of a live nonce is still 403 replay, not busy (got ${replay.status} ${replay.error})`);
+    const memberNonce = freshNonce();
+    const s2 = storeWith(SMALL);
+    verify(s2, parts(M[0], memberNonce, t), t);
+    verify(s2, parts(M[0], freshNonce(), t), t);
+    const memberReplay = verify(s2, parts(M[0], memberNonce, t), t);
+    assert(!memberReplay.ok && memberReplay.status === 403, `a member's replay with its own share full is 403 too (got ${memberReplay.status})`);
+    const forged = verify(s, parts(newKey(), freshNonce(), t, true), t, { client: 'c4' });
+    assert(!forged.ok && forged.status === 403 && /signature/i.test(forged.error), `a forged request keeps its own answer (got ${forged.status} ${forged.error})`);
+    const unspent = verify(s, parts(newKey(), freshNonce(), t), t, { client: 'c4', consumeNonce: false });
+    assert(unspent.ok, `a route that spends no nonce (the redeem routes) is not refused (got ${unspent.status} ${unspent.error})`);
+    assert(s.size === 7, `none of these stored anything (size ${s.size})`);
+
+    const anon = storeWith(SMALL);
+    const noClient = [0, 1, 2].map(() => verify(anon, parts(newKey(), freshNonce(), t), t).status);
+    assert(noClient[0] === 200 && noClient[1] === 200 && noClient[2] === 503,
+        `a caller that passes no client is held to one address's share, every key together (${noClient.join(', ')})`);
+
+    const later = T0 + W + 2;
+    const again = verify(s, parts(newKey(), freshNonce(), later), later, { client: 'c3' });
+    assert(again.ok, `once the nonces have expired a stranger is accepted again (got ${again.status} ${again.error})`);
+}
+
+function securityLineChecks(first: number, before: { member: number; stranger: number }): void {
+    assert(securityLines('stranger') === before.stranger + 1 && securityLines('member') === before.member + 1,
+        `the first refusals wrote one line each for strangers and for members (${securityLines('stranger') - before.stranger}, ${securityLines('member') - before.member})`);
+    /** One stranger refusal at `at`, from a store whose address share is 1. */
     const trip = (at: number): number => {
-        const s = new NonceStore(W, 1);
-        verify(s, parts(freshNonce(), at), at);
-        return verify(s, parts(freshNonce(), at), at).status;
+        const s = storeWith({ ...SMALL, addressMax: 1 });
+        verify(s, parts(newKey(), freshNonce(), at), at, { client: 'z' });
+        return verify(s, parts(newKey(), freshNonce(), at), at, { client: 'z' }).status;
     };
-    const statuses = [first + 60_000, first + 30 * 60_000, first + HOUR - 1].map(trip);
-    assert(statuses.every((s) => s === 503), `refused within the hour (${statuses.join(', ')})`);
-    assert(securityLines() === before + 1, `no second line within the hour (${securityLines() - before})`);
+    const statuses = [first + MINUTE, first + 30 * MINUTE, first + HOUR - 1].map(trip);
+    assert(statuses.every((st) => st === 503), `refused within the hour (${statuses.join(', ')})`);
+    assert(securityLines('stranger') === before.stranger + 1, `no second strangers' line within the hour (${securityLines('stranger') - before.stranger})`);
     trip(first + HOUR);
-    assert(securityLines() === before + 2, `a second line an hour after the first (${securityLines() - before})`);
+    assert(securityLines('stranger') === before.stranger + 2, `a second one an hour after the first (${securityLines('stranger') - before.stranger})`);
     for (let i = 1; i <= 50; i++) trip(first + HOUR + i * 1000);
-    assert(securityLines() === before + 2, `50 more refusals in that hour write none (${securityLines() - before})`);
+    assert(securityLines('stranger') === before.stranger + 2, `50 more refusals in that hour write none (${securityLines('stranger') - before.stranger})`);
+    assert(securityLines('member') === before.member + 1, 'nor do they write a members\' line');
 }
 
-async function httpChecks(base: string): Promise<void> {
-    console.log('\n3. over HTTPS: the real middleware and the process\'s store');
-    const path = '/api/messages/mark-read';
-    const post = async (nonce: string) => {
-        const ts = Date.now();
-        const body = JSON.stringify({ pubkey: pubKeyHex, conversationId: 'test-conv' });
-        const res = await fetch(`${base}${path}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json', 'X-Public-Key': pubKeyHex, 'X-Timestamp': String(ts), 'X-Nonce': nonce,
-                [SIGNED_FOR_HEADER]: HOST, 'X-Signature': sign('POST', path, ts, nonce, body),
-            },
-            body,
+// ─── HTTPS ──────────────────────────────────────────────────────────────────────────────────
+
+let BASE = '';
+interface Answer { status: number; retryAfter: string | null; error?: string; code?: string }
+
+/** A request from `ip` (X-Forwarded-For from loopback, which the node trusts), signed by `id` when given. */
+async function request(id: Id | null, method: 'GET' | 'POST', path: string, ip: string, body = ''): Promise<Answer> {
+    const headers: Record<string, string> = { 'X-Forwarded-For': ip };
+    if (method === 'POST') headers['Content-Type'] = 'application/json';
+    if (id) {
+        const ts = Date.now(), nonce = freshNonce();
+        Object.assign(headers, {
+            'X-Public-Key': id.pubKeyHex, 'X-Timestamp': String(ts), 'X-Nonce': nonce, [SIGNED_FOR_HEADER]: HOST,
+            'X-Signature': sign(id, method, path, ts, nonce, body),
         });
-        let json: { error?: string; code?: string } = {};
-        try { json = await res.json(); } catch { /* no json */ }
-        return { status: res.status, retryAfter: res.headers.get('retry-after'), ...json };
-    };
-    const socket = (nonce: string) => new Promise<{ opened: boolean; status: number }>((resolve) => {
-        const ts = Date.now();
-        const sig = sign('WS', '/ws', ts, nonce, '');
-        const ws = new WebSocket(`${base.replace('https', 'wss')}/ws?pubkey=${pubKeyHex}&ts=${ts}&nonce=${nonce}`
-            + `&sig=${encodeURIComponent(sig)}&for=${HOST}&v=2`, { rejectUnauthorized: false });
+    }
+    const res = await fetch(`${BASE}${path}`, { method, headers, body: method === 'POST' ? body : undefined });
+    let json: { error?: string; code?: string } = {};
+    try { json = await res.json(); } catch { /* no json */ }
+    return { status: res.status, retryAfter: res.headers.get('retry-after'), error: json.error, code: json.code };
+}
+
+const WRITE_PATH = '/api/notices/seen';
+const WRITE_BODY = JSON.stringify({ ids: ['nonce-cap'] });
+const write = (id: Id, ip: string) => request(id, 'POST', WRITE_PATH, ip, WRITE_BODY);
+
+/** A /ws upgrade from `ip`, with a connect token signed by `id` (none when null). */
+function socket(id: Id | null, ip: string): Promise<{ opened: boolean; status: number }> {
+    return new Promise((resolve) => {
+        let query = '';
+        if (id) {
+            const ts = Date.now(), nonce = freshNonce();
+            query = `?pubkey=${id.pubKeyHex}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sign(id, 'WS', '/ws', ts, nonce, ''))}&for=${HOST}&v=2`;
+        }
+        const ws = new WebSocket(`${BASE.replace('https', 'wss')}/ws${query}`, { rejectUnauthorized: false, headers: { 'X-Forwarded-For': ip } });
         ws.on('open', () => { ws.close(); resolve({ opened: true, status: 101 }); });
         ws.on('unexpected-response', (_req, res) => { resolve({ opened: false, status: res.statusCode ?? 0 }); res.resume(); });
         ws.on('error', () => resolve({ opened: false, status: 0 }));
     });
+}
 
-    const first = await post(freshNonce());
-    assert(first.status === 404, `a signed request reaches the route (got ${first.status} ${first.error ?? ''})`);
+/** Every nonce forgotten (each expires within 10 minutes), the gateway's counts cleared: a check starts from nothing. */
+function freshNode(maxRequestsPerMinute = 120): void {
+    requestNonces.prune(Date.now() + 11 * MINUTE);
+    resetGatewayRateLimit();
+    updateGatewayConfig({ rateLimiting: { ...DEFAULT_GATEWAY_CONFIG.rateLimiting, enabled: true, maxRequestsPerMinute } });
+}
 
-    const lines = securityLines();
-    requestNonces.setMaxForTests(requestNonces.size + 2);
-    try {
-        const a = freshNonce();
-        const ra = await post(a);
-        const rb = await post(freshNonce());
-        assert(ra.status === 404 && rb.status === 404, `two more fill the store (got ${ra.status}, ${rb.status})`);
-        const held = requestNonces.size;
+const liveCounts = () => requestNonces.counts();
+const attacker = (n: number) => `198.51.100.${n}`;
 
-        const c = freshNonce();
-        const rc = await post(c);
-        assert(rc.status === 503 && rc.code === 'store_full', `a new nonce is refused 503 store_full (got ${rc.status} ${rc.code ?? ''} ${rc.error ?? ''})`);
-        assert(rc.retryAfter === '60', `with Retry-After: 60 (got ${rc.retryAfter})`);
-        assert(requestNonces.size === held && !requestNonces.isSpent(c), `and is not stored (store ${held} → ${requestNonces.size})`);
-
-        const replay = await post(a);
-        assert(replay.status === 403 && /replay/i.test(replay.error ?? ''), `a replay of a live nonce is still 403 (got ${replay.status} ${replay.error ?? ''})`);
-
-        const ws = await socket(freshNonce());
-        assert(!ws.opened && ws.status === 503, `a /ws connect token with a new nonce is turned away 503 (opened ${ws.opened}, status ${ws.status})`);
-        assert(requestNonces.size === held, `and stores nothing (store ${held} → ${requestNonces.size})`);
-        assert(securityLines() === lines + 1, `one security line for all of these (${securityLines() - lines})`);
-
-        requestNonces.setMaxForTests(null);
-        const again = await post(c);
-        assert(again.status === 404, `with room again, the refused request is accepted (got ${again.status} ${again.error ?? ''})`);
-    } finally {
-        requestNonces.setMaxForTests(null);
+async function fifteenAddressesCheck(): Promise<void> {
+    freshNode();
+    requestNonces.setLimitsForTests({ membersMax: 200, strangersMax: 300, keyMax: 20, addressMax: 30 });
+    const lines = securityLines('stranger');
+    const stored: number[] = [];
+    let firstRefused = 0, wrongRefusal = 0;
+    for (let n = 1; n <= 15; n++) {
+        let ok = 0;
+        for (let i = 0; i < 40; i++) {
+            const r = await write(newKey(), attacker(n));
+            if (r.status !== 503) { ok++; continue; }
+            if (i === 0) firstRefused++;
+            if (r.code !== 'store_full' || r.retryAfter !== '60' || r.error !== STRANGERS_FULL_ERROR) wrongRefusal++;
+        }
+        stored.push(ok);
     }
+    assert(stored.every((n) => n <= 30), `each address stored at most its share of 30 (${stored.join(' ')})`);
+    assert(liveCounts().stranger.live === 300, `the strangers' region holds its 300 (${liveCounts().stranger.live})`);
+    assert(firstRefused === 5, `addresses 11 to 15 were refused from their first request (${firstRefused})`);
+    assert(wrongRefusal === 0, `every refusal was 503 store_full, Retry-After 60, in the strangers' words (${wrongRefusal} not)`);
+
+    const member = makeMember();
+    const home = '203.0.113.7';
+    const w = await write(member, home);
+    assert(w.status === 200, `a member's signed write reaches its route (got ${w.status} ${w.error ?? ''})`);
+    const gated = await request(member, 'GET', '/api/members', home);
+    assert(gated.status === 200, `its gated read (/api/members) is 200 (got ${gated.status} ${gated.error ?? ''})`);
+    const health = await request(member, 'GET', '/api/community/health', home);
+    assert(health.status === 200, `its signed public read (/api/community/health) is 200 (got ${health.status})`);
+    const memberLive = liveCounts().member.live;
+    const ws = await socket(member, home);
+    assert(ws.opened, `its /ws opens (status ${ws.status})`);
+    assert(liveCounts().member.live === memberLive + 1, 'as a member\'s: its token was spent in the members\' region');
+
+    const sixteenth = attacker(16);
+    const strangerLive = liveCounts().stranger.live;
+    const pub = await request(newKey(), 'GET', '/api/community/health', sixteenth);
+    assert(pub.status === 200, `a stranger's signed public read is answered as unsigned, 200 (got ${pub.status} ${pub.error ?? ''})`);
+    const sw = await write(newKey(), sixteenth);
+    assert(sw.status === 503 && sw.code === 'store_full', `a stranger's signed write from a 16th address is 503 (got ${sw.status} ${sw.code ?? ''})`);
+    const sws = await socket(newKey(), sixteenth);
+    assert(sws.opened, `a stranger's /ws token opens as unsigned, not 503, not 401 (status ${sws.status})`);
+    assert(liveCounts().stranger.live === strangerLive, `none of the three stored a nonce (${strangerLive} → ${liveCounts().stranger.live})`);
+
+    requestNonces.prune(Date.now() + 11 * MINUTE);
+    const after = await write(newKey(), sixteenth);
+    assert(after.status !== 503, `once the nonces have expired the 16th address is accepted (got ${after.status})`);
+    assert(securityLines('stranger') === lines + 1, `one security line for all of it (${securityLines('stranger') - lines})`);
+}
+
+async function oneMemberKeyCheck(): Promise<{ A: Id }> {
+    freshNode(30);
+    requestNonces.setLimitsForTests({ membersMax: 250_000, strangersMax: 100_000, keyMax: 20, addressMax: 3_000 });
+    const lines = securityLines('member');
+    const A = makeMember(), B = makeMember();
+    const hall = '192.0.2.44';
+    const answers: Answer[] = [];
+    for (let i = 0; i < 25; i++) answers.push(await write(A, hall));
+    const ok = answers.filter((r) => r.status === 200).length;
+    const refused = answers.filter((r) => r.status === 503 && r.code === 'store_full' && r.retryAfter === '60' && r.error === KEY_SHARE_ERROR).length;
+    assert(ok === 20 && refused === 5, `member A's 25 writes: 20 reach the route, 5 are 503 in the words for its own app (${ok} ok, ${refused} refused; ${answers.map((r) => r.status).join(' ')})`);
+    const b = await write(B, hall);
+    assert(b.status === 200, `member B on the same address is accepted (got ${b.status} ${b.error ?? ''})`);
+    const wsA = await socket(A, hall);
+    assert(!wsA.opened && wsA.status === 503, `A's /ws is turned away 503, busy (opened ${wsA.opened}, status ${wsA.status})`);
+    const wsB = await socket(B, hall);
+    assert(wsB.opened, `B's /ws opens (status ${wsB.status})`);
+    const reads: number[] = [];
+    for (let i = 0; i < 31; i++) reads.push((await request(null, 'GET', '/api/version', hall)).status);
+    assert(reads.slice(0, 30).every((st) => st === 200) && reads[30] === 429,
+        `30 unsigned public reads from that address are 200 and the 31st 429: A's refusals were charged to A, not the address (${reads.join(' ')})`);
+    assert(securityLines('member') === lines + 1, `one members' security line (${securityLines('member') - lines})`);
+    const line = db.prepare(`SELECT message FROM system_logs WHERE level = 'SECURITY' AND message LIKE '%store_full%' ORDER BY rowid DESC LIMIT 1`).get() as { message: string } | undefined;
+    assert(!!line && line.message.includes(A.pubKeyHex.slice(0, 12)) && !line.message.includes(A.pubKeyHex.slice(0, 13)),
+        'which names the member\'s key by its first 12 characters only');
+    return { A };
+}
+
+async function membersRegionCheck(): Promise<void> {
+    freshNode();
+    requestNonces.setLimitsForTests({ membersMax: 40, strangersMax: 100_000, keyMax: 20, addressMax: 3_000 });
+    const C = makeMember(), D = makeMember(), E = makeMember();
+    let ok = 0;
+    for (let i = 0; i < 20; i++) if ((await write(C, '192.0.2.61')).status === 200) ok++;
+    for (let i = 0; i < 20; i++) if ((await write(D, '192.0.2.62')).status === 200) ok++;
+    assert(ok === 40 && liveCounts().member.live === 40, `two members fill the members' region of 40 (${ok} ok, ${liveCounts().member.live} live)`);
+    const e = await write(E, '192.0.2.63');
+    assert(e.status === 503 && e.error === MEMBERS_FULL_ERROR && e.retryAfter === '60', `a third member's write is 503 "very busy" (got ${e.status} "${e.error ?? ''}")`);
+    const pub = await request(E, 'GET', '/api/community/health', '192.0.2.63');
+    assert(pub.status === 200 && liveCounts().member.live === 40, `its signed public read is answered as unsigned, 200, nothing stored (got ${pub.status})`);
+    const ws = await socket(E, '192.0.2.63');
+    assert(!ws.opened && ws.status === 503, `its /ws is 503 (opened ${ws.opened}, status ${ws.status})`);
+    const stranger = await write(newKey(), '192.0.2.64');
+    assert(stranger.status !== 503, `a stranger is still accepted: its region is its own (got ${stranger.status})`);
+}
+
+// ─── 6. The alert ───────────────────────────────────────────────────────────────────────────
+
+const flood = (told: { key: string }[]) => told.filter((e) => e.key === 'requests.flood') as Array<{ kind: string; priority: number; detail: string }>;
+const ADDRESS_OR_KEY = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b|[0-9a-f]{12}/i;
+
+async function alertChecks(): Promise<void> {
+    resetAlertsForTests();
+    setAlertsClockForTests(0);
+    await section('3. HTTPS: 15 addresses with fresh keys fill the strangers\' region; members are not touched', fifteenAddressesCheck);
+    await section('6a. the alert, after the strangers\' region filled', async () => {
+        const told = flood(await checkServerAlerts());
+        assert(told.length === 1 && told[0].kind === 'raised' && told[0].priority === 3,
+            `requests.flood is raised once, priority 3 (${JSON.stringify(told.map((e) => [e.kind, e.priority]))})`);
+        const detail = told[0]?.detail ?? '';
+        assert(detail.includes('300') && detail.includes('10 addresses') && detail.includes('not affected'),
+            `its words count the region and its addresses and say members are not affected ("${detail}")`);
+        assert(!ADDRESS_OR_KEY.test(detail), 'and name no address and no key');
+        const banner = serverAlertsBanner().items.find((i) => i.key === 'requests.flood');
+        assert(banner?.title === 'signed requests turned away', `it is in the owners' banner (${banner?.title})`);
+        assert(flood(await checkServerAlerts()).length === 0, 'a second tick tells nothing');
+    });
+    await section('4. HTTPS: one member key is held to its own share; the next member goes on', oneMemberKeyCheck);
+    await section('6b. the alert, after a member key reached its share', async () => {
+        const told = flood(await checkServerAlerts());
+        assert(told.length === 1 && told[0].kind === 'raised' && told[0].priority === 4,
+            `requests.flood is told again at priority 4: members are affected (${JSON.stringify(told.map((e) => [e.kind, e.priority]))})`);
+        const detail = told[0]?.detail ?? '';
+        assert(/\b1 member's app\b/.test(detail) && !ADDRESS_OR_KEY.test(detail), `its words count 1 member and name no key ("${detail}")`);
+    });
+    await section('5. HTTPS: the members\' region full refuses members only', membersRegionCheck);
+    await section('6c. the alert, after the members\' region filled, and its end', async () => {
+        assert(flood(await checkServerAlerts()).length === 0, 'already told at priority 4: nothing more');
+        const detail = serverAlertsBanner().items.find((i) => i.key === 'requests.flood')?.detail ?? '';
+        assert(/Members' signed requests have filled their share/.test(detail) && /40 in flight from 2 keys/.test(detail),
+            `the banner's words now say the members' share is full ("${detail}")`);
+        requestNonces.prune(Date.now() + 11 * MINUTE);
+        setAlertsClockForTests(3 * MINUTE);
+        assert(flood(await checkServerAlerts()).length === 0, 'with nothing refused for 3 minutes, its end waits the 15-minute hold');
+        assert(!serverAlertsBanner().items.some((i) => i.key === 'requests.flood'), 'and it leaves the banner');
+        setAlertsClockForTests(19 * MINUTE);
+        const told = flood(await checkServerAlerts());
+        assert(told.length === 1 && told[0].kind === 'cleared', `15 minutes later it is told cleared (${JSON.stringify(told.map((e) => e.kind))})`);
+        setAlertsClockForTests(0);
+    });
 }
 
 async function main(): Promise<void> {
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
+    BASE = `https://127.0.0.1:${port}`;
 
-    // The verifier's checks run on a clock 4 hours back, so the hour the security line waits has passed by the time
-    // the HTTPS checks trip it on the real clock.
+    // The store's and the verifier's checks run on a clock 4 hours back, so the hour the security lines wait has passed
+    // by the time the HTTPS checks trip them on the real clock.
     const T0 = Date.now() - 4 * HOUR;
-    const before = securityLines();
-    verifierChecks(T0);
-    securityLineChecks(T0 + 1000, before); // the first refusal above is at T0 + 1 s
-    await httpChecks(`https://localhost:${port}`);
+    const M = [makeMember(), makeMember(), makeMember()];
+    await section('1. the store: shares per owner, a ceiling per region', () => storeChecks(T0));
+    const before = { member: securityLines('member'), stranger: securityLines('stranger') };
+    await section('2. the verifier: the sentences, the scope, replays and forgeries with every region full', () => verifierChecks(T0, M));
+    await section('2b. the security line: at most one an hour per scope', () => securityLineChecks(T0 + 1000, before));
+    try {
+        await alertChecks();
+    } finally {
+        try { requestNonces.setLimitsForTests(null); } catch { /* a store without limits to put back */ }
+    }
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

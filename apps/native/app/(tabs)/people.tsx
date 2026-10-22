@@ -1044,7 +1044,7 @@ export default function PeopleScreen() {
                                                 const conv = await createConversationApi('dm', [identity.publicKey, item.public_key], identity.publicKey);
                                                 router.push(`/chat/${conv.id}`);
                                             } catch (e: any) {
-                                                const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout/i.test(e.message);
+                                                const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
                                                 Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
                                             }
                                         }}

@@ -61,6 +61,7 @@ const data = vi.hoisted(() => ({
     addedFriends: [] as string[],
     blockedUsers: new Set<string>(),
     unblockedUsers: [] as string[],
+    unblockFails: false,
     conversationsCreated: [] as any[],
     createConvError: null as Error | null,
     trust: { tier: { name: 'Member', emoji: '🌱' }, risk: { band: 'green', headline: 'Good standing' } } as any,
@@ -94,6 +95,7 @@ vi.mock('../blocklist', () => ({
     BLOCKLIST_UPDATED_EVENT: 'beanpool_blocklist_updated',
     blockUser: vi.fn(async (target: string) => { data.blockedUsers.add(target); }),
     unblockUser: vi.fn(async (target: string) => {
+        if (data.unblockFails) return false;
         data.blockedUsers.delete(target);
         data.unblockedUsers.push(target);
         return true;
@@ -146,6 +148,7 @@ beforeEach(() => {
     data.addedFriends = [];
     data.blockedUsers.clear();
     data.unblockedUsers = [];
+    data.unblockFails = false;
     data.conversationsCreated = [];
     data.createConvError = null;
 });
@@ -250,10 +253,28 @@ describe('Phone public profile message and friend actions (S0)', () => {
         await settle();
 
         expect(data.unblockedUsers).toContain(KOFI);
+        expect(host.textContent).not.toContain('You blocked Kofi.');
+        expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent?.includes('Message'))).toBe(true);
     });
 
-    it('offline / refusal when tapping Message shows alert', async () => {
-        data.createConvError = new Error('You are off-grid. Please connect to a node first.');
+    it('an Unblock that did not happen keeps the blocked row', async () => {
+        data.blockedUsers.add(KOFI);
+        data.unblockFails = true;
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderProfile();
+
+        const unblockBtn = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Unblock'));
+        await act(async () => {
+            unblockBtn!.click();
+        });
+        await settle();
+
+        expect(host.textContent).toContain('You blocked Kofi.');
+        expect(Array.from(host.querySelectorAll('button')).some(b => b.textContent?.includes('Message'))).toBe(false);
+    });
+
+    const tapMessageFailing = async (err: Error) => {
+        data.createConvError = err;
         nav.params = { publicKey: KOFI, callsign: 'Kofi' };
         await renderProfile();
 
@@ -262,8 +283,31 @@ describe('Phone public profile message and friend actions (S0)', () => {
             msgBtn!.click();
         });
         await settle();
+    };
 
-        expect(alerts.said.some(s => s.includes('Connect to your community') || s.includes('off-grid'))).toBe(true);
+    it('offline when tapping Message: says to connect, opens nothing', async () => {
+        await tapMessageFailing(new Error('You are off-grid. Please connect to a node first.'));
+
+        expect(alerts.said.some(s => s.includes('Connect to your community to start a chat.'))).toBe(true);
+        expect(alerts.said.some(s => s.includes('off-grid'))).toBe(false);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('a request cut off by the 12 s limit reads as offline too', async () => {
+        const aborted = new Error('Aborted');
+        aborted.name = 'AbortError';
+        await tapMessageFailing(aborted);
+
+        expect(alerts.said.some(s => s.includes('Connect to your community to start a chat.'))).toBe(true);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it("a refusal is said in the node's words, never as offline", async () => {
+        await tapMessageFailing(new Error('New accounts can start a few new chats a day. Try again tomorrow.'));
+
+        expect(alerts.said.some(s => s.includes('New accounts can start a few new chats a day. Try again tomorrow.'))).toBe(true);
+        expect(alerts.said.some(s => s.includes('Connect to your community'))).toBe(false);
+        expect(nav.pushed).toEqual([]);
     });
 
     it('collaboration chemistry nudge uses DM creation handler with prefill instead of pubkey', async () => {

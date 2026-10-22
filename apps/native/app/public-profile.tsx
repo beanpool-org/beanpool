@@ -755,7 +755,7 @@ export default function PublicProfileScreen() {
         if (identity?.publicKey && pubKeyStr && !isSelf) {
             getFriendsLocal(identity.publicKey).then(friends => {
                 if (active && Array.isArray(friends)) {
-                    setIsFriend(friends.some(f => (f as any).publicKey === pubKeyStr || (f as any).public_key === pubKeyStr || (f as any).friend_pubkey === pubKeyStr));
+                    setIsFriend(friends.some(f => f.publicKey === pubKeyStr));
                 }
             }).catch(() => {});
         }
@@ -764,12 +764,9 @@ export default function PublicProfileScreen() {
 
     const handleUnblock = async () => {
         if (!pubKeyStr) return;
-        try {
-            await unblockUser(pubKeyStr);
-            setIsBlocked(false);
-        } catch {
-            // keep state
-        }
+        // unblockUser says false rather than throwing: the list is read back, so the row never shows an unblock that didn't happen.
+        await unblockUser(pubKeyStr);
+        isUserBlocked(pubKeyStr).then(setIsBlocked).catch(() => {});
     };
 
     const handleOpenDm = async (prefill?: string) => {
@@ -786,7 +783,7 @@ export default function PublicProfileScreen() {
                 router.push(`/chat/${conv.id}`);
             }
         } catch (e: any) {
-            const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout/i.test(e.message);
+            const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
             Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
         } finally {
             setIsMessaging(false);

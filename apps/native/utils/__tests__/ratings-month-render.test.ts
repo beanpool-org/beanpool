@@ -94,7 +94,7 @@ vi.mock('../db', () => ({
     updateMemberProfile: vi.fn(async () => undefined),
 }));
 
-vi.mock('../blocklist', () => ({ blockUser: vi.fn(async () => undefined) }));
+vi.mock('../blocklist', () => ({ blockUser: vi.fn(async () => undefined), unblockUser: vi.fn(async () => true), isUserBlocked: vi.fn(async () => false), BLOCKLIST_UPDATED_EVENT: 'blocklist_updated' }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null) }));
 vi.mock('../channels', () => ({ fetchPublicChannels: vi.fn(async () => []) }));
 vi.mock('../crypto', () => ({ buildSignedHeaders: vi.fn(async () => ({})) }));

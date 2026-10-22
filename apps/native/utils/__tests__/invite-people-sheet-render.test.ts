@@ -18,12 +18,13 @@ import { createRoot, type Root } from 'react-dom/client';
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', checkbox: 'checkbox' };
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, disabled } = props;
+        const { children, onPress, accessibilityLabel, accessibilityRole, disabled, placeholder } = props;
         const attrs: Record<string, unknown> = {};
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
         if (disabled) attrs['aria-disabled'] = 'true';
+        if (placeholder) attrs.placeholder = placeholder;
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
     };
     const FlatList = ({ data, renderItem, keyExtractor }: Record<string, any>) =>
@@ -193,5 +194,18 @@ describe('InvitePeopleSheet member statuses and accessibility', () => {
         // 4. Dave is invitable and selectable
         await press(daveBtn!);
         expect(text()).toContain('Invite 1 person');
+    });
+
+    it('uses the short placeholder "Search people" so it fits small screens', async () => {
+        await renderSheet({
+            isOpen: true,
+            groupId: 'g-test',
+            groupName: 'Test Group',
+            existing: new Set(),
+            myPubkey: ME,
+            onClose: () => {},
+        });
+        const input = host.querySelector('input');
+        expect(input?.getAttribute('placeholder')).toBe('Search people');
     });
 });

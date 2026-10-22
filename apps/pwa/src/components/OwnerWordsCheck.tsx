@@ -123,7 +123,7 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
                             spellCheck={false}
                             data-1p-ignore
                             data-lpignore="true"
-                            placeholder="word word word …"
+                            placeholder={t('word word word …')}
                             className="w-full min-h-[120px] p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-base leading-relaxed"
                         />
                         <div className="text-sm text-nature-600 dark:text-nature-300 leading-relaxed">{t('{n} of 12 words · {stays}', { n: count, stays: keyLineWords(COPY.stays) })}</div>

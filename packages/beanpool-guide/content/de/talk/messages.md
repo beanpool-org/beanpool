@@ -4,7 +4,7 @@ title: Nachrichten
 summary: Einen Chat starten, Fotos senden, antworten, reagieren, bearbeiten, löschen, stummschalten und Privatsphäre.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Deine Chats. Einzelchats sind Ende-zu-Ende verschlüsselt. Tippe auf einen Chat zum Öffnen oder auf + zum Starten.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Deine Chats
@@ -23,11 +23,12 @@ In der Web-App ist dies der Reiter **Chat**. Er listet alle deine Chats auf, auc
 
 ## Einen Chat starten
 
-- Aus einem Beitrag: Tippe auf **Nachricht** und den Namen der Person.
+- Aus einem Profil: Öffne das Profil der Person und tippe auf **Nachricht**. Dort kannst du sie auch als Freund hinzufügen.
 - Aus dem **Chat**: Tippe auf die Stift-Schaltfläche und suche die Person nach Namen. In der weltweiten Gemeinschaft listet „Neue Nachricht“ die Personen auf, mit denen du gehandelt hast, sowie deine Freunde. Um andere zu finden, gib mindestens 2 Buchstaben ihres Namens ein.
-- Aus deinen Freunden: **Chat**, dann **Personen**, dann **Freunde**, und tippe auf die Nachrichten-Schaltfläche neben einem Namen.
+- Aus der Mitgliederliste: **Chat**, dann **Personen**, und tippe auf 💬 neben dem Namen eines Mitglieds unter **Community** oder **Freunde**.
+- Aus einem Beitrag: Tippe auf **Nachricht** und den Namen der Person.
 
-Verwende in der Web-App **✉️ Neue Direktnachricht** oder die Schaltfläche **💬 Nachricht** an einem Beitrag. Deine Freunde befinden sich unter dem Reiter **Leute**.
+Verwende in der Web-App **Nachricht** im Profil der Person, 💬 in ihrer Zeile unter **Leute**, **✉️ Neue Direktnachricht** oder die Schaltfläche **💬 Nachricht** an einem Beitrag.
 
 ## Senden
 

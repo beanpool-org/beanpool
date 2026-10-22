@@ -4,7 +4,7 @@ title: Messages
 summary: Lancer une discussion, envoyer des photos, répondre, réagir, modifier, supprimer, mettre en sourdine et ce qui reste privé.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Vos discussions. Un échange individuel est chiffré de bout en bout. Touchez un échange pour l'ouvrir ou démarrez-en un depuis une annonce ou vos amis.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Vos discussions
@@ -23,11 +23,12 @@ Dans l'application web, il s'agit de l'onglet **Discussion**. Il regroupe toutes
 
 ## Démarrer une discussion
 
-- Depuis une annonce : touchez **Message** suivi du nom de la personne.
+- Depuis un profil : ouvrez son profil et touchez **Message**. Vous pouvez aussi l'y ajouter comme ami.
 - Depuis **Échanges** : touchez le bouton du crayon, puis trouvez la personne par son nom. Sur la communauté mondiale, Nouveau message liste les membres avec qui vous avez déjà conclu un accord ainsi que vos amis. Pour trouver n'importe qui d'autre, saisissez au moins 2 lettres de son nom.
-- Depuis vos amis : ouvrez **Échanges**, puis **Membres**, puis **Amis**, et touchez le bouton de message à côté d'un nom.
+- Depuis la liste des membres : ouvrez **Échanges**, puis **Membres**, et touchez 💬 à côté du nom d'un membre dans **Communauté** ou **Amis**.
+- Depuis une annonce : touchez **Message** suivi du nom de la personne.
 
-Dans l'application web, utilisez **✉️ Nouveau message direct**, ou le bouton **💬 Message** sur une publication. Vos amis figurent sous l'onglet **Membres**.
+Dans l'application web, utilisez **Message** sur son profil, 💬 sur sa ligne sous **Membres**, **✉️ Nouveau message direct**, ou le bouton **💬 Message** sur une publication.
 
 ## Envoyer un message
 

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/tr by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dükkânınız — BeanPool members' guide</title>
+    <meta name="description" content="Kendi hesabınızın bir vitrini: seçtiğiniz Teklifler için, tek bir ad altında.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Pazar</a></p>
+        <h1>Dükkânınız</h1>
+        <p class="lede">Kendi hesabınızın bir vitrini: seçtiğiniz Teklifler için, tek bir ad altında.</p>
+        <h2>Dükkân nedir</h2>
+        <p>Dükkânınız, kendi hesabınızın bir vitrinidir. İçine koyduğunuz Teklifleri, tek bir ad altında ve hakkında birkaç kelimeyle bir arada tutar. Bunlardan gelen Fasulyeler, her Teklifte olduğu gibi sizindir. Bir girişim değildir: onu başka kimse tutmaz ve Tekliflerinizin zaten göstermediği hiçbir şeyi göstermez.</p>
+        <p>Bulunduğunuz her toplulukta bir dükkânınız olur.</p>
+        <h2>Dükkânı açma</h2>
+        <p>Ana Sayfa'daki <strong>Dükkânın ve aletlerin</strong> kartından ya da <strong>Aletler</strong>'den <strong>Dükkânın</strong>'ı açın. Kartı Ana Sayfa'ya koymak için <strong>Ana Sayfayı düzenle</strong>'yi kullanın ve <strong>Dükkânın ve aletlerin</strong>'i ekleyin.</p>
+        <p><strong>Dükkânımı aç</strong>'a dokunun. Ona bir ad verene kadar adı sizden alınır: &quot;Ana dükkânı&quot;.</p>
+        <h2>Adı, türü ve sözleri</h2>
+        <p>Bunların her biri tek bir alandır. İstediğiniz sırayla doldurun ya da hiç doldurmayın:</p>
+        <ul>
+            <li><strong>Ad:</strong> en fazla 60 karakter. Yeniden sizin adınızla anılması için boş bırakın.</li>
+            <li><strong>Tür:</strong> on dörtten biri, örneğin <strong>Aletler ve ekipman</strong>, <strong>Onarım</strong> ya da <strong>Bahçeden veya çiftlikten yiyecek</strong>. Komşularınızın sizi bulmasına yardım eder ve gösterilen aletleri seçer. Başka hiçbir şeyi değiştirmez.</li>
+            <li><strong>Hakkında:</strong> ne olduğu, birkaç kelimeyle.</li>
+            <li><strong>Nasıl takas yaparım:</strong> nereden alınacağı ve eşyaların ne zaman döneceği.</li>
+        </ul>
+        <h2>İçine Teklif koyma</h2>
+        <p>Bir dükkâna yalnızca buradaki herkese açık kendi Teklifleriniz girer. Bir İhtiyaç ya da bir gruba veya tek bir kişiye yönelik bir Teklif dışarıda kalır.</p>
+        <ul>
+            <li><strong>Bir Teklifi düzenlerken:</strong> <strong>Bunu dükkânına koy</strong>'u işaretleyin ya da Teklifi çıkarmak için işareti kaldırın.</li>
+            <li><strong>Yayındaki Tekliflerimi ekle:</strong> Dükkânın ekranında, zaten yayında olan Teklifleri işaretleyin ve <strong>Dükkânıma koy</strong>'a dokunun.</li>
+            <li><strong>Bir aletten:</strong> bir aletten bir şey ilan ettiğinizde <strong>Bunu dükkânına koy</strong> işaretli gelir. Henüz dükkânınız yoksa o Teklifle birlikte açılır. Başlığını ya da sözlerini yeni Teklif formunda değiştirebilirsiniz ve yine de içeri girer. Onu tamamen değiştirirseniz ya da onun yerine başka bir şey paylaşırsanız dükkânınızın dışında yayınlanır ve uygulama size bunu söyler. İçine koymak için Teklifi açın, <strong>İlanı Düzenle</strong>'ye dokunun ve <strong>Bunu dükkânına koy</strong>'u işaretleyin.</li>
+        </ul>
+        <p>Haritadaki yeni Teklif formunda henüz işaret kutusu yok. Teklifi paylaşın, sonra düzenleme ekranından ya da Dükkânın ekranından içine koyun.</p>
+        <h2>Şimdilik kapatma</h2>
+        <p><strong>Şimdilik kapat</strong>'a dokunun. Ne zaman döneceğinizi söyleyebilirsiniz: bir hafta içinde, iki hafta içinde ya da bir ay içinde. Teklifleri Pazar'dan kalkar ve bekler. Kapalıyken içine hiçbir şey girmez ve Tekliflerinden hiçbiri tek başına yeniden yayına konamaz.</p>
+        <p>Hepsini geri koymak için <strong>Dükkânımı yeniden aç</strong>'a dokunun. Kendiniz duraklattığınız bir Teklif duraklatılmış kalır.</p>
+        <h2>Dükkânı kapatma</h2>
+        <p><strong>Dükkânımı kapat</strong>'a dokunun. Teklifleri Pazar'da sıradan Teklifler olarak kalır; <strong>Tekliflerini de sonlandır</strong>'ı seçerseniz onlar da sona erer. Özel alet listeleriniz telefonunuzda kalır. İstediğiniz zaman yeni bir dükkân açabilirsiniz.</p>
+        <p>Onun eşyalarından biri için bir takas istenmişken ya da sürüyorken dükkânı kapatamaz ve şimdilik de kapatamazsınız. Uygulama kaç takasın açık olduğunu söyler ve <strong>Takaslarım</strong>'a giden bir düğme sunar.</p>
+        <h2>Küresel toplulukta</h2>
+        <p>Bir dükkân küresel toplulukta da aynı şekilde çalışır. Henüz katılmamış biri dükkânın ne tür bir dükkân olduğunu ve içinde kaç eşya bulunduğunu görür; asla onun adını ya da sizin adınızı görmez.</p>
+        <h2>Web uygulamasında</h2>
+        <p>Web uygulaması henüz dükkânları göstermiyor.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>Teklif veya İhtiyaç paylaşma</strong><span>Yapabileceğiniz, verebileceğiniz bir şey veya aradığınız bir şeyi paylaşın.</span></a></li>
+            <li><a href="my-deals.html"><strong>Takaslarım</strong><span>Dahil olduğunuz her takas, yayındaki her ilanınız ve geçmiş takaslarınız için tek bir yer.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Pazarda gezinme</strong><span>Arama, filtreler ve mesafe ile Teklifleri ve İhtiyaçları bulun.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Tatil Modu</strong><span>Tatil Modu siz uzaktayken Tekliflerinizi gizler ve yeni talepleri duraklatır.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 6.</p>
+    </main>
+</body>
+</html>

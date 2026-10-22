@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Os membros da sua comunidade e seus amigos. Toque em alguém para ver o perfil ou em 💬 junto a um amigo para conversar.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Os membros da sua comunidade e seus amigos. Toque em alguém para ver o perfil ou em 💬 junto a um membro para enviar uma mensagem.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Para proprietários de comunidades. Como checar suas 12 palavras, assumir ou restaurar o servidor pelo celular e verificação automática pelo aparelho.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Sua loja",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Uma vitrine na sua própria conta, para as Ofertas que você escolher, sob um só nome.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Suas Ofertas sob um só nome. Dê um nome a ela, diga que tipo de loja é, feche por enquanto ou feche de vez.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

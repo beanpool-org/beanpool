@@ -2,10 +2,10 @@
   "_meta": {
     "language": "tr",
     "name": "Turkish",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, top-up 23 Oct core)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-23",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "fasulye",
@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "Yukarıda: fasulye topluluğun ve rehberdir, ? bu ekranı açıklar, sürgüler Ayarlar'dır.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "Üst kısımda: ? bulunduğun ekranı açıklar; Ayarlar ise tüm rehberin bulunduğu yerdir.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "İlk kartlarını ekle: birini Ana Sayfa'ya koymak için dokun. Veya Bitti'ye dokunursan Ana Sayfa her zamanki beş kartla başlar.",
-  "Step {n} of {total}": "{n} / {total}. adım"
+  "Step {n} of {total}": "{n} / {total}. adım",
+  "Things you own and might lend, and who has them.": "Sahip olduğun ve ödünç verebileceğin eşyalar, bir de kimde olduklarının listesi.",
+  "Tool shed": "Alet kulübesi",
+  "When something lent outside BeanPool is due back": "BeanPool dışında ödünç verilen bir şeyin geri verilme zamanı",
+  "Your shop and tools": "Dükkânın ve aletlerin",
+  "Your shop, and things you can do on your own.": "Dükkânın ve tek başına yapabileceğin şeyler.",
+  "Your things, and what is out.": "Eşyaların ve dışarıda olanlar.",
+  "a drill": "bir matkap",
+  "a ladder": "bir merdiven",
+  "a tent": "bir çadır",
+  "{name} is due back": "{name} geri verilmeli",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} eşya · kulübende",
+    "other": "{n} eşya · hepsi kulübende"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} eşya · {listed} dükkânında · {out} dışarıda",
+    "other": "{n} eşya · {listed} dükkânında · {out} dışarıda"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} eşya · {out} dışarıda",
+    "other": "{n} eşya · {out} dışarıda"
+  }
 }

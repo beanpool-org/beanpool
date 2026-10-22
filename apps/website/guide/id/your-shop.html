@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/id by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tokomu — BeanPool members' guide</title>
+    <meta name="description" content="Etalase di akunmu sendiri, untuk Penawaran yang kamu pilih, dalam satu nama.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Pasar</a></p>
+        <h1>Tokomu</h1>
+        <p class="lede">Etalase di akunmu sendiri, untuk Penawaran yang kamu pilih, dalam satu nama.</p>
+        <h2>Apa itu toko</h2>
+        <p>Tokomu adalah etalase di akunmu sendiri. Isinya Penawaran yang kamu masukkan, dalam satu nama, dengan beberapa kata tentangnya. Kacang dari Penawaran itu milikmu, seperti Penawaran lainnya. Toko bukan usaha: tidak ada orang lain yang mengurusnya, dan tidak menampilkan apa pun yang belum ditampilkan oleh Penawaranmu.</p>
+        <p>Kamu punya satu toko di setiap komunitas yang kamu ikuti.</p>
+        <h2>Membukanya</h2>
+        <p>Buka <strong>Tokomu</strong> dari kartu Beranda <strong>Tokomu dan peralatan</strong>, atau dari <strong>Peralatan</strong>. Untuk menaruh kartu itu di Beranda, gunakan <strong>Edit beranda</strong> dan tambahkan <strong>Tokomu dan peralatan</strong>.</p>
+        <p>Ketuk <strong>Buka tokoku</strong>. Sebelum kamu memberinya nama, toko itu dinamai menurut namamu: &quot;Toko Ana&quot;.</p>
+        <h2>Nama, jenis, dan deskripsinya</h2>
+        <p>Masing-masing adalah satu isian. Isi dalam urutan apa pun, atau tidak sama sekali:</p>
+        <ul>
+            <li><strong>Nama</strong>: maksimal 60 karakter. Kosongkan agar kembali dinamai menurut namamu.</li>
+            <li><strong>Jenis</strong>: salah satu dari empat belas, seperti <strong>Peralatan dan perlengkapan</strong>, <strong>Perbaikan</strong>, atau <strong>Makanan dari kebun atau pertanian</strong>. Ini membantu tetangga menemukanmu dan menentukan peralatan yang ditampilkan. Tidak mengubah hal lain.</li>
+            <li><strong>Tentang</strong>: apa ini, dalam beberapa kata.</li>
+            <li><strong>Cara saya bertransaksi</strong>: di mana mengambil barang, dan kapan barang kembali.</li>
+        </ul>
+        <h2>Memasukkan Penawaran ke dalamnya</h2>
+        <p>Hanya Penawaranmu sendiri yang untuk semua orang di sini yang bisa masuk ke toko. Permintaan, atau Penawaran untuk sebuah grup atau satu orang, tetap di luar.</p>
+        <ul>
+            <li><strong>Saat kamu mengedit Penawaran:</strong> centang <strong>Masukkan ini ke tokomu</strong>, atau hapus centangnya untuk mengeluarkan Penawaran itu.</li>
+            <li><strong>Tambahkan Penawaranku yang aktif:</strong> di Tokomu, centang Penawaran yang sudah kamu pasang lalu ketuk <strong>Masukkan ke tokoku</strong>.</li>
+            <li><strong>Dari sebuah alat:</strong> saat kamu mendaftarkan sesuatu dari sebuah alat, <strong>Masukkan ini ke tokomu</strong> sudah tercentang. Jika kamu belum punya toko, toko akan terbuka bersama Penawaran itu. Kamu bisa mengubah judul atau deskripsinya di formulir Penawaran baru dan Penawaran itu tetap masuk. Jika kamu mengubahnya sepenuhnya, atau memposting hal lain sebagai gantinya, Penawaran itu terpasang di luar tokomu dan aplikasi memberi tahumu. Untuk memasukkannya, buka Penawaran itu, ketuk <strong>Edit Postingan</strong> dan centang <strong>Masukkan ini ke tokomu</strong>.</li>
+        </ul>
+        <p>Formulir Penawaran baru di peta belum punya centang itu. Posting Penawarannya, lalu masukkan dari layar edit-nya atau dari Tokomu.</p>
+        <h2>Menutupnya untuk sementara</h2>
+        <p>Ketuk <strong>Tutup untuk sementara</strong>. Kamu bisa memberi tahu kapan kamu kembali: <strong>Dalam seminggu</strong>, <strong>Dalam dua minggu</strong>, atau <strong>Dalam sebulan</strong>. Penawarannya diturunkan dari Pasar dan menunggu. Tidak ada yang bisa dimasukkan selagi tutup, dan tidak ada Penawarannya yang bisa dipasang kembali sendiri-sendiri.</p>
+        <p>Ketuk <strong>Buka kembali tokoku</strong> untuk memasang semuanya kembali. Penawaran yang kamu jeda sendiri tetap dijeda.</p>
+        <h2>Menutupnya</h2>
+        <p>Ketuk <strong>Tutup tokoku</strong>. Penawarannya tetap di Pasar sebagai Penawaran biasa, atau ikut berakhir jika kamu memilih <strong>Akhiri juga Penawarannya</strong>. Daftar alat pribadimu tetap ada di ponselmu. Kamu bisa membuka toko baru kapan saja.</p>
+        <p>Kamu tidak bisa menutupnya, atau menutupnya untuk sementara, selama ada kesepakatan atas salah satu barangnya yang sedang diminta atau berjalan. Aplikasi memberi tahu berapa banyak kesepakatan yang masih terbuka, dengan tombol ke <strong>Kesepakatan Saya</strong>.</p>
+        <h2>Di komunitas global</h2>
+        <p>Toko bekerja sama di komunitas global. Orang yang belum bergabung melihat jenis toko itu dan berapa banyak barang di dalamnya, tidak pernah namanya atau namamu.</p>
+        <h2>Di aplikasi web</h2>
+        <p>Aplikasi web belum menampilkan toko.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>Memasang Penawaran atau Permintaan</strong><span>Tawarkan keahlian atau barang yang bisa kamu berikan, atau tulis hal yang kamu butuhkan.</span></a></li>
+            <li><a href="my-deals.html"><strong>Kesepakatanku</strong><span>Satu tempat untuk setiap transaksi yang sedang berlangsung, semua kirimanmu, dan riwayat transaksimu.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Menjelajahi pasar</strong><span>Cari Penawaran dan Permintaan dengan pencarian, filter, dan jarak.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Bepergian</strong><span>Mode Liburan menyembunyikan Penawaranmu dan menjeda permintaan baru saat kamu sedang bepergian.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 6.</p>
+    </main>
+</body>
+</html>

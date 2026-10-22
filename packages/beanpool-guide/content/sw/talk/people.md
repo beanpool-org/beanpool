@@ -3,8 +3,8 @@ slug: people
 title: Watu na marafiki
 summary: Tafuta wanachama wa jumuiya yako, ongeza marafiki, na mdhamini mtu.
 related: messages, your-profile, joining, blocking
-help: Wanachama wa jumuiya yako na marafiki. Gusa mtu kuona wasifu wake, au gusa 💬 karibu na rafiki kumtumia ujumbe.
-source-hash: 7720f543f516d9dc
+help: Wanachama wa jumuiya yako na marafiki zako. Gusa mtu kuona wasifu wake, au gusa 💬 karibu na mwanachama kumtumia ujumbe.
+source-hash: 44b66169497e9909
 ---
 
 ## Kutafuta watu
@@ -15,12 +15,12 @@ Gusa **Gumzo**, kisha **Watu**. Kwenye programu ya wavuti, gusa **Watu** katika 
 - **Jumuiya:** kila mwanachama. Tafuta kwa jina. Kwenye simu, panga kwa **Wapya zaidi**, **Jina**, **Marafiki**, **Wanaoaminika** au **Wanaoshiriki**. Kwenye jumuiya ya kimataifa huonyesha wanachama walio karibu zaidi na eneo lako: andika angalau herufi 2 za jina ili kumpata mtu mwingine yeyote.
 - **Mialiko:** mwalike mtu mpya. Tazama "Kujiunga na BeanPool". Ikiwa bado hujajiunga, kitufe hiki kinasomeka **Jisajili**. Wakati watu wameomba kujiunga na jumuiya yako, huonyesha wangapi, na wameorodheshwa chini ya **Wanataka kujiunga**. Kwenye programu ya wavuti kitufe hiki huwa daima ni **🎟️ Mialiko**, bila idadi na bila orodha ya **Wanataka kujiunga**.
 
-Gusa mtu kuona wasifu wake: maoni na machapisho yao, na, kwenye simu katika jumuiya inayotumia Maharagwe, beji yao ya uaminifu na miamala yao. Tazama "Wasifu wako".
+Gusa mtu kuona wasifu wake: maoni na machapisho yao, na, kwenye simu katika jumuiya inayotumia Maharagwe, beji yao ya uaminifu na miamala yao. Unaweza kumtumia ujumbe moja kwa moja kutoka kwenye wasifu wake kwa **Tuma ujumbe**, au kumwongeza kama rafiki kwa **+ Ongeza rafiki**. Tazama "Wasifu wako".
 
 ## Marafiki
 
-- Katika **Jumuiya**, gusa **+ Ongeza** kando ya jina. Inabadilika kuwa **Ameongezwa**. Gusa **Ameongezwa** ili kuwaondoa tena. Kwenye programu ya wavuti inabadilika kuwa **✓ Rafiki**, ambayo huwezi kuigusa: ili kumwondoa mtu, tumia **Ondoa** chini ya **Marafiki**.
-- Katika **Marafiki**, gusa kitufe cha ujumbe ili kuanzisha soga, au kitufe cha kuondoa, kisha **Ondoa**, ili kumwondoa mtu.
+- Katika **Jumuiya**, gusa 💬 kuanzisha gumzo, au gusa **+ Ongeza** kando ya jina. Inabadilika kuwa **Ameongezwa**. Gusa **Ameongezwa** ili kuwaondoa tena. Kwenye programu ya wavuti inabadilika kuwa **✓ Rafiki**, ambayo huwezi kuigusa: ili kumwondoa mtu, tumia **Ondoa** chini ya **Marafiki**. Unaweza pia kumtumia mtu ujumbe au kumwongeza kama rafiki moja kwa moja kutoka kwenye wasifu wake.
+- Katika **Marafiki**, gusa 💬 ili kuanzisha gumzo, au kitufe cha kuondoa, kisha **Ondoa**, ili kumwondoa mtu.
 - Mtu anapokuongeza, juu ya **Marafiki** inasema ni nani, kama vile "Sam amekuongeza", kukiwa na **Ongeza pia**. Gusa jina lao ili uone wasifu wao kwanza. Hakuna arifa. Mstari huo unaondoka unapowaongeza pia, au baada ya siku 30. Hadi 20 huonyeshwa, kisha wangapi zaidi.
 - Unaweza kuongeza hadi watu 100 katika saa 24 zozote. Kumwondoa mtu kunahesabiwa pia. Ukifikia kiwango hicho, programu inasema hivyo na lini unaweza kuongeza mtu tena.
 - Huwezi kumwongeza mtu uliyemzuia: kwanza acha kumzuia. Tazama "Kuzuia mtu".

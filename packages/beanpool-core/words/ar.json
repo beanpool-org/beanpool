@@ -882,5 +882,39 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "في الأعلى: حبة الفاصوليا هي مجتمعك والدليل، و? يشرح هذه الشاشة، وأشرطة التمرير هي الإعدادات.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "في الأعلى: ? يشرح الشاشة التي أنت فيها؛ والإعدادات هي المكان الذي يوجد فيه الدليل كاملاً.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "أضف بطاقاتك الأولى: اضغط على إحداها لوضعها في الرئيسية. أو اضغط على تم لتبدأ الرئيسية بالبطاقات الخمس المعتادة.",
-  "Step {n} of {total}": "الخطوة {n} من {total}"
+  "Step {n} of {total}": "الخطوة {n} من {total}",
+  "Things you own and might lend, and who has them.": "أشياء تملكها وقد تعيرها، ومن هي عنده.",
+  "Tool shed": "مخزن الأدوات",
+  "When something lent outside BeanPool is due back": "عند حلول موعد إرجاع شيء أُعير خارج BeanPool",
+  "Your shop and tools": "متجرك وأدواتك",
+  "Your shop, and things you can do on your own.": "متجرك، وأشياء يمكنك القيام بها بمفردك.",
+  "Your things, and what is out.": "أشياؤك، وما هو معار.",
+  "a drill": "مثقاب",
+  "a ladder": "سلّم",
+  "a tent": "خيمة",
+  "{name} is due back": "حان موعد إرجاع {name}",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "zero": "{n} أشياء · في مخزنك",
+    "one": "شيء واحد · في مخزنك",
+    "two": "شيئان · في مخزنك",
+    "few": "{n} أشياء · كلها في مخزنك",
+    "many": "{n} شيئًا · كلها في مخزنك",
+    "other": "{n} شيء · كلها في مخزنك"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "zero": "{n} أشياء · {listed} في متجرك · {out} معارة",
+    "one": "شيء واحد · {listed} في متجرك · {out} معارة",
+    "two": "شيئان · {listed} في متجرك · {out} معارة",
+    "few": "{n} أشياء · {listed} في متجرك · {out} معارة",
+    "many": "{n} شيئًا · {listed} في متجرك · {out} معارة",
+    "other": "{n} شيء · {listed} في متجرك · {out} معارة"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "zero": "{n} أشياء · {out} معارة",
+    "one": "شيء واحد · {out} معارة",
+    "two": "شيئان · {out} معارة",
+    "few": "{n} أشياء · {out} معارة",
+    "many": "{n} شيئًا · {out} معارة",
+    "other": "{n} شيء · {out} معارة"
+  }
 }

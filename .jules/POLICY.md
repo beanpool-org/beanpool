@@ -969,3 +969,38 @@ Note (#1819, Scout): closed because its exemption checks were vacuous: with the 
 - **Category:** CLAIM FALSE (see the Bolt `.find()` → `Map` rule above)
 - **Claim:** replacing `.find()` over a DM's `participants` with index checks makes the recent-DMs list "O(1)".
 - **Why not to re-file:** a DM has exactly 2 participants; `.find()` there is already O(2) and clearer. Bolt: do not micro-optimise fixed-size arrays.
+
+### 2026-10-23 — Pixel: dynamic label and hint on AreaPicker's "use my location" (#2375) — CLOSED, CLAIM FALSE (see #2172)
+- **Category:** CLAIM FALSE
+- **Claim:** the "use my location" button needs a spoken label that changes while busy, plus a hint.
+- **Why not to re-file:** it already has `accessibilityLabel={t(AREA_WORDS.useLocation)}` and `accessibilityState={{ busy }}` (AreaPicker.tsx ~147). The PR's new strings sat outside `AREA_WORDS` and the 25-language set, so they would read in English. Pixel: a new spoken string needs a real gap and goes through the screen's word table.
+
+### 2026-10-23 — Flow: loading indicator in OwnerWordsChecksPanel (#2376) — CLOSED, RE-FILE (see #1957, #2076, #2116)
+- **Category:** NO-OP UX
+- **Claim:** Settings → Backups' owner-words panel needs a loading state.
+- **Why not to re-file:** the panel renders nothing until its first read and hides on error or an older server, so a loader would flash and vanish; the PR's spinner was an emoji with English-only text. Flow: no loaders on panels that hide when there is nothing to show.
+
+### 2026-10-23 — Forge: poll vote status codes (#2377) — CLOSED, EMPTY
+- **Category:** EMPTY PR
+- **Claim:** the poll vote route now answers 404/403 instead of 400.
+- **Why not to re-file:** the PR changed only `.jules/forge.md`; no route code changed (`polls/vote` on main is unchanged). Forge: re-file only with the route diff and a test.
+
+### 2026-10-23 — Bolt: Map lookup in standby-health (#2378) — CLOSED, NO MEASURABLE WIN (see #745, #2171)
+- **Category:** CLAIM FALSE (see the Bolt `.find()` → `Map` rule above)
+- **Claim:** standby health labels become O(1) with a Map.
+- **Why not to re-file:** a node has one or two standbys, and the PR built the Map per call: no benefit, same results (test-standby-health identical on main and the PR). Bolt: measure a real cost at realistic sizes first.
+
+### 2026-10-23 — Shield: device-tied keychain options in LocalAuth (#2380) — CLOSED, NO-OP
+- **Category:** NO-OP
+- **Claim:** LocalAuth's secure-store writes should use device-tied options.
+- **Why not to re-file:** they already do: every LocalAuth write passes `keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY`, the same value as `identity.ts`'s `KEY_ITEM_OPTIONS`. Swapping the literal for the constant changes no stored item and no behaviour. Shield: check the value on main before claiming a weaker class.
+
+### 2026-10-23 — Palette: aria-label on the HelpDialog close button (#2383) — CLOSED, REDUNDANT
+- **Category:** NO-OP A11Y
+- **Claim:** the Help dialog's close button needs an aria-label.
+- **Why not to re-file:** the button shows the word "Close" (through t()); a different spoken name ("Close help dialog") is redundant and adds a string to translate. Palette: aria-labels only for symbol-only buttons (palette.md rule 1).
+
+### 2026-10-23 — Expo: first of repeated params in tool/[id].tsx, sixth filing (#2384) — CLOSED, DECIDED (#1753, #2073, #2118, #2174, #2343)
+- **Category:** DELIBERATE DECISION
+- **Claim:** `useLocalSearchParams` can return `string[]`, so take `[0]` on the tool screen.
+- **Why not to re-file:** a link that repeats a parameter is ambiguous and refused on purpose; the tool screen's senders (`tools/frame.tsx`, `tools/reminders.ts`) emit single values. Expo: this applies to EVERY screen; re-file only with a real link that produces the array AND Marty's decision.

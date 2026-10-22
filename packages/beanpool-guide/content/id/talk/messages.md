@@ -4,7 +4,7 @@ title: Pesan
 summary: Mulai obrolan, kirim foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Obrolanmu. Obrolan pribadi terenkripsi penuh. Ketuk obrolan untuk membukanya.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Obrolan milikmu
@@ -23,11 +23,12 @@ Di aplikasi web ini adalah tab **Obrolan**. Tab ini mencantumkan semua obrolanmu
 
 ## Memulai obrolan
 
-- Dari sebuah postingan: ketuk **Pesan** dan nama orang tersebut.
+- Dari profil: buka profil mereka dan ketuk **Kirim Pesan**. Di sana kamu juga bisa menambahkan mereka sebagai teman.
 - Dari **Obrolan**: ketuk tombol pensil, lalu temukan orang tersebut berdasarkan nama. Pada komunitas seluruh dunia, Pesan Baru mencantumkan orang-orang yang pernah bertransaksi denganmu dan teman-temanmu. Untuk menemukan orang lain, ketik setidaknya 2 huruf dari nama mereka.
-- Dari teman-temanmu: **Obrolan**, lalu **Orang**, kemudian **Teman**, dan ketuk tombol pesan di samping sebuah nama.
+- Dari daftar anggota: **Obrolan**, lalu **Orang**, dan ketuk 💬 di samping nama anggota di **Komunitas** atau **Teman**.
+- Dari sebuah postingan: ketuk **Pesan** dan nama orang tersebut.
 
-Di aplikasi web, gunakan **✉️ DM Baru**, atau tombol **💬 Pesan** pada sebuah postingan. Teman-temanmu berada di bawah tab **Orang**.
+Di aplikasi web, gunakan **Kirim Pesan** di profil mereka, 💬 di barisnya di bawah **Orang**, **✉️ DM Baru**, atau tombol **💬 Pesan** pada sebuah postingan.
 
 ## Mengirim pesan
 

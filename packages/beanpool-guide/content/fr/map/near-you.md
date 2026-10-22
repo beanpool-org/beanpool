@@ -3,7 +3,7 @@ slug: near-you
 title: Trouver près de chez vous
 summary: Afficher uniquement les annonces à une certaine distance de vous ou d'un lieu choisi.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: e02b25e45f78d9fe
+source-hash: 2db25a661f8751ec
 ---
 
 ## Dans l'onglet Marché
@@ -16,7 +16,7 @@ source-hash: e02b25e45f78d9fe
 
 Sur le téléphone, les publications sans localisation sont toujours affichées. Dans l'application web, choisir une **Distance** les masque, à l'exception des sondages. Sur la communauté globale, l'application web les exclut également lorsque la liste est centrée près de chez vous (voir ci-dessous).
 
-Si votre navigateur autorise déjà BeanPool à utiliser votre position, le sélecteur peut s'ouvrir sur l'endroit où vous vous trouvez. Sinon, il s'ouvre sur un point fixe. Vérifiez le repère, ou touchez le bouton de la cible ou la carte avant de toucher **Appliquer**. Sur la communauté globale, l'application web transmet le centre que vous avez choisi à la communauté, arrondi à environ 11 mètres près.
+Dans l'application web, le sélecteur s'ouvre sur le dernier centre que vous avez choisi, ou sinon sur le lieu de la communauté elle-même (une vue du monde si elle n'en a pas). Vérifiez le repère, ou touchez la carte, faites glisser le repère ou touchez le bouton de la cible pour choisir le centre, avant de toucher **Appliquer**. Elle ne demande votre position que lorsque vous touchez le bouton de la cible. Sur la communauté globale, l'application web transmet à la communauté le centre que vous avez choisi, pour le Marché, la Carte et l'Accueil, arrondi à environ un kilomètre. Il devient plus précis lorsque vous choisissez un petit rayon, ou lorsqu'une recherche enregistrée sur l'Accueil porte sur une courte distance.
 
 Sur le téléphone, le sélecteur s'ouvre sur le dernier centre que vous avez choisi, ou sur un point fixe ; touchez donc d'abord le bouton de la cible.
 

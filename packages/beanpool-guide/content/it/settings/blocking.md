@@ -4,7 +4,7 @@ title: Bloccare qualcuno
 summary: Nascondi i post e i messaggi di qualcuno e ripristinali in seguito se lo desideri.
 related: reporting, messages, privacy, getting-help
 help: Persone che hai bloccato. I loro post e messaggi sono nascosti; sblocca qualcuno qui.
-source-hash: be8515fdd8bc780e
+source-hash: 2fa23652f09ffb9b
 ---
 
 ## Come bloccare
@@ -58,5 +58,6 @@ La tua comunità applica quanto segue per i blocchi salvati per te. Oggi questo 
 
 - Apri **Impostazioni**. Sotto **NOTE LEGALI E PRIVACY**, tocca **Gestisci utenti bloccati**.
 - Tocca **Sblocca** accanto a un nome, o **Sblocca tutti**.
+- Nell'app per telefono puoi anche sbloccare una persona dal suo profilo. Sotto il nome compare "Hai bloccato" seguito dal nome. Tocca lì **Sblocca**.
 
 Nell'app web, il blocco e lo sblocco richiedono una connessione alla tua comunità. Senza connessione, l'app lo segnala e nulla cambia. Riprova quando sarai di nuovo online.

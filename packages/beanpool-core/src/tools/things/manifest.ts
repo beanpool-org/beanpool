@@ -2,7 +2,7 @@
  * The Tool shed manifest (scratch/tools/DESIGN-tool-template-fable.md §1.2, §3.1, slice T1.1):
  * what you own and might lend, and who has them. Pure data and pure functions.
  */
-import { word } from '../../words.js';
+import { word, wordn } from '../../words.js';
 import type { ToolScreenProps } from '../host.js';
 import {
     TOOL_LIMITS,
@@ -87,8 +87,9 @@ export function thingsHomeLines(doc: ThingsDoc, now: number): ToolLine[] {
     if (counts.out > 0) {
         return [
             {
-                key: word('{things} things · {out} out'),
-                values: { things: counts.things, out: counts.out },
+                key: wordn('{n} thing · {out} out', '{n} things · {out} out'),
+                n: counts.things,
+                values: { out: counts.out },
                 screen: 'loans',
             },
         ];
@@ -96,8 +97,8 @@ export function thingsHomeLines(doc: ThingsDoc, now: number): ToolLine[] {
 
     return [
         {
-            key: word('{things} things · all in your shed'),
-            values: { things: counts.things },
+            key: wordn('{n} thing · in your shed', '{n} things · all in your shed'),
+            n: counts.things,
             screen: 'main',
         },
     ];
@@ -143,10 +144,10 @@ export const THINGS: ToolManifest<ThingsDoc> = {
         maxBytes: TOOL_LIMITS.docBytes,
     },
     screens: ['main', 'thing', 'edit', 'loans'],
-    row: (d, now) => ({
-        key: word('{things} things · {listed} in your shop · {out} out'),
-        values: thingsCounts(d, now),
-    }),
+    row: (d, now) => {
+        const { things, listed, out } = thingsCounts(d, now);
+        return { key: wordn('{n} thing · {listed} in your shop · {out} out', '{n} things · {listed} in your shop · {out} out'), n: things, values: { listed, out } };
+    },
     examples: [word('a drill'), word('a ladder'), word('a tent')],
     guide: 'lending-and-borrowing',
     homeCard: {

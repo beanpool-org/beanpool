@@ -241,7 +241,7 @@ export interface PluralWord {
  * extractor collects it as one plural entry, like a `tn()` call), and `tn(n, w.one, w.other)` writes it where it is shown.
  */
 export function wordn<A extends string, B extends string>(one: A & Sentence<A>, other: B & Sentence<B>): PluralWord {
-    return { one: one as WordKey, other: other as WordKey };
+    return { one: wordKey(one) as WordKey, other: wordKey(other) as WordKey };
 }
 
 // ── Dates and numbers ──────────────────────────────────────────────────────────────────────────────────────────

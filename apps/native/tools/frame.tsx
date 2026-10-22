@@ -21,7 +21,7 @@ import { View, Text, Pressable, Modal, ScrollView, Switch, StyleSheet, Linking, 
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t, type ToolLine, type ToolManifest } from '@beanpool/core';
+import { t, toolLineText, type ToolLine, type ToolManifest } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
 import { HOME_TARGET_DP, HomeLink, HomeRow, homeStyles } from '../components/home/HomeParts';
 import { editHomeStyles } from '../components/home/EditHomeSheet';
@@ -365,7 +365,7 @@ export function ToolHomeBody({ tool, owner, colors, now }: { tool: PhoneTool; ow
     return (
         <View testID={`tool-home-${manifest.id}`}>
             {lines.map((line, i) => (
-                <HomeRow key={i} text={t(line.key, line.values)} a11y={t(line.key, line.values)} colors={colors} lines={2}
+                <HomeRow key={i} text={toolLineText(line)} a11y={toolLineText(line)} colors={colors} lines={2}
                     onPress={() => openTool(manifest.id, line.screen && manifest.screens.includes(line.screen) ? line.screen : undefined)} />
             ))}
             <HomeLink id={`tool-home-${manifest.id}-open`} testID={`tool-home-${manifest.id}-open`} text={t('Open {tool}', { tool: name })} a11y={t('Open {tool}', { tool: name })} colors={colors} onPress={() => openTool(manifest.id)} />

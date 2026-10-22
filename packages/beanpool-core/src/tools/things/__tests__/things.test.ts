@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { pluralKey, setLanguage } from '../../../words.js';
 import { toolDocBytes, toolFixtureProblems, toolManifestProblems } from '../../check.js';
+import { toolLineText } from '../../line.js';
 import {
     THINGS_DOC_VERSION,
     THINGS_LEND_TERMS_CHARS,
@@ -394,7 +396,7 @@ describe('unread items of a newer version are in no count, line or reminder', ()
     it('Home lines and reminders read past them without throwing', () => {
         const lines = thingsHomeLines(newer, NOW);
         expect(lines.length).toBe(1);
-        expect(lines[0].values).toEqual({ things: 2, out: 1 });
+        expect([lines[0].n, lines[0].values]).toEqual([2, { out: 1 }]);
         expect(lines[0].screen).toBe('loans');
         const dues = loansDue(newer, NOW);
         expect(dues.map((d) => d.values?.name)).toEqual(['Ladder']);
@@ -420,7 +422,7 @@ describe('a newer version\'s lentTo this build cannot read is not out', () => {
         const read = readThingsDoc(raw);
         expect(JSON.parse(JSON.stringify(read)).things).toEqual(raw.things);
         expect(thingsCounts(read)).toEqual({ things: 5, listed: 1, out: 1, shelf: 3 });
-        expect(thingsHomeLines(read, NOW)[0].values).toEqual({ things: 5, out: 1 });
+        expect([thingsHomeLines(read, NOW)[0].n, thingsHomeLines(read, NOW)[0].values]).toEqual([5, { out: 1 }]);
         expect(loansDue(read, NOW)).toEqual([]);
     });
 
@@ -458,7 +460,7 @@ describe('thingsHomeLines (Home card lines)', () => {
         const lines = thingsHomeLines(doc, NOW);
         expect(lines.length).toBeLessThanOrEqual(2);
         expect(lines[0].screen).toBe('loans');
-        expect(lines[0].values).toEqual({ things: 2, out: 1 });
+        expect([lines[0].n, lines[0].values]).toEqual([2, { out: 1 }]);
     });
 
     it('points to main when things are all in shed', () => {
@@ -472,12 +474,48 @@ describe('thingsHomeLines (Home card lines)', () => {
         const lines = thingsHomeLines(doc, NOW);
         expect(lines.length).toBeLessThanOrEqual(2);
         expect(lines[0].screen).toBe('main');
-        expect(lines[0].values).toEqual({ things: 2 });
+        expect([lines[0].n, lines[0].values]).toEqual([2, undefined]);
     });
 
     it('is pure: gives same output twice', () => {
         const doc = FIXTURES.docs.small;
         expect(thingsHomeLines(doc, NOW)).toEqual(thingsHomeLines(doc, NOW));
+    });
+});
+
+describe('the count sentences read "1 thing" and "5 things", and carry every form a language needs', () => {
+    const NOW = Date.parse('2026-10-20T09:00:00.000Z');
+    const at = { createdAt: '', updatedAt: '' };
+    const shed = (n: number, out: number): ThingsDoc => ({
+        v: 1,
+        things: Array.from({ length: n }, (_, i) => ({
+            id: `t${i}`, name: `Thing ${i}`, ...at, ...(i < out ? { lentTo: { name: 'Al', since: '2026-10-01' } } : {}),
+        })),
+    });
+    const drawn = (doc: ThingsDoc) => [...thingsHomeLines(doc, NOW).map(toolLineText), toolLineText(THINGS.row(doc, NOW)!)];
+    afterEach(() => setLanguage('en'));
+
+    it('in English, one thing is singular and more are plural, in the Home lines and the Tools row', () => {
+        expect(drawn(shed(1, 1))).toEqual(['1 thing · 1 out', '1 thing · 0 in your shop · 1 out']);
+        expect(drawn(shed(1, 0))).toEqual(['1 thing · in your shed', '1 thing · 0 in your shop · 0 out']);
+        expect(drawn(shed(5, 1))).toEqual(['5 things · 1 out', '5 things · 0 in your shop · 1 out']);
+        expect(drawn(shed(5, 0))).toEqual(['5 things · all in your shed', '5 things · 0 in your shop · 0 out']);
+    });
+
+    it('each is a wordn() pair whose count is the live things, so tn() picks the form (Russian: one, few, many)', () => {
+        const pair = (l: { key: unknown }) => l.key as { one: string; other: string };
+        const keys = [...thingsHomeLines(shed(2, 1), NOW), ...thingsHomeLines(shed(2, 0), NOW), THINGS.row(shed(2, 1), NOW)!].map(pair);
+        expect(keys.map((k) => `${k.one}|${k.other}`)).toEqual([
+            '{n} thing · {out} out|{n} things · {out} out',
+            '{n} thing · in your shed|{n} things · all in your shed',
+            '{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out',
+        ]);
+        setLanguage('ru', [{
+            [pluralKey(keys[0].one, keys[0].other)]: { one: '{n} вещь · {out} у других', few: '{n} вещи · {out} у других', many: '{n} вещей · {out} у других', other: '{n} вещи · {out} у других' },
+        }]);
+        expect([1, 3, 5, 21].map((n) => toolLineText(thingsHomeLines(shed(n, 1), NOW)[0]))).toEqual([
+            '1 вещь · 1 у других', '3 вещи · 1 у других', '5 вещей · 1 у других', '21 вещь · 1 у других',
+        ]);
     });
 });
 

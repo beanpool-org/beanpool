@@ -13,6 +13,7 @@ import type { ShopKind, ToolManifest, ToolShelf } from './manifest.js';
 import { THINGS } from './things/index.js';
 
 export * from './manifest.js';
+export * from './line.js';
 export * from './host.js';
 export * from './check.js';
 export * from './reconcile.js';

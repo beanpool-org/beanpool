@@ -75,7 +75,8 @@ import {
     evaluateAutoMute, liftMute as liftMuteEngine,
 } from './engine/auto-moderation.js';
 import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
-import { seedPulseCurated } from './engine/pulse-seed.js';
+import { seedPulseCurated, getBeanPoolPubkey } from './engine/pulse-seed.js';
+import { getPulseTreasuryPubkey } from './daily-pulse.js';
 import {
     nodeRoleOf,
     heldNodeRoleOf,
@@ -2020,12 +2021,31 @@ export type { InviteCheckResult, InviteTreeNode };
 
 // ===================== PROFILES =====================
 
+/**
+ * The node's own accounts: BeanPool, which owns the curated learn channel and every channel an admin adds
+ * (engine/pulse-seed.ts), and Daily Pulse (daily-pulse.ts). They are treasury rows, so the People directory leaves them
+ * out, but neither is an enterprise or a project (no keepers, no purpose): their profile and trust profile carry no
+ * `isTreasury`, so both apps open the profile, with its channels, and not an empty enterprise page (review of #2367).
+ * Found by the same lookups their owners use, and never created here. Not `createTreasury`'s `systemCreated`: a
+ * member's enterprise made without a photo passes it too (routes/treasury.ts), and so does a federation link.
+ */
+function nodeOwnAccountKeys(): Set<string> {
+    const keys = new Set<string>();
+    for (const pk of [getBeanPoolPubkey(), getPulseTreasuryPubkey()]) if (pk) keys.add(pk);
+    return keys;
+}
+
 export function getProfile(publicKey: string, requesterPubkey?: string): MemberProfile | null {
-    return getProfileEngine(db, publicKey, requesterPubkey);
+    const profile = getProfileEngine(db, publicKey, requesterPubkey);
+    if (profile?.isTreasury && nodeOwnAccountKeys().has(publicKey)) delete profile.isTreasury;
+    return profile;
 }
 
 export function getAllProfiles(requesterPubkey?: string): MemberProfile[] {
-    return getAllProfilesEngine(db, requesterPubkey);
+    const profiles = getAllProfilesEngine(db, requesterPubkey);
+    const own = nodeOwnAccountKeys();
+    for (const profile of profiles) if (profile.isTreasury && own.has(profile.publicKey)) delete profile.isTreasury;
+    return profiles;
 }
 
 // Who may see a member's contact details: THE rule, shared by the profile page and every list that sends member
@@ -2332,7 +2352,8 @@ export interface ViewerTrustProfile {
     risk: TradeRiskAssessment;
     /**
      * Present, and true, only for an enterprise's or a project's key: the phone's profile screen reads this trust profile
-     * and replaces itself with the enterprise page on it (MemberProfile.isTreasury, slice E0). A member's has no such key.
+     * and replaces itself with the enterprise page on it (MemberProfile.isTreasury, slice E0). A member's has no such key,
+     * nor has the node's own BeanPool or Daily Pulse account (nodeOwnAccountKeys).
      */
     isTreasury?: true;
 }
@@ -2502,7 +2523,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         vouchedInBy,
         elderVouch,
         risk,
-        ...(member.isTreasury ? { isTreasury: true as const } : {}),
+        ...(member.isTreasury && !nodeOwnAccountKeys().has(targetPubkey) ? { isTreasury: true as const } : {}),
     };
 }
 

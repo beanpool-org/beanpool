@@ -115,7 +115,8 @@ export interface MemberProfile {
      * Present, and true, only on an enterprise's or a project's profile: the key is kept by its keepers, not a person.
      * Both apps open the enterprise page for it instead of the member Trust Profile (every door that opens a profile by
      * key; scratch/tools/DESIGN-shops-round3-enterprise-shopfront-fable.md §1.1, slice E0). A member's profile has no
-     * such key at all, so it reads exactly as it did.
+     * such key at all, so it reads exactly as it did. Nor has the node's own BeanPool or Daily Pulse account, treasury
+     * rows that are no enterprise: the server takes it off theirs (apps/server state-engine.ts nodeOwnAccountKeys).
      */
     isTreasury?: true;
 }

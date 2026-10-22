@@ -3043,7 +3043,7 @@ export default function WelcomeScreen() {
                                 style={styles.input}
                                 value={replaceConfirmText}
                                 onChangeText={setReplaceConfirmText}
-                                placeholder={t("WIPE")}
+                                placeholder="WIPE"
                                 placeholderTextColor={colors.text.muted}
                                 autoCapitalize="characters"
                                 autoCorrect={false}

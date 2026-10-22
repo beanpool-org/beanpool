@@ -19,6 +19,7 @@ import {
 import { ToolsPage, type ToolsPageProps } from '../../../pages/ToolsPage';
 import { TOOL_APPS } from '../../index';
 import { ToolDocNotKept, ToolDocTooBig } from '../../builder';
+import { openToolCopy, pageNode } from '../../node-copy';
 import { readToolPhoto, readToolRecord, resetToolStoreForTest, writeToolRecord } from '../../store';
 import { keep as keepThings } from '../parts';
 import { memoryIndexedDB, MemoryIDBKeyRange } from '../../../lib/memory-indexeddb';
@@ -70,7 +71,9 @@ const shed = (...things: Thing[]): ThingsDoc => ({ v: 1, things });
 
 /**
  * The community's server, as these screens use it; `down` when it can't be reached, `dealsDown` when only the deals
- * can't be read, and `dealsGate` holds a read of the deals until it settles.
+ * can't be read, and `dealsGate` holds a read of the deals until it settles. `copy` is its own copy of the shed (from the
+ * member's other device), none when null; `copyGate` holds a read of it and `marketGate` a pause or resume until each
+ * settles; `puts` are the documents sent to it.
  */
 const server = {
     posts: new Map<string, Record<string, unknown>>(),
@@ -81,6 +84,10 @@ const server = {
     down: false,
     dealsDown: false,
     dealsGate: null as Promise<void> | null,
+    copy: null as { doc: ThingsDoc; updatedAt: string } | null,
+    copyGate: null as Promise<void> | null,
+    marketGate: null as Promise<void> | null,
+    puts: [] as unknown[],
 };
 function offer(id: string, title: string, status = 'active', extra: Record<string, unknown> = {}) {
     server.posts.set(id, { id, title, status, type: 'offer', authorPublicKey: OWNER, priceType: 'fixed', ...extra });
@@ -100,8 +107,12 @@ async function answer(input: RequestInfo | URL, init?: RequestInit): Promise<Res
     if (server.down) throw new TypeError('Failed to fetch');
     const body = init?.body ? JSON.parse(String(init.body)) : null;
     switch (`${method} ${url.pathname}`) {
-        case 'GET /api/tools/things': return json({ tool: 'things', doc: null, updatedAt: null });
-        case 'PUT /api/tools/things': return json({ success: true, tool: 'things', updatedAt: '2026-10-21T08:00:00.000Z' });
+        case 'GET /api/tools/things':
+            if (server.copyGate) await server.copyGate;
+            return json({ tool: 'things', doc: server.copy?.doc ?? null, updatedAt: server.copy?.updatedAt ?? null });
+        case 'PUT /api/tools/things':
+            server.puts.push(body.doc);
+            return json({ success: true, tool: 'things', updatedAt: '2026-10-21T08:00:00.000Z' });
         case 'GET /api/marketplace/posts': {
             const id = url.searchParams.get('id');
             const author = url.searchParams.get('author');
@@ -118,6 +129,7 @@ async function answer(input: RequestInfo | URL, init?: RequestInit): Promise<Res
         // As the node has them (posts.ts, routes/marketplace.ts): only a live Offer is paused and only a paused one
         // resumed; anything else is a 400.
         case 'POST /api/marketplace/posts/pause': {
+            if (server.marketGate) await server.marketGate;
             const p = server.posts.get(body.postId);
             if (p?.status !== 'active') return json({ success: false, error: 'Post not found, not active, or not owned by author' }, 400);
             server.paused.push(body.postId);
@@ -125,6 +137,7 @@ async function answer(input: RequestInfo | URL, init?: RequestInit): Promise<Res
             return json({ success: true });
         }
         case 'POST /api/marketplace/posts/resume': {
+            if (server.marketGate) await server.marketGate;
             const p = server.posts.get(body.postId);
             if (p?.status !== 'paused') return json({ success: false, error: 'Post not found, not paused, or not owned by author' }, 400);
             server.resumed.push(body.postId);
@@ -152,6 +165,10 @@ beforeEach(() => {
     server.down = false;
     server.dealsDown = false;
     server.dealsGate = null;
+    server.copy = null;
+    server.copyGate = null;
+    server.marketGate = null;
+    server.puts.length = 0;
     storeFails.on = false;
     info.value = { profile: 'local', features: { beans: true } };
     picked.count = 0;
@@ -627,6 +644,74 @@ describe('A thing', () => {
         expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
     });
 
+    /**
+     * The open's sync takes the server's newer copy while `press` waits for the Market's answer: this browser holds
+     * `ladder`, synced; the server's copy (`copy`) is newer, by default with Drill too (added on the member's phone). Its
+     * read is held until the pause or resume is asked, and that answer until the copy is taken (`meanwhile` runs before
+     * either is let go). Then what this browser keeps, and what the next sync sends the server.
+     */
+    async function takenMeanwhile(ladder: Thing, press: () => Promise<void>, copy = shed(ladder, thing('t-2', 'Drill')), meanwhile = () => {}) {
+        const synced = iso(NOW - DAY);
+        expect(await writeToolRecord(OWNER, 'things', { body: JSON.stringify(shed(ladder)), updatedAt: synced, syncedAt: synced })).toBe(true);
+        let copyAnswers = () => {};
+        let marketAnswers = () => {};
+        server.copy = { doc: copy, updatedAt: iso(NOW - DAY / 2) };
+        server.copyGate = new Promise((r) => { copyAnswers = r; });
+        server.marketGate = new Promise((r) => { marketAnswers = r; });
+        await open('thing', 't-1');
+        await press();
+        expect(server.requests.at(-1)).toMatch(/^POST \/api\/marketplace\/posts\/(pause|resume)$/);
+        meanwhile();
+        copyAnswers();
+        await settle();
+        expect(await kept()).toEqual(readThingsDoc(copy));
+        marketAnswers();
+        await settle();
+        const here = await kept();
+        const sync = await openToolCopy({ manifest: THINGS, owner: { kind: 'member', publicKey: OWNER }, node: pageNode() });
+        return { here, sync, sent: server.puts.at(-1) as ThingsDoc | undefined };
+    }
+
+    /** The things in a document, in its order, by name. */
+    const names = (d: ThingsDoc | undefined) => (d ? readThingsDoc(d).things.map((t) => (t as Thing).name) : null);
+
+    it("Take out while the open's sync takes the server's newer copy: the other device's thing is kept, here and on the server", async () => {
+        offer('post-1', 'Ladder');
+        const after = await takenMeanwhile(thing('t-1', 'Ladder', { postId: 'post-1' }), () => click('thing-take-out'));
+        expect(server.paused).toEqual(['post-1']);
+        expect([names(after.here), after.sync, names(after.sent)]).toEqual([['Ladder', 'Drill'], 'put', ['Ladder', 'Drill']]);
+        expect(after.here.things[0]).toMatchObject({ id: 't-1', pausedPostId: 'post-1' });
+        expect(after.here.things[1]).toEqual(thing('t-2', 'Drill'));
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+    });
+
+    it("Lend while the open's sync takes the server's newer copy: the other device's thing is kept, here and on the server", async () => {
+        offer('post-1', 'Ladder');
+        const after = await takenMeanwhile(thing('t-1', 'Ladder', { postId: 'post-1' }), async () => {
+            await click('thing-lend');
+            await type('thing-lend-name', 'Sam');
+            await click('thing-lend-save');
+        });
+        expect(server.paused).toEqual(['post-1']);
+        expect([names(after.here), after.sync, names(after.sent)]).toEqual([['Ladder', 'Drill'], 'put', ['Ladder', 'Drill']]);
+        expect(after.here.things[0]).toMatchObject({ id: 't-1', postId: 'post-1', lentTo: { name: 'Sam' } });
+        expect(after.here.things[1]).toEqual(thing('t-2', 'Drill'));
+        expect(byTestId('thing-lend-name')).toBeNull();
+        expect(byTestId('thing-state')?.textContent).toMatch(/^With Sam since /);
+    });
+
+    it("It's back while the open's sync takes the server's newer copy: the other device's thing is kept, here and on the server", async () => {
+        offer('post-1', 'Ladder', 'paused');
+        const after = await takenMeanwhile(thing('t-1', 'Ladder', { postId: 'post-1', lentTo: { name: 'Sam', since: iso(NOW - DAY) } }), () => click('thing-back-home'));
+        expect(server.resumed).toEqual(['post-1']);
+        expect([names(after.here), after.sync, names(after.sent)]).toEqual([['Ladder', 'Drill'], 'put', ['Ladder', 'Drill']]);
+        expect(after.here.things[0]).toMatchObject({ id: 't-1', postId: 'post-1' });
+        expect((after.here.things[0] as Thing).lentTo).toBeUndefined();
+        expect(after.here.things[1]).toEqual(thing('t-2', 'Drill'));
+        expect(byTestId('thing-state')?.textContent).toBe('In your shop');
+    });
+
     /** A shed with `first` in it and things to fill it, `room` bytes under the store's bound. */
     function shedWithRoom(first: Thing, room: number): ThingsDoc {
         const target = TOOL_LIMITS.docBytes - room;
@@ -683,6 +768,39 @@ describe('A thing', () => {
         await click('thing-link-post-1');
         expect(byTestId('thing-refused')?.textContent).toBe(FULL);
         expect(await kept()).toEqual(before3);
+    });
+
+    it("a change that no longer fits once the open has taken the server's fuller copy: the shed is said to be full, nothing is written, and the Offer is put back as it was", async () => {
+        offer('post-1', 'Ladder');
+        const ladder = thing('t-1', 'Ladder', { postId: 'post-1' });
+        // Filled on the member's other device, 3 bytes under the bound: taken out, the Offer's id is kept as pausedPostId,
+        // 6 bytes more. What is here fits it easily, so Take out asks the Market.
+        const full = shedWithRoom(ladder, 3);
+        let after = await takenMeanwhile(ladder, () => click('thing-take-out'), full);
+        expect([server.paused, server.resumed, server.posts.get('post-1')?.status]).toEqual([['post-1'], ['post-1'], 'active']);
+        expect(after.here).toEqual(readThingsDoc(full));
+        expect([after.sync, after.sent]).toEqual(['nothing', undefined]);
+        expect(byTestId('thing-refused')?.textContent).toBe(FULL);
+        expect(byTestId('thing-state')?.textContent).toBe('In your shop');
+        expect(byTestId('thing-offer-paused')).toBeNull();
+
+        // The Market can't be reached to put it back: the screen says its Offer is paused, with Put back, which resumes it.
+        cleanup();
+        server.posts.clear();
+        server.paused.length = 0;
+        server.resumed.length = 0;
+        offer('post-1', 'Ladder');
+        after = await takenMeanwhile(ladder, () => click('thing-take-out'), full, () => { server.down = true; });
+        expect([server.paused, server.resumed, server.posts.get('post-1')?.status]).toEqual([['post-1'], [], 'paused']);
+        expect(after.here).toEqual(readThingsDoc(full));
+        expect(byTestId('thing-refused')?.textContent).toBe(FULL);
+        expect(byTestId('thing-state')?.textContent).toBe('In your shop');
+        expect(byTestId('thing-offer-paused')?.textContent).toContain('Its Offer is paused in the Market.');
+        server.down = false;
+        await click('thing-resume');
+        expect([server.resumed, server.posts.get('post-1')?.status]).toEqual([['post-1'], 'active']);
+        expect(byTestId('thing-offer-paused')).toBeNull();
+        expect(await kept()).toEqual(readThingsDoc(full));
     });
 
     it("a change this browser couldn't keep says so in its own words, never that the shed is full", async () => {

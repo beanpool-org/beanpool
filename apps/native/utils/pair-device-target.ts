@@ -119,6 +119,14 @@ export function transferTarget(scannedNodeUrl: string, appNodeUrl: string | null
     return { kind: 'foreign', scannedHost: scanned ? scanned.slice('https://'.length) : '', appHost: own ? own.slice('https://'.length) : null };
 }
 
+/**
+ * Is `target` the community this phone is on (`beanpool_anchor_url`)? The member rows on the phone are that one's, so only
+ * then does its member record give the account's name there (pair-device-payload.ts).
+ */
+export function isAppCommunity(target: TransferTarget | undefined, appNodeUrl: string | null): boolean {
+    return target?.kind === 'ok' && target.nodeUrl === knownOrigin(appNodeUrl);
+}
+
 /** Every address the screen sends to for one pairing: built from the matched saved origin and the session id only. */
 export function pairingRequestUrls(target: Extract<TransferTarget, { kind: 'ok' }>, sessionId: string): { probe: string; transfer: string; cancel: string } {
     return {

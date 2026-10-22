@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,6 +35,7 @@ import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { ReportReasonBox } from '../components/ReportReasonBox';
 import { Sentence } from '../components/Sentence';
 import { reportedAlertBody } from '../utils/reportReasons';
+import { blockUser, isUserBlocked } from '../utils/blocklist';
 import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 import { sampleTreasuryDetail, sampleEnterpriseLedger } from '../components/showcase/sample-screens';
@@ -114,6 +115,12 @@ export default function TreasuryDetailScreen() {
     const [pledging, setPledging] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showReportForm, setShowReportForm] = useState(false);
+    // The "…" menu at the foot, with Block (DESIGN-shops-round3-enterprise-shopfront §0 row 11, §3): a member may hide an
+    // enterprise they don't want to see. Not a header button, as it was on the member Trust Profile an enterprise used to
+    // open; none for its keepers on their own enterprise's page.
+    const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const [blockedHere, setBlockedHere] = useState(false);
+    const [blocking, setBlocking] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
 
     // Keeper Join Request State
@@ -414,6 +421,13 @@ export default function TreasuryDetailScreen() {
         return () => { active = false; };
     }, [treasuryKey, isEffectivePreview, elsewhere, reader.known]);
 
+    useEffect(() => {
+        if (!treasuryKey || isEffectivePreview) return;
+        let live = true;
+        isUserBlocked(treasuryKey).then(b => { if (live) setBlockedHere(b); }).catch(() => {});
+        return () => { live = false; };
+    }, [treasuryKey, isEffectivePreview]);
+
     const loadThread = useCallback(async () => {
         if (!treasuryKey || isEffectivePreview || !reader.known || elsewhere) return;
         try {
@@ -562,6 +576,38 @@ export default function TreasuryDetailScreen() {
     // The name its members gave it, as written; the words only when there is none.
     const name = detail?.name || nameParam || t('Community Enterprise');
     const avatar = detail?.avatar || avatarParam;
+
+    const mayBlock = !isEffectivePreview && !isKeeperOfThis && !!identity?.publicKey && !!treasuryKey;
+    const handleBlockEnterprise = () => {
+        if (!treasuryKey || blocking) return;
+        Alert.alert(
+            t('Block {name}?', { name }),
+            t('This will instantly hide all posts, offers, and messages from {name}, and notify moderation.', { name }),
+            [
+                { text: t('Cancel'), style: 'cancel' },
+                {
+                    text: t('Block'),
+                    style: 'destructive',
+                    onPress: async () => {
+                        setBlocking(true);
+                        try {
+                            // The reason goes to the node as written (moderators read it), not in the member's language.
+                            if (!(await blockUser(treasuryKey, identity?.publicKey, 'Blocked from the enterprise page'))) throw new Error('not blocked');
+                            setBlockedHere(true);
+                            setShowMoreMenu(false);
+                            Alert.alert(t('{name} has been blocked and removed from your feed.', { name }), undefined, [
+                                { text: t('OK'), onPress: () => router.back() },
+                            ]);
+                        } catch {
+                            Alert.alert(t('Error'), t('Failed to block user. Please try again.'));
+                        } finally {
+                            setBlocking(false);
+                        }
+                    },
+                },
+            ],
+        );
+    };
 
     const banner = seasonBanner(detail);
     const controls = seasonControls(detail, identity?.publicKey);
@@ -2082,13 +2128,45 @@ export default function TreasuryDetailScreen() {
                             )}
                         </View>
 
-                        {/* Report Enterprise Action */}
+                        {/* Report Enterprise Action, and the "…" menu with Block */}
                         {!isEffectivePreview && (
                             <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
-                                <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={project ? t('Report Project') : t('Report Enterprise')}>
-                                    <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.fg} />
-                                    <Text style={{ flexShrink: 1, color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>{project ? t('Report Project') : t('Report Enterprise')}</Text>
-                                </Pressable>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                    <Pressable style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={project ? t('Report Project') : t('Report Enterprise')}>
+                                        <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.fg} />
+                                        <Text style={{ flexShrink: 1, color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>{project ? t('Report Project') : t('Report Enterprise')}</Text>
+                                    </Pressable>
+                                    {mayBlock && (
+                                        <Pressable
+                                            style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 }}
+                                            onPress={() => setShowMoreMenu(open => !open)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={t('More options')}
+                                            accessibilityState={{ expanded: showMoreMenu }}
+                                        >
+                                            <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text.secondary} />
+                                        </Pressable>
+                                    )}
+                                </View>
+                                {mayBlock && showMoreMenu && (
+                                    <View testID="enterprise-more-menu" style={{ marginTop: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, overflow: 'hidden' }}>
+                                        {blockedHere ? (
+                                            <Text style={{ paddingHorizontal: 12, paddingVertical: 12, fontSize: 14, color: colors.text.secondary }}>{t('{name} is blocked', { name })}</Text>
+                                        ) : (
+                                            <Pressable
+                                                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, paddingVertical: 10, opacity: blocking ? 0.6 : 1 }}
+                                                onPress={handleBlockEnterprise}
+                                                disabled={blocking}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={t('Block {name}', { name })}
+                                                accessibilityState={{ busy: blocking }}
+                                            >
+                                                <MaterialCommunityIcons name="block-helper" size={16} color={colors.feedback.danger.fg} />
+                                                <Text style={{ flexShrink: 1, color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>{blocking ? t('Blocking…') : t('Block {name}', { name })}</Text>
+                                            </Pressable>
+                                        )}
+                                    </View>
+                                )}
                                 {showReportForm && (
                                     // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
                                     <ReportReasonBox

@@ -240,7 +240,7 @@ beforeEach(async () => {
     mem.store.set('beanpool_anchor_url', NODE_URL);
     node.online = true;
     node.requests.length = 0;
-    node.trust = new Map([[ENTERPRISE, ENTERPRISE_TRUST], [KOFI, memberTrust(KOFI, 'Kofi')]]);
+    node.trust = new Map<string, Record<string, unknown>>([[ENTERPRISE, ENTERPRISE_TRUST], [KOFI, memberTrust(KOFI, 'Kofi')]]);
     node.trustGate = null;
     node.addedYou = [];
     community.features = { beans: true, escrow: true, invites: true, decisions: true, enterprises: true, exampleListings: false };

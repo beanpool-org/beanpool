@@ -27,6 +27,7 @@ import { readsOwn } from '../utils/reads-own';
 import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
 import { LOCAL_COMMUNITY_LINES, formatDate, formatNumber, t, tn, type TierName } from '@beanpool/core';
 import { beansOn, membersByKey } from '../utils/node-profile';
+import { enterprisesOn } from '../utils/commons-sections';
 import { meetingTips } from '../utils/market-global';
 import { TIER_WORDS } from '../utils/trust-tier';
 import { Sentence } from '../components/Sentence';
@@ -412,6 +413,8 @@ export default function PublicProfileScreen() {
     const [given, setGiven] = useState<any[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
     const [trust, setTrust] = useState<any>(null);
+    /** The key whose trust profile the node has answered (or failed to): until then, what the key is isn't known. */
+    const [trustFor, setTrustFor] = useState<string | null>(null);
     const [viewerBalance, setViewerBalance] = useState<any>(null);
     const [vouching, setVouching] = useState(false);
     const [editingReview, setEditingReview] = useState<any | null>(null);
@@ -564,12 +567,16 @@ export default function PublicProfileScreen() {
         // 3. Load trust profile asynchronously in the background (if not self)
         if (!isSelf) {
             setTrustLoading(true);
-            getTrustProfile(pubKeyStr)
+            const asked = pubKeyStr;
+            getTrustProfile(asked)
                 .then(trustProfile => {
                     if (trustProfile) setTrust(trustProfile);
                 })
                 .catch(() => null)
-                .finally(() => setTrustLoading(false));
+                .finally(() => {
+                    setTrustLoading(false);
+                    setTrustFor(asked);
+                });
 
             // The reader's own balance (the vouch button's): never asked where Beans are in preview (utils/reads-own.ts).
             if (identity?.publicKey) {
@@ -702,6 +709,41 @@ export default function PublicProfileScreen() {
             ]
         );
     };
+
+    // An enterprise's key opens the enterprise page, never this one (DESIGN-shops-round3-enterprise-shopfront §1.1,
+    // slice E1). Every door that opens someone by key lands here (a post's author, the deal chat's peer, the map's
+    // preview, the People lists), and none of them knows what the key is: the node's trust profile says `isTreasury` for
+    // an enterprise or a project, and this screen hands over to /treasury-detail on it. The member directory never
+    // carries an enterprise, so a key with no card on this phone may be one: where the community has enterprises at all,
+    // nothing of a member's profile is drawn for it until the node has said (or couldn't: offline, it is drawn as before).
+    const isEnterprise = !isSelf && !!pubKeyStr && !!trust?.isTreasury && trust?.publicKey === pubKeyStr;
+    const kindUnknown = !isSelf && !!pubKeyStr && !profile && trustFor !== pubKeyStr && enterprisesOn(nodeProfile?.features);
+    const enterpriseName = (isEnterprise && trust?.callsign) || (Array.isArray(callsign) ? callsign[0] : callsign);
+    useEffect(() => {
+        if (!isEnterprise || !pubKeyStr) return;
+        router.replace({ pathname: '/treasury-detail', params: { publicKey: pubKeyStr, ...(enterpriseName ? { name: enterpriseName } : {}) } });
+    }, [isEnterprise, pubKeyStr]);
+
+    if (isEnterprise || (kindUnknown && pubKeyStr !== HIDDEN_AUTHOR)) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.header}>
+                    <Pressable
+                        testID="profile-kind-pending-back"
+                        accessibilityRole="button"
+                        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+                        style={styles.backButton}
+                    >
+                        <Text style={styles.backText}>←</Text>
+                        <Text style={styles.backTextLabel}>{t('Back')}</Text>
+                    </Pressable>
+                </View>
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator color={colors.brand.primary} />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     // A listing seen as a visitor names nobody (utils/posts-view.ts): say so, as a state, not an error.
     if (pubKeyStr === HIDDEN_AUTHOR) {

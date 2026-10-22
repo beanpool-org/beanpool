@@ -637,7 +637,7 @@ export function sendMessage(
                 const senderName = senderMember?.callsign || 'A member';
                 // A message request's line says so, at most once an hour per person (engine/dm-requests.ts). One folded into
                 // the hour's single push does the push's work all the same and drops it, as a withheld line does above.
-                const send = requestLine && through?.kind === 'request' && !requestPushDue(through.to, pushConvId)
+                const send = through?.kind === 'request' && !requestPushDue(through.to, pushConvId)
                     ? cb.rehearsePushNotification
                     : cb.dispatchPushNotification;
                 send?.(

@@ -116,7 +116,7 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                     <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel={t('Cancel location picker')} style={styles.headerBtn}>
                         <Text style={styles.cancelText} numberOfLines={1}>{t('Cancel')}</Text>
                     </Pressable>
-                    <Text style={styles.title} numberOfLines={1}>{t('📍 Location & Radius')}</Text>
+                    <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📍 Location & Radius')}</Text>
                     <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel={t('Reset location and radius')} style={styles.headerBtn}>
                         <Text style={styles.resetText} numberOfLines={1}>{t('Reset')}</Text>
                     </Pressable>

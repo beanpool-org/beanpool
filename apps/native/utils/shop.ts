@@ -102,9 +102,19 @@ export function movedCount(v: unknown): number {
 /** The member's own shop: none yet, open (closed for now included), a node from before shops, or no answer. */
 export type MyShopRead = { state: 'none' } | { state: 'open'; shop: MyShop } | { state: 'older' } | { state: 'offline' };
 
-export async function readMyShop(): Promise<MyShopRead> {
+/**
+ * How long the List sheet waits for the member's shop before it opens without "Put this in your shop": the tap shows
+ * nothing meanwhile, and a link that takes the request and never answers (a captive portal, a stalled 2G line) would hold
+ * it until the phone's network stack gives up. A read let go is no answer: nothing is drawn, nothing promised.
+ */
+export const SHOP_TOGGLE_READ_MS = 5_000;
+
+/** `timeoutMs`: past it, the read is let go and is no answer (offline). Without one, it waits as long as the fetch does. */
+export async function readMyShop(options: { timeoutMs?: number } = {}): Promise<MyShopRead> {
+    const stop = options.timeoutMs ? new AbortController() : null;
+    const timer = stop ? setTimeout(() => stop.abort(), options.timeoutMs) : null;
     try {
-        const res = await signedGet('/api/shops/mine');
+        const res = await signedGet('/api/shops/mine', stop ? { signal: stop.signal } : undefined);
         if (res.status === 404) return { state: 'older' };
         if (!res.ok) return { state: 'offline' };
         const json = await res.json().catch(() => null) as { shop?: unknown } | null;
@@ -113,6 +123,8 @@ export async function readMyShop(): Promise<MyShopRead> {
         return shop ? { state: 'open', shop } : { state: 'offline' };
     } catch {
         return { state: 'offline' };
+    } finally {
+        if (timer) clearTimeout(timer);
     }
 }
 

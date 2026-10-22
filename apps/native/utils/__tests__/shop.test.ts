@@ -22,14 +22,20 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 const node = vi.hoisted(() => ({
     gets: [] as string[],
     writes: [] as Array<{ method: string; path: string; body: unknown }>,
-    get: null as null | ((path: string) => { status: number; json?: unknown } | 'down'),
+    get: null as null | ((path: string) => { status: number; json?: unknown } | 'down' | 'never'),
+    signals: [] as Array<AbortSignal | undefined>,
     write: null as null | ((method: string, path: string, body: unknown) => unknown),
 }));
 vi.mock('../db', () => ({
-    signedGet: async (path: string) => {
+    signedGet: async (path: string, options?: { signal?: AbortSignal }) => {
         node.gets.push(path);
+        node.signals.push(options?.signal);
         const a = node.get?.(path) ?? { status: 404 };
         if (a === 'down') throw new TypeError('Network request failed');
+        // A link that takes the request and never answers: only letting it go (the fetch's signal) settles it, as fetch does.
+        if (a === 'never') {
+            return new Promise<never>((_, reject) => options?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+        }
         return { ok: a.status >= 200 && a.status < 300, status: a.status, json: async () => a.json ?? null };
     },
     signedRequestWithMethod: async (method: string, path: string, body: unknown) => {
@@ -40,7 +46,7 @@ vi.mock('../db', () => ({
 
 import {
     SHOP_KIND_WORDS, addOffersToMyShop, backOnChoices, changeMyShop, closeMyShop, localDay, movedCount, offersToAdd, readListingShopId,
-    readMyLiveOffers, readMyShop, readShop, readShopListings, shopCountsLine, shopStateLine, shopTitle,
+    SHOP_TOGGLE_READ_MS, readMyLiveOffers, readMyShop, readShop, readShopListings, shopCountsLine, shopStateLine, shopTitle,
 } from '../shop';
 import { SHOP_CHOICE_HOLDS_MS, SHOP_CHOICE_KEY, clearShopChoice, peekShopChoice, rememberShopChoice, shopChoiceHolds } from '../shop-choice';
 import { SHOP_KINDS } from '@beanpool/core';
@@ -54,6 +60,7 @@ const SHOP = {
 beforeEach(() => {
     store.map.clear();
     node.gets.length = 0;
+    node.signals.length = 0;
     node.writes.length = 0;
     node.get = null;
     node.write = null;
@@ -97,6 +104,27 @@ describe('the member\'s own shop, read', () => {
         node.get = () => ({ status: 403, json: { error: 'Read access requires a member identity' } });
         expect(await readMyShop()).toEqual({ state: 'offline' });
         expect(node.gets.every((p) => p === '/api/shops/mine')).toBe(true);
+    });
+
+    it("with a limit (the List sheet's): a node that never answers is let go at it, as no answer; one that answers is read", async () => {
+        vi.useFakeTimers();
+        try {
+            node.get = () => 'never';
+            let read: unknown = 'waiting';
+            const reading = readMyShop({ timeoutMs: SHOP_TOGGLE_READ_MS }).then((r) => { read = r; });
+            await vi.advanceTimersByTimeAsync(SHOP_TOGGLE_READ_MS - 1);
+            expect(read).toBe('waiting');
+            expect(node.signals.at(-1)?.aborted).toBe(false);
+            await vi.advanceTimersByTimeAsync(1);
+            await reading;
+            expect(read).toEqual({ state: 'offline' });
+            expect(node.signals.at(-1)?.aborted).toBe(true);
+            node.get = () => ({ status: 200, json: { shop: SHOP } });
+            expect(await readMyShop({ timeoutMs: SHOP_TOGGLE_READ_MS })).toEqual({ state: 'open', shop: readShop(SHOP) });
+            expect(vi.getTimerCount()).toBe(0);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('its listings, the owner\'s read (paused ones too), and the member\'s live Offers that could go in', async () => {

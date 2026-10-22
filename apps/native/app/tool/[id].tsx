@@ -42,7 +42,7 @@ import {
 } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
 import { shopToggleState, type ShopToggleState } from '../../components/shop/ShopToggle';
-import { readMyShop } from '../../utils/shop';
+import { SHOP_TOGGLE_READ_MS, readMyShop } from '../../utils/shop';
 
 /** What every open screen of one tool, for one owner, shares. */
 interface SharedState { doc: unknown; stored: boolean; settings: ToolSettings; copyNote: ToolCopyNote }
@@ -216,14 +216,16 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
 
     const openListSheet = useCallback((draft: ToolOfferDraft) => {
         void (async () => {
+            // "Put this in your shop": the member's shop as the node has it now (none yet, open, closed for now), or nothing
+            // once it has taken SHOP_TOGGLE_READ_MS: the sheet waits for it with nothing shown. Asked first, beside the rest.
+            const shopRead = readMyShop({ timeoutMs: SHOP_TOGGLE_READ_MS }).catch(() => null);
             const features = nodeProfile?.features ?? null;
             const needs = await composerNeedsProfilePhoto(features, async () => getCachedNodeProfile(await AsyncStorage.getItem('beanpool_anchor_url')));
             let hasPhoto = false;
             if (needs && owner) {
                 hasPhoto = !!(await getMemberProfile(owner).catch(() => null))?.avatar_url || !!(await getCanonicalAvatar().catch(() => null));
             }
-            // "Put this in your shop": the member's shop as the node has it now (none yet, open, closed for now), or nothing.
-            const shop = shopToggleState(await readMyShop().catch(() => null));
+            const shop = shopToggleState(await shopRead);
             setListChecks({ photo: needs && !hasPhoto, unfinished: await unfinishedPostHere(), shop });
             setListDraft(draft);
         })();

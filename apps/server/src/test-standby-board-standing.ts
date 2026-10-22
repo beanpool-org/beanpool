@@ -3,23 +3,26 @@
  * deltas carry the authors its main server's would (card f8, 2026-09-27).
  *
  * The phone's Market delta carries a local author's listings when members.board_standing_changed_at moved after its
- * cursor (engine posts.ts getPosts): holiday, and an enterprise's pause or wind-up. The column travels with the member
- * row: the replication export, the standby's insert and update, and a whole copy for a row at the same stamp.
+ * cursor (engine posts.ts getPosts): holiday, an enterprise's pause or wind-up, and a member's pause (removal by vote
+ * S1). The column travels with the member row: the replication export, the standby's insert and update, and a whole
+ * copy for a row at the same stamp.
  *
  * Every node is its own process with its own data dir (takeover-test-harness.ts), and the standby pulls through the real
  * puller (services/backup-puller.ts `pullNow`, the loop's own step) from the main server's real backup routes. Each
  * node's delta is read with getPosts as the marketplace route calls it for a phone (the harness serves only the backup
  * routes).
  *
- *  1. A main server with an enterprise (a lead keeper, an offer), Hana (an offer) and Olly (an offer); its standby
- *     copies it.
- *  2. On the main server the enterprise starts winding up, Hana goes on holiday and Olly edits his bio.
- *  3. The standby's next pull (a delta) holds the enterprise's and Hana's standing as the main server wrote it, at its
- *     stamp: the wind-up's status comes with it and doesn't stamp the standby's own time over the main server's. Olly
- *     has none, there as here.
- *  4. A delta since before step 2 on the main server carries the enterprise's and Hana's listings, not Olly's; and on
- *     each node the authors whose standing moved since then, which is what that delta's author half reads, are the same
- *     two.
+ *  1. A main server with an enterprise (a lead keeper, an offer), Hana (an offer), Olly (an offer) and Pia (a
+ *     moderator, an offer); its standby copies it.
+ *  2. On the main server the enterprise starts winding up, Hana goes on holiday, Olly edits his bio and an admin pauses
+ *     Pia (decisions-engine.ts adminEmergencySuspend).
+ *  3. The standby's next pull (a delta) holds the enterprise's, Hana's and Pia's standing as the main server wrote it,
+ *     at its stamp: the wind-up's status and the pause's come with it and don't stamp the standby's own time over the
+ *     main server's. Olly has none, there as here. The pause is all there: Pia 'disabled', its record open, her
+ *     moderator role held aside under it, and no role row of hers left.
+ *  4. A delta since before step 2 on the main server carries the enterprise's, Hana's and Pia's listings, not Olly's;
+ *     and on each node the authors whose standing moved since then, which is what that delta's author half reads, are
+ *     the same three.
  *  5. The main server fills a standing without stamping the row, as its upgrade does (db.ts backfillBoardStanding): no
  *     delta brings it, and a whole copy does.
  *
@@ -52,25 +55,26 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 
 async function child(): Promise<void> {
     await runNodeChild({
-        'setup-primary': async (a: { replicationToken: string; pat: string; hana: string; olly: string }) => {
+        'setup-primary': async (a: { replicationToken: string; pat: string; hana: string; olly: string; pia: string }) => {
             const se = await import('./state-engine.js');
             const { db } = await import('./db/db.js');
             const { setReplicationToken } = await import('./config/local-config.js');
             const genesis = crypto.randomBytes(32).toString('hex');
             se.seedGenesisMember(genesis, 'Gwen');
             setReplicationToken(a.replicationToken);
-            for (const [key, name] of [[a.pat, 'Pat'], [a.hana, 'Hana'], [a.olly, 'Olly']]) {
+            for (const [key, name] of [[a.pat, 'Pat'], [a.hana, 'Hana'], [a.olly, 'Olly'], [a.pia, 'Pia']]) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`).run(key, name, genesis, `INV-${name}`);
                 setMemberPhoto(db, key, AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
+            se.grantNodeRole(a.pia, 'moderator', genesis);
             const { publicKey: mill } = se.createTreasury('Mill', AVATAR, 100);
             db.prepare(`INSERT INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by) VALUES (?, ?, 'lead', 'admin')`).run(mill, a.pat);
             db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(a.pat);
             const offer = (author: string, title: string) =>
                 se.createPost('offer', 'food', title, '', 5, 'fixed', author, undefined, undefined, undefined, true)!.id;
-            return { mill, posts: { mill: offer(mill, 'Flour'), hana: offer(a.hana, 'Lemons'), olly: offer(a.olly, 'Firewood') } };
+            return { mill, posts: { mill: offer(mill, 'Flour'), hana: offer(a.hana, 'Lemons'), olly: offer(a.olly, 'Firewood'), pia: offer(a.pia, 'Honey') } };
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
@@ -96,11 +100,20 @@ async function child(): Promise<void> {
                 delete process.env.BACKUP_RECONCILE_EVERY_MS;
             }
         },
-        change: async (a: { mill: string; pat: string; hana: string; olly: string }) => {
+        change: async (a: { mill: string; pat: string; hana: string; olly: string; pia: string }) => {
             const se = await import('./state-engine.js');
             se.initiateWindUp(a.mill, a.pat);
             se.setHolidayMode(a.hana, true);
-            return !!se.updateProfile(a.olly, { bio: 'Splits and stacks it too' });
+            const paused = se.adminEmergencySuspend(a.pia, 'owner:password', 'Threats made to another member at the market');
+            return !!se.updateProfile(a.olly, { bio: 'Splits and stacks it too' }) && paused.success;
+        },
+        // A member's pause as a node holds it: the record, the role held aside under it, and any role row left.
+        pause: async (a: { key: string }) => {
+            const { db } = await import('./db/db.js');
+            const record = db.prepare("SELECT id, status FROM decisions WHERE subject = ? AND effect = 'keep_suspension'").get(a.key) as { id: string; status: string } | undefined;
+            const held = record ? db.prepare('SELECT role FROM suspended_node_roles WHERE decision_id = ?').get(record.id) as { role: string } | undefined : undefined;
+            const role = db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(a.key) as { role: string } | undefined;
+            return { record: record?.status ?? null, held: held?.role ?? null, role: role?.role ?? null };
         },
         fill: async (a: { key: string; at: string }) => {
             const { db } = await import('./db/db.js');
@@ -161,12 +174,13 @@ async function main(): Promise<void> {
     const pat = newKey();
     const hana = newKey();
     const olly = newKey();
+    const pia = newKey();
 
     try {
-        console.log('\n— 1. a main server with an enterprise, Hana and Olly, and its standby —');
+        console.log('\n— 1. a main server with an enterprise, Hana, Olly and Pia, and its standby —');
         const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
         nodes.push(main);
-        const { mill, posts } = await main.send('setup-primary', { replicationToken, pat, hana, olly });
+        const { mill, posts } = await main.send('setup-primary', { replicationToken, pat, hana, olly, pia });
         fs.mkdirSync(dirs.standby, { recursive: true });
         fs.copyFileSync(path.join(dirs.main, 'genesis.json'), path.join(dirs.standby, 'genesis.json'));
         const standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
@@ -177,13 +191,18 @@ async function main(): Promise<void> {
         const copied = await standby.send('row', { key: mill });
         require_(copied.status === 'active' && copied.standing === null, `there, the enterprise is active and its standing never changed (${JSON.stringify(copied)})`);
 
-        console.log('\n— 2. on the main server: a wind-up, a holiday, a bio —');
+        console.log('\n— 2. on the main server: a wind-up, a holiday, a bio, a pause —');
         const since = new Date(Date.now() - 1).toISOString();
         await sleep(5);
-        require_(await main.send('change', { mill, pat, hana, olly }), 'the enterprise starts winding up, Hana goes on holiday, Olly edits his bio');
-        const onMain = { mill: await main.send('row', { key: mill }), hana: await main.send('row', { key: hana }), olly: await main.send('row', { key: olly }) };
+        require_(await main.send('change', { mill, pat, hana, olly, pia }), 'the enterprise starts winding up, Hana goes on holiday, Olly edits his bio, an admin pauses Pia');
+        const onMain = {
+            mill: await main.send('row', { key: mill }), hana: await main.send('row', { key: hana }), olly: await main.send('row', { key: olly }),
+            pia: await main.send('row', { key: pia }),
+        };
         assert(onMain.mill.status === 'winding_up' && onMain.mill.standing > since && onMain.hana.standing > since && onMain.olly.standing === null,
             `the main server stamps the enterprise's and Hana's standing, not Olly's (${onMain.mill.standing}, ${onMain.hana.standing}, ${onMain.olly.standing})`);
+        assert(onMain.pia.status === 'disabled' && (onMain.pia.standing ?? '') > since,
+            `and Pia's, whom the pause took off the board (${onMain.pia.status}, ${onMain.pia.standing})`);
 
         console.log('\n— 3. the standby\'s next pull —');
         await sleep(20);
@@ -196,15 +215,22 @@ async function main(): Promise<void> {
             `and Hana's standing as the main server wrote it (${onStandby.hana.standing} / ${onMain.hana.standing})`);
         assert(onStandby.olly.bio === 'Splits and stacks it too' && onStandby.olly.standing === null,
             `Olly's bio reaches it, and he has no standing there either (${onStandby.olly.standing})`);
+        const piaThere = await standby.send('row', { key: pia });
+        assert(piaThere.status === 'disabled' && !!piaThere.standing && piaThere.standing === onMain.pia.standing && piaThere.updatedAt === onMain.pia.updatedAt,
+            `Pia's pause reaches it: 'disabled', with the main server's standing and stamp (${piaThere.status}, ${piaThere.standing} / ${onMain.pia.standing})`);
+        const pauseOn = { main: await main.send('pause', { key: pia }), standby: await standby.send('pause', { key: pia }) };
+        assert(pauseOn.main.record === 'open' && pauseOn.main.held === 'moderator' && pauseOn.main.role === null
+            && JSON.stringify(pauseOn.standby) === JSON.stringify(pauseOn.main),
+            `and all of it: the record open, her moderator role held aside under it, no role row left (main ${JSON.stringify(pauseOn.main)}, standby ${JSON.stringify(pauseOn.standby)})`);
 
         console.log('\n— 4. a delta since before the changes —');
         const ids = (rows: Array<{ id: string }>) => rows.map(r => r.id).filter(id => Object.values(posts).includes(id)).sort();
         const mainDelta = ids(await main.send('delta', { since }));
-        assert(JSON.stringify(mainDelta) === JSON.stringify([posts.mill, posts.hana].sort()),
-            `the main server's carries the enterprise's and Hana's listings, not Olly's (${mainDelta.length} of ours)`);
+        assert(JSON.stringify(mainDelta) === JSON.stringify([posts.mill, posts.hana, posts.pia].sort()),
+            `the main server's carries the enterprise's, Hana's and Pia's listings, not Olly's (${mainDelta.length} of ours)`);
         const moved = { main: await main.send('standing-since', { since }), standby: await standby.send('standing-since', { since }) };
-        assert(JSON.stringify(moved.main) === JSON.stringify([mill, hana].sort()) && JSON.stringify(moved.standby) === JSON.stringify(moved.main),
-            `on each node the authors whose standing moved since then are the enterprise and Hana (main ${moved.main.length}, standby ${moved.standby.length})`);
+        assert(JSON.stringify(moved.main) === JSON.stringify([mill, hana, pia].sort()) && JSON.stringify(moved.standby) === JSON.stringify(moved.main),
+            `on each node the authors whose standing moved since then are the enterprise, Hana and Pia (main ${moved.main.length}, standby ${moved.standby.length})`);
 
         console.log('\n— 5. a standing the main server fills without stamping the row —');
         const filledAt = new Date().toISOString();

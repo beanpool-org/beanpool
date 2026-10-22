@@ -11,13 +11,15 @@
  *
  * Boots the real server; every read goes over HTTP through the real signature middleware, or over /ws.
  *
- *  1. Member-only reads, for each reader: a member suspended through a report, one disabled by an admin, a visitor made
+ *  1. Member-only reads, for each reader: a member paused through a report (the same 'disabled' an admin's suspension
+ *     writes, removal by vote S1), one disabled by an admin, a visitor made
  *     by a DM (POST /api/messages/conversation), one made by a transfer (transfer() from the genesis account, which is
  *     how every send reaches the row, with Beans), the recipient of a send the node refused (POST /api/ledger/transfer),
  *     which gets no row, a federation visitor, and the old key of a member being re-keyed each get no Community contact
  *     (the member list and the profile page), no voters (the board), no activity feed and no distances. A real member
  *     made every way there is (the genesis member, an invite, an offline ticket, the open door) gets all four, as do the
- *     suspended and the disabled member once their suspension is lifted.
+ *     suspended and the disabled member once their suspension is lifted. While it lasts, a suspended member's own
+ *     listings are off the board other members read, and they are back once it is lifted.
  *  2. The gate: a visitor reads its own conversation list, its DM and its Beans (balance, transactions) and nothing
  *     else gated (the directory, a profile, its standing, someone else's Beans or chats, the whole ledger, groups). A
  *     suspended member still reads their own messages, standing and balance, and still sends a message.
@@ -41,8 +43,10 @@
  *     ticket then joins, keeping its DM and Beans; a key with no row still joins unsigned. A visitor's row brings
  *     nobody in: it can't make an invite (the answer a key with no row gets), a code it made before this version and a
  *     ticket it signs admit nobody, itself included, and it can neither approve nor decline a knock (403 not_member,
- *     as a key with no row). A member, and a suspended or a disabled one, still makes an invite; a member answers
- *     knocks; a suspended member still can't (#1177). A visitor's own knock is on the members' list and in the
+ *     as a key with no row). A member makes an invite; a member paused through a report and a disabled one can't while
+ *     it lasts (403 `paused`, no code written), and a ticket either signs admits nobody (removal by vote S1: a paused
+ *     member brings nobody in, where #1177 let them); a member answers knocks; a suspended member still can't (#1177).
+ *     A visitor's own knock is on the members' list and in the
  *     operator's count, survives the tidy-up, and a member approves it from the list; the visitor then joins with its
  *     own signed redeem of that invite (4110436318).
  *
@@ -295,11 +299,28 @@ async function main() {
     const heardVote = (s: Socket) => s.events.some(e => e.type === 'post_updated');
 
     // ── Suspensions and a re-key ───────────────────────────────────────────────────────────────────────────────────
+    // Sue's and Dan's own listings, which the board other members read leaves out while they are suspended.
+    const sueOffer = se.createPost('offer', 'food', 'Sue sourdough', 'A loaf a week', 5, 'fixed', sue.pubKeyHex)!.id;
+    const danOffer = se.createPost('offer', 'tools', 'Dan ladder', 'Borrow it for a day', 5, 'fixed', dis.pubKeyHex)!.id;
+    const boardIds = async (reader: Id) => {
+        const r = await get('/api/marketplace/posts?limit=500&types=offer,need,poll,event', reader);
+        return new Set(((Array.isArray(r.body) ? r.body : r.body?.posts) ?? []).map((p: any) => p.id as string));
+    };
+    {
+        const before = await boardIds(olive);
+        assert(before.has(sueOffer) && before.has(danOffer), 'setup: Olive reads Sue\'s and Dan\'s offers on the board');
+    }
     const report = se.submitReport(reporter.pubKeyHex, sue.pubKeyHex, 'Harassing people in the market chats');
     assert(!!report?.id, 'a member reports Sue');
-    assert(se.actionReport(report!.id, false, true) === true && row(sue.pubKeyHex).status === 'suspended', 'a moderator actions the report and suspends Sue');
+    // A report's suspension is the pause an admin's is (removal by vote S1): 'disabled', no longer 'suspended', which is
+    // left to the re-key hold.
+    assert(se.actionReport(report!.id, false, true) === true && row(sue.pubKeyHex).status === 'disabled', `a moderator actions the report and pauses Sue: 'disabled' (${row(sue.pubKeyHex).status})`);
     se.adminSetUserStatus(dis.pubKeyHex, 'disabled');
     assert(row(dis.pubKeyHex).status === 'disabled', 'an admin suspends Dan (disabled)');
+    {
+        const during = await boardIds(olive);
+        assert(!during.has(sueOffer) && !during.has(danOffer), 'while they are suspended, their offers are off the board Olive reads');
+    }
     issueRekeyCode(rex.pubKeyHex, 'owner:password');
     await sleep(200);
     if (!READ_AUTH_OFF) {
@@ -488,6 +509,10 @@ async function main() {
     console.log('\n── 1b. a lifted suspension ──');
     await expectReader('Sue, her suspension lifted', sue);
     await expectReader('Dan, his suspension lifted', dis);
+    {
+        const after = await boardIds(olive);
+        assert(after.has(sueOffer) && after.has(danOffer), 'and their offers are back on the board Olive reads');
+    }
 
     // ── 4. A visitor joins ─────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. a visitor joins for real ──');
@@ -728,15 +753,24 @@ async function main() {
             `…and through the signature middleware's gate, 403 not_a_member before the route (${wesMakesGated.status} ${wesMakesGated.text.slice(0, 80)})`);
         assert(se.generateInvite(wes.pubKeyHex) === null && !db.prepare('SELECT 1 FROM invite_codes WHERE created_by = ?').get(wes.pubKeyHex), '…and no code is written');
 
-        // Members still do, a suspended and a disabled one included, as #1177 left them.
+        // A member does. A paused one doesn't while it lasts (removal by vote S1): #1177 left a suspended and a disabled
+        // member making invites, and a ticket they signed admitting anyone; the pause brings nobody in.
         const sam = seedMember('SuspendedSam');
         const samReport = se.submitReport(reporter.pubKeyHex, sam.pubKeyHex, 'Spamming the market chats');
-        assert(!!samReport?.id && se.actionReport(samReport!.id, false, true) === true && row(sam.pubKeyHex).status === 'suspended', 'Sam is suspended through a report');
+        assert(!!samReport?.id && se.actionReport(samReport!.id, false, true) === true && row(sam.pubKeyHex).status === 'disabled', 'Sam is paused through a report');
         const dora = seedMember('DisabledDora');
         se.adminSetUserStatus(dora.pubKeyHex, 'disabled');
-        for (const [label, id] of [['a member', olive], ['a suspended member', sam], ['a disabled member', dora]] as const) {
+        const olivesMade = await post('/api/invite/generate', { publicKey: olive.pubKeyHex }, olive);
+        assert(olivesMade.status === 200 && !!olivesMade.body?.invite?.code, `a member makes an invite (${olivesMade.status} ${olivesMade.text.slice(0, 80)})`);
+        for (const [label, id] of [['a member paused through a report', sam], ['a disabled member', dora]] as const) {
             const made = await post('/api/invite/generate', { publicKey: id.pubKeyHex }, id);
-            assert(made.status === 200 && !!made.body?.invite?.code, `${label} still makes an invite (${made.status} ${made.text.slice(0, 80)})`);
+            const written = (db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE created_by = ?').get(id.pubKeyHex) as { n: number }).n;
+            assert(made.status === 403 && made.body?.code === 'paused' && written === 0,
+                `${label} can't make an invite while it lasts, and no code is written (${made.status} ${made.text.slice(0, 100)})`);
+            const joiner = keypair(`Via${id.callsign}`);
+            const viaTicket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(id), publicKey: joiner.pubKeyHex, callsign: joiner.callsign }, joiner);
+            assert(viaTicket.status === 400 && !row(joiner.pubKeyHex),
+                `…and an offline ticket they sign admits nobody (${viaTicket.status} ${viaTicket.text.slice(0, 100)})`);
         }
 
         // A code a visitor made before this version (on main, `generateInvite` asked only for the act test), and an

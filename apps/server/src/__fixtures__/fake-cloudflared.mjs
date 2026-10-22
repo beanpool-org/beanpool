@@ -16,8 +16,9 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import process from 'node:process';
-import { setInterval } from 'node:timers';
+import { setInterval, setTimeout } from 'node:timers';
 
 const [dir, ...argv] = process.argv.slice(2);
 const at = (f) => path.join(dir, f);

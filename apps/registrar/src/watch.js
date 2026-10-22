@@ -4,7 +4,7 @@
 // what it sees:
 //   - a server that does not answer as ours two looks in a row (15 s each, a redirect is not followed; a 2xx counts only
 //     with a node's JSON version or the vault's open/locked): urgent, cleared at its first such answer;
-//   - the vault answering locked two looks in a row: urgent;
+//   - the vault answering locked two looks in a row: urgent, cleared only when it answers open;
 //   - the vault's daily signed report, believed only under the ticket public key the apps pin (VAULT_TICKET_KEYS): one
 //     that is missing, not signed by that key ("unverifiable"), unreadable or not from now ("stale") two looks in a
 //     row, or one that says backups or the off-box copy are failing: high. With no key set the report is "not
@@ -204,8 +204,11 @@ function down(t, rows, seen) {
             : `${t.name} (${hostOf(t)}) answers again${seen.ok ? ` (${seen.status})` : ''}.`,
     };
 }
-function locked(t, rows) {
+// Cleared only by an open answer: a locked look after a failed one (gone, and back still locked) decides nothing, and
+// what was raised stays raised — never "answers open again" while it is locked.
+function locked(t, rows, seen) {
     const active = allOf(rows, (r) => r.ok && r.state === 'locked');
+    if (!active && seen.state !== 'open') return null;
     return {
         key: key(t, 'locked'), category: 'health', priority: alerts.PRIORITY.urgent, tag: 'red_circle', title: `${t.name} locked`, active,
         detail: active
@@ -393,7 +396,8 @@ export async function watchOurServers(env) {
                 conditions.push(d);
                 recent.set(t.name, { rows, down: d.active });
                 if (t.kind === 'vault' && s.ok) {
-                    conditions.push(locked(t, rows));
+                    const l = locked(t, rows, s);
+                    if (l) conditions.push(l);
                     if (s.state === 'open' && s.report !== 'not checked') conditions.push(...reportConditions(t, rows, s));
                 }
                 await oneShots(env, t, row.id, s);

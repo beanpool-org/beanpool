@@ -110,7 +110,7 @@ const node = vi.hoisted(() => ({
     shop: null as null | Record<string, any>,
     listings: [] as Listing[],
     log: [] as Array<{ method: string; path: string; body?: any }>,
-    refuse: null as null | { status: number; code: string; error: string },
+    refuse: null as null | { status: number; code?: string; error: string; unsaid?: boolean },
 }));
 const COUNTS0 = { things: 0, available: 0, toBorrow: 0, toBuy: 0, out: 0, newThisWeek: 0 };
 function shopAnswer() {
@@ -136,7 +136,7 @@ vi.mock('../db', () => ({
     signedRequestWithMethod: async (method: string, p: string, body: any) => {
         node.log.push({ method, path: p, body });
         if (node.mode === 'down') throw new TypeError('Network request failed');
-        if (node.refuse) { const r = node.refuse; node.refuse = null; throw Object.assign(new Error(r.error), { status: r.status, code: r.code }); }
+        if (node.refuse) { const r = node.refuse; node.refuse = null; throw Object.assign(new Error(r.error), { status: r.status }, r.code ? { code: r.code } : {}, r.unsaid ? { unsaid: true } : {}); }
         if (method === 'PUT' && p === '/api/shops/mine') {
             if (!node.shop) node.shop = { id: 'shop-1', name: null, ownerName: ME.callsign, kind: null, blurb: null, howToDeal: null, paused: false, backOn: null };
             const s = node.shop;
@@ -163,7 +163,7 @@ vi.mock('../db', () => ({
     },
 }));
 
-import { setLanguage, type ToolOfferDraft } from '@beanpool/core';
+import { setLanguage, t, type ToolOfferDraft } from '@beanpool/core';
 import { lightColors, darkColors, type AppColors } from '../../constants/colors';
 import YourShopScreen from '../../app/shop/mine';
 import { ShopToggle, shopToggleState, shopIdForEdit } from '../../components/shop/ShopToggle';
@@ -385,6 +385,20 @@ describe('Your shop (app/shop/mine.tsx)', () => {
         await click('shop-text-save');
         expect(byTestId('shop-text-sheet')).not.toBeNull();
         expect(byTestId('shop-text-error')?.textContent).toBe(said);
+    });
+
+    it("an answer with no words of the node's own (a proxy's 502 page): our sentence, never \"Request failed: 502\"", async () => {
+        aShopWithThings();
+        await draw(createElement(YourShopScreen));
+        await click('shop-field-blurb');
+        // utils/db.ts signedRequestWithMethod's error for a body without the node's words, withStatus.
+        node.refuse = { status: 502, error: 'Request failed: 502', unsaid: true };
+        await type('shop-text-input', 'Something');
+        await click('shop-text-save');
+        expect(byTestId('shop-text-sheet')).not.toBeNull();
+        expect(byTestId('shop-text-error')?.textContent).toBe(t("Your community couldn't be reached. Try again."));
+        expect(text()).not.toContain('Request failed');
+        atTheFloor();
     });
 
     it('"Add my live Offers": the member\'s own live Offers for everyone that are not in it yet, ticked and put in together', async () => {

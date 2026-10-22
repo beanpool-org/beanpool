@@ -33,10 +33,13 @@ import {
 
 type Where = 'screen' | 'text' | 'kind' | 'pause' | 'close' | 'add';
 
-/** A refusal as the screen shows it: the node's own sentence when it answered, else ours. */
+/**
+ * A refusal as the screen shows it: the node's own sentence when it answered, else ours. An answer without the node's
+ * words (`unsaid`: a proxy's 502 page, an empty 500) is no answer: its message is "Request failed: <status>", in English.
+ */
 function refusalOf(e: unknown): ShopSheetRefusal {
-    const err = e as { message?: unknown; status?: unknown; code?: unknown } | null;
-    const answered = typeof err?.status === 'number' && typeof err.message === 'string' && err.message.trim().length > 0;
+    const err = e as { message?: unknown; status?: unknown; code?: unknown; unsaid?: unknown } | null;
+    const answered = typeof err?.status === 'number' && err.unsaid !== true && typeof err.message === 'string' && err.message.trim().length > 0;
     return {
         message: answered ? String(err!.message) : t("Your community couldn't be reached. Try again."),
         code: typeof err?.code === 'string' ? err.code : undefined,

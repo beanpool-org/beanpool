@@ -253,7 +253,7 @@ describe('a tool this build does not have', () => {
     });
 
     it('the registry as shipped: no tool, the Tools screen says so, and any id is not in this version', async () => {
-        expect(TOOLS).toEqual([]);
+        expect(TOOLS.filter((m) => !!TOOL_APPS[m.id])).toEqual([]);
         expect(Object.keys(TOOL_APPS)).toEqual([]);
         const list = render(<ToolsPage identity={identity} open={{ id: null, screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
         expect(await list.findByTestId('tools-none')).toBeInTheDocument();

@@ -731,9 +731,8 @@ async function main(): Promise<void> {
             .run(pk, C5E[i], new Date().toISOString(), owner, 'TEST');
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
-    grantNodeRole(rey, 'admin', owner);
-    grantNodeRole(mac, 'moderator', owner);
-    grantNodeRole(mol, 'moderator', 'owner:password');
+    // By the password, so the owner's own hour of pushes is untouched: a re-key counted twice would be told, and seen.
+    for (const [pk, role] of [[rey, 'admin'], [mac, 'moderator'], [mol, 'moderator']] as const) grantNodeRole(pk, role, 'owner:password');
     putPushTokenRow(rey, 'ExponentPushToken[rey-admin]', 'android');
     await settle(300);
     const rekey = async (pk: string, as = asOwnerPhone) => {
@@ -783,8 +782,7 @@ async function main(): Promise<void> {
     assert(ownerPushes().length === pM + 2 && /2 members' accounts were moved/.test(topicHits().at(-1)?.body ?? ''),
         `5e. pushed and on the channel with its count (${ownerPushes().length - pM}, ${topicHits().at(-1)?.body.split('\n')[2]})`);
 
-    // The owner's own count is a line of its own, in its words (the owner's hour of pushes from the grants above is over).
-    advance(HOUR + MIN);
+    // The owner's own count is a line of its own, in its words.
     const rO = await rekey(mol);
     assert(rO.done === 200 && heldNodeRoleOf(rO.fresh) === 'moderator' && historyOf('sec.keys').length === keysBefore + 1,
         `5e. an owner re-keys a moderator (${rO.done} ${rO.error ?? ''})`);

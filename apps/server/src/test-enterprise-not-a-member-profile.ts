@@ -15,6 +15,9 @@
  *      profile_updated_at); POST /api/profile/vouch answers 400 with that sentence. A member is still vouched for.
  *   4. A vouch given to an enterprise before this change is left as it is (inert for credit): the row keeps it, and the
  *      voucher may still withdraw it, even while the enterprise is below 0 (a member below 0 still may not).
+ *   5. The node's own accounts, BeanPool and Daily Pulse, are treasury rows but not enterprises: no `isTreasury` on
+ *      either read, so the Pulse card's author door opens BeanPool's profile with its channels. A real enterprise,
+ *      one made without a photo included, still says `isTreasury`.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-not-a-member-profile.ts
  */
@@ -187,6 +190,51 @@ async function main() {
         `a member below 0 keeps their vouch (got "${memberWithdrawal}")`);
     db.prepare(`UPDATE accounts SET balance = 0 WHERE public_key = ?`).run(rosa.pubKeyHex);
     reconcileLedgerFromDb();
+
+    // ── 5. The node's own accounts are not enterprises ──
+    // BeanPool owns the curated learn channel (seeded at every boot) and every channel an admin adds; Daily Pulse posts
+    // the day's entry. Both are treasury rows, so the People directory leaves them out, but neither has keepers or a
+    // purpose: the Pulse card's author door opened an empty "BeanPool" enterprise page instead of its profile with its
+    // channels (deciding review of #2367).
+    console.log('── 5. the node\'s own accounts are not enterprises ──');
+    const { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } = await import('./engine/pulse-seed.js');
+    const { ensurePulseTreasury } = await import('./daily-pulse.js');
+    const { getAllProfiles } = await import('./state-engine.js');
+    const beanpool = ensureBeanPoolIdentity(); // seeded by initStateEngine: this only reads it
+    const dailyPulse = ensurePulseTreasury();
+    const isTreasuryRow = (pk: string) => (db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(pk) as { is_treasury: number } | undefined)?.is_treasury;
+    assert(isTreasuryRow(beanpool) === 1 && isTreasuryRow(dailyPulse) === 1, 'BeanPool and Daily Pulse are still treasury rows (out of the People directory)');
+    for (const [name, pk] of [['BeanPool', beanpool], ['Daily Pulse', dailyPulse]] as const) {
+        const p = getProfile(pk, kofi.pubKeyHex) as Record<string, unknown> | null;
+        assert(!!p && p.callsign === name && !('isTreasury' in p), `${name}'s profile carries no isTreasury key (got ${JSON.stringify(p?.isTreasury)})`);
+        const http = await get(`/api/profile/${pk}`, kofi);
+        assert(http.status === 200 && http.body?.callsign === name && !('isTreasury' in (http.body ?? {})),
+            `GET /api/profile/<${name}> → 200, no isTreasury (got ${http.status}, ${JSON.stringify(http.body?.isTreasury)})`);
+        const trust = getTrustProfileForViewer(kofi.pubKeyHex, pk) as Record<string, unknown> | null;
+        assert(!!trust && !('isTreasury' in trust), `${name}'s trust profile carries no isTreasury key (got ${JSON.stringify(trust?.isTreasury)})`);
+        const trustHttp = await post('/api/trust/profile', { targetPubkey: pk }, kofi);
+        assert(trustHttp.status === 200 && !('isTreasury' in (trustHttp.body ?? {})),
+            `POST /api/trust/profile for ${name} → 200, no isTreasury (got ${trustHttp.status}, ${JSON.stringify(trustHttp.body?.isTreasury)})`);
+    }
+    // The door itself: a curated Pulse card's author is BeanPool, whose profile is a profile, with its channel chips.
+    const feed = await get('/api/pulse/feed', kofi);
+    const owners = new Set(((feed.body?.items ?? []) as { ownerPubkey: string }[]).map(i => i.ownerPubkey));
+    assert(feed.status === 200 && owners.has(beanpool), `the Pulse feed's curated cards are BeanPool's (got ${feed.status}, ${owners.size} owner(s))`);
+    const chips = await get(`/api/members/${beanpool}/channels`, kofi);
+    assert(chips.status === 200 && ((chips.body?.channels ?? []) as { id: string }[]).some(c => c.id === BEANPOOL_LEARN_CHANNEL_ID),
+        `and BeanPool's profile lists its learn channel (got ${chips.status}, ${JSON.stringify((chips.body?.channels ?? []).map((c: any) => c.id))})`);
+    // The admins' members list reads the same rule.
+    const listed = new Map(getAllProfiles(kofi.pubKeyHex).map(p => [p.publicKey, p]));
+    assert(!!listed.get(beanpool) && !('isTreasury' in listed.get(beanpool)!) && !('isTreasury' in (listed.get(dailyPulse) ?? { isTreasury: 1 })),
+        'getAllProfiles: BeanPool and Daily Pulse carry no isTreasury');
+    assert(listed.get(enterprise)?.isTreasury === true, 'getAllProfiles: an enterprise still says isTreasury');
+    // A real enterprise still opens as one, including one made without a photo: POST /api/enterprise passes
+    // `systemCreated: !photoUrl` (routes/treasury.ts), which is why that option is no sign of the node's own account.
+    const { publicKey: photoless } = createTreasury('Kofi Bakes', '', 0, { systemCreated: true, purpose: 'Bread', leadKeeperPubkey: kofi.pubKeyHex });
+    assert(getProfile(photoless, rosa.pubKeyHex)?.isTreasury === true && getTrustProfileForViewer(rosa.pubKeyHex, photoless)?.isTreasury === true,
+        "an enterprise made without a photo still says isTreasury, on its profile and its trust profile");
+    assert(getProfile(enterprise, kofi.pubKeyHex)?.isTreasury === true && getTrustProfileForViewer(kofi.pubKeyHex, enterprise)?.isTreasury === true,
+        'and so does the enterprise from section 1, with the node\'s own accounts in place');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

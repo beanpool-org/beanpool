@@ -67,6 +67,17 @@ export interface ToolPriceHint {
 }
 export type ToolPostStatus = 'active' | 'pending' | 'paused' | 'gone';
 
+/**
+ * The code `posts.resume` rejects with when the Offer is in its owner's shop and the shop is closed for now (the node's
+ * 409 `shop_paused`): the server answered, and nothing in that shop goes back up until its owner reopens it.
+ */
+export const TOOL_SHOP_CLOSED = 'shop_paused';
+
+/** Whether a `posts` call was refused because the Offer's shop is closed for now ({@link TOOL_SHOP_CLOSED}). */
+export function isShopClosedRefusal(e: unknown): boolean {
+    return !!e && typeof e === 'object' && (e as { code?: unknown }).code === TOOL_SHOP_CLOSED;
+}
+
 /** What every tool is given, whatever it asked for. */
 export interface ToolHostBase<D> {
     owner: { kind: 'member' | 'enterprise'; publicKey: string; name: string };
@@ -93,7 +104,10 @@ export interface ToolHostGrants {
     /**
      * The owner's own Offers only: pause and resume one, ask its status ('gone' for one that isn't the owner's), and list
      * them (`mine`), so a tool can link a record to the Offer the member posted from its draft (the composer posts it;
-     * nothing tells the tool its id).
+     * nothing tells the tool its id). The status is the community's server's, asked each time. A pause is the owner's own
+     * and is taken for one live or already paused: a shop closed for now pauses its Offers, and the owner's pause makes
+     * one theirs, so the shop's reopen leaves it down. A resume of one whose shop is closed for now rejects with
+     * {@link TOOL_SHOP_CLOSED}.
      */
     posts: { pause(id: string): Promise<void>; resume(id: string): Promise<void>; status(id: string): Promise<ToolPostStatus>; mine(): Promise<ToolOwnOffer[]> };
     /** Read-only here: the toggle is the host's Settings row. */

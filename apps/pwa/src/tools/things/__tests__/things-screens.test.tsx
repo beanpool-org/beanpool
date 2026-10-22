@@ -73,10 +73,15 @@ const shed = (...things: Thing[]): ThingsDoc => ({ v: 1, things });
  * The community's server, as these screens use it; `down` when it can't be reached, `dealsDown` when only the deals
  * can't be read, and `dealsGate` holds a read of the deals until it settles. `copy` is its own copy of the shed (from the
  * member's other device), none when null; `copyGate` holds a read of it and `marketGate` a pause or resume until each
- * settles; `puts` are the documents sent to it.
+ * settles; `puts` are the documents sent to it. Each pause or resume asked is in `asks`. A shop closed for now
+ * (`closeShop`) paused what is in `shopHeld` and refuses to put back up anything in `inClosedShop` (409 shop_paused); its
+ * reopen puts back what it still holds.
  */
 const server = {
     posts: new Map<string, Record<string, unknown>>(),
+    asks: [] as string[],
+    shopHeld: new Set<string>(),
+    inClosedShop: new Set<string>(),
     deals: [] as Array<Record<string, unknown>>,
     guide: { items: [] as unknown[] },
     paused: [] as string[], resumed: [] as string[],
@@ -91,6 +96,20 @@ const server = {
 };
 function offer(id: string, title: string, status = 'active', extra: Record<string, unknown> = {}) {
     server.posts.set(id, { id, title, status, type: 'offer', authorPublicKey: OWNER, priceType: 'fixed', ...extra });
+}
+/** The member's shop "closed for now" on the server, holding these Offers (engine/shops.ts): the live ones are paused. */
+function closeShop(...ids: string[]) {
+    for (const id of ids) {
+        const p = server.posts.get(id)!;
+        if (p.status === 'active') { p.status = 'paused'; server.shopHeld.add(id); }
+        server.inClosedShop.add(id);
+    }
+}
+/** Reopened: what the shop paused and still holds is back up; the rest stays as it is. */
+function reopenShop() {
+    for (const id of server.shopHeld) { const p = server.posts.get(id); if (p?.status === 'paused') p.status = 'active'; }
+    server.shopHeld.clear();
+    server.inClosedShop.clear();
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 /** One page of a list, as the node pages one (clampLimit, clampOffset in https-server.ts): 50 rows unless asked, at most 200. */
@@ -126,19 +145,26 @@ async function answer(input: RequestInfo | URL, init?: RequestInit): Promise<Res
             const status = url.searchParams.get('status');
             return json(page(server.deals.filter((d) => (d.sellerPublicKey === who || d.buyerPublicKey === who) && (!status || d.status === status)), url));
         }
-        // As the node has them (posts.ts, routes/marketplace.ts): only a live Offer is paused and only a paused one
-        // resumed; anything else is a 400.
+        // As the node has them (posts.ts, routes/marketplace.ts): a live Offer is paused (`paused`), and the owner's pause of
+        // one already paused is taken, making a shop's pause theirs; only a paused one is resumed, never one in a shop
+        // closed for now (409 shop_paused); anything else is a 400.
         case 'POST /api/marketplace/posts/pause': {
+            server.asks.push(`pause ${body.postId}`);
             if (server.marketGate) await server.marketGate;
             const p = server.posts.get(body.postId);
+            if (p?.status === 'paused' && p.authorPublicKey === body.authorPublicKey) { server.shopHeld.delete(body.postId); return json({ success: true }); }
             if (p?.status !== 'active') return json({ success: false, error: 'Post not found, not active, or not owned by author' }, 400);
             server.paused.push(body.postId);
             p.status = 'paused';
             return json({ success: true });
         }
         case 'POST /api/marketplace/posts/resume': {
+            server.asks.push(`resume ${body.postId}`);
             if (server.marketGate) await server.marketGate;
             const p = server.posts.get(body.postId);
+            if (server.inClosedShop.has(body.postId)) {
+                return json({ error: 'This is in a shop that is closed for now. Reopen the shop to put it back up.', code: 'shop_paused' }, 409);
+            }
             if (p?.status !== 'paused') return json({ success: false, error: 'Post not found, not paused, or not owned by author' }, 400);
             server.resumed.push(body.postId);
             p.status = 'active';
@@ -157,6 +183,9 @@ beforeEach(() => {
     resetToolStoreForTest();
     resetAccountEpochForTest();
     server.posts.clear();
+    server.asks.length = 0;
+    server.shopHeld.clear();
+    server.inClosedShop.clear();
     server.deals.length = 0;
     server.guide = { items: [] };
     server.paused.length = 0;
@@ -704,6 +733,9 @@ describe('A thing', () => {
         expect((await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
         expect(byTestId('things-main')).not.toBeNull();
         expect(server.paused).toEqual([]);
+        // The paused one's pause is still asked, as its owner's: one a shop closed for now paused would otherwise come back
+        // with the reopen. The gone one asks nothing.
+        expect(server.asks).toEqual(['pause post-1']);
     });
 
     it("an Offer paused elsewhere after the screen opened: Take out reads it first, so the thing is taken out, never \"couldn't reach\"", async () => {
@@ -714,8 +746,70 @@ describe('A thing', () => {
         await click('thing-take-out');
         expect(byTestId('thing-refused')).toBeNull();
         expect(server.paused).toEqual([]);
+        expect(server.asks).toEqual(['pause post-1']);
         expect(await keptThing('t-1')).toMatchObject({ pausedPostId: 'post-1' });
         expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+    });
+
+    it("with the shop closed for now: Take out, Lend and Delete each ask the owner's pause, so the reopen leaves those Offers down and puts back the rest", async () => {
+        offer('post-1', 'Drill');
+        offer('post-2', 'Ladder');
+        offer('post-3', 'Tent');
+        offer('post-4', 'Hammer');
+        await keep(shed(...['Drill', 'Ladder', 'Tent', 'Hammer'].map((name, i) => thing(`t-${i + 1}`, name, { postId: `post-${i + 1}` }))));
+        // Take out on a screen opened while the shop was open; it closed meanwhile.
+        await open('thing', 't-3');
+        closeShop('post-1', 'post-2', 'post-3', 'post-4');
+        await click('thing-take-out');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(await keptThing('t-3')).toMatchObject({ pausedPostId: 'post-3' });
+
+        // Lend on a screen opened while it is closed: its Offer reads paused.
+        cleanup();
+        await open('thing', 't-2');
+        await waitFor(() => expect(byTestId('thing-offer-paused')?.textContent).toContain('Its Offer is paused in the Market.'));
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('thing-lend-save');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect((await keptThing('t-2'))?.lentTo?.name).toBe('Sam');
+
+        cleanup();
+        await open('main');
+        await click('thing-row-t-1');
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(byTestId('things-main')).not.toBeNull();
+
+        expect(server.asks).toEqual(['pause post-3', 'pause post-2', 'pause post-1']);
+        expect([...server.shopHeld]).toEqual(['post-4']);
+        reopenShop();
+        expect(['post-1', 'post-2', 'post-3', 'post-4'].map((id) => server.posts.get(id)?.status)).toEqual(['paused', 'paused', 'paused', 'active']);
+    });
+
+    it("Put back while the shop is closed for now says so in the Tool shed's words, never \"couldn't reach\", and changes nothing", async () => {
+        const closed = "Your shop is closed for now, so this can't go back in it yet. Reopen your shop first.";
+        offer('post-1', 'Drill');
+        offer('post-2', 'Tent', 'paused');
+        const drill = thing('t-1', 'Drill', { postId: 'post-1' });
+        const tent = thing('t-2', 'Tent', { pausedPostId: 'post-2' });
+        await keep(shed(drill, tent));
+        closeShop('post-1', 'post-2');
+        // In the shop, its Offer paused by the closing: the paused section's Put back.
+        await open('thing', 't-1');
+        await waitFor(() => expect(byTestId('thing-offer-paused')).not.toBeNull());
+        await click('thing-resume');
+        expect(byTestId('thing-refused')?.textContent).toBe(closed);
+        expect(byTestId('thing-offer-paused')).not.toBeNull();
+        // Taken out: Put back.
+        cleanup();
+        await open('thing', 't-2');
+        await click('thing-put-back');
+        expect(byTestId('thing-refused')?.textContent).toBe(closed);
+        expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+        expect([server.resumed, server.posts.get('post-1')?.status, server.posts.get('post-2')?.status]).toEqual([[], 'paused', 'paused']);
+        expect((await kept()).things).toEqual([drill, tent]);
     });
 
     /**

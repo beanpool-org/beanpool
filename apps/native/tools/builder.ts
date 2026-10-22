@@ -12,6 +12,7 @@ import {
     type ToolOwnOffer, type ToolPermission, type ToolPostStatus,
 } from '@beanpool/core';
 import { getMyPosts, getPost, pausePost, resumePost, signedGet } from '../utils/db';
+import { viewOf } from '../utils/posts-view';
 import { keepPicked, openNeedComposer } from './doors';
 import { removeToolPhoto, toolPhotoUri } from './photos';
 import { communityKey } from './community';
@@ -157,19 +158,28 @@ export async function pricingGuideHint(url: string | null, category: string, wor
 }
 
 /**
- * The member's own Offer as the phone holds it, else null: `posts` reaches no other post, so a tool can't learn whether
- * someone else's is there or what state it is in (its status says 'gone').
+ * The member's own Offer as the community's server has it now, else null: `posts` reaches no other post, so a tool can't
+ * learn whether someone else's is there or what state it is in (its status says 'gone'). Asked of the server, signed as
+ * the member, as the web asks it, not read from the phone's own row: a shop closed for now pauses its Offers on the
+ * server, and the row says so only after the next sync. No answer, a refusal, or the visitors' view (no author in it)
+ * rejects, so a screen says it couldn't check rather than that the Offer has gone. Let go at core's withinAnswerTime.
  */
 async function ownOffer(owner: string, id: string): Promise<{ status?: unknown } | null> {
-    const post = await getPost(id).catch(() => null);
-    return post && post.author_pubkey === owner && post.type === 'offer' ? post : null;
+    const rows = await withinAnswerTime(async (signal) => {
+        const res = await signedGet(`/api/marketplace/posts?id=${encodeURIComponent(id)}`, { signal });
+        if (!res.ok || viewOf(res) === 'guest') throw new Error(`The Offer wasn't read (${res.status}).`);
+        return res.json() as Promise<unknown>;
+    });
+    if (!Array.isArray(rows)) throw new Error("The Offer wasn't read.");
+    const post = (rows as Array<Record<string, unknown> | null>).find((p) => p?.id === id);
+    return post && post.authorPublicKey === owner && post.type === 'offer' ? post : null;
 }
 
 async function mustBeOwnOffer(owner: string, id: string): Promise<void> {
-    if (!await ownOffer(owner, id)) throw new Error('Not one of your Offers on this phone.');
+    if (!await ownOffer(owner, id)) throw new Error('Not one of your Offers.');
 }
 
-/** A post the phone holds as the host says it: live, in a deal, paused, or gone. */
+/** A post as the host says it: live, in a deal, paused, or gone. */
 export function postStatus(post: { status?: unknown } | null | undefined): ToolPostStatus {
     switch (post?.status) {
         case 'active': return 'active';

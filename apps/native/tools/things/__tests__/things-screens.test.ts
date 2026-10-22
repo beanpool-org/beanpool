@@ -130,10 +130,17 @@ const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
  * `dealsUnread` when it refuses the deals, and `dealsGate` holds a read of the deals until it settles. The deals asked
  * of the server are in `dealReads`, every other request in `requests`. `copy` is the server's own copy of the shed (from
  * the member's other device), none when null; `copyGate` holds a read of it and `marketGate` a pause or resume (each
- * in `marketAsks` as it is asked) until each settles; `puts` are the documents sent to it.
+ * in `marketAsks` as it is asked) until each settles; `puts` are the documents sent to it. `rows` are the Offers as the
+ * server has them; `phoneRows` is the phone's own row of one where it says something else (a sync not yet run), and the
+ * server's reads of an Offer are in `postReads`. A shop closed for now (`closeShop`) paused what is in `shopHeld` and
+ * refuses to put back up anything in `inClosedShop` (409 shop_paused); its reopen puts back what it still holds.
  */
 const market = vi.hoisted(() => ({
     rows: new Map<string, Record<string, unknown>>(),
+    phoneRows: new Map<string, Record<string, unknown>>(),
+    postReads: [] as string[],
+    shopHeld: new Set<string>(),
+    inClosedShop: new Set<string>(),
     deals: [] as Array<Record<string, unknown>>,
     phoneDeals: [] as Array<Record<string, unknown>>,
     paused: [] as string[], resumed: [] as string[], down: false, dealsUnread: false,
@@ -149,20 +156,22 @@ const market = vi.hoisted(() => ({
 vi.mock('../../../utils/db', () => ({
     getDb: async () => disk.db,
     getMemberProfile: async () => ({ avatar_url: node.avatar }),
-    getPost: async (id: string) => market.rows.get(id) ?? null,
-    getMyPosts: async (pubkey: string) => [...market.rows.values()].filter((p) => p.author_pubkey === pubkey),
+    getPost: async (id: string) => market.phoneRows.get(id) ?? market.rows.get(id) ?? null,
+    getMyPosts: async (pubkey: string) => [...market.rows.values()].map((p) => market.phoneRows.get(p.id as string) ?? p).filter((p) => p.author_pubkey === pubkey),
     // As the phone's own copy answers (utils/db.ts): by status when asked, `limit` rows from `offset`.
     getMarketplaceTransactions: async (pubkey: string, filter?: { status?: string }, limit = 50, offset = 0) =>
         market.phoneDeals.filter((d) => (d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey) && (!filter?.status || d.status === filter.status))
             .slice(offset, offset + limit),
-    // As the node has them (posts.ts): only a live Offer is paused and only a paused one resumed; anything else is a 400,
-    // which the phone's signed request throws.
+    // As the node has them (posts.ts): a live Offer is paused (`paused`), and the owner's pause of one already paused is
+    // taken, making a shop's pause theirs; only a paused one is resumed, never one in a shop closed for now (409
+    // shop_paused); anything else is a 400. The phone's signed request throws each refusal with its status and code.
     pausePost: async (id: string) => {
         if (market.down) throw new TypeError('Network request failed');
         market.marketAsks.push(`pause ${id}`);
         if (market.marketGate) await market.marketGate;
         const p = market.rows.get(id);
-        if (p?.status !== 'active') throw new Error('Post not found, not active, or not owned by author');
+        if (p?.status === 'paused' && p.author_pubkey === ME.publicKey) { market.shopHeld.delete(id); return; }
+        if (p?.status !== 'active') throw Object.assign(new Error('Post not found, not active, or not owned by author'), { status: 400 });
         market.paused.push(id);
         p.status = 'paused';
     },
@@ -171,7 +180,10 @@ vi.mock('../../../utils/db', () => ({
         market.marketAsks.push(`resume ${id}`);
         if (market.marketGate) await market.marketGate;
         const p = market.rows.get(id);
-        if (p?.status !== 'paused') throw new Error('Post not found, not paused, or not owned by author');
+        if (market.inClosedShop.has(id)) {
+            throw Object.assign(new Error('This is in a shop that is closed for now. Reopen the shop to put it back up.'), { status: 409, code: 'shop_paused' });
+        }
+        if (p?.status !== 'paused') throw Object.assign(new Error('Post not found, not paused, or not owned by author'), { status: 400 });
         market.resumed.push(id);
         p.status = 'active';
     },
@@ -195,6 +207,13 @@ vi.mock('../../../utils/db', () => ({
                 .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
                 .slice(offset, offset + limit);
             return { ok: true, status: 200, json: async () => rows };
+        }
+        // One listing by its id, as the node answers its author (routes/marketplace.ts): their paused one too.
+        if (url.pathname === '/api/marketplace/posts') {
+            market.postReads.push(p);
+            if (market.down) throw new TypeError('Network request failed');
+            const row = market.rows.get(url.searchParams.get('id') ?? '');
+            return { ok: true, status: 200, headers: new Headers(), json: async () => (row ? [{ ...row, authorPublicKey: row.author_pubkey }] : []) };
         }
         market.requests.push(`GET ${p}`);
         if (market.down) throw new TypeError('Network request failed');
@@ -273,6 +292,20 @@ const shed = (...things: Thing[]): ThingsDoc => ({ v: 1, things });
 const offer = (id: string, title: string, status = 'active', extra: Record<string, unknown> = {}) => {
     market.rows.set(id, { id, title, status, type: 'offer', author_pubkey: ME.publicKey, ...extra });
 };
+/** The member's shop "closed for now" on the server, holding these Offers (engine/shops.ts): the live ones are paused. */
+const closeShop = (...ids: string[]) => {
+    for (const id of ids) {
+        const p = market.rows.get(id)!;
+        if (p.status === 'active') { p.status = 'paused'; market.shopHeld.add(id); }
+        market.inClosedShop.add(id);
+    }
+};
+/** Reopened: what the shop paused and still holds is back up; the rest stays as it is. */
+const reopenShop = () => {
+    for (const id of market.shopHeld) { const p = market.rows.get(id); if (p?.status === 'paused') p.status = 'active'; }
+    market.shopHeld.clear();
+    market.inClosedShop.clear();
+};
 
 let host: HTMLDivElement;
 let root: Root;
@@ -297,6 +330,10 @@ beforeEach(() => {
     nav.pushed.length = 0;
     nav.backs = 0;
     market.rows.clear();
+    market.phoneRows.clear();
+    market.postReads.length = 0;
+    market.shopHeld.clear();
+    market.inClosedShop.clear();
     market.deals.length = 0;
     market.phoneDeals.length = 0;
     market.paused.length = 0;
@@ -927,6 +964,9 @@ describe('A thing', () => {
         expect(readThingsDoc(await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
         expect(nav.backs).toBe(1);
         expect(market.paused).toEqual([]);
+        // The paused one's pause is still asked, as its owner's: one a shop closed for now paused would otherwise come back
+        // with the reopen. The gone one asks nothing.
+        expect(market.marketAsks).toEqual(['pause post-1']);
     });
 
     it("an Offer paused elsewhere after the screen opened: Take out reads it first, so the thing is taken out, never \"couldn't reach\"", async () => {
@@ -937,8 +977,92 @@ describe('A thing', () => {
         await click('thing-take-out');
         expect(byTestId('thing-refused')).toBeNull();
         expect(market.paused).toEqual([]);
+        expect(market.marketAsks).toEqual(['pause post-1']);
         expect(await keptThing('t-1')).toMatchObject({ pausedPostId: 'post-1' });
         expect(text('thing-state')).toContain('Taken out of your shop');
+    });
+
+    it("with the shop closed for now: Take out, Lend and Delete each ask the owner's pause, so the reopen leaves those Offers down and puts back the rest", async () => {
+        offer('post-1', 'Drill');
+        offer('post-2', 'Ladder');
+        offer('post-3', 'Tent');
+        offer('post-4', 'Hammer');
+        await keep(shed(...['Drill', 'Ladder', 'Tent', 'Hammer'].map((name, i) => thing(`t-${i + 1}`, name, { postId: `post-${i + 1}` }))));
+        // Take out on a screen opened while the shop was open; it closed meanwhile.
+        await open('thing', { key: 't-3' });
+        closeShop('post-1', 'post-2', 'post-3', 'post-4');
+        await click('thing-take-out');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(await keptThing('t-3')).toMatchObject({ pausedPostId: 'post-3' });
+
+        // Lend on a screen opened while it is closed: its Offer reads paused.
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('thing', { key: 't-2' });
+        expect(text('thing-offer-paused')).toContain('Its Offer is paused in the Market.');
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('thing-lend-save');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect((await keptThing('t-2'))?.lentTo?.name).toBe('Sam');
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        nav.backs = 0;
+        await open('thing', { key: 't-1' });
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(nav.backs).toBe(1);
+
+        expect(market.marketAsks).toEqual(['pause post-3', 'pause post-2', 'pause post-1']);
+        expect([...market.shopHeld]).toEqual(['post-4']);
+        reopenShop();
+        expect(['post-1', 'post-2', 'post-3', 'post-4'].map((id) => market.rows.get(id)?.status)).toEqual(['paused', 'paused', 'paused', 'active']);
+    });
+
+    it("Put back while the shop is closed for now says so in the Tool shed's words, never \"couldn't reach\", and changes nothing", async () => {
+        const closed = "Your shop is closed for now, so this can't go back in it yet. Reopen your shop first.";
+        offer('post-1', 'Drill');
+        offer('post-2', 'Tent', 'paused');
+        const drill = thing('t-1', 'Drill', { postId: 'post-1' });
+        const tent = thing('t-2', 'Tent', { pausedPostId: 'post-2' });
+        await keep(shed(drill, tent));
+        closeShop('post-1', 'post-2');
+        // In the shop, its Offer paused by the closing: the paused section's Put back.
+        await open('thing', { key: 't-1' });
+        await click('thing-resume');
+        expect(text('thing-refused')).toBe(closed);
+        expect(byTestId('thing-offer-paused')).not.toBeNull();
+        // Taken out: Put back.
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('thing', { key: 't-2' });
+        await click('thing-put-back');
+        expect(text('thing-refused')).toBe(closed);
+        expect(text('thing-state')).toContain('Taken out of your shop');
+        expect([market.resumed, market.rows.get('post-1')?.status, market.rows.get('post-2')?.status]).toEqual([[], 'paused', 'paused']);
+        expect(readThingsDoc(await kept()).things).toEqual([drill, tent]);
+    });
+
+    it("the phone asks the server how its Offer stands, not its own row: a shop's pause the row doesn't know yet is read, and Delete's pause is taken", async () => {
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' })));
+        closeShop('post-1');
+        // The phone's row is from before the closing: the next sync would bring the pause.
+        market.phoneRows.set('post-1', { ...market.rows.get('post-1'), status: 'active' });
+        await open('thing', { key: 't-1' });
+        expect(market.postReads).toContain('/api/marketplace/posts?id=post-1');
+        expect(text('thing-offer-paused')).toContain('Its Offer is paused in the Market.');
+        expect(byTestId('thing-take-out')).toBeNull();
+        nav.backs = 0;
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(nav.backs).toBe(1);
+        expect(market.marketAsks).toEqual(['pause post-1']);
+        reopenShop();
+        expect(market.rows.get('post-1')?.status).toBe('paused');
     });
 
     /**

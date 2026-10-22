@@ -11,7 +11,7 @@
  * - Out on a loan through BeanPool, or asked for: the deal's words; it is answered and returned in the deal itself.
  *
  * Every change that asks the community's server waits for its answer: when there is none, nothing changes and the screen
- * says so. Never a false success. A change that would take the shed past the store's bound is said before the server is
+ * says so; a shop closed for now is said as that. Never a false success. A change that would take the shed past the store's bound is said before the server is
  * asked anything, as Edit does, and nothing changes.
  * What is written is made from the document as it is once the server has answered, so a sync that took the server's
  * newer copy meanwhile is never undone.
@@ -19,7 +19,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
     BACK_AROUND_DAYS, THINGS_NAME_CHARS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack,
-    offersToLink, openDealsByPost, removeThing, setListed, shedFits, shedTooBigLine, t, takeOutOfShop, thingCategory,
+    isShopClosedRefusal, offersToLink, openDealsByPost, removeThing, setListed, shedFits, shedTooBigLine, shopClosedLine, t,
+    takeOutOfShop, thingCategory,
     thingConditionName, thingListDraft, thingState, thingStateLine, tn,
     type ThingsDoc, type ThingsScreenProps, type ToolOwnOffer, type ToolPostStatus, type ToolPriceHint,
 } from '@beanpool/core';
@@ -100,8 +101,9 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         setRefused(null);
         try {
             await change();
-        } catch {
-            setRefused(unreached());
+        } catch (e) {
+            // The server answered that the shop is closed for now (Put back): said, never "couldn't reach".
+            setRefused(isShopClosedRefusal(e) ? shopClosedLine() : unreached());
         } finally {
             setBusy(false);
         }
@@ -141,14 +143,17 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         if (await write(next)) await kept?.();
     };
     /**
-     * Its Offer out of the Market while the thing is away or deleted. The server pauses only a live Offer, so one already
-     * paused or gone (here or elsewhere) is left as the Market has it. What it returns puts back a pause it made: the
-     * Offer resumed, or, when the server can't be reached then, the screen says it is paused, with Put back.
+     * Its Offer out of the Market while the thing is away or deleted, as its owner's own pause. Asked of a live Offer and of
+     * one already paused alike: a paused one may be its shop's ("closed for now"), which the shop's reopen would put back
+     * up, and the owner's pause makes it theirs, so it stays down. One gone is left as the Market has it. What it returns
+     * puts back a pause it made of a live Offer: the Offer resumed, or, when the server can't be reached then, the screen
+     * says it is paused, with Put back.
      */
     const pauseOffer = async (offerId: string): Promise<(() => Promise<void>) | undefined> => {
         const status = await host.posts.status(offerId);
-        if (status === 'paused' || status === 'gone') return undefined;
+        if (status === 'gone') return undefined;
         await host.posts.pause(offerId);
+        if (status === 'paused') return undefined;
         return () => host.posts.resume(offerId).then(() => {}, () => setOfferStatus('paused'));
     };
 

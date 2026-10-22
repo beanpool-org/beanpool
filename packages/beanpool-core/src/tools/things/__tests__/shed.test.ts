@@ -6,13 +6,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { pseudoLocalise, setLanguage } from '../../../words.js';
 import { TOOL_LIMITS } from '../../manifest.js';
-import type { ToolDealSummary } from '../../host.js';
+import { TOOL_SHOP_CLOSED, isShopClosedRefusal, type ToolDealSummary } from '../../host.js';
 import { THINGS_MAX_ITEMS, THINGS_NAME_CHARS, readThingsDoc, type Thing, type ThingsDoc } from '../doc.js';
 import { FIXTURES } from '../fixtures.js';
 import { thingsCounts } from '../manifest.js';
 import {
     BACK_AROUND_DAYS, THING_FILTERS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack, offersToLink,
-    openDealsByPost, removeThing, saveThing, setListed, shedFits, shedFullLine, shedHasRoom, shedThings, shedTooBigLine,
+    openDealsByPost, removeThing, saveThing, setListed, shedFits, shedFullLine, shedHasRoom, shedThings, shedTooBigLine, shopClosedLine,
     takeOutOfShop, thingCategories, thingCategory, thingConditionName, thingInFilter, thingInput, thingInputProblems,
     thingListDraft, thingRowLine, thingState, thingStateLine, thingsLoans, type ThingInput,
 } from '../shed.js';
@@ -251,6 +251,20 @@ describe('the changes a thing\'s screen makes', () => {
         expect(paused.things[0]).toMatchObject({ pausedPostId: 'p3' });
         expect(paused.things[0]).not.toHaveProperty('postId');
         expect(thingState(paused.things[0] as Thing)).toBe('taken-out');
+    });
+});
+
+describe("a shop closed for now (the node's 409 shop_paused)", () => {
+    it('is told from no answer by its code, and said in a sentence through t() that promises nothing of the reopen', () => {
+        const refused = Object.assign(new Error('This is in a shop that is closed for now. Reopen the shop to put it back up.'), { status: 409, code: 'shop_paused' });
+        expect(TOOL_SHOP_CLOSED).toBe('shop_paused');
+        expect(isShopClosedRefusal(refused)).toBe(true);
+        for (const other of [new TypeError('Network request failed'), Object.assign(new Error('x'), { status: 400 }), { code: 'shop_deals_open' }, null, undefined, 'shop_paused']) {
+            expect(isShopClosedRefusal(other)).toBe(false);
+        }
+        expect(shopClosedLine()).toBe("Your shop is closed for now, so this can't go back in it yet. Reopen your shop first.");
+        setLanguage('xx');
+        expect(shopClosedLine()).toBe(pseudoLocalise("Your shop is closed for now, so this can't go back in it yet. Reopen your shop first."));
     });
 });
 

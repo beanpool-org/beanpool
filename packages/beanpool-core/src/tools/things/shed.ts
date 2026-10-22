@@ -300,6 +300,12 @@ export const shedTooBigLine = () => t('Your Tool shed is full: it keeps up to {k
 });
 
 /**
+ * Said when its Offer can't be put back because the member's shop is closed for now (isShopClosedRefusal): nothing goes
+ * back in it until it is reopened. Not "back when it reopens": an Offer its owner paused stays paused then.
+ */
+export const shopClosedLine = () => t("Your shop is closed for now, so this can't go back in it yet. Reopen your shop first.");
+
+/**
  * The document with a thing deleted: kept as a tombstone (`gone`, its id and name and a newer app's fields) and never
  * shown or counted again; its photo, notes, terms and Offer link go with it.
  */

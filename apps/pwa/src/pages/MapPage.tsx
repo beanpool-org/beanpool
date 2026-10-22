@@ -744,7 +744,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them. Where the node
                     // reads by area, the nearest within the radius, and the viewer's own pins wherever they are. Read from
                     // the distance setting: cut to the exact circle (the node was asked for a wider one), page after page
-                    // while a full one leaves fewer than MAP_NEAR_LIMIT (lib/listings-near readNearestInCircle).
+                    // while a full one leaves fewer than MAP_NEAR_LIMIT or one not yet read could be nearer (lib/listings-near
+                    // readNearestInCircle).
                     near
                         ? readNearestInCircle(near, MAP_NEAR_LIMIT, page => getMarketplacePosts({ ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT, ...page }))
                         : getMarketplacePosts({ ...MAP_LIST_FILTER }),

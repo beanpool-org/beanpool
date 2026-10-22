@@ -131,9 +131,12 @@ export const NEAR_PAGES_MAX = 3;
  * A listings read that shows at most `keep`. A read from the distance setting asks for pages of twice that (the node's
  * cap at most), cut to the exact circle (nearestInCircle) and kept to `keep`: the node answers the nearest to the rounded
  * centre within the wider radius, so once its page fills, listings just past the exact edge on the rounded centre's side
- * take places the ones inside it needed (review of #2363). While a page comes back full and the cut leaves fewer than
- * `keep`, it reads the next (`offset`: the node's nearest first is a total order, engine posts.ts), NEAR_PAGES_MAX at
- * most. Any other read is `read({})` once, as the node sent it.
+ * take places the ones inside it needed (review of #2363). While a page comes back full, it reads the next (`offset`:
+ * the node's nearest first is a total order, engine posts.ts), NEAR_PAGES_MAX at most, until the cut keeps `keep` and
+ * none still unread can be nearer the exact centre than the last of them. Everything unread is at least as far from the
+ * rounded centre as the page's last row, so at least that less the shift from the exact one: a full page can otherwise
+ * fill the list with listings on the rounded centre's side and leave a nearer one on the far side for the next (review
+ * of #2363, the stop rule). Any other read is `read({})` once, as the node sent it.
  */
 export async function readNearestInCircle<T extends { id: string; lat?: number | null; lng?: number | null }>(
     near: NearRead | null,
@@ -142,6 +145,12 @@ export async function readNearestInCircle<T extends { id: string; lat?: number |
 ): Promise<T[]> {
     if (near?.from !== 'setting') return read({});
     const limit = Math.min(NODE_PAGE_MAX, keep * 2);
+    const { circle } = near;
+    const shiftKm = haversineDistance(circle.lat, circle.lng, near.lat, near.lng);
+    // A row's place is the point the node measured it from (its neighbourhood where it is read so, engine posts.ts
+    // placeForOthers); its `distanceKm` is rounded, to the whole km on such a read. No place: nothing to bound by.
+    const unreadNoNearerThan = (last: T): number =>
+        last.lat != null && last.lng != null ? haversineDistance(near.lat, near.lng, last.lat, last.lng) - shiftKm : -Infinity;
     // A listing that moved between two pages' reads comes back on both: kept once.
     const byId = new Map<string, T>();
     let kept: T[] = [];
@@ -149,7 +158,9 @@ export async function readNearestInCircle<T extends { id: string; lat?: number |
         const rows = await read(page === 0 ? { limit } : { limit, offset: page * limit });
         for (const p of rows) if (!byId.has(p.id)) byId.set(p.id, p);
         kept = nearestInCircle([...byId.values()], near);
-        if (rows.length < limit || kept.length >= keep) break;
+        if (rows.length < limit) break;
+        const furthestKept = kept[keep - 1];
+        if (furthestKept && haversineDistance(circle.lat, circle.lng, furthestKept.lat!, furthestKept.lng!) <= unreadNoNearerThan(rows[rows.length - 1])) break;
     }
     return kept.slice(0, keep);
 }

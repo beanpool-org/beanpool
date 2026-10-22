@@ -196,9 +196,16 @@ describe('readNearestInCircle: a read from the setting keeps as many from inside
         expect(node.reads).toEqual([{ limit: 100 }, { limit: 100, offset: 100 }]);
         expect(kept.map(p => p.id)).toEqual(many(45, inside).map(p => p.id));
 
-        const full = pagedNode([...many(150, ring), ...many(500, inside)]);
-        expect(await readNearestInCircle(near, 50, full.read)).toHaveLength(50);
+        // Full once the last kept is well inside the page's last row: nothing still unread can be nearer.
+        const full = pagedNode([...many(120, ring), ...many(500, inside)]);
+        expect((await readNearestInCircle(near, 50, full.read)).map(p => p.id)).toEqual(many(50, inside).map(p => p.id));
         expect(full.reads).toEqual([{ limit: 100 }, { limit: 100, offset: 100 }]);
+
+        // Full at the page's last row: the next page could still hold a nearer one, so it is read (review of #2363, the
+        // stop rule; this read stopped at two before it).
+        const fullAtTheEdge = pagedNode([...many(150, ring), ...many(500, inside)]);
+        expect(await readNearestInCircle(near, 50, fullAtTheEdge.read)).toHaveLength(50);
+        expect(fullAtTheEdge.reads).toEqual([{ limit: 100 }, { limit: 100, offset: 100 }, { limit: 100, offset: 200 }]);
     });
 
     it('a full page that already fills the list is the only read', async () => {

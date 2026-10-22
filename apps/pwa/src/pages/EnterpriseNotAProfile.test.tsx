@@ -7,6 +7,8 @@
  * calls `onOpenProfile`, which App.tsx turns into the one profile overlay, PublicProfilePage. That page reads the
  * profile by key first; when the node says `isTreasury` (server slice E0) it hands the key to `onOpenTreasury`, which
  * App.tsx turns into the enterprise page, and it never draws a Trust Profile for that key, not even while it waits.
+ * The node's own BeanPool account, the author of every curated Pulse card, is a treasury row but no enterprise: its
+ * profile says no `isTreasury`, and the Pulse door opens it, with its channel chips.
  * On the enterprise page, Block sits under a "…" menu at the foot (a member may hide a shop; not a header action), and
  * a keeper of the enterprise has none.
  */
@@ -17,6 +19,7 @@ import path from 'node:path';
 import { PublicProfilePage } from './PublicProfilePage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import { PostAuthorTrust } from '../components/PostAuthorTrust';
+import { PulseFeedCard } from '../components/PulseFeedCard';
 import * as api from '../lib/api';
 import * as blocklist from '../lib/blocklist';
 
@@ -25,7 +28,6 @@ vi.mock('../components/EnterpriseDecisions', () => ({ EnterpriseDecisions: () =>
 vi.mock('../components/ImageLightbox', () => ({ ImageLightbox: () => null }));
 vi.mock('../components/ReportModal', () => ({ ReportModal: () => null }));
 vi.mock('../components/ArchetypeQuizModal', () => ({ ArchetypeQuizModal: () => null }));
-vi.mock('../components/ChannelChips', () => ({ ChannelChips: () => null }));
 vi.mock('../lib/blocklist', () => ({
     isUserBlocked: vi.fn(() => false),
     blockUser: vi.fn(async () => true),
@@ -41,6 +43,16 @@ const KOFI = 'member-kofi';
 
 const ENTERPRISE_PROFILE = { publicKey: ENT, callsign: NAME, avatar: null, bio: '', contact: null, joinedAt: '2026-09-01T00:00:00.000Z', status: 'active', elderVouchedBy: 'member-damo', elderVouchedByCallsign: 'Damo', archetype: null, isTreasury: true };
 const KOFI_PROFILE = { publicKey: KOFI, callsign: 'Kofi', avatar: null, bio: 'I fix bikes', contact: null, joinedAt: '2026-03-01T00:00:00.000Z', status: 'active', elderVouchedBy: null, elderVouchedByCallsign: null, archetype: null };
+// The node's own BeanPool account: a treasury row that is no enterprise, so its profile says no isTreasury (server, review
+// of #2367). It owns the curated learn channel, so it is the author of every curated Pulse card.
+const BEANPOOL = 'node-beanpool';
+const BEANPOOL_PROFILE = { publicKey: BEANPOOL, callsign: 'BeanPool', avatar: 'bundled://sprout', bio: '', contact: null, joinedAt: '2026-08-01T00:00:00.000Z', status: 'active', elderVouchedBy: null, elderVouchedByCallsign: null, archetype: null };
+const BEANPOOL_LEARN = { id: 'chan_beanpool_learn', platform: 'youtube', url: 'https://www.youtube.com/channel/UC-b27mPemXxYje4VkKF7hgw', handle: '@BeanPool', category: 'learn', isPrimaryVideo: true, supportsAutolist: true, isVerified: false };
+/** A curated Pulse card, as GET /api/pulse/feed hands it out. */
+const pulseCard = (ownerPubkey: string, callsign: string) => ({
+    id: `pulse-${ownerPubkey}`, ownerPubkey, url: 'https://www.youtube.com/watch?v=tgsN2LiUVa0', platform: 'youtube', category: 'learn',
+    title: 'The BeanPool Economy', thumbnailUrl: null, callsign, avatarUrl: null, source: 'official', isVerified: false, publishedAt: '2026-08-04T00:00:00Z',
+}) as api.PulseFeedItem;
 
 /** Words only the member Trust Profile draws: none may show for an enterprise's key, at any moment. */
 const TRUST_PROFILE_WORDS = ['Trust Profile', 'Reciprocity', 'Vouch', 'Collaboration Chemistry', 'Joined', 'Block', 'Report'];
@@ -58,6 +70,7 @@ function profileReads(hold = false) {
         await gate;
         if (key === ENT) return ENTERPRISE_PROFILE as any;
         if (key === KOFI) return KOFI_PROFILE as any;
+        if (key === BEANPOOL) return BEANPOOL_PROFILE as any;
         if (key === ME.publicKey) return { ...KOFI_PROFILE, publicKey: ME.publicKey, callsign: 'Ana' } as any;
         throw new Error('Member not found');
     });
@@ -66,7 +79,7 @@ function profileReads(hold = false) {
     vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 10, keeperOf: [] } as any);
     vi.spyOn(api, 'getRatingsGiven').mockResolvedValue({ ratings: [] } as any);
     vi.spyOn(api, 'getFriends').mockResolvedValue([]);
-    vi.spyOn(api, 'getPublicChannels').mockResolvedValue({ channels: [] } as any);
+    vi.spyOn(api, 'getPublicChannels').mockImplementation(async (key: string) => ({ channels: key === BEANPOOL ? [BEANPOOL_LEARN] : [] }) as any);
     vi.spyOn(api, 'vouchMemberApi').mockResolvedValue({ success: true } as any);
 }
 
@@ -134,6 +147,18 @@ describe('every door on the web lands on the enterprise page', () => {
         expectNoTrustProfile('after the door');
     });
 
+    it("the Pulse card's author (PulseFeedCard) → the profile overlay → the enterprise page, for an enterprise's card", async () => {
+        const opened: string[] = [];
+        render(<PulseFeedCard item={pulseCard(ENT, NAME)} onOpenProfile={(k) => opened.push(k)} />);
+        fireEvent.click(screen.getByRole('button', { name: `View ${NAME}'s public profile` }));
+        expect(opened).toEqual([ENT]);
+        cleanup();
+        profileReads();
+        const onOpenTreasury = profilePage(opened[0]);
+        await waitFor(() => expect(onOpenTreasury).toHaveBeenCalledWith(ENT));
+        expectNoTrustProfile('after the door');
+    });
+
     const src = (rel: string) => fs.readFileSync(path.resolve(__dirname, '..', rel), 'utf8');
 
     it('App.tsx: every onOpenProfile opens the one profile overlay, and that overlay hands an enterprise to the enterprise page', () => {
@@ -185,6 +210,23 @@ describe('every door on the web lands on the enterprise page', () => {
             path.join('pages', 'PulsePage.tsx'),
             path.join('pages', 'TreasuryDetailPage.tsx'),
         ].sort());
+    });
+});
+
+describe("the Pulse card's author door, for the node's own BeanPool account", () => {
+    it("opens BeanPool's profile with its learn channel, never the enterprise page", async () => {
+        const opened: string[] = [];
+        render(<PulseFeedCard item={pulseCard(BEANPOOL, 'BeanPool')} onOpenProfile={(k) => opened.push(k)} />);
+        fireEvent.click(screen.getByRole('button', { name: "View BeanPool's public profile" }));
+        expect(opened).toEqual([BEANPOOL]);
+        cleanup();
+        profileReads();
+        const onOpenTreasury = profilePage(opened[0]);
+        const chips = await screen.findByRole('list', { name: 'External channels' });
+        expect(chips.querySelector('a[aria-label="YouTube @BeanPool"]')?.getAttribute('href')).toBe(BEANPOOL_LEARN.url);
+        expect(chips.textContent).toContain('YouTube · @BeanPool');
+        expect(document.body.textContent).toContain('BeanPool');
+        expect(onOpenTreasury).not.toHaveBeenCalled();
     });
 });
 

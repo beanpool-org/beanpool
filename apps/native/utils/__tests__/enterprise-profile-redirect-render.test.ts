@@ -9,7 +9,9 @@
  * lists. None of them knows what the key is, so the profile screen is where an enterprise is told apart: the node's
  * trust profile for the key says `isTreasury` (server slice E0), and the screen replaces itself with `/treasury-detail`.
  * Until the node has said, a key this phone holds no member card for (the member directory never carries an
- * enterprise) draws no Trust Profile at all; a member whose card is held is drawn at once, as before.
+ * enterprise) draws no Trust Profile at all; a member whose card is held is drawn at once, as before. The node's own
+ * BeanPool account, the author of every curated Pulse card, is a treasury row but no enterprise: its trust profile says
+ * no `isTreasury`, and the Pulse door opens its profile with its channel chips.
  *
  * The phone's own utils/db runs on its real schema in an in-memory SQLite; the node is a fetch stand-in that answers
  * the trust profile per key (held until the test lets it through, where a case needs the moment before the answer).
@@ -173,8 +175,11 @@ vi.mock('../node-profile', async (importOriginal) => ({
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: ({ callsign }: { callsign: string }) => createElement('span', { 'data-avatar': callsign }) }));
 vi.mock('../../components/ReviewModal', () => ({ ReviewModal: () => null }));
 vi.mock('../../components/ArchetypeQuizModal', () => ({ ArchetypeQuizModal: () => null }));
-vi.mock('../../components/ChannelChips', () => ({ ChannelChips: () => null }));
-vi.mock('../channels', () => ({ fetchPublicChannels: vi.fn(async () => []) }));
+// The real chips, from the channels the node lists per key (none, unless a case sets some).
+const channels = vi.hoisted(() => ({ byKey: new Map<string, unknown[]>() }));
+vi.mock('../channels', () => ({ fetchPublicChannels: vi.fn(async (publicKey: string) => channels.byKey.get(publicKey) ?? []) }));
+// The Pulse card's player is a WebView: nothing a door's test reads.
+vi.mock('../../components/PulseYouTubePlayer', () => ({ PulseYouTubePlayer: () => null }));
 
 // The node: the trust profile per key (an enterprise's says isTreasury, server slice E0), and who added this member.
 const NODE_URL = 'https://mullum.example';
@@ -232,6 +237,7 @@ import * as db from '../db';
 import PublicProfileScreen from '../../app/public-profile';
 import { PostAuthorTrust } from '../../components/PostAuthorTrust';
 import { AddedYouLines } from '../../components/AddedYouLines';
+import { PulseFeedCard } from '../../components/PulseFeedCard';
 
 const realLoad = (Module as any)._load;
 beforeAll(() => {
@@ -253,6 +259,7 @@ beforeEach(async () => {
     node.trustGate = null;
     node.trustGates = new Map<string, Promise<void>>();
     node.addedYou = [];
+    channels.byKey = new Map<string, unknown[]>();
     community.features = { beans: true, escrow: true, invites: true, decisions: true, enterprises: true, exampleListings: false };
     nav.params = {};
     nav.pushed.length = 0;
@@ -285,6 +292,12 @@ const expectNoTrustProfile = (when: string) => {
     expect(host.querySelector('[data-testid="trust-track-record"]'), when).toBeNull();
 };
 const toEnterprisePage = { pathname: '/treasury-detail', params: { publicKey: ENTERPRISE, name: ENTERPRISE_NAME } };
+/** A curated Pulse card, as GET /api/pulse/feed hands it out: its author is the key that owns its channel. */
+const pulseCard = (ownerPubkey: string, callsign: string) => ({
+    id: `pi_${ownerPubkey.slice(0, 6)}`, ownerPubkey, callsign, avatarUrl: null, platform: 'youtube', category: 'learn',
+    url: 'https://www.youtube.com/watch?v=tgsN2LiUVa0', title: 'The BeanPool Economy', thumbnailUrl: null,
+    publishedAt: '2026-08-04T00:00:00Z', source: 'official', isVerified: false,
+});
 
 for (const dark of [false, true]) {
     describe(`An enterprise's key on the profile screen (${dark ? 'dark' : 'light'}, 320 dp × 1.3)`, () => {
@@ -414,6 +427,42 @@ for (const dark of [false, true]) {
     });
 }
 
+// The node's own BeanPool account owns the curated learn channel and every channel an admin adds: a treasury row, but no
+// enterprise, so the node's trust profile for it carries no isTreasury (server, review of #2367). Every curated Pulse
+// card is BeanPool's, so its author door is the first one a new member taps.
+const BEANPOOL = 'b'.repeat(64);
+const BEANPOOL_LEARN = {
+    id: 'chan_beanpool_learn', platform: 'youtube', url: 'https://www.youtube.com/channel/UC-b27mPemXxYje4VkKF7hgw', handle: '@BeanPool',
+    category: 'learn', isPrimaryVideo: true, supportsAutolist: true, isVerified: false,
+};
+for (const dark of [false, true]) {
+    describe(`The Pulse card's author door, for the node's own BeanPool account (${dark ? 'dark' : 'light'}, 320 dp × 1.3)`, () => {
+        beforeEach(() => {
+            theme.dark = dark;
+            node.trust.set(BEANPOOL, memberTrust(BEANPOOL, 'BeanPool'));
+            channels.byKey.set(BEANPOOL, [BEANPOOL_LEARN]);
+        });
+
+        it("opens BeanPool's profile with its learn channel, never the enterprise page", async () => {
+            await render(createElement(PulseFeedCard, { item: pulseCard(BEANPOOL, 'BeanPool'), currentPubkey: OWN }));
+            await press(host.querySelector('[aria-label="View BeanPool\'s public profile"]')!);
+            expect(nav.pushed).toEqual([{ pathname: '/public-profile', params: { publicKey: BEANPOOL } }]);
+            await act(async () => root.render(null as any));
+            nav.params = (nav.pushed[0] as { params: Record<string, string> }).params;
+            await render(createElement(PublicProfileScreen));
+            await settle(20);
+            expect(nav.replaced).toEqual([]);
+            expect(host.querySelector('[data-testid="profile-kind-pending-back"]')).toBeNull();
+            expect(text()).toContain('BeanPool');
+            const chips = host.querySelector('[aria-label="External channels"]');
+            expect(chips, "BeanPool's channel chips").not.toBeNull();
+            expect(chips!.querySelector('[aria-label="YouTube @BeanPool"]'), 'its learn channel').not.toBeNull();
+            expect(chips!.textContent).toContain('YouTube · @BeanPool');
+            expect(node.requests).toContain('/api/trust/profile');
+        });
+    });
+}
+
 describe('Every door lands on the enterprise page', () => {
     /** Follows a door's push to the profile screen, as the router would, and reads where the screen sent the member. */
     async function follow(push: unknown): Promise<unknown[]> {
@@ -445,6 +494,13 @@ describe('Every door lands on the enterprise page', () => {
 
     it("a door that passes no name (PulseFeedCard's author): the enterprise page, named as the node names it", async () => {
         expect(await follow({ pathname: '/public-profile', params: { publicKey: ENTERPRISE } })).toEqual([{ pathname: '/treasury-detail', params: { publicKey: ENTERPRISE, name: ENTERPRISE_NAME } }]);
+    });
+
+    it("PulseFeedCard's author button → the profile screen → the enterprise page, for an enterprise's card", async () => {
+        await render(createElement(PulseFeedCard, { item: pulseCard(ENTERPRISE, ENTERPRISE_NAME), currentPubkey: OWN }));
+        await press(host.querySelector(`[aria-label="View ${ENTERPRISE_NAME}'s public profile"]`)!);
+        expect(nav.pushed).toEqual([{ pathname: '/public-profile', params: { publicKey: ENTERPRISE } }]);
+        expect(await follow(nav.pushed[0])).toEqual([{ pathname: '/treasury-detail', params: { publicKey: ENTERPRISE, name: ENTERPRISE_NAME } }]);
     });
 
     // The doors inside whole screens (post/[id], chat/[id], People, the protected map) are read from their source: each

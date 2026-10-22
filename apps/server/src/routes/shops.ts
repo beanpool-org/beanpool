@@ -66,8 +66,6 @@ import type { RouteDeps } from './types.js';
 export const SHOPS_NEAR_KM_DEFAULT = 50;
 /** The most shops one near read answers. */
 export const SHOPS_NEAR_MAX = 30;
-/** The most listings a near read measures to find them: the nearest listings in a shop, at most a page of the listings. */
-const SHOPS_NEAR_LISTINGS = 200;
 
 type Op = 'read' | 'write';
 type Ctx = Koa.Context & { params: Record<string, string | undefined>; requestBody?: Record<string, unknown> };
@@ -219,7 +217,9 @@ async function getShop(ctx: Ctx): Promise<void> {
  * GET /api/shops?lat=&lng=&radiusKm=: the shops with a listing near the place, nearest first, each once, placed by its
  * nearest listing the reader may see. The listings are read as the listings' own read reads them for this reader (a
  * visitor's from each listing's area, `coarse`; a member of a node anyone can join from its neighbourhood), so a shop's
- * distance and place in the order are its nearest listing's in that read, and never finer.
+ * distance and place in the order are its nearest listing's in that read, and never finer. The read ranks shops, not
+ * listings (getPosts `nearestPerShop`): one row per shop, so a shop with many listings near the place hides none past
+ * it, and the answer is the nearest SHOPS_NEAR_MAX of every shop with a listing the one pass measures.
  */
 async function getShopsNear(ctx: Ctx): Promise<void> {
     const distance = parseDistanceQuery(ctx.query);
@@ -231,15 +231,12 @@ async function getShopsNear(ctx: Ctx): Promise<void> {
     const neighbourhood = !!reader && !guest && getProfileSwitches().openMembership;
     const near = getPosts(db, {
         type: 'offer', excludeEvents: true, inShop: true, viewerPubkey: reader, guest: true, coarse: guest || undefined,
-        neighbourhood: neighbourhood || undefined, near: { ...point, radiusKm }, sortByDistance: true,
-        measureAtMost: ONE_PASS_MAX_MEASURED, limit: SHOPS_NEAR_LISTINGS,
+        neighbourhood: neighbourhood || undefined, near: { ...point, radiusKm }, sortByDistance: true, nearestPerShop: true,
+        measureAtMost: ONE_PASS_MAX_MEASURED, limit: SHOPS_NEAR_MAX,
     });
-    const seen = new Set<string>();
     const shops: unknown[] = [];
     for (const post of near) {
-        if (!post.shopId || seen.has(post.shopId) || shops.length >= SHOPS_NEAR_MAX) continue;
-        seen.add(post.shopId);
-        const shop = shopById(post.shopId);
+        const shop = post.shopId ? shopById(post.shopId) : undefined;
         if (!shop) continue;
         const km = post.distanceKm ?? 0;
         shops.push({ ...shopFor(shop, guest, reader), distanceKm: guest ? Math.round(km) : Math.round(km * 10) / 10 });

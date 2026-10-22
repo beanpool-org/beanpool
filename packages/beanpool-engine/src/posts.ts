@@ -256,6 +256,13 @@ export interface PostFilter {
     shopId?: string;
     /** The listings in any shop only: the shops near a place are read from them (apps/server routes/shops.ts). */
     inShop?: boolean;
+    /**
+     * Each shop once, by its nearest listing (needs `near` and `sortByDistance`, as the shops near a place read it with
+     * `inShop`, apps/server routes/shops.ts): of each shop's listings the read would give, only the first in its order,
+     * so `limit` and `offset` count shops, and a shop with many listings near the reader hides none past it. A listing
+     * in no shop is its own. Ranked on ids and distances in the one pass, as every read with a point is (postRowsNear).
+     */
+    nearestPerShop?: boolean;
     includeInactive?: boolean;
     includeAllScopes?: boolean;
     audienceScope?: AudienceScope | string;
@@ -1203,7 +1210,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
-    lendable: null, shopId: null, inShop: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
+    lendable: null, shopId: null, inShop: null, nearestPerShop: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
 /** Whether a nearest-first read may search circles before its one pass (CIRCLE_FIELDS). */
@@ -1244,12 +1251,22 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     // neighbourhood read every post in it or whose neighbourhood is (neighbourhoodBox).
     const boxFor = (exact: ReturnType<typeof boundingBox>) => filter.coarse ? areaBox(exact)
         : neighbourhood ? neighbourhoodBox(exact) : exact;
+    // Each shop once (PostFilter.nearestPerShop): a ranking that also carries each listing's shop and the order's columns
+    // is kept to the first of each shop's listings in NEAREST_ORDER, before the order and the page, so both count shops.
+    // Every other read's SQL is as it was.
+    const perShop = byDistance && !!filter.nearestPerShop;
+    const shopColumns = (t: string) => perShop ? `, ${t}.shop_id, ${t}.updated_at, ${t}.created_at` : '';
+    const firstOfEachShop = (ranking: string) => perShop ? `
+        SELECT p.id, p.distance_km FROM (
+            SELECT p.*, ROW_NUMBER() OVER (PARTITION BY COALESCE(p.shop_id, p.id)${NEAREST_ORDER}) AS shop_rank FROM (${ranking}
+            ) p
+        ) p WHERE p.shop_rank = 1` : ranking;
 
     // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
     // POST_ROW_SELECT adds, so no join changes which posts there are.
     const rank = (withinKm: number | undefined, limit: number | undefined, skip: number, circle: boolean) => {
         let sql = `
-        SELECT p.id, ${km('p')} AS distance_km`;
+        SELECT p.id, ${km('p')} AS distance_km${shopColumns('p')}`;
         const params: unknown[] = [...kmParams];
         if (withinKm === undefined) {
             sql += `
@@ -1282,6 +1299,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         }
         sql += where;
         params.push(...whereParams);
+        sql = firstOfEachShop(sql);
         sql += byDistance ? NEAREST_ORDER : recentOrder(filter);
         if (limit) {
             sql += " LIMIT ? OFFSET ?";
@@ -1299,7 +1317,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
         const params: unknown[] = [...kmParams];
         let inner = `
-                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at${neighbourhood ? ', p.author_pubkey' : ''}
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at${neighbourhood ? ', p.author_pubkey' : ''}${perShop ? ', p.shop_id' : ''}
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
                 WHERE 1=1`;
@@ -1311,16 +1329,17 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         // "Coming up" keeps the soonest `cap` (PostFilter.upcomingUntil), every other read the newest.
         inner += where + (filter.upcomingUntil ? START_ORDER : ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC') + ' LIMIT ?';
         params.push(...whereParams, cap);
-        let sql = `
-        WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, q.event_start_at, ${km('q')} AS distance_km FROM (${inner}
-            ) q
-        )
-        SELECT p.id, p.distance_km FROM measured p`;
+        let ranking = `
+        SELECT p.id, p.distance_km${shopColumns('p')} FROM measured p`;
         if (withinKm !== undefined) {
-            sql += ' WHERE p.distance_km <= ?';
+            ranking += ' WHERE p.distance_km <= ?';
             params.push(withinKm);
         }
+        let sql = `
+        WITH measured AS MATERIALIZED (
+            SELECT q.id, q.updated_at, q.created_at, q.event_start_at${perShop ? ', q.shop_id' : ''}, ${km('q')} AS distance_km FROM (${inner}
+            ) q
+        )${firstOfEachShop(ranking)}`;
         sql += byDistance ? NEAREST_ORDER : recentOrder(filter);
         if (limit) {
             sql += " LIMIT ? OFFSET ?";

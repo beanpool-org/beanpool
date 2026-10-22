@@ -9,9 +9,10 @@
  *      member's language), one per member (the same id again); dressed one field at a time (name, kind, blurb, how I
  *      deal), each held to its bound in a sentence, an empty one cleared; a kind that is none of the fourteen refused
  *   2. what goes in it: an Offer put in at create, by the edit toggle (and out again), and by "Add my live Offers"; refused,
- *      writing nothing: a Need, another member's shop, a shop that isn't there, an Offer for a group or one person, a
- *      batch naming anything but the member's own live Offers. An enterprise's Offers go in its shop through its own
- *      route, by a keeper; a keeper's own Offer can't go in the enterprise's shop, nor the enterprise's in the keeper's
+ *      writing nothing: a Need or an event, another member's shop, a shop that isn't there, an Offer for a group or one
+ *      person, a batch naming anything but the member's own live Offers. An enterprise's Offers go in its shop through its
+ *      own route, by a keeper; a keeper's own Offer can't go in the enterprise's shop, nor the enterprise's in the
+ *      keeper's, nor its Need or its event
  *   3. `shop=` on the listings: that shop's listings only, each naming its shop; with `author=` its owner sees the paused
  *      ones too; given twice, 400
  *   4. a shop read by a member: its name, owner, words and counts (things, available, to borrow, to buy, out, new this
@@ -19,7 +20,8 @@
  *   5. a visitor (the global profile's visitors' view): one shop and the shops near a place answer kind and counts
  *      only, never the name, the owner or their words; no member's key or name anywhere in the answer; the listings keep
  *      their shop and lose their author; a member reads the whole shop; without the visitors' view a stranger is refused
- *   6. shops near a place: those with a live listing within the radius, nearest first, each once
+ *   6. shops near a place: those with a live listing within the radius, nearest first, each once; a shop with more
+ *      Offers than a page of listings hides none past it, for a member and a visitor alike, up to the most one read answers
  *   7. pause and reopen: refused while a deal on one of its things is open, saying how many; paused, its live Offers leave
  *      the board and the shop says closed, back on a date if given; nothing goes in while it is; one of its Offers can't be
  *      put back up alone; reopened, what the pause took down comes back and what its owner had paused stays paused
@@ -49,8 +51,9 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, adminPruneUser, purgeMemberSelf, exportSyncState, signSyncPayload, importRemoteState,
-    setNodeRole, reconcileLedgerFromDb, createProject, updateProject,
+    setNodeRole, reconcileLedgerFromDb, createProject, updateProject, createPost,
 } from './state-engine.js';
+import { SHOPS_NEAR_MAX } from './routes/shops.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { setSwitchOverride } from './config/node-profile.js';
@@ -138,6 +141,7 @@ const shopIdOf = (postId: string) => postRow(postId)?.shop_id ?? null;
 const MULLUM = { lat: -28.55, lng: 153.50 };
 const NEAR_MULLUM = { lat: -28.65, lng: 153.60 }; // ~15 km
 const CASTLEMAINE = { lat: -37.06, lng: 144.21 };
+const HOBART = { lat: -42.88, lng: 147.33 };
 
 async function main(): Promise<void> {
     console.log('\n=== Shops: a front window on an account ===\n');
@@ -382,6 +386,44 @@ async function main(): Promise<void> {
     const noPoint = await call('GET', cy, '/api/shops');
     const badPoint = await call('GET', cy, '/api/shops?lat=nope&lng=1');
     assert(noPoint.status === 400 && badPoint.status === 400, `near a place needs a place (${show(noPoint)}; ${show(badPoint)})`);
+    // A shop with more Offers than a page of listings holds doesn't hide the shops past it (the review of b4f941f6): far from
+    // the rest, Ivy's shop holds 210 Offers at the point, and 30 more shops one Offer each, each farther south than the last,
+    // every one in an area of its own. A member (by exact places, and by neighbourhood where anyone can join) and a visitor
+    // alike get the most shops one read answers, Ivy's first, then the others nearest first, and the farthest one left out.
+    const ivy = member('Ivy');
+    const ivyShop: string = shopsModule.openShop(ivy.pk).id;
+    for (let i = 0; i < 210; i++) {
+        createPost('offer', 'tools', `Ivy thing ${i}`, '', 0, 'fixed', ivy.pk, HOBART.lat, HOBART.lng, undefined, false, undefined, false, { shopId: ivyShop });
+    }
+    const southShops: string[] = [];
+    for (let i = 0; i < 30; i++) {
+        const keeper = member(`Keeper${i}`);
+        const shop: string = shopsModule.openShop(keeper.pk).id;
+        createPost('offer', 'tools', `Keeper ${i} thing`, '', 0, 'fixed', keeper.pk, HOBART.lat - 0.12 * (i + 1), HOBART.lng, undefined, false, undefined, false, { shopId: shop });
+        southShops.push(shop);
+    }
+    const wanted = [ivyShop, ...southShops.slice(0, SHOPS_NEAR_MAX - 1)];
+    const memberPast = await call('GET', cy, nearPath(HOBART.lat, HOBART.lng, 1000));
+    attempt(() => setSwitchOverride('openMembership', true));
+    let neighbourhoodPast: Res;
+    try {
+        neighbourhoodPast = await call('GET', cy, nearPath(HOBART.lat, HOBART.lng, 1000));
+    } finally {
+        attempt(() => setSwitchOverride('openMembership', false));
+    }
+    attempt(() => setSwitchOverride('guestListingsOnly', true));
+    let visitorPast: Res;
+    try {
+        visitorPast = await call('GET', null, nearPath(HOBART.lat, HOBART.lng, 1000));
+    } finally {
+        attempt(() => setSwitchOverride('guestListingsOnly', false));
+    }
+    for (const [who, r] of [['a member', memberPast], ['a member where anyone can join (by neighbourhood)', neighbourhoodPast], ['a visitor', visitorPast]] as Array<[string, Res]>) {
+        const got: string[] = (r.body?.shops ?? []).map((s: any) => s.id);
+        assert(r.status === 200 && same(got, wanted),
+            `${who}: a shop with 210 Offers hides none past it: the ${SHOPS_NEAR_MAX} nearest shops, each once, nearest first (${r.status}: ${got.length} shops, `
+            + `${got.filter(id => wanted.includes(id)).length} of the ${wanted.length} wanted)`);
+    }
 
     // ── 7. pause and reopen ─────────────────────────────────────────────────────────────────────
     console.log('\n── 7. pause and reopen ──');

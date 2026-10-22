@@ -4,6 +4,7 @@
 //
 // The connector runs it through setTunnelConnectorForTests({ command: process.execPath, prefixArgs: [this file, folder] }),
 // so it sees exactly the arguments and the environment the real one would. It:
+//   - waits <folder>/start-delay-ms first, when it exists (a loaded machine's slow start: FAKE_CLOUDFLARED_START_DELAY_MS);
 //   - appends { pid, argv, env, at } to <folder>/runs.jsonl as it starts;
 //   - exits at once with code 1 while <folder>/crash exists (a crash);
 //   - serves GET /ready on the --metrics address: <folder>/ready.json's { status, readyConnections }, else 503;
@@ -29,6 +30,9 @@ process.on('SIGTERM', () => {
 });
 
 fs.mkdirSync(dir, { recursive: true });
+// The connector's spawn resolves on the 'spawn' event; on a loaded CI runner this process records itself well after that.
+const startDelayMs = Number(readJson('start-delay-ms')) || 0;
+if (startDelayMs > 0) await new Promise((r) => setTimeout(r, startDelayMs));
 fs.appendFileSync(at('runs.jsonl'), JSON.stringify({ pid: process.pid, argv, env: { ...process.env }, at: Date.now() }) + '\n');
 
 if (fs.existsSync(at('crash'))) {

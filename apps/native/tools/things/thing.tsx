@@ -12,13 +12,15 @@
  * Every change that asks the community's server (pause, resume) waits for its answer: when there is none, nothing
  * changes and the screen says so. Never a false success. A change that would take the shed past the store's bound is
  * said before the server is asked anything, as Edit does, and nothing changes.
+ * What is written is made from the document as it is once the server has answered, so a sync that took the server's
+ * newer copy meanwhile is never undone.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     BACK_AROUND_DAYS, THINGS_NAME_CHARS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack,
     offersToLink, openDealsByPost, removeThing, setListed, shedFits, shedTooBigLine, t, takeOutOfShop, thingCategory,
     thingConditionName, thingListDraft, thingState, thingStateLine, tn,
-    type ThingsScreenProps, type ToolOwnOffer, type ToolPostStatus, type ToolPriceHint,
+    type ThingsDoc, type ThingsScreenProps, type ToolOwnOffer, type ToolPostStatus, type ToolPriceHint,
 } from '@beanpool/core';
 import {
     ToolButton, ToolButtons, ToolChips, ToolEmpty, ToolField, ToolInput, ToolNote, ToolPhoto, ToolRow, ToolScreen, ToolSection,
@@ -28,6 +30,17 @@ import { keep, useDeals } from './parts';
 /** Said when the community's server didn't answer: nothing changed. */
 const unreached = () => t("Couldn't reach your community's server, so nothing changed. Try again when you're online.");
 const notKept = () => t("Couldn't save it on this phone. Try again.");
+
+/**
+ * A change that asked the server first, as the server's answer leaves it: `make` it to the document as it is then;
+ * `undo` puts the server back as it was, should the change no longer fit; `kept` is done once the change is kept (not
+ * `then`: an async step's answer with a `then` would be awaited as a promise).
+ */
+interface AfterServer {
+    make: (doc: ThingsDoc) => ThingsDoc;
+    undo?: () => Promise<void>;
+    kept?: () => void | Promise<void>;
+}
 
 export function ThingScreen({ host, params }: ThingsScreenProps) {
     const doc = host.doc.get();
@@ -95,7 +108,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         }
     };
     /** Keep a changed document: true once kept; else the screen says why not (the shed is full, or it wasn't kept). */
-    const write = async (next: Parameters<typeof keep>[1]) => {
+    const write = async (next: ThingsDoc) => {
         const why = await keep(host, next);
         if (why) setRefused(why === 'too-big' ? shedTooBigLine() : notKept());
         return why === null;
@@ -104,18 +117,40 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
      * Whether a change that makes the document bigger fits the store's bound, checked before the server is asked anything
      * (as Edit checks): one that doesn't says the shed is full, and nothing changes, here or in the Market.
      */
-    const fits = (next: Parameters<typeof keep>[1]) => {
+    const fits = (next: ThingsDoc) => {
         if (shedFits(next)) return true;
         setRefused(shedTooBigLine());
         return false;
     };
     /**
-     * Its Offer out of the Market while the thing is away or deleted. The server pauses only a live Offer, so one already
-     * paused or gone (here or elsewhere) is left as the Market has it.
+     * One change that asks the server first, then the document: Take out, Put back, Lend, It's back and Delete each go
+     * through here. `first`, the change as the document stands before the server is asked, must fit (else the shed is
+     * said to be full and nothing is asked). `ask` asks the server and says what to change. The change is made to the
+     * document as it is once the server has answered, never to one read before: the open's sync may have taken the
+     * server's newer copy meanwhile (a thing added on another device), and writing a document from before would undo it,
+     * here and on the server at the next sync. Should the change no longer fit then, the server is put back as it was and
+     * the shed is said to be full.
      */
-    const pauseOffer = async (offerId: string) => {
+    const serverFirst = async (ask: () => Promise<AfterServer>, first?: (doc: ThingsDoc) => ThingsDoc) => {
+        if (first && !fits(first(host.doc.get()))) return;
+        const { make, undo, kept } = await ask();
+        const next = make(host.doc.get());
+        if (!fits(next)) {
+            await undo?.();
+            return;
+        }
+        if (await write(next)) await kept?.();
+    };
+    /**
+     * Its Offer out of the Market while the thing is away or deleted. The server pauses only a live Offer, so one already
+     * paused or gone (here or elsewhere) is left as the Market has it. What it returns puts back a pause it made: the
+     * Offer resumed, or, when the server can't be reached then, the screen says it is paused, with Put back.
+     */
+    const pauseOffer = async (offerId: string): Promise<(() => Promise<void>) | undefined> => {
         const status = await host.posts.status(offerId);
-        if (status !== 'paused' && status !== 'gone') await host.posts.pause(offerId);
+        if (status === 'paused' || status === 'gone') return undefined;
+        await host.posts.pause(offerId);
+        return () => host.posts.resume(offerId).then(() => {}, () => setOfferStatus('paused'));
     };
 
     const list = () => {
@@ -124,59 +159,56 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         setListedNote(true);
     };
     const takeOut = () => act(async () => {
-        const next = takeOutOfShop(host.doc.get(), id, host.now());
-        if (!fits(next)) return;
-        await pauseOffer(postId!);
-        await write(next);
+        const out = (d: ThingsDoc) => takeOutOfShop(d, id, host.now());
+        await serverFirst(async () => ({ make: out, undo: await pauseOffer(postId!) }), out);
     });
     const putBack = () => act(async () => {
         const paused = thing.pausedPostId ?? postId!;
-        const status = await host.posts.status(paused);
-        if (status === 'gone') {
-            await write(forgetOffer(host.doc.get(), id, host.now()));
-            setGoneNote(true);
-            return;
-        }
-        if (status === 'paused') await host.posts.resume(paused);
-        setOfferStatus('active');
-        await write(setListed(host.doc.get(), id, paused, host.now()));
+        await serverFirst(async () => {
+            const status = await host.posts.status(paused);
+            if (status === 'gone') return { make: (d: ThingsDoc) => forgetOffer(d, id, host.now()), kept: () => setGoneNote(true) };
+            if (status === 'paused') await host.posts.resume(paused);
+            setOfferStatus('active');
+            return { make: (d: ThingsDoc) => setListed(d, id, paused, host.now()) };
+        });
     });
     const lend = () => act(async () => {
         if (!lending || !lending.name.trim()) return;
         const now = host.now();
-        const next = lendOutside(host.doc.get(), id, lending.name, lending.days ? backAroundIn(now, lending.days) : null, now);
-        if (!fits(next)) return;
-        if (postId) await pauseOffer(postId);
-        if (await write(next)) setLending(null);
+        const lent = (d: ThingsDoc) => lendOutside(d, id, lending.name, lending.days ? backAroundIn(now, lending.days) : null, now);
+        await serverFirst(async () => ({ make: lent, undo: postId ? await pauseOffer(postId) : undefined, kept: () => setLending(null) }), lent);
     });
     const backHome = () => act(async () => {
         const now = host.now();
-        let next = markBack(host.doc.get(), id, now);
-        let gone = false;
-        if (postId) {
+        const home = (d: ThingsDoc) => markBack(d, id, now);
+        await serverFirst(async () => {
+            if (!postId) return { make: home };
             // Its Offer back in the Market, as the Market has it now (the server resumes only a paused one): paused, it is
             // resumed; put back meanwhile, it is left live; gone, it is forgotten and the thing is on the shelf. If the
             // server can't be reached, it is home and taken out of the shop, as it is.
             try {
                 const status = await host.posts.status(postId);
                 if (status === 'paused') await host.posts.resume(postId);
-                if (status === 'gone') {
-                    next = forgetOffer(next, id, now);
-                    gone = true;
-                }
                 setOfferStatus(status === 'paused' ? 'active' : status);
+                if (status === 'gone') return { make: (d: ThingsDoc) => forgetOffer(home(d), id, now), kept: () => setGoneNote(true) };
+                return { make: home };
             } catch {
-                next = takeOutOfShop(next, id, now);
+                return { make: (d: ThingsDoc) => takeOutOfShop(home(d), id, now) };
             }
-        }
-        if (await write(next) && gone) setGoneNote(true);
+        });
     });
     const remove = () => act(async () => {
-        if (postId) await pauseOffer(postId);
         const photo = thing.photo;
-        if (!await write(removeThing(host.doc.get(), id, host.now()))) return;
-        if (photo) await host.photos.remove(photo).catch(() => {});
-        host.back();
+        await serverFirst(async () => {
+            if (postId) await pauseOffer(postId);
+            return {
+                make: (d: ThingsDoc) => removeThing(d, id, host.now()),
+                kept: async () => {
+                    if (photo) await host.photos.remove(photo).catch(() => {});
+                    host.back();
+                },
+            };
+        });
     });
     const findLinks = () => act(async () => {
         setLinks(offersToLink(host.doc.get(), await host.posts.mine(), id));

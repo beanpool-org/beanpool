@@ -810,6 +810,42 @@ describe('A thing', () => {
         expect(['post-1', 'post-2', 'post-3', 'post-4'].map((id) => server.posts.get(id)?.status)).toEqual(['paused', 'paused', 'paused', 'active']);
     });
 
+    it("with the shop closed for now, a thing taken out by linking it to the Offer the shop paused: Lend and Delete ask the owner's pause too, so the reopen leaves those Offers down", async () => {
+        offer('post-1', 'Drill');
+        offer('post-2', 'Ladder');
+        offer('post-3', 'Hammer');
+        await keep(shed(thing('t-1', 'Drill'), thing('t-2', 'Ladder')));
+        closeShop('post-1', 'post-2', 'post-3');
+        // Linked while the shop is closed: its Offer reads paused, so the thing is taken out of the shop, and only its
+        // pausedPostId names the Offer.
+        await open('thing', 't-1');
+        await click('thing-link');
+        await click('thing-link-post-1');
+        expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('thing-lend-save');
+        await waitFor(async () => expect(await keptThing('t-1')).toMatchObject({ pausedPostId: 'post-1', lentTo: { name: 'Sam' } }));
+        expect(byTestId('thing-refused')).toBeNull();
+
+        cleanup();
+        await open('main');
+        await click('thing-row-t-2');
+        await click('thing-link');
+        await click('thing-link-post-2');
+        expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        await waitFor(() => expect(byTestId('things-main')).not.toBeNull());
+        expect((await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
+
+        expect(server.asks).toEqual(['pause post-1', 'pause post-2']);
+        expect([...server.shopHeld]).toEqual(['post-3']);
+        reopenShop();
+        expect(['post-1', 'post-2', 'post-3'].map((id) => server.posts.get(id)?.status)).toEqual(['paused', 'paused', 'active']);
+    });
+
     it("Put back while the shop is closed for now says so in the Tool shed's words, never \"couldn't reach\", and changes nothing", async () => {
         const closed = "Your shop is closed for now, so this can't go back in it yet. Reopen your shop first.";
         offer('post-1', 'Drill');

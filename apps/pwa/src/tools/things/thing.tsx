@@ -94,6 +94,8 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         );
     }
     const id = thing.id;
+    /** Its Offer, in the shop or taken out of it: what Lend and Delete pause. */
+    const linked = postId ?? thing.pausedPostId;
     const state = thingState(thing, open);
     const cat = thingCategory(thing.category);
     const condition = thingConditionName(thing.condition);
@@ -187,7 +189,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         if (!lending || !lending.name.trim()) return;
         const now = host.now();
         const lent = (d: ThingsDoc) => lendOutside(d, id, lending.name, lending.days ? backAroundIn(now, lending.days) : null, now);
-        await serverFirst(async () => ({ make: lent, undo: postId ? await pauseOffer(postId) : undefined, kept: () => setLending(null) }), lent);
+        await serverFirst(async () => ({ make: lent, undo: linked ? await pauseOffer(linked) : undefined, kept: () => setLending(null) }), lent);
     });
     const backHome = () => act(async () => {
         const now = host.now();
@@ -211,7 +213,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const remove = () => act(async () => {
         const photo = thing.photo;
         await serverFirst(async () => {
-            if (postId) await pauseOffer(postId);
+            if (linked) await pauseOffer(linked);
             return {
                 make: (d: ThingsDoc) => removeThing(d, id, host.now()),
                 kept: async () => {

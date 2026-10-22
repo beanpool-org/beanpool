@@ -172,6 +172,16 @@ describe('readNearestInCircle: a read from the setting keeps as many from inside
         };
         return { reads, read };
     };
+    /**
+     * A node that answers as the posts route does: within the radius it was sent round the centre it was sent, nearest
+     * first from that centre then by id, `limit` (50 unless asked) from `offset` (engine posts.ts NEAREST_ORDER).
+     */
+    const nearestFirstNode = <T extends { id: string; lat: number; lng: number }>(sent: { lat: number; lng: number; radiusKm: number }, rows: T[]) =>
+        pagedNode(rows
+            .map(p => ({ p, km: haversineDistance(sent.lat, sent.lng, p.lat, p.lng) }))
+            .filter(x => x.km <= sent.radiusKm)
+            .sort((a, b) => a.km - b.km || (a.p.id < b.p.id ? -1 : a.p.id > b.p.id ? 1 : 0))
+            .map(x => x.p));
 
     it('asks for twice what it keeps, cuts, and keeps the nearest that many', async () => {
         const node = pagedNode([...many(10, ring), ...many(60, inside)]);
@@ -213,6 +223,28 @@ describe('readNearestInCircle: a read from the setting keeps as many from inside
         const node = pagedNode(rows);
         expect((await readNearestInCircle(near, 50, node.read)).map(p => p.id)).toEqual([inside(0).id, inside(1).id]);
         expect(node.reads).toHaveLength(2);
+    });
+
+    // The node orders by the ROUNDED centre, so a full first page can fill the list with listings further from the exact
+    // centre than one it left for the next page (deciding review of #2363, the stop rule). 10 km goes as 2 dp, 0.725 km
+    // off: a town 9.7 km out on the rounded centre's side, and one lone listing 8.3 km out on the other.
+    it('a full page that fills the list still reads on while a listing not yet read could be nearer', async () => {
+        const n10 = nearRead({ nearbyListings: NEARBY, setting: { lat: -28.6149, lng: 153.5951, radiusKm: 10, label: '10km radius' }, area: null, visitor: false })!;
+        expect([n10.lat, n10.lng, n10.radiusKm]).toEqual([-28.61, 153.6, 11]);
+        const { lat, lng } = n10.circle;
+        const shiftKm = haversineDistance(lat, lng, n10.lat, n10.lng);
+        // From the exact centre along the line to the rounded one (+) or away from it (-).
+        const along = (km: number) => ({ lat: lat + (n10.lat - lat) * km / shiftKm, lng: lng + (n10.lng - lng) * km / shiftKm });
+        const lone = { id: 'lone', ...along(-8.3) };
+        const town = (i: number) => ({ id: `town-${String(i).padStart(4, '0')}`, ...along(9.7 + i * 0.0001) });
+        expect(haversineDistance(lat, lng, lone.lat, lone.lng)).toBeLessThan(haversineDistance(lat, lng, town(0).lat, town(0).lng));
+        expect(haversineDistance(n10.lat, n10.lng, town(149).lat, town(149).lng)).toBeLessThan(haversineDistance(n10.lat, n10.lng, lone.lat, lone.lng));
+        for (const size of [100, 150]) {
+            const node = nearestFirstNode(n10, [lone, ...many(size, town)]);
+            const kept = await readNearestInCircle(n10, 50, node.read);
+            expect(kept.map(p => p.id)).toEqual(['lone', ...many(49, town).map(p => p.id)]);
+            expect(node.reads).toEqual([{ limit: 100 }, { limit: 100, offset: 100 }]);
+        }
     });
 
     it('a read from the area, and no read, are one read as before, as the node sent them', async () => {

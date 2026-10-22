@@ -2215,7 +2215,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 {MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.label || previewPost.category}
                             </span>
                             <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 mr-6">
-                                {previewPost.credits}{t('B', undefined, 'the Beans sign')}
+                                {t('{amount}B', { amount: previewPost.credits })}
                             </span>
                         </div>
                         <span className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors">

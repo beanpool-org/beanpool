@@ -75,7 +75,9 @@ jobs:
       # pwa_dark_classes and native_phone_width, started 2m23s and 2m32s in, failed in 8-9 s on that lock. The workspace
       # has one Playwright (1.63.0), so the PWA's install is every check's browser; their own `playwright install` then
       # finds it and downloads nothing.
+      # Measured 11 s on CI; a stalled apt mirror or download fails here instead of holding the runner for GitHub's 6 h default.
       - name: Install Chromium for the browser checks
+        timeout-minutes: 15
         run: pnpm --filter @beanpool/pwa exec playwright install --only-shell --with-deps chromium
 
       # A hang fails the step instead of holding the runner for GitHub's 6 h default. patches/vitest@3.2.7.patch drops

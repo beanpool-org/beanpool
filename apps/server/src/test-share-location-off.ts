@@ -10,13 +10,16 @@
  *      rest of the identity as before), nor from /api/directory/info or the directory push (which already sent none);
  *      the directory still names the community. The unsigned and the stranger's answers are the same bytes, so the
  *      answer says nothing about a key but what its own signer already knows.
- *   2. OFF: a member's signed GET /api/node/config gets today's pin to two decimals (~1 km); an owner's and an admin's
- *      key session get it exact (the manager's Node Identity screen saves it back); a session the node doesn't know gets
- *      the stranger's answer. /api/local/* is never signature-checked (https-server isSignatureBypassed), so status and
+ *   2. OFF: a member's signed GET /api/node/config gets today's pin to two decimals (~1 km); a suspended or disabled
+ *      member's gets the stranger's answer (readsAsMember: while it lasts they read what a non-member reads); an owner's
+ *      and an admin's key session get it exact (the manager's Node Identity screen saves it back); a session the node
+ *      doesn't know gets the stranger's answer. /api/local/* is never signature-checked (https-server isSignatureBypassed), so status and
  *      the dashboard can't tell a member from a stranger: they give it to no one without an admin credential.
  *   3. OFF: no public read (every PUBLIC_READ_EXACT path, and the three /api/local/* reads that answer without a
  *      credential) holds a number within ~10 km of the place, unsigned or signed by a stranger.
- *   4. OFF on a private preview: a stranger's answer is the service area alone, and it is null.
+ *   4. OFF on a private preview: a stranger's answer is the service area alone, and it is null; an owner's and an
+ *      admin's key session still get the whole config (the Node Identity screen loads every switch from it, and saves
+ *      them all back).
  *   5. ON: as before: anyone gets the pin to two decimals from each read, an owner or admin exact where they did.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-share-location-off.ts
@@ -109,6 +112,18 @@ async function main() {
     se.seedGenesisMember(member.pk, 'PlaceMember');
     const stranger = newId();
     if (!se.isNodeMember(member.pk) || se.isNodeMember(stranger.pk)) throw new Error('setup: the member is no member, or the stranger is one');
+    // Members suspended and disabled, as a re-key, an admin, a report or a community vote leaves the row: still members
+    // (isNodeMember), who read what a non-member reads while it lasts (readsAsMember).
+    const { db } = await import('./db/db.js');
+    const suspended = newId();
+    se.seedGenesisMember(suspended.pk, 'PlaceSuspended');
+    db.prepare("UPDATE members SET status = 'suspended' WHERE public_key = ?").run(suspended.pk);
+    const disabled = newId();
+    se.seedGenesisMember(disabled.pk, 'PlaceDisabled');
+    db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(disabled.pk);
+    for (const id of [suspended, disabled]) {
+        if (!se.isNodeMember(id.pk) || se.readsAsMember(id.pk)) throw new Error('setup: a suspended or disabled member is no member, or reads as one');
+    }
 
     // What the operator set in the manager: one pin, saved as both (NodeIdentityPanel handleSave).
     updateLocalConfig({ communityName: 'Placeholder Vale', callsign: 'placevale', location: PLACE });
@@ -146,8 +161,15 @@ async function main() {
         `a member's signed GET /api/node/config: the centre to two decimals (${cfgMember.status} ${show(cfgMember.body?.serviceRadius)})`);
     assert(same({ ...cfgMember.body, serviceRadius: null }, cfgUnsigned.body),
         `and every other field as a stranger has it`);
+    for (const [who, id] of [['a suspended member', suspended], ['a disabled member', disabled]] as const) {
+        const cfg = await get('/api/node/config', id);
+        assert(cfg.status === 200 && cfg.body?.serviceRadius === null && cfg.text === cfgUnsigned.text,
+            `${who}'s signed GET /api/node/config: no place, the stranger's answer byte for byte (${cfg.status} ${show(cfg.body?.serviceRadius)})`);
+    }
+    const wholeConfig: Record<string, string> = {};
     for (const [who, headers] of [['an owner', OWNER], ['an admin', ADMIN]] as const) {
         const cfg = await get('/api/node/config', null, headers);
+        wholeConfig[who] = cfg.text;
         assert(cfg.status === 200 && same(cfg.body?.serviceRadius, AREA),
             `${who}'s key session, GET /api/node/config: the exact centre (${cfg.status} ${show(cfg.body?.serviceRadius)})`);
         const dash = await get('/api/local/dashboard', null, headers);
@@ -181,13 +203,21 @@ async function main() {
         const previewMember = await get('/api/node/config', member);
         assert(previewMember.status === 200 && same(previewMember.body?.serviceRadius, ROUNDED_AREA),
             `a member's: the centre to two decimals, as before (${previewMember.status} ${show(previewMember.body?.serviceRadius)})`);
+        const previewDisabled = await get('/api/node/config', disabled);
+        assert(previewDisabled.status === 200 && previewDisabled.body?.serviceRadius === null,
+            `a disabled member's: no place (${previewDisabled.status} ${show(previewDisabled.body?.serviceRadius)})`);
+        for (const [who, headers] of [['an owner', OWNER], ['an admin', ADMIN]] as const) {
+            const cfg = await get('/api/node/config', null, headers);
+            assert(cfg.status === 200 && cfg.text === wholeConfig[who] && cfg.body?.publishLocation === false && typeof cfg.body?.acceptKnocks === 'boolean',
+                `${who}'s key session: the whole config, as off a preview, so a save from the Node Identity screen keeps the switch off (${cfg.status} ${cfg.text.slice(0, 200)})`);
+        }
     } finally {
         delete process.env.PRIVATE_PREVIEW;
     }
 
     console.log('\n── 5. ON: as before ──');
     se.updateNodeConfig({ publishLocation: true });
-    for (const [who, id] of [['unsigned', null], ['signed by a stranger', stranger], ['signed by a member', member]] as const) {
+    for (const [who, id] of [['unsigned', null], ['signed by a stranger', stranger], ['signed by a member', member], ['signed by a disabled member', disabled]] as const) {
         const cfg = await get('/api/node/config', id);
         assert(cfg.status === 200 && same(cfg.body?.serviceRadius, ROUNDED_AREA) && cfg.body?.publishLocation === true,
             `${who} GET /api/node/config: the centre to two decimals (${cfg.status} ${show(cfg.body?.serviceRadius)})`);

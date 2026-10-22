@@ -235,8 +235,9 @@ router.get('/', async (ctx) => {
 // The service area's centre is the manager's one map pin, which is also the node's place, and an operator may have set it
 // at home: config/community-place.ts says who gets it (public-routes audit NEW-1: it was served to ~1 m). An owner or admin
 // gets it exact, as the manager's Node Identity screen reads it with its admin credential, so a save never writes a
-// rounded pin back; a member to two decimals (~1 km); anyone else to two decimals with "Share Location & Radius" on, and
-// null with it off. The web app and the phone sign this read when they hold a key, so a member's map still centres.
+// rounded pin back; a member who reads as one (not suspended or disabled) to two decimals (~1 km); anyone else to two
+// decimals with "Share Location & Radius" on, and null with it off. The web app and the phone sign this read when they
+// hold a key, so a member's map still centres.
 function publicNodeConfig(config: NodeConfig, shown: PlaceShown) {
     return {
         serviceRadius: placeAs(config.serviceRadius, shown),

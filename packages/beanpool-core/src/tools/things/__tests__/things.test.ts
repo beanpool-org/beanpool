@@ -455,6 +455,16 @@ describe('Loans maths and validations (against S3 lendable Offers semantics)', (
         expect(loanTotalBeans(25, 'weekly', 0)).toBe(0);
     });
 
+    it('loanTotalBeans quotes what the node charges for a price with cents, never rounded to whole Beans', () => {
+        // escrow.ts draws post.credits * hours (or post.credits on one fee) with no rounding.
+        expect(loanTotalBeans(2.5, 'daily', 3)).toBe(2.5 * 3);
+        expect(loanTotalBeans(1.5, 'fixed', 1)).toBe(1.5);
+        expect(loanTotalBeans(0.4, 'fixed', 1)).toBe(0.4); // a loan that costs 0.4 Beans is not free
+        expect(loanTotalBeans(0.4, 'fixed', 1)).toBeGreaterThan(0);
+        expect(loanTotalBeans(0.75, 'weekly', 2)).toBe(0.75 * 2);
+        expect(loanTotalBeans(10, 'daily', 1.5)).toBe(10 * 1.5);
+    });
+
     it('isLoanOverdue detects whether backAround date is in the past', () => {
         const future = new Date(NOW + 86_400_000).toISOString();
         const past = new Date(NOW - 86_400_000).toISOString();

@@ -32,7 +32,8 @@ export {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Total Beans fee for a loan:
+ * Total Beans fee for a loan, unrounded: the amount the node draws (apps/server/src/engine/escrow.ts, `post.credits * hours`
+ * or `post.credits`), cents included, so a 0.4-Bean loan is never quoted as free.
  * - Free loan (0 or negative credits): 0 Beans
  * - Fixed price: one fee of `credits` Beans (regardless of duration/units)
  * - Daily price: `credits * units` Beans
@@ -42,10 +43,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function loanTotalBeans(credits: number, priceType: string | null | undefined, units: unknown): number {
     if (typeof credits !== 'number' || !Number.isFinite(credits) || credits <= 0) return 0;
     const type = priceType || 'fixed';
-    if (type === 'fixed') return Math.round(credits);
+    if (type === 'fixed') return credits;
     if (type === 'daily' || type === 'weekly') {
         if (typeof units !== 'number' || !Number.isFinite(units) || units <= 0) return 0;
-        return Math.round(credits * units);
+        return credits * units;
     }
     return 0;
 }

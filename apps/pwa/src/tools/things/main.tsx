@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from 'react';
 import {
-    openDealsByPost, shedThings, t, thingCategory, thingInFilter, thingState, thingStateLine, thingsLoans, tn,
+    openDealsByPost, shedThings, t, thingCategory, thingInFilter, thingRowLine, thingState, thingsLoans,
     type ThingFilter, type ThingsScreenProps,
 } from '@beanpool/core';
 import { ToolButton, ToolChips, ToolNote, ToolRow, ToolSection } from '../ui';
@@ -45,7 +45,7 @@ export function Main({ host }: ThingsScreenProps) {
                                 image={thing.photo ? host.photos.uri(thing.photo) : null}
                                 icon={thingCategory(thing.category).emoji}
                                 title={thing.name}
-                                state={thingStateLine(thing, open, now)}
+                                state={thingRowLine(thing, open, now)}
                                 onClick={() => host.navigate('thing', { key: thing.id })}
                                 testId={`thing-row-${thing.id}`}
                             />
@@ -58,7 +58,7 @@ export function Main({ host }: ThingsScreenProps) {
                     <ToolRow
                         icon="🤝"
                         title={t('Loans')}
-                        state={loans > 0 ? tn(loans, '{n} thing out or asked for', '{n} things out or asked for') : t('Nothing out right now')}
+                        state={loans > 0 ? t('Out or asked for: {count}', { count: loans }) : t('Nothing out right now')}
                         onClick={() => host.navigate('loans')}
                         testId="things-loans"
                     />

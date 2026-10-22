@@ -107,7 +107,7 @@ export function ToolChips({ chips, picked, onPick, label, heading, testId }: {
                 return (
                     <button key={c.id} type="button" aria-pressed={on} onClick={() => onPick(c.id)} data-testid={testId ? `${testId}-${c.id}` : undefined}
                         className={`shrink-0 max-w-full min-h-[48px] px-4 rounded-full border text-sm font-semibold break-words cursor-pointer ${FOCUS} ${on
-                            ? 'bg-bp-chip-accent-tint text-bp-chip-accent-ink border-bp-chip-accent-border'
+                            ? 'bg-bp-accent-fill text-bp-accent-on border-transparent'
                             : 'bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 border-nature-300 dark:border-nature-700'}`}>
                         {c.label}
                     </button>

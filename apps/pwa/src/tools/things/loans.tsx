@@ -5,7 +5,7 @@
  * apps/native/tools/things/loans.tsx (which also says the phone reminds; the web has no reminders).
  */
 import { useMemo } from 'react';
-import { openDealsByPost, t, thingCategory, thingStateLine, thingsLoans, type ThingLoan, type ThingsScreenProps } from '@beanpool/core';
+import { openDealsByPost, t, thingCategory, thingRowLine, thingsLoans, type ThingLoan, type ThingsScreenProps } from '@beanpool/core';
 import { ToolEmpty, ToolNote, ToolRow, ToolSection } from '../ui';
 import { useDeals } from './parts';
 
@@ -22,7 +22,7 @@ export function LoansScreen({ host }: ThingsScreenProps) {
             image={l.thing.photo ? host.photos.uri(l.thing.photo) : null}
             icon={thingCategory(l.thing.category).emoji}
             title={l.thing.name}
-            state={thingStateLine(l.thing, open, now)}
+            state={thingRowLine(l.thing, open, now)}
             onClick={() => host.navigate('thing', { key: l.thing.id })}
             testId={`loan-row-${l.thing.id}`}
         />

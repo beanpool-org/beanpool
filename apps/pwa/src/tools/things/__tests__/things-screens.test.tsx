@@ -211,7 +211,7 @@ describe('Your things', () => {
         offer('post-1', 'Cordless drill');
         await keep(FIXTURES.docs.small);
         await open('main');
-        expect(rows()).toEqual(['Camping tentOn your shelf', expect.stringMatching(/^Step ladderWith Alice · back around \d{1,2} [A-Z][a-z]{2}$/), 'Cordless drillIn your shop']);
+        expect(rows()).toEqual(['Camping tentOn your shelf', expect.stringMatching(/^Step ladderDue \d{1,2} [A-Z][a-z]{2} · with Alice$/), 'Cordless drillIn your shop']);
         await click('things-filter-out');
         expect(rows().map((r) => r!.slice(0, 11))).toEqual(['Step ladder']);
         await click('things-filter-shop');
@@ -473,7 +473,7 @@ describe('Loans', () => {
         ));
         await open('loans');
         await waitFor(() => expect(screen.queryAllByTestId(/^loan-row-/).map((r) => r.getAttribute('data-testid'))).toEqual(['loan-row-t-2', 'loan-row-t-1', 'loan-row-t-3']));
-        expect(words(byTestId('loan-row-t-2'))).toMatch(/^LadderWith Sam · was due back /);
+        expect(words(byTestId('loan-row-t-2'))).toBe('LadderOverdue · with Sam');
         expect(within(byTestId('loans-outside')!).getByTestId('loan-row-t-2')).toBeTruthy();
         expect(within(byTestId('loans-beanpool')!).getByTestId('loan-row-t-1')).toBeTruthy();
         expect(within(byTestId('loans-asked')!).getByTestId('loan-row-t-3')).toBeTruthy();

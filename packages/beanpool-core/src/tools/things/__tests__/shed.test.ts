@@ -14,7 +14,7 @@ import {
     BACK_AROUND_DAYS, THING_FILTERS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack, offersToLink,
     openDealsByPost, removeThing, saveThing, setListed, shedFits, shedFullLine, shedHasRoom, shedThings, shedTooBigLine,
     takeOutOfShop, thingCategories, thingCategory, thingConditionName, thingInFilter, thingInput, thingInputProblems,
-    thingListDraft, thingState, thingStateLine, thingsLoans, type ThingInput,
+    thingListDraft, thingRowLine, thingState, thingStateLine, thingsLoans, type ThingInput,
 } from '../shed.js';
 
 afterEach(() => setLanguage('en'));
@@ -77,6 +77,25 @@ describe('a thing\'s state, its line and the filters', () => {
         expect(line(thing('a', 'Drill', { lentTo: { name: 'Sam', since: iso(NOW - 2 * DAY), backAround: iso(NOW + DAY) } }))).toBe('With Sam · back around 21 Oct');
         expect(line(thing('a', 'Drill', { lentTo: { name: 'Sam', since: iso(NOW - 9 * DAY), backAround: iso(NOW - DAY) } }))).toBe('With Sam · was due back 19 Oct');
         expect(line(thing('a', 'Drill', { lentTo: { name: 'Sam', since: 'not a date' } }))).toBe('With Sam');
+    });
+
+    it('a row\'s line is short, what matters first, so a 320 dp row that cuts it still shows the date', () => {
+        const open = openDealsByPost([deal('p1', 'pending', { backAround: iso(NOW + 3 * DAY) }), deal('p2', 'pending', { backAround: iso(NOW - DAY) }), deal('p3', 'pending'), deal('p4', 'requested')]);
+        const row = (t: Thing) => thingRowLine(t, open, NOW);
+        expect(row(thing('a', 'Drill'))).toBe('On your shelf');
+        expect(row(thing('a', 'Drill', { pausedPostId: 'p8' }))).toBe('Taken out of your shop');
+        expect(row(thing('a', 'Drill', { postId: 'p9' }))).toBe('In your shop');
+        expect(row(thing('a', 'Drill', { postId: 'p4' }))).toBe('Asked to borrow');
+        expect(row(thing('a', 'Drill', { postId: 'p1' }))).toBe('Out · due 23 Oct');
+        expect(row(thing('a', 'Drill', { postId: 'p2' }))).toBe('Out · overdue');
+        expect(row(thing('a', 'Drill', { postId: 'p3' }))).toBe('Out on a loan');
+        expect(row(thing('a', 'Drill', { lentTo: { name: 'Sam', since: iso(NOW - 2 * DAY), backAround: iso(NOW + DAY) } }))).toBe('Due 21 Oct · with Sam');
+        expect(row(thing('a', 'Drill', { lentTo: { name: 'Sam', since: iso(NOW - 9 * DAY), backAround: iso(NOW - DAY) } }))).toBe('Overdue · with Sam');
+        expect(row(thing('a', 'Drill', { lentTo: { name: 'Sam', since: iso(NOW - 2 * DAY) } }))).toBe('With Sam');
+        // Each is shorter than the screen's sentence it stands for.
+        for (const t of [thing('a', 'Drill', { postId: 'p4' }), thing('a', 'Drill', { postId: 'p1' }), thing('a', 'Drill', { lentTo: { name: 'Sam', since: iso(NOW), backAround: iso(NOW + DAY) } })]) {
+            expect(row(t).length).toBeLessThan(thingStateLine(t, open, NOW).length);
+        }
     });
 
     it('through t(): in the pseudo-locale every line is bracketed, the member\'s words inside', () => {

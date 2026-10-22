@@ -4,7 +4,7 @@
  * Each row opens its thing. What it couldn't check is said, never shown as nothing out.
  */
 import React, { useMemo } from 'react';
-import { openDealsByPost, t, thingCategory, thingStateLine, thingsLoans, type ThingLoan, type ThingsScreenProps } from '@beanpool/core';
+import { openDealsByPost, t, thingCategory, thingRowLine, thingsLoans, type ThingLoan, type ThingsScreenProps } from '@beanpool/core';
 import { ToolEmpty, ToolNote, ToolRow, ToolScreen, ToolSection } from '../ui';
 import { useDeals } from './parts';
 
@@ -21,7 +21,7 @@ export function LoansScreen({ host }: ThingsScreenProps) {
             image={l.thing.photo ? host.photos.uri(l.thing.photo) : null}
             icon={thingCategory(l.thing.category).emoji}
             title={l.thing.name}
-            state={thingStateLine(l.thing, open, now)}
+            state={thingRowLine(l.thing, open, now)}
             onPress={() => host.navigate('thing', { key: l.thing.id })}
             testID={`loan-row-${l.thing.id}`}
         />

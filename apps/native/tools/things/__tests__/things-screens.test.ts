@@ -394,7 +394,7 @@ describe('Your things', () => {
         await open('main');
         expect(rows()).toEqual([
             'Camping tent, On your shelf',
-            expect.stringMatching(/^Step ladder, With Alice · back around \d{1,2} [A-Z][a-z]{2}$/),
+            expect.stringMatching(/^Step ladder, Due \d{1,2} [A-Z][a-z]{2} · with Alice$/),
             'Cordless drill, In your shop',
         ]);
         await click('things-filter-out');
@@ -417,7 +417,7 @@ describe('Your things', () => {
         market.deals.push({ id: 'tx1', postId: 'post-1', sellerPublicKey: ME.publicKey, buyerPublicKey: 'b', status: 'pending', hours: 3, createdAt: iso(NOW - 2 * DAY) });
         await keep(shed(thing('t-1', 'Cordless drill', { postId: 'post-1' })));
         await open('main');
-        expect(rows()).toEqual([expect.stringMatching(/^Cordless drill, Out on a loan · back around /)]);
+        expect(rows()).toEqual([expect.stringMatching(/^Cordless drill, Out · due \d{1,2} [A-Z][a-z]{2}$/)]);
         await click('things-filter-shelf');
         expect(rows()).toEqual([]);
         expect(text('things-none')).toBe('Nothing to show here.');
@@ -726,7 +726,7 @@ describe('Loans', () => {
         ));
         await open('loans');
         expect(all('[data-testid^="loan-row-"]').map((r) => r.getAttribute('data-testid'))).toEqual(['loan-row-t-2', 'loan-row-t-1', 'loan-row-t-3']);
-        expect(byTestId('loan-row-t-2')?.getAttribute('aria-label')).toMatch(/^Ladder, With Sam · was due back /);
+        expect(byTestId('loan-row-t-2')?.getAttribute('aria-label')).toBe('Ladder, Overdue · with Sam');
         expect(byTestId('loans-outside')).not.toBeNull();
         expect(byTestId('loans-beanpool')).not.toBeNull();
         expect(byTestId('loans-asked')).not.toBeNull();

@@ -129,6 +129,32 @@ export function thingStateLine(thing: Thing, deals: ReadonlyMap<string, ToolDeal
     }
 }
 
+/**
+ * A thing's state in a row of a list (Your things, Loans): one short line, what matters first, so the date still shows
+ * where a 320 dp row cuts the line: a long name is what is cut ("Due 3 Nov · with Sam", "Asked to borrow"). The thing's
+ * own screen says the whole of it ({@link thingStateLine}).
+ */
+export function thingRowLine(thing: Thing, deals: ReadonlyMap<string, ToolDealSummary> = new Map(), now: number = Date.now()): string {
+    switch (thingState(thing, deals)) {
+        case 'lent': {
+            const lent = thing.lentTo!;
+            if (!validTime(lent.backAround)) return t('With {name}', { name: lent.name });
+            return Date.parse(lent.backAround) < now
+                ? t('Overdue · with {name}', { name: lent.name })
+                : t('Due {date} · with {name}', { name: lent.name, date: day(lent.backAround) });
+        }
+        case 'out': {
+            const back = deals.get(thing.postId!)?.backAround;
+            if (!validTime(back)) return t('Out on a loan');
+            return Date.parse(back) < now ? t('Out · overdue') : t('Out · due {date}', { date: day(back) });
+        }
+        case 'asked': return t('Asked to borrow');
+        case 'listed': return t('In your shop');
+        case 'taken-out': return t('Taken out of your shop');
+        case 'shelf': return t('On your shelf');
+    }
+}
+
 // ── The categories and conditions a thing may have ────────────────────────────────────────────────────────────────
 
 /** A thing's category when it has none: Tools. */

@@ -29,6 +29,7 @@ import * as Crypto from 'expo-crypto';
 import { Stack, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
+import { t } from '@beanpool/core';
 import { useIdentity } from './IdentityContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
 import { SsoSignInError, fetchSsoNonce } from '../utils/sso-signin';
@@ -211,8 +212,8 @@ export default function AppleProbeScreen() {
     if (!__DEV__) {
         return (
             <View style={styles.centre}>
-                <Stack.Screen options={{ title: 'Not available' }} />
-                <Text style={styles.muted}>This screen is a development diagnostic.</Text>
+                <Stack.Screen options={{ title: t('Not available') }} />
+                <Text style={styles.muted}>{t('This screen is a development diagnostic.')}</Text>
             </View>
         );
     }
@@ -258,12 +259,11 @@ export default function AppleProbeScreen() {
 
     return (
         <ScrollView contentContainerStyle={styles.container}>
-            <Stack.Screen options={{ title: 'Apple sub probe' }} />
+            <Stack.Screen options={{ title: t('Apple sub probe') }} />
 
             <View style={styles.banner}>
                 <Text style={styles.bannerText}>
-                    Diagnostic screen. Sign in here and on the web probe with the same Apple ID, then
-                    compare the two values.
+                    {t('Diagnostic screen. Sign in here and on the web probe with the same Apple ID, then compare the two values.')}
                 </Text>
             </View>
 
@@ -273,47 +273,45 @@ export default function AppleProbeScreen() {
               complete test of "can this app get a nonce from its node", which is half the chain
               and the half that has never run.
             */}
-            <Text style={styles.label}>1 · Node chain</Text>
-            {chain.stage === 'loading' && <Text style={styles.muted}>Asking the node for a nonce…</Text>}
+            <Text style={styles.label}>{t('1 · Node chain')}</Text>
+            {chain.stage === 'loading' && <Text style={styles.muted}>{t('Asking the node for a nonce…')}</Text>}
             {chain.stage === 'no-identity' && (
                 <Text style={styles.error} accessibilityRole="alert">
-                    No identity on this device. Finish signup first — the nonce request has to be signed.
+                    {t('No identity on this device. Finish signup first — the nonce request has to be signed.')}
                 </Text>
             )}
             {chain.stage === 'no-node' && (
                 <Text style={styles.error} accessibilityRole="alert">
-                    No node configured. Join one first; there is nobody to ask for a nonce.
+                    {t('No node configured. Join one first; there is nobody to ask for a nonce.')}
                 </Text>
             )}
             {chain.stage === 'failed' && (
                 <>
-                    <Text style={styles.error} accessibilityRole="alert">FAILED ({chain.reason})</Text>
+                    <Text style={styles.error} accessibilityRole="alert">{t('FAILED ({reason})', { reason: chain.reason })}</Text>
                     <Text style={styles.mono}>{chain.detail}</Text>
                 </>
             )}
             {chain.stage === 'ready' && (
                 <>
-                    <Text style={styles.ok}>✓ nonce issued</Text>
+                    <Text style={styles.ok}>{t('✓ nonce issued')}</Text>
                     <Text style={styles.mono}>{chain.nonce}</Text>
                     <Text style={styles.muted}>
-                        from {chain.url}
-                        {chain.providers.length > 0 && ` · accepts: ${chain.providers.join(', ')}`}
+                        {chain.providers.length > 0 ? t('from {url} · accepts: {providers}', { url: chain.url, providers: chain.providers.join(', ') }) : t('from {url}', { url: chain.url })}
                     </Text>
                 </>
             )}
 
-            <Text style={styles.label}>2 · Apple sheet</Text>
+            <Text style={styles.label}>{t('2 · Apple sheet')}</Text>
             {chain.stage !== 'ready' && (
                 <Text style={styles.muted}>
-                    No node nonce, so signing in still measures the sub but does NOT test the chain.
+                    {t('No node nonce, so signing in still measures the sub but does NOT test the chain.')}
                 </Text>
             )}
             {Platform.OS !== 'ios' ? (
-                <Text style={styles.muted}>Sign in with Apple is iOS only — run this on an iPhone.</Text>
+                <Text style={styles.muted}>{t('Sign in with Apple is iOS only — run this on an iPhone.')}</Text>
             ) : available === false ? (
                 <Text style={styles.muted}>
-                    Not available on this device. Needs iOS 13+ and a development build (Expo Go cannot
-                    provide the entitlement).
+                    {t('Not available on this device. Needs iOS 13+ and a development build (Expo Go cannot provide the entitlement).')}
                 </Text>
             ) : (
                 <AppleAuthentication.AppleAuthenticationButton
@@ -329,28 +327,25 @@ export default function AppleProbeScreen() {
 
             {nonceEcho && (
                 <>
-                    <Text style={styles.label}>3 · Nonce binding — the answer nobody has had</Text>
+                    <Text style={styles.label}>{t('3 · Nonce binding — the answer nobody has had')}</Text>
                     <Text style={nonceEcho.startsWith('MISMATCH') ? styles.error : styles.ok}>
                         {nonceEcho}
                     </Text>
                     <Text style={styles.muted}>
-                        The server tolerates both forms on documentation alone. This is the first
-                        time anything has measured which one arrives.
+                        {t('The server tolerates both forms on documentation alone. This is the first time anything has measured which one arrives.')}
                     </Text>
                 </>
             )}
 
             {idToken && chain.stage === 'ready' && identity && (
                 <>
-                    <Text style={styles.label}>4 · Does the node accept a real token?</Text>
+                    <Text style={styles.label}>{t('4 · Does the node accept a real token?')}</Text>
                     <Text style={styles.muted}>
-                        Sends this token to the node with a deliberately wrong nonce. Rejection ON
-                        THE NONCE is the pass — it means the signature, issuer and audience all held
-                        against Apple&apos;s live keys. Nothing is stored either way.
+                        {t("Sends this token to the node with a deliberately wrong nonce. Rejection ON THE NONCE is the pass — it means the signature, issuer and audience all held against Apple's live keys. Nothing is stored either way.")}
                     </Text>
                     <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel="Ask the node to verify this Apple token"
+                        accessibilityLabel={t('Ask the node to verify this Apple token')}
                         accessibilityState={{ disabled: verifying, busy: verifying }}
                         disabled={verifying}
                         style={[styles.verifyButton, verifying && styles.verifyButtonBusy]}
@@ -389,22 +384,22 @@ export default function AppleProbeScreen() {
 
             {tokenSub && (
                 <>
-                    <Text style={styles.label}>Token sub — compare this with the web probe</Text>
+                    <Text style={styles.label}>{t('Token sub — compare this with the web probe')}</Text>
                     <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel="Copy the token sub to the clipboard"
-                        accessibilityHint="Copies the value so you can compare it with the web probe"
+                        accessibilityLabel={t('Copy the token sub to the clipboard')}
+                        accessibilityHint={t('Copies the value so you can compare it with the web probe')}
                         onPress={() => Clipboard.setStringAsync(tokenSub)}
                     >
                         <Text style={styles.value}>{tokenSub}</Text>
-                        <Text style={styles.muted}>tap to copy</Text>
+                        <Text style={styles.muted}>{t('tap to copy')}</Text>
                     </TouchableOpacity>
                 </>
             )}
 
             {credentialUser && (
                 <>
-                    <Text style={styles.label}>credential.user</Text>
+                    <Text style={styles.label}>{t('credential.user')}</Text>
                     <Text style={styles.mono}>{credentialUser}</Text>
                     <Text style={styles.muted}>
                         {credentialUser === tokenSub
@@ -416,11 +411,10 @@ export default function AppleProbeScreen() {
 
             {audience && (
                 <>
-                    <Text style={styles.label}>Audience (the native bundle ID)</Text>
+                    <Text style={styles.label}>{t('Audience (the native bundle ID)')}</Text>
                     <Text style={styles.mono}>{audience}</Text>
                     <Text style={styles.muted}>
-                        The web probe's audience will be the Services ID. Different audiences are
-                        expected; different subs are the problem.
+                        {t("The web probe's audience will be the Services ID. Different audiences are expected; different subs are the problem.")}
                     </Text>
                 </>
             )}

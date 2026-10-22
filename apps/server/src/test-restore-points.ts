@@ -47,7 +47,10 @@
  *
  * Run:
  *   SERVER_SUITES_ONLY=test-restore-points node scripts/run-server-suites.mjs
- * (It re-runs itself as a child with `--child <scenario>` for the servers whose database a restore replaces.)
+ * (It re-runs itself as a child with `--child <scenario>` for the servers whose database a restore replaces.) That runs
+ * the file three times, as CI does (scripts/server-suites.mjs): every section but S2b, then RESTORE_POINTS_ONLY=s2b-a-i
+ * (S2b's rows a and i) and RESTORE_POINTS_ONLY=s2b-b-h (its rows b to h). S2b starts a server of its own for each row,
+ * and the whole file took 4m31s-5m00s on CI's slower runners, past the runner's 300 s four times in 25 runs (22 Oct 2026).
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -68,6 +71,8 @@ import { localFetch } from './keepalive-test-fetch.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 
 const IS_CHILD = process.argv[2] === '--child';
+// Unset: every section but S2b. s2b-a-i or s2b-b-h: that half of S2b alone (see the Run note above).
+const ONLY = process.env.RESTORE_POINTS_ONLY || '';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -560,6 +565,11 @@ function runChild(scenario: string, dataDir: string, env: Record<string, string>
 // ── The main server (this process) ─────────────────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+    if (ONLY && ONLY !== 's2b-a-i' && ONLY !== 's2b-b-h') {
+        // A part this file does not have would run no S2b row and pass: refused instead.
+        console.error(`❌ RESTORE_POINTS_ONLY=${ONLY} is not a part of this suite (s2b-a-i, s2b-b-h).`);
+        process.exit(1);
+    }
     const dataDir = process.env.BEANPOOL_DATA_DIR;
     assert(!!dataDir, 'BEANPOOL_DATA_DIR is set');
     onlyLoopback();
@@ -612,6 +622,12 @@ async function main(): Promise<void> {
     }
     const mainKey = sha(fs.readFileSync(path.join(dataDir!, 'libp2p_key')));
     const childEnv = { TEST_BACKUP_FILE: backupFile, TEST_RECOVERY_CODE: code.code, TEST_OWNER: owner, TEST_ADMIN: admin };
+
+    // S2b's own runs: its half, then the count. No row of it needs this process's server.
+    if (ONLY) {
+        await sectionS2b(work, childEnv, ONLY);
+        finish(registrar, work);
+    }
 
     // ── 1. A sealed restore keeps a point first ──
     console.log('\n── 1. a sealed restore keeps a restore point of the server it replaces ──');
@@ -903,8 +919,37 @@ async function main(): Promise<void> {
             `6. past a week the newest five stay and the sixth goes (${left3.length} left)`);
     }
 
+    // ── 8. The plain archive naming a new owner (last: on a server that takes it, it replaces this process's database) ──
+    console.log('\n── 8. a plain archive naming a new owner, by the password and an earlier 2FA session ──');
+    {
+        const copy = path.join(work, 'mallory-state.db');
+        db.exec(`VACUUM INTO '${copy.replace(/'/g, "''")}'`);
+        const Database = (await import('better-sqlite3')).default;
+        const mallory = crypto.randomBytes(32).toString('hex');
+        const edit = new Database(copy);
+        edit.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'Mallory', ?, ?, 'TEST')`).run(mallory, new Date().toISOString(), owner);
+        edit.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by, granted_at) VALUES (?, 'owner', ?, ?)`).run(mallory, owner, new Date().toISOString());
+        edit.close();
+        const plain = makeTarGz([{ name: './state.db', content: fs.readFileSync(copy) }, { name: './node_config.json', content: Buffer.from('{}') }]);
+        const roles = () => JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey, role').all());
+        const rolesBefore = roles();
+        const r = await call('POST', '/api/local/admin/restore', earlier2fa(), undefined, plain);
+        assert(r.status === 400 && r.json?.notLocked === true && r.json?.command === 'beanpool restore --unlocked FILE'
+            && r.json?.error === 'Backups that are not locked no longer restore from Settings: make a recovery code so every backup is locked. '
+                + 'An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE`. Nothing was changed.',
+            `8. refused 400, naming the command (${r.status} ${r.text.slice(0, 200)})`);
+        assert(roles() === rolesBefore && !db.prepare(`SELECT 1 FROM node_roles WHERE member_pubkey = ?`).get(mallory), '8. no role moved: Mallory is no owner');
+        assert(!fs.existsSync(path.join(dataDir!, '.restore-tmp')) && !fs.existsSync(path.join(dataDir!, '.restore-candidate'))
+            && fs.readdirSync(dataDir!).filter((f) => f.startsWith('uploaded-backup')).length === 0, '8. nothing extracted, nothing left behind');
+    }
+
+    finish(registrar, work);
+}
+
+/** S2b, one half per run (RESTORE_POINTS_ONLY). Each row is a child server of its own, made from nothing in this process. */
+async function sectionS2b(work: string, childEnv: Record<string, string>, part: string): Promise<void> {
     // ── S2b. Another community's file restores only where nobody but the owners has joined ──
-    console.log("\n── S2b. another community's locked file, opened with the uploader's own code ──");
+    console.log(`\n── S2b. another community's locked file, opened with the uploader's own code (rows ${part === 's2b-a-i' ? 'a and i' : 'b to h'}) ──`);
     {
         const made = runChild('make-other', fs.mkdtempSync(path.join(os.tmpdir(), 'restore-points-other-')), { TEST_WORK: work });
         assert(made.ok === true && typeof made.code === 'string', `setup: another community made its own locked backups and code (${made.community})`);
@@ -943,70 +988,51 @@ async function main(): Promise<void> {
             && JSON.stringify(r.after) === JSON.stringify(r.before) && r.after?.points?.length === 0 && r.after?.leftovers?.length === 0;
         const said = (r: any) => `${r.answer?.status} ${String(r.answer?.error ?? (r.answer?.success ? 'restored' : '')).slice(0, 110)}`;
 
-        for (const who of [
-            'the password with an earlier 2FA session',
-            'a password session',
-            "the owner's computer session",
-            'a fresh phone hand-off',
-            'the password with a current code',
-            'the password with a current code in a later 30-second step',
-        ]) {
-            const r = row('lived-in', `a:${who}`);
-            assert(r.signIn === 200 && refusedOther(r), `S2b-a. a lived-in server, ${who}, the other community's file and its own right code: 409 otherCommunity (${said(r)})`);
-            assert(nothingMoved(r), `S2b-a. …node_roles, libp2p_key, genesis.json and local-config.json as they were; no point, nothing left (${diffMoved(r)})`);
+        if (part === 's2b-a-i') {
+            for (const who of [
+                'the password with an earlier 2FA session',
+                'a password session',
+                "the owner's computer session",
+                'a fresh phone hand-off',
+                'the password with a current code',
+                'the password with a current code in a later 30-second step',
+            ]) {
+                const r = row('lived-in', `a:${who}`);
+                assert(r.signIn === 200 && refusedOther(r), `S2b-a. a lived-in server, ${who}, the other community's file and its own right code: 409 otherCommunity (${said(r)})`);
+                assert(nothingMoved(r), `S2b-a. …node_roles, libp2p_key, genesis.json and local-config.json as they were; no point, nothing left (${diffMoved(r)})`);
+            }
+            const g = row('lived-in', 'a:the password with an earlier 2FA session', { NODE_PROFILE: 'global' });
+            assert(refusedOther(g) && nothingMoved(g), `S2b-i. the global profile, lived-in: the other community's file is 409, nothing moved (${said(g)}, ${diffMoved(g)})`);
+        } else {
+            const b = row('lived-in', 'b');
+            assert(refusedOther(b) && nothingMoved(b), `S2b-b. the same file with no take-over bundle inside: 409, nothing moved (${said(b)}, ${diffMoved(b)})`);
+            const c = row('lived-in', 'c');
+            assert(refusedOther(c) && c.answer?.needsOwnerPhone !== true && !c.answer?.phone, `S2b-c. "open with an owner's phone": 409, not 202, no unlock started (${said(c)})`);
+            assert(nothingMoved(c) && c.pending?.length === 0, `S2b-c. …no file kept for the phone, nothing moved (${diffMoved(c)}, pending: ${JSON.stringify(c.pending)})`);
+            const d = row('claimed', 'd');
+            assert(d.post === 1, `S2b-d. setup: the claimed server holds its owner's own post and an enterprise (${d.post})`);
+            assert(d.answer?.status === 200 && d.answer.success === true && d.answer.restoredKeys === true && d.community === made.community,
+                `S2b-d. a fresh claimed server (one owner, their post, an enterprise): 200, the bundle applied, the other community here (${said(d)})`);
+            assert(d.after?.points?.length === 1 && d.answer?.restorePoint?.name === d.after.points[0], `S2b-d. …and a restore point kept (${JSON.stringify(d.after?.points)})`);
+            const e = row('claimed', 'e');
+            assert(refusedOther(e) && nothingMoved(e), `S2b-e. one invited member joins that server: 409, nothing moved (${said(e)}, ${diffMoved(e)})`);
+            const es = row('claimed', 'e-suspended');
+            assert(refusedOther(es) && nothingMoved(es), `S2b-e. …that member suspended: still 409 (${said(es)}, ${diffMoved(es)})`);
+            const f = row('lived-in', 'f');
+            assert(f.answer?.status === 200 && f.answer.success === true && f.after?.points?.length === 1,
+                `S2b-f. a lived-in server's own backup, signed by itself, with its own code: still 200, a point kept (${said(f)})`);
+            for (const which of ['h-own', 'h-other']) {
+                const h = row('lived-in', which);
+                assert(h.answer?.status === 409 && h.answer.ownRecordUnreadable === true && h.answer.error === UNREADABLE_WORDS && h.answer.thisCommunityId === null
+                    && h.answer.command === 'beanpool restore FILE',
+                    `S2b-h. genesis.json cannot be read, ${which === 'h-own' ? "the server's own backup" : "the other community's"}: 409 in its own words (${said(h)})`);
+                assert(nothingMoved(h), `S2b-h. …nothing moved (${diffMoved(h)})`);
+            }
         }
-        const b = row('lived-in', 'b');
-        assert(refusedOther(b) && nothingMoved(b), `S2b-b. the same file with no take-over bundle inside: 409, nothing moved (${said(b)}, ${diffMoved(b)})`);
-        const c = row('lived-in', 'c');
-        assert(refusedOther(c) && c.answer?.needsOwnerPhone !== true && !c.answer?.phone, `S2b-c. "open with an owner's phone": 409, not 202, no unlock started (${said(c)})`);
-        assert(nothingMoved(c) && c.pending?.length === 0, `S2b-c. …no file kept for the phone, nothing moved (${diffMoved(c)}, pending: ${JSON.stringify(c.pending)})`);
-        const d = row('claimed', 'd');
-        assert(d.post === 1, `S2b-d. setup: the claimed server holds its owner's own post and an enterprise (${d.post})`);
-        assert(d.answer?.status === 200 && d.answer.success === true && d.answer.restoredKeys === true && d.community === made.community,
-            `S2b-d. a fresh claimed server (one owner, their post, an enterprise): 200, the bundle applied, the other community here (${said(d)})`);
-        assert(d.after?.points?.length === 1 && d.answer?.restorePoint?.name === d.after.points[0], `S2b-d. …and a restore point kept (${JSON.stringify(d.after?.points)})`);
-        const e = row('claimed', 'e');
-        assert(refusedOther(e) && nothingMoved(e), `S2b-e. one invited member joins that server: 409, nothing moved (${said(e)}, ${diffMoved(e)})`);
-        const es = row('claimed', 'e-suspended');
-        assert(refusedOther(es) && nothingMoved(es), `S2b-e. …that member suspended: still 409 (${said(es)}, ${diffMoved(es)})`);
-        const f = row('lived-in', 'f');
-        assert(f.answer?.status === 200 && f.answer.success === true && f.after?.points?.length === 1,
-            `S2b-f. a lived-in server's own backup, signed by itself, with its own code: still 200, a point kept (${said(f)})`);
-        for (const which of ['h-own', 'h-other']) {
-            const h = row('lived-in', which);
-            assert(h.answer?.status === 409 && h.answer.ownRecordUnreadable === true && h.answer.error === UNREADABLE_WORDS && h.answer.thisCommunityId === null
-                && h.answer.command === 'beanpool restore FILE',
-                `S2b-h. genesis.json cannot be read, ${which === 'h-own' ? "the server's own backup" : "the other community's"}: 409 in its own words (${said(h)})`);
-            assert(nothingMoved(h), `S2b-h. …nothing moved (${diffMoved(h)})`);
-        }
-        const g = row('lived-in', 'a:the password with an earlier 2FA session', { NODE_PROFILE: 'global' });
-        assert(refusedOther(g) && nothingMoved(g), `S2b-i. the global profile, lived-in: the other community's file is 409, nothing moved (${said(g)}, ${diffMoved(g)})`);
     }
+}
 
-    // ── 8. The plain archive naming a new owner (last: on a server that takes it, it replaces this process's database) ──
-    console.log('\n── 8. a plain archive naming a new owner, by the password and an earlier 2FA session ──');
-    {
-        const copy = path.join(work, 'mallory-state.db');
-        db.exec(`VACUUM INTO '${copy.replace(/'/g, "''")}'`);
-        const Database = (await import('better-sqlite3')).default;
-        const mallory = crypto.randomBytes(32).toString('hex');
-        const edit = new Database(copy);
-        edit.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, 'Mallory', ?, ?, 'TEST')`).run(mallory, new Date().toISOString(), owner);
-        edit.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by, granted_at) VALUES (?, 'owner', ?, ?)`).run(mallory, owner, new Date().toISOString());
-        edit.close();
-        const plain = makeTarGz([{ name: './state.db', content: fs.readFileSync(copy) }, { name: './node_config.json', content: Buffer.from('{}') }]);
-        const roles = () => JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey, role').all());
-        const rolesBefore = roles();
-        const r = await call('POST', '/api/local/admin/restore', earlier2fa(), undefined, plain);
-        assert(r.status === 400 && r.json?.notLocked === true && r.json?.command === 'beanpool restore --unlocked FILE'
-            && r.json?.error === 'Backups that are not locked no longer restore from Settings: make a recovery code so every backup is locked. '
-                + 'An old unlocked file restores on the server itself with `beanpool restore --unlocked FILE`. Nothing was changed.',
-            `8. refused 400, naming the command (${r.status} ${r.text.slice(0, 200)})`);
-        assert(roles() === rolesBefore && !db.prepare(`SELECT 1 FROM node_roles WHERE member_pubkey = ?`).get(mallory), '8. no role moved: Mallory is no owner');
-        assert(!fs.existsSync(path.join(dataDir!, '.restore-tmp')) && !fs.existsSync(path.join(dataDir!, '.restore-candidate'))
-            && fs.readdirSync(dataDir!).filter((f) => f.startsWith('uploaded-backup')).length === 0, '8. nothing extracted, nothing left behind');
-    }
-
+function finish(registrar: http.Server, work: string): never {
     registrar.close();
     fs.rmSync(work, { recursive: true, force: true });
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);

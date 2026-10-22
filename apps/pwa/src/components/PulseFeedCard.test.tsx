@@ -92,3 +92,120 @@ describe('PulseFeedCard Report', () => {
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     });
 });
+
+const instagramNoThumb: PulseFeedItem = {
+    id: 'pulse-ig-1',
+    ownerPubkey: 'pubkey-kofi',
+    url: 'https://www.instagram.com/p/abc123xyz/',
+    platform: 'instagram',
+    category: 'art',
+    title: 'Kiln firing at dawn\nSecond line of caption that should not be in title',
+    thumbnailUrl: null,
+    callsign: 'Kofi',
+    avatarUrl: null,
+    source: 'user',
+    isVerified: false,
+    publishedAt: new Date().toISOString(),
+};
+
+const instagramWithThumb: PulseFeedItem = {
+    id: 'pulse-ig-2',
+    ownerPubkey: 'pubkey-kofi',
+    url: 'https://www.instagram.com/p/abc123xyz/',
+    platform: 'instagram',
+    category: 'art',
+    title: 'Kiln firing at dawn',
+    thumbnailUrl: 'https://example.com/thumb.jpg',
+    callsign: 'Kofi',
+    avatarUrl: null,
+    source: 'user',
+    isVerified: false,
+    publishedAt: new Date().toISOString(),
+};
+
+describe('PulseFeedCard Instagram link card (web)', () => {
+    it('an Instagram item with no thumbnail renders the card title/author and one Open on Instagram button, no empty block, and only one link', () => {
+        const { container } = render(<PulseFeedCard item={instagramNoThumb} />);
+
+        // Title first line
+        expect(screen.getByText('Kiln firing at dawn')).toBeInTheDocument();
+        expect(screen.queryByText(/Second line of caption/)).not.toBeInTheDocument();
+
+        // Author
+        expect(screen.getAllByText('Kofi').length).toBeGreaterThanOrEqual(1);
+
+        // ONE clear button "Open on Instagram" (button >= 44px)
+        const igBtn = screen.getByRole('link', { name: 'Open on Instagram' });
+        expect(igBtn).toBeInTheDocument();
+        expect(igBtn.className).toContain('min-h-[44px]');
+
+        // No empty aspect-video block
+        expect(container.querySelector('.aspect-video')).not.toBeInTheDocument();
+
+        // Exactly one link to the post
+        const links = screen.getAllByRole('link');
+        expect(links).toHaveLength(1);
+    });
+
+    it('a failed image falls back to the same card', () => {
+        const { container } = render(<PulseFeedCard item={instagramWithThumb} />);
+
+        const img = container.querySelector('img');
+        expect(img).not.toBeNull();
+        fireEvent.error(img!);
+
+        // Falls back to designed card
+        expect(screen.getByText('Kiln firing at dawn')).toBeInTheDocument();
+        expect(screen.getAllByText('Kofi').length).toBeGreaterThanOrEqual(1);
+
+        const igBtn = screen.getByRole('link', { name: 'Open on Instagram' });
+        expect(igBtn).toBeInTheDocument();
+        expect(igBtn.className).toContain('min-h-[44px]');
+
+        expect(container.querySelector('.aspect-video')).not.toBeInTheDocument();
+        expect(screen.getAllByRole('link')).toHaveLength(1);
+    });
+
+    it('an Instagram item with a valid thumbnail shows the thumbnail with platform badge and drops duplicate second link', () => {
+        const { container } = render(<PulseFeedCard item={instagramWithThumb} />);
+
+        // Shows thumbnail with badge
+        expect(container.querySelector('img')).toBeInTheDocument();
+        expect(screen.getByText('Instagram ↗')).toBeInTheDocument();
+
+        // Does NOT render duplicate second link in footer
+        expect(screen.queryByText(/Open on Instagram/)).not.toBeInTheDocument();
+    });
+
+    it('handles caption with leading newlines and whitespace safely', () => {
+        const itemWithLeadingNewlines = {
+            ...instagramNoThumb,
+            id: 'pulse-ig-leading-newlines',
+            title: '\n\n   \nActual caption first line\nSecond line',
+        };
+        const { unmount } = render(<PulseFeedCard item={itemWithLeadingNewlines} />);
+
+        expect(screen.getByText('Actual caption first line')).toBeInTheDocument();
+        expect(screen.queryByText(/Second line/)).not.toBeInTheDocument();
+        unmount();
+
+        const itemWhitespaceOnly = {
+            ...instagramNoThumb,
+            id: 'pulse-ig-whitespace',
+            title: '   \n\n   ',
+        };
+        render(<PulseFeedCard item={itemWhitespaceOnly} />);
+
+        // Falls back to localized platform title rather than empty string
+        expect(screen.getByText('View post on Instagram')).toBeInTheDocument();
+    });
+
+    it('a YouTube item is unchanged', () => {
+        const { container } = render(<PulseFeedCard item={mockItem} />);
+
+        // YouTube retains aspect-video and Open on YouTube link
+        expect(container.querySelector('.aspect-video')).toBeInTheDocument();
+        expect(screen.getByText(/Open on YouTube/)).toBeInTheDocument();
+    });
+});
+

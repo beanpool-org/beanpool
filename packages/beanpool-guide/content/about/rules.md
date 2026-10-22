@@ -87,7 +87,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 - After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
 - A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.
 - When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.
-- The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote cannot take that away; the app says so if you try. An owner can take an admin's role away first, and after that they are a member like any other.
+- The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote someone proposes cannot take that away; the app says so if you try. The one way a vote ends their role is by keeping their emergency suspension (see below). An owner can take an admin's role away first, and after that they are a member like any other.
 
 ## Emergency suspension
 

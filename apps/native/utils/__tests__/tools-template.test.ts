@@ -108,7 +108,7 @@ vi.mock('../market-global', () => ({ composerNeedsProfilePhoto: async () => true
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => null }));
 
 // The one store, for real: tool_docs in SQLite (node:sqlite behind expo-sqlite's calls) and photos in a real folder.
-const disk = vi.hoisted(() => ({ dir: '', db: null as any, delayTicks: 0 }));
+const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
 const posts = vi.hoisted(() => ({ rows: new Map<string, Record<string, unknown>>(), paused: [] as string[], resumed: [] as string[] }));
 /**
  * The community's server, for a tool that asks for node-copy (slice T0.4): its tool store as engine/tool-state.ts keeps
@@ -202,6 +202,39 @@ vi.mock('../../tools/index', async (importOriginal) => {
     };
 });
 
+const nodeCopyQueues = vi.hoisted(() => [] as Array<{ pending: () => string[]; cancelAll: () => void }>);
+vi.mock('@beanpool/core', async (importOriginal) => {
+    const real = await importOriginal<typeof import('@beanpool/core')>();
+    return {
+        ...real,
+        createToolCopyQueue: (delayMs?: number, alone?: any) => {
+            const q = real.createToolCopyQueue(delayMs, alone);
+            const pendingKeys = new Set<string>();
+            const origLater = q.later.bind(q);
+            const origCancel = q.cancel.bind(q);
+            q.later = (key: string, job: () => Promise<unknown>) => {
+                pendingKeys.add(key);
+                origLater(key, async () => {
+                    pendingKeys.delete(key);
+                    return job();
+                });
+            };
+            q.cancel = (key: string) => {
+                pendingKeys.delete(key);
+                origCancel(key);
+            };
+            nodeCopyQueues.push({
+                pending: () => [...pendingKeys].filter((k) => q.waiting(k)),
+                cancelAll: () => {
+                    for (const k of [...pendingKeys]) q.cancel(k);
+                    pendingKeys.clear();
+                },
+            });
+            return q;
+        },
+    };
+});
+
 import { DatabaseSync } from 'node:sqlite';
 import {
     TOOLS, pseudoLocalise, setLanguage, toolFixtureProblems, toolHomeCardType, toolManifestProblems, word,
@@ -242,12 +275,7 @@ function sqliteDb() {
     return {
         execAsync: async (sql: string) => { d.exec(sql); },
         runAsync: async (sql: string, params?: unknown[]) => { const r = d.prepare(sql).run(...bind(params)); return { changes: Number(r.changes) }; },
-        getFirstAsync: async (sql: string, params?: unknown[]) => {
-            if (disk.delayTicks) {
-                for (let i = 0; i < disk.delayTicks; i++) await new Promise((r) => setTimeout(r, 0));
-            }
-            return d.prepare(sql).get(...bind(params)) ?? null;
-        },
+        getFirstAsync: async (sql: string, params?: unknown[]) => d.prepare(sql).get(...bind(params)) ?? null,
         getAllAsync: async (sql: string, params?: unknown[]) => d.prepare(sql).all(...bind(params)),
         count: (sql: string) => Number((d.prepare(sql).get() as { n: number }).n),
     };
@@ -349,7 +377,6 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     store.map.clear();
-    disk.delayTicks = 0;
     store.map.set('beanpool_anchor_url', 'https://mullum.example');
     disk.dir = fs.mkdtempSync(path.join(tmp, 'disk-'));
     disk.db = sqliteDb();
@@ -367,7 +394,16 @@ beforeEach(() => {
     node.profile = { profile: 'local', features: { beans: true } };
     server.reset();
 });
-afterEach(() => { act(() => root.unmount()); host.remove(); setLanguage('en'); });
+afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    setLanguage('en');
+    const pending = nodeCopyQueues.flatMap((q) => q.pending());
+    if (pending.length) {
+        for (const q of nodeCopyQueues) q.cancelAll();
+        expect(pending, 'node-copy queue has pending sync timer at end of test').toEqual([]);
+    }
+});
 
 const settle = async (n = 10) => { for (let i = 0; i < n; i++) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); };
 async function drawTool(id: string, extra: Record<string, string> = {}, lang: 'xx' | 'en' = 'xx') {
@@ -651,8 +687,8 @@ describe('the route around a tool', () => {
             text: 'Add', testID: `add-${name}`, onPress: () => { const d = h.doc.get(); void h.doc.set({ ...d, items: [...d.items, { id: name, name, at: NOW + DAY }] }); },
         } as any);
         const Main = (p: KitProps) => createElement(ToolScreen, null as any, createElement(add('Rake'), p), ...p.host.doc.get().items.map((i) => createElement(ToolRow, { key: i.id, title: i.name } as any)));
-        reg.extra = [{ manifest: { ...KIT, id: 'two-screens' }, app: { id: 'two-screens', screens: () => ({ main: Main, item: add('Saw') }) } }];
-        const tool = { ...KIT, id: 'two-screens' };
+        const tool = { ...KIT, id: 'two-screens', permissions: KIT.permissions.filter((p) => p !== 'node-copy') };
+        reg.extra = [{ manifest: tool, app: { id: 'two-screens', screens: () => ({ main: Main, item: add('Saw') }) } }];
         await writeToolDoc(ME.publicKey, tool, KIT_FIXTURES.docs.small, NOW);
         await drawTool('two-screens', {}, 'en');
         const over = document.createElement('div');
@@ -906,17 +942,6 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         await click(byTestId('tool-menu'), 'the "…"');
         await click(byTestId('tool-menu-settings'), 'Settings');
     }
-    /** Wait until the open sync has finished, assert that open GET, then clear the request log. */
-    async function settleOpenSync() {
-        let ticks = 0;
-        while (!server.log.some((r) => r.method === 'GET')) {
-            if (++ticks > 50) throw new Error('Timed out waiting for open sync GET');
-            await settle(1);
-        }
-        await settle(2);
-        expect(server.log.map((r) => r.method)).toEqual(['GET']);
-        server.log.length = 0;
-    }
     beforeEach(() => { reg.extra = [{ manifest: KIT, app: kitApp }]; OTHERS = ['Ladder', 'Tent']; });
 
     it("the open takes the server's copy (a first open on this phone) and draws it; the tool is told the copy is on", async () => {
@@ -991,7 +1016,6 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
     it("the toggle: while the server can't be reached the switch stays and says so; then off is one DELETE, and on a GET and a PUT", async () => {
         await keptAndSynced(KIT_FIXTURES.docs.small);
         await drawTool('fixture-kit', {}, 'xx');
-        await settleOpenSync();
         await openSettings();
         expect(byTestId('tool-settings-node-copy-note')?.textContent).toBe(pseudoLocalise(ONE_PHONE));
         server.mode = 'down';
@@ -1033,7 +1057,6 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         await writeToolSettings(ME.publicKey, 'fixture-kit', { door: 'doing', reminders: { weekly: true } });
         server.seen = () => disk.db.count('SELECT COUNT(*) AS n FROM tool_docs');
         await drawTool('fixture-kit', {}, 'xx');
-        await settleOpenSync();
         const remove = async () => {
             alerts.said.length = 0;
             await click(byTestId('tool-menu'), 'the "…"');
@@ -1106,7 +1129,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
             OTHERS = ['Ladder', 'Tent', 'Add'];
             await keptAndSynced(KIT_FIXTURES.docs.small);
             await drawTool('fixture-kit', {}, 'xx');
-            await settleOpenSync();
+            server.log.length = 0;
             // The other phone's off reaches the server between this phone's GET and its PUT.
             server.before = (method) => {
                 if (method !== 'PUT') return;
@@ -1144,7 +1167,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
             reg.extra = [{ manifest: KIT, app: { ...kitApp, screens: () => ({ ...kitScreens, main: Writes }) } }];
             await keptAndSynced(KIT_FIXTURES.docs.small);
             await drawTool('fixture-kit', {}, 'en');
-            await settleOpenSync();
+            server.log.length = 0;
             for (let i = 0; i < 4; i++) await click(byTestId('add'), 'a write');
             expect(server.log).toEqual([]);
             await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });

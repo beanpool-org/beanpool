@@ -259,6 +259,9 @@ async function main(): Promise<void> {
     const batchBad = await call('POST', dave, `${MINE}/offers`, { postIds: [oldOfferId, daveNeed.body?.post?.id, annOffer, cancelledOfferId] });
     assert(batchBad.status === 400 && batchBad.body?.code === 'shop_offers_not_yours' && shopIdOf(oldOfferId) === null,
         `"Add my live Offers" naming a Need, someone else's Offer or an ended one is refused whole, writing nothing (${show(batchBad)})`);
+    const batchOthers = await call('POST', dave, `${MINE}/offers`, { postIds: [annOffer] });
+    assert(batchOthers.status === 400 && batchOthers.body?.code === 'shop_offers_not_yours' && shopIdOf(annOffer) === null,
+        `and one naming only another member's live Offer, writing nothing (${show(batchOthers)})`);
     const hoseId = await offerId(dave, 'Hose');
     const batch = await call('POST', dave, `${MINE}/offers`, { postIds: [oldOfferId, hoseId] });
     assert(batch.status === 200 && same([...(batch.body?.added ?? [])].sort(), [oldOfferId, hoseId].sort()) && shopIdOf(oldOfferId) === daveShop && shopIdOf(hoseId) === daveShop,

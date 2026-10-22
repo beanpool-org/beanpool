@@ -14,6 +14,7 @@ import {
 import {
     THINGS_DOC_VERSION,
     emptyThingsDoc,
+    isLentTo,
     isLiveThing,
     readThingsDoc,
     type ThingsDoc,
@@ -44,10 +45,11 @@ export interface ThingsCounts {
 /**
  * Counts of things in the shed:
  * - things: active things you own (!gone, {@link isLiveThing}: the number THINGS_MAX_ITEMS caps)
- * - out: things currently lent out (lentTo != null)
- * - listed: things in your shop ready to lend (postId != null && lentTo == null)
- * - shelf: things at home not listed or lent (postId == null && lentTo == null)
- * Invariant: things === listed + out + shelf. A newer version's item this build can't read is in none of them.
+ * - out: things currently lent out (a lentTo this build reads, {@link isLentTo})
+ * - listed: things in your shop ready to lend (a string postId, not out)
+ * - shelf: things at home not listed or lent (neither)
+ * Invariant: things === listed + out + shelf. A newer version's item this build can't read is in none of them; a newer
+ * version's field it can't read (kept as it was) counts as if it were not there.
  */
 export function thingsCounts(doc: ThingsDoc, _now?: number): ThingsCounts {
     let things = 0;
@@ -58,9 +60,9 @@ export function thingsCounts(doc: ThingsDoc, _now?: number): ThingsCounts {
     for (const t of doc.things ?? []) {
         if (!isLiveThing(t)) continue;
         things++;
-        if (t.lentTo != null) {
+        if (isLentTo(t.lentTo)) {
             out++;
-        } else if (t.postId != null) {
+        } else if (typeof t.postId === 'string') {
             listed++;
         } else {
             shelf++;
@@ -109,7 +111,7 @@ export function loansDue(doc: ThingsDoc, now: number): ToolDue[] {
     const dues: ToolDue[] = [];
 
     for (const t of doc.things ?? []) {
-        if (!isLiveThing(t) || !t.lentTo?.backAround) continue;
+        if (!isLiveThing(t) || !isLentTo(t.lentTo) || typeof t.lentTo.backAround !== 'string') continue;
         const at = Date.parse(t.lentTo.backAround);
         if (!Number.isFinite(at) || at < now) continue;
         dues.push({

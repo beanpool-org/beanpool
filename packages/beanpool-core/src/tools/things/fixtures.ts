@@ -78,6 +78,11 @@ const newerItems = [
     'a string item',
 ];
 const newerReadable = { ...thing(1, 'Cordless drill'), extra: 1 };
+/** Things a newer app wrote with a `lentTo` this build can't read: kept as they were, and never counted as out. */
+const newerUnreadLentTo = [
+    { ...thing(2, 'Step ladder'), lentTo: 'Al' },
+    { ...thing(3, 'Camping tent'), lentTo: [], postId: 'post-3' },
+] as unknown as Thing[];
 
 export const FIXTURES: ToolFixtures<ThingsDoc> = {
     stored: [
@@ -110,8 +115,11 @@ export const FIXTURES: ToolFixtures<ThingsDoc> = {
         },
         {
             name: 'a newer version with items this build cannot read, kept in their places',
-            raw: { v: 2, things: [newerItems[0], newerReadable, newerItems[1], newerItems[2], newerItems[3]] },
-            reads: { v: 2, things: [unread(newerItems[0]), newerReadable, unread(newerItems[1]), unread(newerItems[2]), unread(newerItems[3])] },
+            raw: { v: 2, things: [newerItems[0], newerReadable, newerItems[1], ...newerUnreadLentTo, newerItems[2], newerItems[3]] },
+            reads: {
+                v: 2,
+                things: [unread(newerItems[0]), newerReadable, unread(newerItems[1]), ...newerUnreadLentTo, unread(newerItems[2]), unread(newerItems[3])],
+            },
         },
         { name: 'not a document', raw: 'garbage', reads: emptyThingsDoc() },
         { name: 'empty object', raw: {}, reads: emptyThingsDoc() },

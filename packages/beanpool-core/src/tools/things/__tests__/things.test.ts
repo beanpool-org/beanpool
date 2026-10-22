@@ -8,6 +8,7 @@ import {
     THINGS_OWNER_NOTE_CHARS,
     THINGS_REPLACEMENT_VALUE_CHARS,
     emptyThingsDoc,
+    isLentTo,
     isLiveThing,
     isThing,
     readThingsDoc,
@@ -397,6 +398,44 @@ describe('unread items of a newer version are in no count, line or reminder', ()
         expect(lines[0].screen).toBe('loans');
         const dues = loansDue(newer, NOW);
         expect(dues.map((d) => d.values?.name)).toEqual(['Ladder']);
+    });
+});
+
+describe('a newer version\'s lentTo this build cannot read is not out', () => {
+    const NOW = Date.parse('2026-10-20T09:00:00.000Z');
+    const soon = new Date(NOW + 86_400_000).toISOString();
+
+    it('counts it by its postId, as if it were not lent, and keeps it as it was', () => {
+        const at = { createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z' };
+        const raw = {
+            v: 2,
+            things: [
+                { id: 'a', name: 'x', lentTo: 'Al', ...at },
+                { id: 'b', name: 'y', lentTo: [], ...at },
+                { id: 'c', name: 'z', lentTo: { name: 'Bo' }, postId: 'post-c', ...at },
+                { id: 'd', name: 'w', lentTo: { name: 'Cy', since: '2026-10-01', backAround: 5 }, ...at },
+                { id: 'e', name: 'v', postId: 7, ...at },
+            ],
+        };
+        const read = readThingsDoc(raw);
+        expect(JSON.parse(JSON.stringify(read)).things).toEqual(raw.things);
+        expect(thingsCounts(read)).toEqual({ things: 5, listed: 1, out: 1, shelf: 3 });
+        expect(thingsHomeLines(read, NOW)[0].values).toEqual({ things: 5, out: 1 });
+        expect(loansDue(read, NOW)).toEqual([]);
+    });
+
+    it('the stored newer-version fixture has none out', () => {
+        const stored = FIXTURES.stored.find((s) => s.name.startsWith('a newer version'))!;
+        expect(thingsCounts(readThingsDoc(stored.raw))).toEqual({ things: 3, listed: 1, out: 0, shelf: 2 });
+    });
+
+    it('isLentTo reads an object with a string name and since', () => {
+        expect(isLentTo({ name: 'Al', since: '2026-10-01' })).toBe(true);
+        expect(isLentTo({ name: 'Al', since: '2026-10-01', backAround: soon })).toBe(true);
+        expect(isLentTo({ name: 'Al' })).toBe(false);
+        expect(isLentTo('Al')).toBe(false);
+        expect(isLentTo([])).toBe(false);
+        expect(isLentTo(null)).toBe(false);
     });
 });
 

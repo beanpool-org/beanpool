@@ -81,8 +81,14 @@ export const isThing = (t: unknown): t is Thing => isPlainObject(t) && typeof t.
 /** A thing the member still has (not `gone`): what {@link THINGS_MAX_ITEMS} caps and what every count counts. */
 export const isLiveThing = (t: unknown): t is Thing => isThing(t) && t.gone !== true;
 
+/**
+ * Whether a thing's `lentTo` is one this build reads (an object with a string name and since). A newer version keeps a
+ * `lentTo` this build can't read as it was, so the counts, lines and reminders ask this, never `lentTo != null`.
+ */
+export const isLentTo = (v: unknown): v is ThingLentTo => isPlainObject(v) && typeof v.name === 'string' && typeof v.since === 'string';
+
 function readLentTo(raw: unknown, ours: boolean): ThingLentTo | undefined {
-    if (!isPlainObject(raw) || typeof raw.name !== 'string' || typeof raw.since !== 'string') return undefined;
+    if (!isLentTo(raw)) return undefined;
     const name = ours ? [...raw.name].slice(0, THINGS_NAME_CHARS).join('') : raw.name;
     const since = raw.since;
     const backAround = typeof raw.backAround === 'string' ? raw.backAround : undefined;

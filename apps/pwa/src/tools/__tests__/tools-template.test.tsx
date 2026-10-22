@@ -17,7 +17,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
-import { useState, type ComponentType } from 'react';
+import { useRef, useState, type ComponentType } from 'react';
 import { TOOLS, TOOL_PERMISSIONS, type AnyToolScreenProps, type ToolApp, type ToolManifest } from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../pages/ToolsPage';
 import { TOOL_APPS } from '../index';
@@ -474,6 +474,35 @@ describe('the frame', () => {
         fireEvent.click(screen.getAllByTestId('tools-back')[0]);
         expect(await screen.findByTestId('tool-doors')).toBeInTheDocument();
         expect(screen.queryByText('Ladder')).toBeNull();
+    });
+
+    // Review of #2373: a panel is no leave, so the tool's screen is still there under it, and drawn again with each host.
+    it("a tool's own back under a panel is its screens': the panel stays, and ← shows the screen it went back to", async () => {
+        const manifest: ToolManifest = { ...scaffold.manifest, id: 'two', screens: ['main', 'record'] };
+        let finish = () => {};
+        const Main = ({ host }: AnyToolScreenProps) => <button type="button" data-testid="two-open" onClick={() => host.navigate('record', { key: 'a' })}>Open</button>;
+        // Goes back once what it waits on lands, through the host it was last drawn with: the one under the panel.
+        const Record = ({ host }: AnyToolScreenProps) => {
+            const latest = useRef(host);
+            latest.current = host;
+            const done = () => { void new Promise<void>((r) => { finish = r; }).then(() => latest.current.back()); };
+            return <button type="button" data-testid="two-done" onClick={done}>Done</button>;
+        };
+        const two: WebApp = { id: 'two', screens: () => ({ main: Main, record: Record }) };
+        await keep('two', scaffold.fixtures.docs.small);
+        const { props } = draw({ manifest, loader: async () => ({ default: two }) }, { id: 'two', screen: 'main', key: null });
+        fireEvent.click(await screen.findByTestId('two-open'));
+        fireEvent.click(await screen.findByTestId('two-done'));
+        fireEvent.click(screen.getByTestId('tool-menu'));
+        fireEvent.click(screen.getByTestId('tool-menu-about'));
+        expect(screen.getByTestId('tool-about')).toBeInTheDocument();
+        await act(async () => { finish(); });
+        expect(screen.getByTestId('tool-about')).toBeInTheDocument();
+        fireEvent.click(screen.getAllByTestId('tools-back')[0]);
+        expect(screen.queryByTestId('tool-about')).toBeNull();
+        expect(screen.getByTestId('two-open')).toBeInTheDocument();
+        expect(screen.queryByTestId('two-done')).toBeNull();
+        expect(props.onClose).not.toHaveBeenCalled();
     });
 
     // Review of #2274: Back is the stack's (§1.5). A tool opened from the Tools screen went straight past it, closing the page.

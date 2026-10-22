@@ -1023,13 +1023,14 @@ export default function PeopleScreen() {
                                     )}
                                 </View>
                                 <View style={styles.textStack}>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                        <Text style={styles.callsign} numberOfLines={1}>{item.callsign}</Text>
+                                    <Text style={styles.callsign} numberOfLines={1}>{item.callsign}</Text>
+                                    {/* The Friend chip shares the date's line: beside the name, with 💬 and ✓ Added on the row, it cut the name to ".." at 320 dp × 1.3. */}
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                                         {isFriend && <Text style={styles.friendChip} numberOfLines={1}>{t('Friend')}</Text>}
+                                        <Text style={[styles.dateText, { marginTop: 0, flexShrink: 1 }]} numberOfLines={1}>
+                                            {joinDateText}{typeof item.distance_km === 'number' ? <Text style={styles.distanceText}>{' · '}<Text>{t('about {km} km', { km: formatNumber(item.distance_km) })}</Text></Text> : null}
+                                        </Text>
                                     </View>
-                                    <Text style={styles.dateText} numberOfLines={1}>
-                                        {joinDateText}{typeof item.distance_km === 'number' ? <Text style={styles.distanceText}>{' · '}<Text>{t('about {km} km', { km: formatNumber(item.distance_km) })}</Text></Text> : null}
-                                    </Text>
                                 </View>
                             </Pressable>
                             {!isSelf && (

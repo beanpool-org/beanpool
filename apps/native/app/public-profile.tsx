@@ -941,8 +941,9 @@ export default function PublicProfileScreen() {
                 </View>
 
                 {!isSelf && (
+                    // Keyed so Unblock mounts a fresh row: reusing the blocked row's views kept "Unblock" as the toggle's label and squeezed both buttons onto one line (320 dp × 1.3).
                     isBlocked ? (
-                        <View style={styles.blockedRow}>
+                        <View key="blocked" style={styles.blockedRow}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
                                 <Text style={styles.blockedEmoji}>🚫</Text>
                                 <Text style={styles.blockedText}>
@@ -959,7 +960,7 @@ export default function PublicProfileScreen() {
                             </Pressable>
                         </View>
                     ) : (
-                        <View style={styles.actionRow}>
+                        <View key="actions" style={styles.actionRow}>
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel={t('Message', undefined, 'button: write to')}
@@ -978,17 +979,12 @@ export default function PublicProfileScreen() {
                             </Pressable>
                             <Pressable
                                 accessibilityRole="button"
+                                accessibilityLabel={isFriend ? t('✓ Friend') : t('+ Add friend')}
                                 accessibilityState={{ selected: isFriend }}
                                 disabled={togglingFriend}
                                 style={[styles.friendToggleBtn, isFriend && styles.friendToggleBtnActive]}
                                 onPress={handleToggleFriend}
                             >
-                                <MaterialCommunityIcons
-                                    name={isFriend ? 'check' : 'account-plus-outline'}
-                                    size={16}
-                                    color={isFriend ? colors.brand.primary : colors.text.heading}
-                                    style={{ marginRight: 6 }}
-                                />
                                 <Text style={[styles.friendToggleBtnText, isFriend && styles.friendToggleBtnTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                                     {isFriend ? t('✓ Friend') : t('+ Add friend')}
                                 </Text>

@@ -540,8 +540,8 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                     ) : (
                         <div className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
                             {filteredMembers.map(m => (
-                                    <div key={m.publicKey} className="p-3 px-4 flex items-center justify-between transition-colors hover:bg-oat-50/50 dark:hover:bg-nature-800/30">
-                                        <div className="flex items-center gap-3">
+                                    <div key={m.publicKey} className="p-3 px-4 flex flex-wrap items-center justify-between gap-2 transition-colors hover:bg-oat-50/50 dark:hover:bg-nature-800/30">
+                                        <div className="flex items-center gap-3 min-w-0">
                                             <button 
                                                 type="button"
                                                 aria-label={t("View {name}'s profile", { name: m.callsign })}
@@ -563,12 +563,13 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        {/* Wraps under the name when 💬 and + Add leave it no room (320 px at 130% text). */}
+                                        <div className="shrink-0 ml-auto flex items-center gap-2">
                                             {onNavigate && (
                                                 <button
                                                     type="button"
                                                     onClick={() => handleMessage(m.publicKey)}
-                                                    className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                    className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
                                                     title={t('Message {name}', { name: m.callsign })}
                                                     aria-label={t('Message {name}', { name: m.callsign })}
                                                 >
@@ -584,7 +585,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                     type="button"
                                                     onClick={() => handleAddFriend(m.publicKey)}
                                                     aria-label={t('Add {name} as friend', { name: m.callsign })}
-                                                    className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                    className="min-h-[44px] whitespace-nowrap bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 >
                                                     {t('+ Add')}
                                                 </button>

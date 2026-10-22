@@ -6,7 +6,7 @@ import path from 'node:path';
 
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 process.chdir(PWA_DIR);
-const OUT_DIR = path.resolve('/Users/marty/projects/beanpool/scratch/fable-design/message-s0-shots');
+const OUT_DIR = path.resolve(process.env.PROFILE_MESSAGE_OUT || path.join(PWA_DIR, 'e2e', 'screenshots', 'profile-message'));
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const KOFI_PUBKEY = 'kofi-pubkey-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';

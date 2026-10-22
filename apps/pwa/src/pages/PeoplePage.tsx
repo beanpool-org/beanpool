@@ -265,20 +265,33 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                     </span>
                 </span>
             </button>
-            {friendPubkeys.has(m.publicKey) ? (
-                <span className="shrink-0 text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent">
-                    {t('✓ Friend')}
-                </span>
-            ) : (
-                <button
-                    type="button"
-                    onClick={() => handleAddFriend(m.publicKey)}
-                    aria-label={t('Add {name} as friend', { name: m.callsign })}
-                    className="shrink-0 min-h-[44px] min-w-[44px] bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3 text-xs font-bold cursor-pointer shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                >
-                    {t('+ Add')}
-                </button>
-            )}
+            <div className="shrink-0 flex items-center gap-2">
+                {onNavigate && (
+                    <button
+                        type="button"
+                        onClick={() => handleMessage(m.publicKey)}
+                        className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        title={t('Message {name}', { name: m.callsign })}
+                        aria-label={t('Message {name}', { name: m.callsign })}
+                    >
+                        💬
+                    </button>
+                )}
+                {friendPubkeys.has(m.publicKey) ? (
+                    <span className="shrink-0 text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent">
+                        {t('✓ Friend')}
+                    </span>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={() => handleAddFriend(m.publicKey)}
+                        aria-label={t('Add {name} as friend', { name: m.callsign })}
+                        className="shrink-0 min-h-[44px] min-w-[44px] bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3 text-xs font-bold cursor-pointer shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    >
+                        {t('+ Add')}
+                    </button>
+                )}
+            </div>
         </div>
     );
     const listBox = 'bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden';
@@ -550,20 +563,33 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 </div>
                                             </div>
                                         </div>
-                                        {friendPubkeys.has(m.publicKey) ? (
-                                            <span className="text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent shadow-sm">
-                                                {t('✓ Friend')}
-                                            </span>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleAddFriend(m.publicKey)}
-                                                aria-label={t('Add {name} as friend', { name: m.callsign })}
-                                                className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                                            >
-                                                {t('+ Add')}
-                                            </button>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                            {onNavigate && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleMessage(m.publicKey)}
+                                                    className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                    title={t('Message {name}', { name: m.callsign })}
+                                                    aria-label={t('Message {name}', { name: m.callsign })}
+                                                >
+                                                    💬
+                                                </button>
+                                            )}
+                                            {friendPubkeys.has(m.publicKey) ? (
+                                                <span className="text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent shadow-sm">
+                                                    {t('✓ Friend')}
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleAddFriend(m.publicKey)}
+                                                    aria-label={t('Add {name} as friend', { name: m.callsign })}
+                                                    className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                >
+                                                    {t('+ Add')}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
                         </div>

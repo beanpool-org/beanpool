@@ -1033,29 +1033,48 @@ export default function PeopleScreen() {
                                 </View>
                             </Pressable>
                             {!isSelf && (
-                                <Pressable
-                                    accessibilityRole="button"
-                                    accessibilityState={{ selected: isFriend }}
-                                    style={[styles.addBtn, isFriend && styles.addBtnFriended]}
-                                    onPress={async () => {
-                                        if (!identity?.publicKey) return;
-                                        if (isFriend) {
-                                            await removeFriendLocal(identity.publicKey, item.public_key);
-                                        } else {
-                                            // Refused by the node (100 adds a day, or someone you blocked): said, not dropped.
+                                <View style={styles.friendActions}>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Message', undefined, 'button: write to')}
+                                        style={styles.msgBtn}
+                                        onPress={async () => {
+                                            if (!identity?.publicKey) return;
                                             try {
-                                                await addFriendLocal(identity.publicKey, item.public_key);
+                                                const conv = await createConversationApi('dm', [identity.publicKey, item.public_key], identity.publicKey);
+                                                router.push(`/chat/${conv.id}`);
                                             } catch (e: any) {
-                                                Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+                                                const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout/i.test(e.message);
+                                                Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
                                             }
-                                        }
-                                        loadFriends();
-                                    }}
-                                >
-                                    <Text style={[styles.addBtnText, isFriend && styles.addBtnTextFriended]}>
-                                        {isFriend ? t('✓ Added') : t('+ Add')}
-                                    </Text>
-                                </Pressable>
+                                        }}
+                                    >
+                                        <Text style={styles.msgBtnText}>💬</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityState={{ selected: isFriend }}
+                                        style={[styles.addBtn, { marginLeft: 0 }, isFriend && styles.addBtnFriended]}
+                                        onPress={async () => {
+                                            if (!identity?.publicKey) return;
+                                            if (isFriend) {
+                                                await removeFriendLocal(identity.publicKey, item.public_key);
+                                            } else {
+                                                // Refused by the node (100 adds a day, or someone you blocked): said, not dropped.
+                                                try {
+                                                    await addFriendLocal(identity.publicKey, item.public_key);
+                                                } catch (e: any) {
+                                                    Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+                                                }
+                                            }
+                                            loadFriends();
+                                        }}
+                                    >
+                                        <Text style={[styles.addBtnText, isFriend && styles.addBtnTextFriended]}>
+                                            {isFriend ? t('✓ Added') : t('+ Add')}
+                                        </Text>
+                                    </Pressable>
+                                </View>
                             )}
                         </View>
                     );

@@ -6,8 +6,8 @@ import { useLocalSearchParams, router, ErrorBoundary } from 'expo-router';
 export { ErrorBoundary };
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
-import { blockUser } from '../utils/blocklist';
+import { getMemberProfile, getMemberRatings, getMemberPosts, getBalance, getRatingsGiven, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi, getTrustProfile, vouchMember, updateMemberProfile } from '../utils/db';
+import { blockUser, unblockUser, isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 import { useIdentity } from './IdentityContext';
 import { ReviewModal } from '../components/ReviewModal';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
@@ -111,6 +111,56 @@ export default function PublicProfileScreen() {
         joinedText: { fontSize: 12, color: colors.text.muted, fontWeight: '600', marginTop: 6 },
         // The way on when no card is held offline: read at 4.5:1 in both schemes, unlike the muted lines around it.
         unreachableText: { fontSize: 13, color: colors.text.secondary, fontWeight: '600', marginTop: 6, textAlign: 'center' },
+
+        // Profile top actions (other members)
+        actionRow: {
+            flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center',
+            gap: 10, marginHorizontal: 16, marginTop: 16,
+        },
+        messageBtn: {
+            flexGrow: 1, flexBasis: 180, minHeight: 48,
+            backgroundColor: colors.brand.fill, borderRadius: 12,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+            paddingHorizontal: 16, paddingVertical: 12,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2,
+        },
+        messageBtnText: {
+            fontSize: 15, fontWeight: '800', color: colors.text.inverse, flexShrink: 1,
+        },
+        friendToggleBtn: {
+            flexGrow: 1, flexBasis: 120, minHeight: 48,
+            backgroundColor: colors.surface.card, borderRadius: 12,
+            borderWidth: 1, borderColor: colors.border.strong,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            paddingHorizontal: 16, paddingVertical: 12,
+        },
+        friendToggleBtnActive: {
+            backgroundColor: colors.surface.subtle, borderColor: colors.border.default,
+        },
+        friendToggleBtnText: {
+            fontSize: 14, fontWeight: '700', color: colors.text.heading, flexShrink: 1,
+        },
+        friendToggleBtnTextActive: {
+            color: colors.brand.primary,
+        },
+        blockedRow: {
+            marginHorizontal: 16, marginTop: 16, padding: 14, borderRadius: 14,
+            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50,
+            borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap',
+        },
+        blockedText: {
+            fontSize: 14, fontWeight: '600', color: colors.feedback.danger.fg, flexShrink: 1,
+        },
+        unblockBtn: {
+            minHeight: 44, minWidth: 44, paddingHorizontal: 14, paddingVertical: 8,
+            borderRadius: 8, backgroundColor: colors.surface.card,
+            borderWidth: 1, borderColor: colors.border.strong,
+            alignItems: 'center', justifyContent: 'center',
+        },
+        unblockBtnText: {
+            fontSize: 13, fontWeight: '700', color: colors.text.heading,
+        },
 
         // Quick stats strip (self)
         statStrip: { flexDirection: 'row', backgroundColor: colors.surface.card, marginHorizontal: 16, marginTop: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 14, alignItems: 'center' },
@@ -675,6 +725,88 @@ export default function PublicProfileScreen() {
     };
 
     const [isBlocking, setIsBlocking] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(false);
+    const [isFriend, setIsFriend] = useState(false);
+    const [isMessaging, setIsMessaging] = useState(false);
+    const [togglingFriend, setTogglingFriend] = useState(false);
+
+    useEffect(() => {
+        let sub: any;
+        if (pubKeyStr) {
+            isUserBlocked(pubKeyStr).then(setIsBlocked).catch(() => {});
+            sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => {
+                if (Array.isArray(list)) {
+                    setIsBlocked(list.includes(pubKeyStr));
+                } else {
+                    isUserBlocked(pubKeyStr).then(setIsBlocked).catch(() => {});
+                }
+            });
+        }
+        return () => {
+            sub?.remove?.();
+        };
+    }, [pubKeyStr]);
+
+    useEffect(() => {
+        let active = true;
+        if (identity?.publicKey && pubKeyStr && !isSelf) {
+            getFriendsLocal(identity.publicKey).then(friends => {
+                if (active && Array.isArray(friends)) {
+                    setIsFriend(friends.some(f => (f as any).publicKey === pubKeyStr || (f as any).public_key === pubKeyStr || (f as any).friend_pubkey === pubKeyStr));
+                }
+            }).catch(() => {});
+        }
+        return () => { active = false; };
+    }, [identity?.publicKey, pubKeyStr, isSelf]);
+
+    const handleUnblock = async () => {
+        if (!pubKeyStr) return;
+        try {
+            await unblockUser(pubKeyStr);
+            setIsBlocked(false);
+        } catch {
+            // keep state
+        }
+    };
+
+    const handleOpenDm = async (prefill?: string) => {
+        if (!pubKeyStr || !identity?.publicKey || isMessaging) return;
+        setIsMessaging(true);
+        try {
+            const conv = await createConversationApi('dm', [identity.publicKey, pubKeyStr], identity.publicKey);
+            if (prefill) {
+                router.push({
+                    pathname: `/chat/${conv.id}`,
+                    params: { prefill },
+                });
+            } else {
+                router.push(`/chat/${conv.id}`);
+            }
+        } catch (e: any) {
+            const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout/i.test(e.message);
+            Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
+        } finally {
+            setIsMessaging(false);
+        }
+    };
+
+    const handleToggleFriend = async () => {
+        if (!identity?.publicKey || !pubKeyStr || togglingFriend) return;
+        setTogglingFriend(true);
+        try {
+            if (isFriend) {
+                await removeFriendLocal(identity.publicKey, pubKeyStr);
+                setIsFriend(false);
+            } else {
+                await addFriendLocal(identity.publicKey, pubKeyStr);
+                setIsFriend(true);
+            }
+        } catch (e: any) {
+            Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+        } finally {
+            setTogglingFriend(false);
+        }
+    };
 
     const handleBlockUser = () => {
         if (!pubKeyStr || isBlocking) return;
@@ -807,6 +939,60 @@ export default function PublicProfileScreen() {
                     {/* Syndicated Creator Channels (The Pulse, Phase 1) */}
                     <ChannelChips channels={channels} />
                 </View>
+
+                {!isSelf && (
+                    isBlocked ? (
+                        <View style={styles.blockedRow}>
+                            <Text style={styles.blockedText}>
+                                🚫 {t('You blocked {name}.', { name: callsignStr || '…' })}
+                            </Text>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Unblock')}
+                                style={styles.unblockBtn}
+                                onPress={handleUnblock}
+                            >
+                                <Text style={styles.unblockBtnText}>{t('Unblock')}</Text>
+                            </Pressable>
+                        </View>
+                    ) : (
+                        <View style={styles.actionRow}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={t('Message', undefined, 'button: write to')}
+                                disabled={isMessaging}
+                                style={styles.messageBtn}
+                                onPress={() => handleOpenDm()}
+                            >
+                                {isMessaging ? (
+                                    <ActivityIndicator size="small" color={colors.text.inverse} />
+                                ) : (
+                                    <>
+                                        <MaterialCommunityIcons name="message-text-outline" size={18} color={colors.text.inverse} />
+                                        <Text style={styles.messageBtnText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Message', undefined, 'button: write to')}</Text>
+                                    </>
+                                )}
+                            </Pressable>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: isFriend }}
+                                disabled={togglingFriend}
+                                style={[styles.friendToggleBtn, isFriend && styles.friendToggleBtnActive]}
+                                onPress={handleToggleFriend}
+                            >
+                                <MaterialCommunityIcons
+                                    name={isFriend ? 'check' : 'account-plus-outline'}
+                                    size={16}
+                                    color={isFriend ? colors.brand.primary : colors.text.heading}
+                                    style={{ marginRight: 6 }}
+                                />
+                                <Text style={[styles.friendToggleBtnText, isFriend && styles.friendToggleBtnTextActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                                    {isFriend ? t('✓ Friend') : t('+ Add friend')}
+                                </Text>
+                            </Pressable>
+                        </View>
+                    )
+                )}
 
                 {/* Trust & safety (other members only) — the "is this person safe to trade with?" panel. Its verdict, tier,
                     Trust Points, track record, vouch and Vouch action are all Beans: gated like the own card (`showsBeans`).
@@ -1001,14 +1187,10 @@ export default function PublicProfileScreen() {
                                                 onPress={() => {
                                                     if (pubKeyStr) {
                                                         // The message starts in the sender's language; they can change it before it goes.
-                                                        router.push({
-                                                            pathname: `/chat/${pubKeyStr}`,
-                                                            params: {
-                                                                prefill: callsignStr
-                                                                    ? t('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡', { name: callsignStr })
-                                                                    : t('Hey there! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡'),
-                                                            }
-                                                        });
+                                                        const prefill = callsignStr
+                                                            ? t('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡', { name: callsignStr })
+                                                            : t('Hey there! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡');
+                                                        handleOpenDm(prefill);
                                                     }
                                                 }}
                                             >

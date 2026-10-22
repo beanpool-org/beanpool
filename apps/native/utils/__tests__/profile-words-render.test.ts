@@ -79,11 +79,19 @@ vi.mock('../db', () => ({
     getBalance: vi.fn(async () => data.balance),
     getRatingsGiven: vi.fn(async () => data.given),
     getFriendsLocal: vi.fn(async () => data.friends),
+    addFriendLocal: vi.fn(async () => undefined),
+    removeFriendLocal: vi.fn(async () => undefined),
+    createConversationApi: vi.fn(async (_type: string, _participants: string[], _createdBy: string) => ({ id: 'conv-dm-kofi' })),
     getTrustProfile: vi.fn(async () => data.trust),
     vouchMember: vi.fn(async (...a: unknown[]) => { if (data.vouchError) throw data.vouchError; data.vouched.push(a); }),
     updateMemberProfile: vi.fn(async () => undefined),
 }));
-vi.mock('../blocklist', () => ({ blockUser: vi.fn(async () => undefined) }));
+vi.mock('../blocklist', () => ({
+    BLOCKLIST_UPDATED_EVENT: 'beanpool_blocklist_updated',
+    blockUser: vi.fn(async () => undefined),
+    unblockUser: vi.fn(async () => true),
+    isUserBlocked: vi.fn(async () => false),
+}));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null) }));
 const chans = vi.hoisted(() => ({ list: [] as unknown[] }));
 vi.mock('../channels', () => ({ fetchPublicChannels: vi.fn(async () => chans.list) }));
@@ -283,7 +291,7 @@ describe('another member\'s profile in the pseudo-locale: every word came throug
         expect(host.textContent).toContain(xx("{name} hasn't taken the working style quiz yet. Send a friendly nudge in chat to get tips for working together.").replace('{name}', 'Kofi'));
         const nudge = host.querySelector(`[aria-label="${xx('Nudge {name} to take the working style quiz').replace('{name}', 'Kofi')}"]`);
         await click(nudge, 'Nudge');
-        expect(nav.pushed).toEqual([{ pathname: `/chat/${KOFI}`, params: { prefill: xx('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡').replace('{name}', 'Kofi') } }]);
+        expect(nav.pushed).toEqual([{ pathname: '/chat/conv-dm-kofi', params: { prefill: xx('Hey {name}! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡').replace('{name}', 'Kofi') } }]);
         expect(bypassing(host, [...NODE_WORDS, ...MEMBERS], said())).toEqual([]);
     });
 

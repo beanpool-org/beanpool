@@ -4,6 +4,7 @@ import React from 'react';
 import { PeoplePage } from './PeoplePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
+import * as membersOnDemand from '../lib/members-on-demand';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -103,7 +104,7 @@ describe('PeoplePage tabs follow the WAI-ARIA tabs pattern (#674)', () => {
 
     it('shows 💬 message button on community rows and opens DM when clicked (S0)', async () => {
         const onNavigate = vi.fn();
-        vi.spyOn(api, 'getMembersWhole').mockResolvedValue([
+        vi.spyOn(membersOnDemand, 'getMembersWhole').mockResolvedValue([
             { publicKey: 'bob-pubkey', callsign: 'Bob', joinedAt: '2026-01-01', invitedBy: '', inviteCode: '', avatarUrl: null },
         ] as any);
         render(<PeoplePage identity={identity} onNavigate={onNavigate} />);

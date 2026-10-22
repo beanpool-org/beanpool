@@ -63,6 +63,7 @@ const data = vi.hoisted(() => ({
     unblockedUsers: [] as string[],
     conversationsCreated: [] as any[],
     createConvError: null as Error | null,
+    trust: { tier: { name: 'Member', emoji: '🌱' }, risk: { band: 'green', headline: 'Good standing' } } as any,
 }));
 
 vi.mock('../db', () => ({
@@ -84,12 +85,13 @@ vi.mock('../db', () => ({
         data.conversationsCreated.push({ type, participants, createdBy });
         return { id: 'conv-dm-123', participants, type };
     }),
-    getTrustProfile: vi.fn(async () => null),
+    getTrustProfile: vi.fn(async () => data.trust),
     vouchMember: vi.fn(async () => undefined),
     updateMemberProfile: vi.fn(async () => undefined),
 }));
 
 vi.mock('../blocklist', () => ({
+    BLOCKLIST_UPDATED_EVENT: 'beanpool_blocklist_updated',
     blockUser: vi.fn(async (target: string) => { data.blockedUsers.add(target); }),
     unblockUser: vi.fn(async (target: string) => {
         data.blockedUsers.delete(target);

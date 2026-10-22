@@ -644,6 +644,15 @@ describe('A thing', () => {
         storeFails.on = false;
         expect(byTestId('thing-refused')?.textContent).toBe("Couldn't save it in this browser. Try again.");
         expect((await keptThing('t-1'))?.postId).toBeUndefined();
+        // Nothing changed on the screen either (it reads host.doc.get()), so the next write that is kept doesn't carry the
+        // link the member was told had failed.
+        expect(byTestId('thing-state')?.textContent).toBe('On your shelf');
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('thing-lend-save');
+        expect(server.paused).toEqual([]);
+        expect(await keptThing('t-1')).toMatchObject({ lentTo: { name: 'Sam' } });
+        expect((await keptThing('t-1'))?.postId).toBeUndefined();
     });
 
     it("keep: past the bound it never asks the host; the host's own size refusal is the shed full; anything else is not kept", async () => {

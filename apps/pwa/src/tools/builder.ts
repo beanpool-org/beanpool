@@ -44,7 +44,7 @@ export class ToolDocTooBig extends Error {
     }
 }
 
-/** A write the browser didn't keep (no IndexedDB, a full disk, signed out in another tab): the screen still holds it. */
+/** A write the browser didn't keep (no IndexedDB, a full disk, signed out in another tab): the screen is as it was. */
 export class ToolDocNotKept extends Error {
     constructor() {
         super('The document was not kept in this browser.');
@@ -84,7 +84,7 @@ export type ToolDocState<D> =
 /**
  * The tool's one document for `owner`, from the store: loading, then ready (its empty one when nothing is kept).
  * `set` writes it whole (its last sync with the node kept, tools/store.ts keepToolDoc) and refuses one over the bound,
- * then `afterWrite` (the node copy's sync); `reload` reads it again (after the node's copy was taken); `remove` takes this
+ * then `afterWrite` (the node copy's sync); one the browser didn't keep is taken back off the screen and throws; `reload` reads it again (after the node's copy was taken); `remove` takes this
  * browser's copy away and leaves the empty one.
  */
 export function useToolDoc<D>(m: ToolManifest<D> | undefined, owner: string | null, afterWrite?: () => void) {
@@ -116,10 +116,20 @@ export function useToolDoc<D>(m: ToolManifest<D> | undefined, owner: string | nu
         const bytes = toolDocBytes(next);
         if (bytes > max) throw new ToolDocTooBig(bytes, max);
         const updatedAt = new Date().toISOString();
+        const was = current.current;
+        let shown: ToolDocState<D> | null = null;
         current.current = next;
-        setState({ status: 'ready', doc: next, updatedAt });
+        setState((s) => { shown = s; return { status: 'ready', doc: next, updatedAt }; });
         const kept = await keepToolDoc(owner, m.id, JSON.stringify(next), updatedAt);
-        if (!kept) throw new ToolDocNotKept();
+        if (!kept) {
+            // Nothing changed: the screen and get() hold the document as it was, so a later write can't keep this one
+            // either. A write or read since then is left as it is.
+            if (current.current === next) {
+                current.current = was;
+                setState((s) => (s.status === 'ready' && s.doc === next && shown ? shown : s));
+            }
+            throw new ToolDocNotKept();
+        }
         afterWrite?.();
     }, [id, owner, m, afterWrite]);
 

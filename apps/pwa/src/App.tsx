@@ -1165,11 +1165,11 @@ export function App() {
                             isMember={!isGuest}
                             pubkey={openTreasuryPubkey}
                             enterprisesPreview={enterprisesMode === 'preview'}
-                            onNearYou={() => { setOpenTreasuryPubkey(null); setActiveTab('home'); }}
-                            onGuide={(slug) => { setOpenTreasuryPubkey(null); navigateToTab('guide', slug); }}
+                            onNearYou={() => { closePagesOver(); setActiveTab('home'); }}
+                            onGuide={(slug) => { closePagesOver(); navigateToTab('guide', slug); }}
                             onBack={() => setOpenTreasuryPubkey(null)}
                             onNavigatePost={(postId) => {
-                                setOpenTreasuryPubkey(null);
+                                closePagesOver();
                                 navigateToTab('marketplace', postId);
                             }}
                             onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
@@ -1177,7 +1177,8 @@ export function App() {
                     )}
                     {/* Public Profile Overlay — after the enterprise page: both stack at z-[110], so document order puts a
                         profile opened from a keeper row on top, and Back returns to the enterprise page. Leaving the
-                        profile for anywhere else closes the enterprise page too. */}
+                        profile for anywhere else closes the enterprise page too, and a tool the sidebar's profile button
+                        opened it over (review, 22 Oct); so do the enterprise page's own ways out. */}
                     {openProfilePubkey && (
                         <PublicProfilePage
                             identity={identity}
@@ -1188,24 +1189,20 @@ export function App() {
                                 setOpenTreasuryPubkey(pubkey);
                             }}
                             onMessage={(pubkey) => {
-                                setOpenProfilePubkey(null);
-                                setOpenTreasuryPubkey(null);
+                                closePagesOver();
                                 navigateToTab('messages', pubkey);
                             }}
                             onNavigatePost={(postId) => {
-                                setOpenProfilePubkey(null);
-                                setOpenTreasuryPubkey(null);
+                                closePagesOver();
                                 navigateToTab('marketplace', postId);
                             }}
                             onEditProfile={() => {
-                                setOpenProfilePubkey(null);
-                                setOpenTreasuryPubkey(null);
+                                closePagesOver();
                                 setSettingsInitialMode('profile');
                                 setShowSettings(true);
                             }}
                             onNavigateTab={(tab, subView) => {
-                                setOpenProfilePubkey(null);
-                                setOpenTreasuryPubkey(null);
+                                closePagesOver();
                                 // The 🏘️ sheet's How it works: a guide page, as every other screen opens one.
                                 if (tab === 'guide') { navigateToTab('guide', subView); return; }
                                 if (tab === 'people' && subView) {

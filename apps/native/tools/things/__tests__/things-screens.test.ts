@@ -1115,6 +1115,28 @@ describe('A thing', () => {
         disk.db.runAsync = run;
         expect(text('thing-refused')).toBe("Couldn't save it on this phone. Try again.");
         expect((await keptThing('t-1'))?.postId).toBeUndefined();
+        // Not linked, so the Offers to link stay open to try again.
+        expect(byTestId('thing-link-post-1')).not.toBeNull();
+    });
+
+    it("List it again that the phone couldn't keep says so, and opens no List sheet over a thing still linked to the gone Offer", async () => {
+        await keep(shed(thing('t-1', 'Cordless drill', { postId: 'post-9' })));
+        await open('thing', { key: 't-1' });
+        const run = disk.db.runAsync;
+        disk.db.runAsync = async (sql: string, params?: unknown[]) => {
+            if (sql.includes('INSERT INTO tool_docs')) throw new Error('database or disk is full');
+            return run(sql, params);
+        };
+        await click('thing-relist');
+        disk.db.runAsync = run;
+        expect(text('thing-refused')).toBe("Couldn't save it on this phone. Try again.");
+        expect(byTestId('tool-list-sheet')).toBeNull();
+        expect((await keptThing('t-1'))?.postId).toBe('post-9');
+
+        await click('thing-relist');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(byTestId('tool-list-sheet')).not.toBeNull();
+        expect((await keptThing('t-1'))?.postId).toBeUndefined();
     });
 
     it("keep: past the bound it never asks the host; the host's own size refusal is the shed full; anything else is not kept", async () => {

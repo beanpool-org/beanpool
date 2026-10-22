@@ -213,15 +213,15 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const findLinks = () => act(async () => {
         setLinks(offersToLink(host.doc.get(), await host.posts.mine(), id));
     });
+    // A link or a fresh listing that couldn't be kept leaves the screen as it was, with the sentence that says so.
     const link = (offer: ToolOwnOffer) => act(async () => {
-        await write(linkOffer(host.doc.get(), id, offer, host.now()));
+        if (!(await write(linkOffer(host.doc.get(), id, offer, host.now())))) return;
         setLinks(null);
         setListedNote(false);
     });
     const forget = () => act(async () => { await write(forgetOffer(host.doc.get(), id, host.now())); });
     const relist = () => act(async () => {
-        await write(forgetOffer(host.doc.get(), id, host.now()));
-        list();
+        if (await write(forgetOffer(host.doc.get(), id, host.now()))) list();
     });
     const resumeHere = () => act(async () => {
         await host.posts.resume(postId!);

@@ -840,6 +840,8 @@ describe('A thing', () => {
         storeFails.on = false;
         expect(byTestId('thing-refused')?.textContent).toBe("Couldn't save it in this browser. Try again.");
         expect((await keptThing('t-1'))?.postId).toBeUndefined();
+        // Not linked, so the Offers to link stay open to try again.
+        expect(byTestId('thing-link-post-1')).not.toBeNull();
         // Nothing changed on the screen either (it reads host.doc.get()), so the next write that is kept doesn't carry the
         // link the member was told had failed.
         expect(byTestId('thing-state')?.textContent).toBe('On your shelf');
@@ -848,6 +850,22 @@ describe('A thing', () => {
         await click('thing-lend-save');
         expect(server.paused).toEqual([]);
         expect(await keptThing('t-1')).toMatchObject({ lentTo: { name: 'Sam' } });
+        expect((await keptThing('t-1'))?.postId).toBeUndefined();
+    });
+
+    it("List it again that this browser couldn't keep says so, and opens no composer over a thing still linked to the gone Offer", async () => {
+        await keep(shed(thing('t-1', 'Cordless drill', { postId: 'post-9' })));
+        const { props } = await open('thing', 't-1');
+        storeFails.on = true;
+        await click('thing-relist');
+        storeFails.on = false;
+        expect(byTestId('thing-refused')?.textContent).toBe("Couldn't save it in this browser. Try again.");
+        expect(props.onComposer).not.toHaveBeenCalled();
+        expect((await keptThing('t-1'))?.postId).toBe('post-9');
+
+        await click('thing-relist');
+        expect(byTestId('thing-refused')).toBeNull();
+        await waitFor(() => expect(props.onComposer).toHaveBeenCalledTimes(1));
         expect((await keptThing('t-1'))?.postId).toBeUndefined();
     });
 

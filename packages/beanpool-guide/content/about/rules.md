@@ -97,6 +97,7 @@ An admin can suspend a member at once, for example to stop harm. They must give 
 - It needs the usual turnout and 60% Yes.
 - If it does not pass, or too few people vote, the suspension lifts by itself.
 - An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.
+- An admin can suspend another admin. If the community votes to keep the suspension, that admin loses the role.
 
 On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.
 

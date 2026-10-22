@@ -107,6 +107,17 @@ describe('pair-device.tsx wiring', () => {
         expect(pair()).not.toMatch(/callsign:\s*identity\.callsign/);
     });
 
+    it('takes the name as it seals, not as the button was pressed: the member record can answer while the unlock asks', () => {
+        const src = pair();
+        const confirm = src.slice(src.indexOf('async function handleConfirmLink() {'), src.indexOf('function handleDismissSheet() {'));
+        // The press's render can be from before the lookup answered: the name it held then would go empty.
+        expect(confirm).not.toMatch(/\bscannedName\b/);
+        // The latest lookup, and only the one for the code being sent.
+        expect(src).toMatch(/memberNameRef\.current = memberName;/);
+        expect(confirm).toMatch(/memberNameRef\.current/);
+        expect(confirm).toMatch(/\.scan === scanned\b/);
+    });
+
     it("the Account row shows pairingAccountLabel, not the stored name, which can be blank", () => {
         expect(pair()).toMatch(/<Text style=\{styles\.infoValue\}>\{identity \? pairingAccountLabel\(identity, /);
         expect(pair()).not.toContain('{identity?.callsign}');

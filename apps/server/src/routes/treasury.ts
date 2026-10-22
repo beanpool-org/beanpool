@@ -936,6 +936,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, post, ...eventTimeAnswer(timeOut) };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
+            if (respondShopRefusal(ctx, e)) return;
             ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });

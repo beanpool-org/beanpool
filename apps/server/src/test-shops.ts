@@ -228,6 +228,8 @@ async function main(): Promise<void> {
     const tentId = await offerId(dave, 'Tent', { shopId: daveShop });
     const postsBefore = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
     const need = await call('POST', dave, '/api/marketplace/posts', { type: 'need', category: 'tools', title: 'Need a saw', description: '', credits: 0, authorPublicKey: dave.pk, shopId: daveShop });
+    const event = await call('POST', dave, '/api/marketplace/posts', { type: 'event', title: 'Tool swap', description: 'Bring one, take one', authorPublicKey: dave.pk,
+        lat: MULLUM.lat, lng: MULLUM.lng, eventStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), shopId: daveShop });
     const others = await offer(dave, 'Into Ann\'s', { shopId: annShop });
     const madeUp = await offer(dave, 'Into nowhere', { shopId: 'no-such-shop' });
     const notText = await offer(dave, 'Into a number', { shopId: 12 });
@@ -235,6 +237,7 @@ async function main(): Promise<void> {
     const postsAfter = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
     assert(need.status === 400 && need.body?.code === 'shop_offers_only' && /Offer/.test(need.body?.error ?? ''),
         `a Need is refused in a sentence (${show(need)})`);
+    assert(event.status === 400 && event.body?.code === 'shop_offers_only', `so is an event, not made without its shop (${show(event)})`);
     assert([others, madeUp, notText].every(r => r.status === 403 && r.body?.code === 'shop_not_yours'),
         `another member's shop, one that isn't there and an id that isn't one are refused alike (${[others, madeUp, notText].map(show).join(' | ')})`);
     assert(direct.status === 400 && direct.body?.code === 'shop_public_only', `an Offer for one person stays out of a shop (${show(direct)})`);
@@ -285,9 +288,15 @@ async function main(): Promise<void> {
     const boShop: string = (await call('PUT', bo, MINE, {})).body?.shop?.id;
     const entIntoKeeper = await call('POST', bo, `/api/treasury/${bikes}/offer`, { category: 'transport', title: 'Into Bo\'s', credits: 0, shopId: boShop });
     const entNeed = await call('POST', bo, `/api/treasury/${bikes}/need`, { category: 'transport', title: 'Need tubes', credits: 0, shopId: bikesShop });
+    const entPostsBefore = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
+    const entEvent = await call('POST', bo, `/api/treasury/${bikes}/event`, { title: 'Bike repair night', description: 'Bring a bike',
+        lat: MULLUM.lat, lng: MULLUM.lng, eventStartAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), shopId: bikesShop });
+    const entPostsAfter = (db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n;
     assert(keeperOwnIntoEnt.status === 403 && keeperOwnIntoEnt.body?.code === 'shop_not_yours' && entIntoKeeper.status === 403 && entIntoKeeper.body?.code === 'shop_not_yours',
         `a keeper's own Offer can't go in the enterprise's shop, nor the enterprise's in the keeper's (${show(keeperOwnIntoEnt)}; ${show(entIntoKeeper)})`);
     assert(entNeed.status === 400 && entNeed.body?.code === 'shop_offers_only', `nor an enterprise's Need (${show(entNeed)})`);
+    assert(entEvent.status === 400 && entEvent.body?.code === 'shop_offers_only' && entPostsAfter === entPostsBefore,
+        `nor an enterprise's event, refused in the engine's words and not made (${show(entEvent)})`);
 
     // ── 3. shop= on the listings ────────────────────────────────────────────────────────────────
     console.log('\n── 3. shop= on the listings ──');

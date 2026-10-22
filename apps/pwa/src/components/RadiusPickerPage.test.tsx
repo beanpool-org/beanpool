@@ -84,4 +84,24 @@ describe('RadiusPickerPage', () => {
         render(<RadiusPickerPage onApply={noop} onCancel={noop} onReset={noop} />);
         expect(screen.getByText('Use my location to centre the circle')).toBeInTheDocument();
     });
+
+    it('does not fitBounds on initial mount when no initial place is given', () => {
+        render(<RadiusPickerPage onApply={noop} onCancel={noop} onReset={noop} />);
+        const mapInstance = vi.mocked(L.map).mock.results[0]?.value;
+        expect(mapInstance.fitBounds).not.toHaveBeenCalled();
+    });
+
+    it('handles malformed nodeCenter safely and defaults to neutral center and zoom', () => {
+        render(
+            <RadiusPickerPage
+                nodeCenter={[] as any}
+                onApply={noop}
+                onCancel={noop}
+                onReset={noop}
+            />
+        );
+        const mapCall = vi.mocked(L.map).mock.calls[0];
+        expect(mapCall?.[1]?.center).toEqual([20, 0]);
+        expect(mapCall?.[1]?.zoom).toEqual(2);
+    });
 });

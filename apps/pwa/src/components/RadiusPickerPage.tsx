@@ -25,15 +25,22 @@ const NEUTRAL_CENTER: [number, number] = [20, 0];
 const NEUTRAL_ZOOM = 2;
 const DEFAULT_ZOOM = 11;
 
-function resolveCenter(initial?: RadiusSettings | null, nodeCenter?: { lat: number; lng: number } | [number, number] | null): [number, number] {
-    if (initial) return [initial.lat, initial.lng];
+function resolveCenter(
+    initial?: RadiusSettings | null,
+    nodeCenter?: { lat: number; lng: number } | [number, number] | null
+): [number, number] | null {
+    if (initial && typeof initial.lat === 'number' && typeof initial.lng === 'number' && Number.isFinite(initial.lat) && Number.isFinite(initial.lng)) {
+        return [initial.lat, initial.lng];
+    }
     if (nodeCenter) {
-        if (Array.isArray(nodeCenter)) return [nodeCenter[0], nodeCenter[1]];
-        if (typeof nodeCenter.lat === 'number' && typeof nodeCenter.lng === 'number') {
+        if (Array.isArray(nodeCenter) && typeof nodeCenter[0] === 'number' && typeof nodeCenter[1] === 'number' && Number.isFinite(nodeCenter[0]) && Number.isFinite(nodeCenter[1])) {
+            return [nodeCenter[0], nodeCenter[1]];
+        }
+        if (typeof nodeCenter.lat === 'number' && typeof nodeCenter.lng === 'number' && Number.isFinite(nodeCenter.lat) && Number.isFinite(nodeCenter.lng)) {
             return [nodeCenter.lat, nodeCenter.lng];
         }
     }
-    return NEUTRAL_CENTER;
+    return null;
 }
 
 export function RadiusPickerPage({ initial, defaultRadius = 20, nodeCenter, onApply, onCancel, onReset }: Props) {
@@ -41,9 +48,11 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, nodeCenter, onAp
     const mapRef = useRef<L.Map | null>(null);
     const circleRef = useRef<L.Circle | null>(null);
     const markerRef = useRef<L.Marker | null>(null);
+    const isFirstMount = useRef(true);
 
-    const initialCenter = resolveCenter(initial, nodeCenter);
-    const hasInitialPlace = Boolean(initial || (nodeCenter && (Array.isArray(nodeCenter) ? true : typeof nodeCenter.lat === 'number')));
+    const resolvedCenter = resolveCenter(initial, nodeCenter);
+    const initialCenter = resolvedCenter ?? NEUTRAL_CENTER;
+    const hasInitialPlace = resolvedCenter !== null;
 
     const [center, setCenter] = useState<[number, number]>(initialCenter);
     const [radiusKm, setRadiusKm] = useState(initial?.radiusKm ?? defaultRadius);
@@ -126,10 +135,13 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, nodeCenter, onAp
         setRadiusKm(km);
         if (circleRef.current && mapRef.current) {
             circleRef.current.setRadius(km * 1000);
-            // Fit map to show the full circle
-            mapRef.current.fitBounds(circleRef.current.getBounds(), { padding: [20, 20] });
+            // Fit map to show the full circle if center has been set or after initial mount
+            if (!isFirstMount.current || hasInitialPlace) {
+                mapRef.current.fitBounds(circleRef.current.getBounds(), { padding: [20, 20] });
+            }
         }
-    }, [radiusIdx]);
+        isFirstMount.current = false;
+    }, [radiusIdx, hasInitialPlace]);
 
     const handleGpsLocate = () => {
         navigator.geolocation?.getCurrentPosition(

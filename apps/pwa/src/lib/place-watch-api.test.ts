@@ -33,4 +33,13 @@ describe('watchPlace', () => {
         expect(init.method).toBe('POST');
         expect(JSON.parse(init.body)).toEqual({ lat: -28.6, lng: 153.6 });
     });
+
+    it('wraps a Distance centre past the date line, as the Home read does, so the node takes it', async () => {
+        // The picker keeps Leaflet's unwrapped longitude (Tonga tapped with the map on Fiji is 185); the node refuses
+        // anything past ±180 (engine member-area.ts isPoint).
+        fetchMock.mockResolvedValueOnce(reply(200, { success: true }));
+        await watchPlace(-21.2, 184.8);
+
+        expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ lat: -21.2, lng: -175.2 });
+    });
 });

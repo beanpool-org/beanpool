@@ -14,22 +14,50 @@ import { type RadiusSettings } from '../lib/geo';
 interface Props {
     initial?: RadiusSettings | null;
     defaultRadius?: number;
+    nodeCenter?: { lat: number; lng: number } | [number, number] | null;
     onApply: (settings: RadiusSettings) => void;
     onCancel: () => void;
     onReset: () => void;
 }
 
 const RADIUS_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 25, 50];
+const NEUTRAL_CENTER: [number, number] = [20, 0];
+const NEUTRAL_ZOOM = 2;
+const DEFAULT_ZOOM = 11;
 
-export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCancel, onReset }: Props) {
+function resolveCenter(
+    initial?: RadiusSettings | null,
+    nodeCenter?: { lat: number; lng: number } | [number, number] | null
+): [number, number] | null {
+    if (initial && typeof initial.lat === 'number' && typeof initial.lng === 'number' && Number.isFinite(initial.lat) && Number.isFinite(initial.lng)) {
+        return [initial.lat, initial.lng];
+    }
+    if (nodeCenter) {
+        if (Array.isArray(nodeCenter)) {
+            if (typeof nodeCenter[0] === 'number' && typeof nodeCenter[1] === 'number' && Number.isFinite(nodeCenter[0]) && Number.isFinite(nodeCenter[1])) {
+                return [nodeCenter[0], nodeCenter[1]];
+            }
+            return null;
+        }
+        if (typeof nodeCenter.lat === 'number' && typeof nodeCenter.lng === 'number' && Number.isFinite(nodeCenter.lat) && Number.isFinite(nodeCenter.lng)) {
+            return [nodeCenter.lat, nodeCenter.lng];
+        }
+    }
+    return null;
+}
+
+export function RadiusPickerPage({ initial, defaultRadius = 20, nodeCenter, onApply, onCancel, onReset }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const circleRef = useRef<L.Circle | null>(null);
     const markerRef = useRef<L.Marker | null>(null);
 
-    const [center, setCenter] = useState<[number, number]>(
-        initial ? [initial.lat, initial.lng] : [-28.5495, 153.5005] // Default: Mullumbimby
-    );
+    const resolvedCenter = resolveCenter(initial, nodeCenter);
+    const initialCenter = resolvedCenter ?? NEUTRAL_CENTER;
+    const hasInitialPlace = resolvedCenter !== null;
+
+    const [center, setCenter] = useState<[number, number]>(initialCenter);
+    const [picked, setPicked] = useState<boolean>(hasInitialPlace);
     const [radiusKm, setRadiusKm] = useState(initial?.radiusKm ?? defaultRadius);
     const [radiusIdx, setRadiusIdx] = useState(() => {
         const km = initial?.radiusKm ?? defaultRadius;
@@ -41,9 +69,10 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
     useEffect(() => {
         if (!mapContainer.current || mapRef.current) return;
 
+        const initialZoom = hasInitialPlace ? DEFAULT_ZOOM : NEUTRAL_ZOOM;
         const map = L.map(mapContainer.current, {
             center: center,
-            zoom: 11,
+            zoom: initialZoom,
             zoomControl: false,
             attributionControl: false,
         });
@@ -67,9 +96,10 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
             draggable: true
         }).addTo(map);
 
-        marker.on('dragend', (e) => {
+        marker.on('dragend', () => {
             const { lat, lng } = marker.getLatLng();
             setCenter([lat, lng]);
+            setPicked(true);
             circle.setLatLng([lat, lng]);
         });
 
@@ -77,29 +107,17 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
         map.on('click', (e: L.LeafletMouseEvent) => {
             const { lat, lng } = e.latlng;
             setCenter([lat, lng]);
+            setPicked(true);
             circle.setLatLng([lat, lng]);
             marker.setLatLng([lat, lng]);
+            if (map.getZoom() <= NEUTRAL_ZOOM) {
+                map.setView([lat, lng], DEFAULT_ZOOM);
+            }
         });
 
         mapRef.current = map;
         circleRef.current = circle;
         markerRef.current = marker;
-
-        // Try to get user's actual location
-        if (!initial) {
-            navigator.geolocation?.getCurrentPosition(
-                (pos) => {
-                    const userLat = pos.coords.latitude;
-                    const userLng = pos.coords.longitude;
-                    setCenter([userLat, userLng]);
-                    map.setView([userLat, userLng], 11);
-                    circle.setLatLng([userLat, userLng]);
-                    marker.setLatLng([userLat, userLng]);
-                },
-                undefined,
-                { timeout: 5000 }
-            );
-        }
 
         return () => {
             map.remove();
@@ -122,10 +140,27 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
         setRadiusKm(km);
         if (circleRef.current && mapRef.current) {
             circleRef.current.setRadius(km * 1000);
-            // Fit map to show the full circle
-            mapRef.current.fitBounds(circleRef.current.getBounds(), { padding: [20, 20] });
+            if (picked) {
+                mapRef.current.fitBounds(circleRef.current.getBounds(), { padding: [20, 20] });
+            }
         }
-    }, [radiusIdx]);
+    }, [radiusIdx, picked]);
+
+    // Re-centre on a late nodeCenter unless already picked
+    useEffect(() => {
+        if (picked) return;
+        const centerFromProps = resolveCenter(initial, nodeCenter);
+        if (centerFromProps) {
+            setCenter(centerFromProps);
+            setPicked(true);
+            if (mapRef.current && circleRef.current && markerRef.current) {
+                circleRef.current.setLatLng(centerFromProps);
+                markerRef.current.setLatLng(centerFromProps);
+                mapRef.current.setView(centerFromProps, DEFAULT_ZOOM);
+                mapRef.current.fitBounds(circleRef.current.getBounds(), { padding: [20, 20] });
+            }
+        }
+    }, [nodeCenter, initial, picked]);
 
     const handleGpsLocate = () => {
         navigator.geolocation?.getCurrentPosition(
@@ -133,8 +168,11 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 const userLat = pos.coords.latitude;
                 const userLng = pos.coords.longitude;
                 setCenter([userLat, userLng]);
+                setPicked(true);
                 if (mapRef.current && circleRef.current && markerRef.current) {
-                    mapRef.current.setView([userLat, userLng], mapRef.current.getZoom());
+                    const currentZoom = mapRef.current.getZoom();
+                    const targetZoom = currentZoom <= NEUTRAL_ZOOM ? DEFAULT_ZOOM : currentZoom;
+                    mapRef.current.setView([userLat, userLng], targetZoom);
                     circleRef.current.setLatLng([userLat, userLng]);
                     markerRef.current.setLatLng([userLat, userLng]);
                 }
@@ -198,49 +236,78 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
             <div style={{ flex: 1, position: 'relative' }}>
                 <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
                 
-                {/* Floating GPS Button */}
-                <button
-                    type="button"
-                    onClick={handleGpsLocate}
-                    aria-label={t('Center map on my location')}
-                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                {/* Floating GPS Button & explanation */}
+                <div
                     style={{
                         position: 'absolute',
                         right: '1rem',
                         bottom: '1rem',
-                        width: '2.75rem',
-                        height: '2.75rem',
-                        borderRadius: '50%',
-                        background: '#ffffff',
-                        border: '1px solid var(--border-secondary)',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
+                        gap: '0.5rem',
                         zIndex: 1000,
-                        color: '#4b5563',
-                        transition: 'transform 0.15s ease, background-color 0.15s ease, color 0.15s ease',
                     }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.08)';
-                        e.currentTarget.style.color = '#111827';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)';
-                        e.currentTarget.style.color = '#4b5563';
-                    }}
-                    title={t('Center on my location')}
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <circle cx="12" cy="12" r="3" />
-                        <line x1="12" y1="1" x2="12" y2="4" />
-                        <line x1="12" y1="20" x2="12" y2="23" />
-                        <line x1="1" y1="12" x2="4" y2="12" />
-                        <line x1="20" y1="12" x2="23" y2="12" />
-                    </svg>
-                </button>
+                    <button
+                        type="button"
+                        onClick={handleGpsLocate}
+                        aria-label={t('Use my location to centre the circle')}
+                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                        style={{
+                            background: 'var(--bg-secondary)',
+                            color: 'var(--text-muted)',
+                            fontSize: '0.75rem',
+                            minHeight: '2.75rem',
+                            minWidth: '44px',
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '9999px',
+                            border: '1px solid var(--border-secondary)',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            fontFamily: 'inherit',
+                        }}
+                    >
+                        {t('Use my location to centre the circle')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleGpsLocate}
+                        aria-label={t('Center map on my location')}
+                        title={t('Center on my location')}
+                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                        style={{
+                            width: '2.75rem',
+                            height: '2.75rem',
+                            borderRadius: '50%',
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-secondary)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: 'var(--text-primary)',
+                            transition: 'transform 0.15s ease, background-color 0.15s ease, color 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.08)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <circle cx="12" cy="12" r="3" />
+                            <line x1="12" y1="1" x2="12" y2="4" />
+                            <line x1="12" y1="20" x2="12" y2="23" />
+                            <line x1="1" y1="12" x2="4" y2="12" />
+                            <line x1="20" y1="12" x2="23" y2="12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             {/* Bottom controls */}
@@ -292,28 +359,35 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
 
                 {/* Tap hint */}
                 <p style={{
-                    textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-faint)',
+                    textAlign: 'center', fontSize: '0.75rem', color: picked ? 'var(--text-faint)' : 'var(--text-muted)',
                     marginBottom: '0.75rem',
                 }}>
-                    {t('Tap the map or drag the pin to move the center point')}
+                    {picked
+                        ? t('Tap the map or drag the pin to move the center point')
+                        : t('Tap the map or use your location to choose a centre')}
                 </p>
 
                 {/* Apply button */}
                 <button
                     type="button"
-                    onClick={() => onApply({
-                        lat: center[0],
-                        lng: center[1],
-                        radiusKm,
-                        label: radiusKm < 1 ? `${Math.round(radiusKm * 1000)}m radius` : `${radiusKm}km radius`,
-                    })}
+                    disabled={!picked}
+                    onClick={() => {
+                        if (!picked) return;
+                        onApply({
+                            lat: center[0],
+                            lng: center[1],
+                            radiusKm,
+                            label: radiusKm < 1 ? `${Math.round(radiusKm * 1000)}m radius` : `${radiusKm}km radius`,
+                        });
+                    }}
                     className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                     style={{
                         width: '100%', padding: '0.85rem', borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                        border: 'none', color: '#fff', fontSize: '1rem',
-                        fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                        boxShadow: '0 4px 16px rgba(245, 158, 11, 0.3)',
+                        background: picked ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'var(--border-secondary)',
+                        border: 'none', color: picked ? '#fff' : 'var(--text-muted)', fontSize: '1rem',
+                        fontWeight: 700, cursor: picked ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
+                        boxShadow: picked ? '0 4px 16px rgba(245, 158, 11, 0.3)' : 'none',
+                        opacity: picked ? 1 : 0.6,
                     }}
                 >
                     {t('Apply — {distance} radius', { distance: radiusKm < 1 ? t('{n}m', { n: Math.round(radiusKm * 1000) }) : t('{n}km', { n: radiusKm }) })}

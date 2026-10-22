@@ -3,7 +3,7 @@ slug: near-you
 title: Yakınınızdakileri bulma
 summary: Yalnızca size veya seçtiğiniz herhangi bir yere belirli bir mesafedeki ilanları gösterin.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: e02b25e45f78d9fe
+source-hash: 2db25a661f8751ec
 ---
 
 ## Pazar sekmesinde
@@ -16,7 +16,7 @@ source-hash: e02b25e45f78d9fe
 
 Telefonda, konumu olmayan gönderiler her zaman gösterilir. Web uygulamasında anketler hariç olmak üzere bir **Mesafe** bunları gizler. Küresel toplulukta web uygulaması liste yakınınızdayken de bunları dışarıda bırakır (aşağıda).
 
-Tarayıcınız BeanPool'un konumunuzu kullanmasına zaten izin veriyorsa seçici şu anda bulunduğunuz yerde açılabilir. İzin vermiyorsa sabit bir noktada açılır. **Uygula**'ya dokunmadan önce iğneyi kontrol edin veya hedef düğmesine ya da haritaya dokunun. Küresel toplulukta web uygulaması seçtiğiniz merkezi yaklaşık 11 metreye yuvarlayarak topluluğa gönderir.
+Web uygulamasında seçici, seçtiğiniz son merkezde ya da yoksa topluluğun kendi yerinde açılır (topluluğun yeri yoksa dünya görünümüyle). **Uygula**'ya dokunmadan önce iğneyi kontrol edin veya merkezi seçmek için haritaya dokunun, iğneyi sürükleyin ya da hedef düğmesine dokunun. Konumunuzu yalnızca hedef düğmesine dokunduğunuzda ister. Küresel toplulukta web uygulaması seçtiğiniz merkezi, Pazar, Harita ve Ana Sayfa için, yaklaşık bir kilometreye yuvarlayarak topluluğa gönderir. Küçük bir yarıçap seçtiğinizde ya da Ana Sayfa'ya kaydettiğiniz bir arama küçük bir mesafe içinde baktığında daha yakın bir değer gönderir.
 
 Telefonda seçici seçtiğiniz son merkezde veya sabit bir noktada açılır; bu nedenle önce hedef düğmesine dokunun.
 

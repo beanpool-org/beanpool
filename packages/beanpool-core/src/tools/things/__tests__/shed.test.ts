@@ -309,4 +309,24 @@ describe('the loans view', () => {
         expect(loans[2].backAround).toBeNull();
         expect(thingsLoans(d, null, NOW).map((l) => l.thing.id)).toEqual(['a', 'd']);
     });
+
+    it("a taken-out thing whose Offer is up again (its shop's reopen, the Market's own resume) and in a deal is out or asked for, never \"taken out\" or \"nothing out\"", () => {
+        const deals = [
+            deal('p1', 'pending', { backAround: iso(NOW + 3 * DAY), updatedAt: iso(NOW - DAY) }),
+            deal('p2', 'requested', { updatedAt: iso(NOW - 2 * DAY) }),
+            deal('p3', 'completed'),
+        ];
+        const open = openDealsByPost(deals);
+        const drill = thing('a', 'Drill', { pausedPostId: 'p1' });
+        const ladder = thing('b', 'Ladder', { pausedPostId: 'p2' });
+        const tent = thing('c', 'Tent', { pausedPostId: 'p3' });
+        expect([drill, ladder, tent].map((t) => thingState(t, open))).toEqual(['out', 'asked', 'taken-out']);
+        expect(thingStateLine(drill, open, NOW)).toBe('Out on a loan · back around 23 Oct');
+        expect(thingRowLine(drill, open, NOW)).toBe('Out · due 23 Oct');
+        expect(thingRowLine(ladder, open, NOW)).toBe('Asked to borrow');
+        expect(thingRowLine(tent, open, NOW)).toBe('Taken out of your shop');
+        expect(thingsLoans(doc(drill, ladder, tent), deals, NOW).map((l) => [l.thing.id, l.state, l.backAround, l.since])).toEqual([
+            ['a', 'out', iso(NOW + 3 * DAY), iso(NOW - DAY)], ['b', 'asked', null, iso(NOW - 2 * DAY)],
+        ]);
+    });
 });

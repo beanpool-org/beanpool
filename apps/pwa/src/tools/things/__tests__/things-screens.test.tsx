@@ -234,6 +234,15 @@ async function open(screenName: string, key: string | null = null, over: Partial
     await settle();
     return { props, view };
 }
+/** The page in StrictMode, as main.tsx draws the app: each screen mounted twice. */
+function drawStrict(screenName: string, key: string | null = null) {
+    return render(
+        <StrictMode>
+            <ToolsPage identity={identity} open={{ id: 'things', screen: screenName, key }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()}
+                onGuide={vi.fn()} onAddHomeCard={vi.fn()} now={() => NOW} />
+        </StrictMode>,
+    );
+}
 const settle = async () => { for (let i = 0; i < 6; i++) await act(async () => { await Promise.resolve(); await new Promise((r) => setTimeout(r, 0)); }); };
 const byTestId = (id: string) => screen.queryByTestId(id);
 async function click(id: string) {
@@ -483,6 +492,36 @@ describe('Edit', () => {
         await click('edit-save');
         expect((await keptThing('t-1'))?.photo).toBe(ref);
         expect(await readToolPhoto(OWNER, 'things', ref)).toBe('data:image/jpeg;base64,cGhvdG81');
+    });
+
+    it("Settings, About and Remove my data from the … menu are no leave: on ← what was typed and the photo chosen are still there; Cancel then takes the photo away", async () => {
+        await keep(shed(thing('t-1', 'Ladder')));
+        drawStrict('main');
+        await screen.findByTestId('things-main');
+        await settle();
+        await click('thing-row-t-1');
+        await click('thing-edit');
+        await type('edit-name', 'Ladder, 3 m aluminium');
+        await type('edit-note', 'In the garage, left wall');
+        await click('edit-photo-pick');
+        const ref = picked.refs.at(-1)!;
+        const photo = 'data:image/jpeg;base64,cGhvdG81';
+        for (const [item, panel] of [['tool-menu-about', 'tool-about'], ['tool-menu-settings', 'tool-settings'], ['tool-menu-remove', 'tool-settings']] as const) {
+            await click('tool-menu');
+            await click(item);
+            expect(byTestId(panel), item).not.toBeNull();
+            await click('tools-back');
+            expect(byTestId(panel), item).toBeNull();
+            expect((byTestId('edit-name') as HTMLInputElement).value, item).toBe('Ladder, 3 m aluminium');
+            expect((byTestId('edit-note') as HTMLTextAreaElement).value, item).toBe('In the garage, left wall');
+            expect(byTestId('edit-photo')?.getAttribute('src'), item).toBe(photo);
+            expect(await readToolPhoto(OWNER, 'things', ref), item).toBe(photo);
+        }
+        expect(await keptThing('t-1')).toMatchObject({ name: 'Ladder' });
+        await click('edit-cancel');
+        expect(byTestId('thing-screen')).not.toBeNull();
+        expect(await readToolPhoto(OWNER, 'things', ref)).toBeNull();
+        expect((await keptThing('t-1'))?.photo).toBeUndefined();
     });
 
     it(`a ${THINGS_MAX_ITEMS + 1}st thing and a save past the store's bound are refused in one sentence each; nothing is written`, async () => {
@@ -869,6 +908,101 @@ describe('A thing', () => {
         expect([...server.shopHeld]).toEqual(['post-3']);
         reopenShop();
         expect(['post-1', 'post-2', 'post-3'].map((id) => server.posts.get(id)?.status)).toEqual(['paused', 'paused', 'active']);
+    });
+
+    it("linked while its shop was closed, then the shop reopened: its screen says its Offer is up again, and lent through BeanPool it is Out in its row, on its screen and in Loans, never \"nothing out\"", async () => {
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill')));
+        closeShop('post-1');
+        await open('thing', 't-1');
+        await click('thing-link');
+        await click('thing-link-post-1');
+        expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+        expect(server.asks).toEqual([]);
+        // The reopen puts the Offer back up, as the shop still holds it: nothing in the Tool shed did that.
+        reopenShop();
+        expect(server.posts.get('post-1')?.status).toBe('active');
+        cleanup();
+        await open('thing', 't-1');
+        await waitFor(() => expect(byTestId('thing-offer-live')?.textContent).toBe('Its Offer is up in the Market again.'));
+        expect(byTestId('thing-put-back')).not.toBeNull();
+
+        // Someone borrows it through BeanPool.
+        cleanup();
+        offer('post-1', 'Drill', 'pending', { lendable: true, acceptedAt: iso(NOW - DAY) });
+        server.deals.push({ id: 'tx1', postId: 'post-1', sellerPublicKey: OWNER, buyerPublicKey: 'b', status: 'pending', hours: 3, createdAt: iso(NOW - DAY) });
+        await open('main');
+        await waitFor(() => expect(rows()).toEqual([expect.stringMatching(/^DrillOut · due \d{1,2} [A-Z][a-z]{2}$/)]));
+        await click('things-loans');
+        await waitFor(() => expect(byTestId('loan-row-t-1')).not.toBeNull());
+        expect(within(byTestId('loans-beanpool')!).getByTestId('loan-row-t-1')).toBeTruthy();
+        expect(byTestId('loans-none')).toBeNull();
+        await click('loan-row-t-1');
+        await waitFor(() => expect(byTestId('thing-state')?.textContent).toMatch(/^Out on a loan · back around /));
+        expect(byTestId('thing-deal-note')?.textContent).toBe('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.');
+        expect(['thing-put-back', 'thing-lend', 'thing-delete', 'thing-offer-live'].map((id) => byTestId(id))).toEqual([null, null, null, null]);
+        expect(server.asks).toEqual([]);
+    });
+
+    it("taken out, its Offer up again (the Market's own resume): Put back says so in the shop and asks nothing of the Market", async () => {
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { pausedPostId: 'post-1' })));
+        await open('thing', 't-1');
+        await waitFor(() => expect(byTestId('thing-offer-live')).not.toBeNull());
+        await click('thing-put-back');
+        expect(await keptThing('t-1')).toMatchObject({ postId: 'post-1' });
+        expect(byTestId('thing-state')?.textContent).toBe('In your shop');
+        expect(byTestId('thing-offer-live')).toBeNull();
+        expect(server.asks).toEqual([]);
+    });
+
+    it("taken out, its deals not yet known: Lend and Delete wait for them, as for a thing in the shop", async () => {
+        let release!: () => void;
+        server.dealsGate = new Promise<void>((r) => { release = r; });
+        offer('post-1', 'Drill', 'paused');
+        await keep(shed(thing('t-1', 'Drill', { pausedPostId: 'post-1' })));
+        await open('thing', 't-1');
+        expect(['thing-lend', 'thing-delete'].map((id) => byTestId(id))).toEqual([null, null]);
+        expect(byTestId('thing-put-back')).not.toBeNull();
+        release();
+        await waitFor(() => expect(['thing-lend', 'thing-delete'].filter((id) => byTestId(id) === null)).toEqual([]));
+    });
+
+    it("a panel from the … menu over a thing is no leave: the Lend form keeps its name, and a Delete that lands meanwhile goes back to Your things", async () => {
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { postId: 'post-1' }), thing('t-2', 'Ladder')));
+        drawStrict('main');
+        await screen.findByTestId('things-main');
+        await settle();
+        await click('thing-row-t-2');
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('tool-menu');
+        await click('tool-menu-settings');
+        await click('tools-back');
+        expect((byTestId('thing-lend-name') as HTMLInputElement).value).toBe('Sam');
+        await click('thing-lend-cancel');
+        await click('tools-back');
+
+        await click('thing-row-t-1');
+        let answer = () => {};
+        server.marketGate = new Promise<void>((r) => { answer = r; });
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        await waitFor(() => expect(server.asks).toEqual(['pause post-1']));
+        await click('tool-menu');
+        await click('tool-menu-about');
+        answer();
+        await waitFor(async () => expect(shedThings(await kept()).map((t) => t.id)).toEqual(['t-2']));
+        await settle();
+        // The panel stays where the member put it; behind it, the Delete went back a screen.
+        expect(byTestId('tool-about')).not.toBeNull();
+        await click('tools-back');
+        expect(byTestId('tool-about')).toBeNull();
+        expect(byTestId('things-main')).not.toBeNull();
+        expect(byTestId('thing-missing')).toBeNull();
+        expect(byTestId('thing-row-t-1')).toBeNull();
+        expect(byTestId('thing-row-t-2')).not.toBeNull();
     });
 
     it("Put back while the shop is closed for now says so in the Tool shed's words, never \"couldn't reach\", and changes nothing", async () => {

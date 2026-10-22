@@ -1113,6 +1113,71 @@ describe('A thing', () => {
         expect(['post-1', 'post-2', 'post-3'].map((id) => market.rows.get(id)?.status)).toEqual(['paused', 'paused', 'active']);
     });
 
+    it("linked while its shop was closed, then the shop reopened: its screen says its Offer is up again, and lent through BeanPool it is Out in its row, on its screen and in Loans, never \"nothing out\"", async () => {
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill')));
+        closeShop('post-1');
+        await open('thing', { key: 't-1' });
+        await click('thing-link');
+        await click('thing-link-post-1');
+        expect(text('thing-state')).toContain('Taken out of your shop');
+        expect(market.marketAsks).toEqual([]);
+        // The reopen puts the Offer back up, as the shop still holds it: nothing in the Tool shed did that.
+        reopenShop();
+        expect(market.rows.get('post-1')?.status).toBe('active');
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('thing', { key: 't-1' });
+        expect(text('thing-offer-live')).toBe('Its Offer is up in the Market again.');
+        expect(byTestId('thing-put-back')).not.toBeNull();
+
+        // Someone borrows it through BeanPool.
+        act(() => root.unmount());
+        root = createRoot(host);
+        offer('post-1', 'Drill', 'pending', { lendable: 1, price_type: 'fixed', accepted_at: iso(NOW - DAY) });
+        market.deals.push({ id: 'tx1', postId: 'post-1', sellerPublicKey: ME.publicKey, buyerPublicKey: 'b', status: 'pending', hours: 3, createdAt: iso(NOW - DAY) });
+        await open('main');
+        expect(rows()).toEqual([expect.stringMatching(/^Drill, Out · due \d{1,2} [A-Z][a-z]{2}$/)]);
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('loans');
+        expect(all('[data-testid^="loan-row-"]').map((r) => r.getAttribute('data-testid'))).toEqual(['loan-row-t-1']);
+        expect(byTestId('loans-beanpool')).not.toBeNull();
+        expect(byTestId('loans-none')).toBeNull();
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('thing', { key: 't-1' });
+        expect(text('thing-state')).toMatch(/^Out on a loan · back around /);
+        expect(text('thing-deal-note')).toBe('It is out on a loan through BeanPool. The borrower confirms it is back in the deal.');
+        expect(['thing-put-back', 'thing-lend', 'thing-delete', 'thing-offer-live'].map((id) => byTestId(id))).toEqual([null, null, null, null]);
+        expect(market.marketAsks).toEqual([]);
+    });
+
+    it("taken out, its Offer up again (the Market's own resume): Put back says so in the shop and asks nothing of the Market", async () => {
+        offer('post-1', 'Drill');
+        await keep(shed(thing('t-1', 'Drill', { pausedPostId: 'post-1' })));
+        await open('thing', { key: 't-1' });
+        expect(byTestId('thing-offer-live')).not.toBeNull();
+        await click('thing-put-back');
+        expect(await keptThing('t-1')).toMatchObject({ postId: 'post-1' });
+        expect(text('thing-state')).toContain('In your shop');
+        expect(byTestId('thing-offer-live')).toBeNull();
+        expect(market.marketAsks).toEqual([]);
+    });
+
+    it("taken out, its deals not yet known: Lend and Delete wait for them, as for a thing in the shop", async () => {
+        let release!: () => void;
+        market.dealsGate = new Promise<void>((r) => { release = r; });
+        offer('post-1', 'Drill', 'paused');
+        await keep(shed(thing('t-1', 'Drill', { pausedPostId: 'post-1' })));
+        await open('thing', { key: 't-1' });
+        expect(['thing-lend', 'thing-delete'].map((id) => byTestId(id))).toEqual([null, null]);
+        expect(byTestId('thing-put-back')).not.toBeNull();
+        release();
+        await settle();
+        expect(['thing-lend', 'thing-delete'].filter((id) => byTestId(id) === null)).toEqual([]);
+    });
+
     it("Put back while the shop is closed for now says so in the Tool shed's words, never \"couldn't reach\", and changes nothing", async () => {
         const closed = "Your shop is closed for now, so this can't go back in it yet. Reopen your shop first.";
         offer('post-1', 'Drill');

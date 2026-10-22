@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/ar by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>متجرك — BeanPool members' guide</title>
+    <meta name="description" content="واجهة على حسابك الخاص، للعروض التي تختارها، تحت اسم واحد.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">السوق</a></p>
+        <h1>متجرك</h1>
+        <p class="lede">واجهة على حسابك الخاص، للعروض التي تختارها، تحت اسم واحد.</p>
+        <h2>ما هو المتجر</h2>
+        <p>متجرك واجهة على حسابك الخاص. يضم العروض التي تضعها فيه، تحت اسم واحد، مع بضع كلمات عنه. فاصوليا هذه العروض لك، كما في أي عرض آخر. وهو ليس مؤسسة: لا يحتفظ به أحد غيرك، ولا يُظهر شيئًا لا تُظهره عروضك أصلًا.</p>
+        <p>لديك متجر واحد في كل مجتمع أنت عضو فيه.</p>
+        <h2>فتحه</h2>
+        <p>افتح <strong>متجرك</strong> من بطاقة الرئيسية <strong>متجرك وأدواتك</strong>، أو من <strong>أدوات</strong>. ولوضع البطاقة في الرئيسية، استخدم <strong>تعديل الرئيسية</strong> وأضف <strong>متجرك وأدواتك</strong>.</p>
+        <p>اضغط على <strong>فتح متجري</strong>. وإلى أن تمنحه اسمًا، يُسمّى باسمك: «متجر آنا».</p>
+        <h2>اسمه ونوعه وكلماته</h2>
+        <p>كل واحد من هذه حقل مستقل. املأها بأي ترتيب، أو لا تملأها إطلاقًا:</p>
+        <ul>
+            <li><strong>الاسم</strong>: حتى 60 حرفًا. اتركه فارغًا ليُسمّى باسمك من جديد.</li>
+            <li><strong>النوع</strong>: واحد من أربعة عشر نوعًا، مثل <strong>أدوات ومعدات</strong> أو <strong>إصلاحات</strong> أو <strong>طعام من الحديقة أو المزرعة</strong>. يساعد الجيران على إيجادك، ويحدد الأدوات المعروضة. ولا يغيّر أي شيء آخر.</li>
+            <li><strong>نبذة</strong>: ما هو، في بضع كلمات.</li>
+            <li><strong>طريقة تعاملي</strong>: أين يتم الاستلام، ومتى تعود الأشياء.</li>
+        </ul>
+        <h2>وضع العروض فيه</h2>
+        <p>لا يدخل المتجر إلا عروضك أنت المتاحة للجميع هنا. أما الطلب، أو العرض الموجّه لمجموعة أو لشخص واحد، فيبقى خارجه.</p>
+        <ul>
+            <li><strong>عند تعديل عرض:</strong> علّم على <strong>ضع هذا في متجرك</strong>، أو ألغِ التعليم لإخراج العرض منه.</li>
+            <li><strong>إضافة عروضي الحالية:</strong> في متجرك، علّم على العروض المنشورة لديك بالفعل واضغط على <strong>ضعها في متجري</strong>.</li>
+            <li><strong>من أداة:</strong> عندما تضيف شيئًا من أداة، يكون <strong>ضع هذا في متجرك</strong> معلَّمًا. وإن لم يكن لديك متجر بعد، فيُفتح مع ذلك العرض. ويمكنك تغيير عنوانه أو كلماته في نموذج العرض الجديد وسيبقى داخل المتجر. أما إذا غيّرته تمامًا، أو نشرت شيئًا آخر بدلًا منه، فيُنشر خارج متجرك ويخبرك التطبيق بذلك. ولوضعه فيه، افتحه، واضغط على <strong>تعديل المنشور</strong>، وعلّم على <strong>ضع هذا في متجرك</strong>.</li>
+        </ul>
+        <p>لا يحتوي نموذج العرض الجديد على الخريطة على هذا التعليم بعد. انشر العرض، ثم ضعه في المتجر من شاشة تعديله أو من متجرك.</p>
+        <h2>إغلاقه مؤقتًا</h2>
+        <p>اضغط على <strong>إغلاق مؤقتًا</strong>. ويمكنك أن تحدد متى تعود: بعد أسبوع، أو بعد أسبوعين، أو بعد شهر. تُسحب عروضه من <strong>السوق</strong> وتنتظر. ولا يُضاف شيء إليه وهو مغلق، ولا يمكن إعادة نشر أي من عروضه بمفرده.</p>
+        <p>اضغط على <strong>إعادة فتح متجري</strong> لإعادتها كلها. أما العرض الذي أوقفته بنفسك فيبقى متوقفًا.</p>
+        <h2>إغلاقه</h2>
+        <p>اضغط على <strong>إغلاق متجري</strong>. تبقى عروضه في <strong>السوق</strong> كعروض عادية، أو تنتهي هي أيضًا إذا اخترت <strong>أنهِ عروضه أيضًا</strong>. وتبقى قوائم أدواتك الخاصة على هاتفك. ويمكنك فتح متجر جديد في أي وقت.</p>
+        <p>لا يمكنك إغلاقه، ولا إغلاقه مؤقتًا، ما دامت هناك صفقة على أحد أشيائه مطلوبة أو جارية. ويخبرك التطبيق بعدد الصفقات المفتوحة، مع زر يؤدي إلى <strong>صفقاتي</strong>.</p>
+        <h2>في المجتمع العالمي</h2>
+        <p>يعمل المتجر في المجتمع العالمي بالطريقة نفسها. ومن لم ينضم بعد يرى نوع المتجر وعدد الأشياء فيه، ولا يرى اسمه ولا اسمك أبدًا.</p>
+        <h2>في تطبيق الويب</h2>
+        <p>لا يعرض تطبيق الويب المتاجر بعد.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>نشر عرض أو طلب</strong><span>انشر شيئًا يمكنك فعله أو تقديمه، أو شيئًا تبحث عنه.</span></a></li>
+            <li><a href="my-deals.html"><strong>صفقاتي</strong><span>مكان واحد لكل معاملة تشارك فيها، وكل منشور لديك، وتداولاتك السابقة.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>تصفح السوق</strong><span>ابحث عن العروض والطلبات باستخدام البحث، والتصنيفات، والمسافة.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>الغياب</strong><span>يخفي وضع العطلة عروضك ويوقف الطلبات الجديدة مؤقتًا أثناء غيابك.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 6.</p>
+    </main>
+</body>
+</html>

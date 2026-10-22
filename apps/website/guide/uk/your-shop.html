@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/uk by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ваша крамниця — BeanPool members' guide</title>
+    <meta name="description" content="Вітрина на вашому акаунті для Пропозицій, які ви оберете, під однією назвою.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Ринок</a></p>
+        <h1>Ваша крамниця</h1>
+        <p class="lede">Вітрина на вашому акаунті для Пропозицій, які ви оберете, під однією назвою.</p>
+        <h2>Що таке крамниця</h2>
+        <p>Ваша крамниця — це вітрина на вашому акаунті. У ній зібрані Пропозиції, які ви до неї додали, під однією назвою та з кількома словами про неї. Боби від них — ваші, як і від будь-якої Пропозиції. Це не підприємство: ніхто інший її не веде, і вона не показує нічого, чого ваші Пропозиції не показують самі.</p>
+        <p>У кожній спільноті, де ви є, у вас одна крамниця.</p>
+        <h2>Як її відкрити</h2>
+        <p>Відкрийте <strong>Ваша крамниця</strong> з картки <strong>Ваша крамниця та інструменти</strong> на Головній або з розділу <strong>Інструменти</strong>. Щоб додати картку на Головну, скористайтеся <strong>Редагувати Головну</strong> й додайте <strong>Ваша крамниця та інструменти</strong>.</p>
+        <p>Торкніться <strong>Відкрити мою крамницю</strong>. Доки ви не дасте їй назву, вона зветься за вами: «Крамниця Ани».</p>
+        <h2>Назва, вид і слова про неї</h2>
+        <p>Кожен із цих пунктів — окреме поле. Заповнюйте їх у будь-якому порядку або взагалі не заповнюйте:</p>
+        <ul>
+            <li><strong>Назва</strong>: до 60 символів. Залиште порожнім, щоб її знову називали за вами.</li>
+            <li><strong>Вид</strong>: один із чотирнадцяти, наприклад <strong>Інструменти та обладнання</strong>, <strong>Ремонт</strong> або <strong>Їжа з городу чи ферми</strong>. Це допомагає сусідам знайти вас і визначає, які інструменти показано. Більше нічого не змінює.</li>
+            <li><strong>Про крамницю</strong>: що це таке, кількома словами.</li>
+            <li><strong>Як я домовляюся</strong>: де забрати та коли речі повертаються.</li>
+        </ul>
+        <h2>Як додати до неї Пропозиції</h2>
+        <p>До крамниці потрапляють лише ваші власні Пропозиції для всіх тут. Потреба або Пропозиція для групи чи для однієї людини лишається поза нею.</p>
+        <ul>
+            <li><strong>Коли ви редагуєте Пропозицію:</strong> позначте <strong>Додати до вашої крамниці</strong> або зніміть позначку, щоб прибрати Пропозицію.</li>
+            <li><strong>Додати мої чинні Пропозиції:</strong> у розділі «Ваша крамниця» позначте Пропозиції, які вже опубліковано, і торкніться <strong>Додати їх до моєї крамниці</strong>.</li>
+            <li><strong>З інструмента:</strong> коли ви виставляєте щось з інструмента, <strong>Додати до вашої крамниці</strong> позначено. Якщо крамниці ще немає, вона відкривається разом із цією Пропозицією. На формі нової Пропозиції можна змінити її заголовок чи слова, і вона все одно потрапить до крамниці. Якщо змінити її повністю або опублікувати натомість щось інше, вона з'явиться поза крамницею, і додаток вам про це скаже. Щоб додати її, відкрийте її, торкніться <strong>Редагувати публікацію</strong> і позначте <strong>Додати до вашої крамниці</strong>.</li>
+        </ul>
+        <p>На формі нової Пропозиції на карті такої позначки ще немає. Опублікуйте Пропозицію, а потім додайте її з екрана редагування або з розділу «Ваша крамниця».</p>
+        <h2>Тимчасове закриття</h2>
+        <p>Торкніться <strong>Закрити на час</strong>. Можна вказати, коли ви повернетеся: за тиждень, за два тижні або за місяць. Її Пропозиції зникають з Ринку й чекають. Поки крамниця закрита, нічого не додається, і жодну з її Пропозицій не можна знову виставити окремо.</p>
+        <p>Торкніться <strong>Знову відкрити мою крамницю</strong>, щоб повернути їх усі. Пропозиція, яку ви призупинили самі, залишається призупиненою.</p>
+        <h2>Закриття</h2>
+        <p>Торкніться <strong>Закрити мою крамницю</strong>. Її Пропозиції залишаються на Ринку як звичайні Пропозиції або теж завершуються, якщо ви оберете <strong>Завершити й його Пропозиції</strong>. Ваші приватні списки інструментів залишаються на телефоні. Нову крамницю можна відкрити будь-коли.</p>
+        <p>Закрити її, у тому числі на час, не вийде, поки хтось просить про обмін щодо однієї з її речей або обмін триває. Додаток скаже, скільки обмінів відкрито, і покаже кнопку для переходу до <strong>Мої обміни</strong>.</p>
+        <h2>У глобальній спільноті</h2>
+        <p>У глобальній спільноті крамниця працює так само. Той, хто ще не приєднався, бачить, який це вид крамниці й скільки в ній речей, але ніколи не бачить її назви чи вашої.</p>
+        <h2>У вебдодатку</h2>
+        <p>Вебдодаток поки що не показує крамниць.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>Публікація Пропозиції чи Потреби</strong><span>Запропонуйте те, що ви можете зробити чи віддати, або те, що ви шукаєте.</span></a></li>
+            <li><a href="my-deals.html"><strong>Мої обміни</strong><span>Єдине місце для кожного вашого обміну, кожного активного оголошення та минулих угод.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Перегляд ринку</strong><span>Знаходьте Пропозиції та Потреби за допомогою пошуку, фільтрів і відстані.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Відпустка</strong><span>Режим відпустки приховує ваші Пропозиції та призупиняє нові запити, поки ви відсутні.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 6.</p>
+    </main>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import L from 'leaflet';
 import { RadiusPickerPage } from './RadiusPickerPage';
@@ -75,7 +75,7 @@ describe('RadiusPickerPage', () => {
 
     it('tapping the GPS button calls getCurrentPosition once', () => {
         render(<RadiusPickerPage onApply={noop} onCancel={noop} onReset={noop} />);
-        const gpsButton = screen.getByRole('button', { name: /Center map on my location|Use my location to centre the circle/i });
+        const gpsButton = screen.getByRole('button', { name: 'Center map on my location' });
         fireEvent.click(gpsButton);
         expect(getCurrentPosition).toHaveBeenCalledTimes(1);
     });
@@ -113,6 +113,63 @@ describe('RadiusPickerPage', () => {
         expect(mapInstance.setView).toHaveBeenCalledWith([-37.07, 144.22], 11);
         expect(circleInstance.setLatLng).toHaveBeenCalledWith([-37.07, 144.22]);
         expect(markerInstance.setLatLng).toHaveBeenCalledWith([-37.07, 144.22]);
+    });
+
+    it('late nodeCenter does not overwrite a centre already picked by the user', () => {
+        const { rerender } = render(<RadiusPickerPage onApply={noop} onCancel={noop} onReset={noop} />);
+        const mapInstance = vi.mocked(L.map).mock.results[0]?.value;
+        const markerInstance = vi.mocked(L.marker).mock.results[0]?.value;
+
+        // User taps the map at [10, 20]
+        const mapClickHandler = mapInstance.on.mock.calls.find((call: any[]) => call[0] === 'click')?.[1];
+        expect(mapClickHandler).toBeDefined();
+        act(() => {
+            mapClickHandler({ latlng: { lat: 10, lng: 20 } });
+        });
+
+        mapInstance.setView.mockClear();
+        markerInstance.setLatLng.mockClear();
+
+        // Late nodeCenter arrives
+        rerender(
+            <RadiusPickerPage
+                nodeCenter={{ lat: -37.07, lng: 144.22 }}
+                onApply={noop}
+                onCancel={noop}
+                onReset={noop}
+            />
+        );
+
+        expect(mapInstance.setView).not.toHaveBeenCalledWith([-37.07, 144.22], expect.anything());
+        expect(markerInstance.setLatLng).not.toHaveBeenCalledWith([-37.07, 144.22]);
+    });
+
+    it('user pick via map tap enables Apply and sets chosen coordinates', () => {
+        const onApply = vi.fn();
+        render(<RadiusPickerPage onApply={onApply} onCancel={noop} onReset={noop} />);
+        const mapInstance = vi.mocked(L.map).mock.results[0]?.value;
+        const mapClickHandler = mapInstance.on.mock.calls.find((call: any[]) => call[0] === 'click')?.[1];
+        act(() => {
+            mapClickHandler({ latlng: { lat: -33.8688, lng: 151.2093 } });
+        });
+
+        const applyBtn = screen.getByRole('button', { name: /Apply/i });
+        expect(applyBtn).not.toBeDisabled();
+        fireEvent.click(applyBtn);
+        expect(onApply).toHaveBeenCalledWith(expect.objectContaining({
+            lat: -33.8688,
+            lng: 151.2093,
+        }));
+    });
+
+    it('does not fitBounds on initial mount under StrictMode when no initial place is given', () => {
+        render(
+            <React.StrictMode>
+                <RadiusPickerPage onApply={noop} onCancel={noop} onReset={noop} />
+            </React.StrictMode>
+        );
+        const mapInstance = vi.mocked(L.map).mock.results[0]?.value;
+        expect(mapInstance.fitBounds).not.toHaveBeenCalled();
     });
 
     it('tapping the location words calls getCurrentPosition and does not move the pin via map click', () => {

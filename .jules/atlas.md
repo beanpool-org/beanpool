@@ -250,3 +250,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `isAutomationToken`, `passwordField`, `isAuthFailure`, and `nodeReadLimits` in `apps/manager/src/lib/node-client.ts` were untested directly.
 **Learning:** Testing `nodeReadLimits` with Vitest fake timers (`vi.useFakeTimers()`) verifies timeout promise rejection and `AbortSignal` state propagation when reads exceed `answerMs`.
 **Action:** Continue identifying helper utilities in `apps/manager/src/lib/` for unit test coverage.
+
+## 2026-10-22 - [manager tests] forgetStandby and passwordNeeds2faError unit tests
+**Gap:** `forgetStandby` and `passwordNeeds2faError` helper functions in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage.
+**Learning:** Testing `passwordNeeds2faError` required testing non-403 responses (returns `null`), `password_retired` code (attaches `PASSWORD_RETIRED_HINT`), `password_needs_2fa` code with custom vs default error messages (attaches `PASSWORD_NEEDS_2FA_HINT`), and unrelated 403 error codes.
+**Action:** Continue identifying remaining untested helper functions across `apps/manager/src/lib/`.

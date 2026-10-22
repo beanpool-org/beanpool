@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "മുകളിൽ: പയർ നിങ്ങളുടെ കമ്മ്യൂണിറ്റിയും ഗൈഡുമാണ്, ? ഈ സ്ക്രീനെക്കുറിച്ച് വിശദീകരിക്കുന്നു, സ്ലൈഡറുകൾ ക്രമീകരണങ്ങളാണ്.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "മുകളിൽ: നിങ്ങൾ നിൽക്കുന്ന സ്ക്രീനെക്കുറിച്ച് ? വിശദീകരിക്കുന്നു; ക്രമീകരണങ്ങളിലാണ് മുഴുവൻ ഗൈഡും ഉള്ളത്.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "നിങ്ങളുടെ ആദ്യത്തെ കാർഡുകൾ ചേർക്കുക: ഹോമിൽ ഇടാൻ ഒന്നിൽ ടാപ്പ് ചെയ്യുക. അല്ലെങ്കിൽ പൂർത്തിയായി ടാപ്പ് ചെയ്യുക, പതിവ് അഞ്ച് കാർഡുകളോടെ ഹോം ആരംഭിക്കും.",
-  "Step {n} of {total}": "ഘട്ടം {n} / {total}"
+  "Step {n} of {total}": "ഘട്ടം {n} / {total}",
+  "Things you own and might lend, and who has them.": "നിങ്ങളുടെ ഉടമസ്ഥതയിലുള്ളതും കടം നൽകാവുന്നതുമായ സാധനങ്ങൾ, അവ ആരുടെ കൈയിലാണ് എന്നതും.",
+  "Tool shed": "ഉപകരണ ഷെഡ്",
+  "When something lent outside BeanPool is due back": "BeanPool-ന് പുറത്ത് കടം നൽകിയ എന്തെങ്കിലും തിരികെ വരേണ്ട സമയം",
+  "Your shop and tools": "നിങ്ങളുടെ ഷോപ്പും ഉപകരണങ്ങളും",
+  "Your shop, and things you can do on your own.": "നിങ്ങളുടെ ഷോപ്പ്, നിങ്ങൾക്ക് സ്വന്തമായി ചെയ്യാവുന്ന കാര്യങ്ങളും.",
+  "Your things, and what is out.": "നിങ്ങളുടെ സാധനങ്ങൾ, പുറത്തുള്ളവയും.",
+  "a drill": "ഒരു ഡ്രിൽ",
+  "a ladder": "ഒരു ഏണി",
+  "a tent": "ഒരു ടെന്റ്",
+  "{name} is due back": "{name} തിരികെ വരേണ്ട സമയമായി",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "{n} സാധനം · നിങ്ങളുടെ ഷെഡ്ഡിൽ",
+    "other": "{n} സാധനങ്ങൾ · എല്ലാം നിങ്ങളുടെ ഷെഡ്ഡിൽ"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "{n} സാധനം · {listed} നിങ്ങളുടെ ഷോപ്പിൽ · {out} പുറത്ത്",
+    "other": "{n} സാധനങ്ങൾ · {listed} നിങ്ങളുടെ ഷോപ്പിൽ · {out} പുറത്ത്"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "{n} സാധനം · {out} പുറത്ത്",
+    "other": "{n} സാധനങ്ങൾ · {out} പുറത്ത്"
+  }
 }

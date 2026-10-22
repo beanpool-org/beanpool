@@ -85,6 +85,45 @@ describe('RadiusPickerPage', () => {
         expect(screen.getByText('Use my location to centre the circle')).toBeInTheDocument();
     });
 
+    it('with no place and no pick, Apply is disabled and shows hint, and does not call onApply with [20, 0]', () => {
+        const onApply = vi.fn();
+        render(<RadiusPickerPage onApply={onApply} onCancel={noop} onReset={noop} />);
+        const applyBtn = screen.getByRole('button', { name: /Apply/i });
+        expect(applyBtn).toBeDisabled();
+        expect(screen.getByText('Tap the map or use your location to choose a centre')).toBeInTheDocument();
+        fireEvent.click(applyBtn);
+        expect(onApply).not.toHaveBeenCalled();
+    });
+
+    it('late nodeCenter re-centres map, circle, and marker when user has not picked', () => {
+        const { rerender } = render(<RadiusPickerPage onApply={noop} onCancel={noop} onReset={noop} />);
+        const mapInstance = vi.mocked(L.map).mock.results[0]?.value;
+        const circleInstance = vi.mocked(L.circle).mock.results[0]?.value;
+        const markerInstance = vi.mocked(L.marker).mock.results[0]?.value;
+
+        rerender(
+            <RadiusPickerPage
+                nodeCenter={{ lat: -37.07, lng: 144.22 }}
+                onApply={noop}
+                onCancel={noop}
+                onReset={noop}
+            />
+        );
+
+        expect(mapInstance.setView).toHaveBeenCalledWith([-37.07, 144.22], 11);
+        expect(circleInstance.setLatLng).toHaveBeenCalledWith([-37.07, 144.22]);
+        expect(markerInstance.setLatLng).toHaveBeenCalledWith([-37.07, 144.22]);
+    });
+
+    it('tapping the location words calls getCurrentPosition and does not move the pin via map click', () => {
+        render(<RadiusPickerPage onApply={noop} onCancel={noop} onReset={noop} />);
+        const wordsButton = screen.getByRole('button', { name: 'Use my location to centre the circle' });
+        const markerInstance = vi.mocked(L.marker).mock.results[0]?.value;
+        fireEvent.click(wordsButton);
+        expect(getCurrentPosition).toHaveBeenCalledTimes(1);
+        expect(markerInstance.setLatLng).not.toHaveBeenCalled();
+    });
+
     it('does not fitBounds on initial mount when no initial place is given', () => {
         render(<RadiusPickerPage onApply={noop} onCancel={noop} onReset={noop} />);
         const mapInstance = vi.mocked(L.map).mock.results[0]?.value;

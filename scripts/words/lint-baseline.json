@@ -5,9 +5,6 @@
     "apps/native/app/(tabs)": 4,
     "apps/native/components": 1,
     "apps/native/components/showcase": 6,
-    "apps/native/utils": 3,
-    "apps/pwa/src": 4,
-    "apps/pwa/src/components": 49,
-    "apps/pwa/src/pages": 116
+    "apps/native/utils": 3
   }
 }

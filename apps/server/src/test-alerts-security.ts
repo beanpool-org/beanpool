@@ -32,7 +32,9 @@
  *     alert book a handful of times at most, its next write carries their count. A standby takes a role
  *     grant and tells it on its own channel only; once it is the main server, its standby days leave the card and banner.
  *  5e. An owner re-keys an admin through the real routes: told to the owners as a key replaced (sec.keys) and pushed to
- *     them, naming nobody; a moderator's re-key tells nothing.
+ *     them, naming nobody, and not counted again as an account moved. That admin re-keys a member, then a moderator: one
+ *     line counting the day's accounts moved, "by an admin" (sec.members), pushed to the owners; a moderator's re-key
+ *     tells nothing as a key replaced. An owner's re-key is counted on a line of its own, "by an owner".
  *
  * Run (as test-all does, through scripts/run-server-suites.mjs):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-alerts-security.ts
@@ -717,27 +719,30 @@ async function main(): Promise<void> {
     // Through the real routes: an owner issues the code and binds the new key, from the phone with Manage pressed just now
     // (an owner's or admin's re-key asks the fresh proof, #1984 confirmation R1). Told to the owners as sec.keys, under the
     // owner's own bound (the re-key drops the old key's push tokens: the owners are pushed); a moderator's re-key tells
-    // nothing; nobody named.
+    // nothing as a key replaced. Every other re-key moves a whole account to a key the one who acted could hold (Fable's
+    // re-decision of #1807, 22 Oct, 6b): the owners are told a count of the day, sec.members, as for removals, in words
+    // naming who acted, never whose account; an owner's or admin's re-key is not counted again. Nobody named.
     alerts.resetAlertsForTests();
     advance(2 * HOUR);
-    const C5E = ['ReyRekeyedS', 'MacModRekeyS'];
-    const [rey, mac] = C5E.map(() => pubkey());
-    for (const [i, pk] of [rey, mac].entries()) {
+    const C5E = ['ReyRekeyedS', 'MacModRekeyS', 'PiaPlainRekeyS', 'MolModRekeyS'];
+    const [rey, mac, pia, mol] = C5E.map(() => pubkey());
+    for (const [i, pk] of [rey, mac, pia, mol].entries()) {
         db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)`)
             .run(pk, C5E[i], new Date().toISOString(), owner, 'TEST');
         db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     }
-    grantNodeRole(rey, 'admin', owner);
-    grantNodeRole(mac, 'moderator', owner);
+    // By the password, so the owner's own hour of pushes is untouched: a re-key counted twice would be told, and seen.
+    for (const [pk, role] of [[rey, 'admin'], [mac, 'moderator'], [mol, 'moderator']] as const) grantNodeRole(pk, role, 'owner:password');
     putPushTokenRow(rey, 'ExponentPushToken[rey-admin]', 'android');
     await settle(300);
-    const rekey = async (pk: string) => {
-        const issued = await call('POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {}, asOwnerPhone());
+    const rekey = async (pk: string, as = asOwnerPhone) => {
+        const issued = await call('POST', `/api/local/admin/members/${pk}/rekey/issue-code`, {}, as());
         const fresh = pubkey();
-        const done = await call('POST', `/api/local/admin/members/${pk}/rekey/complete`, { code: issued.json?.code, newPubkey: fresh }, asOwnerPhone());
+        const done = await call('POST', `/api/local/admin/members/${pk}/rekey/complete`, { code: issued.json?.code, newPubkey: fresh }, as());
         await settle(300);
         return { issued: issued.status, done: done.status, error: done.json?.error ?? issued.json?.error, fresh };
     };
+    const moved = () => historyOf('sec.members');
     const hK = topicHits().length;
     const pK = ownerPushes().length;
     const keysBefore = historyOf('sec.keys').length;
@@ -752,12 +757,42 @@ async function main(): Promise<void> {
         `5e. the owners pushed at once (${JSON.stringify(toK)})`);
     assert(topicHits().length === hK + 1 && /An admin's key was replaced by a re-key, by an owner\./.test(topicHits().at(-1)?.body ?? ''),
         `5e. one line on the channel (${topicHits().length - hK})`);
-    const r2 = await rekey(mac);
+    assert(moved().length === 0, `5e. an admin's re-key is not counted again as an account moved (${JSON.stringify(moved().map((e) => e.detail))})`);
+
+    // The admin just re-keyed now moves a plain member's account, then a moderator's, from a computer's key session.
+    const asReyAdmin = () => ({ 'x-admin-session': session(r1.fresh, 'admin') });
+    const hM = topicHits().length;
+    const pM = ownerPushes().length;
+    const rP = await rekey(pia, asReyAdmin);
+    assert(rP.issued === 200 && rP.done === 200 && heldNodeRoleOf(rP.fresh) === null && historyOf('sec.keys').length === keysBefore + 1,
+        `5e. an admin re-keys a member through the routes, told as no key replaced (${rP.issued} ${rP.done} ${rP.error ?? ''})`);
+    assert(moved().length === 1 && /^A member's account was moved to a new phone in the last day, by an admin\.$/.test(moved()[0]?.detail ?? ''),
+        `5e. the owners are told one account moved, by an admin (${JSON.stringify(moved().map((e) => e.detail))})`);
+    const toM = ownerPushes().slice(pM).flatMap((x) => x.to);
+    assert(ownerPushes().length === pM + 1 && toM.includes('ExponentPushToken[olive-owner]') && toM.includes('ExponentPushToken[xav-new-owner]')
+        && !toM.includes('ExponentPushToken[rey-admin]'), `5e. pushed to the owners (${JSON.stringify(toM)})`);
+    assert(topicHits().length === hM + 1 && /A member's account was moved to a new phone in the last day, by an admin\./.test(topicHits().at(-1)?.body ?? '')
+        && /members removed or moved/.test(String(topicHits().at(-1)?.headers.title ?? '')),
+        `5e. one line on the channel, titled as moved too, not only removed (${topicHits().length - hM} ${topicHits().at(-1)?.headers.title})`);
+    const r2 = await rekey(mac, asReyAdmin);
     assert(r2.done === 200 && heldNodeRoleOf(r2.fresh) === 'moderator' && historyOf('sec.keys').length === keysBefore + 1,
         `5e. a moderator's re-key tells nothing as a key replaced (${r2.done} ${r2.error ?? ''})`);
+    assert(moved().length === 1 && /^2 members' accounts were moved to a new phone in the last day, by an admin\.$/.test(moved()[0]?.detail ?? ''),
+        `5e. it is counted on the day's line, in place of the first: one line, never one per account (${JSON.stringify(moved().map((e) => e.detail))})`);
+    assert(ownerPushes().length === pM + 2 && /2 members' accounts were moved/.test(topicHits().at(-1)?.body ?? ''),
+        `5e. pushed and on the channel with its count (${ownerPushes().length - pM}, ${topicHits().at(-1)?.body.split('\n')[2]})`);
+
+    // The owner's own count is a line of its own, in its words.
+    const rO = await rekey(mol);
+    assert(rO.done === 200 && heldNodeRoleOf(rO.fresh) === 'moderator' && historyOf('sec.keys').length === keysBefore + 1,
+        `5e. an owner re-keys a moderator (${rO.done} ${rO.error ?? ''})`);
+    assert(moved().length === 2 && /^A member's account was moved to a new phone in the last day, by an owner\.$/.test(moved()[0]?.detail ?? '')
+        && /^2 members' accounts were moved to a new phone in the last day, by an admin\.$/.test(moved()[1]?.detail ?? ''),
+        `5e. told as moved by an owner, on a line of its own (${JSON.stringify(moved().map((e) => e.detail))})`);
     const c5e = [...topicHits().slice(hK).map((h) => JSON.stringify(h.headers) + h.body), JSON.stringify(alerts.getAlertsStatus()),
         ...ownerPushes().slice(pK).map((p) => p.title + p.body)];
-    assert(!c5e.some((p) => C5E.some((c) => p.includes(c)) || [rey, mac, r1.fresh, r2.fresh].some((k) => p.includes(k.slice(0, 12)))),
+    assert(!c5e.some((p) => C5E.some((c) => p.includes(c))
+        || [rey, mac, pia, mol, r1.fresh, r2.fresh, rP.fresh, rO.fresh].some((k) => p.includes(k.slice(0, 12)))),
         '5e. no member or key in any of these lines, pushes or the status');
 
     // ── 6. The server's shell: beanpool recover run as a real process, its notice delivered as index.ts's watch does ──

@@ -64,8 +64,14 @@ function readLentTo(raw: unknown, ours: boolean): ThingLentTo | undefined {
     const name = ours ? [...raw.name].slice(0, THINGS_NAME_CHARS).join('') : raw.name;
     const since = raw.since;
     const backAround = typeof raw.backAround === 'string' ? raw.backAround : undefined;
+    const {
+        name: _name,
+        since: _since,
+        backAround: _backAround,
+        ...unknownKeys
+    } = raw;
     return {
-        ...raw,
+        ...(ours ? unknownKeys : raw),
         name,
         since,
         ...(backAround !== undefined ? { backAround } : {}),
@@ -97,8 +103,26 @@ function readThing(raw: unknown, ours: boolean): Thing | null {
     const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : createdAt;
     const gone = raw.gone === true ? true : undefined;
 
+    const {
+        id: _id,
+        name: _name,
+        category: _cat,
+        condition: _cond,
+        replacementValue: _rep,
+        lendTerms: _terms,
+        lendMaxDays: _lmd,
+        ownerNote: _note,
+        photo: _photo,
+        postId: _post,
+        lentTo: _lent,
+        createdAt: _ca,
+        updatedAt: _ua,
+        gone: _gone,
+        ...unknownKeys
+    } = raw;
+
     return {
-        ...raw,
+        ...(ours ? unknownKeys : raw),
         id: raw.id,
         name,
         ...(category !== undefined ? { category } : {}),

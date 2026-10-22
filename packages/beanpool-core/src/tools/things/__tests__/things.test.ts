@@ -149,6 +149,66 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
         expect(item.customItemProp).toBe(42);
     });
 
+    it('strips invalid known fields on v1 items while preserving genuine unknown extension fields', () => {
+        const raw = {
+            v: 1,
+            things: [
+                {
+                    id: 't-1',
+                    name: 'Hammer',
+                    category: 12345, // invalid type
+                    condition: 999, // invalid type
+                    lendMaxDays: 9999, // out of bounds
+                    replacementValue: 50, // invalid type
+                    lendTerms: ['no abuse'], // invalid type
+                    ownerNote: false, // invalid type
+                    photo: 42, // invalid type
+                    postId: null, // invalid type
+                    gone: 'yes', // invalid boolean
+                    lentTo: 'not-an-object', // invalid lentTo
+                    createdAt: '2026-10-01T00:00:00.000Z',
+                    updatedAt: '2026-10-01T00:00:00.000Z',
+                    genuineExtensionProp: 'preserved',
+                },
+                {
+                    id: 't-2',
+                    name: 'Drill',
+                    lentTo: {
+                        name: 'Alice',
+                        since: '2026-10-01T00:00:00.000Z',
+                        backAround: 12345, // invalid backAround type
+                        extraLentProp: 'kept',
+                    },
+                    createdAt: '2026-10-01T00:00:00.000Z',
+                    updatedAt: '2026-10-01T00:00:00.000Z',
+                },
+            ],
+        };
+        const read = readThingsDoc(raw);
+        const item1 = read.things[0];
+        expect(item1.id).toBe('t-1');
+        expect(item1.name).toBe('Hammer');
+        expect(item1.category).toBeUndefined();
+        expect(item1.condition).toBeUndefined();
+        expect(item1.lendMaxDays).toBeUndefined();
+        expect(item1.replacementValue).toBeUndefined();
+        expect(item1.lendTerms).toBeUndefined();
+        expect(item1.ownerNote).toBeUndefined();
+        expect(item1.photo).toBeUndefined();
+        expect(item1.postId).toBeUndefined();
+        expect(item1.gone).toBeUndefined();
+        expect(item1.lentTo).toBeUndefined();
+        expect(item1.genuineExtensionProp).toBe('preserved');
+
+        const item2 = read.things[1];
+        expect(item2.id).toBe('t-2');
+        expect(item2.lentTo).toBeDefined();
+        expect(item2.lentTo?.name).toBe('Alice');
+        expect(item2.lentTo?.since).toBe('2026-10-01T00:00:00.000Z');
+        expect(item2.lentTo?.backAround).toBeUndefined();
+        expect(item2.lentTo?.extraLentProp).toBe('kept');
+    });
+
     it('handles newer version (v > 1) by keeping it whole without truncation or field dropping', () => {
         const things: Thing[] = Array.from({ length: 105 }, (_, i) => ({
             id: `t-${i}`,

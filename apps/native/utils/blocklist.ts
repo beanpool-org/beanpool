@@ -19,6 +19,12 @@
  * app comes back ({@link retryPendingReports}). It goes only to that community, whichever the phone is set to by then,
  * and only signed by the key that made it ({@link sendReport}): a node files a report as whoever signs it, so never by
  * the next account on the phone.
+ *
+ * And the community keeps the block for the account (POST /api/blocks, the web app's route, apps/server routes/blocks.ts),
+ * so it stops delivering the blocked member's messages (Marty, 23 Oct, design message-a-friend Q5): {@link syncBlocks}
+ * brings the list the community the phone is set to keeps for the account in line with the phone's, after each block and
+ * unblock, at start and as the app comes back. The phone's own list stays the one the screens read: it holds offline,
+ * and on a community whose node has no block list.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -26,7 +32,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { onAccountOnPhone } from './account-on-phone';
 import { loadIdentity } from './identity';
 import { signedPost } from './node-post';
-import { blockedUsersStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
+import { blockedUsersStoreKey, communityBlocksStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
 
 export const BLOCKLIST_UPDATED_EVENT = 'beanpool_blocklist_updated';
 
@@ -234,29 +240,8 @@ export async function blockUser(
             await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(newList));
             if (generation === accountGeneration) cached = { owner, list: newList };
 
-            // Apple Guideline 1.2: Blocking must notify developer of inappropriate content
-            if (reporterPubkey && reporterPubkey !== owner) {
-                console.warn('[blocklist] Not reporting the block: the reporter is not the account on this phone');
-            } else if (reporterPubkey) {
-                // Made at the community the phone is set to now, where the member blocked, and sent only there.
-                const community = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
-                if (!community) {
-                    console.warn('[blocklist] Not reporting the block: the phone is set to no community');
-                } else {
-                    const report: PendingReport = { reporterPubkey, community, targetPubkey, reason, postId, timestamp: Date.now() };
-                    try {
-                        if (!(await sendReport(report))) await queueReportForRetry(report);
-                    } catch (err) {
-                        if (isFinalReportRefusal(err)) {
-                            // Refused for good (a post no longer there): the block stands, nothing is queued.
-                            console.warn('[blocklist] The community refused the report sent with the block; not retrying:', err);
-                        } else {
-                            console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
-                            await queueReportForRetry(report);
-                        }
-                    }
-                }
-            }
+            // The report and the block go to the community side by side: neither waits for the other's answer.
+            await Promise.all([reportBlock(owner, targetPubkey, reporterPubkey, reason, postId), syncBlocks()]);
 
             if (generation === accountGeneration) DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
             return true;
@@ -268,7 +253,37 @@ export async function blockUser(
 }
 
 /**
- * Unblocks a single user for the account on this phone, and dispatches a global event.
+ * Apple Guideline 1.2: Blocking must notify developer of inappropriate content. The report a block of `targetPubkey` by
+ * `owner` sends, when it names a reporter: queued when the node didn't take it.
+ */
+async function reportBlock(owner: string, targetPubkey: string, reporterPubkey: string | undefined, reason: string, postId?: string): Promise<void> {
+    if (reporterPubkey && reporterPubkey !== owner) {
+        console.warn('[blocklist] Not reporting the block: the reporter is not the account on this phone');
+    } else if (reporterPubkey) {
+        // Made at the community the phone is set to now, where the member blocked, and sent only there.
+        const community = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
+        if (!community) {
+            console.warn('[blocklist] Not reporting the block: the phone is set to no community');
+        } else {
+            const report: PendingReport = { reporterPubkey, community, targetPubkey, reason, postId, timestamp: Date.now() };
+            try {
+                if (!(await sendReport(report))) await queueReportForRetry(report);
+            } catch (err) {
+                if (isFinalReportRefusal(err)) {
+                    // Refused for good (a post no longer there): the block stands, nothing is queued.
+                    console.warn('[blocklist] The community refused the report sent with the block; not retrying:', err);
+                } else {
+                    console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
+                    await queueReportForRetry(report);
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Unblocks a single user for the account on this phone, takes it off the community's list ({@link syncBlocks}), and
+ * dispatches a global event.
  */
 export async function unblockUser(targetPubkey: string): Promise<boolean> {
     if (!targetPubkey) return false;
@@ -285,6 +300,7 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
                 cached = { owner, list: newList };
                 DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
             }
+            await syncBlocks();
             return true;
         }
     } catch (e) {
@@ -309,10 +325,173 @@ export async function clearBlocklist(): Promise<boolean> {
             cached = { owner, list: [] };
             DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, []);
         }
+        // Takes off the community's list the blocks this phone put there, and no other (a block made in the web app stays).
+        await syncBlocks();
         return true;
     } catch (e) {
         console.error('[blocklist] Failed to clear blocklist', e);
         return false;
+    }
+}
+
+// ── the list the community keeps for the account ─────────────────────────────────────────────────────────────────
+
+const BLOCKS_PATH = '/api/blocks';
+const BLOCKS_REMOVE_PATH = '/api/blocks/remove';
+/** The most keys a community keeps on one member's list (apps/server engine/member-blocks.ts MEMBER_BLOCKS_MAX), and so the most one request names. */
+const COMMUNITY_BLOCKS_MAX = 500;
+/** How long a community that refused a change for good, or has no block list (a node from before it), is left alone. */
+const BLOCKS_WAIT_MS = 24 * 60 * 60 * 1000;
+/** A key as every community keeps it (apps/server engine/member-key.ts): one in any other spelling, or the owner's own, has the whole list refused. */
+const MEMBER_KEY = /^[0-9a-f]{64}$/;
+
+/**
+ * What this phone knows of one community's list for one account: `on`, keys this phone put there that the community's
+ * answer showed it holds; `sent`, keys sent whose answer never came, which it may hold; `waitUntil`, after a refusal
+ * asking again won't soon change, when it may be asked again.
+ */
+interface BlocksAt {
+    on: string[];
+    sent: string[];
+    waitUntil?: number;
+}
+
+/** What a change met: the keys on the community's list after it; `later`, ask again at the next sync; `wait`, not for a day. */
+type ChangeAnswer = string[] | 'later' | 'wait';
+
+let syncing: Promise<void> = Promise.resolve();
+
+/**
+ * Brings the block list the community the phone is set to keeps for the account on the phone (routes/blocks.ts) in line
+ * with the phone's: each key on the phone's list that the community hasn't answered it holds is added, and each this
+ * phone put there that is no longer on the phone's list is taken off. A key on the community's list that this phone
+ * never put there (a block made in the web app) is never touched. Nothing is sent when nothing changed.
+ *
+ * - Each community the member is on with this phone gets the phone's list; the first time, every block from before this
+ *   build, in one request (a key the community has no row for, which a list skips, goes again on its own, as the web
+ *   app's move sends it). An unblock reaches each community this phone put that block on, when the phone is next there.
+ * - No answer (no connection, a timeout, a server error, 401, 408, 425, 429): asked again at the next sync. A block whose
+ *   answer never came may be on the list, so it is taken off all the same when the member unblocks.
+ * - Any other refusal (404 or 405 from a node with no block list, a 403, the community's limit): that community is not
+ *   asked again for a day. The phone's own block stands throughout.
+ * - Only ever the account's own: sent to the community the phone is set to as the sync starts, each request signed by the
+ *   key of the account whose list it is, and only while that account is on the phone. One sync at a time.
+ */
+export function syncBlocks(): Promise<void> {
+    const run = syncing.then(syncBlocksOnce);
+    syncing = run;
+    return run;
+}
+
+async function syncBlocksOnce(): Promise<void> {
+    try {
+        const owner = await accountOnPhone();
+        if (!owner) return;
+        const community = (await AsyncStorage.getItem(ANCHOR_STORE_KEY))?.replace(/\/+$/, '');
+        if (!community) return;
+        const list = await listOf(owner);
+        const storeKey = communityBlocksStoreKey(owner);
+        const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
+        const at: BlocksAt = record[community] ?? { on: [], sent: [] };
+        if (at.waitUntil !== undefined && Date.now() < at.waitUntil) return;
+        delete at.waitUntil;
+        const save = async () => {
+            record[community] = at;
+            await AsyncStorage.setItem(storeKey, JSON.stringify(record));
+        };
+        const waitADay = async () => {
+            at.waitUntil = Date.now() + BLOCKS_WAIT_MS;
+            await save();
+        };
+        const took = (keys: string[]) => {
+            at.on = [...new Set([...at.on, ...keys])];
+            at.sent = at.sent.filter(k => !keys.includes(k));
+        };
+
+        for (const key of [...new Set([...at.on, ...at.sent])]) {
+            if (list.includes(key)) continue;
+            const answer = await sendBlockChange(owner, community, BLOCKS_REMOVE_PATH, { targetPubkey: key });
+            if (answer === 'later') return;
+            if (answer === 'wait') return waitADay();
+            at.on = at.on.filter(k => k !== key);
+            at.sent = at.sent.filter(k => k !== key);
+            await save();
+        }
+
+        const adds = [...new Set(list)].filter(k => MEMBER_KEY.test(k) && k !== owner && !at.on.includes(k));
+        if (adds.length === 0) return;
+        // Written down before they go: one whose answer never comes may be on the list, and an unblock takes it off.
+        at.sent = [...new Set([...at.sent, ...adds])];
+        await save();
+        const alone: string[] = adds.length === 1 ? [adds[0]] : [];
+        for (let i = 0; adds.length > 1 && i < adds.length; i += COMMUNITY_BLOCKS_MAX) {
+            const batch = adds.slice(i, i + COMMUNITY_BLOCKS_MAX);
+            const answer = await sendBlockChange(owner, community, BLOCKS_PATH, { targetPubkeys: batch });
+            if (answer === 'later') return;
+            if (answer === 'wait') return waitADay();
+            took(batch.filter(k => answer.includes(k)));
+            alone.push(...batch.filter(k => !answer.includes(k)));
+            await save();
+        }
+        // One key on its own is taken whether or not the community has a row for it (routes/blocks.ts).
+        for (const key of alone) {
+            const answer = await sendBlockChange(owner, community, BLOCKS_PATH, { targetPubkey: key });
+            if (answer === 'later') return;
+            if (answer === 'wait') return waitADay();
+            took([key]);
+            await save();
+        }
+    } catch (e) {
+        console.warn('[blocklist] Could not bring the community\'s block list in line with this phone\'s; tried again at the next sync', e);
+    }
+}
+
+/**
+ * One change to `community`'s list for `owner`, signed by `owner`'s key, which must be the one on the phone: when it
+ * isn't, nothing is sent, and the change waits for its account (`later`).
+ */
+async function sendBlockChange(owner: string, community: string, path: string, body: Record<string, unknown>): Promise<ChangeAnswer> {
+    const signer = await loadIdentity();
+    if (!signer?.privateKey || signer.publicKey !== owner) return 'later';
+    let res: Response;
+    try {
+        res = await withTimeout(signedPost(community, path, body, signer), REPORT_TIMEOUT_MS);
+    } catch {
+        return 'later';
+    }
+    if (res.ok) {
+        // Only the node's own answer counts: a 200 from something in front of it (a Wi-Fi login page) took nothing.
+        try {
+            const parsed = JSON.parse(await res.text());
+            if (parsed?.success === true && Array.isArray(parsed.blocked)) {
+                return parsed.blocked.map((b: { publicKey?: unknown } | null) => b?.publicKey).filter((k: unknown): k is string => typeof k === 'string');
+            }
+        } catch {
+            // Not JSON: not the node's answer.
+        }
+        return 'later';
+    }
+    return res.status >= 400 && res.status < 500 && ![401, 408, 425, 429].includes(res.status) ? 'wait' : 'later';
+}
+
+function keysIn(v: unknown): string[] {
+    return Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [];
+}
+
+function parseCommunityBlocks(raw: string | null): Record<string, BlocksAt> {
+    if (!raw) return {};
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const out: Record<string, BlocksAt> = {};
+        for (const [community, value] of Object.entries(parsed as Record<string, Partial<BlocksAt> | null>)) {
+            if (!value || typeof value !== 'object') continue;
+            out[community] = { on: keysIn(value.on), sent: keysIn(value.sent) };
+            if (typeof value.waitUntil === 'number') out[community].waitUntil = value.waitUntil;
+        }
+        return out;
+    } catch {
+        return {};
     }
 }
 

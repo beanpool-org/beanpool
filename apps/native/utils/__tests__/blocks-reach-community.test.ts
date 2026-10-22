@@ -158,7 +158,7 @@ beforeEach(async () => {
         if (missing) return reply(missing, null, 'Not Found');
         const list = listAt(community, signer);
         const path = url.slice(community.length);
-        let extra: Record<string, unknown> = {};
+        let extra: Record<string, unknown>;
         if (path === '/api/blocks' && typeof body.targetPubkey === 'string') {
             extra = { added: list.has(body.targetPubkey) ? [] : [body.targetPubkey] };
             list.add(body.targetPubkey);
@@ -434,12 +434,14 @@ describe('only ever the account\'s own', () => {
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkeys: [STRANGER, OUTSIDER] } }]);
         expect([...listAt(NODE, ben.publicKey)]).toEqual([]);
 
-        // Back on the phone, Ana's go, each on its own, signed by her.
+        // Back on the phone, Ana's go, signed by her: the list again (the community answered it holds neither), then each
+        // on its own.
         await app.signOut(ben);
         await app.restore(ana);
         net.sent = [];
         await app.syncBlocks();
         expect(blockChanges()).toEqual([
+            { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkeys: [STRANGER, OUTSIDER] } },
             { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: STRANGER } },
             { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: OUTSIDER } },
         ]);

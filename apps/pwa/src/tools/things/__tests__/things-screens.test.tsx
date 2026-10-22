@@ -13,10 +13,14 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, readThingsDoc, shedThings, toolDocBytes, type Thing, type ThingsDoc } from '@beanpool/core';
+import {
+    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, shedThings, toolDocBytes, type Thing, type ThingsDoc,
+} from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../../pages/ToolsPage';
 import { TOOL_APPS } from '../../index';
+import { ToolDocNotKept, ToolDocTooBig } from '../../builder';
 import { readToolPhoto, readToolRecord, resetToolStoreForTest, writeToolRecord } from '../../store';
+import { keep as keepThings } from '../parts';
 import { memoryIndexedDB, MemoryIDBKeyRange } from '../../../lib/memory-indexeddb';
 import { resetAccountEpochForTest } from '../../../lib/account-epoch';
 import { backToEnglish, bypassing, showIn } from '../../../words-xx.test-support';
@@ -46,6 +50,13 @@ vi.mock('../../photos', async (importOriginal) => {
             return { dataUrl: `data:image/jpeg;base64,cGhvdG8${picked.count}`, width: 800, height: 600 };
         }),
     };
+});
+
+// This browser's store, as when it can't keep a write (no IndexedDB, a full disk): `on` refuses the document's writes.
+const storeFails = vi.hoisted(() => ({ on: false }));
+vi.mock('../../store', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../../store')>();
+    return { ...real, keepToolDoc: async (...a: Parameters<typeof real.keepToolDoc>) => (storeFails.on ? false : real.keepToolDoc(...a)) };
 });
 
 const OWNER = 'things-web-owner';
@@ -141,6 +152,7 @@ beforeEach(() => {
     server.down = false;
     server.dealsDown = false;
     server.dealsGate = null;
+    storeFails.on = false;
     info.value = { profile: 'local', features: { beans: true } };
     picked.count = 0;
     picked.cancel = false;
@@ -550,6 +562,99 @@ describe('A thing', () => {
         expect((await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
         expect(byTestId('things-main')).not.toBeNull();
         expect(server.paused).toEqual([]);
+    });
+
+    it("an Offer paused elsewhere after the screen opened: Take out reads it first, so the thing is taken out, never \"couldn't reach\"", async () => {
+        offer('post-1', 'Ladder');
+        await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1' })));
+        await open('thing', 't-1');
+        server.posts.get('post-1')!.status = 'paused';
+        await click('thing-take-out');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(server.paused).toEqual([]);
+        expect(await keptThing('t-1')).toMatchObject({ pausedPostId: 'post-1' });
+        expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+    });
+
+    /** A shed with `first` in it and things to fill it, `room` bytes under the store's bound. */
+    function shedWithRoom(first: Thing, room: number): ThingsDoc {
+        const target = TOOL_LIMITS.docBytes - room;
+        const big = (i: number) => thing(`f-${i}`, 'n'.repeat(80), { lendTerms: 't'.repeat(300), ownerNote: 'o'.repeat(500), replacementValue: 'r'.repeat(40) });
+        const small = (i: number) => thing(`f-${i}`, 'n'.repeat(80));
+        // The last thing's note: a letter more is a byte more, so it takes up all that is left but `room`.
+        const last = (k: number) => thing('f-last', 'Odds and ends', { ownerNote: 'o'.repeat(1 + k) });
+        const fill: Thing[] = [];
+        while (toolDocBytes(shed(first, ...fill, big(fill.length), last(0))) <= target) fill.push(big(fill.length));
+        while (toolDocBytes(shed(first, ...fill, small(fill.length), last(0))) <= target) fill.push(small(fill.length));
+        const doc = shed(first, ...fill, last(target - toolDocBytes(shed(first, ...fill, last(0)))));
+        expect(toolDocBytes(doc)).toBe(target);
+        return doc;
+    }
+    const FULL = 'Your Tool shed is full: it keeps up to 64 KB. Take out something you no longer have, or shorten some notes.';
+
+    it("at the store's bound, lend, take out and link say the shed is full before the server is asked anything; nothing changes", async () => {
+        offer('post-1', 'Ladder');
+        const listed = thing('t-1', 'Ladder', { postId: 'post-1' });
+        // Lent to Sam, back in a week: more than the 40 bytes left.
+        const full = shedWithRoom(listed, 40);
+        expect(toolDocBytes(lendOutside(full, 't-1', 'Sam', backAroundIn(NOW, 7), NOW))).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        await keep(full);
+        const before = await kept();
+        expect(toolDocBytes(before)).toBe(TOOL_LIMITS.docBytes - 40);
+        await open('thing', 't-1');
+        const asked = server.requests.length;
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('thing-lend-back-7');
+        await click('thing-lend-save');
+        expect([server.paused, server.posts.get('post-1')?.status, server.requests.slice(asked)]).toEqual([[], 'active', []]);
+        expect(await kept()).toEqual(before);
+        expect(byTestId('thing-refused')?.textContent).toBe(FULL);
+        expect(byTestId('thing-state')?.textContent).toBe('In your shop');
+
+        // Taken out, its Offer's id is kept as pausedPostId: 6 bytes more than the 3 left.
+        cleanup();
+        await keep(shedWithRoom(listed, 3));
+        const before2 = await kept();
+        await open('thing', 't-1');
+        const asked2 = server.requests.length;
+        await click('thing-take-out');
+        expect([server.paused, server.posts.get('post-1')?.status, server.requests.slice(asked2)]).toEqual([[], 'active', []]);
+        expect(await kept()).toEqual(before2);
+        expect(byTestId('thing-refused')?.textContent).toBe(FULL);
+
+        // Linked (no server step): its Offer's id is more than the 10 bytes left, and the shed is said to be full.
+        cleanup();
+        await keep(shedWithRoom(thing('t-1', 'Ladder'), 10));
+        const before3 = await kept();
+        await open('thing', 't-1');
+        await click('thing-link');
+        await click('thing-link-post-1');
+        expect(byTestId('thing-refused')?.textContent).toBe(FULL);
+        expect(await kept()).toEqual(before3);
+    });
+
+    it("a change this browser couldn't keep says so in its own words, never that the shed is full", async () => {
+        offer('post-1', 'Ladder');
+        await keep(shed(thing('t-1', 'Ladder')));
+        await open('thing', 't-1');
+        await click('thing-link');
+        storeFails.on = true;
+        await click('thing-link-post-1');
+        storeFails.on = false;
+        expect(byTestId('thing-refused')?.textContent).toBe("Couldn't save it in this browser. Try again.");
+        expect((await keptThing('t-1'))?.postId).toBeUndefined();
+    });
+
+    it("keep: past the bound it never asks the host; the host's own size refusal is the shed full; anything else is not kept", async () => {
+        const set = vi.fn(async (_next: ThingsDoc) => {});
+        const over = shedWithRoom(thing('t-1', 'Ladder'), 0);
+        const setting = (s: typeof set) => ({ doc: { get: () => over, set: s } }) as unknown as Parameters<typeof keepThings>[0];
+        expect(await keepThings(setting(set), lendOutside(over, 't-1', 'Sam', null, NOW))).toBe('too-big');
+        expect(set).not.toHaveBeenCalled();
+        expect(await keepThings(setting(set), shed(thing('t-1', 'Ladder')))).toBeNull();
+        expect(await keepThings(setting(vi.fn(async () => { throw new ToolDocTooBig(70_000, 65_536); })), shed())).toBe('too-big');
+        expect(await keepThings(setting(vi.fn(async () => { throw new ToolDocNotKept(); })), shed())).toBe('not-kept');
     });
 
     it("in the shop: until its deals are known, nothing that would pause its Offer or delete it; deals that can't be read say so", async () => {

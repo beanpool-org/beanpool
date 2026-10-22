@@ -10,13 +10,14 @@
  * - Out on a loan through BeanPool, or asked for: the deal's words; it is answered and returned in the deal itself.
  *
  * Every change that asks the community's server (pause, resume) waits for its answer: when there is none, nothing
- * changes and the screen says so. Never a false success.
+ * changes and the screen says so. Never a false success. A change that would take the shed past the store's bound is
+ * said before the server is asked anything, as Edit does, and nothing changes.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     BACK_AROUND_DAYS, THINGS_NAME_CHARS, backAroundChip, backAroundIn, findThing, forgetOffer, lendOutside, linkOffer, markBack,
-    offersToLink, openDealsByPost, removeThing, setListed, t, takeOutOfShop, thingCategory, thingConditionName, thingListDraft,
-    thingState, thingStateLine, tn,
+    offersToLink, openDealsByPost, removeThing, setListed, shedFits, shedTooBigLine, t, takeOutOfShop, thingCategory,
+    thingConditionName, thingListDraft, thingState, thingStateLine, tn,
     type ThingsScreenProps, type ToolOwnOffer, type ToolPostStatus, type ToolPriceHint,
 } from '@beanpool/core';
 import {
@@ -26,6 +27,7 @@ import { keep, useDeals } from './parts';
 
 /** Said when the community's server didn't answer: nothing changed. */
 const unreached = () => t("Couldn't reach your community's server, so nothing changed. Try again when you're online.");
+const notKept = () => t("Couldn't save it on this phone. Try again.");
 
 export function ThingScreen({ host, params }: ThingsScreenProps) {
     const doc = host.doc.get();
@@ -92,8 +94,28 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
             setBusy(false);
         }
     };
+    /** Keep a changed document: true once kept; else the screen says why not (the shed is full, or it wasn't kept). */
     const write = async (next: Parameters<typeof keep>[1]) => {
-        if (!await keep(host, next)) setRefused(t("Couldn't save it on this phone. Try again."));
+        const why = await keep(host, next);
+        if (why) setRefused(why === 'too-big' ? shedTooBigLine() : notKept());
+        return why === null;
+    };
+    /**
+     * Whether a change that makes the document bigger fits the store's bound, checked before the server is asked anything
+     * (as Edit checks): one that doesn't says the shed is full, and nothing changes, here or in the Market.
+     */
+    const fits = (next: Parameters<typeof keep>[1]) => {
+        if (shedFits(next)) return true;
+        setRefused(shedTooBigLine());
+        return false;
+    };
+    /**
+     * Its Offer out of the Market while the thing is away or deleted. The server pauses only a live Offer, so one already
+     * paused or gone (here or elsewhere) is left as the Market has it.
+     */
+    const pauseOffer = async (offerId: string) => {
+        const status = await host.posts.status(offerId);
+        if (status !== 'paused' && status !== 'gone') await host.posts.pause(offerId);
     };
 
     const list = () => {
@@ -102,8 +124,10 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         setListedNote(true);
     };
     const takeOut = () => act(async () => {
-        await host.posts.pause(postId!);
-        await write(takeOutOfShop(host.doc.get(), id, host.now()));
+        const next = takeOutOfShop(host.doc.get(), id, host.now());
+        if (!fits(next)) return;
+        await pauseOffer(postId!);
+        await write(next);
     });
     const putBack = () => act(async () => {
         const paused = thing.pausedPostId ?? postId!;
@@ -117,20 +141,13 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         setOfferStatus('active');
         await write(setListed(host.doc.get(), id, paused, host.now()));
     });
-    /**
-     * Its Offer out of the Market while the thing is away or deleted. The server pauses only a live Offer, so one already
-     * paused or gone (here or elsewhere) is left as the Market has it.
-     */
-    const pauseOffer = async (offerId: string) => {
-        const status = await host.posts.status(offerId);
-        if (status !== 'paused' && status !== 'gone') await host.posts.pause(offerId);
-    };
     const lend = () => act(async () => {
         if (!lending || !lending.name.trim()) return;
-        if (postId) await pauseOffer(postId);
         const now = host.now();
-        await write(lendOutside(host.doc.get(), id, lending.name, lending.days ? backAroundIn(now, lending.days) : null, now));
-        setLending(null);
+        const next = lendOutside(host.doc.get(), id, lending.name, lending.days ? backAroundIn(now, lending.days) : null, now);
+        if (!fits(next)) return;
+        if (postId) await pauseOffer(postId);
+        if (await write(next)) setLending(null);
     });
     const backHome = () => act(async () => {
         const now = host.now();
@@ -148,10 +165,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const remove = () => act(async () => {
         if (postId) await pauseOffer(postId);
         const photo = thing.photo;
-        if (!await keep(host, removeThing(host.doc.get(), id, host.now()))) {
-            setRefused(t("Couldn't save it on this phone. Try again."));
-            return;
-        }
+        if (!await write(removeThing(host.doc.get(), id, host.now()))) return;
         if (photo) await host.photos.remove(photo).catch(() => {});
         host.back();
     });

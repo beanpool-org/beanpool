@@ -3,7 +3,7 @@
  * that says whether it was kept. The rules themselves are core's (packages/beanpool-core/src/tools/things/shed.ts).
  */
 import { useEffect, useState } from 'react';
-import type { ThingsDoc, ThingsScreenProps, ToolDealSummary } from '@beanpool/core';
+import { shedFits, type ThingsDoc, type ThingsScreenProps, type ToolDealSummary } from '@beanpool/core';
 
 type Host = ThingsScreenProps['host'];
 
@@ -27,12 +27,21 @@ export function useDeals(host: Host): { deals: ToolDealSummary[] | null; failed:
 /** A new thing's id: the time and a few random letters, unique on this phone and any other the member uses. */
 export const newThingId = (now: number) => `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
-/** Keep a changed document: true once the host has it, false when it couldn't (the screen says so). */
-export async function keep(host: Host, next: ThingsDoc): Promise<boolean> {
+/** Why a changed document wasn't kept: past the store's bound (the shed is full), or the host couldn't keep it. */
+export type NotKept = 'too-big' | 'not-kept';
+
+/**
+ * Keep a changed document: null once the host has it, else why not (the screen says which). One past the store's bound
+ * (core's shedFits, the bound the host refuses at) is never handed to the host, so the shed is said to be full, never
+ * "Try again".
+ */
+export async function keep(host: Host, next: ThingsDoc): Promise<NotKept | null> {
+    if (!shedFits(next)) return 'too-big';
     try {
         await host.doc.set(next);
-        return true;
-    } catch {
-        return false;
+        return null;
+    } catch (e) {
+        // The host's own size refusal (ToolDocTooBigError in tools/store.ts), should its bound ever be tighter than core's.
+        return e instanceof Error && e.name.startsWith('ToolDocTooBig') ? 'too-big' : 'not-kept';
     }
 }

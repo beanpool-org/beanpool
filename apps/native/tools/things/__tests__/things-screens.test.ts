@@ -211,7 +211,8 @@ vi.mock('../index', async () => {
 
 import { DatabaseSync } from 'node:sqlite';
 import {
-    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, readThingsDoc, setLanguage, shedThings, toolDocBytes, toolLineText, type Thing, type ThingsDoc,
+    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, setLanguage, shedThings, toolDocBytes, toolLineText,
+    type Thing, type ThingsDoc,
 } from '@beanpool/core';
 // The Tool shed's fixtures are never shipped: from core's sources, as the template's generic tests read them.
 import { FIXTURES as SOURCE_FIXTURES } from '../../../../../packages/beanpool-core/src/tools/things/fixtures';
@@ -221,7 +222,8 @@ const FIXTURES = SOURCE_FIXTURES as unknown as { docs: { empty: ThingsDoc; small
 import { TOOL_APPS, phoneTool } from '../../index';
 import { ToolHomeBody, homeLines, safeLine } from '../../frame';
 import { TOOL_DOCS_TABLE } from '../../schema';
-import { readToolDoc, writeToolDoc } from '../../store';
+import { ToolDocTooBigError, readToolDoc, writeToolDoc } from '../../store';
+import { keep as keepThings } from '../parts';
 import { OFFER_DRAFT_KEY } from '../../doors';
 import { toolPhotoUri } from '../../photos';
 import { communityKey } from '../../community';
@@ -816,6 +818,104 @@ describe('A thing', () => {
         expect(readThingsDoc(await kept()).things.find((t) => (t as Thing).id === 't-2')).toMatchObject({ gone: true });
         expect(nav.backs).toBe(1);
         expect(market.paused).toEqual([]);
+    });
+
+    it("an Offer paused elsewhere after the screen opened: Take out reads it first, so the thing is taken out, never \"couldn't reach\"", async () => {
+        offer('post-1', 'Ladder');
+        await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1' })));
+        await open('thing', { key: 't-1' });
+        market.rows.get('post-1')!.status = 'paused';
+        await click('thing-take-out');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(market.paused).toEqual([]);
+        expect(await keptThing('t-1')).toMatchObject({ pausedPostId: 'post-1' });
+        expect(text('thing-state')).toContain('Taken out of your shop');
+    });
+
+    /** A shed with `first` in it and things to fill it, `room` bytes under the store's bound. */
+    function shedWithRoom(first: Thing, room: number): ThingsDoc {
+        const target = TOOL_LIMITS.docBytes - room;
+        const big = (i: number) => thing(`f-${i}`, 'n'.repeat(80), { lendTerms: 't'.repeat(300), ownerNote: 'o'.repeat(500), replacementValue: 'r'.repeat(40) });
+        const small = (i: number) => thing(`f-${i}`, 'n'.repeat(80));
+        // The last thing's note: a letter more is a byte more, so it takes up all that is left but `room`.
+        const last = (k: number) => thing('f-last', 'Odds and ends', { ownerNote: 'o'.repeat(1 + k) });
+        const fill: Thing[] = [];
+        while (toolDocBytes(shed(first, ...fill, big(fill.length), last(0))) <= target) fill.push(big(fill.length));
+        while (toolDocBytes(shed(first, ...fill, small(fill.length), last(0))) <= target) fill.push(small(fill.length));
+        const doc = shed(first, ...fill, last(target - toolDocBytes(shed(first, ...fill, last(0)))));
+        expect(toolDocBytes(doc)).toBe(target);
+        return doc;
+    }
+    const FULL = 'Your Tool shed is full: it keeps up to 64 KB. Take out something you no longer have, or shorten some notes.';
+
+    it("at the store's bound, lend, take out and link say the shed is full before the server is asked anything; nothing changes", async () => {
+        offer('post-1', 'Ladder');
+        const listed = thing('t-1', 'Ladder', { postId: 'post-1' });
+        // Lent to Sam, back in a week: more than the 40 bytes left.
+        const full = shedWithRoom(listed, 40);
+        expect(toolDocBytes(lendOutside(full, 't-1', 'Sam', backAroundIn(NOW, 7), NOW))).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        await keep(full);
+        const before = await kept();
+        expect(toolDocBytes(before)).toBe(TOOL_LIMITS.docBytes - 40);
+        await open('thing', { key: 't-1' });
+        const asked = market.requests.length;
+        await click('thing-lend');
+        await type('thing-lend-name', 'Sam');
+        await click('thing-lend-back-7');
+        await click('thing-lend-save');
+        expect([market.paused, market.rows.get('post-1')?.status, market.requests.slice(asked)]).toEqual([[], 'active', []]);
+        expect(await kept()).toEqual(before);
+        expect(text('thing-refused')).toBe(FULL);
+        expect(text('thing-state')).toContain('In your shop');
+
+        // Taken out, its Offer's id is kept as pausedPostId: 6 bytes more than the 3 left.
+        act(() => root.unmount());
+        root = createRoot(host);
+        await keep(shedWithRoom(listed, 3));
+        const before2 = await kept();
+        await open('thing', { key: 't-1' });
+        await click('thing-take-out');
+        expect([market.paused, market.rows.get('post-1')?.status]).toEqual([[], 'active']);
+        expect(await kept()).toEqual(before2);
+        expect(text('thing-refused')).toBe(FULL);
+
+        // Linked (no server step): its Offer's id is more than the 10 bytes left, and the shed is said to be full.
+        act(() => root.unmount());
+        root = createRoot(host);
+        await keep(shedWithRoom(thing('t-1', 'Ladder'), 10));
+        const before3 = await kept();
+        await open('thing', { key: 't-1' });
+        await click('thing-link');
+        await click('thing-link-post-1');
+        expect(text('thing-refused')).toBe(FULL);
+        expect(await kept()).toEqual(before3);
+    });
+
+    it("a change the phone couldn't keep says so in its own words, never that the shed is full", async () => {
+        offer('post-1', 'Ladder');
+        await keep(shed(thing('t-1', 'Ladder')));
+        await open('thing', { key: 't-1' });
+        await click('thing-link');
+        const run = disk.db.runAsync;
+        disk.db.runAsync = async (sql: string, params?: unknown[]) => {
+            if (sql.includes('INSERT INTO tool_docs')) throw new Error('database or disk is full');
+            return run(sql, params);
+        };
+        await click('thing-link-post-1');
+        disk.db.runAsync = run;
+        expect(text('thing-refused')).toBe("Couldn't save it on this phone. Try again.");
+        expect((await keptThing('t-1'))?.postId).toBeUndefined();
+    });
+
+    it("keep: past the bound it never asks the host; the host's own size refusal is the shed full; anything else is not kept", async () => {
+        const set = vi.fn(async (_next: ThingsDoc) => {});
+        const over = shedWithRoom(thing('t-1', 'Ladder'), 0);
+        const setting = (s: typeof set) => ({ doc: { get: () => over, set: s } }) as unknown as Parameters<typeof keepThings>[0];
+        expect(await keepThings(setting(set), lendOutside(over, 't-1', 'Sam', null, NOW))).toBe('too-big');
+        expect(set).not.toHaveBeenCalled();
+        expect(await keepThings(setting(set), shed(thing('t-1', 'Ladder')))).toBeNull();
+        expect(await keepThings(setting(vi.fn(async () => { throw new ToolDocTooBigError(70_000, 65_536); })), shed())).toBe('too-big');
+        expect(await keepThings(setting(vi.fn(async () => { throw new Error('database or disk is full'); })), shed())).toBe('not-kept');
     });
 
     it("in the shop: until its deals are known, nothing that would pause its Offer or delete it; deals that can't be read say so", async () => {

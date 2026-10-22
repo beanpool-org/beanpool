@@ -100,6 +100,8 @@ const net = {
     up: true,
     /** Communities whose node has no block list: each answers this status, with no JSON. */
     noList: new Map<string, number>(),
+    /** Communities that refuse block changes, with the node's own refusal: every change, or only the adds. */
+    refuse: new Map<string, { status: number; code?: string; addsOnly?: boolean }>(),
     /** The next block request is taken by the community, and its answer never reaches the phone. */
     loseNextAnswer: false,
     /** Something in front of the community (a Wi-Fi login page) answers every block request with a 200 of its own. */
@@ -135,6 +137,7 @@ beforeEach(async () => {
     rn.emit.mockClear();
     net.up = true;
     net.noList.clear();
+    net.refuse.clear();
     net.loseNextAnswer = false;
     net.portal = false;
     net.hold = null;
@@ -168,6 +171,8 @@ beforeEach(async () => {
         const community = url.slice(0, url.indexOf('/api/'));
         const missing = net.noList.get(community);
         if (missing) return reply(missing, null, 'Not Found');
+        const refusal = net.refuse.get(community);
+        if (refusal && !(refusal.addsOnly && url.endsWith('/remove'))) return reply(refusal.status, { error: 'Refused', code: refusal.code });
         const list = listAt(community, signer);
         const path = url.slice(community.length);
         let extra: Record<string, unknown>;
@@ -466,6 +471,75 @@ describe('a community whose node has no block list', () => {
             expect([...listAt(NODE, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
         });
     }
+});
+
+describe('a community that refuses a block (a 403, its limit)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-23T08:00:00Z'));
+    });
+
+    for (const refusal of [{ status: 403 }, { status: 409, code: 'block_limit', addsOnly: true }]) {
+        it(`(${refusal.status}): its blocks wait a day, and an Unblock made meanwhile goes at once`, async () => {
+            const app = await startApp();
+            await app.identity.importIdentity(ana);
+            await app.blockUser(HARASSER, ana.publicKey);
+            await app.blockSyncsEndedForTests();
+
+            net.refuse.set(NODE, refusal);
+            net.sent = [];
+            await app.blockUser(SPAMMER, ana.publicKey);
+            await app.blockSyncsEndedForTests();
+            expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } }]);
+            expect(await app.isUserBlocked(SPAMMER)).toBe(true);
+
+            // A 403 that passed (a Cloudflare one), or the limit, whose answer is "Unblock someone to block another".
+            if (refusal.status === 403) net.refuse.delete(NODE);
+            net.sent = [];
+            await app.syncBlocks();
+            expect(blockChanges()).toEqual([]);
+            await app.unblockUser(HARASSER);
+            await app.blockSyncsEndedForTests();
+            expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+            expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
+
+            // A day on, the block goes.
+            net.refuse.delete(NODE);
+            vi.setSystemTime(new Date(Date.now() + DAY + 1000));
+            net.sent = [];
+            await app.syncBlocks();
+            expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } }]);
+            expect([...listAt(NODE, ana.publicKey)]).toEqual([SPAMMER]);
+        });
+    }
+
+    it('an Unblock it refuses waits a day, and so does every change there', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+
+        net.refuse.set(NODE, { status: 403 });
+        net.sent = [];
+        await app.unblockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+
+        net.refuse.delete(NODE);
+        net.sent = [];
+        for (let i = 0; i < 3; i++) await app.syncBlocks();
+        await app.blockUser(SPAMMER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([]);
+
+        vi.setSystemTime(new Date(Date.now() + DAY + 1000));
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([
+            { at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } },
+            { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } },
+        ]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([SPAMMER]);
+    });
 });
 
 describe('the blocks the phone held before this build', () => {

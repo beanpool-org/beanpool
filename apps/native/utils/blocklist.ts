@@ -352,17 +352,22 @@ const MEMBER_KEY = /^[0-9a-f]{64}$/;
 
 /**
  * What this phone knows of one community's list for one account: `on`, keys this phone put there that the community's
- * answer showed it holds; `sent`, keys sent whose answer never came, which it may hold; `waitUntil`, after a refusal
- * asking again won't soon change, when it may be asked again.
+ * answer showed it holds; `sent`, keys sent whose answer never came, which it may hold. After a refusal asking again
+ * won't soon change: `waitUntil`, when it may be asked anything again (it has no block list, or refused a removal);
+ * `addsWaitUntil`, when it may be sent blocks again (it refused one), while unblocks still go.
  */
 interface BlocksAt {
     on: string[];
     sent: string[];
     waitUntil?: number;
+    addsWaitUntil?: number;
 }
 
-/** What a change met: the keys on the community's list after it; `later`, ask again at the next sync; `wait`, not for a day. */
-type ChangeAnswer = string[] | 'later' | 'wait';
+/**
+ * What a change met: the keys on the community's list after it; `later`, ask again at the next sync; `no list`, a node
+ * with no block list (404, 405), where no change can land; `refused`, any other refusal (a 403, the community's limit).
+ */
+type ChangeAnswer = string[] | 'later' | 'no list' | 'refused';
 
 let syncing: Promise<void> = Promise.resolve();
 
@@ -377,8 +382,10 @@ let syncing: Promise<void> = Promise.resolve();
  *   app's move sends it). An unblock reaches each community this phone put that block on, when the phone is next there.
  * - No answer (no connection, a timeout, a server error, 401, 408, 425, 429): asked again at the next sync. A block whose
  *   answer never came may be on the list, so it is taken off all the same when the member unblocks.
- * - Any other refusal (404 or 405 from a node with no block list, a 403, the community's limit): that community is not
- *   asked again for a day. The phone's own block stands throughout.
+ * - A node with no block list (404, 405): that community is not asked again for a day. Any other refusal (a 403, the
+ *   community's limit) of a block: it is sent no blocks for a day, but unblocks still go, so the blocked member's lines
+ *   are withheld no longer than the member wants (the limit's own answer is "Unblock someone to block another"); of an
+ *   unblock: it is asked nothing for a day. The phone's own block stands throughout.
  * - Only ever the account's own: sent to the community the phone is set to as the sync starts, each request signed by the
  *   key of the account whose list it is, and only while that account is on the phone. One sync at a time.
  */
@@ -404,16 +411,20 @@ async function syncBlocksOnce(): Promise<void> {
         const storeKey = communityBlocksStoreKey(owner);
         const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
         const at: BlocksAt = record[community] ?? { on: [], sent: [] };
-        if (at.waitUntil !== undefined && Date.now() < at.waitUntil) return;
+        const now = Date.now();
+        if (at.waitUntil !== undefined && now < at.waitUntil) return;
         delete at.waitUntil;
+        if (at.addsWaitUntil !== undefined && now >= at.addsWaitUntil) delete at.addsWaitUntil;
         const save = async () => {
             record[community] = at;
             await AsyncStorage.setItem(storeKey, JSON.stringify(record));
         };
-        const waitADay = async () => {
-            at.waitUntil = Date.now() + BLOCKS_WAIT_MS;
+        const waitADay = async (what: 'waitUntil' | 'addsWaitUntil') => {
+            at[what] = Date.now() + BLOCKS_WAIT_MS;
             await save();
         };
+        // A refused block holds back the blocks only; a node with no block list, everything.
+        const addRefused = (answer: 'no list' | 'refused') => waitADay(answer === 'no list' ? 'waitUntil' : 'addsWaitUntil');
         const took = (keys: string[]) => {
             at.on = [...new Set([...at.on, ...keys])];
             at.sent = at.sent.filter(k => !keys.includes(k));
@@ -423,12 +434,13 @@ async function syncBlocksOnce(): Promise<void> {
             if (list.includes(key)) continue;
             const answer = await sendBlockChange(owner, community, BLOCKS_REMOVE_PATH, { targetPubkey: key });
             if (answer === 'later') return;
-            if (answer === 'wait') return waitADay();
+            if (answer === 'no list' || answer === 'refused') return waitADay('waitUntil');
             at.on = at.on.filter(k => k !== key);
             at.sent = at.sent.filter(k => k !== key);
             await save();
         }
 
+        if (at.addsWaitUntil !== undefined) return;
         const adds = [...new Set(list)].filter(k => MEMBER_KEY.test(k) && k !== owner && !at.on.includes(k));
         if (adds.length === 0) return;
         // Written down before they go: one whose answer never comes may be on the list, and an unblock takes it off.
@@ -439,7 +451,7 @@ async function syncBlocksOnce(): Promise<void> {
             const batch = adds.slice(i, i + COMMUNITY_BLOCKS_MAX);
             const answer = await sendBlockChange(owner, community, BLOCKS_PATH, { targetPubkeys: batch });
             if (answer === 'later') return;
-            if (answer === 'wait') return waitADay();
+            if (answer === 'no list' || answer === 'refused') return addRefused(answer);
             took(batch.filter(k => answer.includes(k)));
             alone.push(...batch.filter(k => !answer.includes(k)));
             await save();
@@ -448,7 +460,7 @@ async function syncBlocksOnce(): Promise<void> {
         for (const key of alone) {
             const answer = await sendBlockChange(owner, community, BLOCKS_PATH, { targetPubkey: key });
             if (answer === 'later') return;
-            if (answer === 'wait') return waitADay();
+            if (answer === 'no list' || answer === 'refused') return addRefused(answer);
             took([key]);
             await save();
         }
@@ -492,7 +504,8 @@ async function sendBlockChange(owner: string, community: string, path: string, b
         }
         return 'later';
     }
-    return res.status >= 400 && res.status < 500 && ![401, 408, 425, 429].includes(res.status) ? 'wait' : 'later';
+    if (res.status === 404 || res.status === 405) return 'no list';
+    return res.status >= 400 && res.status < 500 && ![401, 408, 425, 429].includes(res.status) ? 'refused' : 'later';
 }
 
 function keysIn(v: unknown): string[] {
@@ -509,6 +522,7 @@ function parseCommunityBlocks(raw: string | null): Record<string, BlocksAt> {
             if (!value || typeof value !== 'object') continue;
             out[community] = { on: keysIn(value.on), sent: keysIn(value.sent) };
             if (typeof value.waitUntil === 'number') out[community].waitUntil = value.waitUntil;
+            if (typeof value.addsWaitUntil === 'number') out[community].addsWaitUntil = value.addsWaitUntil;
         }
         return out;
     } catch {

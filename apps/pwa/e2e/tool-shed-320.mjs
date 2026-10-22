@@ -20,7 +20,7 @@
  * Run from apps/pwa: Tailwind reads its config from the working directory. Needs @beanpool/core built.
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global process, console, document, getComputedStyle, window, URL, URLSearchParams */
+/* global process, console, document, getComputedStyle, URL, URLSearchParams */
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';

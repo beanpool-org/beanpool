@@ -177,14 +177,15 @@ vi.mock('../index', async () => {
 
 import { DatabaseSync } from 'node:sqlite';
 import {
-    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, readThingsDoc, setLanguage, shedThings, toolDocBytes, type Thing, type ThingsDoc,
+    THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, readThingsDoc, setLanguage, shedThings, toolDocBytes, toolLineText, type Thing, type ThingsDoc,
 } from '@beanpool/core';
 // The Tool shed's fixtures are never shipped: from core's sources, as the template's generic tests read them.
 import { FIXTURES as SOURCE_FIXTURES } from '../../../../../packages/beanpool-core/src/tools/things/fixtures';
 
 /** The same documents, typed as the app's build of core types them. */
 const FIXTURES = SOURCE_FIXTURES as unknown as { docs: { empty: ThingsDoc; small: ThingsDoc; full: ThingsDoc }; now: number };
-import { TOOL_APPS } from '../../index';
+import { TOOL_APPS, phoneTool } from '../../index';
+import { ToolHomeBody, homeLines, safeLine } from '../../frame';
 import { TOOL_DOCS_TABLE } from '../../schema';
 import { readToolDoc, writeToolDoc } from '../../store';
 import { OFFER_DRAFT_KEY } from '../../doors';
@@ -384,6 +385,29 @@ describe('the Tool shed on the phone', () => {
                 root = createRoot(host);
             }
         }
+    });
+});
+
+// #2366 review: the frame's safeLine and homeLines pass a wordn() line through, and toolLineText draws its plural.
+describe("the frame's count line and the Tool shed's Home card", () => {
+    it('say "1 thing" and "3 things", each in the form its count needs', async () => {
+        const one = shed(thing('t-1', 'Drill'));
+        expect(toolLineText(safeLine(() => THINGS.row(one, NOW))!)).toBe('1 thing · 0 in your shop · 0 out');
+        expect(homeLines(THINGS, one, NOW).map(toolLineText)).toEqual(['1 thing · in your shed']);
+        expect(homeLines(THINGS, FIXTURES.docs.small, NOW).map(toolLineText)).toEqual(['3 things · 1 out']);
+        expect(homeLines(THINGS, FIXTURES.docs.empty, NOW)).toEqual([]);
+
+        await keep(FIXTURES.docs.small);
+        await open('main');
+        expect(text('tool-state')).toBe('3 things · 1 in your shop · 1 out');
+        act(() => root.unmount());
+        root = createRoot(host);
+        await keep(one);
+        await act(async () => {
+            root.render(createElement(ToolHomeBody, { tool: phoneTool('things')!, owner: ME.publicKey, colors: lightColors, now: NOW }) as any);
+        });
+        await settle();
+        expect(byTestId('tool-home-things')?.textContent).toContain('1 thing · in your shed');
     });
 });
 

@@ -252,6 +252,18 @@ describe('a tool this build does not have', () => {
         expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
     });
 
+    // #2366 review: a manifest with no web half fetched the node's copy and kept it in this browser, then said it wasn't here.
+    it('a manifest with node-copy and no web half here asks the node nothing and keeps nothing in this browser', async () => {
+        const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ tool: 'scaffold', doc: { v: 1, items: [] }, updatedAt: '2026-10-20T08:00:00.000Z' }), { status: 200 }));
+        vi.stubGlobal('fetch', fetchSpy);
+        const withCopy: ToolManifest = { ...scaffold.manifest, permissions: ['node-copy'] };
+        draw({ manifest: withCopy, loader: scaffold.loader }, { id: 'scaffold', screen: 'main', key: null }, { apps: {} });
+        expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
+        await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(await readToolRecord(OWNER, 'scaffold')).toBeNull();
+    });
+
     it("the registry as shipped: the Tool shed, core and web half, on the Tools screen's shelf; an id this build doesn't have is not in this version", async () => {
         // The slice that adds a tool's web half changes both lines on purpose (the Tool shed's was T1.3).
         expect(TOOLS.map((m) => m.id)).toEqual(['things']);

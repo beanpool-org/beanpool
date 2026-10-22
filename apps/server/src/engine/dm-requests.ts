@@ -40,6 +40,15 @@
  * A block lifted is the one exception, as lifting it is meant to be: the line kept for the opener during it never reaches
  * the other person, so it no longer counts as the request's one line, and the opener's next line is (openerLinesSince).
  *
+ * ## The switch turned off
+ *
+ * Where requests were on and are turned off, nothing waits: every line goes through, and a request still waiting, or one
+ * that lapsed, is an ordinary chat. One the person ignored, or a removal ignored (dropRequestsOf), stays out of their
+ * lists, their unread count and their badge: that was their decision, or the removal's (PR #2392 review 4354581049). Their
+ * own act brings it back as an ordinary chat, as it accepts one when on ({@link acceptable}), and so does the opener's next
+ * line, which makes it a new request from then, an ordinary chat while off (lineWhileOff), as one after its 30 days is:
+ * nothing is stored or pushed into a chat the person can't find.
+ *
  * ## Pushes
  *
  * The request's first line pushes "{name} wants to message you" instead of "sent you a message", at most once an hour per
@@ -151,6 +160,15 @@ export function requestNeeded(from: string, to: string): boolean {
     `).get({ from, to });
 }
 
+/**
+ * Whether an act of the person a request is for accepts it (their line, their own open of the chat, adding the opener, a
+ * trade between the two): any request not accepted yet, where requests are on. Where they were turned off since, only one
+ * they ignored, the one kind still kept out of their lists then (sortRequestsOut), so their act brings it back.
+ */
+function acceptable(row: RequestRow | undefined): row is RequestRow {
+    return !!row && row.state !== 'accepted' && (requestsOn() || row.state === 'ignored');
+}
+
 /** Accept it: its state, and both people's sockets (the opener's app can write again). After the write commits. */
 function accept(row: RequestRow, now: number): void {
     assertPlainTablesWritable();
@@ -180,9 +198,8 @@ export function openRequest(conversationId: string, from: string, to: string, at
  * is a request waiting for them, asking for it themselves is reaching out to its opener, as writing is, and accepts it.
  */
 export function acceptOnOpen(conversationId: string, who: string, now: number = Date.now()): void {
-    if (!requestsOn()) return;
     const row = rowOf(conversationId);
-    if (row && row.to_pubkey === who && row.state !== 'accepted') accept(row, now);
+    if (acceptable(row) && row.to_pubkey === who) accept(row, now);
 }
 
 /**
@@ -245,9 +262,12 @@ function waitingFor(to: string, what: 'write' | 'react'): string {
  * - any other line of the opener's is refused.
  */
 export function lineThroughRequest(conversationId: string, author: string, now: number = Date.now()): LineThroughRequest {
-    if (!requestsOn()) return DIRECT;
     const row = rowOf(conversationId);
     if (!row || row.state === 'accepted') return DIRECT;
+    if (!requestsOn()) {
+        lineWhileOff(row, author, now);
+        return DIRECT;
+    }
     if (author === row.to_pubkey) {
         accept(row, now);
         return DIRECT;
@@ -272,6 +292,21 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
     return { kind: 'request', to: row.to_pubkey };
 }
 
+/**
+ * A line where requests were turned off since: it goes through, but a request the person ignored is still kept out of
+ * their lists, and the line would be stored where they never look. Their own line accepts it, as when on; the opener's
+ * makes it a new request from then, which is an ordinary chat while off (the header's "The switch turned off"). A
+ * standby, which writes no request, leaves it.
+ */
+function lineWhileOff(row: RequestRow, author: string, now: number): void {
+    if (row.state !== 'ignored' || standbyWritesNothing()) return;
+    if (author === row.to_pubkey) accept(row, now);
+    else if (author === row.from_pubkey) {
+        db.prepare("UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL WHERE conversation_id = ?")
+            .run(iso(now), row.conversation_id);
+    }
+}
+
 /** The refusal of a reaction by the opener of a request still waiting, or null (engine/messaging.ts toggleMessageReaction). */
 export function reactionRefusal(conversationId: string, author: string, now: number = Date.now()): string | null {
     if (!requestsOn()) return null;
@@ -292,16 +327,16 @@ export function reactionRefusal(conversationId: string, author: string, now: num
  * acceptance with the main server's copy.
  */
 export function acceptOnFriendAdd(owner: string, friend: string, now: number = Date.now()): void {
-    if (!requestsOn() || standbyWritesNothing()) return;
+    if (standbyWritesNothing()) return;
     const rows = db.prepare("SELECT * FROM dm_requests WHERE from_pubkey = ? AND to_pubkey = ? AND state != 'accepted'").all(friend, owner) as RequestRow[];
-    for (const row of rows) accept(row, now);
+    for (const row of rows) if (acceptable(row)) accept(row, now);
 }
 
 /** A trade between the two opening its chat (engine/messaging.ts ensureTransactionConversation) accepts a request in it. */
 export function acceptOnTrade(conversationId: string, now: number = Date.now()): void {
-    if (!requestsOn() || standbyWritesNothing()) return;
+    if (standbyWritesNothing()) return;
     const row = rowOf(conversationId);
-    if (row && row.state !== 'accepted') accept(row, now);
+    if (acceptable(row)) accept(row, now);
 }
 
 // ── the lists ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -343,11 +378,15 @@ interface Listed {
  * A member's conversation list (GET /api/messages/conversations): each direct conversation with its `request` (null for an
  * ordinary one), neither side's read marker on one not accepted, and the requests waiting for the viewer taken out into
  * `requests` (at most REQUESTS_LISTED_MAX, and how many in all). A request for the viewer that isn't waiting (ignored,
- * expired, from someone they blocked or who is gone) is in neither. Null where requests are off: the list as it always was.
+ * expired, from someone they blocked or who is gone) is in neither. Where requests are off, `requests` is null and the list
+ * is as it always was, less the requests the viewer ignored (the header's "The switch turned off").
  */
 export function sortRequestsOut<T extends Listed>(viewer: string, convs: T[], now: number = Date.now()):
-    { listed: (T & { request?: RequestView | null })[]; requests: (T & { request: RequestView; addedYou: boolean })[]; count: number } | null {
-    if (!requestsOn()) return null;
+    { listed: (T & { request?: RequestView | null })[]; requests: (T & { request: RequestView; addedYou: boolean })[] | null; count: number } {
+    if (!requestsOn()) {
+        const ignored = ignoredBy(viewer);
+        return { listed: ignored.size === 0 ? convs : convs.filter(c => c.type !== 'dm' || !ignored.has(c.id)), requests: null, count: 0 };
+    }
     const rows = new Map((db.prepare('SELECT * FROM dm_requests WHERE from_pubkey = ? OR to_pubkey = ?').all(viewer, viewer) as RequestRow[])
         .map(r => [r.conversation_id, r]));
     const waiting = new Map(waitingRows(viewer, now).map((r, i) => [r.conversation_id, i]));
@@ -385,12 +424,18 @@ export function withRequestFor<T extends { id: string; type: string }>(conv: T, 
     return out;
 }
 
+/** The requests for `viewer` they ignored (or a removal of their opener ignored). */
+function ignoredBy(viewer: string): Set<string> {
+    return new Set((db.prepare("SELECT conversation_id FROM dm_requests WHERE to_pubkey = ? AND state = 'ignored'").all(viewer) as { conversation_id: string }[])
+        .map(r => r.conversation_id));
+}
+
 /**
  * The conversations `viewer`'s badge and unread count leave out (state-engine.ts getListedUnreadCounts): every request for
- * them they haven't accepted. Empty where requests are off.
+ * them they haven't accepted. Where requests are off, the ones they ignored, which their list leaves out too.
  */
 export function heldFromUnread(viewer: string): Set<string> {
-    if (!requestsOn()) return new Set();
+    if (!requestsOn()) return ignoredBy(viewer);
     return new Set((db.prepare("SELECT conversation_id FROM dm_requests WHERE to_pubkey = ? AND state != 'accepted'").all(viewer) as { conversation_id: string }[])
         .map(r => r.conversation_id));
 }

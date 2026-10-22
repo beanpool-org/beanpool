@@ -410,15 +410,16 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const convs = listWithOwnWithheld(viewer, getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey)));
     // Where requests are on (engine/dm-requests.ts): each direct conversation says whether it is a message request, the
     // ones waiting for the viewer are listed apart in `requests`, and one they ignored, or from someone they blocked, in
-    // neither. Their unread lines are in neither the list's count nor the badge (getListedUnreadCounts).
+    // neither. Their unread lines are in neither the list's count nor the badge (getListedUnreadCounts). Where requests are
+    // off, the list as it always was, less one the viewer ignored while they were on.
     const sorted = sortRequestsOut(viewer, convs);
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
     // A DM's re-keyed people's signed former keys, to someone in it (engine/key-succession.ts withDmFormerKeys).
     const shaped = <C extends { id: string }>(list: C[], counts: Record<string, number>) =>
         withDmFormerKeys(list.map(c => ({ ...withEventChatReaders(c as any), unreadCount: counts[c.id] || 0, mute: mutes.get(c.id) ?? null })), viewer);
-    const conversations = shaped(sorted ? sorted.listed : convs, unreadCounts);
-    const requests = sorted && sorted.requests.length > 0 ? shaped(sorted.requests, getUnreadCounts(publicKey)) : [];
+    const conversations = shaped(sorted.listed, unreadCounts);
+    const requests = sorted.requests && sorted.requests.length > 0 ? shaped(sorted.requests, getUnreadCounts(publicKey)) : [];
     // The people in these chats who deleted their accounts, every line of whose is now blanked: the phone blanks the older
     // lines of theirs it holds, which its sync (the newest 50 of each chat) never brings again (accountsDeletedAmong).
     // Only people already listed above as in the caller's chats.
@@ -429,7 +430,7 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
         conversations,
         totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0),
         deletedAccounts: accountsDeletedAmong(others),
-        ...(sorted ? { requests: { count: sorted.count, conversations: requests } } : {}),
+        ...(sorted.requests ? { requests: { count: sorted.count, conversations: requests } } : {}),
     };
 });
 

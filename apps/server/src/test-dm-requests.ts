@@ -31,7 +31,8 @@
  *  15. off by default: a stranger's open and two lines arrive as today, and nothing says requests (R1)
  *  16. the operator turns them on in Settings; then a stranger's open is a request, and a chat opened before stays open
  *  17. a trade's chat and a pending or completed trade go straight through; a trade opening accepts a request (R5, R7)
- *  18. turned off again: a waiting request is an ordinary chat
+ *  18. turned off again: a waiting request is an ordinary chat; one Ann ignored, or a removed member's, stays out of her
+ *      chats and her unread count until one of them writes in it again or she opens it herself
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
  *
@@ -765,12 +766,42 @@ async function localRun(): Promise<void> {
 
     // ── 18. turned off again ────────────────────────────────────────────────────────────────────
     console.log('── 18. turned off again ──');
+    // While on: one Ann ignores (Ike's, Kit's), and one whose opener is removed, which the removal ignores (Jem's).
+    const [ike, jem, kit] = [member('Ike'), member('Jem'), member('Kit')];
+    const ikeConv: string = (await open(ike, ann)).body?.conversation?.id;
+    const jemConv: string = (await open(jem, ann)).body?.conversation?.id;
+    const kitConv: string = (await open(kit, ann)).body?.conversation?.id;
+    for (const [c, s] of [[ikeConv, ike], [jemConv, jem], [kitConv, kit]] as [string, Id][]) await send(c, s);
+    const ignoreIke = await decide(ann, ikeConv, 'ignore');
+    const ignoreKit = await decide(ann, kitConv, 'ignore');
+    attempt(() => adminPruneUser(jem.pk, 'owner:password'));
+    const unreadOn = (await listOf(ann))?.totalUnread;
     const off = await call('POST', null, '/api/local/admin/node/config', { dmRequests: false }, admin);
     const c3 = await send(cyConv, cy);
     await sleep(100);
     const annOff = await listOf(ann);
     assert(off.status === 200 && off.body?.dmRequests === false && c3.status === 200 && inChats(annOff, cyConv) && !('requests' in (annOff ?? {})),
         `off again, Cy's waiting request is an ordinary chat (${show(c3)})`);
+    // What Ann ignored, and what a removal ignored, stays out of her chats, her unread count and her badge (PR #2392 review
+    // 4354581049): only Cy's chat, waiting until now, adds to her unread.
+    const countsOff = attempt(() => getListedUnreadCounts(ann.pk)) ?? { [ikeConv]: 1 };
+    assert(ignoreIke.status === 200 && ignoreKit.status === 200 && rowOf(jemConv)?.state === 'ignored'
+        && ![ikeConv, jemConv, kitConv].some(c => inChats(annOff, c) || c in countsOff)
+        && annOff?.totalUnread === unreadOn + entryOf(annOff, cyConv)?.unreadCount,
+        `the requests ignored while on stay out of her chats and her unread count (unread ${unreadOn} → ${annOff?.totalUnread})`);
+    // Either of them writing again, or Ann asking for the chat herself, brings it back as an ordinary chat, so nothing is
+    // stored or pushed into a chat she can't find.
+    const pushedOff = noticesTo(ann).length;
+    const i2 = await send(ikeConv, ike);
+    const annAsksKit = await open(ann, kit);
+    await sleep(150);
+    const annBack = await listOf(ann);
+    assert(i2.status === 200 && inChats(annBack, ikeConv) && entryOf(annBack, ikeConv)?.unreadCount === 2
+        && JSON.stringify(noticesTo(ann).slice(pushedOff)) === JSON.stringify(['Ike sent you a message']),
+        `Ike writes again: his chat is an ordinary one in her chats, pushed as one (${show(i2)}; ${JSON.stringify(noticesTo(ann).slice(pushedOff))})`);
+    assert(annAsksKit.status === 200 && annAsksKit.body?.conversation?.id === kitConv && inChats(annBack, kitConv) && rowOf(kitConv)?.state === 'accepted',
+        `Ann asks for the chat with Kit herself: it accepts his request, and it is in her chats (${show(annAsksKit)})`);
+    assert(!inChats(annBack, jemConv), 'the removed member\'s stays out');
 }
 
 main().then(() => process.exit(0)).catch((e) => {

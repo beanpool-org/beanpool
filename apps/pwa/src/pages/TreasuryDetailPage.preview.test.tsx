@@ -25,6 +25,10 @@ vi.mock('../lib/sync', () => ({
 vi.mock('../lib/blocklist', () => ({
     getBlockedUsers: vi.fn(() => []),
     onBlocklistUpdated: vi.fn(() => () => {}),
+    // The enterprise page's "…" menu (Block / Unblock).
+    isUserBlocked: vi.fn(() => false),
+    blockUser: vi.fn(async () => true),
+    unblockUser: vi.fn(async () => true),
 }));
 
 vi.mock('../components/EnterpriseDecisions', () => ({

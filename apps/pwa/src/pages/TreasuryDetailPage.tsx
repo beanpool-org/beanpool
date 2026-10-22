@@ -30,6 +30,7 @@ import {
     isAmbiguousAmount, parseAmount, upperCase, type WordKey,
 } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
+import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated } from '../lib/blocklist';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
 import { Sentence } from '../components/Sentence';
@@ -158,6 +159,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const [pledging, setPledging] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
+    // The "…" menu at the foot, with Block (DESIGN-shops-round3-enterprise-shopfront §0 row 11, §3): a member may hide an
+    // enterprise they don't want to see. Not a header button, as it was on the member Trust Profile an enterprise used to
+    // open; none for its keepers on their own enterprise's page.
+    const [showMoreMenu, setShowMoreMenu] = useState(false);
+    const [isBlocked, setIsBlocked] = useState(() => isUserBlocked(pubkey));
+    const [isBlocking, setIsBlocking] = useState(false);
 
     // Discussion Thread State
     const [threadMessages, setThreadMessages] = useState<EnterpriseThreadMessage[]>([]);
@@ -498,6 +505,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     useEffect(() => {
         load();
     }, [load]);
+
+    useEffect(() => {
+        setIsBlocked(isUserBlocked(pubkey));
+        return onBlocklistUpdated(() => setIsBlocked(isUserBlocked(pubkey)));
+    }, [pubkey]);
 
     const loadLedger = useCallback(async (period: 'all' | '30d' | '90d' | '365d' = ledgerPeriod) => {
         if (isEffectivePreview) {
@@ -891,6 +903,39 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const balance = detail?.balance ?? 0;
     const name = detail?.name || t('Community Enterprise');
+
+    const mayBlock = !isEffectivePreview && viewerIsMember && !isKeeperOfThis;
+    const handleBlock = async () => {
+        if (isBlocking || !identity) return;
+        if (!window.confirm(t('Block {name}?\n\nThis will instantly hide all posts, offers, and messages from {name}, and notify moderation.', { name }))) return;
+        try {
+            setIsBlocking(true);
+            // The reason goes to the node as written (moderators read it), not in the member's language.
+            await blockUser(pubkey, identity.publicKey, 'Blocked from the enterprise page');
+            setIsBlocked(true);
+            setShowMoreMenu(false);
+            alert(t('{name} has been blocked and removed from your feed.', { name }));
+        } catch (e: any) {
+            alert(e?.message || t('Failed to block user. Please try again.'));
+        } finally {
+            setIsBlocking(false);
+        }
+    };
+    const handleUnblock = async () => {
+        if (isBlocking) return;
+        if (!window.confirm(t('Unblock {name}?', { name }))) return;
+        try {
+            setIsBlocking(true);
+            await unblockUser(pubkey);
+            setIsBlocked(false);
+            setShowMoreMenu(false);
+            alert(t('{name} has been unblocked.', { name }));
+        } catch (e: any) {
+            alert(e?.message || t('Failed to unblock. Please try again.'));
+        } finally {
+            setIsBlocking(false);
+        }
+    };
     const avatarUrl = resolveAvatarUrl(detail?.avatar);
     // What the node's P&L summary counts as "came in" is gross; net change is net of the community fee.
     const ledgerFees = ledgerData?.summary
@@ -2578,16 +2623,50 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             )}
                         </div>
 
-                        {/* Report Enterprise Action */}
+                        {/* Report Enterprise Action, and the "…" menu with Block */}
                         {!isEffectivePreview && (
-                            <div className="pt-4 border-t border-nature-200 dark:border-nature-800 flex justify-center">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowReportModal(true)}
-                                    className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
-                                >
-                                    <span aria-hidden="true">🛡️</span> {project ? t('Report Project') : t('Report Enterprise')}
-                                </button>
+                            <div className="pt-4 border-t border-nature-200 dark:border-nature-800">
+                                <div className="flex items-center justify-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowReportModal(true)}
+                                        className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
+                                    >
+                                        <span aria-hidden="true">🛡️</span> {project ? t('Report Project') : t('Report Enterprise')}
+                                    </button>
+                                    {mayBlock && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowMoreMenu((open) => !open)}
+                                            aria-label={t('More options')}
+                                            aria-haspopup="menu"
+                                            aria-expanded={showMoreMenu}
+                                            className="shrink-0 min-h-[48px] min-w-[48px] rounded-full flex items-center justify-center text-lg font-bold text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800 bg-transparent border-none cursor-pointer"
+                                        >
+                                            <span aria-hidden="true">⋯</span>
+                                        </button>
+                                    )}
+                                </div>
+                                {mayBlock && showMoreMenu && (
+                                    <div role="menu" aria-label={t('More options')} className="mt-2 mx-auto max-w-xs rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 overflow-hidden">
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={isBlocked ? handleUnblock : handleBlock}
+                                            disabled={isBlocking}
+                                            className={`w-full min-h-[48px] px-4 py-2 text-left text-sm font-bold flex items-center gap-2 cursor-pointer border-none transition-colors disabled:opacity-60 ${
+                                                isBlocked
+                                                    ? 'bg-transparent text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-800'
+                                                    : 'bg-bp-chip-danger-tint text-bp-chip-danger-ink hover:brightness-95'
+                                            }`}
+                                        >
+                                            <span aria-hidden="true">{isBlocked ? '🛡️' : '🚫'}</span>
+                                            <span className="min-w-0 break-words">
+                                                {isBlocking ? (isBlocked ? t('Unblocking…') : t('Blocking…')) : isBlocked ? t('Unblock {name}', { name }) : t('Block {name}', { name })}
+                                            </span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </>

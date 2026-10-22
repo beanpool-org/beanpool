@@ -67,6 +67,7 @@ function profileReads(hold = false) {
     vi.spyOn(api, 'getRatingsGiven').mockResolvedValue({ ratings: [] } as any);
     vi.spyOn(api, 'getFriends').mockResolvedValue([]);
     vi.spyOn(api, 'getPublicChannels').mockResolvedValue({ channels: [] } as any);
+    vi.spyOn(api, 'vouchMemberApi').mockResolvedValue({ success: true } as any);
 }
 
 beforeEach(() => {

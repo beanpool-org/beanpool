@@ -30,7 +30,7 @@ import {
     approxInstantMs, deviceZone, deviceZoneId, eventAdjustedWords, eventClockBody, eventLinkProblem, eventZoneLine, zoneOptions,
     type EventZoneSource,
 } from '../lib/event-zone';
-import { offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, zoneLabelFor, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type RepeatChoiceKey } from '@beanpool/core';
+import { formatNumber, offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, tn, zoneLabelFor, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields, eventRepeatProblem } from '../components/EventRepeatFields';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
@@ -2432,7 +2432,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 >
                                     <option value="me">{t('Me')}</option>
                                     {keeperOf.map(pk => (
-                                        <option key={pk} value={`ent:${pk}`}>{keeperNames[pk] || `Enterprise ${pk.slice(0, 6)}`}</option>
+                                        <option key={pk} value={`ent:${pk}`}>{keeperNames[pk] || t('Enterprise {id}', { id: pk.slice(0, 6) })}</option>
                                     ))}
                                     {convenorGroups.map(g => (
                                         <option key={g.id} value={`group:${g.id}`}>{g.name}</option>
@@ -2627,7 +2627,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 </p>
                                 <p className="text-[12px] text-nature-700 dark:text-nature-300 m-0">
                                     <Sentence
-                                        text={t("If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.")}
+                                        text={t("If it's at someone's house, use {approximate} to round the location to roughly 100\u00A0m, and put the exact spot in the note for people who are going.")}
                                         parts={{
                                             approximate: <strong>{t('Approximate')}</strong>
                                         }}
@@ -2814,7 +2814,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                                 : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300'
                                         }`}
                                     >
-                                        {t('{days} Days', { days })}
+                                        {tn(days, '{n} Days', '{n} Days')}
                                     </button>
                                 ))}
                             </div>
@@ -2899,18 +2899,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 onChange={e => setNewPostPriceType(e.target.value as 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly')}
                                 className="w-24 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[14px] font-semibold focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 cursor-pointer appearance-auto"
                             >
-                                <option value="fixed">{t('Total')}</option>
-                                <option value="hourly">{t('/ Hr')}</option>
-                                <option value="daily">{t('/ Dy')}</option>
-                                <option value="weekly">{t('/ Wk')}</option>
-                                <option value="monthly">{t('/ Mo')}</option>
+                                <option value="fixed">{t('Total', undefined, 'a price for the whole job')}</option>
+                                <option value="hourly">{t('/ Hr', undefined, 'price per hour')}</option>
+                                <option value="daily">{t('/ Dy', undefined, 'price per day')}</option>
+                                <option value="weekly">{t('/ Wk', undefined, 'price per week')}</option>
+                                <option value="monthly">{t('/ Mo', undefined, 'price per month')}</option>
                             </select>
                             </>)}
                         </div>
 
                         {priceMarked && (
                             <div className="mt-1 mb-3" data-testid="composer-price-line">
-                                <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.price}
+                                <LocalCommunityLine feature="beans" text={t(LOCAL_COMMUNITY_LINES.price)}
                                     onNearYou={onNavigate ? () => onNavigate('home') : undefined}
                                     onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                             </div>
@@ -2926,10 +2926,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 const parsed = read.ok ? read.value : NaN;
                                 if (!isNaN(parsed) && parsed > 0) {
                                     const net = Math.round(parsed * 0.985 * 100) / 100;
-                                    return `1.5% fee: ${newPostType === 'offer' ? 'You will receive' : 'Fulfiller receives'} ${net.toFixed(2)} B. `;
+                                    return newPostType === 'offer'
+                                        ? t('1.5% fee: You will receive {amount} B.', { amount: formatNumber(net, 2) })
+                                        : t('1.5% fee: Fulfiller receives {amount} B.', { amount: formatNumber(net, 2) });
                                 }
-                                return '1.5% transaction fee funds community projects & solvency. ';
-                            })()}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">{t('Learn more ⓘ')}</span>
+                                return t('1.5% transaction fee funds community projects & solvency.');
+                            })()}{' '}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">{t('Learn more ⓘ')}</span>
                             <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1">{t('(100% community owned)')}</span>
                         </p>}
 

@@ -20,8 +20,8 @@
  *  1. The store (rows 6 / reserve 3 / key 2 / newKey 1 / strangers 3 / address 2), with a counting classifier: no
  *     classification on the fast path, one per key, the 60 s memo; newcomers held to their share and the line,
  *     established keys to theirs and the region, strangers as before; the counts exact through expiry and re-spends; the
- *     defaults and the shares by the gateway's allowance; the real sizes (584 newcomer keys reach the line, 200
- *     established keys fill the region).
+ *     defaults and the shares by the gateway's allowance; the real sizes at the floor shares, as at 120 a minute (584
+ *     newcomer keys reach the line, 200 established keys fill the region).
  *  2. The verifier, with stores of its own: the four sentences and the scope for the three classes; who is established
  *     (a member of 4 days, a role holder joined today) and who is not (a member joined today, a visitor's row); a replay
  *     and a forgery 403 with every region full; a route that spends no nonce never refused; a caller with no client held
@@ -37,6 +37,8 @@
  *     held to 5, the line refuses the rest, and the established member and the owner go on.
  *  7. The alert (requests.flood): by class, counts only, formatted; cleared after the 15-minute hold.
  *  8. The security line: at most one an hour per class (2b).
+ *  9. Over HTTPS at 600 a minute: the middleware and /ws pass the allowance, so a newer key is refused at 3,000 and an
+ *     established one at 15,000, not at the floors.
  *
  * Fail-first: run against 49aa3028 (round 1), checks 1, 2, 5, 6 and 7 fail. Round 1 had one members' ceiling,
  * `membersMax`; the HTTPS checks set it to the rows' ceiling too (scaled()), so they measure round 1 at the same size.
@@ -628,6 +630,37 @@ async function dmVisitorsCheck(): Promise<void> {
         `under the real limits the 20 visitors hold 12,000, each refused at its 600: a 29th of the 350,000 line, the reserve untouched (${held} held, rows ${rows})`);
 }
 
+/**
+ * 9. The middleware and /ws pass the gateway's allowance to the store (#2359 review of 087685cd: every other HTTPS check
+ * runs at 120 or 30, where the shares are the floors, so a caller that dropped it stayed green). At 600 a minute, the
+ * manager's "Standard", a newer key's share is 3,000 and an established one's 15,000. Each key's nonces but its last two
+ * are spent straight into the store; those two go over HTTPS, a write and a /ws token, and the next of each is refused
+ * at its share. A caller that passed 120, or nothing, would refuse the first write: the floors are 600 and 3,000.
+ */
+async function allowanceCheck(): Promise<void> {
+    freshNode(600);
+    requestNonces.setLimitsForTests(null);
+    const now = Date.now();
+    const keys = [
+        { who: 'a member joined today', id: makeMember(0), cls: 'newcomer', share: 3_000, ip: '192.0.2.150' },
+        { who: 'a member of 4 days', id: makeMember(4), cls: 'member', share: 15_000, ip: '192.0.2.151' },
+    ] as const;
+    for (const { who, id, cls, share, ip } of keys) {
+        const spender: NonceSpender = { region: 'rows', owner: `k:${id.pubKeyHex}`, established: () => cls === 'member' };
+        for (let i = 0; i < share - 2; i++) requestNonces.consume(`pm-${cls}-${i}`, now, now, spender);
+        const w = await write(id, ip);
+        const ws = await socket(id, ip);
+        assert(w.status === 200 && ws.opened,
+            `at 600 a minute ${who} holding ${(share - 2).toLocaleString('en')} still writes and opens /ws (${w.status} ${w.error ?? ''}, ${ws.status})`);
+        const over = await write(id, ip);
+        const wsOver = await socket(id, ip);
+        assert(over.status === 503 && over.error === KEY_SHARE_ERROR && over.retryAfter === '60' && !wsOver.opened && wsOver.status === 503,
+            `its next write is 503 in the words for its own app, and its next /ws 503 (${over.status} "${over.error ?? ''}", ${wsOver.status})`);
+        const noted = (requestNonces.pressure() as unknown as Record<string, { share: number }>)[cls]?.share;
+        assert(noted === share, `the store refused it at its share of ${share.toLocaleString('en')} (${noted})`);
+    }
+}
+
 // ─── 7. The alert ───────────────────────────────────────────────────────────────────────────
 
 const flood = (told: AlertEvent[]) => told.filter((e) => e.key === 'requests.flood');
@@ -733,6 +766,7 @@ async function main(): Promise<void> {
     try {
         await alertChecks();
         await section('6. HTTPS: 20 DM-visitor keys can\'t fill the members\' region', dmVisitorsCheck);
+        await section('9. HTTPS at 600 a minute: the middleware and /ws give the store the allowance, and the shares follow it', allowanceCheck);
     } finally {
         try { requestNonces.setLimitsForTests(null); } catch { /* a store without limits to put back */ }
     }

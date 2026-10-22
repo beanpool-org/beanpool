@@ -71,6 +71,15 @@ export const LEND_TERMS_LIMIT: TextLimit = limitOf(300);
  * characters. Shown, never parsed, never moved: settled between the two people (DESIGN-shops-and-tools-fable.md §0 row 9).
  */
 export const REPLACEMENT_VALUE_LIMIT: TextLimit = limitOf(40);
+/**
+ * A shop's own name (DESIGN-shops-and-tools-fable.md §9.1): 60 characters. With none, the apps call it "<the owner's
+ * name>'s shop" in the reader's language.
+ */
+export const SHOP_NAME_LIMIT: TextLimit = limitOf(60);
+/** What a shop is, in its owner's words: 300 characters. */
+export const SHOP_BLURB_LIMIT: TextLimit = limitOf(300);
+/** A shop's "how I deal" (where to pick up, when things come back), in its owner's words: 300 characters. */
+export const SHOP_HOW_TO_DEAL_LIMIT: TextLimit = limitOf(300);
 
 /** The words a refusal of `what` over `limit` says, as both apps show it: "A listing's title can be at most 200 characters. …" */
 export function textTooLongMessage(what: string, limit: TextLimit): string {

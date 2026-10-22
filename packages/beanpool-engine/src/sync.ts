@@ -1016,6 +1016,8 @@ function postOfRow(row: any): MarketplacePost {
             ...(row.lend_terms != null ? { lendTerms: row.lend_terms } : {}),
             ...(row.replacement_value != null ? { replacementValue: row.replacement_value } : {}),
         } : {}),
+        // The shop it is in, as the main server holds it (apps/server engine/sync.ts postShop): none said is none.
+        ...(row.shop_id != null ? { shopId: row.shop_id } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,

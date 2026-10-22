@@ -148,6 +148,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('chat_mutes', 'member_pubkey');
     // Their tools' private copies (engine/tool-state.ts): the new phone gets them back from here.
     move('member_tool_state', 'public_key');
+    // Their shop (engine/shops.ts): the same front window, under the new key. Keyed by its own id, so its listings and its
+    // tombstones need nothing more.
+    move('shops', 'owner_pubkey');
     // And the copies they switched off, each a tombstone `<key>|<tool>` for its 30 days: left on the old key, the new key's
     // read says none was removed (routes/tools.ts deletedAt), and the new phone sends back the copy the member switched
     // off. Each keeps its time, so it goes when it would have. One for a tool the new key now holds, as a copy (its own,

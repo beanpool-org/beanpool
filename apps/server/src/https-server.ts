@@ -147,6 +147,7 @@ import { createKnockRoutes } from './routes/knocks.js';
 import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { createToolRoutes } from './routes/tools.js';
+import { createShopRoutes } from './routes/shops.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
@@ -327,6 +328,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
     '/api/marketplace/posts',        // marketplace board: public only with the visitors' view on (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT)
+    '/api/shops',                    // the shops near a place: public only with the visitors' view on, kind and counts (routes/shops.ts)
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
@@ -379,6 +381,7 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
     /^\/api\/groups\/[^/]+\/picture$/,                      // <img> a group's own picture binary; served only to a URL carrying its key, which only a group read hands out (engine/avatar-keys.ts)
+    /^\/api\/shops\/(?!mine$)[^/]+$/,                      // one shop: public only with the visitors' view on, kind and counts (PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS)
 ];
 
 // Reads on the allowlist that name members, and so are members' reads on every node: off the allowlist, the ordinary
@@ -433,7 +436,13 @@ export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set
 // their own.
 export const PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/marketplace/posts',
+    // The shops near a place (routes/shops.ts): the listings' front windows, a visitor's in kind and counts only.
+    '/api/shops',
 ]);
+/** The same rule for the listings' parameterised reads: one shop (routes/shops.ts), never the signer's own (`mine`). */
+export const PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
+    /^\/api\/shops\/(?!mine$)[^/]+$/,
+];
 
 // Home in one read (routes/home.ts, DESIGN-home-dashboard §5.3): public, like the listings, only on a node that shows
 // visitors the listings and not the people (`guestListingsOnly`, the global node), where an unsigned reader or a key that
@@ -464,7 +473,7 @@ export const COMMUNITY_MEMBERS_ONLY = {
 
 function isListingsRead(path: string): boolean {
     const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
-    return PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed);
+    return PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed));
 }
 
 function isAllowlisted(path: string): boolean {
@@ -484,7 +493,9 @@ function isPublicRead(path: string): boolean {
     if (!isAllowlisted(path)) return false;
     // The switches are read only for these few paths, so no other request pays for them.
     // The listings: public only where visitors get the listings' view.
-    if (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
+    if (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(path) || PUBLIC_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(path))) {
+        return getProfileSwitches().guestListingsOnly;
+    }
     // Home: the visitors' subset is public only there too.
     if (HOME_READ_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
     // The Commons pot: public everywhere but there.
@@ -1851,6 +1862,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createNoticeRoutes(deps),
         createBlockRoutes(deps),
         createToolRoutes(deps),
+        createShopRoutes(deps),
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),

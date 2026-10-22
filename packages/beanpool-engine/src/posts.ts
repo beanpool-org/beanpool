@@ -101,6 +101,12 @@ export interface MarketplacePost {
     replacementValue?: string;
     /** While it is out: when it is due back (the hand-over plus the loan's days, @beanpool/core lendBackAroundOf). Never a name. */
     lendBackAround?: string;
+    /**
+     * The shop it is in (DESIGN-shops-and-tools-fable.md §9.1, slice S1; apps/server engine/shops.ts): an Offer its author put
+     * in their shop, or an enterprise's in the enterprise's. Only on a post in one, so every other post reads byte for byte
+     * as before, and an app that predates shops shows it as the Offer it is.
+     */
+    shopId?: string;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -246,6 +252,10 @@ export interface PostFilter {
     beansOnly?: boolean;
     /** Lendable Offers only (the list route's `lendable=1`): a member's shop, things to borrow. */
     lendable?: boolean;
+    /** The listings in this shop only (the list route's `shop=`, apps/server engine/shops.ts). */
+    shopId?: string;
+    /** The listings in any shop only: the shops near a place are read from them (apps/server routes/shops.ts). */
+    inShop?: boolean;
     includeInactive?: boolean;
     includeAllScopes?: boolean;
     audienceScope?: AudienceScope | string;
@@ -686,6 +696,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         repeatable: Boolean(row.repeatable),
         cashAlsoNeeded: Boolean(row.cash_also_needed),
         ...lendFieldsOf(db, row),
+        ...(typeof row.shop_id === 'string' && row.shop_id ? { shopId: row.shop_id } : {}),
         acceptedBy: row.accepted_by,
         acceptedByCallsign: row.accepted_callsign,
         acceptedAt: row.accepted_at,
@@ -1192,7 +1203,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     authorCardsChanged: null,
     localAuthorCardsChanged: null,
     id: null, ids: null, status: null, updatedAfter: null, syncPage: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
-    lendable: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
+    lendable: null, shopId: null, inShop: null, includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
 
 /** Whether a nearest-first read may search circles before its one pass (CIRCLE_FIELDS). */
@@ -1777,6 +1788,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     // rather than vanishing from the filtered view.
     if (filter?.beansOnly) { where += " AND COALESCE(p.cash_also_needed, 0) = 0"; }
     if (filter?.lendable) { where += " AND p.type = 'offer' AND p.lendable = 1"; }
+    if (filter?.shopId) { where += " AND p.shop_id = ?"; params.push(filter.shopId); }
+    if (filter?.inShop) { where += " AND p.shop_id IS NOT NULL"; }
 
     // Audience scoping (docs/the-commons.md §9, Item 10)
     // Non-members must NEVER see group-scoped or direct-scoped posts in feeds, map pins, search, or direct queries.
@@ -2235,6 +2248,10 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // A lendable Offer's own words, as its price and description are. When it is due back is dropped below, with when it
     // was taken.
     lendable: 'keep', lendMaxDays: 'keep', lendTerms: 'keep', replacementValue: 'keep',
+    // The shop it is in: a visitor sees a shop's card, its kind and its counts, and never its name or owner
+    // (DESIGN-shops-and-tools-fable.md §4, §9.4; apps/server routes/shops.ts). So the id links the listings its owner
+    // put in the one front window, as the shop card does, and no others: their listings outside it stay apart.
+    shopId: 'keep',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.

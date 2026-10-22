@@ -42,6 +42,7 @@ import { photoValueRefusal, routePhotoValueRefusal, routePhotosRefusal, photoRef
 import { assertMayStorePhotoBytes, incomingPhotoBytes } from '../engine/photo-upload-budget.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
+import { respondShopRefusal } from './shop-refusal.js';
 import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
@@ -861,12 +862,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // enterprise's 1,000 are up, against the keeper's own 100 instead (engine/writer-bounds.ts). Checked by the
             // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
             const limit = enterprisePostLimit(treasury, actor);
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite });
+            // `shopId`: the enterprise's own shop, raw: the engine refuses any other (engine/shops.ts assertShopForPost).
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
+            if (respondShopRefusal(ctx, e)) return;
             ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
@@ -887,12 +890,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             assertNotMuted(actor);
             assertNotMuted(treasury);
             const limit = enterprisePostLimit(treasury, actor);
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite });
+            // A Need never goes in a shop: a `shopId` sent is refused in the engine's words, never dropped.
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite, shopId: b.shopId });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
+            if (respondShopRefusal(ctx, e)) return;
             ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });

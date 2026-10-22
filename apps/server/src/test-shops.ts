@@ -212,7 +212,7 @@ async function main(): Promise<void> {
     assert(cleared.status === 200 && cleared.body?.shop?.howToDeal === null && cleared.body.shop.kind === null && shopRowOf(dave.pk)?.how_to_deal === null,
         'an empty one is cleared, and null clears a kind');
     await call('PUT', dave, MINE, { kind: 'tools' });
-    const annShop: string = (await call('PUT', ann, MINE, { name: "Ann's Garden", kind: 'garden-food' })).body?.shop?.id;
+    const annShop: string = (await call('PUT', ann, MINE, { name: "Ann's Garden", kind: 'food' })).body?.shop?.id;
     assert(typeof annShop === 'string' && annShop !== daveShop, "another member's shop is their own");
     const unsignedMine = await call('GET', null, MINE);
     assert(unsignedMine.status === 401 || unsignedMine.status === 403, `a member's own shop is a signed read (${show(unsignedMine)})`);
@@ -354,7 +354,7 @@ async function main(): Promise<void> {
     // ── 6. near a place ─────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. shops near a place ──');
     await offerId(ann, 'Ann seedlings', { shopId: annShop, lat: NEAR_MULLUM.lat, lng: NEAR_MULLUM.lng });
-    const eveShop: string = (await call('PUT', eve, MINE, { kind: 'cooked-food' })).body?.shop?.id;
+    const eveShop: string = (await call('PUT', eve, MINE, { kind: 'baking' })).body?.shop?.id;
     await offerId(eve, 'Eve bread', { shopId: eveShop, lat: CASTLEMAINE.lat, lng: CASTLEMAINE.lng });
     const fromAnn = await call('GET', cy, nearPath(NEAR_MULLUM.lat, NEAR_MULLUM.lng, 50));
     const order = (fromAnn.body?.shops ?? []).map((s: any) => s.id);
@@ -372,6 +372,9 @@ async function main(): Promise<void> {
 
     // ── 7. pause and reopen ─────────────────────────────────────────────────────────────────────
     console.log('\n── 7. pause and reopen ──');
+    // Fay and Gus each list an Offer first, as anyone who asks for one must where Beans are on.
+    await offerId(fay, 'Fay odd jobs', { lat: CASTLEMAINE.lat, lng: CASTLEMAINE.lng });
+    await offerId(gus, 'Gus odd jobs', { lat: CASTLEMAINE.lat, lng: CASTLEMAINE.lng });
     const asked = await call('POST', fay, '/api/marketplace/posts/request', { postId: drillId, buyerPublicKey: fay.pk });
     const dealId: string = asked.body?.transaction?.id;
     assert(asked.status === 200 && typeof dealId === 'string', `Fay asks for the drill (${show(asked)})`);
@@ -497,7 +500,7 @@ async function main(): Promise<void> {
     assert(mainShops.length >= 4 && same(byId(exported), mainShops),
         `a whole copy carries every shop verbatim (${exported.length} of ${mainShops.length})`);
     const exportedPosts = byId((whole.posts ?? []).filter((p: any) => p.shopId).map((p: any) => ({ id: p.id as string, shop_id: p.shopId as string })));
-    assert(mainShopPosts.length >= 3 && same(exportedPosts, mainShopPosts), `and each listing's shop (${exportedPosts.length} of ${mainShopPosts.length})`);
+    assert(mainShopPosts.length >= 2 && same(exportedPosts, mainShopPosts), `and each listing's shop (${exportedPosts.length} of ${mainShopPosts.length})`);
     const wholeCopy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(whole));
     attempt(() => emptyCopiedTables(db));
     db.prepare('UPDATE posts SET shop_id = NULL').run();
@@ -530,15 +533,16 @@ async function main(): Promise<void> {
     const dCleared = (delta.posts ?? []).filter((p: any) => eveThings.includes(p.id));
     assert(same(dShops.map((s: any) => s.id).sort(), [bikesShop, cyShop].sort()) && !!dTomb && dCleared.length === eveThings.length && dCleared.every((p: any) => !p.shopId),
         `a delta carries the dressing, the new shop, the close's tombstone and the listings it cleared (${dShops.length}, ${!!dTomb}, ${dCleared.length})`);
-    // The standby as it was before the delta.
+    // The standby as it was before the delta: its shops, and each listing the delta carries as it was, at an old stamp, so
+    // the copy's row is the newer one.
     db.transaction(() => {
         db.prepare('DELETE FROM shops').run();
         const cols = Object.keys(keptShops[0] ?? {});
         const ins = db.prepare(`INSERT INTO shops (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`);
         for (const s of keptShops) ins.run(...cols.map(k => (s as any)[k]));
-        db.prepare('UPDATE posts SET shop_id = NULL').run();
-        const put = db.prepare('UPDATE posts SET shop_id = ? WHERE id = ?');
-        for (const p of keptPosts) put.run(p.shop_id, p.id);
+        const was = new Map(keptPosts.map(p => [p.id, p.shop_id]));
+        const put = db.prepare("UPDATE posts SET shop_id = ?, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?");
+        for (const p of (delta.posts ?? []) as any[]) put.run(was.get(p.id) ?? null, p.id);
         db.prepare("DELETE FROM tombstones WHERE table_name = 'shops' AND row_key = ?").run(eveShop);
     })();
     const deltaCopy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(delta));

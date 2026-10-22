@@ -58,6 +58,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
 import { dropToolStateOf } from './engine/tool-state.js';
+import { dropShopOf, openShop } from './engine/shops.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
@@ -5492,6 +5493,8 @@ export function createPost(
         lendMaxDays?: unknown;
         lendTerms?: unknown;
         replacementValue?: unknown;
+        /** The shop to put it in (engine/shops.ts assertShopForPost). */
+        shopId?: unknown;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
     }
@@ -8275,6 +8278,10 @@ export function createTreasury(
         db.prepare(`INSERT OR IGNORE INTO conversations (id, type, name, created_by, created_at)
                     VALUES (?, 'enterprise_thread', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
             .run(pubKeyHex, trimmed, opts.leadKeeperPubkey || pubKeyHex);
+        // Its shop, made with it (DESIGN-shops-and-tools-fable.md §9.1): named by the enterprise, so a rename carries over
+        // (engine/shops.ts). For one a member starts, who leads it; not for one the node makes for itself (a federation
+        // link, the Pulse's own), which sells nothing. One the admin makes gets its shop when a keeper opens it.
+        if (opts.leadKeeperPubkey) openShop(pubKeyHex);
     })();
 
     if (incomingBytes > 0 && opts.leadKeeperPubkey) {
@@ -8497,6 +8504,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropBlocksOf(publicKey);
         // Their tools' private copies, tombstoned: nobody can read them now (engine/tool-state.ts). Their phone keeps its own.
         dropToolStateOf(publicKey);
+        // And their shop, with a tombstone; their listings name it no more (engine/shops.ts).
+        dropShopOf(publicKey);
         // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
         dropWithheldOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
@@ -8676,6 +8685,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropBlocksOf(publicKey);
         // And their tools' private copies, a tombstone each (engine/tool-state.ts).
         dropToolStateOf(publicKey);
+        // And their shop, with a tombstone; their listings name it no more (engine/shops.ts).
+        dropShopOf(publicKey);
         // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
         dropWithheldOf(publicKey);
         // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.

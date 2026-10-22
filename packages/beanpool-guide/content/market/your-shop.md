@@ -33,7 +33,7 @@ Only your own Offers for everyone here go in a shop. A Need, or an Offer for a g
 
 - **When you edit an Offer:** tick **Put this in your shop**, or untick it to take the Offer out.
 - **Add my live Offers:** on Your shop, tick the Offers you already have up and tap **Put them in my shop**.
-- **From a tool:** when you list something from a tool, **Put this in your shop** is ticked. If you have no shop yet, it opens with that Offer.
+- **From a tool:** when you list something from a tool, **Put this in your shop** is ticked. If you have no shop yet, it opens with that Offer. You can change its title or words on the new Offer form and it still goes in. If you change it completely, or post something else instead, it goes up outside your shop and the app tells you. To put it in, open it, tap **Edit Post** and tick **Put this in your shop**.
 
 The new Offer form on the map has no tick yet. Post the Offer, then put it in from its edit screen or from Your shop.
 

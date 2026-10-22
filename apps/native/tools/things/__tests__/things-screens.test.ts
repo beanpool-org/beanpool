@@ -89,7 +89,12 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
-vi.mock('react-native-keyboard-controller', () => ({ useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }) }));
+vi.mock('react-native-keyboard-controller', () => ({
+    useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }),
+    // The keyboard is the device's: the stand-in draws its rows and says how it was asked to keep them above it.
+    KeyboardAwareScrollView: ({ children, testID, bottomOffset, keyboardShouldPersistTaps }: Record<string, any>) => createElement('div',
+        { 'data-testid': testID, 'data-keyboard-aware': 'true', 'data-bottom-offset': String(bottomOffset ?? 0), 'data-persist-taps': keyboardShouldPersistTaps }, children),
+}));
 const picker = vi.hoisted(() => ({ file: '', refs: 0, cameraAllowed: true }));
 vi.mock('expo-image-picker', () => ({
     launchImageLibraryAsync: async () => ({ canceled: false, assets: [{ uri: `file://${picker.file}` }] }),
@@ -559,6 +564,26 @@ describe('Edit', () => {
         expect(nav.backs).toBe(1);
     });
 
+    it('the keyboard never covers a box or Save: every box, Save and Cancel are in the keyboard-aware scroll', async () => {
+        // Edit is the tallest form a tool has (#2373's deciding review): at 320 dp × 1.3 "Your own note" and Save sit under
+        // an open keyboard. ToolScreen scrolls the box tapped above it, with room for its note line, and adds the
+        // keyboard's height under Save so Save can be scrolled up too (react-native-keyboard-controller, the root provider).
+        await keep(shed(thing('t-1', 'Ladder')));
+        await open('edit', { key: 't-1' });
+        const screen = byTestId('thing-edit-screen')!;
+        expect(screen.getAttribute('data-keyboard-aware')).toBe('true');
+        expect(screen.getAttribute('data-persist-taps')).toBe('handled');
+        expect(Number(screen.getAttribute('data-bottom-offset'))).toBeGreaterThanOrEqual(4 + 18 * FONT_SCALE);
+        for (const id of ['edit-name', 'edit-replacement', 'edit-terms', 'edit-days', 'edit-note', 'edit-save', 'edit-cancel']) {
+            expect(byTestId(id), id).not.toBeNull();
+            expect(screen.contains(byTestId(id)), id).toBe(true);
+        }
+        // With the keyboard up a tap on Save still saves (keyboardShouldPersistTaps="handled").
+        await type('edit-note', 'Behind the shed');
+        await click('edit-save');
+        expect((await keptThing('t-1'))?.ownerNote).toBe('Behind the shed');
+    });
+
     it('the category opens to every Market category, Tools first; an edit keeps its Offer and who has it', async () => {
         await keep(shed(thing('t-1', 'Hoe', { postId: 'post-1', lentTo: { name: 'Sam', since: iso(NOW - DAY) } })));
         await open('edit', { key: 't-1' });
@@ -752,6 +777,17 @@ describe('A thing', () => {
         expect((await keptThing('t-1'))?.postId).toBeUndefined();
         expect(byTestId('thing-offer-gone')).toBeNull();
         expect(byTestId('thing-list')).not.toBeNull();
+    });
+
+    it('"Who has it?" and its Save are in the keyboard-aware scroll, as Edit\'s boxes are', async () => {
+        await keep(shed(thing('t-1', 'Ladder')));
+        await open('thing', { key: 't-1' });
+        await click('thing-lend');
+        const screen = byTestId('thing-screen')!;
+        expect(screen.getAttribute('data-keyboard-aware')).toBe('true');
+        expect(screen.getAttribute('data-persist-taps')).toBe('handled');
+        expect(screen.contains(byTestId('thing-lend-name'))).toBe(true);
+        expect(screen.contains(byTestId('thing-lend-save'))).toBe(true);
     });
 
     it("lent outside BeanPool: who and when it's back; a listed thing's Offer is paused meanwhile and resumed when it's back", async () => {

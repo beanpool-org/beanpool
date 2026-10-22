@@ -8,7 +8,8 @@
  * Words: every prop a member reads is a string the tool made with t() (or the member's own text, shown as written).
  */
 import React from 'react';
-import { View, Text, Pressable, ScrollView, TextInput, Image, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Text, Pressable, TextInput, Image, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../app/ThemeContext';
 import { HOME_TARGET_DP, homeStyles } from '../components/home/HomeParts';
@@ -19,12 +20,24 @@ export function useToolColors(): AppColors {
     return useTheme().colors;
 }
 
-/** A tool's screen body: one column that scrolls down, never sideways. */
+/**
+ * Room kept between a box the member is typing in and the keyboard: the first line of the note under it (its error or
+ * hint) at 1.3× text.
+ */
+const KEYBOARD_GAP = 48;
+
+/**
+ * A tool's screen body: one column that scrolls down, never sideways. The app is edge-to-edge, so the keyboard no longer
+ * shrinks the window: as the app's other forms (suggest-change, treasury-post), the scroll view keeps it off what the
+ * member types. A box they tap is scrolled above the keyboard, and the keyboard's height is added under the last row, so
+ * the screen's own buttons (Edit's Save) can be scrolled up above it too. The root KeyboardProvider (app/_layout.tsx)
+ * drives it; never a second one.
+ */
 export function ToolScreen({ children, testID }: { children: React.ReactNode; testID?: string }) {
     return (
-        <ScrollView contentContainerStyle={ui.screen} keyboardShouldPersistTaps="handled" testID={testID}>
+        <KeyboardAwareScrollView contentContainerStyle={ui.screen} keyboardShouldPersistTaps="handled" bottomOffset={KEYBOARD_GAP} testID={testID}>
             {children}
-        </ScrollView>
+        </KeyboardAwareScrollView>
     );
 }
 

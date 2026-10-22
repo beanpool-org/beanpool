@@ -37,7 +37,8 @@ draft), `deals` (the owner's deals as seller or lender, a loan's `backAround` wh
 community's guide, never a price set), `nodeCopy`, and `reminders` (which grants no function: the host schedules what
 `due()` says). `place` and `eventDoor` are not built yet: a phone route refuses a tool that asks for them.
 
-**The primitives** (`apps/native/tools/ui.tsx`, `apps/pwa/src/tools/ui.tsx`, the same names): `ToolScreen` (phone),
+**The primitives** (`apps/native/tools/ui.tsx`, `apps/pwa/src/tools/ui.tsx`, the same names): `ToolScreen` (phone;
+it scrolls a box being typed in, and the buttons under it, above the keyboard),
 `ToolSection`, `ToolRow` (an emoji or a photo, a title, a one-line state; `wrap` for a record's own screen), `ToolField`,
 `ToolChips` (`heading` to show its label), `ToolButton` (primary, danger), `ToolEmpty`, `ToolNote` (warning, danger),
 `ToolInput` (one line, several, or numbers) and `ToolPhoto`. One column, 48 px targets, colours from the central tokens.

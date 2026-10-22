@@ -92,7 +92,12 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: ({ name }: { name: string }) => createElement('i', { 'data-icon': name }) }));
 vi.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
-vi.mock('react-native-keyboard-controller', () => ({ useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }) }));
+vi.mock('react-native-keyboard-controller', () => ({
+    useKeyboardState: (pick: (s: { height: number; isVisible: boolean }) => unknown) => pick({ height: 0, isVisible: false }),
+    // The keyboard is the device's: the stand-in draws its rows and says how it was asked to keep them above it.
+    KeyboardAwareScrollView: ({ children, testID, bottomOffset, keyboardShouldPersistTaps }: Record<string, any>) => createElement('div',
+        { 'data-testid': testID, 'data-keyboard-aware': 'true', 'data-bottom-offset': String(bottomOffset ?? 0), 'data-persist-taps': keyboardShouldPersistTaps }, children),
+}));
 vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn(), launchCameraAsync: vi.fn(), requestCameraPermissionsAsync: vi.fn() }));
 vi.mock('expo-image-manipulator', () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: 'jpeg' } }));
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'photo-ref' }));
@@ -698,6 +703,24 @@ describe('the route around a tool', () => {
         nav.canGoBack = false;
         await click(byTestId('tools-back'), 'Back');
         expect([nav.backs, nav.replaced]).toEqual([1, ['/(tabs)']]);
+    });
+
+    it("a tool's screen keeps the keyboard off what is typed, as the app's other forms do; no tool adds a KeyboardProvider", async () => {
+        await writeToolDoc(ME.publicKey, KIT, KIT_FIXTURES.docs.small, NOW);
+        await drawTool('fixture-kit', {}, 'en');
+        // ToolScreen is react-native-keyboard-controller's KeyboardAwareScrollView (edge-to-edge: the window no longer
+        // shrinks for the keyboard), a tap on a button reaches it while the keyboard is up, and a box is scrolled to a
+        // gap above the keyboard that fits the first note line under it at 1.3× (ToolInput's: 4 dp over an 18 dp line).
+        const screen = byTestId('kit-main')!;
+        expect(screen.getAttribute('data-keyboard-aware')).toBe('true');
+        expect(screen.getAttribute('data-persist-taps')).toBe('handled');
+        expect(Number(screen.getAttribute('data-bottom-offset'))).toBeGreaterThanOrEqual(4 + 18 * FONT_SCALE);
+        expect(screen.contains(byTestId('kit-add'))).toBe(true);
+        // The root provider (app/_layout.tsx) is the one: a second inside a tool's Modal breaks keyboards app-wide.
+        const tools = path.resolve(__dirname, '../../tools');
+        const files = (fs.readdirSync(tools, { recursive: true }) as string[]).filter((f) => /\.tsx?$/.test(f) && !f.includes('__tests__'));
+        expect(files).toContain('ui.tsx');
+        for (const f of files) expect(fs.readFileSync(path.join(tools, f), 'utf8'), f).not.toMatch(/<KeyboardProvider\b/);
     });
 
     it('"Remove my data from this phone" on a later screen goes back to the first, where the doors are', async () => {

@@ -262,3 +262,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-21 - FormerAddressBanner ARIA Live Region & Internationalization
 **Learning:** `FormerAddressBanner.tsx` displayed community migration alerts using `role="status"` without explicit `aria-live="polite"` or `aria-label`, preventing screen readers from describing the alert context, and hardcoded text strings without `t(...)` translation wrappers.
 **Action:** Added `aria-live="polite"` and `aria-label={t('Community address change alert')}` to the status container, wrapped text strings with `t(...)`, and verified test suite passing.
+
+## 2026-10-22 - HelpDialog Close Button Accessibility
+**Learning:** `HelpDialog.tsx` rendered the dialog close button without an explicit screen reader `aria-label`, relying solely on visible text "Close". Adding `aria-label={t('Close help dialog')}` provides clear context for assistive technology users when navigating dialog controls.
+**Action:** Added `aria-label={t('Close help dialog')}` to the close button in `HelpDialog.tsx` and created `HelpDialog.test.tsx` verifying dialog ARIA accessibility.

@@ -66,7 +66,7 @@ vi.mock('expo-crypto', async () => {
 // tables. Everything else in it is real.
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn(), defaultDatabaseDirectory: '/data/user/0/org.beanpool.app/files/SQLite' }));
 vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/cache/', deleteAsync: vi.fn(async () => {}) }));
-vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: vi.fn() }));
+vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: vi.fn(), isGuestNode: vi.fn(async () => false) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn() }));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 vi.mock('../db', async (importOriginal) => ({

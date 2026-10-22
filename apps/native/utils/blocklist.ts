@@ -32,6 +32,7 @@ import { DeviceEventEmitter } from 'react-native';
 import { onAccountOnPhone } from './account-on-phone';
 import { loadIdentity } from './identity';
 import { signedPost } from './node-post';
+import { isGuestNode } from './nodes';
 import { blockedUsersStoreKey, communityBlocksStoreKey, PENDING_ABUSE_REPORTS_STORE_KEY, pendingAbuseReportsStoreKey } from './storage-keys';
 
 export const BLOCKLIST_UPDATED_EVENT = 'beanpool_blocklist_updated';
@@ -349,6 +350,8 @@ const COMMUNITY_BLOCKS_MAX = 500;
 const BLOCKS_WAIT_MS = 24 * 60 * 60 * 1000;
 /** A key as every community keeps it (apps/server engine/member-key.ts): one in any other spelling, or the owner's own, has the whole list refused. */
 const MEMBER_KEY = /^[0-9a-f]{64}$/;
+/** A change's 403 from a community the account is no member of (yet): apps/server engine/members.ts NOT_A_MEMBER_CODE. */
+const NOT_A_MEMBER_CODE = 'not_a_member';
 
 /**
  * What this phone knows of one community's list for one account: `on`, keys this phone put there that the community's
@@ -364,8 +367,9 @@ interface BlocksAt {
 }
 
 /**
- * What a change met: the keys on the community's list after it; `later`, ask again at the next sync; `no list`, a node
- * with no block list (404, 405), where no change can land; `refused`, any other refusal (a 403, the community's limit).
+ * What a change met: the keys on the community's list after it; `later`, ask again at the next sync (no answer, or no
+ * member there yet); `no list`, a node with no block list (404, 405), where no change can land; `refused`, any other
+ * refusal (another 403, the community's limit).
  */
 type ChangeAnswer = string[] | 'later' | 'no list' | 'refused';
 
@@ -380,8 +384,13 @@ let syncing: Promise<void> = Promise.resolve();
  * - Each community the member is on with this phone gets the phone's list; the first time, every block from before this
  *   build, in one request (a key the community has no row for, which a list skips, goes again on its own, as the web
  *   app's move sends it). An unblock reaches each community this phone put that block on, when the phone is next there.
- * - No answer (no connection, a timeout, a server error, 401, 408, 425, 429): asked again at the next sync. A block whose
- *   answer never came may be on the list, so it is taken off all the same when the member unblocks.
+ * - A community the phone visits as a guest (nodes.ts markGuestNode: "Guest view first", Add & Connect) is sent nothing:
+ *   the account is no member there, and the list is the member's own business. Joining there clears the mark, and the
+ *   next sync sends the list.
+ * - No answer (no connection, a timeout, a server error, 401, 408, 425, 429), or a community that has the account as no
+ *   member yet (403 not_a_member): asked again at the next sync, so a member who joins there has the list sent then, not
+ *   a day later. A block whose answer never came may be on the list, so it is taken off all the same when the member
+ *   unblocks.
  * - A node with no block list (404, 405): that community is not asked again for a day. Any other refusal (a 403, the
  *   community's limit) of a block: it is sent no blocks for a day, but unblocks still go, so the blocked member's lines
  *   are withheld no longer than the member wants (the limit's own answer is "Unblock someone to block another"); of an
@@ -405,8 +414,13 @@ async function syncBlocksOnce(): Promise<void> {
     try {
         const owner = await accountOnPhone();
         if (!owner) return;
-        const community = (await AsyncStorage.getItem(ANCHOR_STORE_KEY))?.replace(/\/+$/, '');
-        if (!community) return;
+        const anchor = await AsyncStorage.getItem(ANCHOR_STORE_KEY);
+        const community = anchor?.replace(/\/+$/, '');
+        if (!anchor || !community) return;
+        // Marked as the visit wrote the address, with or without its trailing slash.
+        for (const url of new Set([anchor, community, `${community}/`])) {
+            if (await isGuestNode(url)) return;
+        }
         const list = await listOf(owner);
         const storeKey = communityBlocksStoreKey(owner);
         const record = parseCommunityBlocks(await AsyncStorage.getItem(storeKey));
@@ -485,7 +499,7 @@ async function sendBlockChange(owner: string, community: string, path: string, b
     try {
         ({ res, text } = await withTimeout((async () => {
             const answer = await signedPost(community, path, body, signer, controller.signal);
-            return { res: answer, text: answer.ok ? await answer.text() : '' };
+            return { res: answer, text: await answer.text() };
         })(), REPORT_TIMEOUT_MS));
     } catch {
         // Not left running behind the next sync.
@@ -505,7 +519,19 @@ async function sendBlockChange(owner: string, community: string, path: string, b
         return 'later';
     }
     if (res.status === 404 || res.status === 405) return 'no list';
+    // No member there yet: nothing about the change itself, and a member who joins has it sent at the next sync.
+    if (res.status === 403 && changeErrorCode(text) === NOT_A_MEMBER_CODE) return 'later';
     return res.status >= 400 && res.status < 500 && ![401, 408, 425, 429].includes(res.status) ? 'refused' : 'later';
+}
+
+/** The `code` in a block route's JSON refusal (routes/blocks.ts), or null for anything else. */
+function changeErrorCode(text: string): string | null {
+    try {
+        const parsed = JSON.parse(text);
+        return parsed && typeof parsed.code === 'string' ? parsed.code : null;
+    } catch {
+        return null;
+    }
 }
 
 function keysIn(v: unknown): string[] {

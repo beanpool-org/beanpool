@@ -84,6 +84,7 @@ vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ publicKey: ME
 vi.mock('../nodes', () => ({
     getDatabaseFilenameForNode: vi.fn((url: string | null) => (url ? `beanpool_${new URL(url).hostname}.db` : 'beanpool_none.db')),
     addSavedNode: vi.fn(async () => {}),
+    isGuestNode: vi.fn(async () => false),
 }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn(async () => {}) }));
 // Signed as any request is: the test reads which request was signed, not the signature (request-signing has its own).

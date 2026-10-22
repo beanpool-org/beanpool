@@ -120,3 +120,36 @@ export function nearestInCircle<T extends { lat?: number | null; lng?: number | 
         .sort((a, b) => a.km - b.km)
         .map(x => x.p);
 }
+
+/** How many listings the node answers a read without a limit, and the most it answers any read (apps/server clampLimit). */
+export const NODE_PAGE_DEFAULT = 50;
+export const NODE_PAGE_MAX = 200;
+/** The most pages one read from the distance setting takes to fill the list the cut left short. */
+export const NEAR_PAGES_MAX = 3;
+
+/**
+ * A listings read that shows at most `keep`. A read from the distance setting asks for pages of twice that (the node's
+ * cap at most), cut to the exact circle (nearestInCircle) and kept to `keep`: the node answers the nearest to the rounded
+ * centre within the wider radius, so once its page fills, listings just past the exact edge on the rounded centre's side
+ * take places the ones inside it needed (review of #2363). While a page comes back full and the cut leaves fewer than
+ * `keep`, it reads the next (`offset`: the node's nearest first is a total order, engine posts.ts), NEAR_PAGES_MAX at
+ * most. Any other read is `read({})` once, as the node sent it.
+ */
+export async function readNearestInCircle<T extends { id: string; lat?: number | null; lng?: number | null }>(
+    near: NearRead | null,
+    keep: number,
+    read: (page: { limit?: number; offset?: number }) => Promise<T[]>,
+): Promise<T[]> {
+    if (near?.from !== 'setting') return read({});
+    const limit = Math.min(NODE_PAGE_MAX, keep * 2);
+    // A listing that moved between two pages' reads comes back on both: kept once.
+    const byId = new Map<string, T>();
+    let kept: T[] = [];
+    for (let page = 0; page < NEAR_PAGES_MAX; page++) {
+        const rows = await read(page === 0 ? { limit } : { limit, offset: page * limit });
+        for (const p of rows) if (!byId.has(p.id)) byId.set(p.id, p);
+        kept = nearestInCircle([...byId.values()], near);
+        if (rows.length < limit || kept.length >= keep) break;
+    }
+    return kept.slice(0, keep);
+}

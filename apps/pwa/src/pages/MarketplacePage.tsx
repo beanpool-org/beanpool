@@ -33,7 +33,7 @@ import { exampleListingsOn, showExampleListings } from '../lib/example-listings'
 import { pollsInformal } from '../lib/informal-polls';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { useMembersOnDemand } from '../lib/members-on-demand';
-import { nearRead, nearParams, listingDistanceKm, nearestInCircle } from '../lib/listings-near';
+import { nearRead, nearParams, listingDistanceKm, readNearestInCircle, NODE_PAGE_DEFAULT } from '../lib/listings-near';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
@@ -764,8 +764,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 const wantsEvents = filter.type === 'event' || (filter.types ?? '').split(',').includes('event');
                 const [homeData, myOwnPosts, statusesData, fallbackTreasuries, onlineEvents] = await Promise.all([
                     // Nearest first within the radius where the node reads by area (lib/listings-near); the viewer's own
-                    // listings wherever they are.
-                    getMarketplacePosts({ ...filter, ...nearParams(near) }),
+                    // listings wherever they are. Read from the distance setting: cut to the exact circle and nearest
+                    // first from its centre, as many as the node's page without a limit.
+                    readNearestInCircle(near, NODE_PAGE_DEFAULT, page => getMarketplacePosts({ ...filter, ...nearParams(near), ...page })),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
                     // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock),
@@ -792,8 +793,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 // Merge own posts (dedupe by id; own wins — it carries the paused status the feed omits).
                 const byId = new Map<string, MarketplacePost>();
-                // Read from the distance setting: cut to the exact circle and nearest first from its centre.
-                for (const p of nearestInCircle(homeData, near)) byId.set(p.id, p);
+                for (const p of homeData) byId.set(p.id, p);
                 for (const p of (onlineEvents as MarketplacePost[])) if (!byId.has(p.id)) byId.set(p.id, p);
                 for (const p of (myOwnPosts as MarketplacePost[])) byId.set(p.id, p);
                 let allPosts: MarketplacePost[] = Array.from(byId.values());

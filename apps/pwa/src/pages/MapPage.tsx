@@ -33,7 +33,7 @@ import {
 import { offsetMinutesOf, repeatRefusalText, seriesMovedFromLine, t, zoneLabelFor, amountRefusalWords, ANY_DECIMALS, isAmbiguousAmount, parseAmount, type RepeatChoiceKey } from '@beanpool/core';
 import { EventRepeatFields, eventRepeatProblem } from '../components/EventRepeatFields';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
-import { nearRead, nearParams, listingDistanceKm, nearestInCircle } from '../lib/listings-near';
+import { nearRead, nearParams, listingDistanceKm, readNearestInCircle } from '../lib/listings-near';
 import { standingFromRefusal } from '../lib/standing-refusal';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
@@ -739,17 +739,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         setInactiveEnterpriseKeys(inactiveKeys);
                     }).catch(() => {});
                 });
-                const [pinsRes, nearData, ownData] = await Promise.all([
+                const [pinsRes, localData, ownData] = await Promise.all([
                     visitor ? Promise.resolve({ enterprises: [] }) : getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
                     // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them. Where the node
-                    // reads by area, the nearest within the radius, and the viewer's own pins wherever they are.
-                    getMarketplacePosts(near ? { ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT } : { ...MAP_LIST_FILTER }),
+                    // reads by area, the nearest within the radius, and the viewer's own pins wherever they are. Read from
+                    // the distance setting: cut to the exact circle (the node was asked for a wider one), page after page
+                    // while a full one leaves fewer than MAP_NEAR_LIMIT (lib/listings-near readNearestInCircle).
+                    near
+                        ? readNearestInCircle(near, MAP_NEAR_LIMIT, page => getMarketplacePosts({ ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT, ...page }))
+                        : getMarketplacePosts({ ...MAP_LIST_FILTER }),
                     near && identity ? getMarketplacePosts({ ...MAP_LIST_FILTER, author: identity.publicKey, limit: MAP_NEAR_LIMIT }).catch(() => []) : Promise.resolve([]),
                     // No read for online events (the Market makes one beside its radius read): they have no place, so the
                     // map has nothing to draw for them (review of #1952, finding 8).
                 ]);
-                // Read from the distance setting: cut to the exact circle (the node was asked for a wider one).
-                const localData = nearestInCircle(nearData, near);
                 setEnterprises(pinsRes?.enterprises || []);
                 const ownIds = new Set(localData.map(p => p.id));
                 let allPosts: MarketplacePost[] = [...localData, ...ownData.filter(p => !ownIds.has(p.id))];

@@ -235,6 +235,10 @@ export function toolNameClashes(id, root = ROOT) {
     const core = PARTS.find((p) => p.part === 'core');
     const overlay = new Map(scaffoldFiles(id).filter((f) => f.part === 'core').map((f) => [path.join(root, core.dir, f.rel), f.text]));
     const fromDisk = (file) => {
+        if (root !== ROOT && path.resolve(file) === path.resolve(ROOT, core.index)) {
+            const rootIndex = path.join(root, core.index);
+            if (fs.existsSync(rootIndex)) return fs.readFileSync(rootIndex, 'utf8');
+        }
         for (const f of [file, path.join(ROOT, path.relative(root, file))]) if (fs.existsSync(f)) return fs.readFileSync(f, 'utf8');
         return null;
     };

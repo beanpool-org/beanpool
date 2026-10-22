@@ -19,7 +19,7 @@
  */
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import {
-    TOOLS, TOOL_SHELVES, t, toolById, toolHomeCardType, toolsOnShelf, word,
+    TOOLS, TOOL_SHELVES, t, toolById, toolHomeCardType, toolLineText, toolsOnShelf, word,
     type AnyToolScreenProps, type ToolCopyOutcome, type ToolLine, type ToolManifest, type ToolShelf, type WordKey,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -57,7 +57,7 @@ const SHELF_NAMES: Record<ToolShelf, WordKey> = {
     books: word("How it's going"),
 };
 
-const lineText = (l: ToolLine | null | undefined) => (l ? t(l.key, l.values) : null);
+const lineText = (l: ToolLine | null | undefined) => (l ? toolLineText(l) : null);
 
 export function ToolsPage(props: ToolsPageProps) {
     const { open, onOpen, onClose } = props;

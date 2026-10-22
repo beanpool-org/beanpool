@@ -9,7 +9,7 @@
  */
 import type { ShowcaseFeature } from '../features.js';
 import type { HomeNodeFacts } from '../home-frame.js';
-import type { WordKey } from '../words.js';
+import type { PluralWord, WordKey } from '../words.js';
 
 /** A tool's id: the store key (the node's member_tool_state.tool ≤ 24), the route param and the Home card type's tail. */
 export type ToolId = string;
@@ -66,9 +66,15 @@ export const TOOL_LIMITS = {
     examples: 3,
 } as const;
 
-/** One sentence with its values, drawn as t(key, values). Fixed words, never member text in `key`. */
+/**
+ * One sentence with its values, drawn as t(key, values); a sentence with a count is a wordn('{n} thing', '{n} things')
+ * pair with its count `n`, drawn as tn(n, key.one, key.other, values), so every language gets the form it needs.
+ * toolLineText (line.ts) draws either. Fixed words, never member text in `key`.
+ */
 export interface ToolLine {
-    key: WordKey;
+    key: WordKey | PluralWord;
+    /** The count a wordn() pair is chosen by, written as its {n}: given with a pair, and only with one. */
+    n?: number;
     values?: Record<string, string | number>;
     /** A screen of the tool this line opens (the manifest's `screens`). */
     screen?: string;

@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { t, type AnyToolScreenProps, type ToolCopyOutcome, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
+import { t, toolLineText, type AnyToolScreenProps, type ToolCopyOutcome, type ToolManifest, type ToolOfferDraft } from '@beanpool/core';
 import { useIdentity } from '../IdentityContext';
 import { useTheme } from '../ThemeContext';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -331,7 +331,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         <>
             <ToolFrame
                 manifest={manifest}
-                state={row ? t(row.key, row.values) : null}
+                state={row ? toolLineText(row) : null}
                 settings={settings}
                 copyNote={copyNote}
                 ownerKind={ctx.owner.kind}

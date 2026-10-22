@@ -252,8 +252,9 @@ describe('a tool this build does not have', () => {
         expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
     });
 
-    it('the registry as shipped: no tool, the Tools screen says so, and any id is not in this version', async () => {
-        expect(TOOLS).toEqual([]);
+    it("the registry as shipped: the Tool shed's core and no web half yet, the Tools screen says no tool, and any id is not in this version", async () => {
+        // The slice that adds a tool's web half (the Tool shed's is T1.3) changes both lines on purpose.
+        expect(TOOLS.map((m) => m.id)).toEqual(['things']);
         expect(Object.keys(TOOL_APPS)).toEqual([]);
         const list = render(<ToolsPage identity={identity} open={{ id: null, screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
         expect(await list.findByTestId('tools-none')).toBeInTheDocument();

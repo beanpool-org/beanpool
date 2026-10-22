@@ -108,7 +108,7 @@ vi.mock('../market-global', () => ({ composerNeedsProfilePhoto: async () => true
 vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => null }));
 
 // The one store, for real: tool_docs in SQLite (node:sqlite behind expo-sqlite's calls) and photos in a real folder.
-const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
+const disk = vi.hoisted(() => ({ dir: '', db: null as any, delayTicks: 0 }));
 const posts = vi.hoisted(() => ({ rows: new Map<string, Record<string, unknown>>(), paused: [] as string[], resumed: [] as string[] }));
 /**
  * The community's server, for a tool that asks for node-copy (slice T0.4): its tool store as engine/tool-state.ts keeps
@@ -242,7 +242,12 @@ function sqliteDb() {
     return {
         execAsync: async (sql: string) => { d.exec(sql); },
         runAsync: async (sql: string, params?: unknown[]) => { const r = d.prepare(sql).run(...bind(params)); return { changes: Number(r.changes) }; },
-        getFirstAsync: async (sql: string, params?: unknown[]) => d.prepare(sql).get(...bind(params)) ?? null,
+        getFirstAsync: async (sql: string, params?: unknown[]) => {
+            if (disk.delayTicks) {
+                for (let i = 0; i < disk.delayTicks; i++) await new Promise((r) => setTimeout(r, 0));
+            }
+            return d.prepare(sql).get(...bind(params)) ?? null;
+        },
         getAllAsync: async (sql: string, params?: unknown[]) => d.prepare(sql).all(...bind(params)),
         count: (sql: string) => Number((d.prepare(sql).get() as { n: number }).n),
     };
@@ -344,6 +349,7 @@ beforeEach(() => {
     document.body.appendChild(host);
     root = createRoot(host);
     store.map.clear();
+    disk.delayTicks = 0;
     store.map.set('beanpool_anchor_url', 'https://mullum.example');
     disk.dir = fs.mkdtempSync(path.join(tmp, 'disk-'));
     disk.db = sqliteDb();
@@ -1116,6 +1122,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
     });
 
     it("a write through the tool's host: one sync five seconds after the last, not one a write", async () => {
+        disk.delayTicks = 6;
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
         try {
             let n = 0;

@@ -17,9 +17,10 @@ import { createRoot, type Root } from 'react-dom/client';
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', checkbox: 'checkbox' };
+    const flat = (s: unknown): Record<string, unknown> => Object.assign({}, ...[s].flat(3).filter(Boolean));
     const el = (tag: string) => (props: Record<string, any>) => {
-        const { children, onPress, accessibilityLabel, accessibilityRole, disabled, placeholder } = props;
-        const attrs: Record<string, unknown> = {};
+        const { children, onPress, accessibilityLabel, accessibilityRole, disabled, placeholder, style } = props;
+        const attrs: Record<string, unknown> = { 'data-style': JSON.stringify(flat(style)) };
         if (onPress && !disabled) attrs.onClick = () => onPress();
         if (accessibilityLabel) attrs['aria-label'] = accessibilityLabel;
         if (accessibilityRole && roles[accessibilityRole]) attrs.role = roles[accessibilityRole];
@@ -196,7 +197,8 @@ describe('InvitePeopleSheet member statuses and accessibility', () => {
         expect(text()).toContain('Invite 1 person');
     });
 
-    it('uses the short placeholder "Search people" so it fits small screens', async () => {
+    // Walkthrough of 22 Oct at 320 dp with the text at 1.3x: "Search people in this community" showed as "Search people in this commu".
+    it('uses the short placeholder "Search people", whole on one line at 320 dp and 1.3x', async () => {
         await renderSheet({
             isOpen: true,
             groupId: 'g-test',
@@ -207,5 +209,14 @@ describe('InvitePeopleSheet member statuses and accessibility', () => {
         });
         const input = host.querySelector('input');
         expect(input?.getAttribute('placeholder')).toBe('Search people');
+
+        // The box is the sheet's full 320 dp less its margin and padding, the magnifier (20 dp) and the gap before the
+        // field. Glyphs at a generous 0.62em, as my-deals-history-320.test.ts measures.
+        const style = (el: Element | null) => JSON.parse(el?.getAttribute('data-style') ?? '{}') as Record<string, number>;
+        const box = style(input!.parentElement);
+        const field = style(input);
+        const room = 320 - 2 * box.margin - 2 * box.paddingHorizontal - 20 - field.marginLeft;
+        const needed = input!.getAttribute('placeholder')!.length * field.fontSize * 1.3 * 0.62;
+        expect(needed).toBeLessThanOrEqual(room);
     });
 });

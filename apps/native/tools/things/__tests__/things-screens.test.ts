@@ -629,7 +629,7 @@ describe('Edit', () => {
         await open('edit');
         await type('edit-name', 'One more');
         await click('edit-save');
-        expect(text('edit-problem')).toBe('Your Tool shed holds 100 things. Take one out first.');
+        expect(text('edit-problem')).toBe('Your Tool shed holds 100 things. Delete one first.');
         expect((await kept()).things).toHaveLength(THINGS_MAX_ITEMS);
         expect(nav.backs).toBe(0);
 
@@ -647,7 +647,7 @@ describe('Edit', () => {
         await type('edit-note', 'o'.repeat(500));
         await type('edit-replacement', 'r'.repeat(40));
         await click('edit-save');
-        expect(text('edit-problem')).toBe('Your Tool shed is full: it keeps up to 64 KB. Take out something you no longer have, or shorten some notes.');
+        expect(text('edit-problem')).toBe('Your Tool shed is full: it keeps up to 64 KB. Delete something you no longer have, or shorten some notes.');
         expect((await kept()).things).toHaveLength(full.length);
     });
 });
@@ -899,7 +899,7 @@ describe('A thing', () => {
         expect(toolDocBytes(doc)).toBe(target);
         return doc;
     }
-    const FULL = 'Your Tool shed is full: it keeps up to 64 KB. Take out something you no longer have, or shorten some notes.';
+    const FULL = 'Your Tool shed is full: it keeps up to 64 KB. Delete something you no longer have, or shorten some notes.';
 
     it("at the store's bound, lend, take out and link say the shed is full before the server is asked anything; nothing changes", async () => {
         offer('post-1', 'Ladder');

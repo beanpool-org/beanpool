@@ -177,8 +177,8 @@ describe('the edit screen: its fields, what stops a save, and saving', () => {
         expect(shedHasRoom(doc(...many(THINGS_MAX_ITEMS - 1)))).toBe(true);
         expect(shedHasRoom(doc(...many(THINGS_MAX_ITEMS)))).toBe(false);
         expect(shedHasRoom(doc(...many(THINGS_MAX_ITEMS - 1), thing('g', 'Gone', { gone: true })))).toBe(true);
-        expect(shedFullLine()).toBe('Your Tool shed holds 100 things. Take one out first.');
-        expect(shedTooBigLine()).toBe(`Your Tool shed is full: it keeps up to ${TOOL_LIMITS.docBytes / 1024} KB. Take out something you no longer have, or shorten some notes.`);
+        expect(shedFullLine()).toBe('Your Tool shed holds 100 things. Delete one first.');
+        expect(shedTooBigLine()).toBe(`Your Tool shed is full: it keeps up to ${TOOL_LIMITS.docBytes / 1024} KB. Delete something you no longer have, or shorten some notes.`);
         expect(shedFits(FIXTURES.docs.full)).toBe(true);
         expect(shedFits(doc(thing('a', 'x'.repeat(70_000))))).toBe(false);
     });

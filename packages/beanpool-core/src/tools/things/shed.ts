@@ -292,10 +292,10 @@ export function shedFits(doc: ThingsDoc): boolean {
 }
 
 /** Said when a new thing would be one too many. */
-export const shedFullLine = () => tn(THINGS_MAX_ITEMS, 'Your Tool shed holds {n} thing. Take one out first.', 'Your Tool shed holds {n} things. Take one out first.');
+export const shedFullLine = () => tn(THINGS_MAX_ITEMS, 'Your Tool shed holds {n} thing. Delete one first.', 'Your Tool shed holds {n} things. Delete one first.');
 
 /** Said when a save would take the document past the store's bound: the bound as core reports it. */
-export const shedTooBigLine = () => t('Your Tool shed is full: it keeps up to {kb} KB. Take out something you no longer have, or shorten some notes.', {
+export const shedTooBigLine = () => t('Your Tool shed is full: it keeps up to {kb} KB. Delete something you no longer have, or shorten some notes.', {
     kb: Math.floor(TOOL_LIMITS.docBytes / 1024),
 });
 

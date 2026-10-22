@@ -22,7 +22,7 @@ Tap **Add a thing**. Give it a name. The rest is up to you: a photo, a category,
 
 The list shows your newest things first, each with where it is: **On your shelf**, **In your shop**, **Out on a loan**, or **With** the person you lent it to. **All**, **In your shop**, **Out** and **On your shelf** narrow the list.
 
-The Tool shed holds up to 100 things. Long notes take room too: when it is full, it says so and keeps nothing new until you take something out.
+The Tool shed holds up to 100 things. Long notes take room too: when it is full, it says so and keeps nothing new until you delete something.
 
 ## Lending it through BeanPool
 

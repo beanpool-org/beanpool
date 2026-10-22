@@ -11,17 +11,20 @@
  *
  * A tool's folder imports this file as `../ui` (the fence in eslint.config.mjs allows it and the host, nothing else).
  */
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
+import { useToolPhotoSrc } from './photos';
 
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-ink-brand';
 
-/** A heading and what is under it. */
-export function ToolSection({ title, children, testId }: { title: string; children: ReactNode; testId?: string }) {
+/** A heading (or none) and what is under it. */
+export function ToolSection({ title, children, testId }: { title?: string; children: ReactNode; testId?: string }) {
     return (
         <section className="mb-4 min-w-0" data-testid={testId}>
-            <h2 className="m-0 mb-1 px-1 min-w-0 break-words text-xs font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">
-                {title}
-            </h2>
+            {title ? (
+                <h2 className="m-0 mb-1 px-1 min-w-0 break-words text-xs font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                    {title}
+                </h2>
+            ) : null}
             <div className="min-w-0 rounded-2xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 divide-y divide-nature-200 dark:divide-nature-800">
                 {children}
             </div>
@@ -30,11 +33,14 @@ export function ToolSection({ title, children, testId }: { title: string; childr
 }
 
 /**
- * One row: an icon, a title of up to two lines, a state line cut to one, and a chevron when it opens something. The whole
- * row is the target (at least 48 px) and its name is its words, the title and the state, so a screen reader hears both.
+ * One row: an icon (or a photo the host keeps, as a small square in its place), a title of up to two lines, a state line
+ * cut to one, and a chevron when it opens something. The whole row is the target (at least 48 px) and its name is its
+ * words, the title and the state, so a screen reader hears both.
  */
-export function ToolRow({ icon, title, state, onClick, testId }: {
+export function ToolRow({ icon, image, title, state, onClick, testId }: {
     icon?: string;
+    /** A photo's uri from the host (host.photos.uri): drawn instead of the icon. */
+    image?: string | null;
     title: string;
     state?: string | null;
     onClick?: () => void;
@@ -42,7 +48,7 @@ export function ToolRow({ icon, title, state, onClick, testId }: {
 }) {
     const inner = (
         <>
-            {icon && <span aria-hidden="true" className="shrink-0 w-8 text-center text-xl leading-none">{icon}</span>}
+            {image ? <RowPhoto uri={image} /> : icon && <span aria-hidden="true" className="shrink-0 w-8 text-center text-xl leading-none">{icon}</span>}
             <span className="min-w-0 flex-1">
                 <span className="block min-w-0 break-words line-clamp-2 text-[0.95rem] font-semibold text-nature-900 dark:text-white">{title}</span>
                 {state && <span className="block min-w-0 truncate text-xs text-nature-600 dark:text-nature-300">{state}</span>}
@@ -70,20 +76,36 @@ export function ToolField({ label, children }: { label: string; children: ReactN
     );
 }
 
-/** Chips that wrap to another row rather than shrink their words; the picked one is pressed. */
-export function ToolChips({ chips, picked, onPick, label }: {
+/** A row's photo: a small square, decorative (the row's words name it). */
+function RowPhoto({ uri }: { uri: string }) {
+    const src = useToolPhotoSrc(uri);
+    return (
+        <span aria-hidden="true" className="shrink-0 w-10 h-10 rounded-lg overflow-hidden bg-nature-100 dark:bg-nature-800">
+            {src && <img src={src} alt="" className="w-full h-full object-cover" />}
+        </span>
+    );
+}
+
+/**
+ * Chips that wrap to another row rather than shrink their words; the picked one is pressed. `heading` shows the group's
+ * label over the chips, as a field's label.
+ */
+export function ToolChips({ chips, picked, onPick, label, heading, testId }: {
     chips: readonly { id: string; label: string }[];
     picked: string | null;
     onPick: (id: string) => void;
     /** What the group of chips chooses, for a screen reader. */
     label: string;
+    heading?: boolean;
+    /** Each chip is `<testId>-<id>`. */
+    testId?: string;
 }) {
-    return (
-        <div role="group" aria-label={label} className="flex flex-wrap gap-2 min-w-0">
+    const group = (
+        <div role="group" aria-label={label} data-testid={testId} className="flex flex-wrap gap-2 min-w-0">
             {chips.map((c) => {
                 const on = c.id === picked;
                 return (
-                    <button key={c.id} type="button" aria-pressed={on} onClick={() => onPick(c.id)}
+                    <button key={c.id} type="button" aria-pressed={on} onClick={() => onPick(c.id)} data-testid={testId ? `${testId}-${c.id}` : undefined}
                         className={`shrink-0 max-w-full min-h-[48px] px-4 rounded-full border text-sm font-semibold break-words cursor-pointer ${FOCUS} ${on
                             ? 'bg-bp-chip-accent-tint text-bp-chip-accent-ink border-bp-chip-accent-border'
                             : 'bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 border-nature-300 dark:border-nature-700'}`}>
@@ -93,6 +115,74 @@ export function ToolChips({ chips, picked, onPick, label }: {
             })}
         </div>
     );
+    if (!heading) return group;
+    return (
+        <div className="min-w-0">
+            <div aria-hidden="true" className="mb-1 text-xs font-bold text-nature-700 dark:text-nature-200 break-words">{label}</div>
+            {group}
+        </div>
+    );
+}
+
+/**
+ * A text box with its label over it, one column: one line, or several (`lines`) for longer words; the number keyboard
+ * for `numeric`. At most `max` characters (the document holds each field to its bound in code points, so this is never
+ * looser). A hint under it, or what is wrong with it in its place; both are read with it.
+ */
+export function ToolInput({ label, value, onChange, max, lines, numeric, hint, error, testId }: {
+    label: string;
+    value: string;
+    onChange: (next: string) => void;
+    max: number;
+    lines?: number;
+    numeric?: boolean;
+    hint?: string;
+    error?: string | null;
+    testId?: string;
+}) {
+    const id = useId();
+    const noteId = `${id}-note`;
+    const note = error || hint;
+    const cls = `w-full min-w-0 min-h-[48px] px-3 py-2 rounded-xl border text-base bg-white dark:bg-nature-950 text-nature-900 dark:text-white ${error
+        ? 'border-bp-danger-fill'
+        : 'border-nature-300 dark:border-nature-700'} ${FOCUS}`;
+    const common = {
+        id, value, maxLength: max, 'aria-invalid': error ? true : undefined, 'aria-describedby': note ? noteId : undefined, 'data-testid': testId,
+    };
+    return (
+        <div className="px-3 py-2 min-w-0" data-testid={testId ? `${testId}-field` : undefined}>
+            <label htmlFor={id} className="block mb-1 text-xs font-bold text-nature-700 dark:text-nature-200 break-words">{label}</label>
+            {lines && lines > 1
+                ? <textarea {...common} rows={lines} onChange={(e) => onChange(e.target.value)} className={`${cls} resize-y`} />
+                : <input {...common} type="text" inputMode={numeric ? 'numeric' : undefined} onChange={(e) => onChange(e.target.value)} className={cls} />}
+            {error
+                ? <p id={noteId} className="m-0 mt-1 text-xs font-semibold text-bp-ink-danger break-words">{error}</p>
+                : hint ? <p id={noteId} className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300 break-words">{hint}</p> : null}
+        </div>
+    );
+}
+
+/** A photo the host keeps (host.photos.uri), as wide as the column and never taller than it is wide. */
+export function ToolPhoto({ uri, label, testId }: { uri: string; label: string; testId?: string }) {
+    const src = useToolPhotoSrc(uri);
+    return (
+        <div className="px-3 pt-3 min-w-0">
+            <div className="w-full aspect-[4/3] rounded-xl overflow-hidden bg-nature-100 dark:bg-nature-800">
+                {src
+                    ? <img src={src} alt={label} data-testid={testId} className="w-full h-full object-cover" />
+                    : <span role="img" aria-label={label} data-testid={testId} className="block w-full h-full" />}
+            </div>
+        </div>
+    );
+}
+
+/**
+ * A sentence under a section: a note, a hint. Wraps; never cut. `warning` for what needs the member's eye before they go
+ * on, `danger` for what stopped (both announced as they show).
+ */
+export function ToolNote({ text, tone, testId }: { text: string; tone?: 'warning' | 'danger'; testId?: string }) {
+    const look = tone === 'danger' ? 'font-semibold text-bp-ink-danger' : tone === 'warning' ? 'font-semibold text-bp-ink-warning' : 'text-nature-700 dark:text-nature-200';
+    return <p role={tone ? 'status' : undefined} data-testid={testId} className={`m-0 px-3 py-2 text-sm break-words min-w-0 ${look}`}>{text}</p>;
 }
 
 /** A button: `primary` the screen's one main action, `quiet` the rest, `danger` what takes something away. */

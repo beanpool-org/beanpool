@@ -207,12 +207,15 @@ function markHomeOffered(owner: string, id: string) {
 function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCard, tools = TOOLS, apps = TOOL_APPS, now = Date.now }: ToolsPageProps & { id: string; onBack: () => void }) {
     const manifest = toolById(id, tools);
     const loader = manifest ? apps[id] : undefined;
+    // A tool this build has: its manifest and its web half. Nothing of any other is read or asked for, here or on the node
+    // (#2366 review: a manifest with no web half fetched and kept the node's copy, then said it wasn't in this version).
+    const here = manifest && loader ? manifest : undefined;
     const [attempt, setAttempt] = useState(0);
     const loaded = useToolApp(id, loader, attempt);
     const owner = identity.publicKey;
     const copyOf: WebToolCopy | null = useMemo(
-        () => (manifest && keepsNodeCopy(manifest) ? { manifest, owner: { kind: 'member', publicKey: owner }, node: pageNode() } : null),
-        [manifest, owner]);
+        () => (here && keepsNodeCopy(here) ? { manifest: here, owner: { kind: 'member', publicKey: owner }, node: pageNode() } : null),
+        [here, owner]);
     const [copy, setCopy] = useState<CopyView>({ setting: undefined, note: null, busy: false, failed: null });
     const noteRef = useRef<CopyView['note']>(null);
     noteRef.current = copy.note;
@@ -226,7 +229,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     const afterWrite = useCallback(() => {
         if (copyOf && noteRef.current !== 'older-node') toolCopyAfterWrite(copyOf, heard);
     }, [copyOf, heard]);
-    const store = useToolDoc(manifest, owner, afterWrite);
+    const store = useToolDoc(here, owner, afterWrite);
     reloadRef.current = store.reload;
     const info = useCommunityInfo();
     const [stack, setStack] = useState<Step[]>(() => [{ screen: open.screen, params: open.key ? { key: open.key } : {} as Record<string, string> }]);
@@ -285,10 +288,11 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
         owner: { kind: 'member', publicKey: owner, name: identity.callsign },
         node: { url: getNodeApiUrl() || null, profile: info?.profile ?? 'local', features: (info?.features as Record<string, unknown> | undefined) ?? null },
         navigate: (screen, params) => setStack((s) => [...s, { screen, params: { ...(params ?? {}) } }]),
+        back,
         openComposer: onComposer,
         now,
         nodeCopy: !!copyOf && copy.setting !== false && copy.note !== 'older-node',
-    }), [owner, identity.callsign, info, onComposer, now, copyOf, copy.setting, copy.note]);
+    }), [owner, identity.callsign, info, back, onComposer, now, copyOf, copy.setting, copy.note]);
     const docHandle = useMemo(() => ({ get: store.get, set: store.set }), [store.get, store.set]);
     const host = useMemo(() => (manifest ? webHostFor(manifest, ctx, docHandle) : null), [manifest, ctx, docHandle]);
 

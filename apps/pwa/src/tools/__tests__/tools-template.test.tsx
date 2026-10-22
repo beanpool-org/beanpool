@@ -252,12 +252,13 @@ describe('a tool this build does not have', () => {
         expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
     });
 
-    it("the registry as shipped: the Tool shed's core and no web half yet, the Tools screen says no tool, and any id is not in this version", async () => {
-        // The slice that adds a tool's web half (the Tool shed's is T1.3) changes both lines on purpose.
+    it("the registry as shipped: the Tool shed, core and web half, on the Tools screen's shelf; an id this build doesn't have is not in this version", async () => {
+        // The slice that adds a tool's web half changes both lines on purpose (the Tool shed's was T1.3).
         expect(TOOLS.map((m) => m.id)).toEqual(['things']);
-        expect(Object.keys(TOOL_APPS)).toEqual([]);
+        expect(Object.keys(TOOL_APPS)).toEqual(['things']);
         const list = render(<ToolsPage identity={identity} open={{ id: null, screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
-        expect(await list.findByTestId('tools-none')).toBeInTheDocument();
+        expect(within(await list.findByTestId('tools-shelf-stock')).getByTestId('tools-row-things')).toBeInTheDocument();
+        expect(list.queryByTestId('tools-none')).toBeNull();
         list.unmount();
         render(<ToolsPage identity={identity} open={{ id: 'scaffold', screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
         expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
@@ -282,12 +283,12 @@ describe('the host: only what the manifest declared', () => {
         await keep('spy', { v: 1, items: [{ id: 'a', name: 'Ladder', addedAt: '2026-10-01T00:00:00.000Z' }] });
         draw(c, { id: 'spy', screen: 'main', key: null });
         await screen.findByRole('button', { name: 'offer' });
-        expect(Object.keys(seen.host!).sort()).toEqual(['doc', 'navigate', 'node', 'now', 'owner']);
+        expect(Object.keys(seen.host!).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'now', 'owner']);
         expect('offerDoor' in seen.host!).toBe(false);
         expect('deals' in seen.host!).toBe(false);
     });
 
-    it('every permission at once: the web grants only what it has built (the doors, the node copy); the rest are absent, not undefined', async () => {
+    it('every permission at once: the web grants only what it has built (all but place and the event door); the rest are absent, not undefined', async () => {
         // The node copy's open asks the community's server, which keeps none yet, so this browser's copy is sent; answered
         // here, and waited for, so it can't land in a later test.
         const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify(init?.method === 'PUT'
@@ -301,9 +302,12 @@ describe('the host: only what the manifest declared', () => {
         await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
         expect(fetchSpy.mock.calls.map(([url, init]) => [String(url).replace(/^.*(\/api\/)/, '$1'), init?.method])).toEqual([['/api/tools/spy', 'GET'], ['/api/tools/spy', 'PUT']]);
         await waitFor(async () => expect((await readToolRecord(OWNER, 'spy'))?.syncedAt).toBe('2026-10-21T08:00:00.000Z'));
-        expect(Object.keys(seen.host!).sort()).toEqual(['doc', 'navigate', 'needDoor', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner']);
+        // Photos, the camera, posts, deals and the pricing guide came with the Tool shed (T1.3), the first tool to ask for them.
+        expect(Object.keys(seen.host!).sort()).toEqual([
+            'back', 'camera', 'deals', 'doc', 'navigate', 'needDoor', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner', 'photos', 'posts', 'pricingGuide',
+        ]);
         expect((seen.host as unknown as { nodeCopy: { on: boolean } }).nodeCopy).toEqual({ on: true });
-        for (const absent of ['photos', 'camera', 'place', 'eventDoor', 'deals', 'pricingGuide', 'posts']) {
+        for (const absent of ['place', 'eventDoor']) {
             expect(absent in seen.host!, absent).toBe(false);
         }
     });

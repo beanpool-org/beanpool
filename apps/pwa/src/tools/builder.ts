@@ -6,11 +6,16 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    TOOL_LIMITS, narrowHost, toolDocBytes,
-    type ToolHost, type ToolHostBase, type ToolHostGrants, type ToolManifest, type ToolNeedDraft, type ToolOfferDraft, type ToolPermission,
+    TOOL_LIMITS, lendBackAroundOf, narrowHost, pricingHintFor, toolDocBytes,
+    type PricingGuideItem, type ToolDealSummary, type ToolHost, type ToolHostBase, type ToolHostGrants, type ToolManifest, type ToolNeedDraft,
+    type ToolOfferDraft, type ToolOwnOffer, type ToolPermission, type ToolPostStatus,
 } from '@beanpool/core';
+import {
+    getMarketplacePosts, getMyMarketplaceTransactions, pauseMarketplacePost, request, resumeMarketplacePost, type MarketplacePost,
+} from '../lib/api';
 import { MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
-import { keepToolDoc, readToolRecord, removeToolRecord } from './store';
+import { chooseImageFile, keepChosen, toolPhotoToken } from './photos';
+import { keepToolDoc, readToolPhoto, readToolRecord, removeToolPhoto, removeToolRecord } from './store';
 
 /** What App gives the host: who the owner is, the node, and its doors. */
 export interface WebHostContext {
@@ -18,6 +23,8 @@ export interface WebHostContext {
     node: { url: string | null; profile: string; features: Record<string, unknown> | null };
     /** Into another screen of this tool (the covered page's openTool state). */
     navigate(screen: string, params?: Record<string, string>): void;
+    /** Back, as the page's Back goes: the screen this one was opened from, else out of the tool. */
+    back(): void;
     /** The composer, opened prefilled; the member taps Post. */
     openComposer(draft: ComposerDraft): void;
     now?(): number;
@@ -141,7 +148,12 @@ export interface ComposerDraft {
     priceType: 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly' | null;
     repeatable: boolean;
     cashAlsoNeeded: boolean;
+    /** The tool's photos for an Offer, as the composer keeps them (JPEG data URLs at 800 px); absent when it has none. */
+    photos?: string[];
 }
+
+/** The composer keeps at most this many photos. */
+const COMPOSER_PHOTOS = 5;
 
 const PRICE_TYPES = new Set(['fixed', 'hourly', 'daily', 'weekly', 'monthly']);
 export const COMPOSER_TITLE_CHARS = 120;
@@ -168,10 +180,98 @@ export function composerDraft(type: 'offer' | 'need', draft: ToolOfferDraft | To
     };
 }
 
-function webGrants(ctx: WebHostContext): Partial<ToolHostGrants> {
+/** A post as the host says it to a tool: live, in a deal, paused, or gone (ended, deleted, or not the owner's). */
+export function postStatusOf(post: Pick<MarketplacePost, 'status'> | null | undefined): ToolPostStatus {
+    switch (post?.status) {
+        case 'active': return 'active';
+        case 'pending': return 'pending';
+        case 'paused': return 'paused';
+        default: return 'gone';
+    }
+}
+
+/**
+ * The owner's own Offer as the node has it, else null: `posts` reaches no other post. A server that can't be reached
+ * throws, so a tool says it couldn't check rather than that the Offer has gone.
+ */
+async function ownOffer(owner: string, id: string): Promise<MarketplacePost | null> {
+    const [post] = await getMarketplacePosts({ id });
+    return post && post.id === id && post.authorPublicKey === owner && post.type === 'offer' ? post : null;
+}
+
+/** The owner's own Offers, live, in a deal or paused (the node shows its author the paused ones). */
+async function ownOffers(owner: string): Promise<MarketplacePost[]> {
+    const posts = await getMarketplacePosts({ author: owner, type: 'offer' });
+    return (Array.isArray(posts) ? posts : []).filter((p) => p && p.authorPublicKey === owner && p.type === 'offer' && postStatusOf(p) !== 'gone');
+}
+
+/** `posts`: pause and resume the owner's own Offers only, say how one stands, and list them. */
+export function webPosts(owner: string): ToolHostGrants['posts'] {
+    const mustBeOwn = async (id: string) => {
+        if (!await ownOffer(owner, id)) throw new Error('Not one of your Offers.');
+    };
     return {
-        offerDoor: (draft: ToolOfferDraft) => ctx.openComposer(composerDraft('offer', draft)),
+        pause: async (id) => { await mustBeOwn(id); await pauseMarketplacePost(id, owner); },
+        resume: async (id) => { await mustBeOwn(id); await resumeMarketplacePost(id, owner); },
+        status: async (id) => postStatusOf(await ownOffer(owner, id)),
+        mine: async (): Promise<ToolOwnOffer[]> => (await ownOffers(owner)).map((p) => ({ id: p.id, title: p.title, status: postStatusOf(p) })),
+    };
+}
+
+/**
+ * `deals`: the owner's deals where they are the seller or lender (on their own Offers; the tool matches the ones its
+ * records are linked to), never one they are buying in. A loan that is out says when it is due back, from its Offer's
+ * hand-over and the deal's days (core's lendBackAroundOf).
+ */
+export async function webDeals(owner: string): Promise<ToolDealSummary[]> {
+    const [deals, offers] = await Promise.all([getMyMarketplaceTransactions(owner), ownOffers(owner).catch(() => [] as MarketplacePost[])]);
+    const byId = new Map(offers.map((p) => [p.id, p]));
+    return (Array.isArray(deals) ? deals : []).filter((d) => d && d.sellerPublicKey === owner).map((d): ToolDealSummary => {
+        const post = byId.get(d.postId);
+        const backAround = d.status === 'pending' && post?.lendable ? lendBackAroundOf(post.acceptedAt, post.priceType, d.hours) : null;
+        const updatedAt = (d.status === 'pending' && post?.acceptedAt) || d.completedAt || d.createdAt;
+        return { postId: d.postId, transactionId: d.id, status: d.status, updatedAt, ...(backAround ? { backAround } : {}) };
+    });
+}
+
+/**
+ * `pricingGuide`: the community's price guide (its public GET /api/pricing-guide) on one thing, through core's
+ * pricingHintFor. Null when it can't be read or nothing matches: a hint, never a price set for the member.
+ */
+export async function webPricingHint(category: string, words: string): Promise<{ credits: number; priceType: string } | null> {
+    const data = await request<{ items?: unknown }>('GET', '/api/pricing-guide').catch(() => null);
+    return Array.isArray(data?.items) ? pricingHintFor(data.items as PricingGuideItem[], category, words) : null;
+}
+
+/** A new photo's ref. */
+const newPhotoRef = () => (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+
+function webGrants(ctx: WebHostContext, tool: string): Partial<ToolHostGrants> {
+    const owner = ctx.owner.publicKey;
+    const photo = async (capture: boolean) => keepChosen(owner, tool, await chooseImageFile(capture), newPhotoRef());
+    return {
+        // The draft's photos are the tool's refs: read from this browser's store into the composer's own form. A draft
+        // with none opens the composer at once.
+        offerDoor: (draft: ToolOfferDraft) => {
+            const refs = (Array.isArray(draft?.photos) ? draft.photos : []).filter((r): r is string => typeof r === 'string').slice(0, COMPOSER_PHOTOS);
+            if (refs.length === 0) { ctx.openComposer(composerDraft('offer', draft)); return; }
+            void Promise.all(refs.map((ref) => readToolPhoto(owner, tool, ref))).then((read) => {
+                const photos = read.filter((p): p is string => !!p);
+                ctx.openComposer({ ...composerDraft('offer', draft), ...(photos.length > 0 ? { photos } : {}) });
+            });
+        },
         needDoor: (draft: ToolNeedDraft) => ctx.openComposer(composerDraft('need', draft)),
+        photos: {
+            pick: () => photo(false),
+            remove: async (ref: string) => { await removeToolPhoto(owner, tool, ref); },
+            uri: (ref: string) => toolPhotoToken(owner, tool, ref),
+        },
+        camera: { take: () => photo(true) },
+        posts: webPosts(owner),
+        deals: () => webDeals(owner),
+        pricingGuide: (category: string, words: string) => webPricingHint(category, words),
         nodeCopy: { on: ctx.nodeCopy ?? false },
     };
 }
@@ -188,8 +288,9 @@ export function webHostFor<D, P extends ToolPermission>(
         node: ctx.node,
         doc,
         navigate: (screen, params) => ctx.navigate(screen, params),
+        back: () => ctx.back(),
         now: () => (ctx.now ? ctx.now() : Date.now()),
-        ...webGrants(ctx),
+        ...webGrants(ctx, m.id),
     };
     return narrowHost(full, m.permissions);
 }

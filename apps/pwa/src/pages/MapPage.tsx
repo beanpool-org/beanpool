@@ -48,6 +48,7 @@ import {
 } from '../lib/live-posts';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
+import { Sentence } from '../components/Sentence';
 import { approximateLocation, listPhotoUrl, tierForCredit, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { NewAccountCard } from '../components/NewAccountCard';
@@ -81,6 +82,54 @@ function simpleHash(str: string): number {
     }
     return Math.abs(hash);
 }
+
+const MAP_LEAFLET_CSS = `
+    .leaflet-container {
+        z-index: 0 !important;
+    }
+    .leaflet-top.leaflet-right {
+        display: none !important;
+    }
+    .user-marker-pulse {
+        width: 18px; height: 18px;
+        background: rgba(16, 185, 129, 0.9); /* emerald-500 */
+        border: 2px solid #fff;
+        border-radius: 50%;
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+        animation: pulse 2s ease-out infinite;
+    }
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+        100% { box-shadow: 0 0 0 16px rgba(16, 185, 129, 0); }
+    }
+    .leaflet-control-zoom a {
+        background: rgba(255, 255, 255, 0.9) !important;
+        color: #4b5563 !important; /* text-nature-600 */
+        border-color: #e5e7eb !important; /* border-nature-200 */
+    }
+    .leaflet-control-zoom a:hover {
+        background: rgba(249, 250, 251, 0.95) !important; /* bg-nature-50 */
+    }
+    .leaflet-control-attribution {
+        background: rgba(255, 255, 255, 0.7) !important;
+        color: #6b7280 !important; /* text-nature-500 */
+        font-size: 10px !important;
+        border-top-left-radius: 8px;
+    }
+    .leaflet-control-attribution a {
+        color: #4b5563 !important;
+    }
+    .leaflet-popup-content-wrapper {
+        background: rgba(255, 255, 255, 0.95) !important;
+        color: #111827 !important; /* text-nature-950 */
+        border-radius: 16px !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important; /* shadow-soft */
+        border: 1px solid #e5e7eb !important; /* border-nature-200 */
+    }
+    .leaflet-popup-tip {
+        background: rgba(255, 255, 255, 0.95) !important;
+    }
+`;
 
 const DEFAULT_ZOOM = 13;
 // Where the map starts before it knows where this community is, and stays when the community has never set its
@@ -1166,7 +1215,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (nodeRadius && postLat != null && postLng != null) {
             const dist = haversineDistance(postLat, postLng, nodeRadius.lat, nodeRadius.lng);
             if (dist > nodeRadius.radiusKm) {
-                const proceed = window.confirm(`This listing is ${Math.round(dist)}km away, which is outside your community's ${nodeRadius.radiusKm}km service area. Are you sure you want to post it here?`);
+                const proceed = window.confirm(t("This listing is {distance}km away, which is outside your community's {service}km service area. Are you sure you want to post it here?", { distance: Math.round(dist), service: nodeRadius.radiusKm }));
                 if (!proceed) return;
             }
         }
@@ -1641,7 +1690,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             }
             onCopyEventHandled?.();
             if (!source || source.type !== 'event') {
-                alert('That event could not be loaded, so there is nothing to copy.');
+                alert(t('That event could not be loaded, so there is nothing to copy.'));
                 return;
             }
             const copy = buildEventCopy(source, identity?.publicKey);
@@ -1700,11 +1749,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             }
             onEditEventHandled?.();
             if (!source || source.type !== 'event') {
-                alert('That event could not be loaded, so it cannot be edited right now.');
+                alert(t('That event could not be loaded, so it cannot be edited right now.'));
                 return;
             }
             if (!isEventHostView(source)) {
-                alert('Only the host can edit this event.');
+                alert(t('Only the host can edit this event.'));
                 return;
             }
             const blocked = eventEditBlockedReason(source);
@@ -1778,23 +1827,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
                     : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                 }`}>
-                    <span className="text-xl leading-none">📍</span> My location
+                    <span className="text-xl leading-none">📍</span> {t('My location')}
                 </button>
                 <button onClick={() => { enterPinDrop(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                     validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
                     : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                 }`}>
-                    <span className="text-xl leading-none">📌</span> Drop a pin
+                    <span className="text-xl leading-none">📌</span> {t('Drop a pin')}
                 </button>
             </div>
             {pinDropMode && postLat == null && (
                 <p className="m-0 mb-3 text-blue-600 dark:text-blue-400 text-sm font-semibold text-center animate-pulse">
-                    Tap the map to place your pin
+                    {t('Tap the map to place your pin')}
                 </p>
             )}
             {postLat != null && postLng != null && (
                 <p className="m-0 mb-3 text-emerald-600 text-sm font-semibold text-center flex items-center justify-center gap-1">
-                    ✓ Location set
+                    {t('✓ Location set')}
                 </p>
             )}
             {/* Where anyone can join, a listing's pin starts Approximate; the member may choose the exact spot. The event
@@ -1829,10 +1878,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <div className="flex gap-2 flex-wrap items-center">
                     {newPostPhotos.map((photo, i) => (
                         <div key={i} className="relative">
-                            <img src={photo} alt={`photo ${i+1}`} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
+                            <img src={photo} alt={t('photo {n}', { n: i + 1 })} className="w-16 h-16 object-cover rounded-xl border border-nature-200 shadow-sm" />
                             <button
                                 onClick={() => setNewPostPhotos(prev => prev.filter((_, j) => j !== i))}
-                                aria-label="Remove photo"
+                                aria-label={t('Remove photo')}
                                 className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-bp-danger-fill hover:bg-bp-danger-hover border-none rounded-full text-bp-danger-on text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md transition-colors transform hover:scale-110"
                             >
                                 ✕
@@ -1873,7 +1922,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     )}
                 </div>
                 <p className={`text-xs font-semibold mt-2 uppercase tracking-wide ${required && validationErrors.has('photos') && newPostPhotos.length === 0 ? 'text-red-500' : 'text-nature-400'}`}>
-                    {newPostPhotos.length}/5 photos {newPostPhotos.length === 0 ? (required ? '(at least 1 required)' : '(optional)') : ''}
+                    {newPostPhotos.length === 0
+                        ? (required ? t('0/5 photos (at least 1 required)') : t('0/5 photos (optional)'))
+                        : t('{n}/5 photos', { n: newPostPhotos.length })}
                 </p>
                 {visitorNote && (
                     <p data-testid="composer-visitor-note" className="m-0 mt-2 text-sm text-nature-600 dark:text-nature-300">{visitorNote}</p>
@@ -1894,53 +1945,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         <>
         <div className="relative w-full h-full">
             {/* Map custom styles overrides for glassmorphism and Earth-tone palettes */}
-            <style>{`
-                .leaflet-container {
-                    z-index: 0 !important;
-                }
-                .leaflet-top.leaflet-right {
-                    display: none !important;
-                }
-                .user-marker-pulse {
-                    width: 18px; height: 18px;
-                    background: rgba(16, 185, 129, 0.9); /* emerald-500 */
-                    border: 2px solid #fff;
-                    border-radius: 50%;
-                    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
-                    animation: pulse 2s ease-out infinite;
-                }
-                @keyframes pulse {
-                    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
-                    100% { box-shadow: 0 0 0 16px rgba(16, 185, 129, 0); }
-                }
-                .leaflet-control-zoom a {
-                    background: rgba(255, 255, 255, 0.9) !important;
-                    color: #4b5563 !important; /* text-nature-600 */
-                    border-color: #e5e7eb !important; /* border-nature-200 */
-                }
-                .leaflet-control-zoom a:hover {
-                    background: rgba(249, 250, 251, 0.95) !important; /* bg-nature-50 */
-                }
-                .leaflet-control-attribution {
-                    background: rgba(255, 255, 255, 0.7) !important;
-                    color: #6b7280 !important; /* text-nature-500 */
-                    font-size: 10px !important;
-                    border-top-left-radius: 8px;
-                }
-                .leaflet-control-attribution a {
-                    color: #4b5563 !important;
-                }
-                .leaflet-popup-content-wrapper {
-                    background: rgba(255, 255, 255, 0.95) !important;
-                    color: #111827 !important; /* text-nature-950 */
-                    border-radius: 16px !important;
-                    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important; /* shadow-soft */
-                    border: 1px solid #e5e7eb !important; /* border-nature-200 */
-                }
-                .leaflet-popup-tip {
-                    background: rgba(255, 255, 255, 0.95) !important;
-                }
-            `}</style>
+            <style>{MAP_LEAFLET_CSS}</style>
 
             {/* Map container */}
             <div ref={mapContainer} className="w-full h-full" />
@@ -1954,7 +1959,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     data-testid="map-location-hint"
                     className="absolute top-[4.25rem] md:top-3 left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-2 rounded-full bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 pointer-events-none"
                 >
-                    This community hasn't set its location yet
+                    {t("This community hasn't set its location yet")}
                 </p>
             )}
 
@@ -1964,8 +1969,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     data-testid="map-near-empty"
                     className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
-                    <span>{`Nothing within ${formatDistance(near.radiusKm)} ${near.from === 'area' ? 'of your area' : 'of the place you picked'} yet.`}</span>
-                    <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">Show everywhere</button>
+                    <span>
+                        {near.from === 'area'
+                            ? t('Nothing within {distance} of your area yet.', { distance: formatDistance(near.radiusKm) })
+                            : t('Nothing within {distance} of the place you picked yet.', { distance: formatDistance(near.radiusKm) })}
+                    </span>
+                    <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">{t('Show everywhere')}</button>
                 </p>
             )}
 
@@ -1985,8 +1994,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     data-testid="map-area-failed"
                     className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
-                    <span>Couldn't check your area just now, so this is the newest from everywhere.</span>
-                    <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">Try again</button>
+                    <span>{t("Couldn't check your area just now, so this is the newest from everywhere.")}</span>
+                    <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">{t('Try again')}</button>
                 </p>
             )}
 
@@ -1995,9 +2004,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     data-testid="map-near-again"
                     className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
                 >
-                    <span>Newest from everywhere.</span>
+                    <span>{t('Newest from everywhere.')}</span>
                     <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">
-                        {nearAgain.from === 'area' ? 'Near your area' : 'Near the place you picked'}
+                        {nearAgain.from === 'area' ? t('Near your area') : t('Near the place you picked')}
                     </button>
                 </p>
             )}
@@ -2011,7 +2020,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     ref={eventChipsRef}
                     data-testid="event-window-chips"
                     role="group"
-                    aria-label="Show events"
+                    aria-label={t('Show events')}
                     className="absolute top-[4.25rem] md:top-3 left-0 z-[100] w-fit max-w-full px-3 py-1 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain"
                     style={{ scrollbarWidth: 'none' }}
                 >
@@ -2027,7 +2036,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     : 'bg-white/95 dark:bg-nature-900/95 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-oat-50'
                             }`}
                         >
-                            {w.id === 'all' ? 'All events' : w.label}
+                            {w.id === 'all' ? t('All events') : w.id === 'today' ? t('Today') : w.id === 'weekend' ? t('This weekend') : t('Next 7 days')}
                         </button>
                     ))}
                 </div>
@@ -2037,13 +2046,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             <div className="absolute bottom-[6.5rem] left-3 flex flex-col items-center bg-white/95 dark:bg-nature-900/95 backdrop-blur-md shadow-[0_8px_30px_rgb(0,0,0,0.15)] border border-nature-200 dark:border-nature-700 rounded-2xl z-[100] overflow-hidden">
                 <button
                     onClick={handleLocate}
-                    aria-label="My location"
+                    aria-label={t('My location')}
                     className={`w-12 h-12 flex items-center justify-center transition-colors ${
                         locating 
                             ? 'text-blue-600 bg-blue-50/80 dark:bg-blue-900/30 dark:text-blue-300' 
                             : 'text-nature-800 dark:text-oat-50 hover:bg-black/5 dark:hover:bg-white/10'
                     }`}
-                    title="My location"
+                    title={t('My location')}
                 >
                     {locating ? '⏳' : (
                         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -2059,18 +2068,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <div className="w-8 h-[1px] bg-nature-200 dark:bg-nature-700" />
                 <button
                     onClick={() => mapRef.current?.zoomIn()}
-                    aria-label="Zoom in"
+                    aria-label={t('Zoom in')}
                     className="w-12 h-10 flex items-center justify-center text-nature-800 dark:text-oat-50 text-xl font-bold hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                    title="Zoom in"
+                    title={t('Zoom in')}
                 >
                     +
                 </button>
                 <div className="w-8 h-[1px] bg-nature-200 dark:bg-nature-700" />
                 <button
                     onClick={() => mapRef.current?.zoomOut()}
-                    aria-label="Zoom out"
+                    aria-label={t('Zoom out')}
                     className="w-12 h-10 flex items-center justify-center text-nature-800 dark:text-oat-50 text-xl font-bold hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-                    title="Zoom out"
+                    title={t('Zoom out')}
                 >
                     −
                 </button>
@@ -2080,10 +2089,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             {!showNewPost && !visitor && (
                 <button
                     onClick={tryOpenComposer}
-                    aria-label="New Post"
+                    aria-label={t('New Post')}
                     className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.5rem)' }}
-                    title="New Post"
+                    title={t('New Post')}
                 >
                     +
                 </button>
@@ -2120,12 +2129,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                             className="flex-1 min-h-[48px] rounded-xl border-none font-bold text-white text-sm bg-violet-700 hover:bg-violet-800"
                         >
-                            View Details
+                            {t('View Details')}
                         </button>
                         <button
                             type="button"
                             onClick={() => setPreviewPost(null)}
-                            aria-label="Close preview"
+                            aria-label={t('Close preview')}
                             className="flex-shrink-0 min-h-[48px] min-w-[48px] rounded-xl bg-black/5 dark:bg-white/10 border-none text-sm font-extrabold text-gray-600 dark:text-gray-300"
                         >
                             ✕
@@ -2143,7 +2152,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <button
                         type="button"
                         onClick={() => setPreviewPost(null)}
-                        aria-label="Close preview"
+                        aria-label={t('Close preview')}
                         className="absolute top-1 right-1 min-w-[44px] min-h-[44px] p-0 rounded-full bg-transparent flex items-center justify-center border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
                         <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-300">✕</span>
@@ -2157,12 +2166,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         <span data-testid="map-preview-title" className="text-base font-extrabold text-gray-900 dark:text-white leading-tight break-words">
                             {previewPost.title}
                         </span>
-                        <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-2">near here</span>
+                        <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-2">{t('near here')}</span>
                         <button
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                             className="min-h-[44px] py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer bg-indigo-600 hover:bg-indigo-700"
                         >
-                            View Details
+                            {t('View Details')}
                         </button>
                     </div>
                 </div>
@@ -2173,7 +2182,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <div className="bg-white dark:bg-nature-900 m-4 rounded-[24px] p-4 flex flex-row shadow-[0_10px_20px_rgba(0,0,0,0.15)] pointer-events-auto relative border border-nature-200 dark:border-nature-800 transition-colors">
                     <button 
                         onClick={() => setPreviewPost(null)}
-                        aria-label="Close preview"
+                        aria-label={t('Close preview')}
                         className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-200 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
                     >
                         ✕
@@ -2190,10 +2199,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     triggerElement: e.currentTarget,
                                 })
                             }
-                            aria-label={`View enlarged photo: ${previewPost.title}`}
+                            aria-label={t('View enlarged photo: {title}', { title: previewPost.title })}
                             className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
                         >
-                            <img src={listPhotoUrl(previewPost.photos[0])} alt="thumb" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
+                            <img src={listPhotoUrl(previewPost.photos[0])} alt={t('thumb')} className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
                         </button>
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">
@@ -2206,7 +2215,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 {MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.label || previewPost.category}
                             </span>
                             <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 mr-6">
-                                {previewPost.credits}B
+                                {previewPost.credits}{t('B', undefined, 'the Beans sign')}
                             </span>
                         </div>
                         <span className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors">
@@ -2221,7 +2230,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 previewPost.type === 'offer' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                             }`}
                         >
-                            View Details
+                            {t('View Details')}
                         </button>
                     </div>
                 </div>
@@ -2262,7 +2271,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             pinDropMarkerRef.current.remove();
                             pinDropMarkerRef.current = null;
                         }
-                    }} aria-label="Close new post" className="bg-transparent border-none text-nature-400 hover:text-nature-600 text-2xl cursor-pointer transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-50 dark:hover:bg-nature-800 dark:hover:text-nature-200">
+                    }} aria-label={t('Close new post')} className="bg-transparent border-none text-nature-400 hover:text-nature-600 text-2xl cursor-pointer transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-50 dark:hover:bg-nature-800 dark:hover:text-nature-200">
                         ✕
                     </button>
                 </div>
@@ -2272,28 +2281,27 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 {eventEdit && (
                     <p data-testid="event-edit-fixed" className="m-0 mb-4 p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-sm text-nature-800 dark:text-nature-200">
                         {audienceScope === 'group'
-                            ? `For ${userGroupsById.get(targetGroupId)?.name || 'the group'} only. `
-                            : 'For this community. '}
-                        Who can see it and who hosts it stay as they are.
+                            ? t('For {group} only. Who can see it and who hosts it stay as they are.', { group: userGroupsById.get(targetGroupId)?.name || t('the group') })
+                            : t('For this community. Who can see it and who hosts it stay as they are.')}
                     </p>
                 )}
 
                 {/* Type toggle */}
                 {!eventEdit && (<>
                 <div className="grid grid-cols-2 min-[400px]:grid-cols-4 gap-2 mb-4">
-                    {(['offer', 'need', 'poll', 'event'] as const).map(t => (
+                    {(['offer', 'need', 'poll', 'event'] as const).map(tName => (
                         <button
-                            key={t}
+                            key={tName}
                             type="button"
-                            aria-pressed={newPostType === t}
-                            onClick={() => { setNewPostType(t); setValidationErrors(new Set()); if (t !== 'event') setEventIsCopy(false); }}
+                            aria-pressed={newPostType === tName}
+                            onClick={() => { setNewPostType(tName); setValidationErrors(new Set()); if (tName !== 'event') setEventIsCopy(false); }}
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
-                                newPostType === t
-                                    ? (t === 'offer' ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-md scale-[1.02]' : t === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
+                                newPostType === tName
+                                    ? (tName === 'offer' ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-md scale-[1.02]' : tName === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : tName === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
-                            {t === 'offer' ? '🟢 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}
+                            {tName === 'offer' ? t('🟢 Offer') : tName === 'need' ? t('🟠 Need') : tName === 'event' ? t('Event') : t('🗳️ Poll')}
                         </button>
                     ))}
                 </div>
@@ -2301,7 +2309,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 {/* Audience Scope Selector — scope must be unmistakable before posting (Item 10) */}
                 <div className="mb-4">
                     <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1.5">
-                        Audience Scope
+                        {t('Audience Scope')}
                     </label>
                     <div className="flex gap-2 mb-2">
                         <button
@@ -2314,14 +2322,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
-                            🌍 Everyone (Public)
+                            {t('🌍 Everyone (Public)')}
                         </button>
                         {userGroups.length > 0 && (
                             <button
                                 type="button"
                                 aria-pressed={audienceScope === 'group'}
                                 disabled={enterpriseHostsEvent}
-                                title={enterpriseHostsEvent ? 'An enterprise hosts for the whole community.' : undefined}
+                                title={enterpriseHostsEvent ? t('An enterprise hosts for the whole community.') : undefined}
                                 onClick={() => {
                                     setAudienceScope('group');
                                     if (!targetGroupId && userGroups[0]) {
@@ -2334,14 +2342,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                         : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                 }`}
                             >
-                                👥 Group ({userGroups.length})
+                                {t('👥 Group ({count})', { count: userGroups.length })}
                             </button>
                         )}
                     </div>
                     {/* Said plainly rather than left as a greyed-out button nobody can explain. */}
                     {enterpriseHostsEvent && (
                         <p data-testid="event-enterprise-audience-note" className="m-0 mb-2 text-xs font-semibold text-nature-600 dark:text-nature-400">
-                            {keeperNames[eventHost.slice(4)] || 'The enterprise'} hosts for the whole community, so this event is not group-only.
+                            {t('{host} hosts for the whole community, so this event is not group-only.', { host: keeperNames[eventHost.slice(4)] || t('The enterprise') })}
                         </p>
                     )}
 
@@ -2366,20 +2374,25 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl text-xs text-blue-900 dark:text-blue-200">
                             <p className="font-bold flex items-center gap-1.5 mb-0.5">
                                 <span>🌍</span>
-                                <span>Public — visible to everyone on BeanPool</span>
+                                <span>{t('Public — visible to everyone on BeanPool')}</span>
                             </p>
                             <p className="m-0 leading-relaxed text-[11px] opacity-90">
-                                Anyone in the community can discover and respond to this listing.
+                                {t('Anyone in the community can discover and respond to this listing.')}
                             </p>
                         </div>
                     ) : (
                         <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-500 rounded-xl text-xs text-emerald-950 dark:text-emerald-200">
                             <p className="font-black text-sm flex items-center gap-1.5 mb-1 text-emerald-800 dark:text-emerald-300">
                                 <span>🔒</span>
-                                <span>Only {userGroupsById.get(targetGroupId)?.name || 'Group'} can see this</span>
+                                <span>{t('Only {group} can see this', { group: userGroupsById.get(targetGroupId)?.name || t('Group') })}</span>
                             </p>
                             <p className="m-0 leading-relaxed text-[11px]">
-                                This post will be visible <strong>only to active members of {userGroupsById.get(targetGroupId)?.name || 'this group'}</strong>. It will not appear in the public marketplace feed or on the public map.
+                                <Sentence
+                                    text={t('This post will be visible {groupOnly}. It will not appear in the public marketplace feed or on the public map.')}
+                                    parts={{
+                                        groupOnly: <strong>{t('only to active members of {group}', { group: userGroupsById.get(targetGroupId)?.name || t('this group') })}</strong>
+                                    }}
+                                />
                             </p>
                         </div>
                     )}
@@ -2390,12 +2403,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <div className="space-y-4 mb-4">
                         {eventIsCopy && (
                             <p data-testid="event-copy-hint" className="m-0 p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-sm text-nature-800 dark:text-nature-200">
-                                Copied from your last one. Pick the new date and time. The photo is not copied — add one again if you want.
+                                {t('Copied from your last one. Pick the new date and time. The photo is not copied — add one again if you want.')}
                             </p>
                         )}
                         {!eventEdit && (keeperOf.length > 0 || convenorGroups.length > 0) && (
                             <div>
-                                <label htmlFor="event-host" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Post as</label>
+                                <label htmlFor="event-host" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Post as')}</label>
                                 <select
                                     id="event-host"
                                     value={eventHost}
@@ -2417,7 +2430,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     }}
                                     className="w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 appearance-auto cursor-pointer"
                                 >
-                                    <option value="me">Me</option>
+                                    <option value="me">{t('Me')}</option>
                                     {keeperOf.map(pk => (
                                         <option key={pk} value={`ent:${pk}`}>{keeperNames[pk] || `Enterprise ${pk.slice(0, 6)}`}</option>
                                     ))}
@@ -2429,10 +2442,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         )}
 
                         <div>
-                            <label htmlFor="event-title" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">What's happening</label>
+                            <label htmlFor="event-title" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t("What's happening")}</label>
                             <input
                                 id="event-title"
-                                placeholder="Working bee at the hall"
+                                placeholder={t('Working bee at the hall')}
                                 value={newPostTitle}
                                 onChange={e => { setNewPostTitle(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all ${validationErrors.has('title') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
@@ -2440,7 +2453,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </div>
 
                         <div>
-                            <label htmlFor="event-start" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Starts</label>
+                            <label htmlFor="event-start" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Starts')}</label>
                             <input
                                 id="event-start"
                                 type="datetime-local"
@@ -2449,12 +2462,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_start') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
                             {validationErrors.has('event_start') && (
-                                <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">Pick a start time in the future.</p>
+                                <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">{t('Pick a start time in the future.')}</p>
                             )}
                         </div>
 
                         <div>
-                            <label htmlFor="event-end" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Ends (optional, 2 hours after start if blank)</label>
+                            <label htmlFor="event-end" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Ends (optional, 2 hours after start if blank)')}</label>
                             <input
                                 id="event-end"
                                 type="datetime-local"
@@ -2463,7 +2476,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_end') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
                             {validationErrors.has('event_end') && (
-                                <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">The end must be after the start.</p>
+                                <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">{t('The end must be after the start.')}</p>
                             )}
                             {(() => {
                                 // Which zone the times are in (DESIGN-event-times §3): said only when it is not this device's, and
@@ -2582,10 +2595,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
                         {!eventOnline && (<>
                         <div>
-                            <label htmlFor="event-place" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Place name</label>
+                            <label htmlFor="event-place" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Place name')}</label>
                             <input
                                 id="event-place"
-                                placeholder="The old bowls club"
+                                placeholder={t('The old bowls club')}
                                 maxLength={EVENT_PLACE_NAME_MAX}
                                 value={eventPlaceName}
                                 onChange={e => { setEventPlaceName(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_place'); return n; }); }}
@@ -2610,10 +2623,15 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 className="p-2.5 rounded-lg bg-terra-50 dark:bg-terra-950/40 border border-terra-200 dark:border-terra-800/60 text-xs text-terra-800 dark:text-terra-200 space-y-1.5"
                             >
                                 <p className="font-semibold text-terra-900 dark:text-terra-100 m-0">
-                                    Anyone who opens this node&apos;s map will see this spot.
+                                    {t("Anyone who opens this node's map will see this spot.")}
                                 </p>
                                 <p className="text-[12px] text-nature-700 dark:text-nature-300 m-0">
-                                    If it&apos;s at someone&apos;s house, use <strong>Approximate</strong> to round the location to roughly 100&nbsp;m, and put the exact spot in the note for people who are going.
+                                    <Sentence
+                                        text={t("If it's at someone's house, use {approximate} to round the location to roughly 100 m, and put the exact spot in the note for people who are going.")}
+                                        parts={{
+                                            approximate: <strong>{t('Approximate')}</strong>
+                                        }}
+                                    />
                                 </p>
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <button
@@ -2623,11 +2641,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                         aria-pressed={postApproximate}
                                         className="min-h-[48px] px-3 py-1 rounded-md bg-terra-100 dark:bg-terra-900/40 hover:bg-terra-200 dark:hover:bg-terra-900/70 disabled:opacity-40 disabled:pointer-events-none text-sm font-semibold text-terra-700 dark:text-terra-300 border border-terra-300 dark:border-terra-700/60 transition-colors"
                                     >
-                                        Approximate (~100m)
+                                        {t('Approximate (~100m)')}
                                     </button>
                                     {postApproximate && (
                                         <span className="px-1.5 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink text-[11px] font-semibold border border-bp-chip-warn-ink">
-                                            ~100m
+                                            {t('~100m')}
                                         </span>
                                     )}
                                     {postApproximate && exactPinRef.current && (
@@ -2645,10 +2663,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </>)}
 
                         <div>
-                            <label htmlFor="event-description" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Description (optional)</label>
+                            <label htmlFor="event-description" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Description (optional)')}</label>
                             <textarea
                                 id="event-description"
-                                placeholder="What to expect, who it's for…"
+                                placeholder={t("What to expect, who it's for…")}
                                 value={newPostDescription}
                                 onChange={e => setNewPostDescription(e.target.value)}
                                 rows={3}
@@ -2659,10 +2677,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         {renderPhotoPicker(false)}
 
                         <div>
-                            <label htmlFor="event-note" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Note for people who are going</label>
+                            <label htmlFor="event-note" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Note for people who are going')}</label>
                             <textarea
                                 id="event-note"
-                                placeholder="Gate code, parking, what to bring"
+                                placeholder={t('Gate code, parking, what to bring')}
                                 maxLength={EVENT_PRIVATE_NOTE_MAX}
                                 value={eventNote}
                                 onChange={e => { setEventNote(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_note'); return n; }); }}
@@ -2692,7 +2710,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </div>
                         {eventEdit && eventEditNotifies(eventEditPayload(eventEdit.before, currentEventForm())) && (
                             <p data-testid="event-edit-notifies" className="m-0 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">
-                                You changed the time or place. The event will show UPDATED and everyone going will be told.
+                                {t('You changed the time or place. The event will show UPDATED and everyone going will be told.')}
                             </p>
                         )}
                     </div>
@@ -2700,10 +2718,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <div className="space-y-4 mb-4">
                         <div>
                             <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
-                                Question
+                                {t('Question')}
                             </label>
                             <input
-                                placeholder="What should our community decide?"
+                                placeholder={t('What should our community decide?')}
                                 value={newPostTitle}
                                 onChange={e => { setNewPostTitle(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-purple-300 shadow-sm transition-all ${
@@ -2714,10 +2732,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
                         <div>
                             <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
-                                Background / Context (Optional)
+                                {t('Background / Context (Optional)')}
                             </label>
                             <textarea
-                                placeholder="Add context or notes for members..."
+                                placeholder={t('Add context or notes for members...')}
                                 value={newPostDescription}
                                 onChange={e => setNewPostDescription(e.target.value)}
                                 rows={2}
@@ -2727,14 +2745,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
                         <div>
                             <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
-                                Options (2–4)
+                                {t('Options (2–4)')}
                             </label>
                             <div className="space-y-2">
                                 {pollOptions.map((opt, idx) => (
                                     <div key={idx} className="flex gap-2 items-center">
                                         <span className="w-6 text-center text-sm font-bold text-nature-500 dark:text-nature-400">{idx + 1}.</span>
                                         <input
-                                            placeholder={`Option ${idx + 1}`}
+                                            placeholder={t('Option {n}', { n: idx + 1 })}
                                             value={opt}
                                             maxLength={80}
                                             onChange={e => {
@@ -2750,8 +2768,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                                 type="button"
                                                 onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
                                                 className="text-nature-400 hover:text-red-500 dark:hover:text-red-300 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg leading-none rounded-lg"
-                                                title="Remove option"
-                                                aria-label={`Remove option ${idx + 1}`}
+                                                title={t('Remove option')}
+                                                aria-label={t('Remove option {n}', { n: idx + 1 })}
                                             >
                                                 ✕
                                             </button>
@@ -2765,23 +2783,23 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     onClick={() => setPollOptions([...pollOptions, ''])}
                                     className="mt-2 text-sm text-purple-600 dark:text-purple-300 hover:underline font-semibold flex items-center gap-1 min-h-[44px] py-2 px-1"
                                 >
-                                    + Add option
+                                    {t('+ Add option')}
                                 </button>
                             )}
                             {validationErrors.has('options_empty') && (
-                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Please fill or remove blank options.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">{t('Please fill or remove blank options.')}</p>
                             )}
                             {validationErrors.has('options_duplicate') && (
-                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Options must be distinct.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">{t('Options must be distinct.')}</p>
                             )}
                             {validationErrors.has('options') && (
-                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Please provide at least 2 non-empty options.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">{t('Please provide at least 2 non-empty options.')}</p>
                             )}
                         </div>
 
                         <div>
                             <label className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
-                                Duration
+                                {t('Duration')}
                             </label>
                             <div className="flex gap-2">
                                 {([3, 7, 14] as const).map(days => (
@@ -2796,7 +2814,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                                 : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300'
                                         }`}
                                     >
-                                        {days} Days
+                                        {t('{days} Days', { days })}
                                     </button>
                                 ))}
                             </div>
@@ -2811,11 +2829,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 data-testid="poll-open-vote"
                             />
                             <span className="min-w-0" style={{ overflowWrap: 'anywhere' }}>
-                                <span className="block font-bold mb-0.5">👁️ Open vote</span>
+                                <span className="block font-bold mb-0.5">{t('👁️ Open vote')}</span>
                                 <span className="block leading-relaxed">
                                     {pollOpenVote
-                                        ? 'Members will see who chose what. You can\'t change this once someone has voted.'
-                                        : 'Off: the vote is anonymous. Everyone sees only the totals. Tick it to let members see who chose what; you can\'t change it once someone has voted.'}
+                                        ? t("Members will see who chose what. You can't change this once someone has voted.")
+                                        : t("Off: the vote is anonymous. Everyone sees only the totals. Tick it to let members see who chose what; you can't change it once someone has voted.")}
                                 </span>
                             </span>
                         </label>
@@ -2829,9 +2847,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <>
                         {needBlocked && (
                             <div className="mb-4 p-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 text-sm">
-                                <p className="font-bold mb-1">💡 Contributions First</p>
+                                <p className="font-bold mb-1">{t('💡 Contributions First')}</p>
                                 <p className="text-[13px] leading-snug">
-                                    BeanPool is a mutual-credit community. To encourage a culture of giving, new members must list at least one Offer before they can post Needs. Let the community know what you can give back — switch to <span className="font-bold">🟢 Offer</span> above. (Or ask an Elder to vouch for you.)
+                                    <Sentence
+                                        text={t('BeanPool is a mutual-credit community. To encourage a culture of giving, new members must list at least one Offer before they can post Needs. Let the community know what you can give back — switch to {offer} above. (Or ask an Elder to vouch for you.)')}
+                                        parts={{
+                                            offer: <span className="font-bold">{t('🟢 Offer')}</span>
+                                        }}
+                                    />
                                 </p>
                             </div>
                         )}
@@ -2852,7 +2875,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         {/* Title + Credits */}
                         <div className="flex gap-2 mb-3">
                             <input
-                                placeholder="What do you need/offer?"
+                                placeholder={t('What do you need/offer?')}
                                 value={newPostTitle}
                                 onChange={e => { setNewPostTitle(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('title'); return n; }); }}
                                 className={`flex-1 py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all ${
@@ -2862,7 +2885,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             {!priceMarked && (<>
                             {/* Text, not type="number": a number box reads "12,5" by the browser's language, not the member's (#2202). */}
                             <input
-                                placeholder="B"
+                                placeholder={t('B', undefined, 'the Beans sign')}
                                 type="text"
                                 inputMode="decimal"
                                 value={newPostCredits}
@@ -2876,11 +2899,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 onChange={e => setNewPostPriceType(e.target.value as 'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly')}
                                 className="w-24 py-3 px-2 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[14px] font-semibold focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all border-nature-200 dark:border-nature-700 cursor-pointer appearance-auto"
                             >
-                                <option value="fixed">Total</option>
-                                <option value="hourly">/ Hr</option>
-                                <option value="daily">/ Dy</option>
-                                <option value="weekly">/ Wk</option>
-                                <option value="monthly">/ Mo</option>
+                                <option value="fixed">{t('Total')}</option>
+                                <option value="hourly">{t('/ Hr')}</option>
+                                <option value="daily">{t('/ Dy')}</option>
+                                <option value="weekly">{t('/ Wk')}</option>
+                                <option value="monthly">{t('/ Mo')}</option>
                             </select>
                             </>)}
                         </div>
@@ -2906,8 +2929,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     return `1.5% fee: ${newPostType === 'offer' ? 'You will receive' : 'Fulfiller receives'} ${net.toFixed(2)} B. `;
                                 }
                                 return '1.5% transaction fee funds community projects & solvency. ';
-                            })()}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">Learn more ⓘ</span>
-                            <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1">(100% community owned)</span>
+                            })()}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">{t('Learn more ⓘ')}</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1">{t('(100% community owned)')}</span>
                         </p>}
 
                         {/* Repeatable toggle */}
@@ -2918,7 +2941,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 onChange={e => setNewPostRepeatable(e.target.checked)}
                                 className="w-5 h-5 rounded border-nature-300 text-blue-600 focus:ring-blue-500 shadow-sm accent-blue-600 cursor-pointer transition-all"
                             />
-                            🔁 Repeatable — keep listing active for ongoing bookings
+                            {t('🔁 Repeatable — keep listing active for ongoing bookings')}
                         </label>
 
                         {/* #108 Cash-also-needed toggle. The nudge sits directly under the box, because the
@@ -2932,12 +2955,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 onChange={e => setNewPostCashAlsoNeeded(e.target.checked)}
                                 className="w-5 h-5 rounded border-nature-300 text-amber-600 focus:ring-amber-500 shadow-sm accent-amber-600 cursor-pointer transition-all"
                             />
-                            💸 Cash also needed — for fuel or materials
+                            {t('💸 Cash also needed — for fuel or materials')}
                         </label>
                         {newPostCashAlsoNeeded && (
                             <p className="text-[13px] leading-snug text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 mb-1">
-                                Cash is for fuel and consumables you paid for — <strong>not your time, not your tools</strong>.
-                                At cost, no markup. Agree the details in chat; the app never handles the money.
+                                <Sentence
+                                    text={t('Cash is for fuel and consumables you paid for — {notTools}. At cost, no markup. Agree the details in chat; the app never handles the money.')}
+                                    parts={{
+                                        notTools: <strong>{t('not your time, not your tools')}</strong>
+                                    }}
+                                />
                             </p>
                         )}
 
@@ -2954,7 +2981,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             access control), so the honest fix is the words, not a guarantee we cannot make. */}
                         {audienceScope !== 'group' && reachablePeerList.length > 0 && (
                             <div className="py-2 px-1">
-                                <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">Where does this travel?</label>
+                                <label id="reach-chooser-label" className="block text-sm font-medium text-nature-700 dark:text-nature-300 mb-1.5">{t('Where does this travel?')}</label>
                                 {/* role="group" with aria-pressed toggles, NOT role="radiogroup" with role="radio"
                                     (review suggestion, departed from deliberately): a radiogroup promises arrow-key
                                     navigation between options, and implementing the role without the keys leaves a
@@ -2982,7 +3009,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     ))}
                                 </div>
                                 {newPostReach === 'peers' && (
-                                    <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Communities this listing is aimed at">
+                                    <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={t('Communities this listing is aimed at')}>
                                         {reachablePeerList.map(p => {
                                             const on = newPostReachPeers.includes(p.peerId);
                                             return (
@@ -3026,7 +3053,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
                         {/* Description */}
                         <textarea
-                            placeholder="Describe what you need/offer..."
+                            placeholder={t('Describe what you need/offer...')}
                             value={newPostDescription}
                             onChange={e => { setNewPostDescription(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('description'); return n; }); }}
                             rows={2}

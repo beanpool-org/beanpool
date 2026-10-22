@@ -30,7 +30,7 @@ export function HelpDialog({ sheet, tourOpen, canTour, onReadPage, onSearch, onT
                 className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0">
                 <div className="flex items-start gap-2 mb-2">
                     <h2 id={id} tabIndex={-1} data-testid="help-title" className="m-0 flex-1 min-w-0 break-words text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">{sheet.title ?? t('Help')}</h2>
-                    <button type="button" data-testid="help-close" onClick={onClose} aria-label={t('Close help dialog')} className={plain}>{t('Close')}</button>
+                    <button type="button" data-testid="help-close" onClick={onClose} className={plain}>{t('Close')}</button>
                 </div>
                 {sheet.text && <p data-testid="help-text" className="m-0 mb-3 text-[0.9375rem] text-nature-900 dark:text-nature-100 break-words">{sheet.text}</p>}
                 <div className="border-t border-nature-200 dark:border-nature-800">

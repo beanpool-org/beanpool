@@ -162,7 +162,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             path: ctx.path,
             body: '',
             signedFor: ctx.get(SIGNED_FOR_HEADER) || null,
-        }, { consumeNonce: true });
+        }, { consumeNonce: true, client: clientLimiterKey(ctx) });
         return verdict.ok ? verdict.signer : null;
     }
 

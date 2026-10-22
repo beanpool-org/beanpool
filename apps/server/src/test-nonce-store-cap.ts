@@ -43,7 +43,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { checkServerAlerts, resetAlertsForTests, serverAlertsBanner, setAlertsClockForTests } from './services/alerts.js';
+import { checkServerAlerts, resetAlertsForTests, serverAlertsBanner, setAlertsClockForTests, type AlertEvent } from './services/alerts.js';
 // A namespace, not named imports: so this suite runs, and counts its failures, against a verifier without some of them.
 import * as sig from './engine/member-signature.js';
 import type { NonceLimits, NonceSpender, NonceStore as Store, SignedRequestParts } from './engine/member-signature.js';
@@ -243,7 +243,7 @@ function verifierChecks(T0: number, M: Id[]): void {
     assert(noClient[0] === 200 && noClient[1] === 200 && noClient[2] === 503,
         `a caller that passes no client is held to one address's share, every key together (${noClient.join(', ')})`);
 
-    const later = T0 + W + 2;
+    const later = t + W + 2; // past the expiry of every nonce spent at t (t + W + 1)
     const again = verify(s, parts(newKey(), freshNonce(), later), later, { client: 'c3' });
     assert(again.ok, `once the nonces have expired a stranger is accepted again (got ${again.status} ${again.error})`);
 }
@@ -362,13 +362,19 @@ async function fifteenAddressesCheck(): Promise<void> {
     assert(sws.opened, `a stranger's /ws token opens as unsigned, not 503, not 401 (status ${sws.status})`);
     assert(liveCounts().stranger.live === strangerLive, `none of the three stored a nonce (${strangerLive} → ${liveCounts().stranger.live})`);
 
+    // M-4 still holds for a public read answered as unsigned: fresh keys buy no more than the address's 120 a minute.
+    const reads: number[] = [];
+    for (let i = 0; i < 121; i++) reads.push((await request(newKey(), 'GET', '/api/version', attacker(17))).status);
+    assert(reads.slice(0, 120).every((st) => st === 200) && reads[120] === 429,
+        `a 17th address's 121 signed public reads with fresh keys: 120 answered, the 121st 429 (${reads.filter((st) => st === 200).length} answered, last ${reads[120]})`);
+
     requestNonces.prune(Date.now() + 11 * MINUTE);
     const after = await write(newKey(), sixteenth);
     assert(after.status !== 503, `once the nonces have expired the 16th address is accepted (got ${after.status})`);
     assert(securityLines('stranger') === lines + 1, `one security line for all of it (${securityLines('stranger') - lines})`);
 }
 
-async function oneMemberKeyCheck(): Promise<{ A: Id }> {
+async function oneMemberKeyCheck(): Promise<void> {
     freshNode(30);
     requestNonces.setLimitsForTests({ membersMax: 250_000, strangersMax: 100_000, keyMax: 20, addressMax: 3_000 });
     const lines = securityLines('member');
@@ -393,7 +399,6 @@ async function oneMemberKeyCheck(): Promise<{ A: Id }> {
     const line = db.prepare(`SELECT message FROM system_logs WHERE level = 'SECURITY' AND message LIKE '%store_full%' ORDER BY rowid DESC LIMIT 1`).get() as { message: string } | undefined;
     assert(!!line && line.message.includes(A.pubKeyHex.slice(0, 12)) && !line.message.includes(A.pubKeyHex.slice(0, 13)),
         'which names the member\'s key by its first 12 characters only');
-    return { A };
 }
 
 async function membersRegionCheck(): Promise<void> {
@@ -416,7 +421,7 @@ async function membersRegionCheck(): Promise<void> {
 
 // ─── 6. The alert ───────────────────────────────────────────────────────────────────────────
 
-const flood = (told: { key: string }[]) => told.filter((e) => e.key === 'requests.flood') as Array<{ kind: string; priority: number; detail: string }>;
+const flood = (told: AlertEvent[]) => told.filter((e) => e.key === 'requests.flood');
 const ADDRESS_OR_KEY = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b|[0-9a-f]{12}/i;
 
 async function alertChecks(): Promise<void> {

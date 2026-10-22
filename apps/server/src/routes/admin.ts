@@ -47,7 +47,7 @@ import {
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
 import { gatewayAllowlistRefusal } from '../config/gateway.js';
-import { clientIp } from '../client-ip.js';
+import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
 import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
@@ -382,7 +382,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
                 pubKeyHex, signature: signatureBase64, timestamp: timestampHeader, nonce,
                 method: ctx.method, path: ctx.path, body: (ctx as any).rawBody ?? '',
                 signedFor: typeof signedForHeader === 'string' ? signedForHeader : null,
-            }, { consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces });
+            }, { consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces, client: clientLimiterKey(ctx) });
             if (verdict.ok) {
                 targetPubkey = verdict.signer;
                 selfPubkey = verdict.signer;

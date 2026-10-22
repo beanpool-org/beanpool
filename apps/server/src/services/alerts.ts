@@ -21,6 +21,11 @@
  * another with the same keys, told urgent and daily until an owner acknowledges it. A one-shot security event counts in
  * the banner for a day, or until an owner acknowledges it. Each says what happened and how, never who.
  *
+ * And signed requests turned away because the store of their single-use numbers has no room (engine/member-signature.ts
+ * NonceStore, engine/nonce-pressure.ts): the strangers' share full (priority 3), or members affected, one member's app
+ * at its own share or the members' share full (4). Counts only, never an address or a key; over 15 minutes after the
+ * last request turned away (the usual hold after a quiet tick).
+ *
  * And reports coming in (the launch-readiness review's B9): the first report is told at once, and those that follow
  * inside the fold window (an hour, or ALERTS_REPORT_FOLD_MINUTES in .env) are counted and told as one line when it is
  * over: "N more reports came in", by kind (the reason the member picked: spam or scam, offensive, misleading, child
@@ -95,6 +100,7 @@ import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { heldCertificates, type HeldCertificate } from './acme/schedule.js';
 import { selfSignedHosts } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
+import { keysAtShareSince, requestNoncePressure } from '../engine/nonce-pressure.js';
 import { reportKind, type ReportKind } from './report-kind.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, OWNER_ALERT_WORDS, type SecurityNote } from './security-signal.js';
 import { registrarNames } from '../engine/registrar-names.js';
@@ -157,7 +163,8 @@ export type AlertKey =
     | 'sec.log'
     | 'reg.notice'
     | 'reports.new' | 'reports.child' | 'reports.child-more'
-    | 'door.busy';
+    | 'door.busy'
+    | 'requests.flood';
 
 interface Row {
     title: string;
@@ -233,6 +240,8 @@ const ROWS: Record<AlertKey, Row> = {
     'reports.child-more': { title: 'more child-safety reports waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
     /** More new members in a day than DOOR_BUSY_NEW_MEMBERS_PER_DAY (engine/door-signal.ts doorBusy): told when it rises. */
     'door.busy': { title: 'sign-ups busier than usual', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
+    /** Signed requests turned away for room in the nonce store (nonceConditions): 4 when members are affected. */
+    'requests.flood': { title: 'signed requests turned away', priority: 3, webhook: true, pushEveryMs: DAY, banner: true },
 };
 
 /** Told because members reported: urgent ones too are never kept over another line (keepIn), and the same line is counted. */
@@ -1143,6 +1152,41 @@ function securityQuietConditions(s: BookState, t: number): Condition[] {
     return out;
 }
 
+/** A refusal for room this recent keeps requests.flood on: the last two ticks. */
+const FLOOD_RECENT_MS = 2 * ALERT_TICK_MS;
+
+/**
+ * Signed requests turned away for room in the nonce store (requests.flood, DESIGN-nonce-store-2-fable.md §5): on while a
+ * region refused within the last two ticks, or a member's key was refused for its own share. An address held to its own
+ * share raises nothing: one noisy source is routine, and harms nobody else. Priority 4 when members are affected, 3 when
+ * only strangers are. The counts are the region's at its last refusal; never an address or a key.
+ */
+function nonceConditions(t: number): Condition[] {
+    const p = requestNoncePressure;
+    const recent = (at: number | null) => at !== null && t - at <= FLOOD_RECENT_MS;
+    const strangers = recent(p.stranger.regionAt);
+    const members = recent(p.member.regionAt);
+    const keys = keysAtShareSince(p, t - FLOOD_RECENT_MS);
+    if (!strangers && !members && keys === 0) {
+        return [{ key: 'requests.flood', active: false, detail: tr('No signed request has been turned away for room for a few minutes: requests are answered as usual.') }];
+    }
+    const lines: string[] = [];
+    if (members) {
+        lines.push(tr("Members' signed requests have filled their share of this server's store of single-use request numbers: {n} in flight from {keys} keys. Every member's new request is answered busy (503) until older numbers expire, within 10 minutes; public reads are still answered.",
+            { n: p.member.live, keys: p.member.owners }));
+    } else if (keys > 0) {
+        lines.push(keys === 1
+            ? tr("1 member's app is at its share of request numbers ({share} in flight) and is answered busy until they expire, within 10 minutes. Other members are not affected.", { share: p.member.share })
+            : tr("{n} members' apps are at their share of request numbers ({share} in flight each) and are answered busy until they expire, within 10 minutes. Other members are not affected.", { n: keys, share: p.member.share }));
+    }
+    if (strangers) {
+        lines.push(tr("Signed requests from people who are not members (someone joining, a guest) have filled their share of this server's store of single-use request numbers: {n} in flight from {addresses} addresses. Their new requests are answered busy (503) until older numbers expire, within 10 minutes; public reads are still answered.",
+            { n: p.stranger.live, addresses: p.stranger.owners }));
+        if (!members && keys === 0) lines.push(tr("Members' requests are not affected."));
+    }
+    return [{ key: 'requests.flood', active: true, detail: lines.join(' '), priority: members || keys > 0 ? 4 : 3 }];
+}
+
 /**
  * This community's address not its own (sec.name): on while any recorded name is marked lost, read from the record at
  * every tick, so the book never disagrees with it. A database restored from a backup made before a loss ends it, and one
@@ -1650,6 +1694,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             ...foldedReportConditions(s, t),
             ...childFoldConditions(s, t),
             ...childSummaryConditions(s, t),
+            ...nonceConditions(t),
         ];
         return await updateAlerts(conditions);
     } catch (e) {

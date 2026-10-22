@@ -73,6 +73,7 @@ vi.mock('expo-secure-store', () => ({
 }));
 vi.mock('../pulse-token-store', () => ({ forgetAllPulseTokens: vi.fn(async () => undefined) }));
 
+import { LANGS, setLanguage, t, type UiLang } from '@beanpool/core';
 import { ThemeProvider, useOnboardingColors, useStyles, useTheme } from '../../app/ThemeContext';
 import { RadiusPickerModal } from '../../components/RadiusPickerModal';
 import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
@@ -80,15 +81,17 @@ import { makeChatStyles } from '../../components/chat/styles';
 import { onboardingColors } from '../onboarding-colors';
 import { contrastRatio } from '../readable-color';
 import { THEME_PREFERENCE_KEY } from '../theme-preference';
+import { catalogsFor } from '../words-catalogs';
 import type { ChatMessage, MessageActions } from '../chat-actions';
 
 // The floor: 320 dp wide, the phone's text at 1.3x, with a generous glyph width (0.62em, a bold Latin face) as
-// my-deals-history-320.test.ts does; an emoji counts as 1.2em.
+// my-deals-history-320.test.ts does; an emoji counts as 1.2em, and a Chinese, Japanese or Korean character a full 1em.
 const WIDTH = 320;
 const SCALE = 1.3;
 const GLYPH_EM = 0.62;
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const textWidth = (text: string, fontSize: number) =>
-    [...text].reduce((w, ch) => w + (/\p{Extended_Pictographic}/u.test(ch) ? 1.2 : GLYPH_EM) * fontSize * SCALE, 0);
+    [...text].reduce((w, ch) => w + (/\p{Extended_Pictographic}/u.test(ch) ? 1.2 : CJK.test(ch) ? 1 : GLYPH_EM) * fontSize * SCALE, 0);
 /** Lines a greedy word wrap needs for `text` in `width` dp; Infinity when one word alone is wider than the line. */
 function linesNeeded(text: string, fontSize: number, width: number): number {
     let lines = 1;
@@ -101,10 +104,33 @@ function linesNeeded(text: string, fontSize: number, width: number): number {
     }
     return lines;
 }
+type FlexItem = { el: Element; basis: number };
+/**
+ * How Yoga places a row's children: in order, by their basis; with flexWrap a child that would run past the row starts
+ * a new line (before anything shrinks). Without it they all share one line.
+ */
+function flexLines(items: FlexItem[], width: number, gap: number, wrap: boolean): FlexItem[][] {
+    if (!wrap) return [items];
+    const lines: FlexItem[][] = [];
+    let line: FlexItem[] = [];
+    let used = 0;
+    for (const item of items) {
+        const next = line.length ? used + gap + item.basis : item.basis;
+        if (line.length && next > width) { lines.push(line); line = [item]; used = item.basis; }
+        else { line.push(item); used = next; }
+    }
+    if (line.length) lines.push(line);
+    return lines;
+}
+const lineWidth = (line: FlexItem[], gap: number) => line.reduce((w, i) => w + i.basis, 0) + gap * (line.length - 1);
 
 const style = (el: Element | null) => JSON.parse(el?.getAttribute('data-style') ?? '{}') as Record<string, any>;
 const spanWithText = (host: HTMLElement, text: string) =>
     Array.from(host.querySelectorAll('span')).find((s) => s.textContent === text) ?? null;
+const withLabel = (host: HTMLElement, label: string) =>
+    Array.from(host.querySelectorAll('[aria-label]')).find((el) => el.getAttribute('aria-label') === label) ?? null;
+// Every language the phone ships, and the pseudo-locale's +35%.
+const ALL_LANGS: UiLang[] = ['xx', ...LANGS];
 
 async function render(node: ReactNode): Promise<HTMLElement> {
     const host = document.createElement('div');
@@ -119,35 +145,61 @@ beforeEach(() => {
     document.body.innerHTML = '';
     store.clear();
     look.system = 'light';
+    setLanguage('en');
 });
 
 describe.each(['light', 'dark'] as const)('at 320 dp and 1.3x, %s', (theme) => {
     beforeEach(() => { store.set(THEME_PREFERENCE_KEY, theme); });
 
-    it("1. Location & Radius: the title wraps or shrinks to fit between Cancel and Reset, never cut; both stay >= 44 dp", async () => {
+    // Review of #2369: the English words fitted, but in 17 of the 24 other catalogs Cancel and Reset left the title no room.
+    it.each(ALL_LANGS)("1. Location & Radius in %s: Cancel and Reset share a line, the title fits its line, never cut; both stay >= 44 dp", async (lang) => {
+        setLanguage(lang, catalogsFor(lang));
         const host = await render(createElement(RadiusPickerModal, {
             visible: true, initialRadius: 25, onApply: vi.fn(), onCancel: vi.fn(), onReset: vi.fn(),
         }));
-        const title = spanWithText(host, '📍 Location & Radius')!;
+        const title = spanWithText(host, t('📍 Location & Radius'))!;
         expect(title).not.toBeNull();
         const header = title.parentElement!;
-        const cancel = host.querySelector('[aria-label="Cancel location picker"]')!;
-        const reset = host.querySelector('[aria-label="Reset location and radius"]')!;
+        const cancel = withLabel(host, t('Cancel location picker'))!;
+        const reset = withLabel(host, t('Reset location and radius'))!;
         expect(cancel.parentElement).toBe(header);
         expect(reset.parentElement).toBe(header);
+        if (lang !== 'en') expect(cancel.textContent, 'the words are the language\'s').not.toBe('Cancel');
 
         for (const button of [cancel, reset]) {
             expect(style(button).minHeight).toBeGreaterThanOrEqual(44);
             expect(style(button).minWidth).toBeGreaterThanOrEqual(44);
         }
-        // The title takes what is left of the row, so it is the one that gives way.
+        // The title takes what is left of its line, so it is the one that gives way.
         expect(style(title).flex).toBe(1);
 
-        // Width left for the title: the row less its padding, the two gaps and each button (its word plus padding).
-        const button = (el: Element) => Math.max(style(el).minWidth ?? 0,
-            textWidth(el.textContent!, style(el.firstElementChild).fontSize) + 2 * (style(el).padding ?? 0));
         const row = style(header);
-        const left = WIDTH - 2 * row.paddingHorizontal - 2 * (row.gap ?? 0) - button(cancel) - button(reset);
+        const inner = WIDTH - 2 * row.paddingHorizontal;
+        const gap = row.gap ?? 0;
+        // A size in % is of the row's inner width, as Yoga resolves it.
+        const dp = (v: unknown) => (typeof v === 'string' && v.endsWith('%') ? (parseFloat(v) / 100) * inner : typeof v === 'number' ? v : undefined);
+        // Each button as Yoga sizes it: its word plus padding, at least its minWidth, at most its maxWidth.
+        const button = (el: Element) => Math.min(dp(style(el).maxWidth) ?? Infinity, Math.max(style(el).minWidth ?? 0,
+            textWidth(el.textContent!, style(el.firstElementChild).fontSize) + 2 * (style(el).padding ?? 0)));
+        // The title's basis: '100%' asks for a line of its own; flex: 1 alone (basis 0) takes what its line leaves.
+        const items = Array.from(header.children).map((el) => ({ el, basis: el === title ? dp(style(title).flexBasis) ?? 0 : button(el) }));
+        const lines = flexLines(items, inner, gap, row.flexWrap === 'wrap');
+        const lineOf = (el: Element) => lines.find((l) => l.some((i) => i.el === el))!;
+        expect(lineOf(cancel), 'Reset is never pushed onto a line of its own').toBe(lineOf(reset));
+        for (const line of lines) expect(lineWidth(line, gap), 'nothing runs past the row').toBeLessThanOrEqual(inner);
+
+        // Each button's word fits inside its button, at its smallest size, in the lines it may take.
+        for (const el of [cancel, reset]) {
+            const word = el.firstElementChild!;
+            const smallestWord = style(word).fontSize * Number(word.getAttribute('data-fit') ?? 1);
+            const box = button(el) - 2 * (style(el).padding ?? 0);
+            expect(linesNeeded(word.textContent!, smallestWord, box), `"${word.textContent}"`)
+                .toBeLessThanOrEqual(Number(word.getAttribute('data-lines') ?? Infinity));
+        }
+
+        // Width left for the title: its line less the gaps and whatever else shares it.
+        const titleLine = lineOf(title);
+        const left = inner - titleLine.reduce((w, i) => w + (i.el === title ? 0 : i.basis), 0) - gap * (titleLine.length - 1);
         expect(left).toBeGreaterThan(0);
 
         const allowed = Number(title.getAttribute('data-lines') ?? Infinity);

@@ -114,12 +114,12 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
             <View style={styles.container}>
                 <View style={[styles.header, { paddingTop: HEADER_PAD_TOP + topInset }]}>
                     <Pressable onPress={onCancel} accessibilityRole="button" accessibilityLabel={t('Cancel location picker')} style={styles.headerBtn}>
-                        <Text style={styles.cancelText} numberOfLines={1}>{t('Cancel')}</Text>
+                        <Text style={styles.cancelText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Cancel')}</Text>
+                    </Pressable>
+                    <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel={t('Reset location and radius')} style={styles.headerBtn}>
+                        <Text style={styles.resetText} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('Reset')}</Text>
                     </Pressable>
                     <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{t('📍 Location & Radius')}</Text>
-                    <Pressable onPress={onReset} accessibilityRole="button" accessibilityLabel={t('Reset location and radius')} style={styles.headerBtn}>
-                        <Text style={styles.resetText} numberOfLines={1}>{t('Reset')}</Text>
-                    </Pressable>
                 </View>
 
                 <View style={styles.mapContainer}>
@@ -221,8 +221,11 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.surface.app,
     },
+    // At 320 wide and 1.3x text, Cancel and Reset alone fill the row in German, French, Malayalam and Urdu, so the title
+    // has a line of its own under them (flexWrap + the title's flexBasis), in every language.
     header: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         alignItems: 'center',
         justifyContent: 'space-between',
         backgroundColor: colors.surface.card,
@@ -233,10 +236,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: colors.border.default,
     },
+    // At most half the row less the gap, so Reset never wraps onto a line of its own; a longer word shrinks or wraps.
     headerBtn: {
         padding: 8,
         minHeight: 48,
         minWidth: 48,
+        maxWidth: '48%',
         justifyContent: 'center',
         flexShrink: 0,
     },
@@ -250,9 +255,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
-    // At 320 wide and 1.3x text the title pushed Reset off the right edge; it now shrinks instead.
+    // At 320 wide and 1.3x text the title pushed Reset off the right edge; it now takes the whole second line.
     title: {
         flex: 1,
+        flexBasis: '100%',
         textAlign: 'center',
         color: colors.text.heading,
         fontSize: 15,

@@ -72,6 +72,9 @@ export default function PairDeviceScreen() {
     /** The member record's name for the account where one scan would send it (pair-device-payload.ts), for that scan only. */
     const [memberName, setMemberName] = useState<{ scan: ParsedPairingData; name: string | null } | null>(null);
     const scannedName = memberName && memberName.scan === scannedData ? memberName.name : null;
+    /** The latest lookup, for handleConfirmLink: it seals after the unlock, and its press's render can be from before the lookup answered. */
+    const memberNameRef = useRef(memberName);
+    memberNameRef.current = memberName;
     /** The scanned code was refused (another server, or not readable): its sentence goes first in the sheet. */
     const refusedFirst = !!scannedData?.target && scannedData.target.kind !== 'ok';
     const lockBusyRef = useRef(false);
@@ -471,9 +474,11 @@ export default function PairDeviceScreen() {
             // Retrieve full mnemonic recovery words if available
             const mnemonic = await getMnemonic(identity);
 
-            // The name the sheet showed (pairingPayload): the stored one, or with none the member record's.
+            // The name the sheet shows (pairingPayload): the stored one, or with none the member record's for this code. Read
+            // now, not from the press: Confirm can be tapped before the lookup answers, and it often answers while the unlock asks.
+            const found = memberNameRef.current;
             const encrypted = encryptPairingPayload(
-                pairingPayload(identity, mnemonic, scannedName),
+                pairingPayload(identity, mnemonic, found && found.scan === scanned ? found.name : null),
                 scanned.desktopPubHex,
                 scanned.sessionId
             );

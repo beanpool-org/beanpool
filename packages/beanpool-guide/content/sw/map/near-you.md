@@ -3,7 +3,7 @@ slug: near-you
 title: Kupata vitu vilivyo karibu
 summary: Onyesha tu matangazo yaliyo ndani ya umbali kutoka kwako, au kutoka mahali popote unapochagua.
 related: browsing-the-market, map-pins, pin-locations, events, your-area
-source-hash: e02b25e45f78d9fe
+source-hash: 2db25a661f8751ec
 ---
 
 ## Kwenye kichupo cha Soko
@@ -16,7 +16,7 @@ source-hash: e02b25e45f78d9fe
 
 Kwenye simu, machapisho yasiyo na eneo huonyeshwa kila wakati. Kwenye programu ya wavuti **Umbali** huyaficha, isipokuwa kura za maoni. Kwenye jumuiya ya kimataifa programu ya wavuti pia huyaacha wakati orodha inapokuwa karibu nawe (hapa chini).
 
-Ikiwa kivinjari chako tayari kinairuhusu BeanPool kutumia eneo lako, kiteuzi kinaweza kufungukia mahali ulipo sasa. Ikiwa sivyo, hufungukia kwenye sehemu maalum isiyobadilika. Kagua pini, au gusa kitufe cha shabaha au ramani, kabla ya kugusa **Tumia**. Kwenye jumuiya ya kimataifa programu ya wavuti hutuma kitovu ulichochagua kwa jumuiya, kikiwa kimekadiriwa hadi takriban mita 11.
+Kwenye programu ya wavuti, kiteuzi hufungukia kwenye kitovu cha mwisho ulichochagua, au vinginevyo mahali pa jumuiya yenyewe (mwonekano wa dunia ikiwa haina). Kagua pini, au gusa ramani, buruta pini au gusa kitufe cha shabaha ili kuchagua kitovu, kabla ya kugusa **Tumia**. Huomba eneo lako ukigusa kitufe cha shabaha tu. Kwenye jumuiya ya kimataifa programu ya wavuti hutuma kitovu ulichochagua kwa jumuiya, kwa ajili ya Soko, Ramani na Nyumbani, kikiwa kimekadiriwa hadi takriban kilomita moja. Hukaribia zaidi unapochagua kipenyo kidogo, au utafutaji uliohifadhi kwenye Nyumbani unapotazama ndani ya umbali mdogo.
 
 Kwenye simu kiteuzi hufungukia kwenye kitovu cha mwisho ulichochagua, au kwenye sehemu maalum isiyobadilika, kwa hivyo gusa kitufe cha shabaha kwanza.
 

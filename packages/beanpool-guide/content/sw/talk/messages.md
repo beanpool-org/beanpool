@@ -4,7 +4,7 @@ title: Ujumbe
 summary: Anzisha soga, tuma picha, jibu, toa hisia, hariri, futa, nyamazisha, na mambo ya faragha.
 related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 help: Soga zako. Mazungumzo ya mtu mmoja yamelindwa mwanzo hadi mwisho. Gusa soga kuifungua, au anza kutoka tangazo au marafiki.
-source-hash: e7d6a44f876f54e7
+source-hash: dd41c095375671ac
 ---
 
 ## Mazungumzo yako
@@ -23,11 +23,12 @@ Kwenye programu ya wavuti hili ni kichupo cha **Gumzo**. Huorodhesha mazungumzo 
 
 ## Kuanzisha gumzo
 
-- Kutoka kwenye chapisho: gusa **Ujumbe** na jina la mtu.
+- Kutoka kwenye wasifu: fungua wasifu wake na uguse **Tuma ujumbe**. Unaweza pia kumwongeza kama rafiki hapo.
 - Kutoka **Gumzo**: gusa kitufe cha penseli, kisha mpate mtu huyo kwa jina. Kwenye jumuiya ya kimataifa, Ujumbe Mpya huorodhesha watu uliyofanya nao makubaliano na marafiki zako. Ili kumpata mtu mwingine yeyote, andika angalau herufi 2 za jina lao.
-- Kutoka kwa marafiki zako: **Gumzo**, kisha **Watu**, kisha **Marafiki**, na uguse kitufe cha ujumbe kando ya jina.
+- Kutoka kwenye orodha ya wanachama: **Gumzo**, kisha **Watu**, na uguse 💬 kando ya jina la mwanachama katika **Jumuiya** au **Marafiki**.
+- Kutoka kwenye chapisho: gusa **Ujumbe** na jina la mtu.
 
-Kwenye programu ya wavuti, tumia **✉️ Ujumbe Mpya wa Moja kwa Moja**, au kitufe cha **💬 Ujumbe** kwenye chapisho. Marafiki zako wako chini ya kichupo cha **Watu**.
+Kwenye programu ya wavuti, tumia **Tuma ujumbe** kwenye wasifu wake, 💬 kwenye safu yake chini ya **Watu**, **✉️ Ujumbe Mpya wa Moja kwa Moja**, au kitufe cha **💬 Ujumbe** kwenye chapisho.
 
 ## Kutuma
 

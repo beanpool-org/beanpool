@@ -2,10 +2,10 @@
   "_meta": {
     "language": "sw",
     "name": "Swahili",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); gemini-3.8-flash-high (machine draft, 23 Oct top-up)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-23",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "maharagwe",
@@ -746,5 +746,27 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "Juu kabisa: haragwe ni jumuiya yako na mwongozo, ? inaeleza skrini hii, vitelezi ni Mipangilio.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "Juu kabisa: ? inaeleza skrini uliyopo; Mipangilio ndipo mwongozo mzima ulipo.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "Ongeza kadi zako za kwanza: gusa moja ili kuiweka kwenye Nyumbani. Au gusa Imekamilika na Nyumbani itaanza na tano za kawaida.",
-  "Step {n} of {total}": "Hatua ya {n} kati ya {total}"
+  "Step {n} of {total}": "Hatua ya {n} kati ya {total}",
+  "Your shop and tools": "Duka lako na vifaa",
+  "Your shop, and things you can do on your own.": "Duka lako, na mambo unayoweza kufanya peke yako.",
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "one": "Kitu {n} · {out} nje",
+    "other": "Vitu {n} · {out} nje"
+  },
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "one": "Kitu {n} · kiko kwenye banda lako",
+    "other": "Vitu {n} · vyote viko kwenye banda lako"
+  },
+  "{name} is due back": "{name} inapaswa kurudishwa",
+  "Tool shed": "Banda la vifaa",
+  "Things you own and might lend, and who has them.": "Vitu unavyomiliki na unaweza kukopesha, na ni nani anavyo.",
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "one": "Kitu {n} · {listed} dukani kwako · {out} nje",
+    "other": "Vitu {n} · {listed} dukani kwako · {out} nje"
+  },
+  "a drill": "drili",
+  "a ladder": "ngazi",
+  "a tent": "hema",
+  "Your things, and what is out.": "Vitu vyako, na vilivyo nje.",
+  "When something lent outside BeanPool is due back": "Kitu kilichokopeshwa nje ya BeanPool kinapostahili kurudishwa"
 }

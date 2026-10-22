@@ -5,9 +5,10 @@
  * never held by BeanPool), how they lend it, the longest loan, and a note only they see. Save keeps it and goes back.
  *
  * A save is refused, in one sentence and with nothing written, for a 101st thing and for a shed past the store's bound
- * (64 KB, as core reports it). A photo chosen and not kept is taken off the phone again.
+ * (64 KB, as core reports it). A photo chosen and not kept is taken off the phone again, by Cancel or by leaving
+ * any other way (the header's ←, Android's back, a swipe); a save under way keeps what it saves and tidies the rest.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     THING_CONDITIONS, THING_INPUT_CHARS, findThing, normalizeCategory, saveThing, shedFits, shedFullLine, shedHasRoom, shedTooBigLine,
     t, thingCategories, thingCategory, thingConditionName, thingInput, thingInputProblems,
@@ -25,6 +26,27 @@ export function EditScreen({ host, params }: ThingsScreenProps) {
     const [busy, setBusy] = useState(false);
     /** Photos chosen here and not yet kept by a save: taken off the phone again if the member leaves without one. */
     const chosen = useRef<string[]>([]);
+    /** A save under way, which tidies its own photos once it lands or fails; and whether the member has left this screen. */
+    const saving = useRef(false);
+    const left = useRef(false);
+    const had = existing?.photo;
+
+    /** Takes off the phone the photos chosen here, never the thing's own; not while a save is under way. */
+    const letGo = async () => {
+        if (saving.current) return;
+        const drop = chosen.current.filter((ref) => ref !== had);
+        chosen.current = [];
+        await Promise.all(drop.map((ref) => host.photos.remove(ref).catch(() => {})));
+    };
+    // Leaving without Cancel (the header's ←, Android's back, a swipe) does what Cancel does. `left` is set again on each mount:
+    // StrictMode mounts twice.
+    useEffect(() => {
+        left.current = false;
+        return () => {
+            left.current = true;
+            void letGo();
+        };
+    }, []);
 
     if (params.key && !existing) {
         return (
@@ -39,6 +61,8 @@ export function EditScreen({ host, params }: ThingsScreenProps) {
 
     const took = (photo: Photo | null) => {
         if (!photo) return;
+        // Kept after the member left (the picker answered late): nothing here will keep it.
+        if (left.current) { void host.photos.remove(photo.ref).catch(() => {}); return; }
         chosen.current.push(photo.ref);
         setInput((was) => ({ ...was, photo: photo.ref }));
     };
@@ -58,22 +82,25 @@ export function EditScreen({ host, params }: ThingsScreenProps) {
         const next = saveThing(doc, input, { id: existing?.id ?? null, newId: newThingId(now), now });
         if (!shedFits(next)) { setProblem(shedTooBigLine()); return; }
         setBusy(true);
+        saving.current = true;
         try {
             await host.doc.set(next);
         } catch {
+            saving.current = false;
+            // Left while it was saving: nothing was kept, so what was chosen goes as on leaving.
+            if (left.current) { await letGo(); return; }
             setBusy(false);
             setProblem(t("Couldn't save it on this phone. Try again."));
             return;
         }
+        saving.current = false;
         const drop = unused(input.photo);
         chosen.current = [];
         await Promise.all(drop.map((ref) => host.photos.remove(ref).catch(() => {})));
-        host.back();
+        if (!left.current) host.back();
     };
     const cancel = async () => {
-        const drop = chosen.current.filter((ref) => ref !== existing?.photo);
-        chosen.current = [];
-        await Promise.all(drop.map((ref) => host.photos.remove(ref).catch(() => {})));
+        await letGo();
         host.back();
     };
 

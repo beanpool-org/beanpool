@@ -11,6 +11,7 @@
  * fixture at 320 px × 1.3 with axe). The real-browser check at 320 px is e2e/tool-shed-320.mjs.
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { THINGS, THINGS_MAX_ITEMS, TOOL_LIMITS, readThingsDoc, shedThings, toolDocBytes, type Thing, type ThingsDoc } from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../../pages/ToolsPage';
@@ -32,13 +33,14 @@ const info = vi.hoisted(() => ({ value: { profile: 'local', features: { beans: t
 vi.mock('../../../lib/features', () => ({ useCommunityInfo: () => info.value }));
 
 // The browser's file picker and canvas: a chosen picture, drawn at 800 px (jsdom has no canvas).
-const picked = vi.hoisted(() => ({ count: 0, cancel: false, sizes: [] as number[] }));
+const picked = vi.hoisted(() => ({ count: 0, cancel: false, sizes: [] as number[], refs: [] as string[] }));
 vi.mock('../../photos', async (importOriginal) => {
     const real = await importOriginal<typeof import('../../photos')>();
     return {
         ...real,
         chooseImageFile: async () => (picked.cancel ? null : new File(['jpeg bytes'], 'picked.jpg', { type: 'image/jpeg' })),
         keepChosen: (owner: string, tool: string, file: File | null, ref: string) => real.keepChosen(owner, tool, file, ref, async () => {
+            picked.refs.push(ref);
             picked.count++;
             picked.sizes.push(800);
             return { dataUrl: `data:image/jpeg;base64,cGhvdG8${picked.count}`, width: 800, height: 600 };
@@ -143,6 +145,7 @@ beforeEach(() => {
     picked.count = 0;
     picked.cancel = false;
     picked.sizes.length = 0;
+    picked.refs.length = 0;
     // The clock held at the fixtures' moment, so "back around" never turns into "was due back" on a later run.
     vi.useFakeTimers({ toFake: ['Date'], now: NOW });
 });
@@ -317,6 +320,60 @@ describe('Edit', () => {
         await click('edit-save');
         expect((await keptThing('t-1'))?.photo).toBeUndefined();
         expect(await readToolPhoto(OWNER, 'things', ref!)).toBeNull();
+    });
+
+    it("a photo chosen and left without Cancel (the page's back, the browser's) goes from the store; a saved one stays", async () => {
+        await keep(shed(thing('t-1', 'Tent')));
+        await open('main');
+        await click('thing-row-t-1');
+        await click('thing-edit');
+        await click('edit-photo-pick');
+        const [first] = picked.refs;
+        expect(await readToolPhoto(OWNER, 'things', first)).toBe('data:image/jpeg;base64,cGhvdG81');
+        // The page's Back: the thing's screen again.
+        await click('tools-back');
+        expect(byTestId('thing-edit-screen')).toBeNull();
+        expect(byTestId('thing-screen')).not.toBeNull();
+        expect(await readToolPhoto(OWNER, 'things', first)).toBeNull();
+        expect((await keptThing('t-1'))?.photo).toBeUndefined();
+
+        // Saved, then gone from the page: the thing's photo stays. Chosen again and gone: the new one goes, the thing's stays.
+        cleanup();
+        await open('edit', 't-1');
+        await click('edit-photo-pick');
+        await click('edit-save');
+        const saved = picked.refs[1];
+        expect((await keptThing('t-1'))?.photo).toBe(saved);
+        cleanup();
+        await settle();
+        expect(await readToolPhoto(OWNER, 'things', saved)).toBe('data:image/jpeg;base64,cGhvdG82');
+        await open('edit', 't-1');
+        await click('edit-photo-pick');
+        await click('edit-photo-remove');
+        cleanup();
+        await settle();
+        expect(await readToolPhoto(OWNER, 'things', picked.refs[2])).toBeNull();
+        expect(await readToolPhoto(OWNER, 'things', saved)).toBe('data:image/jpeg;base64,cGhvdG82');
+        expect((await keptThing('t-1'))?.photo).toBe(saved);
+    });
+
+    it("in StrictMode, as main.tsx draws the app: a photo chosen is kept by Save, never taken away by the second mount", async () => {
+        await keep(shed(thing('t-1', 'Tent')));
+        render(
+            <StrictMode>
+                <ToolsPage identity={identity} open={{ id: 'things', screen: 'edit', key: 't-1' }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()}
+                    onGuide={vi.fn()} onAddHomeCard={vi.fn()} now={() => NOW} />
+            </StrictMode>,
+        );
+        await screen.findByTestId('thing-edit-screen');
+        await settle();
+        await click('edit-photo-pick');
+        const ref = picked.refs.at(-1)!;
+        expect(byTestId('edit-photo')).not.toBeNull();
+        expect(await readToolPhoto(OWNER, 'things', ref)).toBe('data:image/jpeg;base64,cGhvdG81');
+        await click('edit-save');
+        expect((await keptThing('t-1'))?.photo).toBe(ref);
+        expect(await readToolPhoto(OWNER, 'things', ref)).toBe('data:image/jpeg;base64,cGhvdG81');
     });
 
     it(`a ${THINGS_MAX_ITEMS + 1}st thing and a save past the store's bound are refused in one sentence each; nothing is written`, async () => {

@@ -587,6 +587,40 @@ describe('Edit', () => {
         expect((await keptThing('t-1'))?.photo).toBeUndefined();
     });
 
+    it("a photo chosen and left without Cancel (the header's ←, Android's back, a swipe) leaves no file behind; a saved one stays", async () => {
+        const comm = communityKey('https://mullum.example');
+        const fileOf = (ref: string) => toolPhotoUri(comm, ME.publicKey, 'things', ref).replace(/^file:\/\//, '');
+        await keep(shed(thing('t-1', 'Tent')));
+        await open('edit', { key: 't-1' });
+        await click('edit-photo-pick');
+        expect(fs.existsSync(fileOf('photo-1'))).toBe(true);
+        act(() => root.unmount());
+        await settle();
+        expect(fs.existsSync(fileOf('photo-1'))).toBe(false);
+        expect((await keptThing('t-1'))?.photo).toBeUndefined();
+        expect(nav.backs).toBe(0);
+
+        // Saved, then left: the thing's photo stays. Chosen again and left: the new one goes, the thing's own stays.
+        root = createRoot(host);
+        await open('edit', { key: 't-1' });
+        await click('edit-photo-pick');
+        await click('edit-save');
+        expect((await keptThing('t-1'))?.photo).toBe('photo-2');
+        act(() => root.unmount());
+        await settle();
+        expect(fs.existsSync(fileOf('photo-2'))).toBe(true);
+        root = createRoot(host);
+        await open('edit', { key: 't-1' });
+        await click('edit-photo-pick');
+        await click('edit-photo-remove');
+        act(() => root.unmount());
+        await settle();
+        root = createRoot(host);
+        expect(fs.existsSync(fileOf('photo-3'))).toBe(false);
+        expect(fs.existsSync(fileOf('photo-2'))).toBe(true);
+        expect((await keptThing('t-1'))?.photo).toBe('photo-2');
+    });
+
     it(`a ${THINGS_MAX_ITEMS + 1}st thing is refused in one sentence, and so is a save past the store's bound; nothing is written`, async () => {
         const many = Array.from({ length: THINGS_MAX_ITEMS }, (_, i) => thing(`t-${i}`, `Thing ${i}`));
         await keep(shed(...many));

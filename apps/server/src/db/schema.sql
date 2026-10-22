@@ -2765,13 +2765,17 @@ CREATE TABLE IF NOT EXISTS member_tool_state (
 );
 
 -- 29. Shops (scratch/tools/DESIGN-shops-and-tools-fable.md §2.1, §9.1, slice S1, and Marty's answers of 19 Oct 2026): a front
--- window on an account, a member's or an enterprise's, one each (owner_pubkey is unique). Its listings name it
+-- window on an account, a member's or an enterprise's, one each (engine/shops.ts openShop). Its listings name it
 -- (posts.shop_id). A member opens theirs; an enterprise's is made with it (state-engine.ts createTreasury). Read through
 -- routes/shops.ts: a member sees it whole, a visitor its kind and counts only. Copied to a standby verbatim (a plain
 -- table, engine/replication-manifest.ts); a close deletes it with a tombstone keyed by its id (engine/shops.ts).
 CREATE TABLE IF NOT EXISTS shops (
     id            TEXT PRIMARY KEY,
-    owner_pubkey  TEXT NOT NULL UNIQUE REFERENCES members(public_key) ON DELETE CASCADE,
+    -- Not UNIQUE: one each is the main server's rule (openShop reads the owner's first), and a standby holds two for a moment.
+    -- A delta writes its rows before its tombstones (engine/sync.ts importRemoteState), so a member's new shop goes in while
+    -- the one they closed in the same delta is still here; a unique index would refuse it, and the tombstone then take the
+    -- old one, leaving none. Both are there only inside that one import.
+    owner_pubkey  TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     -- Its own name, ≤ 60 characters (@beanpool/core SHOP_NAME_LIMIT). NULL: none chosen, and the apps say "<the owner's
     -- name>'s shop" in the reader's language. Always NULL on an enterprise's: its name is the enterprise's, read from
     -- members, so it follows every rename.
@@ -2793,3 +2797,5 @@ CREATE TABLE IF NOT EXISTS shops (
     -- The replication watermark (a plain table): every write moves it (db.ts stampPlainTables).
     updated_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+-- An account's shop (shopOf).
+CREATE INDEX IF NOT EXISTS idx_shops_owner ON shops(owner_pubkey);

@@ -33,8 +33,9 @@
  *  10. accounts: a re-key moves the shop to the new key; a member's deletion and an admin's removal take it, with a
  *      tombstone, and their listings name it no more
  *  11. a standby: refuses every change, 409; a whole copy carries every shop and each listing's shop verbatim; a delta
- *      carries a dressing, a new shop, a close's tombstone and the listings it cleared; the standby answers each shop
- *      read as the main server does, and an enterprise's shop's name follows the enterprise's row
+ *      carries a dressing, a new shop, a close's tombstone and the listings it cleared; a member's close and new shop in
+ *      one delta leave the standby the new shop, not none; the standby answers each shop read as the main server does,
+ *      and an enterprise's shop's name follows the enterprise's row
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
  *
@@ -634,6 +635,44 @@ async function main(): Promise<void> {
         `the standby follows: the dressing and the new shop in, the closed one gone, its listings cleared (${importError || `${everyShop().length} shops`})`);
     assert(sGone.status === 404 && sCy.status === 200 && sCy.body?.counts?.things === 1 && shopIdOf(cyThing) === cyShop,
         `and answers as the main server does (${show(sGone)}; ${show(sCy)})`);
+    // A close and a new shop for the same member in one delta: the copy's rows go in before its tombstones, so the new shop
+    // is written while the old one is still on the standby, and the tombstone then takes the old one only.
+    const sinceReopen = new Date().toISOString();
+    await new Promise(r => setTimeout(r, 5));
+    const keptShops2 = everyShop();
+    const keptPosts2 = shopPosts();
+    await call('POST', cy, `${MINE}/close`, {});
+    const cyShop2: string = (await call('PUT', cy, MINE, { kind: 'tools' })).body?.shop?.id;
+    const afterShops2 = everyShop();
+    const afterPosts2 = shopPosts();
+    const reopenDelta: any = await exportSyncState(nodeId, sinceReopen);
+    const rShops: any[] = reopenDelta.plainTables?.shops ?? [];
+    const rTomb = (reopenDelta.tombstones ?? []).find((t: any) => t.tableName === 'shops' && t.rowKey === cyShop);
+    assert(!!cyShop2 && cyShop2 !== cyShop && same(rShops.map((s: any) => s.id), [cyShop2]) && !!rTomb,
+        `a delta carries the closed shop's tombstone and the same member's new shop (${rShops.length}, ${!!rTomb})`);
+    db.transaction(() => {
+        db.prepare('DELETE FROM shops').run();
+        const cols = Object.keys(keptShops2[0] ?? {});
+        const ins = db.prepare(`INSERT INTO shops (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`);
+        for (const s of keptShops2) ins.run(...cols.map(k => (s as any)[k]));
+        const was = new Map(keptPosts2.map(p => [p.id, p.shop_id]));
+        const put = db.prepare("UPDATE posts SET shop_id = ?, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?");
+        for (const p of (reopenDelta.posts ?? []) as any[]) put.run(was.get(p.id) ?? null, p.id);
+        db.prepare("DELETE FROM tombstones WHERE table_name = 'shops' AND row_key = ?").run(cyShop);
+    })();
+    assert(shopRowOf(cy.pk)?.id === cyShop && shopIdOf(cyThing) === cyShop, 'the standby before it holds the old shop, its listing in it');
+    const reopenCopy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(reopenDelta));
+    setNodeRole('backup');
+    importError = '';
+    try { await importRemoteState(reopenCopy); } catch (e: any) { importError = e?.message || String(e); }
+    const sOld = await call('GET', ann, shopPath(cyShop));
+    const sNew = await call('GET', ann, shopPath(cyShop2));
+    setNodeRole('primary');
+    assert(importError === '' && same(everyShop(), afterShops2) && same(shopPosts(), afterPosts2)
+        && shopRowOf(cy.pk)?.id === cyShop2 && shopRowById(cyShop) === undefined && shopIdOf(cyThing) === null,
+        `the standby follows: the new shop in, the old one gone (${importError || `${everyShop().filter(s => s.owner_pubkey === cy.pk).map(s => s.id === cyShop2 ? 'new' : 'old').join(', ') || 'none'}`})`);
+    assert(sOld.status === 404 && sNew.status === 200 && sNew.body?.kind === 'tools',
+        `and answers as the main server does (${show(sOld)}; ${show(sNew)})`);
     // An enterprise's name travels in its members row: the shop's follows it on the standby too.
     const projectShopId: string = projectShop.body?.shop?.id ?? '';
     const sinceRename = new Date().toISOString();

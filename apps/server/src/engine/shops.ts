@@ -5,8 +5,9 @@
  * person to an enterprise unchanged when the till must split (slice S6); until then a member's shop is theirs, and all
  * its Beans are theirs.
  *
- * - One shop per account (shops.owner_pubkey is unique). A member opens theirs (routes/shops.ts PUT /api/shops/mine); an
- *   enterprise's is made with it (state-engine.ts createTreasury), and a keeper opens one for an enterprise made before.
+ * - One shop per account (openShop; not a unique index, which a standby's import would trip: schema.sql). A member opens
+ *   theirs (routes/shops.ts PUT /api/shops/mine); an enterprise's is made with it (state-engine.ts createTreasury), and a
+ *   keeper opens one for an enterprise made before.
  * - Its name: a member's own, or none, when the apps say "<the owner's name>'s shop" in the reader's language (the node
  *   keeps no words of its own for it). An enterprise's shop has no name of its own: its name is the enterprise's, read
  *   from members whenever it is read, so it follows every rename, on a standby too. Its blurb reads as the purpose until

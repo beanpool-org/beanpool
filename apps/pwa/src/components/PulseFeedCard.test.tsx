@@ -177,6 +177,29 @@ describe('PulseFeedCard Instagram link card (web)', () => {
         expect(screen.queryByText(/Open on Instagram/)).not.toBeInTheDocument();
     });
 
+    it('handles caption with leading newlines and whitespace safely', () => {
+        const itemWithLeadingNewlines = {
+            ...instagramNoThumb,
+            id: 'pulse-ig-leading-newlines',
+            title: '\n\n   \nActual caption first line\nSecond line',
+        };
+        const { unmount } = render(<PulseFeedCard item={itemWithLeadingNewlines} />);
+
+        expect(screen.getByText('Actual caption first line')).toBeInTheDocument();
+        expect(screen.queryByText(/Second line/)).not.toBeInTheDocument();
+        unmount();
+
+        const itemWhitespaceOnly = {
+            ...instagramNoThumb,
+            id: 'pulse-ig-whitespace',
+            title: '   \n\n   ',
+        };
+        render(<PulseFeedCard item={itemWhitespaceOnly} />);
+
+        // Falls back to localized platform title rather than empty string
+        expect(screen.getByText('View post on Instagram')).toBeInTheDocument();
+    });
+
     it('a YouTube item is unchanged', () => {
         const { container } = render(<PulseFeedCard item={mockItem} />);
 

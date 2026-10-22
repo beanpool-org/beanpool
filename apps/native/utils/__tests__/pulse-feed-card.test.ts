@@ -273,6 +273,32 @@ describe('PulseFeedCard Instagram link card (native)', () => {
         expect(links.length).toBe(1);
     });
 
+    it('handles caption with leading newlines and whitespace safely', async () => {
+        const itemWithLeadingNewlines = {
+            ...instagramNoThumb,
+            id: 'pulse-ig-leading-newlines',
+            title: '\n\n   \nActual caption first line\nSecond line',
+        };
+        await act(async () => {
+            root.render(createElement(PulseFeedCard, { item: itemWithLeadingNewlines }) as any);
+        });
+
+        expect(host.textContent).toContain('Actual caption first line');
+        expect(host.textContent).not.toContain('Second line');
+
+        const itemWhitespaceOnly = {
+            ...instagramNoThumb,
+            id: 'pulse-ig-whitespace',
+            title: '   \n\n   ',
+        };
+        await act(async () => {
+            root.render(createElement(PulseFeedCard, { item: itemWhitespaceOnly }) as any);
+        });
+
+        // Falls back to localized platform title rather than empty string
+        expect(host.textContent).toContain('View post on Instagram');
+    });
+
     it('a YouTube item is unchanged', async () => {
         await act(async () => {
             root.render(createElement(PulseFeedCard, { item: youtubeItem, nodeUrl: 'https://node.example' }) as any);

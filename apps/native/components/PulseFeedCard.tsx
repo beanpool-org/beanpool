@@ -120,8 +120,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
     const canPlayInApp = media.kind === 'poster' && media.canPlayInApp;
     const timeAgo = publishedWords(item.publishedAt);
     const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : t('Neighbour'));
-    const postTitle = item.title || t('View post on {platform}', { platform: platName });
-    const titleFirstLine = postTitle.split('\n')[0].trim();
+    const postTitle = item.title?.trim() || t('View post on {platform}', { platform: platName });
+    const titleFirstLine =
+        item.title?.split('\n').map((l) => l.trim()).find(Boolean) || postTitle;
 
     const handleOpenPost = async () => {
         if (!item.url) return;

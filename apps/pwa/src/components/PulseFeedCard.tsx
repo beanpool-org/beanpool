@@ -55,8 +55,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     const isVideo = VIDEO_PLATFORMS.includes(item.platform as any);
     const timeAgo = formatRelativeTime(item.publishedAt);
     const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : t('Neighbour'));
-    const postTitle = item.title || t('View post on {platform}', { platform: platName });
-    const titleFirstLine = postTitle.split('\n')[0].trim();
+    const postTitle = item.title?.trim() || t('View post on {platform}', { platform: platName });
+    const titleFirstLine =
+        item.title?.split('\n').map((l) => l.trim()).find(Boolean) || postTitle;
     const avatarResolved = resolveAvatarUrl(item.avatarUrl);
 
     const handleOpenPost = () => {
@@ -286,7 +287,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                     {/* Title and permalink action */}
                     <div className="p-3 sm:p-3.5">
                         <h3 dir="auto" className="font-bold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors m-0">
-                            {isInstagram ? titleFirstLine : (item.title || t('View post on {platform}', { platform: platName }))}
+                            {isInstagram ? titleFirstLine : postTitle}
                         </h3>
                         {!isInstagram && (
                             <div className="flex items-center gap-1 text-xs font-semibold text-terra-600 dark:text-terra-400 mt-2">

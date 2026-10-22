@@ -1974,22 +1974,40 @@ export async function getReachablePeers(): Promise<{ peerId: string; callsign: s
 }
 
 /**
+ * How long the composer waits for the member's shop (read, and opened if they have none) before it gives up and keeps the
+ * draft: as long as the post itself waits. Without it, a link that takes the request and never answers (a captive portal,
+ * a stalled 2G line) holds Post greyed, with no word, until the phone's network stack gives up.
+ */
+export const SHOP_COMPOSER_WAIT_MS = 10_000;
+
+/**
  * The shop an Offer from the map's composer goes in, when the List sheet said "Put this in your shop" for it (slice S4′,
  * utils/shop-choice.ts: map.tsx is read and never edited, so the choice rides beside its draft): the member's own shop,
  * opened first if they have none yet, as the sheet said. Undefined when the choice doesn't hold for this post, or on a
- * node from before shops. Any other answer throws, so the Offer is never posted outside the shop the sheet promised.
+ * node from before shops. Any other answer throws, so the Offer is never posted outside the shop the sheet promised; so
+ * does no answer within {@link SHOP_COMPOSER_WAIT_MS}.
  */
 async function composerShopId(post: any, anchorUrl: string): Promise<string | undefined> {
     if (post.type !== 'offer' || !shopChoiceHolds(await peekShopChoice(), post, anchorUrl, Date.now())) return undefined;
-    const res = await signedGet('/api/shops/mine');
-    if (res.status === 404) return undefined;
-    const held = res.ok ? await res.json().catch(() => null) : null;
-    if (typeof held?.shop?.id === 'string') return held.shop.id;
-    if (held && held.shop === null) {
-        const opened = await signedRequestWithMethod('PUT', '/api/shops/mine', {}, { withStatus: true });
-        if (typeof opened?.shop?.id === 'string') return opened.shop.id;
+    const unreadable = () => new Error(t("Your shop couldn't be read just now. Try again."));
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), SHOP_COMPOSER_WAIT_MS);
+    try {
+        const res = await signedGet('/api/shops/mine', { signal: stop.signal });
+        if (res.status === 404) return undefined;
+        const held = res.ok ? await res.json().catch(() => null) : null;
+        if (typeof held?.shop?.id === 'string') return held.shop.id;
+        if (held && held.shop === null) {
+            const opened = await signedRequestWithMethod('PUT', '/api/shops/mine', {}, { withStatus: true, signal: stop.signal });
+            if (typeof opened?.shop?.id === 'string') return opened.shop.id;
+        }
+    } catch (e) {
+        if (stop.signal.aborted) throw unreadable();
+        throw e;
+    } finally {
+        clearTimeout(timer);
     }
-    throw new Error(t("Your shop couldn't be read just now. Try again."));
+    throw unreadable();
 }
 
 export async function createPost(post: any) {

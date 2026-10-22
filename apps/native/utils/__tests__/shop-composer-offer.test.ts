@@ -40,7 +40,7 @@ vi.mock('../crypto', async (orig) => ({
     signData: vi.fn(async (msg: Uint8Array) => msg),
 }));
 
-import { createPost, updatePost, signedRequestWithMethod } from '../db';
+import { SHOP_COMPOSER_WAIT_MS, createPost, updatePost, signedRequestWithMethod } from '../db';
 import { SHOP_CHOICE_KEY, rememberShopChoice } from '../shop-choice';
 
 const HERE = 'https://mullum.example';
@@ -49,8 +49,10 @@ const sent: Array<{ method: string; path: string; body: any }> = [];
 function reply(status: number, body: any) {
     return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body) };
 }
+/** A link that takes the request and never answers: only letting it go (the fetch's signal) settles it, as fetch does. */
+const NEVER = Symbol('never');
 /** The node: its shop routes and the listing routes, by method and path. */
-let routes: Record<string, (body: any) => ReturnType<typeof reply>> = {};
+let routes: Record<string, (body: any) => ReturnType<typeof reply> | typeof NEVER> = {};
 
 beforeEach(() => {
     store.map.clear();
@@ -62,13 +64,15 @@ beforeEach(() => {
         'POST /api/marketplace/posts': (body) => reply(200, { success: true, post: { id: body.id, shopId: body.shopId } }),
         'POST /api/marketplace/posts/update': () => reply(200, { success: true }),
     };
-    fetchMock.mockReset().mockImplementation(async (url: string, init: { method?: string; body?: string }) => {
+    fetchMock.mockReset().mockImplementation(async (url: string, init: { method?: string; body?: string; signal?: AbortSignal }) => {
         const method = init?.method ?? 'GET';
         const path = url.slice(HERE.length);
         const body = init?.body ? JSON.parse(init.body) : undefined;
         sent.push({ method, path, body });
         const route = routes[`${method} ${path}`];
-        return route ? route(body) : reply(404, {});
+        const answer = route ? route(body) : reply(404, {});
+        if (answer === NEVER) return new Promise<never>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+        return answer;
     });
     (globalThis as any).fetch = fetchMock;
 });
@@ -165,6 +169,44 @@ describe("the composer's Offer and the List sheet's choice", () => {
             expect(shopAndPost(), c.name).not.toContain('POST /api/marketplace/posts');
             expect(store.map.has(SHOP_CHOICE_KEY), c.name).toBe(true);
             expect(mockDb.runAsync.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO posts')), c.name).toBe(false);
+        }
+    });
+
+    it("the shop never answers (a stalled line): let go at the limit, nothing posted, it says why, and the choice is kept", async () => {
+        const stalls: Array<{ name: string; set: () => void }> = [
+            { name: 'the read', set: () => { routes['GET /api/shops/mine'] = () => NEVER; } },
+            {
+                name: 'the PUT that opens it',
+                set: () => {
+                    routes['GET /api/shops/mine'] = () => reply(200, { shop: null });
+                    routes['PUT /api/shops/mine'] = () => NEVER;
+                },
+            },
+        ];
+        vi.useFakeTimers();
+        try {
+            for (const c of stalls) {
+                sent.length = 0;
+                store.map.delete(SHOP_CHOICE_KEY);
+                mockDb.runAsync.mockClear();
+                c.set();
+                await rememberShopChoice(HERE, 'Cordless drill', true);
+                let settled: unknown = 'waiting';
+                const posting = createPost(composerOffer('Cordless drill')).then(() => { settled = 'posted'; }, (e) => { settled = e; });
+                await vi.advanceTimersByTimeAsync(SHOP_COMPOSER_WAIT_MS - 1);
+                expect(settled, c.name).toBe('waiting');
+                await vi.advanceTimersByTimeAsync(1);
+                await posting;
+                expect(settled, c.name).toBeInstanceOf(Error);
+                expect((settled as Error).message, c.name).toBe("Your shop couldn't be read just now. Try again.");
+                expect(shopAndPost(), c.name).not.toContain('POST /api/marketplace/posts');
+                expect(store.map.has(SHOP_CHOICE_KEY), c.name).toBe(true);
+                expect(mockDb.runAsync.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO posts')), c.name).toBe(false);
+                expect(vi.getTimerCount(), c.name).toBe(0);
+            }
+            expect(SHOP_COMPOSER_WAIT_MS).toBeLessThanOrEqual(10_000);
+        } finally {
+            vi.useRealTimers();
         }
     });
 

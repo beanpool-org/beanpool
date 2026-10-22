@@ -136,7 +136,7 @@ vi.mock('../../components/showcase/LocalCommunityMark', async () => {
 
 import { LanguageProvider } from '../../components/LanguageProvider';
 import PublicProfileScreen from '../../app/public-profile';
-import { blockUser } from '../blocklist';
+import { blockUser, isUserBlocked } from '../blocklist';
 
 let host: HTMLDivElement;
 let root: Root;
@@ -423,5 +423,37 @@ describe('Phone public profile message and friend actions (S0)', () => {
                 prefill: 'Hey Kofi! Take the 60-second working style quiz on your profile so we can see how we work best together! ⚡',
             },
         }]);
+    });
+
+    it('a blocked member is offered no chat nudge, and no chat is started with them', async () => {
+        data.blockedUsers.add(KOFI);
+        data.profiles[OWN] = { ...data.profiles[OWN]!, archetype: 'spark' };
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderProfile();
+
+        expect(host.textContent).toContain('You blocked Kofi.');
+        expect(host.querySelector(`[aria-label="Nudge Kofi to take the working style quiz"]`)).toBeNull();
+        expect(host.textContent).not.toContain('Nudge Kofi in Chat');
+        expect(data.conversationsCreated).toEqual([]);
+        expect(nav.pushed).toEqual([]);
+    });
+
+    it('Message tapped before the block list is read makes no thread with a blocked member', async () => {
+        data.blockedUsers.add(KOFI);
+        // The screen's first read of the list has not answered yet, so the actions row is drawn for a blocked member.
+        vi.mocked(isUserBlocked).mockImplementationOnce(() => new Promise<boolean>(() => {}));
+        nav.params = { publicKey: KOFI, callsign: 'Kofi' };
+        await renderProfile();
+
+        const msgBtn = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('Message'));
+        expect(msgBtn, 'the actions row is up before the list is read').toBeTruthy();
+        await act(async () => {
+            msgBtn!.click();
+        });
+        await settle();
+
+        expect(data.conversationsCreated).toEqual([]);
+        expect(nav.pushed).toEqual([]);
+        expect(host.textContent).toContain('You blocked Kofi.');
     });
 });

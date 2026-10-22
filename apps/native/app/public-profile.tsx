@@ -770,9 +770,15 @@ export default function PublicProfileScreen() {
     };
 
     const handleOpenDm = async (prefill?: string) => {
-        if (!pubKeyStr || !identity?.publicKey || isMessaging) return;
+        if (!pubKeyStr || !identity?.publicKey || isMessaging || isBlocked) return;
         setIsMessaging(true);
         try {
+            // Read the list again: until the screen's first read answers, the actions row is drawn for a blocked member too,
+            // and the node would make a thread nobody can write in.
+            if (await isUserBlocked(pubKeyStr)) {
+                setIsBlocked(true);
+                return;
+            }
             const conv = await createConversationApi('dm', [identity.publicKey, pubKeyStr], identity.publicKey);
             if (prefill) {
                 router.push({
@@ -1172,7 +1178,8 @@ export default function PublicProfileScreen() {
                                     );
                                 }
 
-                                if (!isSelf && viewerArchetype && !targetArchetype) {
+                                // Blocked: no nudge, as there is no Message.
+                                if (!isSelf && !isBlocked && viewerArchetype && !targetArchetype) {
                                     return (
                                         <View style={styles.synergyInviteCard}>
                                             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>

@@ -109,6 +109,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
 
     useImperativeHandle(ref, () => ({
         setText: (text: string) => {
+            // A draft the screen puts back on purpose (Edit on the message just sent, a refused send's text) is one
+            // write of exactly the sent text: the echo signature. Cancel the pending sweep, or it empties the box.
+            clearSweepTimersRef.current.forEach(clearTimeout);
+            clearSweepTimersRef.current = [];
             updateDraft(text);
             // Uncontrolled input: push the text into the native field explicitly. The height follows from
             // the native onContentSizeChange the assignment triggers.

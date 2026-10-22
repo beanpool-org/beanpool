@@ -100,6 +100,8 @@ const net = {
     noList: new Map<string, number>(),
     /** The next block request is taken by the community, and its answer never reaches the phone. */
     loseNextAnswer: false,
+    /** Something in front of the community (a Wi-Fi login page) answers every block request with a 200 of its own. */
+    portal: false,
     /** Held: the next block request waits for it before the community sees it. */
     hold: null as Promise<void> | null,
     sent: [] as { url: string; signedBy: string; body: any }[],
@@ -128,6 +130,7 @@ beforeEach(async () => {
     net.up = true;
     net.noList.clear();
     net.loseNextAnswer = false;
+    net.portal = false;
     net.hold = null;
     net.sent = [];
     net.lists.clear();
@@ -153,6 +156,7 @@ beforeEach(async () => {
             await hold;
         }
         if (!net.up) throw new TypeError('Network request failed');
+        if (net.portal) return reply(200, null, '<!DOCTYPE html><html><title>Sign in to Wi-Fi</title></html>');
         const community = url.slice(0, url.indexOf('/api/'));
         const missing = net.noList.get(community);
         if (missing) return reply(missing, null, 'Not Found');
@@ -278,6 +282,21 @@ describe('a block made on the phone', () => {
         net.sent = [];
         await app.syncBlocks();
         expect(blockChanges()).toEqual([]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
+    });
+
+    it('a 200 that is not the community\'s own answer (a Wi-Fi login page) took nothing: it is sent again at the next sync', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.portal = true;
+        await app.blockUser(HARASSER, ana.publicKey);
+        expect(blockChanges()).toHaveLength(1);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
+
+        net.portal = false;
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
     });
 

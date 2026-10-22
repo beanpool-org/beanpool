@@ -42,6 +42,7 @@ type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain';
 const box: React.CSSProperties = { width: '100%', padding: '0.75rem', borderRadius: '12px', border: '1px solid var(--border-primary, #333)', background: 'var(--bg-secondary, transparent)', color: 'inherit', fontSize: '1rem', fontFamily: 'monospace', boxSizing: 'border-box' };
 const primary: React.CSSProperties = { width: '100%', padding: '0.9rem 1rem', borderRadius: '14px', border: 'none', background: 'var(--bp-info-fill)', color: 'var(--bp-info-on)', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' };
 const secondary: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit' };
+const REKEY_CODE_PLACEHOLDER = 'RK-XXXX-XXXX';
 
 export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: Props) {
     const [code, setCode] = useState(initialCode ?? '');
@@ -176,7 +177,7 @@ export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: P
                 {t('Lost your phone and your 12 words? An admin of this community checked it’s you and made a code. This device takes over your account: your Beans, your name and your history.')}
             </p>
             <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginTop: '0.75rem', marginBottom: '0.25rem' }} htmlFor="web-rekey-code">{t('The code')}</label>
-            <input id="web-rekey-code" style={box} value={code} onChange={(e) => setCode(e.target.value)} placeholder={t('RK-XXXX-XXXX')} autoCapitalize="characters" autoComplete="off" spellCheck={false} />
+            <input id="web-rekey-code" style={box} value={code} onChange={(e) => setCode(e.target.value)} placeholder={REKEY_CODE_PLACEHOLDER} autoCapitalize="characters" autoComplete="off" spellCheck={false} />
             {error && <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem', marginTop: '0.5rem', lineHeight: 1.5 }}>{saidWords(error)}</p>}
             <button type="button" style={primary} onClick={ask} disabled={phase === 'asking'}>{phase === 'asking' ? t('One moment…') : t('Continue')}</button>
             <button type="button" style={secondary} onClick={onBack}>{t('← Back')}</button>

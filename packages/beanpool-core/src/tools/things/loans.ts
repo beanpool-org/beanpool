@@ -31,6 +31,9 @@ export {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Characters as readThingsDoc counts them when it holds a field to its bound: code points, so an emoji is one, not two. */
+const chars = (s: string) => [...s].length;
+
 /**
  * Total Beans fee for a loan, unrounded: the amount the node draws (apps/server/src/engine/escrow.ts, `post.credits * hours`
  * or `post.credits`), cents included, so a 0.4-Bean loan is never quoted as free.
@@ -79,17 +82,17 @@ export function isValidLendMaxDays(days: unknown): boolean {
     return typeof days === 'number' && Number.isInteger(days) && days >= 1 && days <= LEND_MAX_DAYS_MAX;
 }
 
-/** Whether replacementValue is valid: string up to 40 characters in lender's words. */
+/** Whether replacementValue is valid: string up to 40 characters (code points) in lender's words. */
 export function isValidReplacementValue(val: unknown): boolean {
-    return typeof val === 'string' && val.length <= THINGS_REPLACEMENT_VALUE_CHARS;
+    return typeof val === 'string' && chars(val) <= THINGS_REPLACEMENT_VALUE_CHARS;
 }
 
-/** Whether lendTerms is valid: string up to 300 characters. */
+/** Whether lendTerms is valid: string up to 300 characters (code points). */
 export function isValidLendTerms(terms: unknown): boolean {
-    return typeof terms === 'string' && terms.length <= THINGS_LEND_TERMS_CHARS;
+    return typeof terms === 'string' && chars(terms) <= THINGS_LEND_TERMS_CHARS;
 }
 
-/** Whether ownerNote is valid: string up to 500 characters. */
+/** Whether ownerNote is valid: string up to 500 characters (code points). */
 export function isValidOwnerNote(note: unknown): boolean {
-    return typeof note === 'string' && note.length <= THINGS_OWNER_NOTE_CHARS;
+    return typeof note === 'string' && chars(note) <= THINGS_OWNER_NOTE_CHARS;
 }

@@ -540,6 +540,36 @@ describe('Loans maths and validations (against S3 lendable Offers semantics)', (
         expect(isValidOwnerNote(null)).toBe(false);
     });
 
+    it('the validators count characters as readThingsDoc does: code points, so an emoji is one', () => {
+        const emoji = '😀'; // outside the BMP: .length 2, one code point
+        expect(isValidReplacementValue(emoji.repeat(THINGS_REPLACEMENT_VALUE_CHARS))).toBe(true);
+        expect(isValidReplacementValue(emoji.repeat(THINGS_REPLACEMENT_VALUE_CHARS + 1))).toBe(false);
+        expect(isValidLendTerms(emoji.repeat(THINGS_LEND_TERMS_CHARS))).toBe(true);
+        expect(isValidLendTerms(emoji.repeat(THINGS_LEND_TERMS_CHARS + 1))).toBe(false);
+        expect(isValidOwnerNote(emoji.repeat(THINGS_OWNER_NOTE_CHARS))).toBe(true);
+        expect(isValidOwnerNote(emoji.repeat(THINGS_OWNER_NOTE_CHARS + 1))).toBe(false);
+
+        // What a validator accepts, the document keeps whole, and what it refuses, the document cuts.
+        const atBound = {
+            id: 'e-1',
+            name: 'Emoji',
+            replacementValue: emoji.repeat(THINGS_REPLACEMENT_VALUE_CHARS),
+            lendTerms: emoji.repeat(THINGS_LEND_TERMS_CHARS),
+            ownerNote: emoji.repeat(THINGS_OWNER_NOTE_CHARS),
+            createdAt: '2026-10-01T00:00:00.000Z',
+            updatedAt: '2026-10-01T00:00:00.000Z',
+        };
+        const kept = readThingsDoc({ v: 1, things: [atBound] }).things[0];
+        expect(kept.replacementValue).toBe(atBound.replacementValue);
+        expect(kept.lendTerms).toBe(atBound.lendTerms);
+        expect(kept.ownerNote).toBe(atBound.ownerNote);
+        const over = { ...atBound, replacementValue: emoji.repeat(THINGS_REPLACEMENT_VALUE_CHARS + 1) };
+        const cut = readThingsDoc({ v: 1, things: [over] }).things[0];
+        expect(isValidReplacementValue(over.replacementValue)).toBe(false);
+        expect(cut.replacementValue).toBe(atBound.replacementValue);
+        expect(isValidReplacementValue(cut.replacementValue)).toBe(true);
+    });
+
     it('re-exports and integrates with core S3 lending semantics', () => {
         expect(LENDABLE_PRICE_TYPES).toEqual(['fixed', 'daily', 'weekly']);
         expect(isLendablePriceType('fixed')).toBe(true);

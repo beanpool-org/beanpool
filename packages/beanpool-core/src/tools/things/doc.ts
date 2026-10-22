@@ -10,6 +10,7 @@ export const THINGS_DOC_VERSION = 1;
 /** The most items the document keeps, which keeps it under its byte bound. */
 export const THINGS_MAX_ITEMS = 100;
 export const THINGS_NAME_CHARS = 80;
+export const THINGS_CATEGORY_CHARS = 40;
 export const THINGS_REPLACEMENT_VALUE_CHARS = 40;
 export const THINGS_LEND_TERMS_CHARS = 300;
 export const THINGS_OWNER_NOTE_CHARS = 500;
@@ -82,7 +83,7 @@ function readLentTo(raw: unknown, ours: boolean): ThingLentTo | undefined {
 function readThing(raw: unknown, ours: boolean): Thing | null {
     if (!isPlainObject(raw) || typeof raw.id !== 'string' || typeof raw.name !== 'string') return null;
     const name = ours ? [...raw.name].slice(0, THINGS_NAME_CHARS).join('') : raw.name;
-    const category = typeof raw.category === 'string' ? (ours ? [...raw.category].slice(0, 40).join('') : raw.category) : undefined;
+    const category = typeof raw.category === 'string' ? (ours ? [...raw.category].slice(0, THINGS_CATEGORY_CHARS).join('') : raw.category) : undefined;
     const condition = typeof raw.condition === 'string' ? raw.condition : undefined;
     const replacementValue = typeof raw.replacementValue === 'string'
         ? (ours ? [...raw.replacementValue].slice(0, THINGS_REPLACEMENT_VALUE_CHARS).join('') : raw.replacementValue)

@@ -50,6 +50,7 @@ import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, exportSyncState, signSyncPayload, importRemoteState, setNodeRole, reconcileLedgerFromDb,
     adminAssignTreasuryOperator, getMemberTrustProfile, getMemberTrustStats, treasuryKeepers, pausePost, resumePost, removePost,
+    purgeMemberSelf,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -214,8 +215,8 @@ async function main(): Promise<void> {
     const louRename = await call('PUT', lou, profilePath(ent), { name: 'Lou Fixes Sentinel', purpose: 'Bikes, phones and kettles mended.' });
     assert(louRename.status === 200 && louRename.body?.name === 'Lou Fixes Sentinel' && faceOf(ent).callsign === 'Lou Fixes Sentinel'
         && faceOf(ent).purpose === 'Bikes, phones and kettles mended.', `the lead renames it and says what it is for (${show(louRename)})`);
-    const adminRename = await call('PUT', owner, profilePath(ent), { name: 'Lou Mends Sentinel' });
-    assert(adminRename.status === 200 && faceOf(ent).callsign === 'Lou Mends Sentinel', `so may a node admin (${show(adminRename)})`);
+    const adminRename = await call('PUT', owner, `/api/enterprise/${ent}/profile`, { name: 'Lou Mends Sentinel' });
+    assert(adminRename.status === 200 && faceOf(ent).callsign === 'Lou Mends Sentinel', `so may a node admin, by the enterprise's own path too (${show(adminRename)})`);
 
     db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(new Date(Date.now() + 86_400_000).toISOString(), mo.pk);
     const muted = await call('PUT', mo, profilePath(ent), { about: 'Muted words.' });
@@ -456,6 +457,12 @@ async function main(): Promise<void> {
     await call('PUT', max, featurePath(lamp), { featured: true });
     const closedShop = await call('POST', max, '/api/shops/mine/close', {});
     assert(closedShop.status === 200 && featuredAtOf(lamp) === null, `a shop closed takes every stamp in it (${show(closedShop)})`);
+    const zed = member('ZedSentinel');
+    const zedShop: string = (await call('PUT', zed, '/api/shops/mine', {})).body?.shop?.id ?? '';
+    const vase = await memberOffer(zed, 'home', 'Vase', { shopId: zedShop });
+    const zedFeatured = (await call('PUT', zed, featurePath(vase), { featured: true })).body?.featuredAt ?? null;
+    attempt(() => purgeMemberSelf(zed.pk));
+    assert(typeof zedFeatured === 'string' && featuredAtOf(vase) === null, 'an account closed takes its shop, and every stamp in it');
 
     // ── 6. a standby ────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. a standby ──');
@@ -473,6 +480,7 @@ async function main(): Promise<void> {
     const finalLogo = png(5, 150, 60);
     await call('PUT', lou, profilePath(ent), { name: 'Lou Standby Sentinel', purpose: 'Mended on a standby too.', about: 'The standby says this.', avatar: finalLogo });
     await call('PUT', kit, featurePath(shelf[4]), { featured: false });
+    const putOn = await call('PUT', rae, featurePath(shelf[0]), { featured: true });
     const mainFace = faceOf(ent);
     const delta: any = await exportSyncState(nodeId, since);
     // The standby as it was: the old face and the stamp still on, each at an old stamp, so the copy's rows are the newer.
@@ -480,6 +488,7 @@ async function main(): Promise<void> {
     setMemberPhoto(db, ent, png(10, 20, 30));
     db.prepare("UPDATE members SET updated_at = '2000-01-01T00:00:00.000Z' WHERE public_key = ?").run(ent);
     attempt(() => db.prepare("UPDATE posts SET featured_at = '2001-01-01T00:00:00.000Z', updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?").run(shelf[4]));
+    attempt(() => db.prepare("UPDATE posts SET featured_at = NULL, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?").run(shelf[0]));
     const copy = await signSyncPayload((({ signature: _s, publicKey: _k, ...rest }) => rest)(delta));
     setNodeRole('backup');
     let importError = '';
@@ -490,7 +499,8 @@ async function main(): Promise<void> {
     assert(importError === '' && standbyFace.callsign === 'Lou Standby Sentinel' && standbyFace.purpose === 'Mended on a standby too.'
         && standbyFace.bio === 'The standby says this.' && standbyFace.photo === mainFace.photo && standbyFace.profile_updated_at === mainFace.profile_updated_at,
         `a delta carries the new name, purpose, About, logo and stamp (${importError || JSON.stringify({ ...standbyFace, photo: standbyFace.photo?.slice(0, 30) })})`);
-    assert(featuredAtOf(shelf[4]) === null, 'and a stamp taken off');
+    assert(featuredAtOf(shelf[4]) === null && putOn.status === 200 && featuredAtOf(shelf[0]) === putOn.body?.featuredAt,
+        `and a stamp taken off, and one put on (${show(putOn)})`);
     assert(sShop.status === 200 && sShop.body?.name === 'Lou Standby Sentinel', `the standby's copy of the shop says the new name (${show(sShop)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);

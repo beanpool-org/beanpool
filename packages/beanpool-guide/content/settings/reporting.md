@@ -26,7 +26,7 @@ In the web app, a chat with one person has a report button at the top: a flag, w
 
 ## What happens next
 
-Your report goes to your community's moderators: the owners and admins who run its server, and any members they have made moderators. They decide what to do. A moderator can remove a post or a Pulse post. Only the owners and admins can suspend a member, while the community votes on it.
+Your report goes to your community's moderators: the owners and admins who run its server, and any members they have made moderators. They decide what to do. A moderator can remove a post or a Pulse post. Only the owners and admins can suspend a member, and where the community votes, it then votes on keeping the suspension, except when they suspend someone while acting on a report: then there is no vote, and it lasts until an admin lifts it.
 
 - **A Market post or an event:** if they remove it, you get an alert: "The post you reported was removed". If they look at it and keep it, you are told that too. If its author took it down before they looked, you are told it is no longer up.
 - **A Pulse post, a project, an enterprise or a person:** you are not told the outcome in the app.

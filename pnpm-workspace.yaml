@@ -1,3 +1,6 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # The Reddit watcher is a Devvit app with its own npm install (apps/reddit-watcher/README.md): the Devvit CLI is
+  # ~300 MB that no other package or CI job needs.
+  - "!apps/reddit-watcher"

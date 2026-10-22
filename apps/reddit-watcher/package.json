@@ -1,0 +1,23 @@
+{
+  "private": true,
+  "name": "reddit-watcher",
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild --bundle --log-level=warning --target=es2023 --format=cjs --platform=node --outdir=dist/server src/server/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@devvit/web": "0.15.0",
+    "@types/node": "24.19.2",
+    "devvit": "0.15.0",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

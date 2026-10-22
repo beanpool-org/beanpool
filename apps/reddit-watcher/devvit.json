@@ -1,0 +1,39 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "beanpool-watcher",
+  "server": {},
+  "permissions": {
+    "http": {
+      "enable": true,
+      "domains": ["ntfy.sh"]
+    },
+    "redis": true,
+    "reddit": false
+  },
+  "triggers": {
+    "onPostCreate": "/internal/triggers/new-item",
+    "onCommentCreate": "/internal/triggers/new-item"
+  },
+  "settings": {
+    "global": {
+      "ntfyUrl": {
+        "type": "string",
+        "label": "ntfy topic URL (https://ntfy.sh/<topic>)",
+        "helpText": "Where the notifications go. The topic name is its password: set it with `npx devvit settings set ntfyUrl`, never in a file.",
+        "defaultValue": "",
+        "isSecret": true
+      },
+      "ntfyToken": {
+        "type": "string",
+        "label": "ntfy access token (optional)",
+        "helpText": "Only if the topic needs one: sent as Authorization: Bearer.",
+        "defaultValue": "",
+        "isSecret": true
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run build",
+    "dev": "npm run build -- --watch=forever"
+  }
+}

@@ -3,8 +3,8 @@ slug: people
 title: Persone e amici
 summary: Trovare membri della comunità, i loro profili e badge di fiducia, e contrassegnare gli amici per accorgersi se qualcuno esce.
 related: messages, your-profile, joining, blocking
-help: Membri della tua comunità. Tocca una persona per visualizzarne il profilo, Offerte, Richieste e badge.
-source-hash: 7720f543f516d9dc
+help: I membri della tua comunità e i tuoi amici. Tocca una persona per vedere il suo profilo, oppure tocca 💬 accanto a un membro per scrivere un messaggio.
+source-hash: 44b66169497e9909
 ---
 
 ## Trovare persone
@@ -15,12 +15,12 @@ Tocca **Parla**, poi **Persone**. Nella web app, tocca **Persone** nella riga de
 - **Comunità:** ogni membro. Cerca per nome. Sul telefono, ordina per **Più recenti**, **Nome**, **Amici**, **Affidabili** o **Attivi**. Sulla comunità globale mostra i membri più vicini alla tua zona: digita almeno 2 lettere di un nome per trovare chiunque altro.
 - **Inviti:** invita qualcuno di nuovo. Vedi "Entrare in BeanPool". Se non sei ancora entrato, questo pulsante dice **Registrati**. Quando delle persone hanno chiesto di entrare nella tua comunità, mostra quante sono, e sono elencate sotto **Vogliono entrare**. Nella web app questo pulsante è sempre **🎟️ Inviti**, senza conteggio e senza l'elenco **Vogliono entrare**.
 
-Tocca una persona per visualizzarne il profilo: le sue recensioni e i suoi annunci, e, sul telefono in una comunità con i fagioli, il suo badge di fiducia e i suoi scambi. Vedi "Il tuo profilo".
+Tocca una persona per visualizzarne il profilo: le sue recensioni e i suoi annunci, e, sul telefono in una comunità con i fagioli, il suo badge di fiducia e i suoi scambi. Puoi scrivere subito alla persona dal suo profilo con **Invia messaggio**, oppure aggiungerla come amica con **+ Aggiungi amico**. Vedi "Il tuo profilo".
 
 ## Amici
 
-- In **Comunità**, tocca **+ Aggiungi** accanto a un nome. Cambia in **Aggiunto**. Tocca **Aggiunto** per rimuoverlo di nuovo. Nella web app cambia in **✓ Amico**, che non puoi toccare: per rimuovere qualcuno, usa **Rimuovi** sotto **Amici**.
-- In **Amici**, tocca il pulsante del messaggio per avviare una chat, oppure il pulsante di rimozione, poi **Rimuovi**, per togliere qualcuno.
+- In **Comunità**, tocca 💬 per avviare una chat, oppure tocca **+ Aggiungi** accanto a un nome. Cambia in **Aggiunto**. Tocca **Aggiunto** per rimuoverlo di nuovo. Nella web app cambia in **✓ Amico**, che non puoi toccare: per rimuovere qualcuno, usa **Rimuovi** sotto **Amici**. Puoi anche scrivere a qualcuno o aggiungerlo come amico direttamente dal suo profilo.
+- In **Amici**, tocca 💬 per avviare una chat, oppure il pulsante di rimozione, poi **Rimuovi**, per togliere qualcuno.
 - Quando qualcuno ti aggiunge, in cima ad **Amici** compare chi lo ha fatto, ad esempio "Sam ti ha aggiunto", con **Aggiungi a tua volta**. Tocca il suo nome per vedere prima il suo profilo. Non c'è alcuna notifica. La riga scompare quando aggiungi a tua volta la persona, o dopo 30 giorni. Vengono mostrati fino a 20 utenti, poi quanti altri ancora.
 - Puoi aggiungere fino a 100 persone nell'arco di 24 ore. Anche rimuovere qualcuno viene conteggiato. Se raggiungi il limite, l'app lo segnala e indica quando potrai aggiungere nuovamente qualcuno.
 - Non puoi aggiungere qualcuno che hai bloccato: prima sbloccalo. Vedi "Bloccare qualcuno".

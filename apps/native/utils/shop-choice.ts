@@ -15,6 +15,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const SHOP_CHOICE_KEY = 'beanpool_offer_shop_choice';
 /** How long the choice waits for its Offer: a member may leave the composer to set a profile photo and come back. */
 export const SHOP_CHOICE_HOLDS_MS = 24 * 60 * 60 * 1000;
+/**
+ * How long createPost waits for the member's shop (read, and opened if they have none) before it gives up and keeps the
+ * draft: as long as the post itself waits. Without it, a link that takes the request and never answers (a captive portal,
+ * a stalled 2G line) holds the composer's Post greyed, with no word, until the phone's network stack gives up.
+ */
+export const SHOP_COMPOSER_WAIT_MS = 10_000;
 
 export interface ShopChoice {
     anchorUrl: string | null;

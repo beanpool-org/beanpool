@@ -53,7 +53,7 @@ import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 import { languageHeader } from './language-choice';
-import { clearShopChoice, peekShopChoice, shopChoiceHolds } from './shop-choice';
+import { SHOP_COMPOSER_WAIT_MS, clearShopChoice, peekShopChoice, shopChoiceHolds } from './shop-choice';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -1972,13 +1972,6 @@ export async function getReachablePeers(): Promise<{ peerId: string; callsign: s
         return [];
     }
 }
-
-/**
- * How long the composer waits for the member's shop (read, and opened if they have none) before it gives up and keeps the
- * draft: as long as the post itself waits. Without it, a link that takes the request and never answers (a captive portal,
- * a stalled 2G line) holds Post greyed, with no word, until the phone's network stack gives up.
- */
-export const SHOP_COMPOSER_WAIT_MS = 10_000;
 
 /**
  * The shop an Offer from the map's composer goes in, when the List sheet said "Put this in your shop" for it (slice S4′,

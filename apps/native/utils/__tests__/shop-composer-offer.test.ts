@@ -40,8 +40,8 @@ vi.mock('../crypto', async (orig) => ({
     signData: vi.fn(async (msg: Uint8Array) => msg),
 }));
 
-import { SHOP_COMPOSER_WAIT_MS, createPost, updatePost, signedRequestWithMethod } from '../db';
-import { SHOP_CHOICE_KEY, rememberShopChoice } from '../shop-choice';
+import { createPost, updatePost, signedRequestWithMethod } from '../db';
+import { SHOP_CHOICE_KEY, SHOP_COMPOSER_WAIT_MS, rememberShopChoice } from '../shop-choice';
 
 const HERE = 'https://mullum.example';
 const fetchMock = vi.fn();

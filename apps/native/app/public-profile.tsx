@@ -42,6 +42,14 @@ const fmtDay = (iso?: string | null, caps = false): string => {
     return formatDate(d, 'day-month-year', { caps });
 };
 
+/** A month and year through core's formatDate ("Oct 2026"), in the member's language; '' for none or a date that can't be read. */
+const fmtMonthYear = (iso?: string | null, caps = false): string => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return formatDate(d, 'month-year', { caps });
+};
+
 const fmtLastActive = (iso?: string | null): string => {
     if (!iso) return '';
     const d = new Date(iso);
@@ -1432,7 +1440,9 @@ export default function PublicProfileScreen() {
                                                     </View>
                                                 </View>
                                                 <Text style={styles.dateText}>
-                                                    {fmtDay(r.createdAt || new Date().toISOString(), true)}
+                                                    {(r.mine || isSelf)
+                                                        ? fmtDay(r.createdAt || new Date().toISOString(), true)
+                                                        : fmtMonthYear(r.createdAt || new Date().toISOString(), true)}
                                                 </Text>
                                             </View>
                                             {r.comment ? (

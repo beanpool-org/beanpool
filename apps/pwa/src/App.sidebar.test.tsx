@@ -214,6 +214,23 @@ describe('the sidebar\'s profile button shows the member\'s own picture', () => 
         await waitFor(() => expect(within(profileButton()).getByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', 'data:image/jpeg;base64,AAAA'));
     });
 
+    it('a save read that answers before the first read: the saved picture stays, the older answer is dropped', async () => {
+        const answers: ((p: ReturnType<typeof profile>) => void)[] = [];
+        vi.mocked(getMemberProfile).mockImplementation(() => new Promise((r) => { answers.push(r); }));
+        await landed();
+        await waitFor(() => expect(answers).toHaveLength(1));
+
+        const savedModule = './lib/profile-saved';
+        const { PROFILE_SAVED_EVENT } = await import(/* @vite-ignore */ savedModule);
+        act(() => { window.dispatchEvent(new Event(PROFILE_SAVED_EVENT)); });
+        await waitFor(() => expect(answers).toHaveLength(2));
+
+        await act(async () => { answers[1](profile('bundled://moon')); });
+        expect(await within(profileButton()).findByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_moon.jpg');
+        await act(async () => { answers[0](profile('bundled://sun')); });
+        expect(within(profileButton()).getByRole('img', { name: 'Your Photo' })).toHaveAttribute('src', '/avatars/avatar_moon.jpg');
+    });
+
     it('no picture, or one that is not a safe form: the initials', async () => {
         vi.mocked(getMemberProfile).mockResolvedValue(profile('javascript:alert(1)'));
         await landed();

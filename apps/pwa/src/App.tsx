@@ -19,6 +19,7 @@ import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVo
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { useLanguage } from './lib/useLanguage';
+import { useOwnAvatar } from './lib/useOwnAvatar';
 import { SyncStatus } from './components/SyncStatus';
 import { WelcomePage } from './pages/WelcomePage';
 import { GuestLobby } from './pages/GuestLobby';
@@ -183,12 +184,11 @@ export function App() {
     const steps = tour ? tourSteps('web', tour.node) : [];
     const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
     const tourTab = tourRunning ? steps[tourIndex]?.tab ?? null : null;
-    // Each step shows its own tab (Settings and an open profile close for it).
+    // Each step shows its own tab (Settings and a page over the tabs close for it).
     useEffect(() => {
         if (!tourTab) return;
         setShowSettings(false);
-        setOpenProfilePubkey(null);
-        setOpenTool(null);
+        closePagesOver();
         setActiveTab(tourTab as Tab);
     }, [tourTab, tourIndex]);
     // A tab the member opens during the tour moves the tour to that tab's step: it follows, never scolds.
@@ -253,7 +253,24 @@ export function App() {
         setOpenDraft(draft);
         setActiveTab('map');
     }, []);
-    const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey && !openTool;
+    // A member's profile, an enterprise's page or a tool: each drawn over the tabs, and over Settings (z-[110] to its 100).
+    // On md+ the sidebar stays beside it, so its tabs and its cog can be tapped with one open.
+    const pageOver = !!openProfilePubkey || !!openTreasuryPubkey || !!openTool;
+    const isBottomNavVisible = !pageOver;
+    // A tab, from the sidebar or the bottom nav, is shown with nothing over it.
+    const closePagesOver = () => {
+        setOpenProfilePubkey(null);
+        setOpenTreasuryPubkey(null);
+        setOpenTool(null);
+    };
+    // The cog's, the sidebar's and the pill's: Settings as the member sees it. Opened, it closes a page over the tabs as a
+    // tab does, or it opened under that page and nothing seemed to happen (tester, 23 Oct: from My profile the cog didn't
+    // work, from Home it did); pressed only while Settings is what is on screen, so its tap closes only what is seen.
+    const settingsSeen = showSettings && !pageOver;
+    const setSettingsFromCog = (open: boolean) => {
+        if (open) closePagesOver();
+        setShowSettings(open);
+    };
 
     useEffect(() => {
         if (typeof document !== 'undefined') {
@@ -298,6 +315,10 @@ export function App() {
     // before asking for the viewer's balance, so a guest never sends that request; everything else reads
     // null as a member, as before.
     const [isGuest, setIsGuest] = useState<boolean | null>(null);
+    // The sidebar's profile button shows the member's picture: asked once the node takes the key as a member (a guest
+    // has no profile here), again after each save. A picture that fails to load gives the initials back.
+    const ownAvatar = useOwnAvatar(isGuest === false && identity ? identity.publicKey : null);
+    const [brokenAvatar, setBrokenAvatar] = useState<string | null>(null);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
     // The install banner (rehearsal 14 Oct, B1) never sits on the tour or a screen drawn over the tabs, and a member is
     // first offered it once the tour has ended: while Home has not said, or says its Getting started card is up, it waits.
@@ -792,8 +813,7 @@ export function App() {
                         onClick={() => {
                             setActiveTab('home');
                             setShowSettings(false);
-                            setOpenProfilePubkey(null);
-                            setOpenTool(null);
+                            closePagesOver();
                         }}
                     >
                         <img src="/bean.png" alt={t('BeanPool Icon')} className="w-9 h-9 object-contain drop-shadow-sm" />
@@ -819,8 +839,7 @@ export function App() {
                                     if (tab.id === 'people' && activeTab !== 'people') setPeopleSubView('friends');
                                     setActiveTab(tab.id);
                                     setShowSettings(false);
-                                    setOpenProfilePubkey(null);
-                                    setOpenTool(null);
+                                    closePagesOver();
                                 }}
                                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ${
                                     isActive
@@ -851,7 +870,7 @@ export function App() {
                 <div className="p-3 border-t border-nature-200 dark:border-nature-800 space-y-2 bg-nature-100/50 dark:bg-nature-900/50">
                     <div className="flex items-center justify-between px-2 py-1">
                         <SyncStatus isMember={!isGuest} />
-                        <SidebarControls showSettings={showSettings} setShowSettings={setShowSettings} />
+                        <SidebarControls showSettings={settingsSeen} setShowSettings={setSettingsFromCog} />
                     </div>
 
                     {identity && (
@@ -859,8 +878,14 @@ export function App() {
                             onClick={() => setOpenProfilePubkey(identity.publicKey)}
                             className="w-full flex items-center gap-2.5 p-2 rounded-xl bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-800 hover:border-nature-400 dark:hover:border-nature-600 transition-colors cursor-pointer text-left"
                         >
-                            <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-xs text-nature-800 dark:text-nature-200 shrink-0">
-                                {identity.callsign ? identity.callsign.substring(0, 2).toUpperCase() : 'ME'}
+                            {/* The member's own picture, at the size it is kept; the initials while it loads, where there is
+                                none, and where it fails to load. */}
+                            <div className="w-8 h-8 rounded-full bg-nature-200 dark:bg-nature-700 flex items-center justify-center font-bold text-xs text-nature-800 dark:text-nature-200 shrink-0 overflow-hidden">
+                                {ownAvatar && ownAvatar !== brokenAvatar ? (
+                                    <img src={ownAvatar} alt={t('Your Photo')} className="w-full h-full object-cover" onError={() => setBrokenAvatar(ownAvatar)} />
+                                ) : (
+                                    identity.callsign ? identity.callsign.substring(0, 2).toUpperCase() : 'ME'
+                                )}
                             </div>
                             <div className="flex flex-col truncate">
                                 <span className="font-bold text-xs truncate text-nature-900 dark:text-white">{identity.callsign || t('Anonymous')}</span>
@@ -948,8 +973,8 @@ export function App() {
                     )}
 
                     <HeaderControls
-                        showSettings={showSettings}
-                        setShowSettings={setShowSettings}
+                        showSettings={settingsSeen}
+                        setShowSettings={setSettingsFromCog}
                         identityPubkey={identity?.publicKey}
                         onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                     />
@@ -1032,7 +1057,7 @@ export function App() {
                                         onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                         onOpenTreasury={(pubkey) => setOpenTreasuryPubkey(pubkey)}
                                         isMember={isGuest === null ? null : !isGuest}
-                                        covered={!!openTreasuryPubkey || !!openProfilePubkey || !!openTool}
+                                        covered={pageOver}
                                         focusPostId={focusMapPostId}
                                         onFocusPostHandled={clearFocusMapPost}
                                         copyEventPostId={copyEventPostId}
@@ -1229,8 +1254,7 @@ export function App() {
                                 }
                                 setActiveTab(tab.id);
                                 setShowSettings(false);
-                                setOpenProfilePubkey(null);
-                                setOpenTool(null);
+                                closePagesOver();
                             }}
                             style={{
                                 // Width follows label length (floor 4, the emoji's width), so "Commons"

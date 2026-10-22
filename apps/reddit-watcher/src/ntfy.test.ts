@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { deliver, ntfyRequest, SEEN_S, topicUrl, type Deps } from './ntfy';
+import { describe, expect, it, vi } from 'vitest';
+import { deliver, ntfyRequest, SEEN_S, SEND_TIMEOUT_MS, topicUrl, type Deps } from './ntfy';
 import type { Notice } from './notice';
 
 // Stand-ins: never a real topic, token or send.
@@ -101,6 +101,13 @@ describe('ntfyRequest', () => {
         });
     });
 
+    it('never follows a redirect, and gives up on a send that stalls', () => {
+        const { init } = ntfyRequest(notice, topic);
+        expect(init.redirect).toBe('manual');
+        expect(init.signal).toBeInstanceOf(AbortSignal);
+        expect(init.signal?.aborted).toBe(false);
+    });
+
     it('sends the token as a bearer only when there is one', () => {
         expect(ntfyRequest(notice, topic, TOKEN).init.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
         for (const token of [undefined, '', '  ', 7]) {
@@ -179,6 +186,32 @@ describe('deliver', () => {
         const w = world({ status: 'throw' });
         expect(await deliver(comment, w)).toBe('failed');
         expect(w.logs.at(-1)).toBe('[reddit-watcher] a new comment, not told: ntfy unreachable');
+    });
+
+    it('a send that stalls gives up, takes its mark off, and a repeat delivery tries again', async () => {
+        // ntfy takes the connection and never answers. A real fetch rejects when its signal aborts; so does this one,
+        // and the deadline is cut from SEND_TIMEOUT_MS to 20 ms so the test does not wait it out.
+        const timeout = AbortSignal.timeout.bind(AbortSignal);
+        const asked: number[] = [];
+        const spy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+            asked.push(ms);
+            return timeout(20);
+        });
+        try {
+            const w = world();
+            w.fetch = (url, init) => {
+                w.sent.push({ url, init });
+                return new Promise((_, reject) => init.signal?.addEventListener('abort', () => reject(init.signal?.reason)));
+            };
+            expect(await deliver(post, w)).toBe('failed');
+            expect(asked).toEqual([SEND_TIMEOUT_MS]);
+            expect(w.seen.has('seen:t3_abc123')).toBe(false);
+            expect(w.logs.at(-1)).toBe('[reddit-watcher] a new post, not told: ntfy unreachable');
+            expect(await deliver(post, w)).toBe('failed');
+            expect(w.sent).toHaveLength(2);
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     it('tells it anyway when the repeat check is down', async () => {

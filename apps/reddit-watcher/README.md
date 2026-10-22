@@ -32,8 +32,8 @@ It keeps nothing else, and the marker holds no title, text or username.
 **Operational notes**
 
 - If the ntfy topic is not set, nothing is sent; the app's log says so.
-- If ntfy cannot be reached, that one notification is lost (the log says so); if Reddit delivers the event again, the
-  app tries again.
+- If ntfy cannot be reached or does not answer within 10 seconds, that one notification is lost (the log says so); if
+  Reddit delivers the event again, the app tries again.
 - A busy thread sends one notification per comment. r/beanpool is small, so they are not grouped.
 - It is built for r/beanpool only and is not listed in the App Directory.
 

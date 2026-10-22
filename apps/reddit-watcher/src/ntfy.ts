@@ -8,6 +8,11 @@ import { quietNames, toNotice, type Notice } from './notice';
 export const NTFY_HOSTS = ['ntfy.sh'];
 /** How long an item's repeat marker lives: Devvit can deliver one event more than once. */
 export const SEEN_S = 7 * 24 * 3600;
+/**
+ * How long a send may take. A send that stalls must end inside the trigger, or the repeat marker set before it is never
+ * taken off and a repeat delivery is skipped for SEEN_S. alerts.js bounds its send to the same topic too.
+ */
+export const SEND_TIMEOUT_MS = 10_000;
 
 /** The topic URL from the secret, or null when it is unset or not an https topic on an allowed host. */
 export function topicUrl(raw: unknown): URL | null {
@@ -33,7 +38,11 @@ export function ntfyRequest(notice: Notice, topic: URL, token?: unknown): { url:
         Click: notice.url,
     };
     if (typeof token === 'string' && token.trim()) headers.Authorization = `Bearer ${token.trim()}`;
-    return { url: topic.href, init: { method: 'POST', headers, body: notice.body } };
+    // As alerts.js: a redirect is never followed ('manual': a 3xx is a failed send), and a send that stalls gives up.
+    return {
+        url: topic.href,
+        init: { method: 'POST', headers, body: notice.body, redirect: 'manual', signal: AbortSignal.timeout(SEND_TIMEOUT_MS) },
+    };
 }
 
 export type Outcome = 'sent' | 'skipped' | 'repeat' | 'no-channel' | 'failed';

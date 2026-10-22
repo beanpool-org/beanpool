@@ -129,25 +129,35 @@ export async function readMyShop(options: { timeoutMs?: number } = {}): Promise<
 }
 
 const UNREADABLE = () => new Error(t("Your shop couldn't be read just now. Try again."));
+const UNREACHED = () => t("Your community couldn't be reached. Try again.");
 
-async function write(method: 'PUT' | 'POST', path: string, body: unknown): Promise<Record<string, unknown>> {
+/** `timeoutMs`: past it, the write is let go and says the community couldn't be reached. Without one, it waits as the fetch does. */
+async function write(method: 'PUT' | 'POST', path: string, body: unknown, options: { timeoutMs?: number } = {}): Promise<Record<string, unknown>> {
+    const stop = options.timeoutMs ? new AbortController() : null;
+    const timer = stop ? setTimeout(() => stop.abort(), options.timeoutMs) : null;
     let json: unknown;
     try {
-        json = await signedRequestWithMethod(method, path, body, { withStatus: true });
+        json = await signedRequestWithMethod(method, path, body, { withStatus: true, ...(stop ? { signal: stop.signal } : {}) });
     } catch (e) {
+        if (stop?.signal.aborted) throw new Error(UNREACHED());
         // An answer without the node's words (`unsaid`: a proxy's 502 page, an empty 500) is "Request failed: 502", in
         // English: every screen that shows this message (Your shop, the Offer edit screen's alert) says it in words instead,
         // with its status, code and `unsaid` kept, so a screen can still tell it from a refusal.
         const err = e as { unsaid?: unknown; status?: unknown; code?: unknown } | null;
         if (err?.unsaid !== true) throw e;
-        throw Object.assign(new Error(t("Your community couldn't be reached. Try again.")), { status: err.status, unsaid: true }, typeof err.code === 'string' ? { code: err.code } : {});
+        throw Object.assign(new Error(UNREACHED()), { status: err.status, unsaid: true }, typeof err.code === 'string' ? { code: err.code } : {});
+    } finally {
+        if (timer) clearTimeout(timer);
     }
     return (json && typeof json === 'object' ? json : {}) as Record<string, unknown>;
 }
 
-/** Opens the member's shop if need be ({} opens it as it is), then changes what `changes` names. */
-export async function changeMyShop(changes: MyShopChanges): Promise<{ shop: MyShop; paused: number; resumed: number }> {
-    const json = await write('PUT', '/api/shops/mine', changes);
+/**
+ * Opens the member's shop if need be ({} opens it as it is), then changes what `changes` names. `timeoutMs`: a write
+ * not answered within it is let go, with "couldn't be reached" (the Offer edit's Save, which waits on it).
+ */
+export async function changeMyShop(changes: MyShopChanges, options: { timeoutMs?: number } = {}): Promise<{ shop: MyShop; paused: number; resumed: number }> {
+    const json = await write('PUT', '/api/shops/mine', changes, options);
     const shop = readShop(json.shop);
     if (!shop) throw UNREADABLE();
     return { shop, paused: movedCount(json.paused), resumed: movedCount(json.resumed) };

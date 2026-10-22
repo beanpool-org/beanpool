@@ -13,6 +13,7 @@ import { t } from '@beanpool/core';
 import type { AppColors } from '../../constants/colors';
 import { HOME_TARGET_DP, homeStyles } from '../home/HomeParts';
 import { changeMyShop, shopTitle, type MyShopRead } from '../../utils/shop';
+import { SHOP_COMPOSER_WAIT_MS } from '../../utils/shop-choice';
 
 /** Where an Offer could go: the member's shop (open, or closed for now), none yet, or nothing to offer. */
 export type ShopToggleState =
@@ -35,14 +36,15 @@ export const shopTakesOffers = (state: ShopToggleState): boolean => state.kind =
 
 /**
  * What an Offer's edit sends as its shop (utils/db.ts updatePost `shopId`): undefined when the toggle is where it
- * started, null to take it out, the shop's id to put it in; with none yet, the shop is opened first. Closed for now, or
- * nothing read: nothing goes in.
+ * started, null to take it out, the shop's id to put it in; with none yet, the shop is opened first, waiting no longer
+ * than the composer does for the same ({@link SHOP_COMPOSER_WAIT_MS}): Save waits on it, and on a line that never
+ * answers it says the community couldn't be reached, with the edit kept. Closed for now, or nothing read: nothing goes in.
  */
 export async function shopIdForEdit(state: ShopToggleState, startedOn: boolean, on: boolean): Promise<string | null | undefined> {
     if (on === startedOn) return undefined;
     if (!on) return null;
     if (state.kind === 'open') return state.shopId;
-    if (state.kind === 'none') return (await changeMyShop({})).shop.id;
+    if (state.kind === 'none') return (await changeMyShop({}, { timeoutMs: SHOP_COMPOSER_WAIT_MS })).shop.id;
     return undefined;
 }
 

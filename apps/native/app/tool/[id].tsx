@@ -58,16 +58,22 @@ function tellOpenScreens(key: string, from: Hear | null, next: Partial<SharedSta
 /** The route's params as the tool sees them: every one but the route's own `id` and `screen`. */
 function toolParams(all: Record<string, string | string[] | undefined>): Record<string, string> {
     const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(all)) if (k !== 'id' && k !== 'screen' && typeof v === 'string') out[k] = v;
+    for (const [k, v] of Object.entries(all)) {
+        if (k !== 'id' && k !== 'screen') {
+            const val = Array.isArray(v) ? v[0] : v;
+            if (typeof val === 'string') out[k] = val;
+        }
+    }
     return out;
 }
 
 export default function ToolRoute() {
-    const all = useLocalSearchParams<Record<string, string>>();
+    const all = useLocalSearchParams<{ id?: string | string[]; screen?: string | string[] }>();
     const { colors } = useTheme();
-    const id = typeof all.id === 'string' ? all.id : '';
+    const id = typeof all.id === 'string' ? all.id : Array.isArray(all.id) && all.id[0] ? all.id[0] : '';
     const tool = phoneTool(id);
-    const screenName = typeof all.screen === 'string' && all.screen ? all.screen : tool?.manifest.screens[0] ?? '';
+    const screenParam = typeof all.screen === 'string' && all.screen ? all.screen : Array.isArray(all.screen) && all.screen[0] ? all.screen[0] : '';
+    const screenName = screenParam || (tool?.manifest.screens[0] ?? '');
     const Screen = useMemo(() => {
         if (!tool || !tool.manifest.screens.includes(screenName)) return null;
         try {

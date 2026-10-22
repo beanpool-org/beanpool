@@ -390,8 +390,8 @@
         "sourceHash": "4be4971d826d83fe"
       },
       "help": {
-        "text": "Mitglieder deiner Community. Tippe auf ein Mitglied für das Profil, zum Chatten oder als Freund hinzufügen.",
-        "sourceHash": "d90b46866bc2bb6f"
+        "text": "Die Mitglieder deiner Community und deine Freunde. Tippe auf eine Person für das Profil oder auf 💬, um ihr zu schreiben.",
+        "sourceHash": "da6aee1fe2317e12"
       }
     },
     "event-chat": {
@@ -748,6 +748,20 @@
       "summary": {
         "text": "Für Eigentümer einer Community: 12 Wörter prüfen, den Server mit dem Handy übernehmen oder wiederherstellen, und automatische Handy-Checks.",
         "sourceHash": "c3a1b3cdc4e7d8df"
+      }
+    },
+    "your-shop": {
+      "title": {
+        "text": "Dein Shop",
+        "sourceHash": "f413cdb527b9c153"
+      },
+      "summary": {
+        "text": "Ein Schaufenster auf dein eigenes Konto, für die Angebote, die du auswählst, unter einem Namen.",
+        "sourceHash": "43bf209526de6199"
+      },
+      "help": {
+        "text": "Deine Angebote unter einem Namen. Gib ihm einen Namen, sag, was für ein Shop er ist, schließe ihn vorübergehend oder ganz.",
+        "sourceHash": "129a28e32f7e3d56"
       }
     }
   }

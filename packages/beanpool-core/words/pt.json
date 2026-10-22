@@ -762,11 +762,11 @@
     "other": "{n} coisas · todas no seu galpão"
   },
   "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
-    "one": "{n} coisa · {listed} na sua loja · {out} emprestadas",
-    "other": "{n} coisas · {listed} na sua loja · {out} emprestadas"
+    "one": "{n} coisa · {listed} na sua loja · {out} fora",
+    "other": "{n} coisas · {listed} na sua loja · {out} fora"
   },
   "{n} thing · {out} out|{n} things · {out} out": {
-    "one": "{n} coisa · {out} emprestadas",
-    "other": "{n} coisas · {out} emprestadas"
+    "one": "{n} coisa · {out} fora",
+    "other": "{n} coisas · {out} fora"
   }
 }

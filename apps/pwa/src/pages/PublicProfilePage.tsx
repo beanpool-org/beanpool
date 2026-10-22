@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     getMemberProfile, updateMemberProfile, getMemberRatings, getMarketplacePosts, getBalance, getRatingsGiven, getFriends,
     submitRating, vouchMemberApi, getPublicChannels, type MemberProfile, type Rating, type MarketplacePost, type BalanceInfo,
@@ -33,9 +33,15 @@ interface Props {
     onNavigatePost: (postId: string) => void;
     onEditProfile?: () => void;
     onNavigateTab?: (tab: string, subView?: string) => void;
+    /**
+     * Opens the enterprise page instead, for a key that is an enterprise's or a project's: the profile says `isTreasury`
+     * (DESIGN-shops-round3-enterprise-shopfront §1.1, slice E1). Every door that opens someone by key lands on this page
+     * (App.tsx's one profile overlay), so this is where an enterprise is told apart, and no Trust Profile is drawn for it.
+     */
+    onOpenTreasury?: (pubkey: string) => void;
 }
 
-export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab }: Props) {
+export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab, onOpenTreasury }: Props) {
     // Beans live in a local community here (preview or read-only): the trust card's slot carries the line (§1 row 9).
     const beansMarked = marked(useFeatureMode('beans'));
     const [profile, setProfile] = useState<MemberProfile | null>(null);
@@ -68,6 +74,11 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
     const [channels, setChannels] = useState<PublicCreatorChannel[]>([]);
 
     const isSelf = pubkey === identity.publicKey;
+    // The key whose profile has answered and is no enterprise's (or couldn't be read): until then nothing of a member's
+    // profile is drawn, since the key may be an enterprise's (onOpenTreasury). The member's own is never one.
+    const [kindFor, setKindFor] = useState<string | null>(null);
+    const openTreasury = useRef(onOpenTreasury);
+    openTreasury.current = onOpenTreasury;
     const [isBlocked, setIsBlocked] = useState(() => isUserBlocked(pubkey));
     /** Said where they block while blocks wait in this browser because their list on the community is full (lib/blocklist). */
     const [blocklistFullNote, setBlocklistFullNote] = useState(() => getBlocklistFullNote());
@@ -168,8 +179,18 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
         // The reader's own balance (their trust card, or the vouch button on someone else's) is Beans: where they are in
         // preview (the global node) it is never asked (lib/features readsOwn), and the line takes the card's slot.
         const ownBalance = (key: string) => readsOwn('beans').then((reads) => (reads ? getBalance(key) : null)).catch(() => null);
+        // The profile first, on its own: an enterprise's key goes to its page as soon as the node has said what it is.
+        const profileRead = getMemberProfile(pubkey, identity.publicKey).catch(() => null);
+        void profileRead.then((prof) => {
+            if (cancelled) return;
+            if (prof?.isTreasury && openTreasury.current) {
+                openTreasury.current(pubkey);
+                return;
+            }
+            setKindFor(pubkey);
+        });
         Promise.all([
-            getMemberProfile(pubkey, identity.publicKey).catch(() => null),
+            profileRead,
             getMemberRatings(pubkey).catch(() => null),
             getMarketplacePosts({ author: pubkey }).catch(() => []),
             isSelf ? ownBalance(pubkey) : Promise.resolve(null),
@@ -233,6 +254,23 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
 
     const initial = profile?.callsign?.charAt(0).toUpperCase() || '?';
     const avatarResolved = resolveAvatarUrl(profile?.avatar);
+
+    if (!isSelf && kindFor !== pubkey) {
+        // Not known yet whether the key is a member's or an enterprise's: Back, and the page's own ground, nothing more.
+        return (
+            <div className="page-overlay z-[110] overflow-y-auto" data-testid="page-overlay">
+                <div className="sticky top-0 bg-nature-100/90 dark:bg-black/90 backdrop-blur-md border-b border-nature-200 dark:border-nature-800 px-4 py-2 sm:p-4 flex items-center gap-2 z-10">
+                    <button onClick={onBack} className="shrink-0 min-h-[48px] text-nature-500 dark:text-nature-400 font-bold hover:text-nature-900 dark:hover:text-white transition-colors bg-transparent border-none cursor-pointer flex items-center gap-1">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                        {t('Back')}
+                    </button>
+                </div>
+                <div className="py-20 text-center text-nature-500 dark:text-nature-400 font-medium" role="status">{t('Loading…')}</div>
+            </div>
+        );
+    }
 
     return (
         <div className="page-overlay z-[110] overflow-y-auto animate-in slide-in-from-bottom-4 duration-300" data-testid="page-overlay">

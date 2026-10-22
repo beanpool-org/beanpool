@@ -339,6 +339,7 @@ export const SUITES = [
     'test-trust-value-curve',
     'test-trust-tiers-one-source',
     'test-vouch-covenant',
+    'test-enterprise-not-a-member-profile',
     'test-wash-sybil-defense',
     'test-wash-background',
     'test-apple-probe',

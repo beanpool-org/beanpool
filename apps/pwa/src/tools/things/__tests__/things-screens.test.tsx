@@ -826,7 +826,8 @@ describe('A thing', () => {
         await click('thing-delete');
         await click('thing-delete-yes');
         expect(byTestId('thing-refused')).toBeNull();
-        expect(byTestId('things-main')).not.toBeNull();
+        // The Delete's round trip and its write can take longer than click()'s settle under load: wait for it to land.
+        await waitFor(() => expect(byTestId('things-main')).not.toBeNull());
 
         expect(server.asks).toEqual(['pause post-3', 'pause post-2', 'pause post-1']);
         expect([...server.shopHeld]).toEqual(['post-4']);

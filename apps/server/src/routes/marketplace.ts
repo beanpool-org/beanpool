@@ -896,8 +896,11 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
         const result = votePoll(id, voter, optionId, sig);
         ctx.body = result;
     } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to record vote') };
+        const msg = memberErrorText(e, 'Failed to record vote');
+        ctx.status = msg.includes('Poll not found') ? 404
+            : msg.startsWith('UNAUTHORIZED:') || msg.includes('Only active') || msg.includes('Credit-frozen') || msg.includes('closed') ? 403
+            : 400;
+        ctx.body = { error: msg };
     }
 });
 
@@ -926,8 +929,11 @@ router.post('/api/marketplace/polls/vote', async (ctx) => {
         const result = votePoll(targetId, voter, optionId, sig);
         ctx.body = result;
     } catch (e: any) {
-        ctx.status = 400;
-        ctx.body = { error: memberErrorText(e, 'Failed to record vote') };
+        const msg = memberErrorText(e, 'Failed to record vote');
+        ctx.status = msg.includes('Poll not found') ? 404
+            : msg.startsWith('UNAUTHORIZED:') || msg.includes('Only active') || msg.includes('Credit-frozen') || msg.includes('closed') ? 403
+            : 400;
+        ctx.body = { error: msg };
     }
 });
 

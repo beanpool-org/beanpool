@@ -145,14 +145,14 @@ describe('Your Area at signup (S4)', () => {
         expect(current.textContent).toBe('Your Area · Step 3 of 5');
     });
 
-    it('four columns without the feature: the photo goes straight to the words, and the browser is asked once at the end, as today', async () => {
+    it('four columns without the feature: the photo goes straight to the words, and the browser is never asked for a place', async () => {
         const { calls, onComplete } = await toThePhoto(GLOBAL_OPEN);
         expect(columns()).toEqual(['Sign in', 'Your Photo', 'Safety Backup', 'How it Works']);
         fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
         await finishFromBackup(onComplete);
         expect(screen.queryByText(/Roughly where are you\?/)).toBeNull();
         expect(areaCalls(calls)).toEqual([]);
-        expect(geo.getCurrentPosition).toHaveBeenCalledTimes(1);
+        expect(geo.getCurrentPosition).not.toHaveBeenCalled();
     });
 
     it('Skip writes nothing and asks nothing: no request, no position, and none at the end either', async () => {

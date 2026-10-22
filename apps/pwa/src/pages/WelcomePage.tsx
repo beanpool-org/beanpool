@@ -1177,9 +1177,9 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
 
     /**
      * Everything the end of onboarding does but opening the app: the registration where the door has not done it, the
-     * photo, the guide counted, the location and storage asks. False when it could not finish (said in `error`).
+     * photo, the guide counted, the storage ask. False when it could not finish (said in `error`).
      * `leaving`: the page leaves for a provider next (a sign-in added at the end of the tour), so the storage ask is
-     * waited for, and the location ask, whose prompt the leaving page would only dismiss, is left to the map's own.
+     * waited for.
      */
     async function finishOnboarding({ leaving = false }: { leaving?: boolean } = {}): Promise<boolean> {
         if (!pendingIdentity) return false;
@@ -1255,11 +1255,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // again each time they retried.
             const counted = recordOnboardingEvent('guide_complete');
 
-            // Onboarding complete — explicitly ask for location once. Not on a community that syncs by area: its Your Area
-            // step asked already, and a member who skipped it is not asked again behind their back.
-            if (!leaving && !byArea && 'geolocation' in navigator) {
-                navigator.geolocation.getCurrentPosition(() => {}, () => {});
-            }
+            // No location ask here: the browser is asked only when the member taps a location control (Your Area's
+            // "Use my location", the map's, a post's). A local community takes its place from the node's own setting.
             // A browser member's key lives only in this site's storage: ask the browser to keep it (design G11 §4.2).
             // Nothing waits on the answer, and the words warning stays either way.
             const asked = joinedByDoor ? askPersistentStorage() : Promise.resolve(null);
@@ -1338,9 +1335,6 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // A join started here and never sent is not needed now. One that went out stays (identity.ts
             // pendingJoinSent): the node may have that key as a member, and this browser its only copy.
             await clearUnsentPendingJoin().catch((e) => console.warn('[Welcome] leftover pending join not cleared:', e));
-            if ('geolocation' in navigator) {
-                navigator.geolocation.getCurrentPosition(() => {}, () => {});
-            }
             onComplete(member);
             return true;
         }
@@ -1405,10 +1399,6 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 identity = (await adoptNodeName(identity, mem?.callsign)) || identity;
             } catch { /* offline — name lands on next boot */ }
 
-            // Recovery complete — explicitly ask for location once
-            if ('geolocation' in navigator) {
-                navigator.geolocation.getCurrentPosition(() => {}, () => {});
-            }
             onComplete(identity);
         } catch (e) {
             if (e instanceof SentJoinWaitingError) {

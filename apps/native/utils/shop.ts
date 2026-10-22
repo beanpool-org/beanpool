@@ -131,7 +131,17 @@ export async function readMyShop(options: { timeoutMs?: number } = {}): Promise<
 const UNREADABLE = () => new Error(t("Your shop couldn't be read just now. Try again."));
 
 async function write(method: 'PUT' | 'POST', path: string, body: unknown): Promise<Record<string, unknown>> {
-    const json = await signedRequestWithMethod(method, path, body, { withStatus: true });
+    let json: unknown;
+    try {
+        json = await signedRequestWithMethod(method, path, body, { withStatus: true });
+    } catch (e) {
+        // An answer without the node's words (`unsaid`: a proxy's 502 page, an empty 500) is "Request failed: 502", in
+        // English: every screen that shows this message (Your shop, the Offer edit screen's alert) says it in words instead,
+        // with its status, code and `unsaid` kept, so a screen can still tell it from a refusal.
+        const err = e as { unsaid?: unknown; status?: unknown; code?: unknown } | null;
+        if (err?.unsaid !== true) throw e;
+        throw Object.assign(new Error(t("Your community couldn't be reached. Try again.")), { status: err.status, unsaid: true }, typeof err.code === 'string' ? { code: err.code } : {});
+    }
     return (json && typeof json === 'object' ? json : {}) as Record<string, unknown>;
 }
 

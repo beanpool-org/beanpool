@@ -2003,7 +2003,11 @@ async function composerShopId(post: any, anchorUrl: string): Promise<string | un
         }
     } catch (e) {
         if (stop.signal.aborted) throw unreadable();
-        throw e;
+        // The PUT answered without the node's words (a proxy's 502 page): never "Request failed: 502", in English, as
+        // utils/shop.ts says it for the same answer.
+        const err = e as { unsaid?: unknown; status?: unknown; code?: unknown } | null;
+        if (err?.unsaid !== true) throw e;
+        throw Object.assign(new Error(t("Your community couldn't be reached. Try again.")), { status: err.status, unsaid: true }, typeof err.code === 'string' ? { code: err.code } : {});
     } finally {
         clearTimeout(timer);
     }

@@ -600,6 +600,17 @@ describe('"Put this in your shop"', () => {
         expect(await shopIdForEdit({ kind: 'hidden' }, false, true)).toBeUndefined();
     });
 
+    it("the edit toggle opening a first shop through a proxy's 502 page: the edit screen's alert says the community couldn't be reached", async () => {
+        node.shop = null;
+        node.refuse = { status: 502, error: 'Request failed: 502', unsaid: true };
+        // The edit screen's handleSave alerts this error's message as it is (app/post/[id].tsx).
+        const err = await shopIdForEdit({ kind: 'none' }, false, true).catch((e) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect(err.message).toBe("Your community couldn't be reached. Try again.");
+        expect(err.message).not.toContain('Request failed');
+        expect(node.log.filter((r) => r.method === 'PUT')).toEqual([{ method: 'PUT', path: '/api/shops/mine', body: {} }]);
+    });
+
     it('closed for now, a listing in it can still be taken out; one not in it is told why it stays out', async () => {
         OTHERS = ["Ana's Tool Shed"];
         await draw(createElement(ShopToggle, { state: { kind: 'paused', shopId: 'shop-1', title: "Ana's Tool Shed", inShop: true }, on: true, onChange: () => {}, colors: lightColors, testID: 'edit-shop' }));

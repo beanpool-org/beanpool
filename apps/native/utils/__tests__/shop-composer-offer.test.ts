@@ -210,6 +210,18 @@ describe("the composer's Offer and the List sheet's choice", () => {
         }
     });
 
+    it("the PUT that opens it answered without the node's words (a proxy's 502 page): the reachable sentence, never \"Request failed: 502\"", async () => {
+        routes['GET /api/shops/mine'] = () => reply(200, { shop: null });
+        routes['PUT /api/shops/mine'] = () => ({ ok: false, status: 502, json: async () => { throw new SyntaxError('Unexpected token <'); }, text: async () => '<html>Bad gateway</html>' });
+        await rememberShopChoice(HERE, 'Cordless drill', true);
+        const err = await createPost(composerOffer('Cordless drill')).catch((e) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect(err.message).toBe("Your community couldn't be reached. Try again.");
+        expect(err).toMatchObject({ status: 502, unsaid: true });
+        expect(shopAndPost()).toEqual(['GET /api/shops/mine', 'PUT /api/shops/mine']);
+        expect(store.map.has(SHOP_CHOICE_KEY)).toBe(true);
+    });
+
     it('a node from before shops: the Offer posts on its own', async () => {
         routes['GET /api/shops/mine'] = () => reply(404, {});
         await rememberShopChoice(HERE, 'Cordless drill', true);

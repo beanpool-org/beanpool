@@ -35,7 +35,7 @@ type Where = 'screen' | 'text' | 'kind' | 'pause' | 'close' | 'add';
 
 /**
  * A refusal as the screen shows it: the node's own sentence when it answered, else ours. An answer without the node's
- * words (`unsaid`: a proxy's 502 page, an empty 500) is no answer: its message is "Request failed: <status>", in English.
+ * words (`unsaid`: a proxy's 502 page, an empty 500) is no answer, whatever its message (utils/shop.ts says it in words).
  */
 function refusalOf(e: unknown): ShopSheetRefusal {
     const err = e as { message?: unknown; status?: unknown; code?: unknown; unsaid?: unknown } | null;

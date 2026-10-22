@@ -204,6 +204,21 @@ describe('the member\'s own shop, changed', () => {
         await expect(closeMyShop(false)).rejects.toMatchObject({ message: "Finish or cancel the 2 open deals on this shop's things first.", status: 409, code: 'shop_deals_open' });
     });
 
+    it("an answer without the node's words (a proxy's 502 page, an empty 500) says the community couldn't be reached, never \"Request failed: 502\"", async () => {
+        const REACHED = "Your community couldn't be reached. Try again.";
+        node.write = () => { throw Object.assign(new Error('Request failed: 502'), { status: 502, unsaid: true }); };
+        for (const change of [() => changeMyShop({}), () => closeMyShop(false), () => addOffersToMyShop(['c'])]) {
+            const err = await change().catch((e) => e);
+            expect(err).toBeInstanceOf(Error);
+            expect(err).toMatchObject({ message: REACHED, status: 502, unsaid: true });
+        }
+        node.write = () => { throw Object.assign(new Error('Request failed: 500'), { status: 500, unsaid: true, code: 'shop_unknown' }); };
+        await expect(changeMyShop({ name: 'Shed' })).rejects.toMatchObject({ message: REACHED, status: 500, unsaid: true, code: 'shop_unknown' });
+        expect(node.writes.map((w) => `${w.method} ${w.path}`)).toEqual([
+            'PUT /api/shops/mine', 'POST /api/shops/mine/close', 'POST /api/shops/mine/offers', 'PUT /api/shops/mine',
+        ]);
+    });
+
     it('movedCount: a number, a list of ids, or nothing', () => {
         expect([movedCount(3), movedCount(['a', 'b']), movedCount(0), movedCount([]), movedCount(undefined), movedCount(-2), movedCount('x'), movedCount(2.7)])
             .toEqual([3, 2, 0, 0, 0, 0, 0, 2]);

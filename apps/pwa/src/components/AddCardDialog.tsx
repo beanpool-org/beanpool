@@ -208,7 +208,7 @@ export function CardSettingsDialog({ type, name, mode, initial, hasPoint = false
                     {MARKETPLACE_CATEGORIES.map((c) => {
                         // The category's name in the member's language, after its emoji (an icon, not words).
                         const name = t(c.label);
-                        return <option key={c.id} value={c.id}>{`${c.emoji} ${name}`}</option>;
+                        return <option key={c.id} value={c.id}>{c.emoji} {name}</option>;
                     })}
                 </select>
                 {hasPoint && (

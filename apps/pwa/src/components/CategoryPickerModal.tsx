@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { t } from '@beanpool/core';
 
 /**
  * CategoryPickerModal — Grid-based category picker for PWA
@@ -65,11 +66,11 @@ export function CategoryPickerModal({ visible, selected, onSelect, onClose }: Ca
                 <div className="w-10 h-1 rounded-full bg-nature-300 dark:bg-nature-700 mx-auto mb-4 sm:hidden" />
 
                 <div className="flex justify-between items-center mb-5">
-                    <h3 id="category-picker-title" className="text-lg font-black text-nature-900 dark:text-white text-center flex-1">Category</h3>
+                    <h3 id="category-picker-title" className="text-lg font-black text-nature-900 dark:text-white text-center flex-1">{t('Category')}</h3>
                     <button
                         type="button"
                         onClick={onClose}
-                        aria-label="Close category picker"
+                        aria-label={t('Close category picker')}
                         className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
                         ✕

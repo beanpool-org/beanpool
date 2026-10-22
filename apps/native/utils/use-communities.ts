@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { t } from '@beanpool/core';
 import { useIdentity } from '../app/IdentityContext';
 import { getSavedNodes, removeSavedNode, addSavedNode, isGuestNode } from './nodes';
 import { assertPlainNodeAddress } from './node-url';
@@ -104,15 +105,15 @@ export function useCommunities() {
             router.replace('/welcome');
         } catch (e: any) {
             setSwitching(false);
-            Alert.alert("Couldn't switch community", e?.message || 'Please try again.');
+            Alert.alert(t("Couldn't switch community"), e?.message || t('Please try again.'));
         }
     }, [active, switching]);
 
     const remove = useCallback((row: CommunityRow) => {
-        Alert.alert('Remove community?', `Remove ${row.name} from your saved list?`, [
-            { text: 'Cancel', style: 'cancel' },
+        Alert.alert(t('Remove community?'), t('Remove {name} from your saved list?', { name: row.name }), [
+            { text: t('Cancel'), style: 'cancel' },
             {
-                text: 'Remove', style: 'destructive', onPress: async () => {
+                text: t('Remove'), style: 'destructive', onPress: async () => {
                     await removeSavedNode(row.url).catch(() => {});
                     setRows(prev => prev.filter(r => r.url !== row.url));
                 },

@@ -1,3 +1,5 @@
+import { t } from '@beanpool/core';
+
 /**
  * A local community's listings are its members' (Marty, 2026-09-28). The node refuses them to anyone else with
  * `code: 'members_only'` (apps/server https-server.ts LISTINGS_MEMBERS_ONLY), and the web app turns that into a short
@@ -22,7 +24,7 @@ export function LookAroundGlobal({ compact = false }: { compact?: boolean }) {
             className="block w-full text-center rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-800 dark:text-nature-100 font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors"
             style={{ padding: compact ? '0.6rem 0.75rem' : '0.8rem 1rem', overflowWrap: 'anywhere', textDecoration: 'none' }}
         >
-            🌍 Look around the global community
+            {t('🌍 Look around the global community')}
         </a>
     );
 }
@@ -32,11 +34,10 @@ export function MembersOnlyListings() {
     return (
         <div data-testid="members-only-listings" className="bg-nature-50 dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 mb-4 text-center shadow-sm">
             <p className="text-lg font-bold text-nature-900 dark:text-white mb-2" style={{ overflowWrap: 'anywhere' }}>
-                🔒 This community's listings are for its members
+                {t("🔒 This community's listings are for its members")}
             </p>
             <p className="text-sm text-nature-600 dark:text-nature-300 mb-4" style={{ overflowWrap: 'anywhere' }}>
-                To join, ask a member for an invite. Anyone can look around the global community, and ask a community near
-                them to let them in from there.
+                {t('To join, ask a member for an invite. Anyone can look around the global community, and ask a community near them to let them in from there.')}
             </p>
             <LookAroundGlobal />
         </div>

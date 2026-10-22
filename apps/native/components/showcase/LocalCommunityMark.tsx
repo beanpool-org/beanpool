@@ -11,7 +11,7 @@ import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-nati
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
+    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, t, type ShowcaseFeature,
 } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import { lightColors, type AppColors } from '../../constants/colors';
@@ -48,23 +48,23 @@ export function LocalCommunitySheet({ feature, visible, onClose, onLeave }: { fe
     const go = (to: () => void) => { onClose(); onLeave?.(); to(); };
     return (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-            <Pressable style={s.scrim} onPress={onClose} accessibilityLabel="Close" />
+            <Pressable style={s.scrim} onPress={onClose} accessibilityLabel={t('Close')} />
             <View style={s.sheet} testID="local-community-sheet">
                 <ScrollView contentContainerStyle={{ padding: 20, gap: 12 }}>
-                    <Text style={s.title} accessibilityRole="header">{LOCAL_COMMUNITY_EMOJI} {LOCAL_COMMUNITY_SHEET.title}</Text>
-                    <Text style={s.body}>{LOCAL_COMMUNITY_SHEET.features[feature]}</Text>
-                    <Text style={s.body}>{LOCAL_COMMUNITY_SHEET.common}</Text>
+                    <Text style={s.title} accessibilityRole="header">{LOCAL_COMMUNITY_EMOJI}{' '}<Text>{t(LOCAL_COMMUNITY_SHEET.title)}</Text></Text>
+                    <Text style={s.body}>{t(LOCAL_COMMUNITY_SHEET.features[feature])}</Text>
+                    <Text style={s.body}>{t(LOCAL_COMMUNITY_SHEET.common)}</Text>
                     <Pressable style={[s.button, { backgroundColor: tone.fg, borderColor: tone.fg }]} accessibilityRole="button"
                         onPress={() => go(() => router.push(SHEET_ROUTES.start))}>
-                        <Text style={[s.buttonText, { color: colors.surface.card }]}>{LOCAL_COMMUNITY_SHEET.start}</Text>
+                        <Text style={[s.buttonText, { color: colors.surface.card }]}>{t(LOCAL_COMMUNITY_SHEET.start)}</Text>
                     </Pressable>
                     <Pressable style={[s.button, { borderColor: tone.border }]} accessibilityRole="button"
                         onPress={() => go(() => router.push(SHEET_ROUTES.nearYou))}>
-                        <Text style={[s.buttonText, { color: tone.fg }]}>{LOCAL_COMMUNITY_SHEET.nearYou}</Text>
+                        <Text style={[s.buttonText, { color: tone.fg }]}>{t(LOCAL_COMMUNITY_SHEET.nearYou)}</Text>
                     </Pressable>
                     <Pressable style={[s.button, { borderColor: colors.border.default }]} accessibilityRole="button"
                         onPress={() => go(() => router.push({ pathname: '/guide/[slug]', params: { slug: LOCAL_COMMUNITY_SHEET.guide[feature] } }))}>
-                        <Text style={[s.buttonText, { color: colors.text.body }]}>{LOCAL_COMMUNITY_SHEET.howItWorks}</Text>
+                        <Text style={[s.buttonText, { color: colors.text.body }]}>{t(LOCAL_COMMUNITY_SHEET.howItWorks)}</Text>
                     </Pressable>
                 </ScrollView>
             </View>
@@ -114,14 +114,14 @@ export function LocalCommunityMark(props: MarkProps) {
     const sheet = <LocalCommunitySheet feature={props.feature} visible={open} onClose={() => setOpen(false)} onLeave={props.onLeave} />;
     const pill = (
         <View style={[s.pill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
-            <Text style={[s.pillText, { color: tone.fg }]} numberOfLines={1}>{LOCAL_COMMUNITY_EMOJI} {LOCAL_COMMUNITY_MARK}</Text>
+            <Text style={[s.pillText, { color: tone.fg }]} numberOfLines={1}>{LOCAL_COMMUNITY_EMOJI}{' '}<Text>{t('Local community')}</Text></Text>
         </View>
     );
 
     if (props.variant === 'pill') {
         return (
             <>
-                <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`${LOCAL_COMMUNITY_MARK}: why?`} style={{ flexShrink: 0 }}>
+                <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={t('{mark}: why?', { mark: t('Local community') })} style={{ flexShrink: 0 }}>
                     {pill}
                 </Pressable>
                 {sheet}
@@ -131,7 +131,7 @@ export function LocalCommunityMark(props: MarkProps) {
     if (props.variant === 'action') {
         return (
             <>
-                <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`${props.label}, ${LOCAL_COMMUNITY_MARK}`}
+                <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={t('{label}, {mark}', { label: props.label, mark: t('Local community') })}
                     style={[s.action, { borderColor: tone.border }]} testID="local-community-action">
                     <Text style={[s.actionText, { color: tone.fg }]}>{props.label}</Text>
                     {pill}
@@ -155,7 +155,7 @@ export function LocalCommunityMark(props: MarkProps) {
             <>
                 <Pressable onPress={() => setCollapsed(false)} accessibilityRole="button" testID="local-community-strip"
                     style={[s.strip, { backgroundColor: tone.bg, borderColor: tone.border }]}>
-                    <Text style={[s.lineText, { color: tone.fg }]}>{LOCAL_COMMUNITY_STRIP.collapsed}</Text>
+                    <Text style={[s.lineText, { color: tone.fg }]}>{t(LOCAL_COMMUNITY_STRIP.collapsed)}</Text>
                 </Pressable>
                 {sheet}
             </>
@@ -166,25 +166,25 @@ export function LocalCommunityMark(props: MarkProps) {
             <View style={[s.strip, { backgroundColor: tone.bg, borderColor: tone.border }]} testID="local-community-strip">
                 <View style={s.stripTop}>
                     {/* Tapping any variant opens the sheet (design §2), the strip's pill too (review of #1852, finding 12). */}
-                    <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`${LOCAL_COMMUNITY_MARK}: why?`}
+                    <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={t('{mark}: why?', { mark: t('Local community') })}
                         hitSlop={12} style={{ flexShrink: 0 }}>
                         {pill}
                     </Pressable>
-                    <Pressable onPress={() => setCollapsed(true)} accessibilityRole="button" accessibilityLabel="Make this shorter" hitSlop={12}
+                    <Pressable onPress={() => setCollapsed(true)} accessibilityRole="button" accessibilityLabel={t('Make this shorter')} hitSlop={12}
                         style={s.close}>
                         <Text style={[s.closeText, { color: tone.fg }]}>✕</Text>
                     </Pressable>
                 </View>
                 <Text style={[s.stripText, { color: colors.text.body }]}>
-                    <Text style={{ fontWeight: '800' }}>{LOCAL_COMMUNITY_STRIP.lead[props.feature]}</Text> {LOCAL_COMMUNITY_STRIP.body[props.feature]}
+                    <Text style={{ fontWeight: '800' }}>{t(LOCAL_COMMUNITY_STRIP.lead[props.feature])}</Text> {t(LOCAL_COMMUNITY_STRIP.body[props.feature])}
                 </Text>
                 <Pressable onPress={() => { props.onLeave?.(); router.push(SHEET_ROUTES.start); }} accessibilityRole="button"
                     style={[s.stripButton, { backgroundColor: tone.fg, borderColor: tone.fg }]}>
-                    <Text style={[s.buttonText, { color: colors.surface.card }]}>{LOCAL_COMMUNITY_SHEET.start}</Text>
+                    <Text style={[s.buttonText, { color: colors.surface.card }]}>{t(LOCAL_COMMUNITY_SHEET.start)}</Text>
                 </Pressable>
                 <Pressable onPress={() => { props.onLeave?.(); router.push(SHEET_ROUTES.nearYou); }} accessibilityRole="button"
                     style={[s.stripButton, { borderColor: tone.border }]}>
-                    <Text style={[s.buttonText, { color: tone.fg }]}>{LOCAL_COMMUNITY_SHEET.nearYou}</Text>
+                    <Text style={[s.buttonText, { color: tone.fg }]}>{t(LOCAL_COMMUNITY_SHEET.nearYou)}</Text>
                 </Pressable>
             </View>
             {sheet}
@@ -200,7 +200,7 @@ export function ExampleHeader({ text = 'Example Valley · an example member' }: 
     return (
         <View style={s.header}>
             <View style={[s.pill, { backgroundColor: tone.bg, borderColor: tone.border }]}>
-                <Text style={[s.pillText, { color: tone.fg }]}>Example</Text>
+                <Text style={[s.pillText, { color: tone.fg }]}>{t('Example')}</Text>
             </View>
             <Text style={[s.headerText, { color: colors.text.secondary }]}>{text}</Text>
         </View>

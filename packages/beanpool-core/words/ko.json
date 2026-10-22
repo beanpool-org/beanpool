@@ -2,10 +2,10 @@
   "_meta": {
     "language": "ko",
     "name": "Korean",
-    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5); claude-sonnet-5-5 (machine draft, slice S1) (area, town search, photo step); gemini-3.8-flash-high (machine draft, top-up 16 Oct); gemini-3.8-flash-high (machine draft, S3a top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3b Market top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3c Talk top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3d Settings top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3e-S3g top-up 19 Oct); gemini-3.8-flash-high (machine draft, S3i Ledger top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3h enterprise top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3k key screens top-up 20 Oct); gemini-3.8-flash-high (machine draft, S3j welcome top-up 20 Oct); gemini-3.8-flash-high (machine draft, W1 web top-up 20 Oct); gemini-3.8-flash-high (machine draft, all sweeps 20 Oct); claude-sonnet-5-5 (machine draft, 23 Oct top-up)",
     "review": "machine",
     "reviewed": false,
-    "updated": "2026-10-20",
+    "updated": "2026-10-23",
     "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English.",
     "glossary": {
       "Beans": "콩",
@@ -712,5 +712,24 @@
   "Up top: the bean is your community and the guide, ? explains this screen, the sliders are Settings.": "화면 상단: 콩은 내 커뮤니티와 안내서이고, ?는 이 화면을 설명하며, 슬라이더 아이콘은 설정이에요.",
   "At the top: ? explains the screen you're on; Settings is where the whole guide lives.": "상단: ?는 현재 화면을 설명하며, 설정에서 전체 안내서를 볼 수 있어요.",
   "Add your first cards: tap one to put it on Home. Or tap Done and Home starts with the usual five.": "첫 카드를 추가해 보세요: 카드를 탭하여 홈에 추가하세요. 또는 '완료'를 누르면 기본 다섯 개 카드로 홈이 시작돼요.",
-  "Step {n} of {total}": "{total}단계 중 {n}단계"
+  "Step {n} of {total}": "{total}단계 중 {n}단계",
+  "Things you own and might lend, and who has them.": "내가 가진, 빌려줄 수도 있는 물건과 그걸 누가 가지고 있는지 보여줘요.",
+  "Tool shed": "공구 창고",
+  "When something lent outside BeanPool is due back": "BeanPool 밖에서 빌려준 물건을 돌려받을 날",
+  "Your shop and tools": "내 가게와 도구",
+  "Your shop, and things you can do on your own.": "내 가게, 그리고 혼자서도 할 수 있는 일이에요.",
+  "Your things, and what is out.": "내 물건, 그리고 나가 있는 것들이에요.",
+  "a drill": "드릴",
+  "a ladder": "사다리",
+  "a tent": "텐트",
+  "{name} is due back": "{name}을(를) 돌려받을 날이에요",
+  "{n} thing · in your shed|{n} things · all in your shed": {
+    "other": "물건 {n}개 · 모두 내 창고에 있어요"
+  },
+  "{n} thing · {listed} in your shop · {out} out|{n} things · {listed} in your shop · {out} out": {
+    "other": "물건 {n}개 · 내 가게에 {listed}개 · 나가 있는 것 {out}개"
+  },
+  "{n} thing · {out} out|{n} things · {out} out": {
+    "other": "물건 {n}개 · 나가 있는 것 {out}개"
+  }
 }

@@ -50,6 +50,8 @@ const { ME_PUBKEY, BOB_PUBKEY, data } = vi.hoisted(() => {
             { public_key: BOB_PUBKEY, callsign: 'Bob', avatar_url: null, joined_at: '2026-01-01T00:00:00.000Z' },
         ],
         conversationsCreated: [] as any[],
+        /** While set, the community has not answered the ask for the chat yet. */
+        answerGate: null as Promise<void> | null,
     };
     return { ME_PUBKEY, BOB_PUBKEY, data };
 });
@@ -67,6 +69,7 @@ vi.mock('../db', () => ({
     removeFriendLocal: async () => {},
     createConversationApi: vi.fn(async (type: string, participants: string[], createdBy: string) => {
         data.conversationsCreated.push({ type, participants, createdBy });
+        if (data.answerGate) await data.answerGate;
         return { id: 'conv-dm-bob', participants, type };
     }),
 }));
@@ -102,6 +105,7 @@ beforeEach(() => {
     root = createRoot(host);
     nav.pushed.length = 0;
     data.conversationsCreated.length = 0;
+    data.answerGate = null;
 });
 
 afterEach(() => {
@@ -141,5 +145,40 @@ describe('Phone Community rows message action (S0)', () => {
             createdBy: ME_PUBKEY,
         });
         expect(nav.pushed).toContain('/chat/conv-dm-bob');
+    });
+
+    it('a second tap while the community answers opens nothing more: one ask, one chat, a spinner meanwhile', async () => {
+        let answer!: () => void;
+        data.answerGate = new Promise<void>((r) => { answer = r; });
+        await act(async () => {
+            root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'], initial: 'en' }, createElement(PeopleScreen)) as any);
+        });
+        await settle();
+
+        const msgBtn = Array.from(host.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Message');
+        expect(msgBtn).toBeTruthy();
+        // Two taps in the same frame, before the screen re-renders.
+        await act(async () => {
+            msgBtn!.click();
+            msgBtn!.click();
+        });
+        await settle();
+        const asking = Array.from(host.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Message');
+        expect(asking?.querySelector('[data-spinner]')).toBeTruthy();
+        expect(asking?.textContent).not.toContain('💬');
+        // And a third once it shows the spinner.
+        await act(async () => {
+            asking!.click();
+        });
+        await settle();
+        expect(data.conversationsCreated.length).toBe(1);
+
+        await act(async () => { answer(); });
+        await settle();
+
+        expect(data.conversationsCreated.length).toBe(1);
+        expect(nav.pushed).toEqual(['/chat/conv-dm-bob']);
+        const after = Array.from(host.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'Message');
+        expect(after?.textContent).toBe('💬');
     });
 });

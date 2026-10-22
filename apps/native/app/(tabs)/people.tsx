@@ -281,6 +281,10 @@ export default function PeopleScreen() {
     const [friends, setFriends] = useState<any[]>([]);
     const [friendPubkeys, setFriendPubkeys] = useState<Set<string>>(new Set());
     const [friendsLoading, setFriendsLoading] = useState(false);
+    // A Community row's 💬 asks for one chat at a time: the ask can take 12 s, and a second tap would open a second copy
+    // of the chat over the first. The ref stops a tap before the re-render that disables the buttons.
+    const openingDmRef = useRef(false);
+    const [openingDmKey, setOpeningDmKey] = useState<string | null>(null);
 
     useEffect(() => {
         if (view === 'friends') {
@@ -1038,19 +1042,30 @@ export default function PeopleScreen() {
                                     <Pressable
                                         accessibilityRole="button"
                                         accessibilityLabel={t('Message', undefined, 'button: write to')}
+                                        accessibilityState={{ busy: openingDmKey === item.public_key, disabled: openingDmKey !== null }}
+                                        disabled={openingDmKey !== null}
                                         style={styles.msgBtn}
                                         onPress={async () => {
-                                            if (!identity?.publicKey) return;
+                                            if (!identity?.publicKey || openingDmRef.current) return;
+                                            openingDmRef.current = true;
+                                            setOpeningDmKey(item.public_key);
                                             try {
                                                 const conv = await createConversationApi('dm', [identity.publicKey, item.public_key], identity.publicKey);
                                                 router.push(`/chat/${conv.id}`);
                                             } catch (e: any) {
                                                 const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
                                                 Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
+                                            } finally {
+                                                openingDmRef.current = false;
+                                                setOpeningDmKey(null);
                                             }
                                         }}
                                     >
-                                        <Text style={styles.msgBtnText}>💬</Text>
+                                        {openingDmKey === item.public_key ? (
+                                            <ActivityIndicator size="small" color={colors.brand.primary} />
+                                        ) : (
+                                            <Text style={styles.msgBtnText}>💬</Text>
+                                        )}
                                     </Pressable>
                                     <Pressable
                                         accessibilityRole="button"

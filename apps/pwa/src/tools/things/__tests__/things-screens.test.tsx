@@ -503,6 +503,57 @@ describe('A thing', () => {
         expect((await keptThing('t-1'))?.lentTo).toBeUndefined();
     });
 
+    it("It's back reads its Offer first: put back in the Market meanwhile, it stays in the shop; gone, it is on the shelf; never \"taken out\"", async () => {
+        const lentThing = () => thing('t-1', 'Ladder', { postId: 'post-1', lentTo: { name: 'Sam', since: iso(NOW - DAY) } });
+        // Put back in the Market (from My Posts, or another device) while it was away: the server won't resume a live Offer.
+        offer('post-1', 'Ladder', 'paused');
+        await keep(shed(lentThing()));
+        await open('thing', 't-1');
+        server.posts.get('post-1')!.status = 'active';
+        await click('thing-back-home');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(server.resumed).toEqual([]);
+        let back = await keptThing('t-1');
+        expect([back?.postId, back?.pausedPostId, back?.lentTo]).toEqual(['post-1', undefined, undefined]);
+        expect(byTestId('thing-state')?.textContent).toBe('In your shop');
+        expect(byTestId('thing-offer-paused')).toBeNull();
+        expect(byTestId('thing-take-out')).not.toBeNull();
+
+        // Ended or deleted while it was away: it is back on the shelf, and says so.
+        cleanup();
+        server.posts.delete('post-1');
+        await keep(shed(lentThing()));
+        await open('thing', 't-1');
+        await click('thing-back-home');
+        expect(byTestId('thing-refused')).toBeNull();
+        back = await keptThing('t-1');
+        expect([back?.postId, back?.pausedPostId, back?.lentTo]).toEqual([undefined, undefined, undefined]);
+        expect(byTestId('thing-state')?.textContent).toBe('On your shelf');
+        expect(byTestId('thing-gone-note')?.textContent).toBe('Its Offer has gone from the Market, so it is back on your shelf. List it again to make a new one.');
+
+        // Paused, as Lend left it: resumed, and the screen says it is in the shop, never that its Offer is paused.
+        cleanup();
+        offer('post-1', 'Ladder', 'paused');
+        await keep(shed(lentThing()));
+        await open('thing', 't-1');
+        await click('thing-back-home');
+        expect(server.resumed).toEqual(['post-1']);
+        expect(byTestId('thing-state')?.textContent).toBe('In your shop');
+        expect(byTestId('thing-offer-paused')).toBeNull();
+        expect(byTestId('thing-take-out')).not.toBeNull();
+    });
+
+    it("It's back when the community's server can't be reached: it is home, and taken out of the shop, as it is", async () => {
+        offer('post-1', 'Ladder', 'paused');
+        await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1', lentTo: { name: 'Sam', since: iso(NOW - DAY) } })));
+        await open('thing', 't-1');
+        server.down = true;
+        await click('thing-back-home');
+        const back = await keptThing('t-1');
+        expect([back?.postId, back?.pausedPostId, back?.lentTo]).toEqual([undefined, 'post-1', undefined]);
+        expect(byTestId('thing-state')?.textContent).toBe('Taken out of your shop');
+    });
+
     it("when the community's server can't be reached, take out and lend change nothing and say so", async () => {
         offer('post-1', 'Ladder');
         await keep(shed(thing('t-1', 'Ladder', { postId: 'post-1' })));

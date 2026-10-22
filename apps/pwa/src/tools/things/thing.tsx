@@ -151,15 +151,24 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     const backHome = () => act(async () => {
         const now = host.now();
         let next = markBack(host.doc.get(), id, now);
+        let gone = false;
         if (postId) {
-            // Its Offer back in the Market; if the server can't be reached, it is home and taken out of the shop, as it is.
+            // Its Offer back in the Market, as the Market has it now (the server resumes only a paused one): paused, it is
+            // resumed; put back meanwhile, it is left live; gone, it is forgotten and the thing is on the shelf. If the
+            // server can't be reached, it is home and taken out of the shop, as it is.
             try {
-                await host.posts.resume(postId);
+                const status = await host.posts.status(postId);
+                if (status === 'paused') await host.posts.resume(postId);
+                if (status === 'gone') {
+                    next = forgetOffer(next, id, now);
+                    gone = true;
+                }
+                setOfferStatus(status === 'paused' ? 'active' : status);
             } catch {
                 next = takeOutOfShop(next, id, now);
             }
         }
-        await write(next);
+        if (await write(next) && gone) setGoneNote(true);
     });
     const remove = () => act(async () => {
         if (postId) await pauseOffer(postId);

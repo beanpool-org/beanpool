@@ -34,7 +34,8 @@
  * No route takes the owner from the query or the body: a member is `ctx.state.actor`, verified by the real
  * `requireSignature` middleware, and an enterprise is the path's, which the signer must keep (canOperateTreasury, as for
  * its Offers). An enterprise closed (pruned, disabled, suspended) has no shop to change; one wound up keeps its to read.
- * A change that publishes (its words, its kind, a reopen, Offers put in) is refused to a muted member or enterprise (G3).
+ * A change that publishes (its words, its kind, a reopen, Offers put in, a close that puts a pause's Offers back up) is
+ * refused to a muted member or enterprise (G3).
  *
  * ## The main server only, for a change
  *
@@ -181,7 +182,10 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => Owner | undefined) {
             const owner = ownerOf(ctx, 'write');
             if (!owner) return;
             try {
-                const done = closeShop(owner.key, ctx.requestBody?.endOffers === true);
+                const endOffers = ctx.requestBody?.endOffers === true;
+                // Closing a paused shop puts the pause's Offers back up unless they end: a reopen, so it publishes.
+                if (!endOffers && shopOf(owner.key)?.paused_at) assertMayPublish(owner);
+                const done = closeShop(owner.key, endOffers);
                 tellListingsMoved(done.cleared);
                 answer(ctx, { success: true, shopId: done.shopId, cleared: done.cleared.length, ended: done.ended.length, resumed: done.resumed.length });
             } catch (e) {

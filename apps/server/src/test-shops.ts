@@ -24,7 +24,8 @@
  *      the board and the shop says closed, back on a date if given; nothing goes in while it is; one of its Offers can't be
  *      put back up alone; reopened, what the pause took down comes back and what its owner had paused stays paused
  *   8. close: refused while a deal is open; closed, the row goes with a tombstone and its Offers stay as ordinary Offers,
- *      or end when asked; a shop opened after is a new one
+ *      or end when asked; a shop opened after is a new one; muted, a close that would put a pause's Offers back up is
+ *      refused, and one that ends them is not
  *   9. an enterprise's shop: made with the enterprise; its name is the enterprise's and follows a rename; its blurb is
  *      the purpose until a keeper writes one; only a keeper reads it as its keeper or changes it; its name can't be set
  *  10. accounts: a re-key moves the shop to the new key; a member's deletion and an admin's removal take it, with a
@@ -437,6 +438,21 @@ async function main(): Promise<void> {
     assert(endIt.status === 200 && endIt.body?.ended === 1 && postRow(gusThing)?.status === 'cancelled' && postRow(gusThing)?.active === 0
         && shopIdOf(gusThing) === null && shopRowById(gusShop) === undefined,
         `closed with its Offers ended, when asked (${show(endIt)})`);
+    // Muted (G3), a close that would put a pause's Offers back up is a reopen, refused writing nothing; one that ends them is not.
+    const hal = member('HalSentinel');
+    const halShop: string = (await call('PUT', hal, MINE, {})).body?.shop?.id;
+    const halThing = await offerId(hal, 'Hal wheelbarrow', { shopId: halShop });
+    await call('PUT', hal, MINE, { paused: true });
+    db.prepare('UPDATE members SET moderation_muted_until = ? WHERE public_key = ?').run(new Date(Date.now() + 86_400_000).toISOString(), hal.pk);
+    const halRowMuted = JSON.stringify(shopRowOf(hal.pk));
+    const mutedClose = await call('POST', hal, `${MINE}/close`, {});
+    assert(mutedClose.status === 403 && mutedClose.body?.code === 'moderation_muted' && postRow(halThing)?.status === 'paused'
+        && shopIdOf(halThing) === halShop && JSON.stringify(shopRowOf(hal.pk)) === halRowMuted,
+        `muted, a close that would put the pause's Offers back up is refused, writing nothing (${show(mutedClose)})`);
+    const mutedEnd = await call('POST', hal, `${MINE}/close`, { endOffers: true });
+    assert(mutedEnd.status === 200 && mutedEnd.body?.ended === 1 && postRow(halThing)?.status === 'cancelled' && shopRowById(halShop) === undefined,
+        `muted, a close that ends them is not (${show(mutedEnd)})`);
+    db.prepare('UPDATE members SET moderation_muted_until = NULL WHERE public_key = ?').run(hal.pk);
 
     // ── 9. an enterprise's shop ─────────────────────────────────────────────────────────────────
     console.log('\n── 9. an enterprise\'s shop ──');

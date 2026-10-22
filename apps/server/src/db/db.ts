@@ -2939,14 +2939,16 @@ export function createCrowdfundProject(
     const callsign = projectRowName(db, title, id);
 
     // A fresh id (isFreshProjectId, above): every row below is new, so a clash throws rather than writing over another's.
+    // The description is its purpose; its About (members.bio) is its keepers' own words, so it starts with none
+    // (engine/enterprise-shopfront.ts).
     db.transaction(() => {
         db.prepare(`
             INSERT INTO members (
-                public_key, callsign, joined_at, bio, status,
+                public_key, callsign, joined_at, status,
                 is_treasury, earned_credit, earned_surplus,
                 purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
-            ) VALUES (?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
-        `).run(id, callsign, now, description || '', description || title.trim(), goal_amount, deadline_at, now);
+            ) VALUES (?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
+        `).run(id, callsign, now, description || title.trim(), goal_amount, deadline_at, now);
         setMemberPhoto(db, id, photoUrl || null);
         db.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
         if (creator_pubkey) {
@@ -3006,6 +3008,7 @@ export function updateCrowdfundProject(
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
     // The enterprise row's name, by the one name rule, as at the create (projectRowName): the title is stored as typed.
+    // Its name and purpose, never its About (members.bio): that is its keepers' (PUT /api/treasury/:t/profile).
     const rowName = projectRowName(db, title, id);
 
     db.transaction(() => {
@@ -3018,9 +3021,9 @@ export function updateCrowdfundProject(
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(rowName, description, description, goal_amount, deadline_at, now, id);
+            `).run(rowName, description, goal_amount, deadline_at, now, id);
         } else {
             db.prepare(`
                 UPDATE projects
@@ -3030,9 +3033,9 @@ export function updateCrowdfundProject(
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, goal_amount = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(rowName, description, description, goal_amount, now, id);
+            `).run(rowName, description, goal_amount, now, id);
         }
         if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();

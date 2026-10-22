@@ -4,11 +4,13 @@
  * page says who keeps it with what a member's own profile already shows.
  *
  * - The face (changeEnterpriseFace, PUT /api/treasury/:t/profile in routes/treasury.ts): its name and its purpose, the
- *   lead's (or a node admin's); its About (members.bio, unused for an enterprise before) and its logo (its avatar, the
- *   picture it was made with), any keeper's. The banner is its shop's one photo (round 3 §0 row 4), not here. Every
- *   column it writes is in the members row a standby copies whole (members_touch_updated_at lists each, and the photo
- *   travels in the row: engine/replication-manifest.ts), and its shop's name is read from that row (engine/shops.ts), so
- *   the shop follows a rename on every copy.
+ *   lead's (or a node admin's); its About (members.bio) and its logo (its avatar, the picture it was made with), any
+ *   keeper's. About is theirs alone: a crowdfund's and a Commons proposal's own create and edit (db.ts
+ *   createCrowdfundProject, updateCrowdfundProject; state-engine.ts createProject, updateProject) write the name and
+ *   the purpose, never About. The banner is its shop's one photo (round 3 §0 row 4),
+ *   not here. Every column it writes is in the members row a standby copies whole (members_touch_updated_at lists each,
+ *   and the photo travels in the row: engine/replication-manifest.ts), and its shop's name is read from that row
+ *   (engine/shops.ts), so the shop follows a rename on every copy.
  * - The shopfront's data (shopfrontOf, on GET /api/treasury/:t): each keeper's tier, stars, trades and the categories of
  *   their own live Offers for everyone here, and the enterprise's categories, the union with its own. To a member of this
  *   node only (passesReadGate, the listings' gate), whatever ENFORCE_READ_AUTH says: a visitor sees the keepers' names and

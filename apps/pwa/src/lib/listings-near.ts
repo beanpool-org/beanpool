@@ -52,9 +52,10 @@ const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFi
 
 /**
  * A longitude in [-180, 180]. The picker's map gives unwrapped ones past the antimeridian (Tonga tapped with the map on
- * Fiji is 185), which the node refuses (routes/distance-query.ts).
+ * Fiji is 185), which the node refuses (routes/distance-query.ts, engine member-area.ts isPoint). Home's watch sends
+ * one too (lib/api.ts watchPlace).
  */
-const wrapLng = (lng: number): number => (lng >= -180 && lng <= 180 ? lng : ((((lng + 180) % 360) + 360) % 360) - 180);
+export const wrapLng =(lng: number): number => (lng >= -180 && lng <= 180 ? lng : ((((lng + 180) % 360) + 360) % 360) - 180);
 
 /**
  * How many decimals of a setting's centre the node is sent: the shift is at most half a unit on each axis, 7.9 m at

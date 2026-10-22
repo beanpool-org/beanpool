@@ -30,6 +30,7 @@ import {
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import { toolHomeCardIds } from '../tools/index';
+import type { ShopHomeCard } from './shop';
 import { eventHomeWhen } from './events';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
@@ -56,7 +57,7 @@ const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
  * for every tool this build has with a Home card (tools/index.ts toolHomeCardIds), drawn by Home's `default:` branch.
  */
 export const HOME_DRAWN: ReadonlySet<HomeCardId> = new Set([
-    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'events', 'market', 'search', 'decide', 'groups',
+    'needs', 'safety', 'find', 'start', 'steps', 'tips', 'interests', 'deals', 'enterprise', 'shop', 'events', 'market', 'search', 'decide', 'groups',
     'joined', 'pulse', 'sky', 'beans', 'notices', 'invite', 'community',
     ...toolHomeCardIds(),
 ]);
@@ -165,6 +166,8 @@ export interface HomeCards {
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
     /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
     enterprise?: { id: string; name: string; requests: number; others: number; lifecycle?: 'ongoing' | 'bounded' };
+    /** "Your shop and tools" (slice S4′): the member's own shop, or none yet (components/shop/ShopHomeBody.tsx). */
+    shop?: ShopHomeCard;
     events?: { items: HomeEventItem[]; radiusKm: number | null };
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
     decide?: { open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean };

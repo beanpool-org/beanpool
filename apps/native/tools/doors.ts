@@ -18,6 +18,7 @@ import * as Crypto from 'expo-crypto';
 import { t, type ToolNeedDraft, type ToolOfferDraft, type ToolPhoto } from '@beanpool/core';
 import { keepToolPhoto, toolPhotoDataUri } from './photos';
 import { communityKey } from './community';
+import { rememberShopChoice } from '../utils/shop-choice';
 
 /** The Offer composer's draft key (app/(tabs)/map.tsx `OFFER_DRAFT_KEY`, read there and never changed here). */
 export const OFFER_DRAFT_KEY = 'beanpool_offer_draft';
@@ -43,7 +44,8 @@ export interface ToolListFee {
  * the fee as the List sheet set it (0 where Beans are off), the tool's photos as the composer keeps them (data URIs), no
  * pin, and `savedAt` now. With `tool`, it also carries the tool's marker, `source: 'tool'` and `tool: <id>`, so the
  * composer opens it without asking while it is fresh (utils/compose-options.ts decideDraftOpen), and clears the marker
- * once it has. The fields a server slice adds (lendable, shop, availableFrom…) are dropped until that slice lands.
+ * once it has. The fields a server slice adds (lendable, availableFrom…) are dropped until that slice lands; `shop` is the
+ * List sheet's to say, beside the draft ({@link openOfferComposer}).
  */
 export function composerDraft(
     type: 'offer' | 'need', draft: ToolOfferDraft | ToolNeedDraft, anchorUrl: string | null, photos: readonly string[], fee: ToolListFee | null, now: number,
@@ -91,8 +93,13 @@ async function writeDraftAndOpen(type: 'offer' | 'need', owner: string, tool: st
     router.push(`/(tabs)/map?newPost=${type}`);
 }
 
-/** The List sheet's button: the draft written for the map's composer, which opens it. Nothing is posted here. */
-export function openOfferComposer(owner: string, tool: string, draft: ToolOfferDraft, fee: ToolListFee): Promise<void> {
+/**
+ * The List sheet's button: the draft written for the map's composer, which opens it. Nothing is posted here. "Put this in
+ * your shop" (`inShop`) is kept beside the draft for this Offer's title (utils/shop-choice.ts), since the composer carries
+ * only its own fields; off, any earlier choice is forgotten.
+ */
+export async function openOfferComposer(owner: string, tool: string, draft: ToolOfferDraft, fee: ToolListFee, inShop = false): Promise<void> {
+    await rememberShopChoice(await AsyncStorage.getItem('beanpool_anchor_url'), draft.title, inShop);
     return writeDraftAndOpen('offer', owner, tool, draft, fee);
 }
 

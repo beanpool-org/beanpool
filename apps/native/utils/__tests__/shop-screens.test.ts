@@ -164,7 +164,7 @@ vi.mock('../db', () => ({
 }));
 
 import { setLanguage, type ToolOfferDraft } from '@beanpool/core';
-import { lightColors, darkColors } from '../../constants/colors';
+import { lightColors, darkColors, type AppColors } from '../../constants/colors';
 import YourShopScreen from '../../app/shop/mine';
 import { ShopToggle, shopToggleState, shopIdForEdit } from '../../components/shop/ShopToggle';
 import { ShopHomeBody } from '../../components/shop/ShopHomeBody';
@@ -252,7 +252,7 @@ function tooWide(): string[] {
         let text = Array.from(span.childNodes).filter((c) => c.nodeType === 3).map((c) => c.nodeValue).join('');
         for (const o of OTHERS) text = text.split(o).join(' ');
         const font = Number(span.getAttribute('data-font') ?? 15);
-        for (const w of text.split(/[\s​]+/u).filter(Boolean)) if (textWidth(w, font) >= CARD_INNER) out.push(`${w} (${Math.round(textWidth(w, font))} dp)`);
+        for (const w of text.split(/[\s\u200b]+/u).filter(Boolean)) if (textWidth(w, font) >= CARD_INNER) out.push(`${w} (${Math.round(textWidth(w, font))} dp)`);
     }
     return out;
 }
@@ -621,7 +621,8 @@ describe('Home\'s "Your shop and tools" body', () => {
         OTHERS = [ME.callsign, "Ana's Tool Shed"];
         for (const [dark, paused] of [[false, false], [true, true]] as const) {
             theme.dark = dark;
-            const colors = dark ? darkColors : lightColors;
+            // The theme hands either set as the app's one colour type (ThemeContext); so does this.
+            const colors = (dark ? darkColors : lightColors) as unknown as AppColors;
             await draw(createElement(ShopHomeBody, { card: { shop: { id: 'shop-1', name: "Ana's Tool Shed", ownerName: 'Ana', kind: 'tools', counts: COUNTS, paused, backOn: paused ? '2026-11-03' : null } }, colors }));
             expect(byTestId('home-shop-line')?.textContent).toContain("Ana's Tool Shed");
             atTheFloor(colors);

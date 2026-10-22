@@ -31,6 +31,11 @@ export interface MyShop {
     backOn: string | null;
 }
 
+/** Home's "Your shop and tools" as the node sends it (`cards.shop`, apps/server routes/home-answer.ts ShopHomeCard). */
+export interface ShopHomeCard {
+    shop: { id: string; name: string | null; ownerName: string; kind: string | null; counts: ShopCounts; paused: boolean; backOn: string | null } | null;
+}
+
 /** What a change names: each field optional, null or empty text clears one (engine/shops.ts ShopChanges). */
 export interface MyShopChanges {
     name?: string | null;
@@ -59,6 +64,11 @@ export const SHOP_KIND_WORDS: Readonly<Record<ShopKind, { emoji: string; name: W
     labour: { emoji: '👷', name: word('Hands and labour') },
 };
 export const SHOP_KIND_IDS: readonly ShopKind[] = SHOP_KINDS;
+
+/** A kind as it is shown: its emoji and its words, "🛠️ Tools and equipment". */
+export function shopKindLabel(kind: ShopKind): string {
+    return t('{emoji} {kind}', { emoji: SHOP_KIND_WORDS[kind].emoji, kind: t(SHOP_KIND_WORDS[kind].name) }, 'a kind of shop, after its emoji');
+}
 
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
 const count = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);

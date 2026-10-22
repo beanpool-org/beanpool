@@ -31,6 +31,7 @@ import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
+import { ShopHomeBody } from '../../components/shop/ShopHomeBody';
 import { readTypedPlace } from '../../utils/typed-place';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
@@ -906,6 +907,7 @@ export default function HomeScreen() {
             ) : null;
             case 'deals': return c.deals ? frame(<DealsBody card={c.deals} colors={colors} />) : null;
             case 'enterprise': return c.enterprise ? frame(<EnterpriseBody card={c.enterprise} colors={colors} />) : null;
+            case 'shop': return c.shop ? frame(<ShopHomeBody card={c.shop} colors={colors} />) : null;
             case 'events': return c.events ? frame(<EventsBody card={c.events} colors={colors} />) : null;
             case 'market': return c.market ? frame(
                 <MarketBody

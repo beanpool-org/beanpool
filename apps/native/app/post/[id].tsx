@@ -42,6 +42,8 @@ import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_
 import { Sentence } from '../../components/Sentence';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
+import { ShopToggle, shopIdForEdit, shopToggleState, type ShopToggleState } from '../../components/shop/ShopToggle';
+import { readListingShopId, readMyShop } from '../../utils/shop';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
 
@@ -483,6 +485,9 @@ export default function PostDetailModal() {
     const [editPriceType, setEditPriceType] = useState<string>('fixed');
     const [editRepeatable, setEditRepeatable] = useState(false);
     const [editPhotos, setEditPhotos] = useState<string[]>([]);
+    // "Put this in your shop" (slice S4′): where the listing is now, as the node says, and where the edit puts it.
+    const [editShop, setEditShop] = useState<ShopToggleState>({ kind: 'hidden' });
+    const [editInShop, setEditInShop] = useState(false);
 
     // On a community with Beans off (the worldwide one) a post has no price and nothing to accept through escrow:
     // its terms are in the description, and the member messages the poster (utils/market-global.ts).
@@ -850,6 +855,20 @@ export default function PostDetailModal() {
         setEditRepeatable(!!post.repeatable);
         setEditPhotos(photos);
         setEditMode(true);
+        // A member's own Offer for everyone here can go in their shop: the toggle starts where the node says it is now, and
+        // shows nothing while that can't be read (an enterprise's shop is a later slice).
+        setEditShop({ kind: 'hidden' });
+        setEditInShop(false);
+        const scope = post.audience_scope ?? post.audienceScope ?? 'public';
+        if (post.type === 'offer' && post.author_pubkey === identity?.publicKey && scope === 'public' && !post.origin_node
+            && !(post.target_group_id ?? post.targetGroupId) && !(post.target_pubkey ?? post.targetPubkey)) {
+            void Promise.all([readMyShop(), readListingShopId(post.id)]).then(([mine, inShopId]) => {
+                if (inShopId === undefined) return;
+                const inShop = mine.state === 'open' && inShopId === mine.shop.id;
+                setEditShop(shopToggleState(mine, { inShop }));
+                setEditInShop(inShop);
+            });
+        }
     };
 
     const handleSave = async () => {
@@ -860,6 +879,9 @@ export default function PostDetailModal() {
         if (price && !price.ok && price.refusal !== 'empty') { Alert.alert(t('Error'), amountRefusalWords(price.refusal)); return; }
         setSaving(true);
         try {
+            // Its shop: in, out (a Need never stays in one), or left as it is; a shop the member has none of yet is opened first.
+            const startedIn = (editShop.kind === 'open' || editShop.kind === 'paused') && editShop.inShop;
+            const shopId = await shopIdForEdit(editShop, startedIn, editType === 'offer' && editInShop);
             await updatePost(post.id, {
                 type: editType,
                 category: editCategory,
@@ -869,6 +891,7 @@ export default function PostDetailModal() {
                 price_type: editPriceType,
                 repeatable: editRepeatable,
                 photos: editPhotos.length > 0 ? JSON.stringify(editPhotos) : null,
+                ...(shopId !== undefined ? { shopId } : {}),
             });
             // Refresh the post
             const updated = await getPost(post.id);
@@ -1419,6 +1442,13 @@ export default function PostDetailModal() {
                                     <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 2 }}>{t('Post remains active after completion.')}</Text>
                                 </View>
                             </Pressable>
+
+                            {/* Put this in your shop (slice S4′): an Offer only */}
+                            {editType === 'offer' ? (
+                                <View style={{ marginBottom: 15 }}>
+                                    <ShopToggle state={editShop} on={editInShop} onChange={setEditInShop} colors={colors} testID="edit-post-shop" />
+                                </View>
+                            ) : null}
 
                             {/* Photos */}
                             <Text style={styles.editPhotoLabel}>{t('PHOTOS ({n}/{max})', { n: editPhotos.length, max: 5 })}</Text>

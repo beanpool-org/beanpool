@@ -41,6 +41,8 @@ import {
     type ToolCopyNote,
 } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
+import { shopToggleState, type ShopToggleState } from '../../components/shop/ShopToggle';
+import { readMyShop } from '../../utils/shop';
 
 /** What every open screen of one tool, for one owner, shares. */
 interface SharedState { doc: unknown; stored: boolean; settings: ToolSettings; copyNote: ToolCopyNote }
@@ -97,7 +99,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
     const [settings, setSettings] = useState<ToolSettings | null>(null);
     const [url, setUrl] = useState<string | null>(null);
     const [listDraft, setListDraft] = useState<ToolOfferDraft | null>(null);
-    const [listChecks, setListChecks] = useState({ photo: false, unfinished: false });
+    const [listChecks, setListChecks] = useState<{ photo: boolean; unfinished: boolean; shop: ShopToggleState }>({ photo: false, unfinished: false, shop: { kind: 'hidden' } });
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [notificationsAllowed, setNotificationsAllowed] = useState<boolean | null>(null);
     const [copyNote, setCopyNote] = useState<ToolCopyNote>(null);
@@ -220,7 +222,9 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
             if (needs && owner) {
                 hasPhoto = !!(await getMemberProfile(owner).catch(() => null))?.avatar_url || !!(await getCanonicalAvatar().catch(() => null));
             }
-            setListChecks({ photo: needs && !hasPhoto, unfinished: await unfinishedPostHere() });
+            // "Put this in your shop": the member's shop as the node has it now (none yet, open, closed for now), or nothing.
+            const shop = shopToggleState(await readMyShop().catch(() => null));
+            setListChecks({ photo: needs && !hasPhoto, unfinished: await unfinishedPostHere(), shop });
             setListDraft(draft);
         })();
     }, [nodeProfile, owner]);
@@ -379,12 +383,13 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
                 beans={beansOn(nodeProfile?.features)}
                 needsProfilePhoto={listChecks.photo}
                 unfinishedPost={listChecks.unfinished}
+                shop={listChecks.shop}
                 colors={colors}
                 onClose={() => setListDraft(null)}
-                onList={(fee: ToolListFee) => {
+                onList={(fee: ToolListFee, inShop: boolean) => {
                     const draft = listDraft;
                     setListDraft(null);
-                    if (draft) void openOfferComposer(owner, manifest.id, draft, fee);
+                    if (draft) void openOfferComposer(owner, manifest.id, draft, fee, inShop);
                 }}
             />
         </>

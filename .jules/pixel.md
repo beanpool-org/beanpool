@@ -202,3 +202,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2027-01-09 - Add dynamic accessibilityLabel, hint, and busy state to old words unlock submit button
 **Learning:** Unlock buttons in message history recovery flows whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without accessible text feedback when busy unless explicit dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` attributes are supplied.
 **Action:** Supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` on message recovery submit buttons rendering `ActivityIndicator` when busy.
+
+## 2027-01-16 - Add dynamic accessibilityLabel and hint to use my location button in AreaPicker
+**Learning:** Location fetch buttons whose visible text is replaced by an `ActivityIndicator` while acquiring GPS coordinates leave screen readers without dynamic feedback unless provided with explicit dynamic `accessibilityLabel` (`busy === 'location' ? t('Getting your location...') : t(AREA_WORDS.useLocation)`) and `accessibilityHint`.
+**Action:** Supply dynamic `accessibilityLabel` and concise `accessibilityHint` on location reading buttons that conditionally render an `ActivityIndicator`.

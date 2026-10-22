@@ -1135,7 +1135,6 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
     });
 
     it("a write through the tool's host: one sync five seconds after the last, not one a write", async () => {
-        disk.delayTicks = 6;
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
         try {
             let n = 0;

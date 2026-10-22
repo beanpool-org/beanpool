@@ -94,6 +94,7 @@ import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { communityNameSaved } from '../services/directory-publisher.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
 import { cleanLabel } from '../config/clean-label.js';
+import { placeAs, placeShownTo } from '../config/community-place.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
@@ -136,9 +137,10 @@ router.get('/api/local/status', async (ctx) => {
         // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
         isLocked: hasAdminPassword(config),
         callsign: config.callsign || null,
-        // Rounded to two decimals (~1 km), as the Home answer's community.place: this route answers anyone, from anywhere, and an
-        // operator may have set a home address. The only reader is the sister map in the legacy settings page (a marker).
-        location: config.location ? { lat: Math.round(config.location.lat * 100) / 100, lng: Math.round(config.location.lng * 100) / 100 } : null,
+        // As anyone else gets it (config/community-place.ts): rounded to two decimals (~1 km) with "Share Location & Radius"
+        // on, null with it off. This route answers anyone, from anywhere, and isn't signature-checked, so it can't tell a
+        // member; an operator may have set a home address. Its one reader was the sister map in the legacy settings page.
+        location: placeAs(config.location, placeShownTo({ ownerOrAdmin: false })),
         // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet
         // manager knows to use a token. Absent on a node from before.
         passwordRetired: !!config.passwordRetired,
@@ -474,7 +476,7 @@ router.post('/api/local/change-password', async (ctx) => {
 
 // ===================== DASHBOARD API =====================
 
-// The identity is public, as /api/local/status and libp2p already make it. The peer links are for this node's admins
+// The identity is public, as /api/local/status makes it, and libp2p its peer id. The peer links are for this node's admins
 // only (GET /api/local/connectors, below). A caller that sends no admin credential gets the identity; one that sends a
 // credential has it checked as any admin route does, and is refused if it doesn't open one.
 router.get('/api/local/dashboard', async (ctx) => {
@@ -490,10 +492,10 @@ router.get('/api/local/dashboard', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) {
         if (!(ctx.body as any)?.notSignedIn) return;
         ctx.status = 200;
-        // Anyone gets the location rounded to two decimals (~1 km), as /api/local/status and community.place; an owner or
-        // admin gets it exact below, because the settings form edits it from this answer (static/settings.js data.identity).
-        const loc = config.location;
-        ctx.body = { identity: { ...identity, location: loc ? { lat: Math.round(loc.lat * 100) / 100, lng: Math.round(loc.lng * 100) / 100 } : loc } };
+        // Anyone gets the location as /api/local/status gives it (config/community-place.ts: ~1 km with "Share Location &
+        // Radius" on, null with it off); an owner or admin gets it exact below, because the settings form edited it from
+        // this answer (static/settings.js data.identity).
+        ctx.body = { identity: { ...identity, location: placeAs(config.location, placeShownTo({ ownerOrAdmin: false })) } };
         return;
     }
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;

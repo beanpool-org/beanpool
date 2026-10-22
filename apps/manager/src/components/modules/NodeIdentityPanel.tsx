@@ -8,6 +8,7 @@ import { useTimeout } from '../../lib/use-timeout';
 import { createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
 import { nodeCredential } from '../../lib/profiles';
 import { passwordField } from '../../lib/node-client';
+import { t } from '../../lib/fresh-proof';
 
 export interface NodeIdentityPanelProps {
     activeNode: NodeProfile;
@@ -758,7 +759,7 @@ export function NodeIdentityPanel({
                                 <span>📍 Share Location &amp; Radius</span>
                             </label>
                             <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                Helps other BeanPoolers avoid creating duplicate nodes in your area, and allows the global community to see our network grow.
+                                {t('On: anyone can see roughly where your community is (to about a kilometre) and how far it reaches, on the map at beanpool.org and in the directory, so people nearby can find you and nobody starts a second community in your area. Off: only your members see it.')}
                             </p>
                         </div>
 

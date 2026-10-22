@@ -8,6 +8,7 @@ import {
     THINGS_OWNER_NOTE_CHARS,
     THINGS_REPLACEMENT_VALUE_CHARS,
     emptyThingsDoc,
+    isLiveThing,
     isThing,
     readThingsDoc,
     type Thing,
@@ -134,6 +135,43 @@ describe('readThingsDoc (tolerant parsing, bounds, migration)', () => {
         expect(read.things.length).toBe(THINGS_MAX_ITEMS);
         expect(ownThings(read)[0].id).toBe('t-0');
         expect(ownThings(read)[99].id).toBe('t-99');
+    });
+
+    it('the cap counts live things only: gone things ahead of them never push a live thing out', () => {
+        const at = '2026-10-01T00:00:00.000Z';
+        const gone = Array.from({ length: 110 }, (_, i) => ({ id: `g-${i}`, name: `Gone ${i}`, gone: true, createdAt: at, updatedAt: at }));
+        const live = Array.from({ length: 10 }, (_, i) => ({ id: `l-${i}`, name: `Live ${i}`, createdAt: at, updatedAt: at }));
+        const read = readThingsDoc({ v: 1, things: [...gone, ...live] });
+        expect(read.things.length).toBe(120);
+        expect(ownThings(read).filter(isLiveThing).map((t) => t.id)).toEqual(live.map((t) => t.id));
+        expect(thingsCounts(read)).toEqual({ things: 10, listed: 0, out: 0, shelf: 10 });
+        expect(readThingsDoc(read)).toEqual(read);
+    });
+
+    it('past the cap, the live things after the 100th are dropped and the gone things keep their places', () => {
+        const at = '2026-10-01T00:00:00.000Z';
+        const thing = (id: string, gone = false) => ({ id, name: id, ...(gone ? { gone: true } : {}), createdAt: at, updatedAt: at });
+        const raw = [
+            thing('g-a', true),
+            ...Array.from({ length: THINGS_MAX_ITEMS + 5 }, (_, i) => thing(`l-${i}`)),
+            thing('g-b', true),
+        ];
+        const read = readThingsDoc({ v: 1, things: raw });
+        const ids = ownThings(read).map((t) => t.id);
+        expect(ids.length).toBe(THINGS_MAX_ITEMS + 2);
+        expect(ids[0]).toBe('g-a');
+        expect(ids[THINGS_MAX_ITEMS]).toBe(`l-${THINGS_MAX_ITEMS - 1}`);
+        expect(ids[THINGS_MAX_ITEMS + 1]).toBe('g-b');
+        expect(ids).not.toContain(`l-${THINGS_MAX_ITEMS}`);
+        expect(thingsCounts(read).things).toBe(THINGS_MAX_ITEMS);
+    });
+
+    it('isLiveThing is a thing this build reads that is not gone', () => {
+        expect(isLiveThing({ id: 'a', name: 'x' })).toBe(true);
+        expect(isLiveThing({ id: 'a', name: 'x', gone: false })).toBe(true);
+        expect(isLiveThing({ id: 'a', name: 'x', gone: true })).toBe(false);
+        expect(isLiveThing({ id: 7, name: 'x' })).toBe(false);
+        expect(isLiveThing(null)).toBe(false);
     });
 
     it('preserves unknown fields on v1 document and items', () => {

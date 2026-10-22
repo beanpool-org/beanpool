@@ -8,9 +8,11 @@
 
 export const THINGS_DOC_VERSION = 1;
 /**
- * The most items the document keeps. It is not what keeps the document under its byte bound: at every field's cap a thing
+ * The most things the document keeps that the member still has ({@link isLiveThing}): the number the counts show and the
+ * "holds 100 things" refusal names. A `gone` thing (sold, broken) is kept and not counted, so gone things ahead of live
+ * ones never push a live one out. It is not what keeps the document under its byte bound: at every field's cap a thing
  * is about 1.4 KB (about 4.5 KB in emoji), so some 45 of them fill 64 KB, and past the bound the write is refused
- * (maxBytes), never cut.
+ * (maxBytes), never cut. That bound is also what bounds the gone things.
  */
 export const THINGS_MAX_ITEMS = 100;
 export const THINGS_NAME_CHARS = 80;
@@ -75,6 +77,9 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeo
 
 /** Whether an item of the list is one this build reads, not a newer version's {@link UnreadThing}. */
 export const isThing = (t: unknown): t is Thing => isPlainObject(t) && typeof t.id === 'string' && typeof t.name === 'string';
+
+/** A thing the member still has (not `gone`): what {@link THINGS_MAX_ITEMS} caps and what every count counts. */
+export const isLiveThing = (t: unknown): t is Thing => isThing(t) && t.gone !== true;
 
 function readLentTo(raw: unknown, ours: boolean): ThingLentTo | undefined {
     if (!isPlainObject(raw) || typeof raw.name !== 'string' || typeof raw.since !== 'string') return undefined;
@@ -177,9 +182,11 @@ export function readThingsDoc(raw: unknown): ThingsDoc {
         return ours ? [] : [t as UnreadThing];
     });
 
+    // The cap counts live things only; a gone thing keeps its place and is never what pushes a live one out.
+    let live = 0;
     return {
         ...raw,
         v: Math.max(raw.v, THINGS_DOC_VERSION),
-        things: ours ? things.slice(0, THINGS_MAX_ITEMS) : things,
+        things: ours ? things.filter((t) => !isLiveThing(t) || ++live <= THINGS_MAX_ITEMS) : things,
     };
 }

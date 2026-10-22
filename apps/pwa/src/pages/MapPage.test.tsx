@@ -1454,7 +1454,8 @@ describe('MapPage: where the pins are read from (S5)', () => {
         vi.mocked(geo.loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: 'Castlemaine' });
         await act(async () => { render(<MapPage identity={mockIdentity} />); });
         await waitFor(() => expect(listReads().length).toBe(1));
-        expect(listReads()).toEqual([{ types: TYPES, lat: -37.1, lng: 144.2, radiusKm: 30, sort: 'distance', limit: 200 }]);
+        // The node is asked for a tenth more than the setting (lib/listings-near nearRead).
+        expect(listReads()).toEqual([{ types: TYPES, lat: -37.1, lng: 144.2, radiusKm: 33, sort: 'distance', limit: 200 }]);
     });
 
     it('a member with no area reads as before', async () => {
@@ -1602,8 +1603,41 @@ describe('MapPage: where the pins are read from (S5)', () => {
         let view: ReturnType<typeof render> | undefined;
         await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
         await waitFor(() => expect(listReads().length).toBe(1));
-        expect(listReads()).toEqual([{ types: TYPES, lat: -37.1, lng: 144.2, radiusKm: 30, sort: 'distance', limit: 200 }]);
+        expect(listReads()).toEqual([{ types: TYPES, lat: -37.1, lng: 144.2, radiusKm: 33, sort: 'distance', limit: 200 }]);
         expect(view!.queryByTestId('map-area-failed')).toBeNull();
+    });
+
+    it('a precise distance centre goes to the node only as precisely as its radius needs; pins are cut, and an event measured, from the exact centre (N5)', async () => {
+        const geo = await import('../lib/geo');
+        const real = await vi.importActual<typeof import('../lib/geo')>('../lib/geo');
+        vi.mocked(geo.haversineDistance).mockImplementation(real.haversineDistance);
+        try {
+            vi.mocked(geo.loadRadiusSettings).mockReturnValue({ lat: -28.612345, lng: 153.598765, radiusKm: 5, label: '5km radius' });
+            // From the exact centre: 1.10 km, 5.20 km (past the 5 km edge, inside the 5.5 km the node was asked for), and an
+            // event at 2.07 km that the node, measuring from the rounded centre, put at a deliberately unlike 9.9 km.
+            const inside = { ...post, id: 'post-inside', title: 'Inside', lat: -28.612345, lng: 153.61, distanceKm: 1.0 };
+            const ring = { ...post, id: 'post-ring', title: 'Ring', lat: -28.612345, lng: 153.652, distanceKm: 4.9 };
+            const event = {
+                ...post, id: 'ev-near', type: 'event', category: 'community', title: 'Seed swap', credits: 0, repeatable: false,
+                lat: -28.612345, lng: 153.62, distanceKm: 9.9, eventStartAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+                eventState: 'scheduled', goingCount: 0, interestedCount: 0, myRsvp: null,
+            };
+            vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.author ? [] : [ring, event, inside]) as any);
+            let view: ReturnType<typeof render> | undefined;
+            await act(async () => { view = render(<MapPage identity={mockIdentity} />); });
+            await waitFor(() => expect(listReads().length).toBe(1));
+            expect(listReads()).toEqual([{ types: TYPES, lat: -28.612, lng: 153.599, radiusKm: 5.5, sort: 'distance', limit: 200 }]);
+            const pinAt = (lng: number) => mockCreatedMarkers.some(m => m.opts?.className?.includes('custom-map-pin') && m.coords[1] === lng);
+            await waitFor(() => expect(pinAt(153.61)).toBe(true));
+            expect(pinAt(153.652)).toBe(false);
+            const pin = mockCreatedMarkers.find(m => m.opts?.className?.includes('custom-event-pin'))!;
+            act(() => { pin.listeners['click']?.(); });
+            const preview = await view!.findByTestId('map-preview-card');
+            expect(within(preview).getByTestId('event-card')).toHaveTextContent('2.1 km');
+            expect(within(preview).getByTestId('event-card')).not.toHaveTextContent('9.9 km');
+        } finally {
+            vi.mocked(geo.haversineDistance).mockImplementation(() => 0);
+        }
     });
 });
 

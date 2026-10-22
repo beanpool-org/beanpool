@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MarketplacePage } from './MarketplacePage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
-import { loadRadiusSettings } from '../lib/geo';
+import { loadRadiusSettings, haversineDistance } from '../lib/geo';
 import { CLIENT_POST_TYPES } from '../lib/events';
 
 const info = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
@@ -48,6 +48,7 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         vi.mocked(loadRadiusSettings).mockReturnValue(null);
+        vi.mocked(haversineDistance).mockImplementation(() => 0);
         vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (f) => (f?.author ? [] : [
             // The node measured it: the card shows the node's number, not one worked out here (haversine is 0 here).
             f?.lat != null ? { ...offer, distanceKm: 12.3 } : offer,
@@ -87,8 +88,29 @@ describe('MarketplacePage: where the list is read from (S5)', () => {
         vi.mocked(loadRadiusSettings).mockReturnValue({ lat: -37.1, lng: 144.2, radiusKm: 30, label: '30km radius' });
         render(<MarketplacePage identity={identity} />);
         await screen.findByText('Bicycle Repair');
-        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -37.1, lng: 144.2, radiusKm: 30, sort: 'distance' }]);
+        // The node is asked for a tenth more than the setting (lib/listings-near nearRead); the line says the setting.
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -37.1, lng: 144.2, radiusKm: 33, sort: 'distance' }]);
         expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 30 km of the place you picked.');
+    });
+
+    it('a precise distance centre goes to the node only as precisely as its radius needs; the list is cut, ordered and measured from the exact centre (N5)', async () => {
+        info.current = GLOBAL;
+        const real = await vi.importActual<typeof import('../lib/geo')>('../lib/geo');
+        vi.mocked(haversineDistance).mockImplementation(real.haversineDistance);
+        vi.mocked(loadRadiusSettings).mockReturnValue({ lat: -28.612345, lng: 153.598765, radiusKm: 5, label: '5km radius' });
+        // The node ordered and measured from the rounded centre it was sent; here its order and numbers are deliberately
+        // unlike the exact ones. From the exact centre: 2.07 km, 5.20 km (past the 5 km edge), 1.10 km.
+        const at = (id: string, title: string, lng: number, distanceKm: number) => ({ ...offer, id, title, lat: -28.612345, lng, distanceKm });
+        vi.mocked(api.getMarketplacePosts).mockImplementation(async (f) => (f?.author ? [] : [
+            at('offer-two', 'Bicycle Repair', 153.62, 9.9), at('offer-ring', 'Ring offer', 153.652, 4.4), at('offer-one', 'Garden help', 153.61, 0.5),
+        ]) as any);
+        render(<MarketplacePage identity={identity} />);
+        await screen.findByText('Bicycle Repair');
+        expect(feedReads()).toEqual([{ types: CLIENT_POST_TYPES, lat: -28.612, lng: 153.599, radiusKm: 5.5, sort: 'distance' }]);
+        expect(screen.queryByText('Ring offer')).toBeNull();
+        const shown = screen.getAllByTestId('card-distance').map(e => e.textContent?.replace('📍', '').trim());
+        expect(shown).toEqual(['1.1 km', '2.1 km']);
+        expect(screen.getByTestId('market-near-line')).toHaveTextContent('Nearest first, within 5 km of the place you picked.');
     });
 
     it('a member with no area and no distance setting reads the newest, with a way to what is near', async () => {

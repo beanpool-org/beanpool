@@ -305,6 +305,14 @@ async function globalRun(): Promise<void> {
     const m2 = await send(moConv, mo);
     assert(mOpen.body?.conversation?.request === null && m1.status === 200 && m2.status === 200 && inChats(await listOf(ann), moConv),
         'a moderator reaches her straight away');
+    // The rule is read again at each of the opener's lines while the request waits: a role granted since lets them through.
+    const oz = member('Oz');
+    const ozConv: string = (await open(oz, ann)).body?.conversation?.id;
+    await send(ozConv, oz);
+    assert((await send(ozConv, oz)).status === 403, 'Oz\'s request waits');
+    grantNodeRole(oz.pk, 'moderator', owner.pk);
+    const oz3 = await send(ozConv, oz);
+    assert(oz3.status === 200 && rowOf(ozConv)?.state === 'accepted', `made a moderator since, Oz's next line goes through and accepts it (${show(oz3)})`);
 
     // ── 3. Accept ───────────────────────────────────────────────────────────────────────────────
     console.log('── 3. Accept ──');
@@ -347,19 +355,29 @@ async function globalRun(): Promise<void> {
     const eveConv: string = eOpen.body?.conversation?.id;
     await send(eveConv, eve);
     assert(rowOf(eveConv)?.state === 'pending', 'Eve\'s request waits');
+    const eveSock = await socket(eve);
+    await sleep(50);
     const aReply = await send(eveConv, ann);
-    const e2 = await send(eveConv, eve);
     await sleep(150);
-    assert(aReply.status === 200 && rowOf(eveConv)?.state === 'accepted' && e2.status === 200 && inChats(await listOf(ann), eveConv),
-        `Ann's reply accepts Eve's request, and Eve's next line arrives (${show(e2)})`);
+    // Read before Eve writes again: her next line would be let through by the rule all the same (Ann has written), so only
+    // this shows the reply itself accepted it.
+    assert(aReply.status === 200 && rowOf(eveConv)?.state === 'accepted' && inChats(await listOf(ann), eveConv)
+        && eveSock.events.some(e => e.type === 'dm_request_updated' && e.conversationId === eveConv && e.request?.state === 'accepted'),
+        `Ann's reply accepts Eve's request: it is in Ann's chats, and Eve hears it (${show(aReply)})`);
+    const e2 = await send(eveConv, eve);
+    assert(e2.status === 200, `and Eve's next line arrives (${show(e2)})`);
+    eveSock.ws.close();
     const cOpen = await open(cy, ann);
     const cyConv: string = cOpen.body?.conversation?.id;
     await send(cyConv, cy);
     assert((await send(cyConv, cy)).status === 403, 'Cy\'s request waits');
     const addCy = await call('POST', ann, '/api/friends/add', { friendPubkey: cy.pk });
+    // Read before Cy writes again, as above: his next line would be let through by the rule all the same.
+    const annCy = await listOf(ann);
+    assert(addCy.status === 200 && rowOf(cyConv)?.state === 'accepted' && inChats(annCy, cyConv) && !inRequests(annCy, cyConv),
+        `Ann adds Cy as a friend: his request is accepted, and the chat is in her chats (${show(addCy)})`);
     const c3 = await send(cyConv, cy);
-    assert(addCy.status === 200 && rowOf(cyConv)?.state === 'accepted' && c3.status === 200,
-        `Ann adds Cy as a friend: his request is accepted and his next line arrives (${show(c3)})`);
+    assert(c3.status === 200, `and his next line arrives (${show(c3)})`);
     // Asking for the chat herself (Message on his profile) is reaching out to him, as writing is (§4.3 "opened the
     // conversation"): it accepts too, and the chat she opened is in her chats.
     const nia = member('Nia');

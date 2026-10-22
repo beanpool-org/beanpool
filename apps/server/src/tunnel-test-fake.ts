@@ -16,7 +16,8 @@ import { setTunnelConnectorForTests } from './services/tunnel-connector.js';
 
 export const FAKE_CLOUDFLARED = path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__', 'fake-cloudflared.mjs');
 
-export interface FakeRun { pid: number; argv: string[]; env: Record<string, string>; at: number }
+/** `at`: when it recorded itself; `started`: when its process began (a loaded machine's start-up lies between). */
+export interface FakeRun { pid: number; argv: string[]; env: Record<string, string>; at: number; started: number }
 
 export interface FakeTunnel {
     dir: string;

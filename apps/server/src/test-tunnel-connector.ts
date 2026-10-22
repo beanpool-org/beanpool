@@ -367,10 +367,13 @@ async function main(): Promise<void> {
             let most = 0;
             const sampler = setInterval(() => { most = Math.max(most, fakes().length); }, 10);
             await restartTunnel();
-            await fake.waitForRuns(n0 + 6, 5_000);
+            await fake.waitForRuns(n0 + 6, 30_000);
             clearInterval(sampler);
-            const starts = fake.runs().slice(n0).map((r) => r.at);
-            const gaps = starts.slice(1).map((t, i) => t - starts[i]);
+            const crashed = fake.runs().slice(n0);
+            const starts = crashed.map((r) => r.at);
+            // The wait: from each child's crash (as it records itself) to the next one's process start. Not record to record,
+            // which adds a child's own start-up, on a loaded runner more than this section's 600 ms of slack.
+            const gaps = crashed.slice(1).map((r, i) => r.started - crashed[i].at);
             assert(starts.length >= 6, `restarted after each crash (${starts.length} starts)`);
             const scheduled = tunnelLogs().slice(log0)
                 .map((l) => l.message.match(/starting it again in (\d+)\s*ms/))

@@ -169,14 +169,22 @@ function acceptable(row: RequestRow | undefined): row is RequestRow {
     return !!row && row.state !== 'accepted' && (requestsOn() || row.state === 'ignored');
 }
 
-/** Accept it: its state, and both people's sockets (the opener's app can write again). After the write commits. */
-function accept(row: RequestRow, now: number): void {
+/**
+ * Accept it: its state, and the two people's sockets (the opener's app can write again), after the write commits. Never
+ * the socket of one who has blocked the other: what a blocked member does never reaches the person who blocked them
+ * (engine/member-blocks.ts), nor does an acceptance that comes of it (PR #2392 review 4354581168). `actor`, whose act it
+ * is, always hears their own.
+ */
+function accept(row: RequestRow, now: number, actor?: string): void {
     assertPlainTablesWritable();
     const changed = db.prepare("UPDATE dm_requests SET state = 'accepted', decided_at = ? WHERE conversation_id = ? AND state != 'accepted'")
         .run(iso(now), row.conversation_id).changes;
     if (changed === 0) return;
     const request: RequestView = { state: 'accepted', from: row.from_pubkey, at: row.requested_at };
-    afterTransactionCommit(() => ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request }, [row.from_pubkey, row.to_pubkey]));
+    const hears = [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
+        .filter(([who, other]) => who === actor || !hasBlocked(who, other)).map(([who]) => who);
+    if (hears.length === 0) return;
+    afterTransactionCommit(() => ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request }, hears));
 }
 
 // ── the open ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -199,7 +207,7 @@ export function openRequest(conversationId: string, from: string, to: string, at
  */
 export function acceptOnOpen(conversationId: string, who: string, now: number = Date.now()): void {
     const row = rowOf(conversationId);
-    if (acceptable(row) && row.to_pubkey === who) accept(row, now);
+    if (acceptable(row) && row.to_pubkey === who) accept(row, now, who);
 }
 
 /**
@@ -269,12 +277,12 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
         return DIRECT;
     }
     if (author === row.to_pubkey) {
-        accept(row, now);
+        accept(row, now, author);
         return DIRECT;
     }
     if (author !== row.from_pubkey) return DIRECT;
     if (!requestNeeded(row.from_pubkey, row.to_pubkey)) {
-        accept(row, now);
+        accept(row, now, author);
         return DIRECT;
     }
     if (over(row, now)) {
@@ -300,7 +308,7 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
  */
 function lineWhileOff(row: RequestRow, author: string, now: number): void {
     if (row.state !== 'ignored' || standbyWritesNothing()) return;
-    if (author === row.to_pubkey) accept(row, now);
+    if (author === row.to_pubkey) accept(row, now, author);
     else if (author === row.from_pubkey) {
         db.prepare("UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL WHERE conversation_id = ?")
             .run(iso(now), row.conversation_id);
@@ -313,7 +321,7 @@ export function reactionRefusal(conversationId: string, author: string, now: num
     const row = rowOf(conversationId);
     if (!row || row.state === 'accepted' || author !== row.from_pubkey) return null;
     if (!requestNeeded(row.from_pubkey, row.to_pubkey)) {
-        accept(row, now);
+        accept(row, now, author);
         return null;
     }
     return waitingFor(row.to_pubkey, 'react');
@@ -329,7 +337,7 @@ export function reactionRefusal(conversationId: string, author: string, now: num
 export function acceptOnFriendAdd(owner: string, friend: string, now: number = Date.now()): void {
     if (standbyWritesNothing()) return;
     const rows = db.prepare("SELECT * FROM dm_requests WHERE from_pubkey = ? AND to_pubkey = ? AND state != 'accepted'").all(friend, owner) as RequestRow[];
-    for (const row of rows) if (acceptable(row)) accept(row, now);
+    for (const row of rows) if (acceptable(row)) accept(row, now, owner);
 }
 
 /** A trade between the two opening its chat (engine/messaging.ts ensureTransactionConversation) accepts a request in it. */
@@ -468,7 +476,7 @@ export function decideRequest(conversationId: string, actor: string, decision: '
         throw new RequestDecisionError(404, 'request_not_found', t('There is no message request for you in this chat.'));
     }
     if (decision === 'accept') {
-        accept(row, now);
+        accept(row, now, actor);
     } else if (row.state === 'accepted') {
         throw new RequestDecisionError(409, 'request_accepted', t('You have accepted this chat already, so it is no longer a request.'));
     } else if (row.state !== 'ignored') {

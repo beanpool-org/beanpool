@@ -462,7 +462,8 @@ function requestDecider(ctx: any): string | undefined {
 /**
  * Accept or ignore a message request: `{ conversationId, decision: 'accept' | 'ignore' }`, by the person it was sent to
  * (engine/dm-requests.ts decideRequest). Answers `{ success, request }`, the request as they now read it. Accepting rings
- * both people's sockets (`dm_request_updated`); ignoring only the ignorer's, and its opener is never told.
+ * both people's sockets (`dm_request_updated`), but not the opener's if they have blocked the person accepting; ignoring
+ * only the ignorer's, and its opener is never told.
  */
 router.post('/api/messages/request', async (ctx) => {
     const actor = requestDecider(ctx);

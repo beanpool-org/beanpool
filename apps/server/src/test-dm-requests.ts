@@ -16,7 +16,8 @@
  *   4. the person's own first line accepts it, and so does adding the sender as a friend (R11)
  *   5. Ignore: every answer the sender gets is the one a waiting request gets; the person's lists drop it (R9)
  *   6. Block, after the request or before it: the same answers again, and nothing listed (R10); once a block is lifted, the
- *      line kept during it doesn't count, and the opener's next line is the request Ann sees
+ *      line kept during it doesn't count, and the opener's next line is the request Ann sees; an acceptance never rings
+ *      someone who has blocked the one whose act it was
  *   7. read receipts: neither side's read marker reaches the other until it is accepted
  *   8. 30 days: a request nobody accepted expires, an ignored one too; the sender's next line is a new request (R12)
  *   9. a 12-words newcomer's requests count against the new people they may reach in a day (R13)
@@ -499,6 +500,38 @@ async function globalRun(): Promise<void> {
     const v3 = await send(vicConv, vic);
     assert(u3.status === 403 && u3.body?.code === 'dm_request_pending' && v3.status === 403 && v3.body?.code === 'dm_request_pending',
         `and the line after it waits, as any request's (${show(u3)}; ${show(v3)})`);
+    // An acceptance never reaches someone who has blocked the one whose act it was (PR #2392 review 4354581168). Wes and
+    // Xan each write, then block Ann: her reply accepts Wes's, her Accept Xan's. Ann blocks Yul after his line, and he is
+    // made a moderator: his next line accepts it.
+    const [wes, xan, yul] = [member('Wes'), member('Xan'), member('Yul')];
+    const wesConv: string = (await open(wes, ann)).body?.conversation?.id;
+    const xanConv: string = (await open(xan, ann)).body?.conversation?.id;
+    const yulConv: string = (await open(yul, ann)).body?.conversation?.id;
+    for (const [c, s] of [[wesConv, wes], [xanConv, xan], [yulConv, yul]] as [string, Id][]) await send(c, s);
+    const wesSock = await socket(wes);
+    const xanSock = await socket(xan);
+    await sleep(50);
+    const blocks6 = [
+        await call('POST', wes, '/api/blocks', { targetPubkey: ann.pk }),
+        await call('POST', xan, '/api/blocks', { targetPubkey: ann.pk }),
+        await call('POST', ann, '/api/blocks', { targetPubkey: yul.pk }),
+    ];
+    const annHeard6 = annSock.events.length;
+    const wReply = await send(wesConv, ann);
+    const xAccept = await decide(ann, xanConv, 'accept');
+    grantNodeRole(yul.pk, 'moderator', owner.pk);
+    const y2 = await send(yulConv, yul);
+    await sleep(200);
+    assert(blocks6.every(r => r.status === 200) && wReply.status === 200 && xAccept.status === 200 && y2.status === 200
+        && [wesConv, xanConv, yulConv].every(c => rowOf(c)?.state === 'accepted'),
+        `each is accepted (${show(wReply)}; ${show(xAccept)}; ${show(y2)})`);
+    const updated = (s: Sock, c: string, from = 0) => heardOf(s, c, from).filter(e => e.type === 'dm_request_updated');
+    assert(updated(wesSock, wesConv).length === 0 && updated(xanSock, xanConv).length === 0,
+        `neither Wes nor Xan, who blocked Ann, hears that she accepted (${updated(wesSock, wesConv).length}, ${updated(xanSock, xanConv).length})`);
+    assert(updated(annSock, wesConv, annHeard6).length === 1 && updated(annSock, xanConv, annHeard6).length === 1,
+        'Ann hears her own acceptances (her other devices)');
+    assert(updated(annSock, yulConv, annHeard6).length === 0, 'and Ann, who blocked Yul, hears nothing of his line accepting his');
+    for (const s of [wesSock, xanSock]) s.ws.close();
 
     // ── 7. read receipts ────────────────────────────────────────────────────────────────────────
     console.log('── 7. no read receipt either way until accepted ──');

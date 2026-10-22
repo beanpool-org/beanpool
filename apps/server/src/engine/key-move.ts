@@ -119,6 +119,9 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     db.prepare('UPDATE OR IGNORE withheld_conversations SET owner_pubkey = ? WHERE owner_pubkey = ?').run(newKey, oldKey);
     db.prepare('UPDATE OR IGNORE withheld_conversations SET other_pubkey = ? WHERE other_pubkey = ?').run(newKey, oldKey);
     db.prepare('DELETE FROM withheld_conversations WHERE owner_pubkey = ? OR other_pubkey = ?').run(oldKey, oldKey);
+    // Their message requests, made and waiting for them (engine/dm-requests.ts): keyed by the conversation, which keeps its id.
+    move('dm_requests', 'from_pubkey');
+    move('dm_requests', 'to_pubkey');
 
     // (j) friends & ratings
     move('friends', 'owner_pubkey');

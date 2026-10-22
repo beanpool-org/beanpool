@@ -56,6 +56,7 @@ beforeEach(() => {
     store.map.clear();
     store.map.set('beanpool_anchor_url', HERE);
     sent.length = 0;
+    mockDb.runAsync.mockClear();
     routes = {
         'GET /api/shops/mine': () => reply(200, { shop: { id: 'shop-1', name: null, ownerName: 'Me', paused: false } }),
         'POST /api/marketplace/posts': (body) => reply(200, { success: true, post: { id: body.id, shopId: body.shopId } }),

@@ -53,6 +53,7 @@ import { sqliteGroupKeyStore, GROUP_KEY_TABLES_SQL } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 import { languageHeader } from './language-choice';
+import { clearShopChoice, peekShopChoice, shopChoiceHolds } from './shop-choice';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -1972,6 +1973,25 @@ export async function getReachablePeers(): Promise<{ peerId: string; callsign: s
     }
 }
 
+/**
+ * The shop an Offer from the map's composer goes in, when the List sheet said "Put this in your shop" for it (slice S4′,
+ * utils/shop-choice.ts: map.tsx is read and never edited, so the choice rides beside its draft): the member's own shop,
+ * opened first if they have none yet, as the sheet said. Undefined when the choice doesn't hold for this post, or on a
+ * node from before shops. Any other answer throws, so the Offer is never posted outside the shop the sheet promised.
+ */
+async function composerShopId(post: any, anchorUrl: string): Promise<string | undefined> {
+    if (post.type !== 'offer' || !shopChoiceHolds(await peekShopChoice(), post, anchorUrl, Date.now())) return undefined;
+    const res = await signedGet('/api/shops/mine');
+    if (res.status === 404) return undefined;
+    const held = res.ok ? await res.json().catch(() => null) : null;
+    if (typeof held?.shop?.id === 'string') return held.shop.id;
+    if (held && held.shop === null) {
+        const opened = await signedRequestWithMethod('PUT', '/api/shops/mine', {}, { withStatus: true });
+        if (typeof opened?.shop?.id === 'string') return opened.shop.id;
+    }
+    throw new Error(t("Your shop couldn't be read just now. Try again."));
+}
+
 export async function createPost(post: any) {
     const database = await getDb();
 
@@ -1985,6 +2005,7 @@ export async function createPost(post: any) {
     if (!identity) {
         throw new Error('No identity found.');
     }
+    const shopId = await composerShopId(post, anchorUrl);
 
     const body = {
         id: post.id,
@@ -2029,7 +2050,8 @@ export async function createPost(post: any) {
         ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
         ...(post.targetPubkey || post.target_pubkey ? { targetPubkey: post.targetPubkey || post.target_pubkey } : {}),
-        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {})
+        ...(post.assignedTo || post.assigned_to ? { assignedTo: post.assignedTo || post.assigned_to } : {}),
+        ...(shopId ? { shopId } : {}),
     };
     // "Post as → an enterprise" on the event form (NewEventModal). An enterprise's event goes through the
     // enterprise's OWN route, with the enterprise in the PATH and never in the body: the node's signature
@@ -2102,6 +2124,8 @@ export async function createPost(post: any) {
         // If it fails (e.g., no internet or server error), bubble it up to the UI so we DON'T lose the drafted post!
         throw new Error(e.message || 'Network request failed. You must be connected to a node to post.');
     }
+    // In the shop: the sheet's choice has had its Offer.
+    if (shopId) await clearShopChoice();
 
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
@@ -3348,7 +3372,9 @@ export async function updatePost(id: string, updates: any) {
         credits: updates.credits,
         priceType: updates.price_type || 'fixed',
         repeatable: updates.repeatable,
-        photos: updates.photos ? JSON.parse(updates.photos) : undefined
+        photos: updates.photos ? JSON.parse(updates.photos) : undefined,
+        // The edit's "Put this in your shop" (slice S4′): the shop's id puts it in, null takes it out; unnamed, it stays.
+        ...(updates.shopId !== undefined ? { shopId: updates.shopId } : {}),
     });
 
     // 2. Erase from local SQLite Cache (or gracefully update it)
@@ -7963,7 +7989,8 @@ export async function signedRequestWithMethod(method: string, endpoint: string, 
         const errJson = await res.json().catch(() => ({}));
         const words = errJson.error || errJson.message;
         const error = new Error(words || `Request failed: ${res.status}`);
-        if (opts?.withStatus) Object.assign(error, { status: res.status }, words ? {} : { unsaid: true });
+        // The node's code beside its sentence (a shop's `shop_deals_open`, say), so a screen can say what to do next.
+        if (opts?.withStatus) Object.assign(error, { status: res.status }, words ? {} : { unsaid: true }, typeof errJson.code === 'string' ? { code: errJson.code } : {});
         throw error;
     }
     return await res.json();

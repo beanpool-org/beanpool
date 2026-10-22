@@ -42,7 +42,10 @@ const mockLinking = vi.hoisted(() => ({
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button', link: 'link', radio: 'radio', alert: 'alert' };
-    const flat = (style: unknown): Record<string, any> => Object.assign({}, ...[style].flat(4).filter((x) => x && typeof x === 'object'));
+    const flat = (style: unknown): Record<string, any> => {
+        const resolved = typeof style === 'function' ? (style as any)({ pressed: false }) : style;
+        return Object.assign({}, ...[resolved].flat(4).filter((x) => x && typeof x === 'object'));
+    };
     const el = (tag: string) => function Host(props: Record<string, any>) {
         const { children, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, testID, disabled } = props;
         const attrs: Record<string, unknown> = {};
@@ -159,7 +162,7 @@ afterEach(() => {
 describe('PulseFeedCard Instagram link card (native)', () => {
     it('an Instagram item with no thumbnail renders the card title/author and one Open on Instagram button, no empty block, and only one link', async () => {
         await act(async () => {
-            root.render(createElement(PulseFeedCard, { item: instagramNoThumb }));
+            root.render(createElement(PulseFeedCard, { item: instagramNoThumb }) as any);
         });
 
         // Title first line
@@ -196,7 +199,7 @@ describe('PulseFeedCard Instagram link card (native)', () => {
 
     it('a failed image falls back to the same card', async () => {
         await act(async () => {
-            root.render(createElement(PulseFeedCard, { item: instagramWithThumb, nodeUrl: 'https://node.example' }));
+            root.render(createElement(PulseFeedCard, { item: instagramWithThumb, nodeUrl: 'https://node.example' }) as any);
         });
 
         expect(lastImageProps).not.toBeNull();
@@ -228,7 +231,7 @@ describe('PulseFeedCard Instagram link card (native)', () => {
 
     it('an Instagram item with a valid thumbnail shows the thumbnail with badge and drops the duplicate second link', async () => {
         await act(async () => {
-            root.render(createElement(PulseFeedCard, { item: instagramWithThumb, nodeUrl: 'https://node.example' }));
+            root.render(createElement(PulseFeedCard, { item: instagramWithThumb, nodeUrl: 'https://node.example' }) as any);
         });
 
         // Shows thumbnail with platform badge
@@ -245,7 +248,7 @@ describe('PulseFeedCard Instagram link card (native)', () => {
 
     it('a YouTube item is unchanged', async () => {
         await act(async () => {
-            root.render(createElement(PulseFeedCard, { item: youtubeItem, nodeUrl: 'https://node.example' }));
+            root.render(createElement(PulseFeedCard, { item: youtubeItem, nodeUrl: 'https://node.example' }) as any);
         });
 
         // YouTube retains its "Open on YouTube ↗" footer link

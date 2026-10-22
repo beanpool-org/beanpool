@@ -45,6 +45,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
 
     const isOwner = Boolean(currentPubkey && item.ownerPubkey === currentPubkey);
     const canReport = Boolean(currentPubkey && item.ownerPubkey && !isOwner);
+    const isInstagram = item.platform === 'instagram';
+    const proxiedThumbnailUrl = item.thumbnailUrl ? resolvePulseThumbnailUrl(item.id) : null;
+    const isInstagramFallback = isInstagram && (!proxiedThumbnailUrl || imageFailed);
     const platMeta = platformMeta(item.platform);
     // A brand (YouTube, Instagram …) as written; our own names (Website, Blog / RSS, Link) in the member's language.
     const platName = platformName(item.platform);
@@ -52,8 +55,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
     const isVideo = VIDEO_PLATFORMS.includes(item.platform as any);
     const timeAgo = formatRelativeTime(item.publishedAt);
     const authorName = item.callsign?.trim() || (item.ownerPubkey ? `${item.ownerPubkey.slice(0, 8)}…` : t('Neighbour'));
+    const postTitle = item.title || t('View post on {platform}', { platform: platName });
+    const titleFirstLine = postTitle.split('\n')[0].trim();
     const avatarResolved = resolveAvatarUrl(item.avatarUrl);
-    const proxiedThumbnailUrl = item.thumbnailUrl ? resolvePulseThumbnailUrl(item.id) : null;
 
     const handleOpenPost = () => {
         if (!item.url) return;
@@ -206,60 +210,94 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                 </div>
             </div>
 
-            {/* Facade Poster / Thumbnail with Open Link Handler */}
-            <div
-                onClick={handleOpenPost}
-                role="link"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleOpenPost();
-                    }
-                }}
-                className="cursor-pointer group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
-                aria-label={t('Open post on {platform}', { platform: platName })}
-            >
-                <div className="w-full aspect-video relative bg-nature-100 dark:bg-nature-800 overflow-hidden flex items-center justify-center">
-                    {proxiedThumbnailUrl && !imageFailed ? (
-                        <img
-                            src={proxiedThumbnailUrl}
-                            alt=""
-                            onError={() => setImageFailed(true)}
-                            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                            loading="lazy"
-                        />
-                    ) : (
-                        <div className="text-4xl select-none opacity-60">
-                            {platMeta.icon}
-                        </div>
-                    )}
-
-                    {isVideo && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-                            <div className="w-12 h-12 rounded-full bg-black/60 border border-white/80 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                <span className="text-white text-lg ml-0.5 leading-none">▶</span>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="absolute bottom-2 right-2 bg-black/75 backdrop-blur-sm text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow">
-                        {platName} ↗
-                    </div>
-                </div>
-
-                {/* Title and permalink action */}
-                <div className="p-3 sm:p-3.5">
-                    <h3 dir="auto" className="font-bold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors m-0">
-                        {item.title || t('View post on {platform}', { platform: platName })}
-                    </h3>
-                    <div className="flex items-center gap-1 text-xs font-semibold text-terra-600 dark:text-terra-400 mt-2">
-                        <span>
-                            <Sentence text={t('Open on {platform} {arrow}', { platform: platName })} parts={{ arrow: <span aria-hidden="true">↗</span> }} />
+            {/* Facade Poster / Thumbnail with Open Link Handler. For an Instagram post with no
+                thumbnail (or failed image), we render a designed link card with glyph, title first
+                line, author, and one clear "Open on Instagram" button. */}
+            {isInstagramFallback ? (
+                <div className="p-3.5 sm:p-4 flex flex-col gap-2.5">
+                    <div className="flex items-center">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border border-nature-200 dark:border-nature-700">
+                            <span>{platMeta.icon}</span>
+                            <span>{platName}</span>
                         </span>
                     </div>
+
+                    <h3 dir="auto" className="font-bold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug m-0">
+                        {titleFirstLine}
+                    </h3>
+
+                    <p className="text-xs text-nature-600 dark:text-nature-400 font-medium m-0">
+                        {authorName}
+                    </p>
+
+                    {item.url && (
+                        <button
+                            type="button"
+                            onClick={handleOpenPost}
+                            role="link"
+                            className="min-h-[44px] w-full flex items-center justify-center px-4 py-2 rounded-xl text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 text-nature-900 dark:text-white border border-nature-200 dark:border-nature-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 mt-1"
+                        >
+                            {t('Open on Instagram')}
+                        </button>
+                    )}
                 </div>
-            </div>
+            ) : (
+                <div
+                    onClick={handleOpenPost}
+                    role="link"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleOpenPost();
+                        }
+                    }}
+                    className="cursor-pointer group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500"
+                    aria-label={t('Open post on {platform}', { platform: platName })}
+                >
+                    <div className="w-full aspect-video relative bg-nature-100 dark:bg-nature-800 overflow-hidden flex items-center justify-center">
+                        {proxiedThumbnailUrl && !imageFailed ? (
+                            <img
+                                src={proxiedThumbnailUrl}
+                                alt=""
+                                onError={() => setImageFailed(true)}
+                                className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                                loading="lazy"
+                            />
+                        ) : (
+                            <div className="text-4xl select-none opacity-60">
+                                {platMeta.icon}
+                            </div>
+                        )}
+
+                        {isVideo && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+                                <div className="w-12 h-12 rounded-full bg-black/60 border border-white/80 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                    <span className="text-white text-lg ml-0.5 leading-none">▶</span>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="absolute bottom-2 right-2 bg-black/75 backdrop-blur-sm text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow">
+                            {platName} ↗
+                        </div>
+                    </div>
+
+                    {/* Title and permalink action */}
+                    <div className="p-3 sm:p-3.5">
+                        <h3 dir="auto" className="font-bold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors m-0">
+                            {isInstagram ? titleFirstLine : (item.title || t('View post on {platform}', { platform: platName }))}
+                        </h3>
+                        {!isInstagram && (
+                            <div className="flex items-center gap-1 text-xs font-semibold text-terra-600 dark:text-terra-400 mt-2">
+                                <span>
+                                    <Sentence text={t('Open on {platform} {arrow}', { platform: platName })} parts={{ arrow: <span aria-hidden="true">↗</span> }} />
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Mute confirmation modal */}
             {showMuteConfirm && (

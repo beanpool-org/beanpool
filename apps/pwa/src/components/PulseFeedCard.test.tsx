@@ -132,7 +132,7 @@ describe('PulseFeedCard Instagram link card (web)', () => {
         expect(screen.queryByText(/Second line of caption/)).not.toBeInTheDocument();
 
         // Author
-        expect(screen.getByText('Kofi')).toBeInTheDocument();
+        expect(screen.getAllByText('Kofi').length).toBeGreaterThanOrEqual(1);
 
         // ONE clear button "Open on Instagram" (button >= 44px)
         const igBtn = screen.getByRole('link', { name: 'Open on Instagram' });
@@ -156,7 +156,7 @@ describe('PulseFeedCard Instagram link card (web)', () => {
 
         // Falls back to designed card
         expect(screen.getByText('Kiln firing at dawn')).toBeInTheDocument();
-        expect(screen.getByText('Kofi')).toBeInTheDocument();
+        expect(screen.getAllByText('Kofi').length).toBeGreaterThanOrEqual(1);
 
         const igBtn = screen.getByRole('link', { name: 'Open on Instagram' });
         expect(igBtn).toBeInTheDocument();

@@ -238,12 +238,15 @@ export async function blockUser(
         if (!list.includes(targetPubkey)) {
             const newList = [...list, targetPubkey];
             await AsyncStorage.setItem(blockedUsersStoreKey(owner), JSON.stringify(newList));
-            if (generation === accountGeneration) cached = { owner, list: newList };
+            if (generation === accountGeneration) {
+                cached = { owner, list: newList };
+                DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
+            }
 
-            // The report and the block go to the community side by side: neither waits for the other's answer.
-            await Promise.all([reportBlock(owner, targetPubkey, reporterPubkey, reason, postId), syncBlocks()]);
-
-            if (generation === accountGeneration) DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
+            // Blocked on the phone already: the block goes to the community without waiting for its answer, nor for a
+            // sync already under way. The report goes side by side, and is sent or queued before this returns.
+            void syncBlocks();
+            await reportBlock(owner, targetPubkey, reporterPubkey, reason, postId);
             return true;
         }
     } catch (e) {
@@ -300,7 +303,8 @@ export async function unblockUser(targetPubkey: string): Promise<boolean> {
                 cached = { owner, list: newList };
                 DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, newList);
             }
-            await syncBlocks();
+            // Unblocked on the phone already: the community hears of it without this waiting for its answer.
+            void syncBlocks();
             return true;
         }
     } catch (e) {
@@ -325,8 +329,9 @@ export async function clearBlocklist(): Promise<boolean> {
             cached = { owner, list: [] };
             DeviceEventEmitter.emit(BLOCKLIST_UPDATED_EVENT, []);
         }
-        // Takes off the community's list the blocks this phone put there, and no other (a block made in the web app stays).
-        await syncBlocks();
+        // Takes off the community's list the blocks this phone put there, and no other (a block made in the web app stays),
+        // one request each: not waited for, so the list on screen empties at once.
+        void syncBlocks();
         return true;
     } catch (e) {
         console.error('[blocklist] Failed to clear blocklist', e);
@@ -382,6 +387,11 @@ export function syncBlocks(): Promise<void> {
     const run = syncing.then(syncBlocksOnce, syncBlocksOnce);
     syncing = run;
     return run;
+}
+
+/** For tests: settles once every sync begun so far has ended. Block, Unblock and Unblock All begin one and don't wait for it. */
+export function blockSyncsEndedForTests(): Promise<void> {
+    return syncing;
 }
 
 async function syncBlocksOnce(): Promise<void> {

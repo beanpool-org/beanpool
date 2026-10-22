@@ -171,7 +171,7 @@ describe('a Block made on the phone, against a real community node', () => {
         mem.async.set(ANCHOR, URL_BASE);
         mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
         mem.async.set(`beanpool_blocked_users:${ana.publicKey}`, JSON.stringify([hal.publicKey, sol]));
-        const { syncBlocks, blockUser, unblockUser } = await import('../blocklist');
+        const { syncBlocks, blockUser, unblockUser, blockSyncsEndedForTests } = await import('../blocklist');
 
         // 1. The first sync: both reach the community, Sol on his own; a second sync sends nothing.
         await syncBlocks();
@@ -183,6 +183,8 @@ describe('a Block made on the phone, against a real community node', () => {
 
         // 2. She blocks Dee from his profile: the community has it, and his new chat with her never reaches her list.
         expect(await blockUser(dee.publicKey, ana.publicKey, 'Abusive user reported via Trust Profile')).toBe(true);
+        // Block doesn't wait for the community's answer: this waits for it, to read what reached the node.
+        await blockSyncsEndedForTests();
         expect(await blockedAtNode(ana.publicKey)).toEqual([hal.publicKey, dee.publicKey, sol].sort());
         expect(sent.map((r) => `${r.method} ${r.path} ${r.status}`).sort()).toEqual(['POST /api/blocks 200', 'POST /api/reports 200']);
         const fromDee = await openChat(dee, ana);
@@ -194,6 +196,7 @@ describe('a Block made on the phone, against a real community node', () => {
         // 3. She unblocks Hal on the phone: the community's list no longer has him.
         sent.length = 0;
         expect(await unblockUser(hal.publicKey)).toBe(true);
+        await blockSyncsEndedForTests();
         expect(sent.map((r) => `${r.method} ${r.path} ${r.status}`)).toEqual(['POST /api/blocks/remove 200']);
         expect(await blockedAtNode(ana.publicKey)).toEqual([dee.publicKey, sol].sort());
     }, START_MS);

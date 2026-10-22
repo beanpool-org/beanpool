@@ -6,6 +6,8 @@
  *
  *   - a block goes to the community, signed; Unblock takes it off there; nothing is sent when nothing changed
  *   - offline, the block stands on the phone and goes when the community answers again
+ *   - Block, Unblock and Unblock All stand on the phone, and the screens hear of them, without waiting for the community
+ *     (these tests wait for it, `blockSyncsEndedForTests`, before reading what reached it)
  *   - a node with no block list (404, 405): the block stands on the phone, one try, then nothing for a day
  *   - a block whose answer never came may be on the list: an unblock takes it off there all the same
  *   - the blocks the phone held before this build go once, in one request, and a key the community doesn't know goes
@@ -199,6 +201,7 @@ describe('a block made on the phone', () => {
         await app.identity.importIdentity(ana);
 
         expect(await app.blockUser(HARASSER, ana.publicKey, 'Abusive user reported via Trust Profile')).toBe(true);
+        await app.blockSyncsEndedForTests();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
         expect(await app.isUserBlocked(HARASSER)).toBe(true);
@@ -210,6 +213,7 @@ describe('a block made on the phone', () => {
         expect(blockChanges()).toEqual([]);
 
         expect(await app.unblockUser(HARASSER)).toBe(true);
+        await app.blockSyncsEndedForTests();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
         net.sent = [];
@@ -242,8 +246,10 @@ describe('a block made on the phone', () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
         net.up = false;
         expect(await app.unblockUser(HARASSER)).toBe(true);
+        await app.blockSyncsEndedForTests();
         expect(await app.isUserBlocked(HARASSER)).toBe(false);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
 
@@ -259,10 +265,12 @@ describe('a block made on the phone', () => {
         await app.identity.importIdentity(ana);
         net.loseNextAnswer = true;
         await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
         expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
 
         net.up = false;
         await app.unblockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
         net.up = true;
         net.sent = [];
         await app.syncBlocks();
@@ -275,6 +283,7 @@ describe('a block made on the phone', () => {
         await app.identity.importIdentity(ana);
         net.loseNextAnswer = true;
         await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
 
         net.sent = [];
         await app.syncBlocks();
@@ -290,6 +299,7 @@ describe('a block made on the phone', () => {
         await app.identity.importIdentity(ana);
         net.portal = true;
         await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
         expect(blockChanges()).toHaveLength(1);
         expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
 
@@ -305,14 +315,82 @@ describe('a block made on the phone', () => {
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
         await app.blockUser(SPAMMER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
         // Blocked in the web app, at the same community: not on the phone's list.
         listAt(NODE, ana.publicKey).add(STRANGER);
 
         net.sent = [];
         expect(await app.clearBlocklist()).toBe(true);
+        await app.blockSyncsEndedForTests();
         expect(blockChanges().map((c) => c.at)).toEqual([`${NODE}/api/blocks/remove`, `${NODE}/api/blocks/remove`]);
         expect(blockChanges().map((c) => c.body.targetPubkey).sort()).toEqual([SPAMMER, HARASSER].sort());
         expect([...listAt(NODE, ana.publicKey)]).toEqual([STRANGER]);
+    });
+});
+
+/** What `work` came to, or 'still waiting' when it had not settled a second later. */
+async function withinASecond<T>(work: Promise<T>): Promise<T | 'still waiting'> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<'still waiting'>((resolve) => { timer = setTimeout(() => resolve('still waiting'), 1000); });
+    try {
+        return await Promise.race([work, late]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+describe('a community that is slow to answer', () => {
+    it('Block stands on the phone, and the screens hear of it, at once: it waits neither for its own request nor for a sync already under way', async () => {
+        // The phone held a block from before this build: the sync at start sends it, and the community holds its answer.
+        mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
+        mem.async.set(listKey(ana.publicKey), JSON.stringify([SPAMMER]));
+        const app = await startApp();
+        let answer!: () => void;
+        net.hold = new Promise<void>((resolve) => { answer = resolve; });
+        const atStart = app.syncBlocks();
+        await vi.waitFor(() => expect(blockChanges()).toHaveLength(1));
+
+        expect(await withinASecond(app.blockUser(HARASSER, ana.publicKey, 'Abusive user reported via Trust Profile'))).toBe(true);
+        expect(rn.emit).toHaveBeenLastCalledWith(app.BLOCKLIST_UPDATED_EVENT, [SPAMMER, HARASSER]);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+
+        // The community answers: the block reaches it all the same.
+        answer();
+        await atStart;
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([
+            { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } },
+            { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } },
+        ]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([SPAMMER, HARASSER]);
+    });
+
+    it('Unblock and Unblock All take them off the phone, and the screens hear of it, at once', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockUser(SPAMMER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+
+        let answer!: () => void;
+        net.hold = new Promise<void>((resolve) => { answer = resolve; });
+        net.sent = [];
+        expect(await withinASecond(app.unblockUser(HARASSER))).toBe(true);
+        expect(rn.emit).toHaveBeenLastCalledWith(app.BLOCKLIST_UPDATED_EVENT, [SPAMMER]);
+        // Its removal is with the community, which holds its answer; Unblock All waits neither for that nor for its own.
+        await vi.waitFor(() => expect(blockChanges()).toHaveLength(1));
+        expect(await withinASecond(app.clearBlocklist())).toBe(true);
+        expect(rn.emit).toHaveBeenLastCalledWith(app.BLOCKLIST_UPDATED_EVENT, []);
+        expect(await app.getBlockedUsers()).toEqual([]);
+
+        // The community answers: both come off it all the same.
+        answer();
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([
+            { at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } },
+            { at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } },
+        ]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
     });
 });
 
@@ -327,11 +405,13 @@ describe('a community whose node has no block list', () => {
 
             expect(await app.blockUser(HARASSER, ana.publicKey)).toBe(true);
             expect(await app.isUserBlocked(HARASSER)).toBe(true);
+            await app.blockSyncsEndedForTests();
             expect(blockChanges()).toHaveLength(1);
 
             net.sent = [];
             for (let i = 0; i < 5; i++) await app.syncBlocks();
             await app.blockUser(SPAMMER, ana.publicKey);
+            await app.blockSyncsEndedForTests();
             expect(blockChanges()).toEqual([]);
             expect(await app.getBlockedUsers()).toEqual([HARASSER, SPAMMER]);
 
@@ -386,6 +466,7 @@ describe('each community the member is on with this phone', () => {
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
         await app.blockUser(SPAMMER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
 
         // Ana switches to the other community she belongs to.
         mem.async.set(ANCHOR, OTHER);
@@ -395,6 +476,7 @@ describe('each community the member is on with this phone', () => {
 
         net.sent = [];
         await app.unblockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
         expect(blockChanges()).toEqual([{ at: `${OTHER}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
         expect([...listAt(OTHER, ana.publicKey)]).toEqual([SPAMMER]);
         expect([...listAt(NODE, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
@@ -413,6 +495,7 @@ describe('only ever the account\'s own', () => {
         await app.identity.importIdentity(ana);
         net.up = false;
         await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
         net.up = true;
 
         await app.signOut(ana);
@@ -421,6 +504,7 @@ describe('only ever the account\'s own', () => {
         await app.syncBlocks();
         expect(blockChanges()).toEqual([]);
         await app.blockUser(SPAMMER, ben.publicKey);
+        await app.blockSyncsEndedForTests();
         expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ben.publicKey, body: { targetPubkey: SPAMMER } }]);
 
         await app.signOut(ben);
@@ -471,6 +555,7 @@ describe('only ever the account\'s own', () => {
         const app = await startApp();
         await app.identity.importIdentity(ana);
         await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
         const record = `beanpool_community_blocks:${ana.publicKey}`;
         expect(JSON.parse(mem.async.get(record) ?? 'null')).toEqual({ [NODE]: { on: [HARASSER], sent: [] } });
         await app.signOut(ana);

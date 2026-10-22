@@ -53,15 +53,8 @@ describe('RadiusPickerPage', () => {
     });
 
     it('centres on the node\'s place when one is given', () => {
-        const TypedRadiusPicker = RadiusPickerPage as React.ComponentType<{
-            initial?: any;
-            nodeCenter?: { lat: number; lng: number } | null;
-            onApply: (s: any) => void;
-            onCancel: () => void;
-            onReset: () => void;
-        }>;
         render(
-            <TypedRadiusPicker
+            <RadiusPickerPage
                 nodeCenter={{ lat: -37.8136, lng: 144.9631 }}
                 onApply={noop}
                 onCancel={noop}

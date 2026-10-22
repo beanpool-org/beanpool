@@ -14,22 +14,38 @@ import { type RadiusSettings } from '../lib/geo';
 interface Props {
     initial?: RadiusSettings | null;
     defaultRadius?: number;
+    nodeCenter?: { lat: number; lng: number } | [number, number] | null;
     onApply: (settings: RadiusSettings) => void;
     onCancel: () => void;
     onReset: () => void;
 }
 
 const RADIUS_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 25, 50];
+const NEUTRAL_CENTER: [number, number] = [20, 0];
+const NEUTRAL_ZOOM = 2;
+const DEFAULT_ZOOM = 11;
 
-export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCancel, onReset }: Props) {
+function resolveCenter(initial?: RadiusSettings | null, nodeCenter?: { lat: number; lng: number } | [number, number] | null): [number, number] {
+    if (initial) return [initial.lat, initial.lng];
+    if (nodeCenter) {
+        if (Array.isArray(nodeCenter)) return [nodeCenter[0], nodeCenter[1]];
+        if (typeof nodeCenter.lat === 'number' && typeof nodeCenter.lng === 'number') {
+            return [nodeCenter.lat, nodeCenter.lng];
+        }
+    }
+    return NEUTRAL_CENTER;
+}
+
+export function RadiusPickerPage({ initial, defaultRadius = 20, nodeCenter, onApply, onCancel, onReset }: Props) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const mapRef = useRef<L.Map | null>(null);
     const circleRef = useRef<L.Circle | null>(null);
     const markerRef = useRef<L.Marker | null>(null);
 
-    const [center, setCenter] = useState<[number, number]>(
-        initial ? [initial.lat, initial.lng] : [-28.5495, 153.5005] // Default: Mullumbimby
-    );
+    const initialCenter = resolveCenter(initial, nodeCenter);
+    const hasInitialPlace = Boolean(initial || (nodeCenter && (Array.isArray(nodeCenter) ? true : typeof nodeCenter.lat === 'number')));
+
+    const [center, setCenter] = useState<[number, number]>(initialCenter);
     const [radiusKm, setRadiusKm] = useState(initial?.radiusKm ?? defaultRadius);
     const [radiusIdx, setRadiusIdx] = useState(() => {
         const km = initial?.radiusKm ?? defaultRadius;
@@ -41,9 +57,10 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
     useEffect(() => {
         if (!mapContainer.current || mapRef.current) return;
 
+        const initialZoom = hasInitialPlace ? DEFAULT_ZOOM : NEUTRAL_ZOOM;
         const map = L.map(mapContainer.current, {
             center: center,
-            zoom: 11,
+            zoom: initialZoom,
             zoomControl: false,
             attributionControl: false,
         });
@@ -79,27 +96,14 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
             setCenter([lat, lng]);
             circle.setLatLng([lat, lng]);
             marker.setLatLng([lat, lng]);
+            if (map.getZoom() <= NEUTRAL_ZOOM) {
+                map.setView([lat, lng], DEFAULT_ZOOM);
+            }
         });
 
         mapRef.current = map;
         circleRef.current = circle;
         markerRef.current = marker;
-
-        // Try to get user's actual location
-        if (!initial) {
-            navigator.geolocation?.getCurrentPosition(
-                (pos) => {
-                    const userLat = pos.coords.latitude;
-                    const userLng = pos.coords.longitude;
-                    setCenter([userLat, userLng]);
-                    map.setView([userLat, userLng], 11);
-                    circle.setLatLng([userLat, userLng]);
-                    marker.setLatLng([userLat, userLng]);
-                },
-                undefined,
-                { timeout: 5000 }
-            );
-        }
 
         return () => {
             map.remove();
@@ -134,7 +138,9 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
                 const userLng = pos.coords.longitude;
                 setCenter([userLat, userLng]);
                 if (mapRef.current && circleRef.current && markerRef.current) {
-                    mapRef.current.setView([userLat, userLng], mapRef.current.getZoom());
+                    const currentZoom = mapRef.current.getZoom();
+                    const targetZoom = currentZoom <= NEUTRAL_ZOOM ? DEFAULT_ZOOM : currentZoom;
+                    mapRef.current.setView([userLat, userLng], targetZoom);
                     circleRef.current.setLatLng([userLat, userLng]);
                     markerRef.current.setLatLng([userLat, userLng]);
                 }
@@ -198,49 +204,69 @@ export function RadiusPickerPage({ initial, defaultRadius = 20, onApply, onCance
             <div style={{ flex: 1, position: 'relative' }}>
                 <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />
                 
-                {/* Floating GPS Button */}
-                <button
-                    type="button"
-                    onClick={handleGpsLocate}
-                    aria-label={t('Center map on my location')}
-                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                {/* Floating GPS Button & explanation */}
+                <div
                     style={{
                         position: 'absolute',
                         right: '1rem',
                         bottom: '1rem',
-                        width: '2.75rem',
-                        height: '2.75rem',
-                        borderRadius: '50%',
-                        background: '#ffffff',
-                        border: '1px solid var(--border-secondary)',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
+                        gap: '0.5rem',
                         zIndex: 1000,
-                        color: '#4b5563',
-                        transition: 'transform 0.15s ease, background-color 0.15s ease, color 0.15s ease',
                     }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.08)';
-                        e.currentTarget.style.color = '#111827';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)';
-                        e.currentTarget.style.color = '#4b5563';
-                    }}
-                    title={t('Center on my location')}
                 >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <circle cx="12" cy="12" r="3" />
-                        <line x1="12" y1="1" x2="12" y2="4" />
-                        <line x1="12" y1="20" x2="12" y2="23" />
-                        <line x1="1" y1="12" x2="4" y2="12" />
-                        <line x1="20" y1="12" x2="23" y2="12" />
-                    </svg>
-                </button>
+                    <span
+                        style={{
+                            background: 'var(--bg-secondary)',
+                            color: 'var(--text-muted)',
+                            fontSize: '0.75rem',
+                            padding: '0.35rem 0.65rem',
+                            borderRadius: '9999px',
+                            border: '1px solid var(--border-secondary)',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                            pointerEvents: 'none',
+                        }}
+                    >
+                        {t('Use my location to centre the circle')}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={handleGpsLocate}
+                        aria-label={t('Center map on my location')}
+                        title={t('Center on my location')}
+                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                        style={{
+                            width: '2.75rem',
+                            height: '2.75rem',
+                            borderRadius: '50%',
+                            background: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-secondary)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            color: 'var(--text-primary)',
+                            transition: 'transform 0.15s ease, background-color 0.15s ease, color 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.08)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <circle cx="12" cy="12" r="3" />
+                            <line x1="12" y1="1" x2="12" y2="4" />
+                            <line x1="12" y1="20" x2="12" y2="23" />
+                            <line x1="1" y1="12" x2="4" y2="12" />
+                            <line x1="20" y1="12" x2="23" y2="12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             {/* Bottom controls */}

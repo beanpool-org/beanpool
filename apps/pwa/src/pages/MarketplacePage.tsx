@@ -2672,6 +2672,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     <RadiusPickerPage
                         initial={radiusSettings}
                         defaultRadius={nodeConfig?.serviceRadius?.radiusKm}
+                        nodeCenter={nodeConfig?.serviceRadius ? { lat: nodeConfig.serviceRadius.lat, lng: nodeConfig.serviceRadius.lng } : null}
                         onApply={(settings) => {
                             setRadiusSettings(settings);
                             saveRadiusSettings(settings);

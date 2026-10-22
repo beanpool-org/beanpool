@@ -176,7 +176,7 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
         <div data-testid="thing-screen" className="min-w-0">
             <ToolSection>
                 {thing.photo ? <ToolPhoto uri={host.photos.uri(thing.photo)} label={t('Photo of {name}', { name: thing.name })} testId="thing-photo" /> : null}
-                <ToolRow icon={cat.emoji} title={thing.name} />
+                <ToolRow icon={cat.emoji} title={thing.name} wrap />
                 <ToolNote text={thingStateLine(thing, open, host.now())} testId="thing-state" />
                 {refused ? <ToolNote tone="danger" text={refused} testId="thing-refused" /> : null}
                 {goneNote ? <ToolNote text={t('Its Offer has gone from the Market, so it is back on your shelf. List it again to make a new one.')} testId="thing-gone-note" /> : null}

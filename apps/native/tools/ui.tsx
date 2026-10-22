@@ -49,11 +49,13 @@ export function ToolSection({ title, children, testID }: { title?: string; child
  * state under it, and a chevron when it opens something. The whole row is one target with its whole text for the screen
  * reader.
  */
-export function ToolRow({ icon, image, title, state, onPress, a11y, testID }: {
+export function ToolRow({ icon, image, title, wrap, state, onPress, a11y, testID }: {
     icon?: string;
     /** A photo's uri from the host (host.photos.uri): drawn instead of the emoji. */
     image?: string | null;
     title: string;
+    /** The whole title, on as many lines as it takes (a record's own screen), rather than one line. */
+    wrap?: boolean;
     state?: string | null;
     onPress?: () => void;
     a11y?: string;
@@ -68,7 +70,7 @@ export function ToolRow({ icon, image, title, state, onPress, a11y, testID }: {
                 <Image source={{ uri: image }} style={[ui.thumb, { backgroundColor: colors.surface.subtle }]} accessibilityElementsHidden importantForAccessibility="no" />
             ) : icon ? <Text style={ui.rowIcon} accessibilityElementsHidden importantForAccessibility="no">{icon}</Text> : null}
             <View style={s.rowText}>
-                <Text style={[s.rowLine, s.rowStrong]} numberOfLines={1}>{title}</Text>
+                <Text style={[s.rowLine, s.rowStrong]} numberOfLines={wrap ? undefined : 1}>{title}</Text>
                 {state ? <Text style={s.rowSub} numberOfLines={1}>{state}</Text> : null}
             </View>
             {onPress ? <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.secondary} /> : null}

@@ -37,11 +37,13 @@ export function ToolSection({ title, children, testId }: { title?: string; child
  * cut to one, and a chevron when it opens something. The whole row is the target (at least 48 px) and its name is its
  * words, the title and the state, so a screen reader hears both.
  */
-export function ToolRow({ icon, image, title, state, onClick, testId }: {
+export function ToolRow({ icon, image, title, wrap, state, onClick, testId }: {
     icon?: string;
     /** A photo's uri from the host (host.photos.uri): drawn instead of the icon. */
     image?: string | null;
     title: string;
+    /** The whole title, on as many lines as it takes (a record's own screen), rather than two at most. */
+    wrap?: boolean;
     state?: string | null;
     onClick?: () => void;
     testId?: string;
@@ -50,7 +52,7 @@ export function ToolRow({ icon, image, title, state, onClick, testId }: {
         <>
             {image ? <RowPhoto uri={image} /> : icon && <span aria-hidden="true" className="shrink-0 w-8 text-center text-xl leading-none">{icon}</span>}
             <span className="min-w-0 flex-1">
-                <span className="block min-w-0 break-words line-clamp-2 text-[0.95rem] font-semibold text-nature-900 dark:text-white">{title}</span>
+                <span className={`block min-w-0 break-words ${wrap ? '' : 'line-clamp-2'} text-[0.95rem] font-semibold text-nature-900 dark:text-white`}>{title}</span>
                 {state && <span className="block min-w-0 truncate text-xs text-nature-600 dark:text-nature-300">{state}</span>}
             </span>
             {onClick && <span aria-hidden="true" className="shrink-0 text-lg text-nature-500 dark:text-nature-400">›</span>}

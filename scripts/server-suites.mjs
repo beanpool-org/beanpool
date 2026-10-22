@@ -85,6 +85,7 @@ export const SUITES = [
     'test-open-door-counters',
     'test-door-work',
     'test-door-signal',
+    'test-nonce-store-global',
     'test-words-member',
     'test-web-door',
     'test-web-visits',

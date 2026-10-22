@@ -375,6 +375,20 @@ export const FEATURE_ENDED = word("This Offer has ended, so it can't be featured
 export const FEATURE_SHELF_FULL = word('Six is the shelf; un-feature one first.');
 export const FEATURE_NOT_A_FLAG = 'featured must be true or false.';
 
+export const ENTERPRISE_SHOP_CLOSED = word('This enterprise has been closed, so its shop can no longer be read or changed here.');
+export const ENTERPRISE_SHOP_WOUND_UP = word('This enterprise has been wound up, so its shop can no longer be changed.');
+
+/**
+ * What an enterprise's status leaves of its shop, for its shop routes (routes/shops.ts) and Featured on its Offers: one
+ * closed (pruned, disabled, suspended) has none to read or change, one wound up (completed) keeps its to read. The
+ * refusal, 403 enterprise_closed, or undefined.
+ */
+export function enterpriseShopRefusal(status: string | null, op: 'read' | 'write'): ShopRefusal | undefined {
+    if (status === 'pruned' || status === 'disabled' || status === 'suspended') return new ShopRefusal(403, 'enterprise_closed', ENTERPRISE_SHOP_CLOSED);
+    if (op === 'write' && status === 'completed') return new ShopRefusal(403, 'enterprise_closed', ENTERPRISE_SHOP_WOUND_UP);
+    return undefined;
+}
+
 /**
  * Which of a shop's Offers hold a place on its shelf: featured, and on the board or able to come back to it (live, out on
  * loan or in a deal, or paused). A pause takes one off the shopfront by its status and keeps its place, so a resume never
@@ -390,7 +404,7 @@ const SHELF_SQL = `SELECT COUNT(*) AS n FROM posts WHERE shop_id = ? AND id != ?
  */
 function featurableBy(postId: unknown, actor: string, mayKeep: (actor: string, enterprise: string) => boolean): FeaturePost {
     const post = typeof postId === 'string' && postId !== '' && postId.length <= 200
-        ? db.prepare('SELECT p.id, p.type, p.shop_id, p.active, p.status, p.featured_at, p.author_pubkey, m.is_treasury FROM posts p LEFT JOIN members m ON m.public_key = p.author_pubkey WHERE p.id = ?')
+        ? db.prepare('SELECT p.id, p.type, p.shop_id, p.active, p.status, p.featured_at, p.author_pubkey, m.is_treasury, m.status AS author_status FROM posts p LEFT JOIN members m ON m.public_key = p.author_pubkey WHERE p.id = ?')
             .get(postId) as FeaturePost | undefined
         : undefined;
     const mine = !!post && (post.author_pubkey === actor || (post.is_treasury === 1 && mayKeep(actor, post.author_pubkey)));
@@ -407,11 +421,15 @@ interface FeaturePost {
     featured_at: string | null;
     author_pubkey: string;
     is_treasury: number | null;
+    author_status: string | null;
 }
 
 /**
  * Features an Offer in its shop, or takes it off the shelf (`featured` false), for its author or a keeper of the
- * enterprise that posted it (`mayKeep`). Featuring is refused, writing nothing: on anything but an Offer (400
+ * enterprise that posted it (`mayKeep`). An enterprise's, either way, as its shop routes allow (enterpriseShopRefusal:
+ * 403 enterprise_closed once it is closed or wound up), said only to its keepers: anyone else hears feature_not_yours
+ * first. Featuring is refused,
+ * writing nothing: on anything but an Offer (400
  * feature_offers_only), on one in no shop (400 feature_not_in_shop), on an ended one (400 feature_ended), and past the
  * shelf (409 feature_shelf_full: SHOP_FEATURED_MAX that hold a place, SHELF_SQL). `beforeFeature`: the caller's own check
  * of the listing's author once the listing is the actor's to feature, before it is written (a mute: featuring publishes;
@@ -424,6 +442,9 @@ export function featureOffer(postId: unknown, actor: string, featured: unknown, 
     if (typeof featured !== 'boolean') throw new ShopRefusal(400, 'feature_not_a_flag', FEATURE_NOT_A_FLAG);
     const done = db.transaction(() => {
         const post = featurableBy(postId, actor, mayKeep);
+        // An enterprise's Offer, featured or taken off, is a change to its shop: as its shop routes say.
+        const closed = post.is_treasury === 1 ? enterpriseShopRefusal(post.author_status, 'write') : undefined;
+        if (closed) throw closed;
         if (!featured) {
             if (post.featured_at === null) return { postId: post.id, featuredAt: null, changed: false };
             db.prepare('UPDATE posts SET featured_at = NULL, updated_at = ? WHERE id = ?').run(iso(now), post.id);

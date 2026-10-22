@@ -86,7 +86,8 @@ function textOf(raw: unknown): string {
  * purpose (400 purpose_required) or one over its limit; About over 600 characters; a logo that is none (400 logo_required:
  * an enterprise keeps its picture) or no picture the node stores (400 photo_refused, the photo rule's own words, #2082);
  * a logo past the sender's day of photos (the budget's 429, charged to the keeper who sends it). Its own photo address sent
- * back is no new picture. Returns the face, and whether anything was written; a write stamps profile_updated_at.
+ * back is no new picture. Returns the face, and whether anything was written; a write stamps profile_updated_at, and a
+ * new name renames its chat with it.
  */
 export function changeEnterpriseFace(treasury: string, actor: string, changes: FaceChanges, opts: { lead: boolean }, now: number = Date.now()): { face: EnterpriseFace; changed: boolean } {
     const row = faceRowOf(treasury);
@@ -143,6 +144,9 @@ export function changeEnterpriseFace(treasury: string, actor: string, changes: F
                 stamp,
                 treasury,
             );
+            // Its chat is titled by its name (engine/enterprise-thread.ts ensureEnterpriseThread): a rename carries over, as
+            // a group's does (state-engine.ts updateGroup), and reaches a standby the same way (replication-manifest.ts).
+            if (newName !== undefined) db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'enterprise_thread'").run(newName, treasury);
             // The photo, with its reference in the row, by its one writer.
             if (photo !== undefined) setMemberPhoto(db, treasury, photo);
         })();

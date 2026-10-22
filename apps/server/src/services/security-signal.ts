@@ -80,6 +80,11 @@ export const OWNER_ALERT_WORDS = {
     offBoxShorter: 'Off-box backups are kept for fewer days now.',
     standbyTokenCleared: 'This standby no longer holds a replication token: it stops copying until one is saved.',
     membersRemoved: { one: 'A member was removed in the last day, by an admin.', many: '{n} members were removed in the last day, by an admin.' },
+    /** A re-key of an account with no owner or admin role (engine/node-roles.ts accountMovedAlert), `how` who acted: "by an admin". */
+    accountsMoved: (how: string) => ({
+        one: `A member's account was moved to a new phone in the last day, ${how}.`,
+        many: `{n} members' accounts were moved to a new phone in the last day, ${how}.`,
+    }),
     branchesPruned: { one: 'A branch of invites was pruned in the last day, by an owner.', many: '{n} branches of invites were pruned in the last day, by an owner.' },
     communityRenamed: "The community's name was changed, by an admin.",
     callsignChanged: "The community's callsign was changed, by an admin.",

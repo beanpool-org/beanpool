@@ -772,8 +772,9 @@ async function main(): Promise<void> {
     const toM = ownerPushes().slice(pM).flatMap((x) => x.to);
     assert(ownerPushes().length === pM + 1 && toM.includes('ExponentPushToken[olive-owner]') && toM.includes('ExponentPushToken[xav-new-owner]')
         && !toM.includes('ExponentPushToken[rey-admin]'), `5e. pushed to the owners (${JSON.stringify(toM)})`);
-    assert(topicHits().length === hM + 1 && /A member's account was moved to a new phone in the last day, by an admin\./.test(topicHits().at(-1)?.body ?? ''),
-        `5e. one line on the channel (${topicHits().length - hM})`);
+    assert(topicHits().length === hM + 1 && /A member's account was moved to a new phone in the last day, by an admin\./.test(topicHits().at(-1)?.body ?? '')
+        && /members removed or moved/.test(String(topicHits().at(-1)?.headers.title ?? '')),
+        `5e. one line on the channel, titled as moved too, not only removed (${topicHits().length - hM} ${topicHits().at(-1)?.headers.title})`);
     const r2 = await rekey(mac, asReyAdmin);
     assert(r2.done === 200 && heldNodeRoleOf(r2.fresh) === 'moderator' && historyOf('sec.keys').length === keysBefore + 1,
         `5e. a moderator's re-key tells nothing as a key replaced (${r2.done} ${r2.error ?? ''})`);

@@ -449,6 +449,15 @@ describe("the phone's registry", () => {
         }
         expect(phoneTools().map((t) => t.manifest.id).sort()).toEqual(Object.keys(TOOL_APPS).sort());
     });
+
+    it("every tool's guide is a page of the members' guide: \"I'm starting out\" never opens one that isn't there", async () => {
+        const { loadGuide } = await import(/* @vite-ignore */ pathToFileURL(path.join(REPO, 'packages/beanpool-guide/src/guide.mjs')).href);
+        const guide = loadGuide(path.join(REPO, 'packages/beanpool-guide/content'), { version: 1 }) as { sections: Array<{ slugs: string[] }>; guides: Array<{ slug: string }> };
+        const slugs = new Set(guide.sections.flatMap((s) => s.slugs));
+        expect(slugs.size).toBeGreaterThan(10);
+        expect(guide.guides.map((g) => g.slug)).toEqual(expect.arrayContaining([...slugs]));
+        for (const m of TOOLS) if (m.guide) expect(slugs.has(m.guide), `${m.id}'s guide page ${m.guide}`).toBe(true);
+    });
 });
 
 describe('every tool, drawn through the host route at 320 dp × 1.3 in xx', async () => {

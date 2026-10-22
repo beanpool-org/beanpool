@@ -36,7 +36,7 @@ Someone who wants to borrow it asks through the Offer, as for any Offer, and you
 
 **Take out of your shop** pauses its Offer. **Put back in your shop** puts the same Offer back in the Market.
 
-If your shop is closed for now, nothing goes back in it until you reopen it: **Put back in your shop** says so, and changes nothing. A thing you take out, lend or delete while it is closed keeps its Offer off the Market when you reopen.
+If your shop is closed for now, nothing goes back in it until you reopen it: **Put back in your shop** says so, and changes nothing. **Take out of your shop** is not there while it is closed. A thing you lend outside BeanPool or delete while it is closed keeps its Offer off the Market when you reopen, and so does one you took out before you closed it.
 
 ## Lending it outside BeanPool
 

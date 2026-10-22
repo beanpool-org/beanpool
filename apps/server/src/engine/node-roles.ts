@@ -1,7 +1,7 @@
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
-import { noteSecurityEvent } from '../services/security-signal.js';
+import { noteSecurityEvent, OWNER_ALERT_WORDS } from '../services/security-signal.js';
 import { bumpMembersVersion } from './versions.js';
 import { KEY_HELD_FOR_REKEY, NODE_HAS_OWNER_SQL } from './owner-sql.js';
 
@@ -285,6 +285,19 @@ export function roleKeyReplacedAlert(role: 'owner' | 'admin', oldKey: string, op
     const who = withArticle(role);
     const detail = `${who[0].toUpperCase()}${who.slice(1)}'s key was replaced by a re-key, ${how}. Open Settings to see who.`;
     return () => noteSecurityEvent({ key: 'sec.keys', detail, actor: operator || 'SYSTEM', actorRole, high: role === 'owner' });
+}
+
+/**
+ * A re-key that moves an account with no owner or admin role (a member's, a moderator's) to a new key, for the owners'
+ * alert: the one admin act that hands a whole account (Beans, identity, messages from now on) to a key the one who acted
+ * could hold (Fable's re-decision of #1807, 22 Oct, 6b). Told as removals are, one sec.members line counting the day's,
+ * in the words of who acted ("by an admin"), under their own bound, never whose; not high. Who acted is read now; the
+ * returned call tells it once the re-key has committed. An owner's or admin's re-key is told by roleKeyReplacedAlert instead.
+ */
+export function accountMovedAlert(operator: string): () => void {
+    const actorRole = actorRoleOf(operator);
+    const perDay = OWNER_ALERT_WORDS.accountsMoved(HOW[actorRole] ?? 'by the server itself');
+    return () => noteSecurityEvent({ key: 'sec.members', detail: '', perDay, actor: operator || 'SYSTEM', actorRole });
 }
 
 /**

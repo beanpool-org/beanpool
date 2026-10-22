@@ -1,5 +1,6 @@
 import { StrictMode, Component, type ReactNode, type ErrorInfo } from 'react';
 import { createRoot } from 'react-dom/client';
+import { t } from '@beanpool/core';
 import { App } from './App';
 import { applyPatternPreference } from './lib/usePatternBackground';
 import { captureAuthReturn } from './lib/web-join';
@@ -43,9 +44,9 @@ class ErrorBoundary extends Component<
                     textAlign: 'center',
                     fontFamily: 'monospace',
                 }}>
-                    <h1>⚠️ BeanPool Error</h1>
+                    <h1>{t('⚠️ BeanPool Error')}</h1>
                     <p style={{ color: '#888', margin: '1rem 0' }}>
-                        The app failed to load. Error details:
+                        {t('The app failed to load. Error details:')}
                     </p>
                     <pre style={{
                         background: '#1a1a1a',

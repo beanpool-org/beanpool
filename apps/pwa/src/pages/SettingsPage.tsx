@@ -57,6 +57,9 @@ import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated, getBloc
 import { clearSyncCursor } from '../lib/sync';
 import { WEB_COPY_CLEARS_LINE, anotherCopyMade, copyWordsForAMinute, leftTheWordsScreen } from '../lib/words-clipboard';
 
+const PURGE_CONFIRM_WORD = 'DELETE';
+const BEANPOOL_DOMAIN = 'beanpool.org';
+
 interface Props {
     identity: BeanPoolIdentity;
     onIdentityUpdated: (identity: BeanPoolIdentity) => void;
@@ -1315,7 +1318,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             {/* DELETE is what the member types (the code compares it), so it is never translated. */}
                                             <Sentence
                                                 text={t('Type your callsign {name} or {word} to confirm permanent deletion of your account from this community node:')}
-                                                parts={{ name: <strong>{identity?.callsign || 'CALLSIGN'}</strong>, word: <strong>DELETE</strong> }}
+                                                parts={{ name: <strong>{identity?.callsign || 'CALLSIGN'}</strong>, word: <strong>{PURGE_CONFIRM_WORD}</strong> }}
                                             />
                                         </p>
                                         <input
@@ -1982,7 +1985,7 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                         <a key={entry} href={BEANPOOL_WEBSITE_URL} target="_blank" rel="noopener noreferrer" className={rowClass} aria-label={t('beanpool.org, opens in a new tab')}>
                             <span className="text-xl" aria-hidden="true">🌐</span>
                             <span className="flex-1 min-w-0">
-                                <span className="block">beanpool.org</span>
+                                <span className="block">{BEANPOOL_DOMAIN}</span>
                                 <span className="block text-xs font-normal text-nature-600 dark:text-nature-300">{t('The BeanPool project website')}</span>
                             </span>
                             <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>

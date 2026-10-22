@@ -37,6 +37,7 @@ export interface ThingsCounts {
     listed: number;
     out: number;
     shelf: number;
+    [key: string]: number;
 }
 
 /**

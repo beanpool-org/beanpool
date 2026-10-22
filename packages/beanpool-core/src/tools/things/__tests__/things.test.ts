@@ -484,3 +484,166 @@ describe('Loans maths and validations (against S3 lendable Offers semantics)', (
         expect(lendBackAroundOf(from, 'weekly', 1)).toBe('2026-10-27T00:00:00.000Z');
     });
 });
+
+describe('Mutation testing on loans maths and size bounds', () => {
+    const NOW = Date.parse('2026-10-20T09:00:00.000Z');
+    const DAY = 24 * 60 * 60 * 1000;
+
+    describe('loanTotalBeans mutations', () => {
+        it('mutant: fixed price multiplying by units instead of flat fee is caught', () => {
+            const mutantFixed = (credits: number, units: number) => credits * units;
+            const credits = 50;
+            const units = 7;
+            expect(loanTotalBeans(credits, 'fixed', units)).toBe(credits);
+            expect(mutantFixed(credits, units)).not.toBe(loanTotalBeans(credits, 'fixed', units));
+        });
+
+        it('mutant: free loans (0 credits) charging units or flat fee is caught', () => {
+            const mutantFree = (credits: number, units: number) => (credits === 0 ? units : credits);
+            expect(loanTotalBeans(0, 'daily', 5)).toBe(0);
+            expect(mutantFree(0, 5)).not.toBe(loanTotalBeans(0, 'daily', 5));
+        });
+
+        it('mutant: daily loan using addition instead of multiplication is caught', () => {
+            const mutantDaily = (credits: number, units: number) => credits + units;
+            expect(loanTotalBeans(10, 'daily', 3)).toBe(30);
+            expect(mutantDaily(10, 3)).not.toBe(loanTotalBeans(10, 'daily', 3));
+        });
+
+        it('mutant: weekly price multiplying by 7 (days) instead of units is caught', () => {
+            const mutantWeekly = (credits: number, units: number) => credits * units * 7;
+            expect(loanTotalBeans(20, 'weekly', 2)).toBe(40);
+            expect(mutantWeekly(20, 2)).not.toBe(loanTotalBeans(20, 'weekly', 2));
+        });
+
+        it('mutant: negative credits producing negative fees is caught', () => {
+            expect(loanTotalBeans(-10, 'daily', 3)).toBe(0);
+            expect(loanTotalBeans(-5, 'fixed', 1)).toBe(0);
+        });
+    });
+
+    describe('isLoanOverdue mutations', () => {
+        it('mutant: exact moment now considered overdue (< vs <=) is caught', () => {
+            const exactNow = new Date(NOW).toISOString();
+            expect(isLoanOverdue(exactNow, NOW)).toBe(false);
+            const mutantAtOrBefore = (atStr: string, n: number) => Date.parse(atStr) <= n;
+            expect(mutantAtOrBefore(exactNow, NOW)).not.toBe(isLoanOverdue(exactNow, NOW));
+        });
+
+        it('mutant: inverted condition (future considered overdue) is caught', () => {
+            const future = new Date(NOW + 1000).toISOString();
+            expect(isLoanOverdue(future, NOW)).toBe(false);
+            const mutantInverted = (atStr: string, n: number) => Date.parse(atStr) > n;
+            expect(mutantInverted(future, NOW)).not.toBe(isLoanOverdue(future, NOW));
+        });
+
+        it('mutant: invalid date strings or NaN failing silently as overdue is caught', () => {
+            expect(isLoanOverdue('invalid-date', NOW)).toBe(false);
+            expect(isLoanOverdue('', NOW)).toBe(false);
+        });
+    });
+
+    describe('loanDaysRemaining mutations', () => {
+        it('mutant: using Math.floor instead of Math.ceil for partial days is caught', () => {
+            const partialDayAhead = new Date(NOW + 25 * 3600_000).toISOString();
+            expect(loanDaysRemaining(partialDayAhead, NOW)).toBe(2);
+            const mutantFloor = (atStr: string, n: number) => Math.floor((Date.parse(atStr) - n) / DAY);
+            expect(mutantFloor(partialDayAhead, NOW)).not.toBe(loanDaysRemaining(partialDayAhead, NOW));
+        });
+
+        it('mutant: using Math.round instead of Math.ceil is caught', () => {
+            const partialDayAhead = new Date(NOW + 25 * 3600_000).toISOString();
+            expect(loanDaysRemaining(partialDayAhead, NOW)).toBe(2);
+            const mutantRound = (atStr: string, n: number) => Math.round((Date.parse(atStr) - n) / DAY);
+            expect(mutantRound(partialDayAhead, NOW)).not.toBe(loanDaysRemaining(partialDayAhead, NOW));
+        });
+
+        it('mutant: exact day boundaries', () => {
+            const exact2DaysAhead = new Date(NOW + 2 * DAY).toISOString();
+            expect(loanDaysRemaining(exact2DaysAhead, NOW)).toBe(2);
+        });
+    });
+
+    describe('size bound mutations', () => {
+        it('mutant: off-by-one on max items in v1 (100 vs 101) is caught', () => {
+            const exactly100: Thing[] = Array.from({ length: 100 }, (_, i) => ({
+                id: `t-${i}`,
+                name: `Item ${i}`,
+                createdAt: '',
+                updatedAt: '',
+            }));
+            const exactly101: Thing[] = Array.from({ length: 101 }, (_, i) => ({
+                id: `t-${i}`,
+                name: `Item ${i}`,
+                createdAt: '',
+                updatedAt: '',
+            }));
+
+            const read100 = readThingsDoc({ v: 1, things: exactly100 });
+            expect(read100.things.length).toBe(100);
+
+            const read101 = readThingsDoc({ v: 1, things: exactly101 });
+            expect(read101.things.length).toBe(100);
+            expect(read101.things.some((t) => t.id === 't-100')).toBe(false);
+        });
+
+        it('mutant: off-by-one on character limits (80, 40, 300, 500) is caught', () => {
+            const itemAtLimits: Thing = {
+                id: '1',
+                name: 'a'.repeat(80),
+                replacementValue: 'b'.repeat(40),
+                lendTerms: 'c'.repeat(300),
+                ownerNote: 'd'.repeat(500),
+                createdAt: '',
+                updatedAt: '',
+            };
+            const readAtLimits = readThingsDoc({ v: 1, things: [itemAtLimits] }).things[0];
+            expect(readAtLimits.name.length).toBe(80);
+            expect(readAtLimits.replacementValue?.length).toBe(40);
+            expect(readAtLimits.lendTerms?.length).toBe(300);
+            expect(readAtLimits.ownerNote?.length).toBe(500);
+
+            const itemOverLimits: Thing = {
+                id: '2',
+                name: 'a'.repeat(81),
+                replacementValue: 'b'.repeat(41),
+                lendTerms: 'c'.repeat(301),
+                ownerNote: 'd'.repeat(501),
+                createdAt: '',
+                updatedAt: '',
+            };
+            const readOverLimits = readThingsDoc({ v: 1, things: [itemOverLimits] }).things[0];
+            expect(readOverLimits.name.length).toBe(80);
+            expect(readOverLimits.replacementValue?.length).toBe(40);
+            expect(readOverLimits.lendTerms?.length).toBe(300);
+            expect(readOverLimits.ownerNote?.length).toBe(500);
+        });
+
+        it('mutant: document size exceeding 65,536 bytes is detected and refused by toolFixtureProblems', () => {
+            const oversizedDoc: ThingsDoc = {
+                v: 1,
+                things: [
+                    {
+                        id: 'giant',
+                        name: 'Big item',
+                        bigPayload: 'x'.repeat(70_000),
+                        createdAt: '',
+                        updatedAt: '',
+                    },
+                ],
+            };
+            const bytes = toolDocBytes(oversizedDoc);
+            expect(bytes).toBeGreaterThan(65_536);
+
+            const mutantFixtures = {
+                ...FIXTURES,
+                docs: {
+                    ...FIXTURES.docs,
+                    full: oversizedDoc,
+                },
+            };
+            const problems = toolFixtureProblems(THINGS, mutantFixtures);
+            expect(problems.some((p) => p.includes('over its 65536'))).toBe(true);
+        });
+    });
+});

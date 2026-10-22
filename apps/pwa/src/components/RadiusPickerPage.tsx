@@ -33,8 +33,11 @@ function resolveCenter(
         return [initial.lat, initial.lng];
     }
     if (nodeCenter) {
-        if (Array.isArray(nodeCenter) && typeof nodeCenter[0] === 'number' && typeof nodeCenter[1] === 'number' && Number.isFinite(nodeCenter[0]) && Number.isFinite(nodeCenter[1])) {
-            return [nodeCenter[0], nodeCenter[1]];
+        if (Array.isArray(nodeCenter)) {
+            if (typeof nodeCenter[0] === 'number' && typeof nodeCenter[1] === 'number' && Number.isFinite(nodeCenter[0]) && Number.isFinite(nodeCenter[1])) {
+                return [nodeCenter[0], nodeCenter[1]];
+            }
+            return null;
         }
         if (typeof nodeCenter.lat === 'number' && typeof nodeCenter.lng === 'number' && Number.isFinite(nodeCenter.lat) && Number.isFinite(nodeCenter.lng)) {
             return [nodeCenter.lat, nodeCenter.lng];

@@ -1241,6 +1241,57 @@ describe('NodeIdentityPanel Component', () => {
         });
     });
 
+    describe('message requests', () => {
+        function mockRequestsNode(config: Record<string, unknown>) {
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+                if (url.includes('/api/node/config')) {
+                    return Promise.resolve({ ok: true, json: () => Promise.resolve({ publishLocation: true, directoryPushIntervalHours: 12, serviceRadius: null, ...config }) });
+                }
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
+            }));
+        }
+
+        const nodeConfigBody = () => {
+            const call = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/node/config'));
+            return call ? JSON.parse(call[1].body) : undefined;
+        };
+
+        it('shows the switch as the node has it, and saves the operator\'s choice', async () => {
+            mockRequestsNode({ dmRequests: false });
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            const toggle = await waitFor(() => {
+                const el = document.getElementById('dm-requests') as HTMLInputElement;
+                expect(el).toBeInTheDocument();
+                return el;
+            });
+            expect(toggle.checked).toBe(false);
+            expect(screen.getByText('💬 Message Requests')).toBeInTheDocument();
+            await act(async () => {
+                fireEvent.click(toggle);
+            });
+            expect(toggle.checked).toBe(true);
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()?.dmRequests).toBe(true);
+        });
+
+        it('hides the switch for a node that has no such setting, and never sends it there', async () => {
+            mockRequestsNode({});
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+            });
+            expect(document.getElementById('dm-requests')).toBeNull();
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()).toBeDefined();
+            expect('dmRequests' in nodeConfigBody()).toBe(false);
+        });
+    });
+
     describe('Directory publishing: why the community is not listed', () => {
         /** The beforeEach routes, with these answered instead. */
         const answer = (routes: Record<string, { ok: boolean; status?: number; body: unknown }>) => {

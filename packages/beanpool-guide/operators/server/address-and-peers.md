@@ -102,6 +102,12 @@ By default your server tells the BeanPool directory about itself every 12 hours,
 
 The contact email and phone are not sent unless you turn each on here: **Share Email in Directory** and **Share Phone in Directory**. Both are off until you do, even on a server that published them before, and until then your server's own public pages don't show them either. The area, the member count and the health report can each be switched off here. The name and web address are always sent. Setting **Update Schedule** to **Never (Disabled)** stops your server sending anything, but the directory keeps the last entry it received, as it was then, until BeanPool removes it: let one update go out first, so that entry holds no contacts. Your members' names and posts are never sent.
 
+### Message requests
+
+**Message Requests** decides what happens to a member's first message to someone who hasn't added them as a friend, written to them, or traded with them. On, it is held as a request until that person accepts it: they can read it, and the sender can write nothing more until they accept. The sender is never told whether it was ignored or whether they were blocked. Messages from owners, admins and moderators, and the chat that comes with a deal, always arrive straight away. A request nobody accepts lapses after 30 days, and the sender's next message is a new request.
+
+It is on by default on a global community, where anyone can join with 12 words, and off on a local community, where everyone was let in by someone. Turned off, every message arrives straight away, and a request still waiting becomes an ordinary chat. Like every profile switch, it travels with backups and to standbys.
+
 ### When the directory doesn't list your community
 
 Your server sends the directory nothing while either of these is true. **Node Identity** says which, in a line under **Publish Now**, and so does the server's own settings page:

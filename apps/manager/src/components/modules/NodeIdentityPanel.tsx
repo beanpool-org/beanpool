@@ -74,6 +74,8 @@ export function NodeIdentityPanel({
 
     // "Ask to join" (G6): null until the node says it takes requests to join at all (a node from before G6 doesn't).
     const [acceptKnocks, setAcceptKnocks] = useState<boolean | null>(null);
+    // Message requests (the server's engine/dm-requests.ts): null until the node says it has the setting.
+    const [dmRequests, setDmRequests] = useState<boolean | null>(null);
     const [openKnocks, setOpenKnocks] = useState<number | null>(null);
     // Who answers a request to join follows who may invite (`door`, set under People & Safety → Invites & QR).
     const [onlyAdminsAnswer, setOnlyAdminsAnswer] = useState(false);
@@ -153,6 +155,7 @@ export function NodeIdentityPanel({
                         setLastDirectoryPush(cfg.lastDirectoryPush);
                     }
                     setOnlyAdminsAnswer(cfg.door === 'admins');
+                    if (typeof cfg.dmRequests === 'boolean') setDmRequests(cfg.dmRequests);
                     if (typeof cfg.acceptKnocks === 'boolean') {
                         setAcceptKnocks(cfg.acceptKnocks);
                         // How many are waiting is the operator's only, so it is its own admin read.
@@ -444,6 +447,7 @@ export function NodeIdentityPanel({
                         : null,
                     // Only to a node that has the setting; it keeps what it had when this is left out.
                     ...(acceptKnocks === null ? {} : { acceptKnocks }),
+                    ...(dmRequests === null ? {} : { dmRequests }),
                 }),
             });
 
@@ -848,6 +852,24 @@ export function NodeIdentityPanel({
                                         {openKnocks === 0 ? 'No requests waiting.' : `${openKnocks} ${openKnocks === 1 ? 'request' : 'requests'} waiting for an answer.`}
                                     </p>
                                 )}
+                            </div>
+                        )}
+
+                        {dmRequests !== null && (
+                            <div>
+                                <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
+                                    <input
+                                        id="dm-requests"
+                                        type="checkbox"
+                                        checked={dmRequests}
+                                        onChange={(e) => setDmRequests(e.target.checked)}
+                                        className="rounded border-nature-700 bg-nature-950 text-bp-ink-terra mt-0.5 accent-terra-500"
+                                    />
+                                    <span>💬 Message Requests</span>
+                                </label>
+                                <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
+                                    A member&apos;s first message to someone who hasn&apos;t added them, written to them or traded with them waits under Requests until that person accepts. On by default on the global community. Turned off, every message arrives straight away, and a request still waiting becomes an ordinary chat.
+                                </p>
                             </div>
                         )}
                     </div>

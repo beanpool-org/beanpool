@@ -37,7 +37,7 @@ import {
 import { keepsNodeCopy, openToolCopy, removeToolCopyFirst, switchToolCopy, toolCopyAfterWrite, type PhoneToolCopy } from '../../tools/node-copy';
 import { scheduleToolReminders } from '../../tools/reminders';
 import {
-    ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, copyFailedLine, isEmptyDoc, removeQuestion, safeLine,
+    ToolDoors, ToolFrame, ToolNotInThisVersion, ToolScreenBoundary, ToolSettingsSheet, copyFailedLine, isEmptyDoc, removeQuestion, safeLine, toolBack,
     type ToolCopyNote,
 } from '../../tools/frame';
 import { ToolListSheet } from '../../tools/list-sheet';
@@ -244,6 +244,7 @@ function ToolHostScreen({ manifest, screenName, Screen, params }: {
         navigate: (screen: string, p?: Record<string, string>) => {
             router.push({ pathname: '/tool/[id]', params: { ...(p ?? {}), id: manifest.id, screen } });
         },
+        back: toolBack,
         now: () => Date.now(),
         openListSheet,
         nodeCopy: keepsNodeCopy(manifest) && settings?.nodeCopy !== false && copyNote !== 'older-node',

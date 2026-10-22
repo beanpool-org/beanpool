@@ -7570,6 +7570,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             sellerPublicKey: r.seller_pubkey, 
             sellerCallsign: r.sellerCallsign, 
             credits: r.credits, 
+            hours: typeof r.hours === 'number' ? r.hours : null,
             status: r.status, 
             createdAt: r.created_at, 
             completedAt: r.completed_at,

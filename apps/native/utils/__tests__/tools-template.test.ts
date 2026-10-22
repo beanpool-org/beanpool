@@ -109,7 +109,7 @@ vi.mock('../canonical-profile', () => ({ getCanonicalAvatar: async () => null })
 
 // The one store, for real: tool_docs in SQLite (node:sqlite behind expo-sqlite's calls) and photos in a real folder.
 const disk = vi.hoisted(() => ({ dir: '', db: null as any }));
-const posts = vi.hoisted(() => ({ rows: new Map<string, Record<string, unknown>>(), paused: [] as string[], resumed: [] as string[] }));
+const posts = vi.hoisted(() => ({ rows: new Map<string, Record<string, unknown>>(), paused: [] as string[], resumed: [] as string[], deals: [] as Array<Record<string, unknown>> }));
 /**
  * The community's server, for a tool that asks for node-copy (slice T0.4): its tool store as engine/tool-state.ts keeps
  * it, the member's own copies only (the signer is ME). Today's node (S2) unless `sendsDeletedAt` (S2.1) or `refusesOff`
@@ -161,6 +161,8 @@ vi.mock('../db', () => ({
     getDb: async () => disk.db,
     getMemberProfile: async () => ({ avatar_url: null }),
     getPost: async (id: string) => posts.rows.get(id) ?? null,
+    getMyPosts: async (pubkey: string) => [...posts.rows.values()].filter((p) => p.author_pubkey === pubkey),
+    getMarketplaceTransactions: async (pubkey: string) => posts.deals.filter((d) => d.sellerPublicKey === pubkey || d.buyerPublicKey === pubkey),
     pausePost: async (id: string) => { posts.paused.push(id); },
     resumePost: async (id: string) => { posts.resumed.push(id); },
     // The app's signed helpers, as the node copy calls them (tools/node-copy.ts).
@@ -192,9 +194,21 @@ vi.mock('expo-file-system/legacy', async () => {
 const reg = vi.hoisted(() => ({ extra: [] as Array<{ manifest: any; app: any }> }));
 vi.mock('../../tools/index', async (importOriginal) => {
     const real = await importOriginal<typeof import('../../tools/index')>();
-    const all = () => [...real.phoneTools(), ...reg.extra];
+    // A registered tool's screens thunk is require('./screens'): Metro bundles it, and vitest can't load a .tsx through
+    // Node's own require. Here each one's screens module is imported instead, the same module its thunk names.
+    const nodePath = await import('node:path');
+    const nodeFs = await import('node:fs');
+    const { pathToFileURL: fileUrl } = await import('node:url');
+    const apps: Record<string, any> = {};
+    for (const [id, app] of Object.entries(real.TOOL_APPS)) {
+        const file = ['screens.tsx', 'screens.ts'].map((f) => nodePath.resolve(__dirname, '../../tools', id, f)).find((f) => nodeFs.existsSync(f));
+        const mod = file ? await import(/* @vite-ignore */ fileUrl(file).href) : null;
+        apps[id] = mod ? { ...app, screens: () => mod.SCREENS } : app;
+    }
+    const all = () => [...real.phoneTools(apps), ...reg.extra];
     return {
         ...real,
+        TOOL_APPS: apps,
         phoneTools: () => all(),
         phoneTool: (id: string) => all().find((t) => t.manifest.id === id) ?? null,
         toolHomeCardIds: () => real.toolHomeCardIds(all()),
@@ -358,6 +372,7 @@ beforeEach(() => {
     posts.rows.clear();
     posts.paused.length = 0;
     posts.resumed.length = 0;
+    posts.deals.length = 0;
     node.profile = { profile: 'local', features: { beans: true } };
     server.reset();
 });
@@ -585,8 +600,9 @@ describe("a tool, a screen or a permission this build doesn't have", () => {
     });
 
     it("a tool that declares a permission this build's host can't grant yet: the same page, not a function missing when called", async () => {
-        reg.extra = [{ manifest: { ...KIT, id: 'needs-deals', permissions: [...KIT.permissions, 'deals'] }, app: { ...kitApp, id: 'needs-deals' } }];
-        await drawTool('needs-deals');
+        // `place` (the phone grants `deals` since the Tool shed, T1.2).
+        reg.extra = [{ manifest: { ...KIT, id: 'needs-place', permissions: [...KIT.permissions, 'place'] }, app: { ...kitApp, id: 'needs-place' } }];
+        await drawTool('needs-place');
         expect(byTestId('tool-not-in-version')).not.toBeNull();
     });
 
@@ -680,13 +696,13 @@ describe('the route around a tool', () => {
 describe('the host given to a tool has only what its manifest declared', () => {
     const ctx = (manifest: ToolManifest<any>): PhoneHostContext<any> => ({
         manifest, owner: { kind: 'member', publicKey: ME.publicKey, name: ME.callsign }, node: { url: null, profile: 'local', features: null },
-        doc: { get: () => manifest.doc.empty(), set: async () => {} }, navigate: () => {}, now: () => NOW, openListSheet: () => {},
+        doc: { get: () => manifest.doc.empty(), set: async () => {} }, navigate: () => {}, back: () => {}, now: () => NOW, openListSheet: () => {},
     });
 
     it('a tool with no permissions: the base and nothing else; an undeclared call is undefined', () => {
         const bare: ToolManifest<KitDoc> = { ...KIT, permissions: [] };
         const h = hostFor(bare, ctx(bare)) as unknown as Record<string, unknown>;
-        expect(Object.keys(h).sort()).toEqual(['doc', 'navigate', 'node', 'now', 'owner']);
+        expect(Object.keys(h).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'now', 'owner']);
         expect('offerDoor' in h).toBe(false);
         expect(h.offerDoor).toBeUndefined();
         expect(h.photos).toBeUndefined();
@@ -707,13 +723,14 @@ describe('the host given to a tool has only what its manifest declared', () => {
 
     it('the fixture tool: exactly its grants (reminders grants none)', () => {
         const h = hostFor(KIT, ctx(KIT)) as unknown as Record<string, unknown>;
-        expect(Object.keys(h).sort()).toEqual(['doc', 'navigate', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner', 'photos']);
+        expect(Object.keys(h).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner', 'photos']);
         expect(h.nodeCopy).toEqual({ on: false });
         expect(h.posts).toBeUndefined();
     });
 
     it("what this build can't grant yet is named, so its route refuses the tool", () => {
-        expect(ungrantedPermissions({ permissions: ['photos', 'place', 'deals', 'event-door', 'pricing-guide', 'reminders'] }, phoneHost(ctx(KIT)))).toEqual(['place', 'deals', 'event-door', 'pricing-guide']);
+        // `deals` and `pricing-guide` came with the Tool shed (T1.2), the first tool to ask for them.
+        expect(ungrantedPermissions({ permissions: ['photos', 'place', 'deals', 'event-door', 'pricing-guide', 'reminders'] }, phoneHost(ctx(KIT)))).toEqual(['place', 'event-door']);
     });
 
     it("`posts` reaches only the member's own Offers: anyone else's post, or a Need, is 'gone' and can't be paused", async () => {
@@ -728,6 +745,48 @@ describe('the host given to a tool has only what its manifest declared', () => {
         await p.pause('mine');
         await p.resume('mine');
         expect([posts.paused, posts.resumed]).toEqual([['mine'], ['mine']]);
+    });
+
+    it("`posts.mine` lists the member's own Offers, live, in a deal or paused: never a Need, a done one, or anyone else's", async () => {
+        posts.rows.set('live', { id: 'live', author_pubkey: ME.publicKey, type: 'offer', status: 'active', title: 'Ladder' });
+        posts.rows.set('paused', { id: 'paused', author_pubkey: ME.publicKey, type: 'offer', status: 'paused', title: 'Tent' });
+        posts.rows.set('done', { id: 'done', author_pubkey: ME.publicKey, type: 'offer', status: 'completed', title: 'Saw' });
+        posts.rows.set('need', { id: 'need', author_pubkey: ME.publicKey, type: 'need', status: 'active', title: 'A drill' });
+        posts.rows.set('theirs', { id: 'theirs', author_pubkey: 'someone-else', type: 'offer', status: 'active', title: 'Pram' });
+        expect(await phoneHost(ctx(KIT)).posts!.mine()).toEqual([{ id: 'live', title: 'Ladder', status: 'active' }, { id: 'paused', title: 'Tent', status: 'paused' }]);
+    });
+
+    it("`deals`: the member's deals as seller or lender only; a loan that is out says when it is due back, from its Offer's hand-over", async () => {
+        posts.rows.set('p-out', { id: 'p-out', author_pubkey: ME.publicKey, type: 'offer', status: 'pending', lendable: 1, price_type: 'fixed', accepted_at: '2026-10-18T09:00:00.000Z' });
+        posts.deals.push(
+            { id: 'tx-out', postId: 'p-out', sellerPublicKey: ME.publicKey, buyerPublicKey: 'b', status: 'pending', hours: 5, createdAt: '2026-10-17T09:00:00.000Z' },
+            { id: 'tx-asked', postId: 'p-asked', sellerPublicKey: ME.publicKey, buyerPublicKey: 'b', status: 'requested', hours: 2, createdAt: '2026-10-19T09:00:00.000Z' },
+            { id: 'tx-done', postId: 'p-done', sellerPublicKey: ME.publicKey, buyerPublicKey: 'b', status: 'completed', createdAt: '2026-10-01T09:00:00.000Z', completedAt: '2026-10-05T09:00:00.000Z' },
+            { id: 'tx-bought', postId: 'p-theirs', sellerPublicKey: 'someone-else', buyerPublicKey: ME.publicKey, status: 'pending', createdAt: '2026-10-19T09:00:00.000Z' },
+        );
+        expect(await phoneHost(ctx(KIT)).deals!()).toEqual([
+            { postId: 'p-out', transactionId: 'tx-out', status: 'pending', updatedAt: '2026-10-18T09:00:00.000Z', backAround: '2026-10-23T09:00:00.000Z' },
+            { postId: 'p-asked', transactionId: 'tx-asked', status: 'requested', updatedAt: '2026-10-19T09:00:00.000Z' },
+            { postId: 'p-done', transactionId: 'tx-done', status: 'completed', updatedAt: '2026-10-05T09:00:00.000Z' },
+        ]);
+    });
+
+    it("`pricingGuide`: the community's guide on one thing, a hint only; null with no match, no answer or no community", async () => {
+        const guide = { items: [{ id: 'th-002', category: 'tools', emoji: '🪜', name: 'Extension Ladder Hire (6m / Day)', description: '', priceBeans: 12, unit: 'day' }] };
+        const fetchSpy = vi.fn(async (_url: string) => new Response(JSON.stringify(guide), { status: 200 }));
+        vi.stubGlobal('fetch', fetchSpy);
+        try {
+            const host = phoneHost({ ...ctx(KIT), node: { url: 'https://mullum.example/', profile: 'local', features: null } });
+            expect(await host.pricingGuide!('tools', 'Step ladder')).toEqual({ credits: 12, priceType: 'daily' });
+            expect(fetchSpy.mock.calls.map(([u]) => String(u))).toEqual(['https://mullum.example/api/pricing-guide']);
+            expect(await host.pricingGuide!('tools', 'Cordless drill')).toBeNull();
+            fetchSpy.mockImplementationOnce(async () => { throw new TypeError('Network request failed'); });
+            expect(await host.pricingGuide!('tools', 'Step ladder')).toBeNull();
+            store.map.delete('beanpool_anchor_url');
+            expect(await phoneHost(ctx(KIT)).pricingGuide!('tools', 'Step ladder')).toBeNull();
+        } finally {
+            vi.unstubAllGlobals();
+        }
     });
 });
 

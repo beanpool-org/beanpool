@@ -5,12 +5,13 @@
  * host or bypass its manifest's declared permissions. Tools import only types from tools/host.ts.
  */
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    TOOL_PERMISSION_GRANTS, narrowHost,
-    type ToolHost, type ToolHostBase, type ToolHostGrants, type ToolManifest, type ToolOfferDraft, type ToolPermission,
-    type ToolPostStatus,
+    TOOL_PERMISSION_GRANTS, lendBackAroundOf, narrowHost, pricingHintFor,
+    type PricingGuideItem, type ToolDealSummary, type ToolHost, type ToolHostBase, type ToolHostGrants, type ToolManifest, type ToolOfferDraft,
+    type ToolOwnOffer, type ToolPermission, type ToolPostStatus,
 } from '@beanpool/core';
-import { getPost, pausePost, resumePost } from '../utils/db';
+import { getMarketplaceTransactions, getMyPosts, getPost, pausePost, resumePost } from '../utils/db';
 import { keepPicked, openNeedComposer } from './doors';
 import { removeToolPhoto, toolPhotoUri } from './photos';
 import { communityKey } from './community';
@@ -22,6 +23,7 @@ export interface PhoneHostContext<D> {
     node: { url: string | null; profile: string; features: Record<string, unknown> | null };
     doc: { get(): D; set(next: D): Promise<void> };
     navigate(screen: string, params?: Record<string, string>): void;
+    back(): void;
     now(): number;
     /** The List sheet, opened with the tool's draft (the route draws it). */
     openListSheet(draft: ToolOfferDraft): void;
@@ -42,6 +44,7 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
         node: ctx.node,
         doc: ctx.doc,
         navigate: ctx.navigate,
+        back: ctx.back,
         now: ctx.now,
         photos: {
             pick: async () => keepPicked(community, owner, tool, await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 })),
@@ -57,13 +60,67 @@ export function phoneHost<D>(ctx: PhoneHostContext<D>): ToolHostBase<D> & Partia
         },
         offerDoor: (draft) => ctx.openListSheet(draft),
         needDoor: (draft) => { void openNeedComposer(owner, tool, draft); },
+        deals: () => ownerDeals(owner),
+        pricingGuide: (category, words) => pricingGuideHint(ctx.node.url, category, words),
         posts: {
             pause: async (id) => { await mustBeOwnOffer(owner, id); await pausePost(id); },
             resume: async (id) => { await mustBeOwnOffer(owner, id); await resumePost(id); },
             status: async (id) => postStatus(await ownOffer(owner, id)),
+            mine: () => ownOffers(owner),
         },
         nodeCopy: { on: ctx.nodeCopy ?? false },
     };
+}
+
+/**
+ * `deals`: the owner's deals as the phone holds them where the owner is the seller or lender (on their own Offers; the
+ * tool matches the ones its records are linked to), never a deal they are buying in. A loan that is out says when it is
+ * due back, from its Offer's hand-over and the deal's days (core's lendBackAroundOf), when the phone holds both.
+ */
+export async function ownerDeals(owner: string): Promise<ToolDealSummary[]> {
+    const rows = await getMarketplaceTransactions(owner, undefined, 200).catch(() => []);
+    const mine = rows.filter((r) => r && r.sellerPublicKey === owner && typeof r.postId === 'string' && typeof r.id === 'string');
+    return Promise.all(mine.map(async (r): Promise<ToolDealSummary> => {
+        const post = r.status === 'pending' ? await getPost(r.postId).catch(() => null) : null;
+        const backAround = post?.lendable ? lendBackAroundOf(post.accepted_at, post.price_type, r.hours) : null;
+        const updatedAt = (r.status === 'pending' && typeof post?.accepted_at === 'string' && post.accepted_at)
+            || (typeof r.completedAt === 'string' && r.completedAt) || String(r.createdAt ?? '');
+        return { postId: r.postId, transactionId: r.id, status: String(r.status), updatedAt, ...(backAround ? { backAround } : {}) };
+    }));
+}
+
+/** `posts.mine`: the owner's own Offers the phone holds, live, in a deal or paused. */
+export async function ownOffers(owner: string): Promise<ToolOwnOffer[]> {
+    const rows = await getMyPosts(owner).catch(() => []);
+    return rows
+        .filter((p) => p && p.type === 'offer' && p.author_pubkey === owner && typeof p.id === 'string')
+        .map((p) => ({ id: p.id, title: typeof p.title === 'string' ? p.title : '', status: postStatus(p) }))
+        .filter((o) => o.status !== 'gone');
+}
+
+/** How long the pricing guide is asked for before the hint is left out. */
+const PRICING_GUIDE_TIMEOUT_MS = 8_000;
+
+/**
+ * `pricingGuide`: the community's price guide (its public GET /api/pricing-guide, as the Pricing Guide sheet reads it)
+ * on one thing, through core's pricingHintFor. Null when the server can't be reached, has no guide, or no item matches:
+ * a hint, never a price set for the member.
+ */
+export async function pricingGuideHint(url: string | null, category: string, words: string): Promise<{ credits: number; priceType: string } | null> {
+    const base = (url ?? await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null) ?? '').trim().replace(/\/+$/, '');
+    if (!base) return null;
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), PRICING_GUIDE_TIMEOUT_MS);
+    try {
+        const res = await fetch(`${base}/api/pricing-guide`, { signal: abort.signal });
+        if (!res.ok) return null;
+        const data = await res.json() as { items?: unknown };
+        return Array.isArray(data?.items) ? pricingHintFor(data.items as PricingGuideItem[], category, words) : null;
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /**

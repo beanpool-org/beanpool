@@ -1362,7 +1362,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         fields.push('lendable = ?', 'lend_max_days = ?', 'lend_terms = ?', 'replacement_value = ?');
         values.push(lendCells.lendable, lendCells.lend_max_days, lendCells.lend_terms, lendCells.replacement_value);
     }
-    if (nextShop !== undefined) { fields.push('shop_id = ?'); values.push(nextShop); }
+    // Out of its shop, or into another, it is featured in none (engine/shops.ts featureOffer): the stamp goes with the shop.
+    if (nextShop !== undefined) { fields.push('shop_id = ?', 'featured_at = NULL'); values.push(nextShop); }
 
     // The creator may still change the ballot while nobody has voted (refused above once anyone has). Only `true` opens it.
     if (existingPost.type === 'poll' && updates.pollOpenVote !== undefined) {

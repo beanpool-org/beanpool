@@ -49,7 +49,7 @@ import zlib from 'node:zlib';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, exportSyncState, signSyncPayload, importRemoteState, setNodeRole, reconcileLedgerFromDb,
-    adminAssignTreasuryOperator, getMemberTrustProfile, getMemberTrustStats, treasuryKeepers,
+    adminAssignTreasuryOperator, getMemberTrustProfile, getMemberTrustStats, treasuryKeepers, pausePost, resumePost, removePost,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -429,15 +429,16 @@ async function main(): Promise<void> {
     const nowFits = await call('PUT', kit, featurePath(shelf[6]), { featured: true });
     assert(off.status === 200 && off.body?.featuredAt === null && featuredAtOf(shelf[0]) === null && nowFits.status === 200,
         `un-featured the same way, which makes room (${show(off)} | ${show(nowFits)})`);
-    // A paused one keeps its place: put back up, the shelf would hold seven.
-    const paused = await call('POST', kit, '/api/marketplace/posts/pause', { postId: shelf[1], authorPublicKey: ent });
+    // A paused one keeps its place: put back up, the shelf would hold seven. (An enterprise's listing is paused and ended
+    // here through the engine: the member routes take the author from the signer.)
+    const paused = attempt(() => pausePost(shelf[1], ent));
     const whilePaused = await call('PUT', kit, featurePath(shelf[7]), { featured: true });
-    assert(paused.status === 200 && sentence(whilePaused, 409, 'feature_shelf_full') && featuredAtOf(shelf[1]) !== null,
+    assert(paused === true && sentence(whilePaused, 409, 'feature_shelf_full') && featuredAtOf(shelf[1]) !== null,
         `a paused featured Offer keeps its place on the shelf (${show(whilePaused)})`);
-    await call('POST', kit, '/api/marketplace/posts/resume', { postId: shelf[1], authorPublicKey: ent });
-    const removed = await call('POST', kit, '/api/marketplace/posts/remove', { id: shelf[2], authorPublicKey: ent });
+    attempt(() => resumePost(shelf[1], ent));
+    const removed = attempt(() => removePost(shelf[2], ent));
     const afterEnd = await call('PUT', kit, featurePath(shelf[7]), { featured: true });
-    assert(removed.status === 200 && afterEnd.status === 200, `an ended one leaves the shelf (${show(afterEnd)})`);
+    assert(removed === true && afterEnd.status === 200, `an ended one leaves the shelf (${show(afterEnd)})`);
     const fRemoved = await call('PUT', kit, featurePath(shelf[2]), { featured: true });
     assert(sentence(fRemoved, 400, 'feature_ended'), `and can't be featured again, in a sentence (${show(fRemoved)})`);
     const liveFeatured = attempt(() => (db.prepare(`SELECT COUNT(*) AS n FROM posts WHERE shop_id = ? AND featured_at IS NOT NULL AND active = 1 AND status IN ('active', 'pending', 'paused')`).get(entShop) as { n: number }).n);

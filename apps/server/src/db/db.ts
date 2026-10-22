@@ -1477,6 +1477,9 @@ export function initSchema() {
     // The shop a listing is in (schema.sql; DESIGN-shops-and-tools-fable.md §12 S1). Before the schema.sql exec, which
     // indexes it (idx_posts_shop). NULL on every existing row: nothing is in a shop until its author puts it there.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN shop_id TEXT REFERENCES shops(id)`).run(); } catch { }
+    // When it was featured in its shop (schema.sql; DESIGN-shops-round3-enterprise-shopfront-fable.md §4). NULL on every
+    // existing row: nothing is featured until its author or a keeper says so.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN featured_at TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
     // A person's coarse area (G4, engine/member-area.ts). Before the schema.sql exec, whose members_touch_updated_at
     // (dropped below, so the exec recreates it) lists all three. NULL on every existing row: nobody has an area.

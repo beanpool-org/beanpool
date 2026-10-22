@@ -1018,6 +1018,8 @@ function postOfRow(row: any): MarketplacePost {
         } : {}),
         // The shop it is in, as the main server holds it (apps/server engine/sync.ts postShop): none said is none.
         ...(row.shop_id != null ? { shopId: row.shop_id } : {}),
+        // When it was featured in its shop, as the main server holds it (apps/server engine/sync.ts postFeatured).
+        ...(row.featured_at != null ? { featuredAt: row.featured_at } : {}),
         // This server's search words for it (synonyms included), so a standby's search finds what this one's does.
         searchKeywords: row.search_keywords ?? '',
         createdBy: row.created_by ?? undefined,

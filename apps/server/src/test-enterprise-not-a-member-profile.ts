@@ -14,7 +14,7 @@
  *   3. vouchMember refuses an enterprise key in a sentence, and writes nothing (no voucher, no vouch credit, no
  *      profile_updated_at); POST /api/profile/vouch answers 400 with that sentence. A member is still vouched for.
  *   4. A vouch given to an enterprise before this change is left as it is (inert for credit): the row keeps it, and the
- *      voucher may still withdraw it.
+ *      voucher may still withdraw it, even while the enterprise is below 0 (a member below 0 still may not).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-enterprise-not-a-member-profile.ts
  */
@@ -81,8 +81,8 @@ async function main() {
     console.log('An enterprise is never a member\'s Trust Profile, and is never vouched for...\n');
     const { initTls } = await import('./services/tls.js');
     const {
-        initStateEngine, createTreasury, getProfile, getTrustProfileForViewer, vouchMember, unvouchMember, adminSetVoucher,
-        getMemberTrustProfile,
+        initStateEngine, createTreasury, getProfile, getTrustProfileForViewer, vouchMember, unvouchMember, adminSetVoucher, getBalance,
+        getMemberTrustProfile, reconcileLedgerFromDb,
     } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { initAdminPassword } = await import('./config/local-config.js');
@@ -164,8 +164,29 @@ async function main() {
     db.prepare('UPDATE members SET elder_vouched_by = ?, vouch_credit = 25 WHERE public_key = ?').run(damo.pubKeyHex, enterprise);
     assert(rowOf(enterprise).elder_vouched_by === damo.pubKeyHex, 'an existing vouch for an enterprise is left on its row');
     assert(getProfile(enterprise, kofi.pubKeyHex)?.elderVouchedBy === damo.pubKeyHex, 'and its profile still names the voucher (the apps never draw it for this key)');
-    unvouchMember(damo.pubKeyHex, enterprise);
-    assert(rowOf(enterprise).elder_vouched_by === null, 'the voucher may still withdraw it');
+    // An enterprise trades below 0 on its keepers' pledges, and a vouch adds nothing to that line (trust.ts's treasury
+    // branch returns before it reads vouch_credit): the "back to 0 first" rule, which keeps a member from being left
+    // below a floor the vouch held up, would only shut the voucher in (review of #2367).
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(enterprise);
+    db.prepare(`UPDATE accounts SET balance = -30 WHERE public_key = ?`).run(enterprise);
+    reconcileLedgerFromDb(); // getBalance reads the in-memory ledger: resync it from the raw update
+    assert(getBalance(enterprise).balance === -30, `the enterprise is below 0 (balance ${getBalance(enterprise).balance})`);
+    const floorBefore = getMemberTrustProfile(enterprise).floor;
+    let withdrawal = '';
+    try { unvouchMember(damo.pubKeyHex, enterprise); } catch (e: any) { withdrawal = String(e?.message ?? e); }
+    assert(withdrawal === '' && rowOf(enterprise).elder_vouched_by === null, `the voucher may still withdraw it, with the enterprise below 0 (got "${withdrawal}")`);
+    assert(getMemberTrustProfile(enterprise).floor === floorBefore, `and the enterprise's floor is where it was (${floorBefore} → ${getMemberTrustProfile(enterprise).floor})`);
+    db.prepare(`UPDATE accounts SET balance = 0 WHERE public_key = ?`).run(enterprise);
+    reconcileLedgerFromDb();
+    // A member below 0 still keeps their vouch until they are back at 0, as before.
+    db.prepare(`UPDATE accounts SET balance = -5 WHERE public_key = ?`).run(rosa.pubKeyHex);
+    reconcileLedgerFromDb();
+    let memberWithdrawal = '';
+    try { unvouchMember(damo.pubKeyHex, rosa.pubKeyHex); } catch (e: any) { memberWithdrawal = String(e?.message ?? e); }
+    assert(memberWithdrawal.includes('negative balance') && rowOf(rosa.pubKeyHex).elder_vouched_by === damo.pubKeyHex,
+        `a member below 0 keeps their vouch (got "${memberWithdrawal}")`);
+    db.prepare(`UPDATE accounts SET balance = 0 WHERE public_key = ?`).run(rosa.pubKeyHex);
+    reconcileLedgerFromDb();
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

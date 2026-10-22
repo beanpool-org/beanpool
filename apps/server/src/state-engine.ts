@@ -5449,7 +5449,8 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
  * the new floor of 0) — they must return to >= 0 first. Idempotent when not currently vouched.
  */
 export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: true } {
-    if (!getMember(targetPubkey)) throw new Error('Member not found');
+    const target = getMember(targetPubkey);
+    if (!target) throw new Error('Member not found');
     const row = db.prepare("SELECT elder_vouched_by FROM members WHERE public_key = ?").get(targetPubkey) as any;
     const vouchedBy = row?.elder_vouched_by || null;
     if (!vouchedBy) return { ok: true };
@@ -5458,7 +5459,10 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     // Nor a pruned voucher, nor the old key of one being re-keyed (whose node role, if any, waits on the old key
     // until the re-key completes). An admin key with no member row at all, the legacy single-admin setting, is as before.
     if (!isAdmin || getMember(actorPubkey)) assertNodeMember(actorPubkey);
-    if (!isAdmin && getBalance(targetPubkey).balance < 0) {
+    // An enterprise's or a project's line is its keepers' pledges, never the vouch (the treasury branch of
+    // getMemberTrustProfile returns before it reads vouch_credit): withdrawing one leaves its floor where it was, so its
+    // voucher is not held until it is back at 0 (an enterprise trades below 0 as a matter of course).
+    if (!isAdmin && !target.isTreasury && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
     }
     // profile_updated_at too, for the directory's delta (vouchMember).

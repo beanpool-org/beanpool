@@ -42,6 +42,8 @@ import * as tourStore from '../lib/tour-store';
 import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
+import { RADIUS_STORAGE_KEY, loadRadiusSettings } from '../lib/geo';
+import { nearRead } from '../lib/listings-near';
 import { resetAccountEpochForTest } from '../lib/account-epoch';
 import { clearInAnotherTab, signOutInAnotherTab, signOutOnChannelOnly } from '../lib/another-tab';
 import { chooseAndShowLanguage, resetLanguageForTests } from '../lib/language';
@@ -2388,5 +2390,71 @@ describe('Save this search to Home from the Market: the saved search\'s dialog o
         expect(await screen.findByTestId('home-save-search-note')).toHaveTextContent('Home holds 5 saved searches. Remove one, then save "eggs" again.');
         expect(screen.queryByTestId('home-settings-dialog')).toBeNull();
         expect(posts(node.log)).toBe(0);
+    });
+});
+
+describe("the Distance setting's centre goes to /api/home only as precisely as Home measures from it (N5, review of #2363)", () => {
+    // The centre a member picked in the Market's Distance, as this browser keeps it (lib/geo saveRadiusSettings).
+    const pick = (lat: number, lng: number, radiusKm: number) =>
+        localStorage.setItem(RADIUS_STORAGE_KEY, JSON.stringify({ lat, lng, radiusKm, label: `${radiusKm}km radius` }));
+    const sent = (n: number) => { const p = vi.mocked(api.getHome).mock.calls[n][0]!; return [p.lat, p.lng]; };
+    const search = (km: number) => ({ id: 'search-k7mq', type: 'search', settings: { q: 'eggs', kind: 'any', km } });
+    /** This browser's copy of Home, with `layout` as its list. */
+    const keptHere = (layout: ReturnType<typeof v2>) =>
+        writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: layout as never }), layout: layout as never, layoutUnsaved: false, savedAt: 1 });
+
+    it.each([
+        [10, [-28.61, 153.6]],
+        [5, [-28.612, 153.599]],
+        [0.5, [-28.6123, 153.5988]],
+    ])('a %s km setting: the centre goes as the Market sends it, never its nine decimals', async (radiusKm, want) => {
+        pick(-28.612345678, 153.598765432, radiusKm);
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+        expect(sent(0)).toEqual(want);
+        // The Market's and the Map's own rule (lib/listings-near nearRead), not a second one.
+        const market = nearRead({ nearbyListings: { radiusKm: 250 }, setting: loadRadiusSettings(), area: null, visitor: false })!;
+        expect(sent(0)).toEqual([market.lat, market.lng]);
+    });
+
+    it('a centre picked past the date line goes as a longitude the node takes (the home route refuses one past 180)', async () => {
+        pick(-21.2, 184.8, 10);
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+        expect(sent(0)).toEqual([-21.2, -175.2]);
+    });
+
+    it('the list kept here holds a 1 km saved search: the first read goes as precisely as that search needs', async () => {
+        pick(-28.612345678, 153.598765432, 10);
+        const layout = v2(['market'], AT, [search(1)]);
+        await keptHere(layout);
+        nodeKeeping(answer(), layout);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(api.getHome).toHaveBeenCalled());
+        expect(sent(0)).toEqual([-28.612, 153.599]);
+    });
+
+    it('a saved search no closer than the setting changes nothing', async () => {
+        pick(-28.612345678, 153.598765432, 10);
+        const layout = v2(['market'], AT, [search(25)]);
+        await keptHere(layout);
+        nodeKeeping(answer(), layout);
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(api.getHome).toHaveBeenCalled());
+        expect(sent(0)).toEqual([-28.61, 153.6]);
+    });
+
+    it('no list known yet: the first read goes by the setting; the answer holds a 1 km saved search, so one more read goes as precisely as it needs', async () => {
+        pick(-28.612345678, 153.598765432, 10);
+        nodeKeeping(answer(), v2(['market'], AT, [search(1)]));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-community');
+        expect(sent(0)).toEqual([-28.61, 153.6]);
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        expect(sent(1)).toEqual([-28.612, 153.599]);
+        await pause(100);
+        expect(api.getHome).toHaveBeenCalledTimes(2);
     });
 });

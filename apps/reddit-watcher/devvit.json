@@ -20,14 +20,12 @@
         "type": "string",
         "label": "ntfy topic URL (https://ntfy.sh/<topic>)",
         "helpText": "Where the notifications go. The topic name is its password: set it with `npx devvit settings set ntfyUrl`, never in a file.",
-        "defaultValue": "",
         "isSecret": true
       },
       "ntfyToken": {
         "type": "string",
         "label": "ntfy access token (optional)",
         "helpText": "Only if the topic needs one: sent as Authorization: Bearer.",
-        "defaultValue": "",
         "isSecret": true
       }
     }

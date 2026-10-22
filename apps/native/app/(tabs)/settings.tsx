@@ -2821,7 +2821,7 @@ export default function SettingsScreen() {
                                         style={[styles.input, { textAlign: 'center', fontWeight: 'bold' }]}
                                         value={seedConfirm}
                                         onChangeText={setSeedConfirm}
-                                        placeholder={t("CONFIRM")}
+                                        placeholder="CONFIRM"
                                         placeholderTextColor={colors.text.secondary}
                                         autoCapitalize="characters"
                                         autoCorrect={false}
@@ -3019,7 +3019,7 @@ export default function SettingsScreen() {
                                 style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.text.heading, borderColor: colors.border.default }]}
                                 value={wipeConfirm}
                                 onChangeText={setWipeConfirm}
-                                placeholder={t("WIPE")}
+                                placeholder="WIPE"
                                 placeholderTextColor={colors.text.secondary}
                                 autoCapitalize="characters"
                                 autoCorrect={false}
@@ -3134,7 +3134,7 @@ export default function SettingsScreen() {
                                     style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.feedback.danger.fg, borderColor: colors.feedback.danger.border }]}
                                     value={purgeConfirm}
                                     onChangeText={setPurgeConfirm}
-                                    placeholder={t("DELETE")}
+                                    placeholder="DELETE"
                                     placeholderTextColor={colors.text.secondary}
                                     autoCapitalize="none"
                                     autoCorrect={false}

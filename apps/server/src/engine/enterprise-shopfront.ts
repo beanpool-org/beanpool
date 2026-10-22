@@ -15,11 +15,12 @@
  *   roles (§5). A category is one of the listings the reader may list with `author=`, never more (getPosts as that
  *   reader), and only of a listing for everyone here, never one for a group or one person.
  *
- * The refusals are sentences with a code, in the words of the shop's (engine/shops.ts): the apps show the sentence.
+ * The refusals are sentences with a code, each marked with word('…') so the server's catalog (apps/server/words) holds it;
+ * a node writes them in English (core words.test N11), and the apps show the sentence.
  */
 import {
     ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage,
-    tierForCredit, type TierName,
+    tierForCredit, word, type TierName,
 } from '@beanpool/core';
 import { getAverageRating, getMemberTrustProfile, getPosts, passesReadGate, setMemberPhoto } from '@beanpool/engine';
 import { db } from '../db/db.js';
@@ -37,14 +38,14 @@ export class EnterpriseFaceRefusal extends Error {
     }
 }
 
-export const FACE_LEAD_ONLY = "Only the lead keeper can change the enterprise's name or what it is for.";
-export const FACE_NAME_TOO_SHORT = "An enterprise's name needs at least 2 characters.";
-export const FACE_NAME_TAKEN = 'That name is already taken here. Pick another.';
-export const FACE_PURPOSE_REQUIRED = 'Say in a line what the enterprise is for.';
+export const FACE_LEAD_ONLY = word("Only the lead keeper can change the enterprise's name or what it is for.");
+export const FACE_NAME_TOO_SHORT = word("An enterprise's name needs at least 2 characters.");
+export const FACE_NAME_TAKEN = word('That name is already taken here. Pick another.');
+export const FACE_PURPOSE_REQUIRED = word('Say in a line what the enterprise is for.');
 export const FACE_ABOUT_TOO_LONG = textTooLongMessage("An enterprise's About", ENTERPRISE_ABOUT_LIMIT);
-export const FACE_LOGO_REQUIRED = 'An enterprise keeps a picture. Send a new one to change it.';
-export const FACE_NOTHING = 'Send a new name, purpose, About or picture to change.';
-export const FACE_NOT_TEXT = 'The name, what it is for and About must each be text.';
+export const FACE_LOGO_REQUIRED = word('An enterprise keeps a picture. Send a new one to change it.');
+export const FACE_NOTHING = word('Send a new name, purpose, About or picture to change.');
+export const FACE_NOT_TEXT = word('The name, what it is for and About must each be text.');
 
 /** What a PUT may change. Every field is optional; at least one must be sent. */
 export interface FaceChanges {

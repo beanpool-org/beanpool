@@ -35,7 +35,7 @@
 import crypto from 'node:crypto';
 import {
     isShopKind, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, SHOP_NAME_LIMIT, SHOP_BLURB_LIMIT, SHOP_HOW_TO_DEAL_LIMIT,
-    SHOP_BACK_ON_MAX_DAYS, SHOP_FEATURED_MAX, type ShopCounts, type TextLimit,
+    SHOP_BACK_ON_MAX_DAYS, SHOP_FEATURED_MAX, word, type ShopCounts, type TextLimit,
 } from '@beanpool/core';
 import { getPosts, type MarketplacePost } from '@beanpool/engine';
 import { db, writeTombstone } from '../db/db.js';
@@ -366,11 +366,13 @@ export function dropShopOf(owner: string, now: number = Date.now()): string | nu
 
 // ── Featured ────────────────────────────────────────────────────────────────────────────────────
 
-export const FEATURE_NOT_YOURS = "That listing isn't yours to feature.";
-export const FEATURE_OFFERS_ONLY = 'Only an Offer can be featured in a shop.';
-export const FEATURE_NOT_IN_SHOP = 'Put this Offer in the shop first, then feature it.';
-export const FEATURE_ENDED = "This Offer has ended, so it can't be featured.";
-export const FEATURE_SHELF_FULL = 'Six is the shelf; un-feature one first.';
+// Featured's refusals are marked with word('…') so the server's catalog (apps/server/words) holds them; a node writes them
+// in English (core words.test N11). The flag's names the field, a developer's words, as SHOP_PAUSED_NOT_A_FLAG's.
+export const FEATURE_NOT_YOURS = word("That listing isn't yours to feature.");
+export const FEATURE_OFFERS_ONLY = word('Only an Offer can be featured in a shop.');
+export const FEATURE_NOT_IN_SHOP = word('Put this Offer in the shop first, then feature it.');
+export const FEATURE_ENDED = word("This Offer has ended, so it can't be featured.");
+export const FEATURE_SHELF_FULL = word('Six is the shelf; un-feature one first.');
 export const FEATURE_NOT_A_FLAG = 'featured must be true or false.';
 
 /**

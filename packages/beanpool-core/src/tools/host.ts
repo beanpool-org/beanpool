@@ -1,7 +1,7 @@
 /**
  * The host: the only door from a tool to the app (scratch/tools/DESIGN-tool-template-fable.md §1.4). These are its
  * types, shared by the phone's and the web's hosts (T0.2, T0.3), and the one rule both use to narrow it: a tool is given
- * the base (owner, node, its document, navigation, the time) and exactly the functions its manifest's permissions grant.
+ * the base (owner, node, its document, navigation and back, the time) and exactly the functions its manifest's permissions grant.
  * An undeclared function is absent at runtime ({@link narrowHost}) and a type error at build ({@link ToolHost}).
  *
  * The draft shapes carry what the composers take today; a field a server slice adds (lendable, shop, availableFrom) is
@@ -43,12 +43,23 @@ export interface ToolEventDraft {
     description?: string;
     startsAt?: string;
 }
-/** One of the owner's deals on a post the tool listed. */
+/** One of the owner's deals on a post the tool listed: the owner is its seller or lender, never its buyer. */
 export interface ToolDealSummary {
     postId: string;
     transactionId: string;
+    /** The deal's own status: 'requested' (asked, nothing held), 'pending' (agreed, the thing out), 'completed', 'cancelled', 'rejected'. */
     status: string;
+    /** When it last changed as the app knows it: a pending deal's hand-over, a completed one's end, else when it was asked. */
     updatedAt: string;
+    /** A loan that is out: when it is due back (@beanpool/core lendBackAroundOf), when the app knows. A date, never a name. */
+    backAround?: string;
+}
+/** One of the owner's own Offers the app holds (live, in a deal, or paused): what a tool may link a record of its to. */
+export interface ToolOwnOffer {
+    id: string;
+    /** As the owner wrote it. */
+    title: string;
+    status: ToolPostStatus;
 }
 export interface ToolPriceHint {
     credits: number;
@@ -64,6 +75,8 @@ export interface ToolHostBase<D> {
     doc: { get(): D; set(next: D): Promise<void> };
     /** Within the tool; back is the host's. */
     navigate(screen: string, params?: Record<string, string>): void;
+    /** Back, as the header's ← goes: what a form does once it is saved (the screen it was opened from, else out of the tool). */
+    back(): void;
     now(): number;
 }
 
@@ -77,7 +90,12 @@ export interface ToolHostGrants {
     eventDoor: (draft: ToolEventDraft) => void;
     deals: () => Promise<ToolDealSummary[]>;
     pricingGuide: (category: string, words: string) => Promise<ToolPriceHint | null>;
-    posts: { pause(id: string): Promise<void>; resume(id: string): Promise<void>; status(id: string): Promise<ToolPostStatus> };
+    /**
+     * The owner's own Offers only: pause and resume one, ask its status ('gone' for one that isn't the owner's), and list
+     * them (`mine`), so a tool can link a record to the Offer the member posted from its draft (the composer posts it;
+     * nothing tells the tool its id).
+     */
+    posts: { pause(id: string): Promise<void>; resume(id: string): Promise<void>; status(id: string): Promise<ToolPostStatus>; mine(): Promise<ToolOwnOffer[]> };
     /** Read-only here: the toggle is the host's Settings row. */
     nodeCopy: { on: boolean };
 }
@@ -105,7 +123,7 @@ type Granted<P extends ToolPermission> = Exclude<(typeof TOOL_PERMISSION_GRANTS)
 /** The host a tool with permissions `P` is given: the base and its grants, nothing else. */
 export type ToolHost<D, P extends ToolPermission = never> = ToolHostBase<D> & Pick<ToolHostGrants, Granted<P>>;
 
-const BASE_KEYS: readonly (keyof ToolHostBase<unknown>)[] = ['owner', 'node', 'doc', 'navigate', 'now'];
+const BASE_KEYS: readonly (keyof ToolHostBase<unknown>)[] = ['owner', 'node', 'doc', 'navigate', 'back', 'now'];
 
 /**
  * The host given to a tool: from the app's whole host, the base and only what `permissions` grant. Every other key is

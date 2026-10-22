@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
+    LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, t, type ShowcaseFeature,
 } from '@beanpool/core';
 import { StartCommunityScreen } from './StartCommunityScreen';
 import { useDialogFocus } from './dialog-focus';
@@ -37,7 +37,7 @@ export function LocalCommunityPill() {
             data-testid="local-community-pill"
             className={`${TONE} inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-black uppercase tracking-wide`}
         >
-            <span aria-hidden="true">{LOCAL_COMMUNITY_EMOJI}</span>{LOCAL_COMMUNITY_MARK}
+            <span aria-hidden="true">{LOCAL_COMMUNITY_EMOJI}</span><span>{t('Local community')}</span>
         </span>
     );
 }
@@ -79,30 +79,30 @@ export function LocalCommunitySheet({
                         ref={closeRef}
                         type="button"
                         onClick={onClose}
-                        aria-label="Close"
+                        aria-label={t('Close')}
                         className="-mr-2 -mt-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800 dark:hover:text-nature-200"
                     >✕</button>
                 </div>
-                <h2 id="local-community-sheet-title" className="mb-2 text-lg font-extrabold text-nature-900 dark:text-nature-50">{LOCAL_COMMUNITY_SHEET.title}</h2>
-                <p className="mb-2 text-sm text-nature-700 dark:text-nature-200">{LOCAL_COMMUNITY_SHEET.features[feature]}</p>
-                <p className="mb-4 text-sm text-nature-600 dark:text-nature-300">{LOCAL_COMMUNITY_SHEET.common}</p>
+                <h2 id="local-community-sheet-title" className="mb-2 text-lg font-extrabold text-nature-900 dark:text-nature-50">{t(LOCAL_COMMUNITY_SHEET.title)}</h2>
+                <p className="mb-2 text-sm text-nature-700 dark:text-nature-200">{t(LOCAL_COMMUNITY_SHEET.features[feature])}</p>
+                <p className="mb-4 text-sm text-nature-600 dark:text-nature-300">{t(LOCAL_COMMUNITY_SHEET.common)}</p>
                 <div className="flex flex-col gap-2">
                     <button
                         type="button"
                         onClick={onStart}
                         data-testid="local-community-start"
                         className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-3 text-center font-bold text-bp-cta-on"
-                    >{LOCAL_COMMUNITY_SHEET.start}</button>
+                    >{t(LOCAL_COMMUNITY_SHEET.start)}</button>
                     {onNearYou && (
                         <button type="button" onClick={go(onNearYou)} data-testid="local-community-near-you"
                             className="w-full rounded-xl border border-nature-300 dark:border-nature-600 px-4 py-3 font-bold text-nature-800 dark:text-nature-100 hover:bg-nature-50 dark:hover:bg-nature-800">
-                            {LOCAL_COMMUNITY_SHEET.nearYou}
+                            {t(LOCAL_COMMUNITY_SHEET.nearYou)}
                         </button>
                     )}
                     {onGuide && (
                         <button type="button" onClick={go(() => onGuide(LOCAL_COMMUNITY_SHEET.guide[feature]))} data-testid="local-community-guide"
                             className="w-full rounded-xl px-4 py-3 font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/50">
-                            {LOCAL_COMMUNITY_SHEET.howItWorks} ›
+                            <span>{t(LOCAL_COMMUNITY_SHEET.howItWorks)}</span> <span aria-hidden="true">›</span>
                         </button>
                     )}
                 </div>
@@ -174,27 +174,27 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
         <WithSheet feature={feature} ways={ways}>
             {(open, start) => collapsed ? (
                 <div className={`${TONE} mb-4 flex items-center gap-1 rounded-xl pl-3 text-sm font-bold`} data-testid="local-community-strip-collapsed">
-                    <button type="button" onClick={open} className="min-h-[44px] min-w-0 flex-1 py-2 text-left">{LOCAL_COMMUNITY_STRIP.collapsed}</button>
-                    <button type="button" onClick={() => collapse(false)} aria-label="Show the whole note" data-testid="local-community-strip-open"
+                    <button type="button" onClick={open} className="min-h-[44px] min-w-0 flex-1 py-2 text-left">{t(LOCAL_COMMUNITY_STRIP.collapsed)}</button>
+                    <button type="button" onClick={() => collapse(false)} aria-label={t('Show the whole note')} data-testid="local-community-strip-open"
                         className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 rounded-lg">▾</button>
                 </div>
             ) : (
-                <section className={`${TONE} mb-4 rounded-2xl p-4`} data-testid="local-community-strip" aria-label={LOCAL_COMMUNITY_MARK}>
+                <section className={`${TONE} mb-4 rounded-2xl p-4`} data-testid="local-community-strip" aria-label={t('Local community')}>
                     <div className="mb-2 flex items-start justify-between gap-2">
                         <LocalCommunityPill />
-                        <button type="button" onClick={() => collapse(true)} aria-label="Make this note one line" data-testid="local-community-strip-close"
+                        <button type="button" onClick={() => collapse(true)} aria-label={t('Make this note one line')} data-testid="local-community-strip-close"
                             className="-mr-3 -mt-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 rounded-lg">✕</button>
                     </div>
                     <p className="text-sm text-nature-800 dark:text-nature-100">
-                        <strong>{LOCAL_COMMUNITY_STRIP.lead[feature]}</strong> {LOCAL_COMMUNITY_STRIP.body[feature]}
+                        <strong>{t(LOCAL_COMMUNITY_STRIP.lead[feature])}</strong> <span>{t(LOCAL_COMMUNITY_STRIP.body[feature])}</span>
                     </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <button type="button" onClick={start} data-testid="local-community-strip-start"
-                            className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-2.5 font-bold text-bp-cta-on">{LOCAL_COMMUNITY_SHEET.start}</button>
+                            className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-2.5 font-bold text-bp-cta-on">{t(LOCAL_COMMUNITY_SHEET.start)}</button>
                         {ways.onNearYou && (
                             <button type="button" onClick={ways.onNearYou}
                                 className="w-full rounded-xl border border-blue-300 dark:border-blue-700 bg-white/70 dark:bg-nature-900/60 px-4 py-2.5 font-bold text-nature-800 dark:text-nature-100">
-                                {LOCAL_COMMUNITY_SHEET.nearYou}
+                                {t(LOCAL_COMMUNITY_SHEET.nearYou)}
                             </button>
                         )}
                     </div>

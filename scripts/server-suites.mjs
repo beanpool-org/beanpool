@@ -339,6 +339,7 @@ export const SUITES = [
     'test-trust-value-curve',
     'test-trust-tiers-one-source',
     'test-vouch-covenant',
+    'test-enterprise-not-a-member-profile',
     'test-wash-sybil-defense',
     'test-wash-background',
     'test-apple-probe',
@@ -572,6 +573,10 @@ export const VARIANTS = [
     { name: 'test-heavy-read-cap', tag: '1c-roster', label: 'version moves (1c), a roster', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'roster' } },
     // Its section 1d (more readers who stop reading than the budget lets in, plain and gzip) on its own too (#1524).
     { name: 'test-heavy-read-cap', tag: '1d', label: 'readers who stop reading at the bound (1d)', env: { HEAVY_READ_CAP_ONLY: '1d' } },
+    // test-restore-points' section S2b (another community's file, a child server per row) in two halves of its own: with it
+    // the file took 4m31s-5m00s on CI's slower runners and passed the 300 s per run four times in 25 runs (22 Oct 2026).
+    { name: 'test-restore-points', tag: 's2b-a-i', label: 'S2b rows a and i: each credential, the global profile', env: { RESTORE_POINTS_ONLY: 's2b-a-i' } },
+    { name: 'test-restore-points', tag: 's2b-b-h', label: 'S2b rows b to h', env: { RESTORE_POINTS_ONLY: 's2b-b-h' } },
     // The /api gzip switched off by its operator (API_GZIP=off): answers as the routes made them, no Vary of its own.
     { name: 'test-api-compression', tag: 'off', label: 'API_GZIP=off', env: { API_GZIP: 'off' } },
     // The two settlement ROUTES with settlement ENABLED. The plain run covers the shipped state (off, the kill switch

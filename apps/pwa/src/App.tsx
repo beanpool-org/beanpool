@@ -798,7 +798,7 @@ export function App() {
                     >
                         <img src="/bean.png" alt={t('BeanPool Icon')} className="w-9 h-9 object-contain drop-shadow-sm" />
                         <div className="flex flex-col">
-                            <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
+                            <span className="font-extrabold text-xl tracking-tight text-rainbow">{t('BeanPool')}</span>
                             <span
                                 className="text-[10px] font-bold text-amber-700 dark:text-amber-500 tracking-wider"
                                 aria-label={t('Version {version}', { version: displayVersion })}
@@ -937,7 +937,7 @@ export function App() {
                                 onClick={toggleCommunityStatus}
                             >
                                 <img src="/bean.png" alt={t('BeanPool Icon')} style={{ width: '40px', height: '40px', objectFit: 'contain' }} className="drop-shadow-sm" />
-                                <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">BeanPool</span>
+                                <span className="font-extrabold text-[1.6rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">{t('BeanPool')}</span>
                                 <span
                                     className="absolute -right-6 bottom-0.5 text-[10px] font-bold text-amber-500 tracking-wider whitespace-nowrap"
                                     aria-label={t('Version {version}', { version: displayVersion })}
@@ -1157,6 +1157,10 @@ export function App() {
                             identity={identity}
                             pubkey={openProfilePubkey}
                             onBack={() => setOpenProfilePubkey(null)}
+                            onOpenTreasury={(pubkey) => {
+                                setOpenProfilePubkey(null);
+                                setOpenTreasuryPubkey(pubkey);
+                            }}
                             onMessage={(pubkey) => {
                                 setOpenProfilePubkey(null);
                                 setOpenTreasuryPubkey(null);

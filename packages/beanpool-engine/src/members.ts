@@ -111,6 +111,14 @@ export interface MemberProfile {
     elderVouchedBy?: string | null;
     elderVouchedByCallsign?: string | null;
     archetype?: string | null;
+    /**
+     * Present, and true, only on an enterprise's or a project's profile: the key is kept by its keepers, not a person.
+     * Both apps open the enterprise page for it instead of the member Trust Profile (every door that opens a profile by
+     * key; scratch/tools/DESIGN-shops-round3-enterprise-shopfront-fable.md §1.1, slice E0). A member's profile has no
+     * such key at all, so it reads exactly as it did. Nor has the node's own BeanPool or Daily Pulse account, treasury
+     * rows that are no enterprise: the server takes it off theirs (apps/server state-engine.ts nodeOwnAccountKeys).
+     */
+    isTreasury?: true;
 }
 
 /** One member in the invite tree any member can read — who invited whom, never the invite code itself. */
@@ -185,6 +193,7 @@ export function rowToProfile(row: any): MemberProfile {
         elderVouchedBy: row.elder_vouched_by || null,
         elderVouchedByCallsign: row.elder_vouched_by_callsign || null,
         archetype: row.archetype || null,
+        ...(row.is_treasury ? { isTreasury: true as const } : {}),
     };
 }
 

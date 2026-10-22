@@ -587,6 +587,11 @@ export interface MemberProfile {
     elderVouchedBy?: string | null;
     elderVouchedByCallsign?: string | null;
     archetype?: string | null;
+    /**
+     * True only on an enterprise's or a project's profile (the node's MemberProfile.isTreasury, slice E0): the key is
+     * kept by its keepers, not a person, and PublicProfilePage hands it to the enterprise page. Absent on a member's.
+     */
+    isTreasury?: true;
 }
 
 export async function updateMemberProfile(publicKey: string, update: {

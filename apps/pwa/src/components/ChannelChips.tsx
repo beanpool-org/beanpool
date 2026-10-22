@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { isWebUrl, platformMeta, type PublicCreatorChannel } from '@beanpool/core';
+import { isWebUrl, platformMeta, t, type PublicCreatorChannel } from '@beanpool/core';
 
 interface Props {
     channels?: PublicCreatorChannel[] | null;
@@ -23,7 +23,7 @@ export function ChannelChips({ channels }: Props) {
     }
 
     return (
-        <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-md" role="list" aria-label="External channels">
+        <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-md" role="list" aria-label={t('External channels')}>
             {channels.map((channel) => {
                 const meta = platformMeta(channel.platform);
                 const hasHandle = Boolean(channel.handle && channel.handle.trim());
@@ -58,8 +58,8 @@ export function ChannelChips({ channels }: Props) {
                         {channel.isVerified ? (
                             <span
                                 className="w-3.5 h-3.5 rounded-full bg-bp-commit-fill text-bp-commit-on flex items-center justify-center text-[9px] font-black leading-none ml-0.5"
-                                title="Verified account"
-                                aria-label="Verified account"
+                                title={t('Verified account')}
+                                aria-label={t('Verified account')}
                             >
                                 ✓
                             </span>

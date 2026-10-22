@@ -18,6 +18,7 @@ import { useScreenCovered } from '../lib/screen-cover';
 import { Sentence } from './Sentence';
 
 const ON_BRAND = 'var(--bp-commit-on)';
+const SLIDE_UP_CSS = '@keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }';
 
 // Detect if running as installed PWA (standalone mode)
 function isInstalled(): boolean {
@@ -128,12 +129,7 @@ export function InstallPrompt({ hidden = false }: { hidden?: boolean } = {}) {
                 animation: 'slideUp 0.4s ease-out',
             }}
         >
-            <style>{`
-                @keyframes slideUp {
-                    from { transform: translateY(100%); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
-                }
-            `}</style>
+            <style>{SLIDE_UP_CSS}</style>
 
             {/* Close button */}
             <button

@@ -11,6 +11,7 @@
 
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { BoldWords } from '../components/BoldWords';
+import { Sentence } from '../components/Sentence';
 import { isAppsGlobal, phoneLaterLines } from '../lib/global-entry';
 import { webAppAddress, webAppHost } from '../lib/former-address';
 import { useLanguage } from '../lib/useLanguage';
@@ -3031,8 +3032,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     )}
                 </div>
                 <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '1.25rem', lineHeight: 1.4, opacity: 0.8 }}>
-                    {/* The last sentence has two links inside it and stays English until such a sentence can be one string. */}
-                    <>{t('BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance.')}</> By continuing, you agree to our <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Terms of Service</a> and <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>Privacy Policy</a>.
+                    <span>{t('BeanPool is a decentralized, peer-to-peer network. You are responsible for your own local tax compliance.')}</span>{' '}
+                    <Sentence
+                        text={t('By continuing, you agree to our {terms} and {privacy}.')}
+                        parts={{
+                            terms: <a href="https://beanpool.org/terms" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>{t('Terms of Service')}</a>,
+                            privacy: <a href="https://beanpool.org/privacy" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--legal-link, #3b82f6)', textDecoration: 'underline' }}>{t('Privacy Policy')}</a>,
+                        }}
+                    />
                 </p>
             </div>
         </div>

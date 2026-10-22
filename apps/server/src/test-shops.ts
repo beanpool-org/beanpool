@@ -406,6 +406,14 @@ async function main(): Promise<void> {
         `nothing goes in while it is, and one of its Offers can't be put back up alone (${show(addWhilePaused)}; ${show(resumeOne)})`);
     const badBack = await call('PUT', dave, MINE, { backOn: '2001-01-01' });
     assert(badBack.status === 400, `a back-on date in the past is refused (${show(badBack)})`);
+    // Today is the member's, on any clock: at 03:00 UTC it is still yesterday in Hawaii, at 20:00 UTC already tomorrow in Kiribati.
+    const backOnAt = (day: string, at: string): string => {
+        try { shopsModule.changeShop(dave.pk, { backOn: day }, { enterprise: false }, Date.parse(at)); return 'taken'; } catch (e: any) { return e?.code ?? String(e); }
+    };
+    const clocks = [backOnAt('2030-06-14', '2030-06-15T03:00:00.000Z'), backOnAt('2030-06-13', '2030-06-15T03:00:00.000Z'),
+        backOnAt('2031-06-17', '2030-06-15T20:00:00.000Z'), backOnAt('2031-06-18', '2030-06-15T20:00:00.000Z')];
+    assert(same(clocks, ['taken', 'shop_back_on_refused', 'taken', 'shop_back_on_refused']),
+        `a back-on date runs from today to a year ahead on the member's clock, west or east of UTC (${clocks.join(', ')})`);
     const reopened = await call('PUT', dave, MINE, { paused: false });
     assert(reopened.status === 200 && reopened.body?.shop?.paused === false && reopened.body.shop.backOn === null
         && [drillId, ladderId, oldOfferId, hoseId].every(id => postRow(id)?.status === 'active') && postRow(tentId)?.status === 'paused'

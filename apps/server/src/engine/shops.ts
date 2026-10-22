@@ -190,14 +190,23 @@ function cleanText(raw: unknown, limit: TextLimit, what: string, notText: string
     return v;
 }
 
-/** A back-on day as stored: undefined to leave it, null to clear it, else YYYY-MM-DD from today (UTC) to a year ahead. */
+/** How far the clocks furthest behind and ahead of UTC are (UTC−12, UTC+14). */
+const CLOCKS_BEHIND_MS = 12 * 3_600_000;
+const CLOCKS_AHEAD_MS = 14 * 3_600_000;
+
+/**
+ * A back-on day as stored: undefined to leave it, null to clear it, else YYYY-MM-DD from today to a year ahead. Today is
+ * the member's, on a clock the node doesn't know: from the date where the clocks are furthest behind to a year after the
+ * date where they are furthest ahead.
+ */
 function cleanBackOn(raw: unknown, now: number): string | null | undefined {
     if (raw === undefined) return undefined;
     if (raw === null || raw === '') return null;
     if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) throw new ShopRefusal(400, 'shop_back_on_refused', SHOP_BACK_ON_REFUSED);
     const day = Date.parse(`${raw}T00:00:00.000Z`);
-    const today = Date.parse(`${iso(now).slice(0, 10)}T00:00:00.000Z`);
-    if (!Number.isFinite(day) || iso(day).slice(0, 10) !== raw || day < today || day > today + SHOP_BACK_ON_MAX_DAYS * 86_400_000) {
+    const first = Date.parse(`${iso(now - CLOCKS_BEHIND_MS).slice(0, 10)}T00:00:00.000Z`);
+    const last = Date.parse(`${iso(now + CLOCKS_AHEAD_MS).slice(0, 10)}T00:00:00.000Z`) + SHOP_BACK_ON_MAX_DAYS * 86_400_000;
+    if (!Number.isFinite(day) || iso(day).slice(0, 10) !== raw || day < first || day > last) {
         throw new ShopRefusal(400, 'shop_back_on_refused', SHOP_BACK_ON_REFUSED);
     }
     return raw;

@@ -22,7 +22,7 @@ import { signedDelete, signedPost } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
 import {
-    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, placeWatchLimitLine, t, tn,
+    FIND_COMMUNITY_WORDS, PLACE_WATCH_LIMIT_CODE, communitiesNear, findCommunityState, formatCount, formatNumber, knownCommunityCount, placeWatchLimitLine, roundPointToArea, t, tn,
 } from '@beanpool/core';
 
 /** A community's address as the phone will use it (utils/community-origin.ts): kept there so Home's pure rules share it. */
@@ -146,8 +146,9 @@ export function readGlobalHome(body: unknown): GlobalHome | null {
 
 function pointQuery(point: Point | null | undefined): string[] {
     if (!point || !finite(point.lat) || !finite(point.lng)) return [];
-    // Four decimals (~11 m) is plenty for "near"; the node rounds what it keeps anyway.
-    return [`lat=${point.lat.toFixed(4)}`, `lng=${point.lng.toFixed(4)}`];
+    // Two decimals (about a kilometre), as Home and the Market send theirs (home-store.ts, market-global.ts): the node
+    // orders communities in 25 km bands and counts posts within 50 km. A query string is what proxies and CDNs log (N5).
+    return [`lat=${point.lat.toFixed(2)}`, `lng=${point.lng.toFixed(2)}`];
 }
 
 async function errorText(res: Response): Promise<string | null> {
@@ -217,10 +218,13 @@ export function fetchCommunities(
     }, null, base);
 }
 
-/** "Tell me when a community starts near here": the node keeps the ~10 km cell, never the exact point. */
+/**
+ * "Tell me when a community starts near here": the node keeps the ~10 km cell, never the exact point, so that cell is all
+ * the phone sends (@beanpool/core roundPointToArea, the node's own rule).
+ */
 export async function watchPlace(identity: BeanPoolIdentity, point: Point, base: string = GLOBAL_NODE_URL): Promise<Fetched<PlaceWatch>> {
     try {
-        const res = await signedPost(base, '/api/global/watches', { lat: point.lat, lng: point.lng }, identity);
+        const res = await signedPost(base, '/api/global/watches', roundPointToArea(point.lat, point.lng), identity);
         if (res.status === 404) return { ok: false, kind: 'unavailable', message: (await errorText(res)) ?? DIRECTORY_MESSAGES.unavailable };
         if (!res.ok) {
             const body = await res.json().catch(() => null) as { error?: unknown; code?: unknown; limit?: unknown } | null;

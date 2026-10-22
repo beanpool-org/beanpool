@@ -17,7 +17,10 @@
  *      sends it, never cleared; the node's own photo address sent back changes nothing; each field not text refused; a
  *      PUT naming nothing refused; profile_updated_at stamped, and a PUT that changes nothing stamps nothing
  *   3. the shop and the chat follow a rename: GET /api/shops/:id and the keepers' GET /api/treasury/:t/shop say the new
- *      name, and so does its chat opened before (GET /api/treasury/:t/thread, the conversation both apps title it by)
+ *      name, and so does its chat opened before (GET /api/treasury/:t/thread, the conversation both apps title it by);
+ *      a crowdfund and a Commons proposal start with no About (their description is their purpose), their own edits
+ *      (POST /api/crowdfund/projects/update, /api/commons/projects/update) leave the keepers' About as written, and
+ *      their chat follows the rename those edits make
  *   4. the detail (GET /api/treasury/:t): `since` and `about`; each keeper's tier, rating, trades and the categories of
  *      their own live Offers for everyone here (never a paused one, a Need, one for one person, an ended one); the
  *      enterprise's categories, the union with its own; every figure as the engine has it. Members only: unsigned, a key
@@ -302,6 +305,35 @@ async function main(): Promise<void> {
     assert(chatBefore.status === 200 && chatBefore.body?.conversation?.name === 'LOU MENDS SENTINEL'
         && chatAfter.status === 200 && chatAfter.body?.conversation?.name === 'Lou Mended Sentinel' && chatRow?.name === 'Lou Mended Sentinel',
         `its chat, opened before, says the new name: the thread both apps title it by (${chatBefore.body?.conversation?.name} → ${chatAfter.body?.conversation?.name}; row ${chatRow?.name})`);
+
+    // The older writers of an enterprise's name and purpose: a crowdfund's create and edit (POST /api/crowdfund/projects,
+    // …/update) and a Commons proposal's (POST /api/commons/projects, …/update). What it is for is its purpose, so its
+    // About starts empty; an edit leaves the keepers' About as they wrote it, and its chat follows the rename.
+    const story = `We mend what breaks. ${'Tyres, chains and spokes. '.repeat(40)}`.trim(); // past About's 600, within a purpose
+    const cfMade = await call('POST', lou, '/api/crowdfund/projects', { creatorPubkey: lou.pk, title: 'Lou Wheels Sentinel', description: story, goalAmount: 500 });
+    const proposed = await call('POST', lou, '/api/commons/projects', { proposerPubkey: lou.pk, title: 'Lou Commons Sentinel', description: 'A shared tool shed for the street.', requestedAmount: 50 });
+    const cf: string = cfMade.body?.project?.id ?? '';
+    const cp: string = proposed.body?.project?.id ?? '';
+    if (!cf || !cp) throw new Error(`setup: Lou could not start a crowdfund and a Commons proposal: ${show(cfMade)} | ${show(proposed)}`);
+    const seeded = [await call('GET', max, `/api/treasury/${cf}`), await call('GET', max, `/api/treasury/${cp}`)];
+    assert(seeded.every(r => r.status === 200 && r.body?.about === null) && seeded[0].body?.purpose === story && faceOf(cf).bio === null && faceOf(cp).bio === null,
+        `a crowdfund and a Commons proposal start with no About: what it is for is its purpose, not its About too (${seeded.map(r => `${r.status} ${JSON.stringify(r.body?.about)?.slice(0, 40)}`).join(' | ')})`);
+    const ownAbout = "Our own About, in the keepers' words.";
+    const setAbout = [await call('PUT', lou, profilePath(cf), { about: ownAbout }), await call('PUT', lou, profilePath(cp), { about: ownAbout })];
+    const threadsBefore = [await call('GET', lou, `/api/treasury/${cf}/thread`), await call('GET', lou, `/api/treasury/${cp}/thread`)]; // opened under the names they have now
+    const cfEdit = await call('POST', lou, '/api/crowdfund/projects/update', { id: cf, creatorPubkey: lou.pk, title: 'Lou Spokes Sentinel', description: `${story} (edited)`, goalAmount: 500 });
+    const cpEdit = await call('POST', lou, '/api/commons/projects/update', { proposerPubkey: lou.pk, projectId: cp, title: 'Lou Shed Sentinel', description: 'A shared tool shed for two streets.', requestedAmount: 50 });
+    const edited = [await call('GET', max, `/api/treasury/${cf}`), await call('GET', max, `/api/treasury/${cp}`)];
+    assert(setAbout.every(r => r.status === 200) && cfEdit.status === 200 && cpEdit.status === 200
+        && faceOf(cf).purpose === `${story} (edited)` && faceOf(cp).purpose === 'A shared tool shed for two streets.'
+        && edited.every(r => r.status === 200 && r.body?.about === ownAbout) && faceOf(cf).bio === ownAbout && faceOf(cp).bio === ownAbout,
+        `an edit of the crowdfund or the proposal changes its purpose and leaves its About as its keepers wrote it (${[...setAbout, cfEdit, cpEdit].map(r => r.status).join(', ')}; ${edited.map(r => JSON.stringify(r.body?.about)?.slice(0, 40)).join(' | ')})`);
+    const threadsAfter = [await call('GET', lou, `/api/treasury/${cf}/thread`), await call('GET', lou, `/api/treasury/${cp}/thread`)];
+    const names = (rs: Res[]) => rs.map(r => r.body?.conversation?.name);
+    assert(JSON.stringify(names(threadsBefore)) === JSON.stringify(['Lou Wheels Sentinel', 'Lou Commons Sentinel'])
+        && JSON.stringify(names(threadsAfter)) === JSON.stringify([faceOf(cf).callsign, faceOf(cp).callsign])
+        && JSON.stringify(names(threadsAfter)) === JSON.stringify(['Lou Spokes Sentinel', 'Lou Shed Sentinel']),
+        `and its chat, opened before, follows that rename too (${names(threadsBefore).join(', ')} → ${names(threadsAfter).join(', ')})`);
 
     // ── 4. the detail ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. the detail: the shopfront\'s data, members only ──');

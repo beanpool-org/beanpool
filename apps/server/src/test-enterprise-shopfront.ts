@@ -16,7 +16,8 @@
  *      limit and never empty; the logo under the photo rule (a picture, never someone's URL), charged to the keeper who
  *      sends it, never cleared; the node's own photo address sent back changes nothing; each field not text refused; a
  *      PUT naming nothing refused; profile_updated_at stamped, and a PUT that changes nothing stamps nothing
- *   3. the shop follows a rename: GET /api/shops/:id and the keepers' GET /api/treasury/:t/shop say the new name
+ *   3. the shop and the chat follow a rename: GET /api/shops/:id and the keepers' GET /api/treasury/:t/shop say the new
+ *      name, and so does its chat opened before (GET /api/treasury/:t/thread, the conversation both apps title it by)
  *   4. the detail (GET /api/treasury/:t): `since` and `about`; each keeper's tier, rating, trades and the categories of
  *      their own live Offers for everyone here (never a paused one, a Need, one for one person, an ended one); the
  *      enterprise's categories, the union with its own; every figure as the engine has it. Members only: unsigned, a key
@@ -26,8 +27,10 @@
  *      enterprise that posted it; refused, writing nothing, to anyone else in one answer whether the listing is there or
  *      not; on a Need, an Offer in no shop and an ended one, in a sentence; six on the shelf, the seventh refused until
  *      one comes off, a paused one keeping its place; un-featured the same way; out of the shop or the shop closed, the
- *      stamp goes; a muted author can't feature and can un-feature; the stamp is the member's read's and not a visitor's
- *   6. a standby: a whole copy carries each listing's stamp; a delta carries a new name, About, purpose, logo and a stamp
+ *      stamp goes; a muted author can't feature and can un-feature; an enterprise suspended or wound up can neither, as
+ *      its shop routes refuse it (403 enterprise_closed, their words), while its keeper's own Offer stays theirs; the
+ *      stamp is the member's read's and not a visitor's
+ *   6. a standby: a whole copy carries each listing's stamp and the chat's new name; a delta carries a new name, About, purpose, logo and a stamp
  *      cleared, and the standby's copy of the enterprise's shop says the new name
  *
  * Local only: it talks to the server it starts on localhost, and to nothing else.
@@ -287,12 +290,18 @@ async function main(): Promise<void> {
     assert(same.status === 200 && JSON.stringify(faceOf(ent)) === stillStamp, 'a PUT that changes nothing stamps nothing');
 
     // ── 3. the shop follows a rename ────────────────────────────────────────────────────────────
-    console.log('\n── 3. the shop follows a rename ──');
+    console.log('\n── 3. the shop and the chat follow a rename ──');
+    const chatBefore = await call('GET', kit, `/api/treasury/${ent}/thread`); // opened under the name it has now
     await call('PUT', lou, profilePath(ent), { name: 'Lou Mended Sentinel' });
     const shopRead = await call('GET', max, `/api/shops/${entShop}`);
     const keeperRead = await call('GET', kit, `/api/treasury/${ent}/shop`);
     assert(shopRead.status === 200 && shopRead.body?.name === 'Lou Mended Sentinel' && keeperRead.status === 200 && keeperRead.body?.shop?.name === 'Lou Mended Sentinel',
         `a member's read of its shop and its keepers' say the new name (${show(shopRead)} | ${show(keeperRead)})`);
+    const chatAfter = await call('GET', kit, `/api/treasury/${ent}/thread`);
+    const chatRow = db.prepare('SELECT name FROM conversations WHERE id = ?').get(ent) as { name: string | null } | undefined;
+    assert(chatBefore.status === 200 && chatBefore.body?.conversation?.name === 'LOU MENDS SENTINEL'
+        && chatAfter.status === 200 && chatAfter.body?.conversation?.name === 'Lou Mended Sentinel' && chatRow?.name === 'Lou Mended Sentinel',
+        `its chat, opened before, says the new name: the thread both apps title it by (${chatBefore.body?.conversation?.name} → ${chatAfter.body?.conversation?.name}; row ${chatRow?.name})`);
 
     // ── 4. the detail ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. the detail: the shopfront\'s data, members only ──');
@@ -450,6 +459,41 @@ async function main(): Promise<void> {
     assert(mutedOn.status === 403 && mutedOn.body?.code === 'moderation_muted' && mutedOff.status === 200 && featuredAtOf(shelf[3]) === null,
         `a muted keeper can't feature one, and can take one off (${show(mutedOn)} | ${show(mutedOff)})`);
 
+    // An enterprise closed or wound up: Featured on its Offers follows its shop routes, by the same words and code; its
+    // keeper's own Offer in their own shop is theirs, and someone who keeps nothing hears only that it isn't theirs.
+    const otherShop = shopIdOf(other);
+    setMemberPhoto(db, other, png(60, 90, 120));
+    const otherOffer = async (title: string): Promise<string> => {
+        const r = await call('POST', ida, `/api/treasury/${other}/offer`, { category: 'tools', title, credits: 0, lat: MULLUM.lat, lng: MULLUM.lng, shopId: otherShop });
+        if (r.status !== 200 || !(r.body?.post?.id ?? r.body?.id)) throw new Error(`setup: Ida could not post ${title} for her enterprise: ${show(r)}`);
+        return r.body?.post?.id ?? r.body?.id;
+    };
+    const plane = await otherOffer('Plane');
+    const chisel = await otherOffer('Chisel');
+    const idaShop: string = (await call('PUT', ida, '/api/shops/mine', {})).body?.shop?.id ?? '';
+    const stool = await memberOffer(ida, 'home', 'Stool', { shopId: idaShop });
+    const planeOn = await call('PUT', ida, featurePath(plane), { featured: true });
+    if (planeOn.status !== 200) throw new Error(`setup: Ida could not feature Plane: ${show(planeOn)}`);
+    const planeAt = featuredAtOf(plane);
+    for (const status of ['suspended', 'completed']) {
+        db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, other);
+        const shopWrite = await call('PUT', ida, `/api/treasury/${other}/shop`, { blurb: 'Still here.' });
+        const on = await call('PUT', ida, featurePath(chisel), { featured: true });
+        const offR = await call('PUT', ida, featurePath(plane), { featured: false });
+        const notTheirs = await call('PUT', max, featurePath(chisel), { featured: true });
+        const ownOn = await call('PUT', ida, featurePath(stool), { featured: true });
+        const ownOff = await call('PUT', ida, featurePath(stool), { featured: false });
+        assert(sentence(shopWrite, 403, 'enterprise_closed') && sentence(on, 403, 'enterprise_closed') && sentence(offR, 403, 'enterprise_closed')
+            && on.body.error === shopWrite.body.error && offR.body.error === shopWrite.body.error
+            && featuredAtOf(chisel) === null && featuredAtOf(plane) === planeAt,
+            `${status}: its keeper can't feature or un-feature its Offers, as its shop routes say, and nothing changes (${show(on)} | ${show(offR)} | ${show(shopWrite)})`);
+        assert(sentence(notTheirs, 403, 'feature_not_yours') && notTheirs.text === notYours.text && ownOn.status === 200 && ownOff.status === 200,
+            `${status}: someone who keeps nothing hears only that it isn't theirs, and its keeper's own Offer is theirs to feature (${show(notTheirs)} | ${show(ownOn)})`);
+    }
+    db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(other);
+    const reopened = await call('PUT', ida, featurePath(plane), { featured: false });
+    assert(reopened.status === 200 && featuredAtOf(plane) === null, `open again, its keeper can (${show(reopened)})`);
+
     const outOfShop = await call('POST', max, '/api/marketplace/posts/update', { id: lamp, authorPublicKey: max.pk, shopId: null });
     assert(outOfShop.status === 200 && featuredAtOf(lamp) === null, 'taken out of its shop, it is featured no more');
     await call('POST', max, '/api/marketplace/posts/update', { id: lamp, authorPublicKey: max.pk, shopId: maxShop });
@@ -474,6 +518,10 @@ async function main(): Promise<void> {
     const exportedStamps = (whole.posts ?? []).filter((p: any) => p.featuredAt).map((p: any) => ({ id: p.id, featured_at: p.featuredAt }))
         .sort((a: any, b: any) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     assert(stamped.length >= 5 && JSON.stringify(exportedStamps) === JSON.stringify(stamped), `a whole copy carries each listing's stamp (${exportedStamps.length} of ${stamped.length})`);
+    // A rename moves no stamp on the chat and a delta picks conversations by when they began, so its new name travels in
+    // a whole copy, as a group's chat's does (engine/replication-manifest.ts conversations.name, G1b).
+    const wholeChat = (whole.conversations ?? []).find((c: any) => c.id === ent);
+    assert(wholeChat?.name === faceOf(ent).callsign, `a whole copy carries its chat under its new name (${wholeChat?.name} / ${faceOf(ent).callsign})`);
 
     const since = new Date().toISOString();
     await new Promise(r => setTimeout(r, 5));

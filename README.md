@@ -123,7 +123,7 @@ cd apps/server && pnpm dev                      # the server, with hot reload
 | `apps/pwa` | The web app (React, Vite) |
 | `apps/native` | The phone app (Expo, React Native) |
 | `apps/manager` | Settings, for owners and admins, at `/settings` on every server. It holds the operator manual |
-| `apps/vault` | The key vault for sign-in recovery copies. Not live yet |
+| `apps/vault` | The key vault: a small server that keeps members' locked sign-in recovery copies. See its README |
 | `apps/registrar` | The Cloudflare Worker that leases `name.beanpool.org` addresses |
 | `apps/feedback` | The Cloudflare Worker behind "Suggest a change to BeanPool" |
 | `apps/website`, `apps/website-src` | The beanpool.org website, and its translations |

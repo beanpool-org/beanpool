@@ -906,6 +906,17 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         await click(byTestId('tool-menu'), 'the "…"');
         await click(byTestId('tool-menu-settings'), 'Settings');
     }
+    /** Wait until the open sync has finished, assert that open GET, then clear the request log. */
+    async function settleOpenSync() {
+        let ticks = 0;
+        while (!server.log.some((r) => r.method === 'GET')) {
+            if (++ticks > 50) throw new Error('Timed out waiting for open sync GET');
+            await settle(1);
+        }
+        await settle(2);
+        expect(server.log.map((r) => r.method)).toEqual(['GET']);
+        server.log.length = 0;
+    }
     beforeEach(() => { reg.extra = [{ manifest: KIT, app: kitApp }]; OTHERS = ['Ladder', 'Tent']; });
 
     it("the open takes the server's copy (a first open on this phone) and draws it; the tool is told the copy is on", async () => {
@@ -980,6 +991,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
     it("the toggle: while the server can't be reached the switch stays and says so; then off is one DELETE, and on a GET and a PUT", async () => {
         await keptAndSynced(KIT_FIXTURES.docs.small);
         await drawTool('fixture-kit', {}, 'xx');
+        await settleOpenSync();
         await openSettings();
         expect(byTestId('tool-settings-node-copy-note')?.textContent).toBe(pseudoLocalise(ONE_PHONE));
         server.mode = 'down';
@@ -1021,6 +1033,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
         await writeToolSettings(ME.publicKey, 'fixture-kit', { door: 'doing', reminders: { weekly: true } });
         server.seen = () => disk.db.count('SELECT COUNT(*) AS n FROM tool_docs');
         await drawTool('fixture-kit', {}, 'xx');
+        await settleOpenSync();
         const remove = async () => {
             alerts.said.length = 0;
             await click(byTestId('tool-menu'), 'the "…"');
@@ -1093,7 +1106,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
             OTHERS = ['Ladder', 'Tent', 'Add'];
             await keptAndSynced(KIT_FIXTURES.docs.small);
             await drawTool('fixture-kit', {}, 'xx');
-            server.log.length = 0;
+            await settleOpenSync();
             // The other phone's off reaches the server between this phone's GET and its PUT.
             server.before = (method) => {
                 if (method !== 'PUT') return;
@@ -1132,7 +1145,7 @@ describe('the node copy, through the host route (slice T0.4; tool-node-copy.test
             reg.extra = [{ manifest: KIT, app: { ...kitApp, screens: () => ({ ...kitScreens, main: Writes }) } }];
             await keptAndSynced(KIT_FIXTURES.docs.small);
             await drawTool('fixture-kit', {}, 'en');
-            server.log.length = 0;
+            await settleOpenSync();
             for (let i = 0; i < 4; i++) await click(byTestId('add'), 'a write');
             expect(server.log).toEqual([]);
             await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });

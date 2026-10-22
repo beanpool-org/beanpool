@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 5,
+  "version": 6,
   "language": "vi",
-  "hash": "2945ce00ce08e46f0d7c01b974602525381d7ccb6c7e85204135b6d2b9e613e8",
+  "hash": "f288a636c1c599b07254314a45f8ed25bfaab30310d5c502a1cced79212ef7ef",
   "sections": [
     {
       "id": "about",
@@ -41,6 +41,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3222,6 +3223,124 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Cửa hàng",
+      "summary": "Một ô cửa sổ trước tài khoản của riêng bạn, dành cho những Chia sẻ bạn chọn, dưới một cái tên.",
+      "help": "Các Chia sẻ của bạn dưới một cái tên. Đặt tên, cho biết đó là loại gì, tạm đóng hoặc đóng hẳn.",
+      "sourceHash": "afc593ce2f4e5428",
+      "source-hash": "afc593ce2f4e5428",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Cửa hàng là gì"
+        },
+        {
+          "type": "p",
+          "text": "Cửa hàng của bạn là một ô cửa sổ trước tài khoản của riêng bạn. Nó chứa những Chia sẻ bạn đưa vào, dưới một cái tên, kèm vài từ giới thiệu. Đậu từ các Chia sẻ đó là của bạn, như với mọi Chia sẻ khác. Nó không phải là một doanh nghiệp: không ai khác giữ nó, và nó không hiển thị thêm điều gì mà các Chia sẻ của bạn chưa hiển thị."
+        },
+        {
+          "type": "p",
+          "text": "Bạn có một cửa hàng trong mỗi cộng đồng mà bạn tham gia."
+        },
+        {
+          "type": "h2",
+          "text": "Mở cửa hàng"
+        },
+        {
+          "type": "p",
+          "text": "Mở **Cửa hàng của bạn** từ thẻ **Cửa hàng và dụng cụ của bạn** trên Trang chủ, hoặc từ **Dụng cụ**. Để đưa thẻ này lên Trang chủ, hãy dùng **Chỉnh sửa trang chủ** và thêm **Cửa hàng và dụng cụ của bạn**."
+        },
+        {
+          "type": "p",
+          "text": "Nhấn **Mở cửa hàng của tôi**. Cho đến khi bạn đặt tên, nó được gọi theo tên bạn: \"Cửa hàng của Ana\"."
+        },
+        {
+          "type": "h2",
+          "text": "Tên, loại và phần giới thiệu"
+        },
+        {
+          "type": "p",
+          "text": "Mỗi mục dưới đây là một ô riêng. Hãy điền theo thứ tự bất kỳ, hoặc không điền gì cũng được:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Tên**: tối đa 60 ký tự. Để trống thì nó lại được gọi theo tên bạn.",
+            "**Loại**: một trong mười bốn loại, chẳng hạn **Dụng cụ và thiết bị**, **Sửa chữa** hoặc **Thực phẩm từ vườn hoặc nông trại**. Nó giúp hàng xóm tìm thấy bạn và chọn các dụng cụ được hiển thị. Nó không thay đổi gì khác.",
+            "**Giới thiệu**: nó là gì, trong vài từ.",
+            "**Cách tôi giao dịch**: nơi đến lấy đồ, và khi nào đồ được trả lại."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Đưa Chia sẻ vào cửa hàng"
+        },
+        {
+          "type": "p",
+          "text": "Chỉ những Chia sẻ của chính bạn dành cho mọi người ở đây mới đưa vào cửa hàng được. Một Nhu cầu, hoặc một Chia sẻ dành cho một nhóm hay một người, sẽ không nằm trong đó."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Khi bạn chỉnh sửa một Chia sẻ:** đánh dấu **Đưa món này vào cửa hàng của bạn**, hoặc bỏ dấu để gỡ Chia sẻ đó ra.",
+            "**Thêm các Chia sẻ đang hoạt động của tôi:** trong Cửa hàng của bạn, đánh dấu những Chia sẻ bạn đã đăng và nhấn **Đưa chúng vào cửa hàng của tôi**.",
+            "**Từ một dụng cụ:** khi bạn đăng một món từ một dụng cụ, **Đưa món này vào cửa hàng của bạn** đã được đánh dấu sẵn. Nếu bạn chưa có cửa hàng, cửa hàng sẽ được mở cùng với Chia sẻ đó. Bạn có thể đổi tiêu đề hoặc nội dung trên biểu mẫu Chia sẻ mới mà nó vẫn được đưa vào. Nếu bạn đổi hoàn toàn, hoặc đăng một thứ khác thay vào, nó sẽ được đăng ngoài cửa hàng của bạn và ứng dụng sẽ báo cho bạn. Để đưa nó vào, hãy mở nó, nhấn **Chỉnh sửa bài đăng** và đánh dấu **Đưa món này vào cửa hàng của bạn**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Biểu mẫu Chia sẻ mới trên bản đồ chưa có ô đánh dấu này. Hãy đăng Chia sẻ trước, rồi đưa nó vào từ màn hình chỉnh sửa hoặc từ Cửa hàng của bạn."
+        },
+        {
+          "type": "h2",
+          "text": "Tạm đóng cửa hàng"
+        },
+        {
+          "type": "p",
+          "text": "Nhấn **Tạm đóng**. Bạn có thể cho biết khi nào quay lại: trong một tuần, trong hai tuần hoặc trong một tháng. Các Chia sẻ của nó được gỡ khỏi Chợ và chờ đó. Không có gì được thêm vào khi cửa hàng đang đóng, và không Chia sẻ nào của nó có thể tự được đăng lại riêng."
+        },
+        {
+          "type": "p",
+          "text": "Nhấn **Mở lại cửa hàng của tôi** để đưa tất cả trở lại. Một Chia sẻ mà chính bạn đã tạm dừng sẽ vẫn tạm dừng."
+        },
+        {
+          "type": "h2",
+          "text": "Đóng hẳn cửa hàng"
+        },
+        {
+          "type": "p",
+          "text": "Nhấn **Đóng cửa hàng của tôi**. Các Chia sẻ của nó vẫn ở lại trên Chợ như những Chia sẻ bình thường, hoặc cũng kết thúc nếu bạn chọn **Kết thúc cả các Chia sẻ của nó**. Danh sách dụng cụ riêng của bạn vẫn nằm trên điện thoại của bạn. Bạn có thể mở một cửa hàng mới bất cứ lúc nào."
+        },
+        {
+          "type": "p",
+          "text": "Bạn không thể đóng hẳn hay tạm đóng cửa hàng khi một giao dịch về một món trong đó đang được yêu cầu hoặc đang diễn ra. Ứng dụng cho biết có bao nhiêu giao dịch đang mở, kèm một nút đến **Giao dịch của tôi**."
+        },
+        {
+          "type": "h2",
+          "text": "Trên cộng đồng toàn cầu"
+        },
+        {
+          "type": "p",
+          "text": "Cửa hàng hoạt động giống nhau trên cộng đồng toàn cầu. Người chưa tham gia chỉ thấy đó là loại cửa hàng gì và có bao nhiêu món trong đó, không bao giờ thấy tên của nó hay tên của bạn."
+        },
+        {
+          "type": "h2",
+          "text": "Trong ứng dụng web"
+        },
+        {
+          "type": "p",
+          "text": "Ứng dụng web chưa hiển thị cửa hàng."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "Giao dịch",
       "summary": "Một nơi cho mọi giao dịch bạn tham gia, mọi tin bạn đã đăng và các giao dịch trước đây.",
@@ -3649,8 +3768,8 @@
       "slug": "near-you",
       "title": "Tìm kiếm thứ ở gần bạn",
       "summary": "Chỉ hiển thị các bài đăng trong phạm vi khoảng cách từ bạn hoặc từ bất kỳ nơi nào bạn chọn.",
-      "sourceHash": "e02b25e45f78d9fe",
-      "source-hash": "e02b25e45f78d9fe",
+      "sourceHash": "2db25a661f8751ec",
+      "source-hash": "2db25a661f8751ec",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3680,7 +3799,7 @@
         },
         {
           "type": "p",
-          "text": "Nếu trình duyệt của bạn đã cho phép BeanPool sử dụng thông tin vị trí của bạn, bộ chọn vị trí có thể mở ngay tại nơi bạn đang đứng. Nếu chưa, nó sẽ mở tại một điểm cố định. Hãy kiểm tra ghim, hoặc nhấn nút hồng tâm hay nhấn lên bản đồ trước khi bạn nhấn **Áp dụng**. Trên cộng đồng toàn cầu, ứng dụng web sẽ gửi điểm trung tâm bạn đã chọn đến máy chủ cộng đồng, được làm tròn trong phạm vi khoảng 11 mét."
+          "text": "Trong ứng dụng web, bộ chọn mở ra tại điểm trung tâm bạn đã chọn lần gần nhất, hoặc nếu chưa có thì tại vị trí của chính cộng đồng (một góc nhìn toàn thế giới nếu cộng đồng chưa có vị trí). Hãy kiểm tra ghim, hoặc nhấn vào bản đồ, kéo ghim hay nhấn nút hồng tâm để chọn điểm trung tâm, trước khi bạn nhấn **Áp dụng**. Ứng dụng chỉ xin vị trí của bạn khi bạn nhấn nút hồng tâm. Trên cộng đồng toàn cầu, ứng dụng web gửi điểm trung tâm bạn đã chọn đến cộng đồng, cho Chợ, Bản đồ và Trang chủ, được làm tròn đến khoảng một kilômét. Nó sẽ gần hơn khi bạn chọn bán kính nhỏ, hoặc khi một tìm kiếm bạn đã lưu vào Trang chủ tìm trong một khoảng cách nhỏ."
         },
         {
           "type": "p",
@@ -3706,12 +3825,12 @@
           "type": "ul",
           "items": [
             "Khi đã chọn một **Khoảng cách** trên Chợ, cả hai màn hình sẽ hiển thị các tin đăng gần nhất trong phạm vi đó, gần nhất xếp trước. Bản đồ hiển thị tối đa 200 ghim.",
-            "Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong **Cài đặt**, dưới mục **Khu vực bạn**. Một dòng chữ phía trên danh sách của Chợ ghi **Nearest to your area first, within 250 km.** Nhấn **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi, và nhấn **Gần khu vực của bạn** để quay lại.",
+            "Khi không chọn khoảng cách, chúng sẽ hiển thị các tin đăng gần nhất trong phạm vi 250 km tính từ khu vực của bạn: vị trí gần đúng mà bạn cung cấp cho cộng đồng khi tham gia, hoặc thiết lập sau này trong **Cài đặt**, dưới mục **Khu vực bạn**. Một dòng chữ phía trên danh sách của Chợ ghi **Gần khu vực của bạn nhất trước, trong phạm vi 250 km.** Nhấn **Hiện tất cả mọi nơi** để xem những tin mới nhất từ mọi nơi, và nhấn **Gần khu vực của bạn** để quay lại.",
             "Khi không có thiết lập nào ở trên, bạn sẽ thấy những bài đăng mới nhất từ mọi nơi, và mục **Xem những gì gần bạn** sẽ mở bộ chọn khoảng cách. Một dòng phía trên danh sách của Chợ cho biết bạn đang xem theo chế độ nào. Khi đã chọn **Khoảng cách**, dòng này không có nút: hãy mở **Khoảng cách** và nhấn **Đặt lại**. Khi đó bạn sẽ quay lại chế độ gần khu vực của bạn, hoặc nếu chưa thiết lập khu vực, bạn sẽ thấy bài đăng mới nhất từ mọi nơi.",
             "Mỗi tin đăng hiển thị khoảng cách xa bao nhiêu, chẳng hạn như **📍 12 km**. Các tin đăng của chính bạn luôn luôn xuất hiện trên Bản đồ, và trên Chợ ở chế độ gần khu vực của bạn, dù chúng ở bất cứ đâu. Khi đã chọn **Khoảng cách**, Chợ chỉ hiển thị những tin nằm trong khoảng cách đó, bao gồm cả tin của bạn.",
             "Trong khi danh sách đang hiển thị các mục ở gần bạn, các bài đăng không có vị trí sẽ bị bỏ qua. Một cuộc thăm dò từ người chưa thiết lập khu vực của họ là một trong số đó. Để xem chúng, hãy đặt lại **Khoảng cách** nếu bạn đã chọn, sau đó nhấn **Hiện tất cả mọi nơi**.",
             "Dưới mục **Sự kiện**, danh sách không bao giờ bị cắt giảm theo khu vực của bạn hay theo **Khoảng cách**, như trước đây.",
-            "Nếu không có gì ở gần, Bản đồ sẽ thông báo điều đó, kèm theo nút **Hiện tất cả mọi nơi**. Sau đó nút **Gần khu vực của bạn** (hoặc **Near the place you picked**) sẽ đưa các tin gần nhất quay lại."
+            "Nếu không có gì ở gần, Bản đồ sẽ thông báo điều đó, kèm theo nút **Hiện tất cả mọi nơi**. Sau đó nút **Gần khu vực của bạn** (hoặc **Gần nơi bạn đã chọn**) sẽ đưa các tin gần nhất quay lại."
           ]
         },
         {
@@ -3741,8 +3860,8 @@
       "title": "Tin nhắn",
       "summary": "Bắt đầu cuộc trò chuyện, gửi ảnh, trả lời, thả cảm xúc, chỉnh sửa, xóa, tắt thông báo và tính riêng tư.",
       "help": "Các đoạn chat. Chat 1-1 được mã hóa đầu cuối. Nhấn để mở, hoặc bắt đầu từ một bài đăng hay từ bạn bè.",
-      "sourceHash": "e7d6a44f876f54e7",
-      "source-hash": "e7d6a44f876f54e7",
+      "sourceHash": "dd41c095375671ac",
+      "source-hash": "dd41c095375671ac",
       "section": "talk",
       "related": [
         "people",
@@ -3789,14 +3908,15 @@
         {
           "type": "ul",
           "items": [
-            "Từ một bài đăng: nhấn vào **Tin nhắn** và tên của người đó.",
+            "Từ một hồ sơ: mở hồ sơ của họ và nhấn **Nhắn tin**. Bạn cũng có thể kết bạn với họ tại đó.",
             "Từ **Trò chuyện**: nhấn vào nút hình cây bút, sau đó tìm người đó theo tên. Trên cộng đồng toàn cầu, Tin nhắn mới liệt kê những người bạn đã từng giao dịch cùng và bạn bè của bạn. Để tìm bất kỳ ai khác, hãy nhập ít nhất 2 chữ cái trong tên của họ.",
-            "Từ bạn bè của bạn: **Trò chuyện**, sau đó chọn **Mọi người**, rồi **Bạn bè**, và nhấn vào nút tin nhắn bên cạnh một cái tên."
+            "Từ danh sách thành viên: **Trò chuyện**, sau đó chọn **Mọi người**, và nhấn 💬 bên cạnh tên một thành viên trong **Cộng đồng** hoặc **Bạn bè**.",
+            "Từ một bài đăng: nhấn vào **Nhắn tin** và tên của người đó."
           ]
         },
         {
           "type": "p",
-          "text": "Trong ứng dụng web, hãy sử dụng **✉️ Tin nhắn trực tiếp mới**, hoặc nút **💬 Nhắn tin** trên một bài đăng. Bạn bè của bạn nằm dưới thẻ **Mọi người**."
+          "text": "Trong ứng dụng web, hãy dùng **Nhắn tin** trên hồ sơ của họ, 💬 trên hàng của họ trong **Mọi người**, **✉️ Tin nhắn trực tiếp mới**, hoặc nút **💬 Nhắn tin** trên một bài đăng."
         },
         {
           "type": "h2",
@@ -3819,12 +3939,12 @@
             "một dấu tích: đã gửi;",
             "hai dấu tích màu xanh lam: đã đọc;",
             "một chiếc đồng hồ: vẫn đang gửi;",
-            "**! chưa được gửi**: gửi không thành công. Nhấn vào đó để **Gửi lại** hoặc **Hủy bỏ**."
+            "**chưa được gửi**: gửi không thành công. Nhấn vào đó để **Gửi lại** hoặc **Hủy bỏ**."
           ]
         },
         {
           "type": "p",
-          "text": "Đồng hồ và **! chưa được gửi** chỉ có trên điện thoại. Trong ứng dụng web, tin nhắn gửi không thành công sẽ ở lại trong ô nhập, và ứng dụng sẽ thông báo như vậy."
+          "text": "Đồng hồ và **chưa được gửi** chỉ có trên điện thoại. Trong ứng dụng web, tin nhắn gửi không thành công sẽ ở lại trong ô nhập, và ứng dụng sẽ thông báo như vậy."
         },
         {
           "type": "h2",
@@ -3884,12 +4004,12 @@
             "Tin nhắn không thể khóa sẽ không được gửi đi. Nếu ứng dụng chưa thể tìm thấy khóa của người kia, hoặc việc khóa không thành công, nội dung bạn viết sẽ ở lại trong ô nhập tin nhắn kèm một dòng thông báo lý do. Hãy gửi lại sau chốc lát. Máy chủ cộng đồng của bạn cũng từ chối tin nhắn giữa hai người nếu không được khóa.",
             "Các thông báo mà BeanPool thêm vào cuộc trò chuyện về một giao dịch không được mã hóa: Đậu được giữ cho giao dịch, được thanh toán, hoặc được hoàn trả khi bị hủy, số lượng, và cách một quản trị viên giải quyết một giao dịch bị tắc nghẽn và lý do. Những người vận hành máy chủ cộng đồng của bạn có thể đọc được chúng.",
             "Máy chủ cũng biết ai đã nhắn tin cho ai, và vào lúc nào, mỗi tin nhắn trả lời tin nhắn nào, đồng thời thấy các lượt bày tỏ cảm xúc. Tin nhắn mà phiên bản ứng dụng cũ hơn gửi mà không có khóa vẫn có thể đọc được trên máy chủ.",
-            "Đoạn chat của một nhóm cũng được **Mã hóa đầu cuối**, trên điện thoại và trong ứng dụng web: chỉ các thành viên của nhóm mới có thể đọc được, và những người vận hành máy chủ cộng đồng của bạn không thể đọc. Phía trên ô nhập tin nhắn có thông báo rằng cuộc trò chuyện được **Mã hóa đầu cuối**. Máy chủ cộng đồng của bạn vẫn thấy ai đã viết, thời gian nào, ai được nhắc đến, mỗi dòng trả lời tin nhắn nào, và các lượt bày tỏ cảm xúc. Bạn chỉ thấy đoạn chat của một nhóm kể từ ngày bạn tham gia: không có nội dung nào được viết trước đó được hiển thị, và điện thoại của bạn không bao giờ giữ khóa cho nội dung đó. Tin nhắn không thể khóa sẽ không được gửi đi. Một dòng không thể xác minh là do một thành viên viết sẽ hiển thị **Không thể xác minh tin nhắn này.**, không thuộc về ai cả. Nếu máy chủ cộng đồng của bạn đã cũ và chưa thể khóa các đoạn chat nhóm, đoạn chat sẽ nói như vậy, và máy chủ có thể đọc được nó. Khi máy chủ được cập nhật, các tin nhắn cũ hơn đó sẽ bị gỡ bỏ, và một dòng trong đoạn chat sẽ thông báo điều đó. Xem \\\"Nhóm\\\".",
+            "Đoạn chat của một nhóm cũng được **Mã hóa đầu cuối**, trên điện thoại và trong ứng dụng web: chỉ các thành viên của nhóm mới có thể đọc được, và những người vận hành máy chủ cộng đồng của bạn không thể đọc. Phía trên ô nhập tin nhắn có thông báo rằng cuộc trò chuyện được **Mã hóa đầu cuối**. Máy chủ cộng đồng của bạn vẫn thấy ai đã viết, thời gian nào, ai được nhắc đến, mỗi dòng trả lời tin nhắn nào, và các lượt bày tỏ cảm xúc. Bạn chỉ thấy đoạn chat của một nhóm kể từ ngày bạn tham gia: không có nội dung nào được viết trước đó được hiển thị, và điện thoại của bạn không bao giờ giữ khóa cho nội dung đó. Tin nhắn không thể khóa sẽ không được gửi đi. Một dòng không thể xác minh là do một thành viên viết sẽ hiển thị **Không thể xác minh tin nhắn này.**, không thuộc về ai cả. Nếu máy chủ cộng đồng của bạn đã cũ và chưa thể khóa các đoạn chat nhóm, đoạn chat sẽ nói như vậy, và máy chủ có thể đọc được nó. Khi máy chủ được cập nhật, các tin nhắn cũ hơn đó sẽ bị gỡ bỏ, và một dòng trong đoạn chat sẽ thông báo điều đó. Xem \"Nhóm\".",
             "Trong ứng dụng web, đoạn chat của nhóm hoạt động theo cách tương tự, nhưng bạn không thể gửi ảnh trong đó.",
             "Các cuộc trò chuyện của doanh nghiệp và sự kiện không được mã hóa. Những người vận hành máy chủ cộng đồng của bạn có thể đọc được chúng, và máy chủ có thể viết vào đó dưới danh nghĩa của bất kỳ ai.",
             "Cuộc trò chuyện giữa hai người không bao giờ có thể bị biến thành một trong những loại trò chuyện đó. Khi ứng dụng của bạn đã nhận diện một cuộc trò chuyện là giữa hai người, hoặc nó chứa một tin nhắn được mã hóa, nó sẽ luôn giữ nguyên như vậy, bất kể máy chủ nói gì: cuộc trò chuyện chỉ mở ra đúng như dạng chat đó, với tất cả các kiểm tra ở trên, và nội dung bạn gửi trong đó luôn luôn được khóa. Một chiếc điện thoại hoặc trình duyệt chưa từng thấy cuộc trò chuyện đó, và không nhận được bất kỳ tin nhắn mã hóa nào của nó, sẽ không thể phân biệt: đối với nó, cuộc trò chuyện như vậy trông giống như mọi đoạn chat nhóm khác, mà máy chủ có thể đọc được. Trong ứng dụng web, điều này cũng xảy ra đối với trình duyệt đã đăng xuất sau đó, cửa sổ ẩn danh, hoặc trình duyệt đã bị xóa dữ liệu trang web: ứng dụng web quên mất cuộc trò chuyện nào từng là giữa hai người. Ứng dụng điện thoại lưu giữ danh sách đó.",
             "Xóa một tin nhắn là yêu cầu máy chủ cộng đồng của bạn thay thế tin nhắn đó. Thao tác này không thể can thiệp vào bản sao mà ai đó đã đọc, hoặc một ảnh chụp màn hình.",
-            "Xóa tài khoản của bạn cũng làm điều tương tự đối với mọi tin nhắn bạn từng viết, trong mọi loại cuộc trò chuyện, và xóa các hình ảnh bạn đã gửi. Xem \\\"Rời khỏi hoặc xóa tài khoản\\\".",
+            "Xóa tài khoản của bạn cũng làm điều tương tự đối với mọi tin nhắn bạn từng viết, trong mọi loại cuộc trò chuyện, và xóa các hình ảnh bạn đã gửi. Xem \"Rời khỏi hoặc xóa tài khoản\".",
             "Đoạn chat của sự kiện cũng có thể được đọc bởi người tổ chức và tất cả những người tham gia (nơi người tổ chức phê duyệt người tham gia, là những người mà người tổ chức đã cho vào).",
             "Đoạn chat của một doanh nghiệp có thể được đọc bởi bất kỳ thành viên nào trong cộng đồng của bạn. Đó là cuộc thảo luận công khai của doanh nghiệp, giống như cuộc thảo luận hiển thị trên trang của doanh nghiệp đó, và bất kỳ ai trong cộng đồng cũng có thể viết vào đó. Đó không phải là cuộc trò chuyện riêng tư dành cho những người quản lý của doanh nghiệp."
           ]
@@ -3900,7 +4020,7 @@
         },
         {
           "type": "p",
-          "text": "Nhấn vào tên của họ ở đầu cuộc trò chuyện. Hồ sơ của họ sẽ mở ra. Nhấn vào **Chặn**, sau đó nhấn **Chặn người dùng**. Trong ứng dụng web, nhấn vào **Chặn** ở đầu cuộc trò chuyện, sau đó chọn **OK**. Xem \\\"Chặn một người\\\"."
+          "text": "Nhấn vào tên của họ ở đầu cuộc trò chuyện. Hồ sơ của họ sẽ mở ra. Nhấn vào **Chặn**, sau đó nhấn **Chặn người dùng**. Trong ứng dụng web, nhấn vào **Chặn** ở đầu cuộc trò chuyện, sau đó chọn **OK**. Xem \"Chặn một người\"."
         }
       ]
     },
@@ -4308,9 +4428,9 @@
       "slug": "people",
       "title": "Mọi người và bạn bè",
       "summary": "Tìm thành viên trong cộng đồng, kết bạn và bảo lãnh cho một người.",
-      "help": "Thành viên cộng đồng và bạn bè. Nhấn vào ai đó để xem hồ sơ, hoặc nhấn 💬 bên cạnh bạn bè để nhắn tin.",
-      "sourceHash": "7720f543f516d9dc",
-      "source-hash": "7720f543f516d9dc",
+      "help": "Thành viên cộng đồng và bạn bè. Nhấn vào ai đó để xem hồ sơ, hoặc nhấn 💬 bên cạnh một thành viên để nhắn tin cho họ.",
+      "sourceHash": "44b66169497e9909",
+      "source-hash": "44b66169497e9909",
       "section": "talk",
       "related": [
         "messages",
@@ -4337,7 +4457,7 @@
         },
         {
           "type": "p",
-          "text": "Nhấn vào một người để xem hồ sơ của họ: đánh giá và bài đăng của họ, và trên điện thoại trong cộng đồng sử dụng Đậu, huy hiệu tin cậy và các giao dịch của họ. Xem \"Hồ sơ của bạn\"."
+          "text": "Nhấn vào một người để xem hồ sơ của họ: đánh giá và bài đăng của họ, và trên điện thoại trong cộng đồng sử dụng Đậu, huy hiệu tin cậy và các giao dịch của họ. Bạn có thể nhắn tin cho họ ngay từ hồ sơ bằng **Nhắn tin**, hoặc kết bạn với họ bằng **+ Kết bạn**. Xem \"Hồ sơ của bạn\"."
         },
         {
           "type": "h2",
@@ -4346,8 +4466,8 @@
         {
           "type": "ul",
           "items": [
-            "Trong phần **Cộng đồng**, nhấn vào **+ Thêm** bên cạnh một cái tên. Nút này sẽ đổi thành **Đã thêm**. Nhấn vào **Đã thêm** để gỡ họ ra lại. Trong ứng dụng web, nút đổi thành **✓ Bạn bè**, nút này không thể nhấn: để gỡ ai đó, hãy dùng nút **Xóa** trong mục **Bạn bè**.",
-            "Trong phần **Bạn bè**, nhấn vào nút tin nhắn để bắt đầu cuộc trò chuyện, hoặc nút gỡ, sau đó chọn **Xóa**, để gỡ ai đó ra.",
+            "Trong phần **Cộng đồng**, nhấn 💬 để bắt đầu cuộc trò chuyện, hoặc nhấn vào **+ Thêm** bên cạnh một cái tên. Nút này sẽ đổi thành **Đã thêm**. Nhấn vào **Đã thêm** để gỡ họ ra lại. Trong ứng dụng web, nút đổi thành **✓ Bạn bè**, nút này không thể nhấn: để gỡ ai đó, hãy dùng nút **Xóa** trong mục **Bạn bè**. Bạn cũng có thể nhắn tin hoặc kết bạn với ai đó ngay từ hồ sơ của họ.",
+            "Trong phần **Bạn bè**, nhấn 💬 để bắt đầu cuộc trò chuyện, hoặc nút gỡ, sau đó chọn **Xóa**, để gỡ ai đó ra.",
             "Khi ai đó thêm bạn, phần trên cùng của **Bạn bè** sẽ cho biết là ai, chẳng hạn như \"Sam đã thêm bạn\", kèm nút **Thêm lại**. Nhấn vào tên của họ để xem hồ sơ của họ trước. Không có thông báo nào. Dòng này sẽ biến mất khi bạn thêm lại họ, hoặc sau 30 ngày. Tối đa 20 người được hiển thị, sau đó là còn lại bao nhiêu người.",
             "Bạn có thể thêm tối đa 100 người trong bất kỳ khoảng thời gian 24 giờ nào. Việc gỡ ai đó cũng được tính. Nếu bạn đạt đến giới hạn, ứng dụng sẽ thông báo như vậy và cho biết khi nào bạn có thể thêm người lại.",
             "Bạn không thể thêm người mà bạn đã chặn: hãy bỏ chặn họ trước. Xem \"Chặn một người\"."
@@ -6720,8 +6840,8 @@
       "title": "Chặn một người",
       "summary": "Ẩn bài đăng và tin nhắn của ai đó khỏi bạn và bỏ chặn bất cứ lúc nào.",
       "help": "Những người bạn đã chặn. Bài đăng và tin nhắn của họ bị ẩn; bỏ chặn tại đây.",
-      "sourceHash": "be8515fdd8bc780e",
-      "source-hash": "be8515fdd8bc780e",
+      "sourceHash": "2fa23652f09ffb9b",
+      "source-hash": "2fa23652f09ffb9b",
       "section": "settings",
       "related": [
         "reporting",
@@ -6813,7 +6933,8 @@
           "type": "ul",
           "items": [
             "Mở **Cài đặt**. Dưới mục **Pháp lý & quyền riêng tư**, nhấn **Quản lý người dùng bị chặn**.",
-            "Nhấn **Bỏ chặn** bên cạnh một cái tên, hoặc **Bỏ chặn tất cả**."
+            "Nhấn **Bỏ chặn** bên cạnh một cái tên, hoặc **Bỏ chặn tất cả**.",
+            "Trong ứng dụng điện thoại, bạn cũng có thể bỏ chặn ai đó từ hồ sơ của họ. Dưới tên họ có dòng \"Bạn đã chặn\" kèm tên của họ. Nhấn **Bỏ chặn** ở đó."
           ]
         },
         {

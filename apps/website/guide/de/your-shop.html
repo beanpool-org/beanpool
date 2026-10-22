@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content/de by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dein Shop — BeanPool members' guide</title>
+    <meta name="description" content="Ein Schaufenster auf dein eigenes Konto, für die Angebote, die du auswählst, unter einem Namen.">
+    <link rel="icon" type="image/png" href="../../favicon.png">
+    <link rel="stylesheet" href="../../fonts/fonts.css">
+    <link rel="stylesheet" href="../../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../../index.html" class="logo"><img src="../../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="../index.html">Members' guide</a>
+                <a href="../../help.html">Help</a>
+                <a href="../../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="../index.html">Members' guide</a> · <a href="../index.html#market">Markt</a></p>
+        <h1>Dein Shop</h1>
+        <p class="lede">Ein Schaufenster auf dein eigenes Konto, für die Angebote, die du auswählst, unter einem Namen.</p>
+        <h2>Was ein Shop ist</h2>
+        <p>Dein Shop ist ein Schaufenster auf dein eigenes Konto. Er enthält die Angebote, die du hineinlegst, unter einem Namen und mit ein paar Worten dazu. Die Bohnen daraus gehören dir, wie bei jedem Angebot. Er ist kein Betrieb: Niemand sonst führt ihn, und er zeigt nichts, was deine Angebote nicht ohnehin zeigen.</p>
+        <p>Du hast in jeder Community, in der du bist, einen Shop.</p>
+        <h2>Ihn eröffnen</h2>
+        <p>Öffne <strong>Dein Shop</strong> über die Karte <strong>Dein Shop und Werkzeuge</strong> auf der Startseite oder über <strong>Werkzeuge</strong>. Um die Karte auf die Startseite zu holen, nutze <strong>Startseite bearbeiten</strong> und füge <strong>Dein Shop und Werkzeuge</strong> hinzu.</p>
+        <p>Tippe auf <strong>Meinen Shop eröffnen</strong>. Solange du ihm keinen Namen gibst, ist er nach dir benannt: „Shop von Ana“.</p>
+        <h2>Name, Art und Worte</h2>
+        <p>Jedes davon ist ein Feld. Fülle sie in beliebiger Reihenfolge aus, oder gar nicht:</p>
+        <ul>
+            <li><strong>Name:</strong> bis zu 60 Zeichen. Lass ihn leer, um wieder nach dir benannt zu werden.</li>
+            <li><strong>Art:</strong> eine von vierzehn, etwa <strong>Werkzeug und Ausrüstung</strong>, <strong>Reparaturen</strong> oder <strong>Essen aus Garten oder Hof</strong>. Das hilft Nachbarn, dich zu finden, und bestimmt, welche Werkzeuge angezeigt werden. Sonst ändert es nichts.</li>
+            <li><strong>Info:</strong> was er ist, in wenigen Worten.</li>
+            <li><strong>Wie es bei mir läuft:</strong> wo man etwas abholt und wann Sachen zurückkommen.</li>
+        </ul>
+        <h2>Angebote hineinlegen</h2>
+        <p>Nur deine eigenen Angebote für alle hier kommen in einen Shop. Ein Gesuch oder ein Angebot für eine Gruppe oder für eine einzelne Person bleibt draußen.</p>
+        <ul>
+            <li><strong>Wenn du ein Angebot bearbeitest:</strong> hake <strong>In deinen Shop legen</strong> an, oder nimm den Haken weg, um das Angebot herauszunehmen.</li>
+            <li><strong>Meine aktiven Angebote hinzufügen:</strong> hake in Dein Shop die Angebote an, die du schon eingestellt hast, und tippe auf <strong>In meinen Shop legen</strong>.</li>
+            <li><strong>Aus einem Werkzeug:</strong> Wenn du etwas aus einem Werkzeug einstellst, ist <strong>In deinen Shop legen</strong> angehakt. Hast du noch keinen Shop, wird er mit diesem Angebot eröffnet. Du kannst Titel oder Worte im neuen Angebotsformular ändern, und es kommt trotzdem hinein. Änderst du es ganz oder stellst du etwas anderes ein, erscheint es außerhalb deines Shops, und die App sagt es dir. Um es hineinzulegen, öffne es, tippe auf <strong>Beitrag bearbeiten</strong> und hake <strong>In deinen Shop legen</strong> an.</li>
+        </ul>
+        <p>Das Formular für ein neues Angebot auf der Karte hat noch keinen Haken. Stelle das Angebot ein und lege es dann über seinen Bearbeiten-Bildschirm oder über Dein Shop hinein.</p>
+        <h2>Ihn vorübergehend schließen</h2>
+        <p>Tippe auf <strong>Vorübergehend schließen</strong>. Du kannst sagen, wann du zurück bist: in einer Woche, in zwei Wochen oder in einem Monat. Seine Angebote verschwinden vom Markt und warten. Solange er geschlossen ist, kommt nichts hinein, und keines seiner Angebote lässt sich einzeln wieder einstellen.</p>
+        <p>Tippe auf <strong>Meinen Shop wieder öffnen</strong>, um alle zurückzuholen. Ein Angebot, das du selbst pausiert hattest, bleibt pausiert.</p>
+        <h2>Ihn schließen</h2>
+        <p>Tippe auf <strong>Meinen Shop schließen</strong>. Seine Angebote bleiben als gewöhnliche Angebote im Markt, oder sie enden ebenfalls, wenn du <strong>Auch seine Angebote beenden</strong> wählst. Deine privaten Werkzeuglisten bleiben auf deinem Telefon. Du kannst jederzeit einen neuen Shop eröffnen.</p>
+        <p>Du kannst ihn weder schließen noch vorübergehend schließen, solange eine Vereinbarung über eine seiner Sachen angefragt oder im Gange ist. Die App sagt dir, wie viele Vereinbarungen offen sind, mit einer Schaltfläche zu <strong>Meine Vereinbarungen</strong>.</p>
+        <h2>In der globalen Community</h2>
+        <p>Ein Shop funktioniert in der globalen Community genauso. Wer noch nicht beigetreten ist, sieht, was für ein Shop es ist und wie viele Sachen darin sind, nie aber seinen oder deinen Namen.</p>
+        <h2>In der Web-App</h2>
+        <p>Die Web-App zeigt noch keine Shops an.</p>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="posting.html"><strong>Angebot oder Gesuch aufgeben</strong><span>Stelle etwas ein, das du tun oder geben kannst, oder etwas, das du suchst.</span></a></li>
+            <li><a href="my-deals.html"><strong>Meine Deals</strong><span>Ein Ort für alle deine laufenden Deals, aktiven Beiträge und vergangenen Abschlüsse.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Im Markt stöbern</strong><span>Angebote und Gesuche über Suche, Filter und Entfernung finden.</span></a></li>
+            <li><a href="holiday-mode.html"><strong>Verreisen</strong><span>Der Urlaubsmodus blendet deine Angebote aus und pausiert neue Anfragen, während du weg bist.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../../help.html">Help Centre</a>. Guide version 6.</p>
+    </main>
+</body>
+</html>

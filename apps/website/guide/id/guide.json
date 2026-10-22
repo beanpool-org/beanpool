@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 5,
+  "version": 6,
   "language": "id",
-  "hash": "40f1a981f859ae7aeca39af720e814f568eb5ff6eb9298081572f45ee5153daa",
+  "hash": "b5eef2214e10eb7b9e6a083f526cad085079fa0077be0bae743eec6cbad03533",
   "sections": [
     {
       "id": "about",
@@ -41,6 +41,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3222,6 +3223,124 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Tokomu",
+      "summary": "Etalase di akunmu sendiri, untuk Penawaran yang kamu pilih, dalam satu nama.",
+      "help": "Penawaranmu dalam satu nama. Beri nama, tentukan jenisnya, tutup untuk sementara, atau tutup sepenuhnya.",
+      "sourceHash": "afc593ce2f4e5428",
+      "source-hash": "afc593ce2f4e5428",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Apa itu toko"
+        },
+        {
+          "type": "p",
+          "text": "Tokomu adalah etalase di akunmu sendiri. Isinya Penawaran yang kamu masukkan, dalam satu nama, dengan beberapa kata tentangnya. Kacang dari Penawaran itu milikmu, seperti Penawaran lainnya. Toko bukan usaha: tidak ada orang lain yang mengurusnya, dan tidak menampilkan apa pun yang belum ditampilkan oleh Penawaranmu."
+        },
+        {
+          "type": "p",
+          "text": "Kamu punya satu toko di setiap komunitas yang kamu ikuti."
+        },
+        {
+          "type": "h2",
+          "text": "Membukanya"
+        },
+        {
+          "type": "p",
+          "text": "Buka **Tokomu** dari kartu Beranda **Tokomu dan peralatan**, atau dari **Peralatan**. Untuk menaruh kartu itu di Beranda, gunakan **Edit beranda** dan tambahkan **Tokomu dan peralatan**."
+        },
+        {
+          "type": "p",
+          "text": "Ketuk **Buka tokoku**. Sebelum kamu memberinya nama, toko itu dinamai menurut namamu: \"Toko Ana\"."
+        },
+        {
+          "type": "h2",
+          "text": "Nama, jenis, dan deskripsinya"
+        },
+        {
+          "type": "p",
+          "text": "Masing-masing adalah satu isian. Isi dalam urutan apa pun, atau tidak sama sekali:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Nama**: maksimal 60 karakter. Kosongkan agar kembali dinamai menurut namamu.",
+            "**Jenis**: salah satu dari empat belas, seperti **Peralatan dan perlengkapan**, **Perbaikan**, atau **Makanan dari kebun atau pertanian**. Ini membantu tetangga menemukanmu dan menentukan peralatan yang ditampilkan. Tidak mengubah hal lain.",
+            "**Tentang**: apa ini, dalam beberapa kata.",
+            "**Cara saya bertransaksi**: di mana mengambil barang, dan kapan barang kembali."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Memasukkan Penawaran ke dalamnya"
+        },
+        {
+          "type": "p",
+          "text": "Hanya Penawaranmu sendiri yang untuk semua orang di sini yang bisa masuk ke toko. Permintaan, atau Penawaran untuk sebuah grup atau satu orang, tetap di luar."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Saat kamu mengedit Penawaran:** centang **Masukkan ini ke tokomu**, atau hapus centangnya untuk mengeluarkan Penawaran itu.",
+            "**Tambahkan Penawaranku yang aktif:** di Tokomu, centang Penawaran yang sudah kamu pasang lalu ketuk **Masukkan ke tokoku**.",
+            "**Dari sebuah alat:** saat kamu mendaftarkan sesuatu dari sebuah alat, **Masukkan ini ke tokomu** sudah tercentang. Jika kamu belum punya toko, toko akan terbuka bersama Penawaran itu. Kamu bisa mengubah judul atau deskripsinya di formulir Penawaran baru dan Penawaran itu tetap masuk. Jika kamu mengubahnya sepenuhnya, atau memposting hal lain sebagai gantinya, Penawaran itu terpasang di luar tokomu dan aplikasi memberi tahumu. Untuk memasukkannya, buka Penawaran itu, ketuk **Edit Postingan** dan centang **Masukkan ini ke tokomu**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Formulir Penawaran baru di peta belum punya centang itu. Posting Penawarannya, lalu masukkan dari layar edit-nya atau dari Tokomu."
+        },
+        {
+          "type": "h2",
+          "text": "Menutupnya untuk sementara"
+        },
+        {
+          "type": "p",
+          "text": "Ketuk **Tutup untuk sementara**. Kamu bisa memberi tahu kapan kamu kembali: **Dalam seminggu**, **Dalam dua minggu**, atau **Dalam sebulan**. Penawarannya diturunkan dari Pasar dan menunggu. Tidak ada yang bisa dimasukkan selagi tutup, dan tidak ada Penawarannya yang bisa dipasang kembali sendiri-sendiri."
+        },
+        {
+          "type": "p",
+          "text": "Ketuk **Buka kembali tokoku** untuk memasang semuanya kembali. Penawaran yang kamu jeda sendiri tetap dijeda."
+        },
+        {
+          "type": "h2",
+          "text": "Menutupnya"
+        },
+        {
+          "type": "p",
+          "text": "Ketuk **Tutup tokoku**. Penawarannya tetap di Pasar sebagai Penawaran biasa, atau ikut berakhir jika kamu memilih **Akhiri juga Penawarannya**. Daftar alat pribadimu tetap ada di ponselmu. Kamu bisa membuka toko baru kapan saja."
+        },
+        {
+          "type": "p",
+          "text": "Kamu tidak bisa menutupnya, atau menutupnya untuk sementara, selama ada kesepakatan atas salah satu barangnya yang sedang diminta atau berjalan. Aplikasi memberi tahu berapa banyak kesepakatan yang masih terbuka, dengan tombol ke **Kesepakatan Saya**."
+        },
+        {
+          "type": "h2",
+          "text": "Di komunitas global"
+        },
+        {
+          "type": "p",
+          "text": "Toko bekerja sama di komunitas global. Orang yang belum bergabung melihat jenis toko itu dan berapa banyak barang di dalamnya, tidak pernah namanya atau namamu."
+        },
+        {
+          "type": "h2",
+          "text": "Di aplikasi web"
+        },
+        {
+          "type": "p",
+          "text": "Aplikasi web belum menampilkan toko."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "Kesepakatanku",
       "summary": "Satu tempat untuk setiap transaksi yang sedang berlangsung, semua kirimanmu, dan riwayat transaksimu.",
@@ -3649,8 +3768,8 @@
       "slug": "near-you",
       "title": "Menemukan hal di dekatmu",
       "summary": "Tampilkan hanya kiriman dalam jarak tertentu darimu, atau dari tempat mana pun yang kamu pilih.",
-      "sourceHash": "e02b25e45f78d9fe",
-      "source-hash": "e02b25e45f78d9fe",
+      "sourceHash": "2db25a661f8751ec",
+      "source-hash": "2db25a661f8751ec",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3671,7 +3790,7 @@
             "**Lokasi & Radius** akan terbuka (**Atur Lokasi & Radius** di web app). Untuk menggunakan posisimu saat ini, ketuk tombol target. Atau ketuk peta, atau geser pin, untuk memilih titik pusat lainnya.",
             "Tentukan seberapa jauh dengan **Radius pencarian**: mulai dari 100 meter hingga 50 kilometer.",
             "Ketuk **Terapkan**. Tombol kemudian menampilkan jaraknya, seperti **5km**.",
-            "Untuk kembali menampilkan semuanya, buka kembali dan ketuk **Atur Ulang**. Di web app kamu juga dapat mengetuk tanda **✕** pada **Jarak**."
+            "Untuk kembali menampilkan semuanya, buka kembali dan ketuk **Atur ulang**. Di web app kamu juga dapat mengetuk tanda **✕** pada **Jarak**."
           ]
         },
         {
@@ -3680,7 +3799,7 @@
         },
         {
           "type": "p",
-          "text": "Jika browsermu sudah mengizinkan BeanPool untuk menggunakan lokasimu, pemilih dapat langsung terbuka di tempatmu berada sekarang. Jika tidak, pemilih akan terbuka di titik yang tetap. Periksa pin, atau ketuk tombol target atau peta, sebelum kamu mengetuk **Terapkan**. Di komunitas global web app mengirimkan titik pusat yang kamu pilih ke komunitas, dibulatkan ke sekitar 11 meter."
+          "text": "Di web app, pemilih terbuka di titik pusat terakhir yang kamu pilih, atau jika belum ada, di tempat komunitas itu sendiri (tampilan dunia jika komunitas tidak punya tempat). Periksa pin, atau ketuk peta, geser pin, atau ketuk tombol target untuk memilih titik pusat, sebelum kamu mengetuk **Terapkan**. Web app meminta lokasimu hanya saat kamu mengetuk tombol target. Di komunitas global web app mengirimkan titik pusat yang kamu pilih ke komunitas, untuk Pasar, Peta, dan Beranda, dibulatkan ke sekitar satu kilometer. Titiknya lebih dekat saat kamu memilih radius kecil, atau saat pencarian yang kamu simpan ke Beranda mencari dalam jarak kecil."
         },
         {
           "type": "p",
@@ -3700,23 +3819,23 @@
         },
         {
           "type": "p",
-          "text": "Komunitas global memiliki listing dari mana saja, sehingga **Pasar** dan **Peta** pada web app dimulai dari lokasi di dekatmu:"
+          "text": "Komunitas global memiliki iklan dari mana saja, sehingga **Pasar** dan **Peta** pada web app dimulai dari lokasi di dekatmu:"
         },
         {
           "type": "ul",
           "items": [
-            "Dengan **Jarak** yang dipilih di Pasar, keduanya menampilkan listing terdekat di dalamnya, diurutkan dari yang terdekat. Peta menampilkan hingga 200 pin.",
-            "Tanpa filter jarak, keduanya menampilkan listing terdekat dalam radius 250 km dari wilayahmu: perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau nanti di **Pengaturan**, di bawah **Wilayahmu**. Baris di atas daftar Pasar bertuliskan **Terdekat dari area Anda terlebih dahulu, dalam 250 km.** Ketuk **Tampilkan di mana saja** untuk melihat yang terbaru dari mana saja, dan **Dekat area Anda** untuk kembali.",
-            "Tanpa keduanya, kamu melihat yang terbaru dari mana saja, dan **Lihat apa yang ada di dekat Anda** membuka pemilih jarak. Baris di atas daftar Pasar memberi tahu pilihan mana yang sedang kamu lihat. Jika menggunakan **Jarak**, baris ini tidak memiliki tombol: buka **Jarak** dan ketuk **Atur Ulang**. Kamu kemudian kembali ke dekat wilayahmu, atau, jika belum mengatur wilayah, kamu melihat yang terbaru dari mana saja.",
-            "Setiap listing menunjukkan seberapa jauh jaraknya, seperti **📍 12 km**. Listingmu sendiri selalu ada di Peta, dan di Pasar dekat wilayahmu, di mana pun lokasinya. Dengan filter **Jarak**, Pasar hanya menampilkan apa yang berada di dalamnya, termasuk milikmu.",
+            "Dengan **Jarak** yang dipilih di Pasar, keduanya menampilkan iklan terdekat di dalamnya, diurutkan dari yang terdekat. Peta menampilkan hingga 200 pin.",
+            "Tanpa filter jarak, keduanya menampilkan iklan terdekat dalam radius 250 km dari wilayahmu: perkiraan lokasi yang kamu berikan ke komunitas saat bergabung, atau nanti di **Pengaturan**, di bawah **Wilayahmu**. Baris di atas daftar Pasar bertuliskan **Terdekat dari area Anda terlebih dahulu, dalam 250 km.** Ketuk **Tampilkan di mana saja** untuk melihat yang terbaru dari mana saja, dan **Dekat area Anda** untuk kembali.",
+            "Tanpa keduanya, kamu melihat yang terbaru dari mana saja, dan **Lihat apa yang ada di dekat Anda** membuka pemilih jarak. Baris di atas daftar Pasar memberi tahu pilihan mana yang sedang kamu lihat. Jika menggunakan **Jarak**, baris ini tidak memiliki tombol: buka **Jarak** dan ketuk **Atur ulang**. Kamu kemudian kembali ke dekat wilayahmu, atau, jika belum mengatur wilayah, kamu melihat yang terbaru dari mana saja.",
+            "Setiap iklan menunjukkan seberapa jauh jaraknya, seperti **📍 12 km**. Iklanmu sendiri selalu ada di Peta, dan di Pasar dekat wilayahmu, di mana pun lokasinya. Dengan filter **Jarak**, Pasar hanya menampilkan apa yang berada di dalamnya, termasuk milikmu.",
             "Saat daftar berada di dekatmu, postingan tanpa lokasi tidak disertakan. Jajak pendapat dari seseorang yang belum mengatur wilayahnya adalah salah satunya. Untuk melihatnya, atur ulang **Jarak** jika kamu memilihnya, lalu ketuk **Tampilkan di mana saja**.",
             "Di bawah **Acara** daftarnya tidak pernah dipotong oleh wilayahmu atau **Jarak** milikmu, seperti sebelumnya.",
-            "Jika tidak ada apa pun di dekatmu, Peta memberi tahu demikian, dengan tombol **Tampilkan di mana saja**. Kemudian **Dekat area Anda** (atau **Near the place you picked**) membawa kembali daftar terdekat."
+            "Jika tidak ada apa pun di dekatmu, Peta memberi tahu demikian, dengan tombol **Tampilkan di mana saja**. Kemudian **Dekat area Anda** (atau **Dekat tempat yang kamu pilih**) membawa kembali daftar terdekat."
           ]
         },
         {
           "type": "p",
-          "text": "Pencarian web app hanya mencari melalui listing yang ada di layar. **Tampilkan di mana saja** menampilkan listing terbaru dari mana saja, bukan setiap listing yang ada, jadi listing yang jauh dan bukan baru tidak akan muncul dalam pencarian. Di setiap komunitas lain web app tidak membatasi Pasar atau Peta berdasarkan wilayahmu. Keduanya menampilkan 50 listing yang paling baru diubah dan milikmu sendiri, dan pencarian hanya mencari di antaranya."
+          "text": "Pencarian web app hanya mencari melalui iklan yang ada di layar. **Tampilkan di mana saja** menampilkan iklan terbaru dari mana saja, bukan setiap iklan yang ada, jadi iklan yang jauh dan bukan baru tidak akan muncul dalam pencarian. Di setiap komunitas lain web app tidak membatasi Pasar atau Peta berdasarkan wilayahmu. Keduanya menampilkan 50 iklan yang paling baru diubah dan milikmu sendiri, dan pencarian hanya mencari di antaranya."
         },
         {
           "type": "h2",
@@ -3724,7 +3843,7 @@
         },
         {
           "type": "p",
-          "text": "Ponsel menyimpan listing yang paling dekat dengan wilayahmu: hingga 500, dalam jarak 250 km. Ponsel juga menyimpan listing milikmu sendiri, dan setiap listing yang kamu miliki kesepakatan, obrolan, atau jawaban di dalamnya. Pasar dan Peta menampilkan apa yang disimpan ponsel. Tanpa mengatur wilayah, ponsel menyimpan listing terbaru sebagai gantinya, dan baris di atas Pasar memberi tahu demikian. Lihat \"Wilayahmu\"."
+          "text": "Ponsel menyimpan iklan yang paling dekat dengan wilayahmu: hingga 500, dalam jarak 250 km. Ponsel juga menyimpan iklan milikmu sendiri, dan setiap iklan yang kamu miliki kesepakatan, obrolan, atau jawaban di dalamnya. Pasar dan Peta menampilkan apa yang disimpan ponsel. Tanpa mengatur wilayah, ponsel menyimpan iklan terbaru sebagai gantinya, dan baris di atas Pasar memberi tahu demikian. Lihat \"Wilayahmu\"."
         },
         {
           "type": "h2",
@@ -3741,8 +3860,8 @@
       "title": "Pesan",
       "summary": "Mulai obrolan, kirim foto, balas, beri reaksi, edit, hapus, bisukan, dan apa saja yang bersifat pribadi.",
       "help": "Obrolanmu. Obrolan pribadi terenkripsi penuh. Ketuk obrolan untuk membukanya.",
-      "sourceHash": "e7d6a44f876f54e7",
-      "source-hash": "e7d6a44f876f54e7",
+      "sourceHash": "dd41c095375671ac",
+      "source-hash": "dd41c095375671ac",
       "section": "talk",
       "related": [
         "people",
@@ -3789,14 +3908,15 @@
         {
           "type": "ul",
           "items": [
-            "Dari sebuah postingan: ketuk **Pesan** dan nama orang tersebut.",
+            "Dari profil: buka profil mereka dan ketuk **Kirim Pesan**. Di sana kamu juga bisa menambahkan mereka sebagai teman.",
             "Dari **Obrolan**: ketuk tombol pensil, lalu temukan orang tersebut berdasarkan nama. Pada komunitas seluruh dunia, Pesan Baru mencantumkan orang-orang yang pernah bertransaksi denganmu dan teman-temanmu. Untuk menemukan orang lain, ketik setidaknya 2 huruf dari nama mereka.",
-            "Dari teman-temanmu: **Obrolan**, lalu **Orang**, kemudian **Teman**, dan ketuk tombol pesan di samping sebuah nama."
+            "Dari daftar anggota: **Obrolan**, lalu **Orang**, dan ketuk 💬 di samping nama anggota di **Komunitas** atau **Teman**.",
+            "Dari sebuah postingan: ketuk **Pesan** dan nama orang tersebut."
           ]
         },
         {
           "type": "p",
-          "text": "Di aplikasi web, gunakan **✉️ DM Baru**, atau tombol **💬 Pesan** pada sebuah postingan. Teman-temanmu berada di bawah tab **Orang**."
+          "text": "Di aplikasi web, gunakan **Kirim Pesan** di profil mereka, 💬 di barisnya di bawah **Orang**, **✉️ DM Baru**, atau tombol **💬 Pesan** pada sebuah postingan."
         },
         {
           "type": "h2",
@@ -4308,9 +4428,9 @@
       "slug": "people",
       "title": "Orang dan teman",
       "summary": "Mencari anggota komunitas, profil dan lencana mereka, serta menandai teman agar kamu tahu jika ada yang keluar.",
-      "help": "Anggota komunitasmu. Ketuk seseorang untuk melihat profil, Penawaran, Permintaan, dan lencana.",
-      "sourceHash": "7720f543f516d9dc",
-      "source-hash": "7720f543f516d9dc",
+      "help": "Anggota komunitasmu dan teman-temanmu. Ketuk seseorang untuk melihat profilnya, atau ketuk 💬 di samping anggota untuk mengirim pesan.",
+      "sourceHash": "44b66169497e9909",
+      "source-hash": "44b66169497e9909",
       "section": "talk",
       "related": [
         "messages",
@@ -4337,7 +4457,7 @@
         },
         {
           "type": "p",
-          "text": "Ketuk seseorang untuk melihat profil mereka: ulasan dan postingan mereka, serta, di ponsel pada komunitas dengan Kacang, lencana percaya dan transaksi mereka. Lihat \"Profilmu\"."
+          "text": "Ketuk seseorang untuk melihat profil mereka: ulasan dan postingan mereka, serta, di ponsel pada komunitas dengan Kacang, lencana percaya dan transaksi mereka. Kamu bisa langsung mengirim pesan dari profil mereka dengan **Kirim Pesan**, atau menambahkan mereka sebagai teman dengan **+ Tambah teman**. Lihat \"Profilmu\"."
         },
         {
           "type": "h2",
@@ -4346,8 +4466,8 @@
         {
           "type": "ul",
           "items": [
-            "Di **Komunitas**, ketuk **+ Tambah** di samping sebuah nama. Tombol berubah menjadi **Ditambahkan**. Ketuk **Ditambahkan** untuk menghapus mereka kembali. Di aplikasi web tombol berubah menjadi **✓ Teman**, yang tidak dapat diketuk: untuk menghapus seseorang, gunakan **Hapus** di bawah **Teman**.",
-            "Di **Teman**, ketuk tombol pesan untuk memulai obrolan, atau tombol hapus, lalu **Hapus**, untuk menghapus seseorang.",
+            "Di **Komunitas**, ketuk 💬 untuk memulai obrolan, atau ketuk **+ Tambah** di samping sebuah nama. Tombol berubah menjadi **Ditambahkan**. Ketuk **Ditambahkan** untuk menghapus mereka kembali. Di aplikasi web tombol berubah menjadi **✓ Teman**, yang tidak dapat diketuk: untuk menghapus seseorang, gunakan **Hapus** di bawah **Teman**. Kamu juga bisa mengirim pesan kepada seseorang atau menambahkannya sebagai teman langsung dari profilnya.",
+            "Di **Teman**, ketuk 💬 untuk memulai obrolan, atau tombol hapus, lalu **Hapus**, untuk menghapus seseorang.",
             "Ketika seseorang menambahkanmu, bagian atas tab **Teman** menyebutkan siapa, seperti \"Sam menambahkanmu\", dengan tombol **Tambahkan balik**. Ketuk nama mereka untuk melihat profil mereka terlebih dahulu. Tidak ada notifikasi. Baris tersebut akan hilang saat kamu menambahkan mereka balik, atau setelah 30 hari. Hingga 20 orang ditampilkan, lalu berapa banyak lagi.",
             "Kamu dapat menambahkan hingga 100 orang dalam rentang 24 jam mana pun. Menghapus seseorang juga dihitung. Jika kamu mencapai batas tersebut, aplikasi akan memberitahukan hal itu dan kapan kamu dapat menambahkan seseorang lagi.",
             "Kamu tidak dapat menambahkan seseorang yang telah kamu blokir: buka blokir mereka terlebih dahulu. Lihat \"Memblokir seseorang\"."
@@ -6720,8 +6840,8 @@
       "title": "Memblokir seseorang",
       "summary": "Sembunyikan kiriman dan pesan seseorang darimu, dan batalkan pemblokiran nanti jika diinginkan.",
       "help": "Orang yang telah kamu blokir. Kiriman dan pesan mereka disembunyikan; buka blokir di sini.",
-      "sourceHash": "be8515fdd8bc780e",
-      "source-hash": "be8515fdd8bc780e",
+      "sourceHash": "2fa23652f09ffb9b",
+      "source-hash": "2fa23652f09ffb9b",
       "section": "settings",
       "related": [
         "reporting",
@@ -6813,7 +6933,8 @@
           "type": "ul",
           "items": [
             "Buka **Pengaturan**. Di bawah **HUKUM & PRIVASI**, ketuk **Kelola Pengguna yang Diblokir**.",
-            "Ketuk **Buka blokir** di samping nama, atau **Buka Blokir Semua**."
+            "Ketuk **Buka blokir** di samping nama, atau **Buka Blokir Semua**.",
+            "Di aplikasi ponsel kamu juga bisa membuka blokir seseorang dari profilnya. Di bawah namanya tertulis \"Kamu memblokir\" dan namanya. Ketuk **Buka blokir** di sana."
           ]
         },
         {

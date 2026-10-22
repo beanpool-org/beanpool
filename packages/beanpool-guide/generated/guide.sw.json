@@ -1,8 +1,8 @@
 {
   "schema": 2,
-  "version": 5,
+  "version": 6,
   "language": "sw",
-  "hash": "423fa2e10063350858ae152b0d2b6cfd31a223853bf14e5db61de49004496c8c",
+  "hash": "a6b58e45b642a1748fa99965cb7d5b80003c3b27b5fd30f64cd359d575b5c1b4",
   "sections": [
     {
       "id": "about",
@@ -41,6 +41,7 @@
       "slugs": [
         "browsing-the-market",
         "posting",
+        "your-shop",
         "my-deals",
         "a-deal-step-by-step",
         "when-a-deal-goes-wrong"
@@ -3222,6 +3223,124 @@
       ]
     },
     {
+      "slug": "your-shop",
+      "title": "Duka Lako",
+      "summary": "Dirisha la mbele kwenye akaunti yako mwenyewe, kwa Ofa unazochagua, chini ya jina moja.",
+      "help": "Ofa zako chini ya jina moja. Lipe jina, sema ni aina gani, lifunge kwa sasa, au lifunge kabisa.",
+      "sourceHash": "afc593ce2f4e5428",
+      "source-hash": "afc593ce2f4e5428",
+      "section": "market",
+      "related": [
+        "posting",
+        "my-deals",
+        "browsing-the-market",
+        "holiday-mode"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "Duka ni nini"
+        },
+        {
+          "type": "p",
+          "text": "Duka lako ni dirisha la mbele kwenye akaunti yako mwenyewe. Linashikilia Ofa unazoweka ndani yake, chini ya jina moja, pamoja na maneno machache kulihusu. Maharagwe yanayotokana nazo ni yako, kama ilivyo kwa Ofa yoyote. Si biashara ya pamoja: hakuna mtu mwingine anayelitunza, na halionyeshi kitu ambacho Ofa zako hazionyeshi tayari."
+        },
+        {
+          "type": "p",
+          "text": "Una duka moja katika kila jumuiya uliyomo."
+        },
+        {
+          "type": "h2",
+          "text": "Kulifungua"
+        },
+        {
+          "type": "p",
+          "text": "Fungua **Duka lako** kutoka kwenye kadi ya Nyumbani **Duka lako na vifaa**, au kutoka **Vifaa**. Ili kuweka kadi hiyo kwenye Nyumbani, tumia **Hariri nyumbani** kisha ongeza **Duka lako na vifaa**."
+        },
+        {
+          "type": "p",
+          "text": "Gusa **Fungua duka langu**. Hadi utakapolipa jina, litaitwa kwa jina lako: \"Duka la Ana\"."
+        },
+        {
+          "type": "h2",
+          "text": "Jina, aina na maneno yake"
+        },
+        {
+          "type": "p",
+          "text": "Kila moja ya haya ni sehemu moja ya kujaza. Yajaze kwa mpangilio wowote, au usiyajaze kabisa:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Jina**: hadi herufi 60. Liache tupu ili liitwe kwa jina lako tena.",
+            "**Aina**: moja kati ya kumi na nne, kama vile **Vifaa na zana**, **Matengenezo** au **Chakula kutoka bustanini au shambani**. Husaidia majirani kukupata na huchagua vifaa vinavyoonyeshwa. Haibadilishi kingine chochote.",
+            "**Kuhusu**: ni nini, kwa maneno machache.",
+            "**Jinsi ninavyofanya biashara**: mahali pa kuchukua vitu, na vitarudi lini."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Kuweka Ofa ndani yake"
+        },
+        {
+          "type": "p",
+          "text": "Ofa zako mwenyewe za kila mtu hapa pekee ndizo zinazoingia dukani. Hitaji, au Ofa ya kikundi au ya mtu mmoja, linabaki nje."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Unapohariri Ofa:** weka tiki kwenye **Weka hili dukani kwako**, au iondoe ili kutoa Ofa dukani.",
+            "**Ongeza Ofa zangu zinazoendelea:** kwenye Duka lako, weka tiki kwenye Ofa ulizokwisha kuweka kisha gusa **Ziweke dukani kwangu**.",
+            "**Kutoka kwenye kifaa:** unapoorodhesha kitu kutoka kwenye kifaa, **Weka hili dukani kwako** huwa na tiki. Kama bado huna duka, litafunguka pamoja na Ofa hiyo. Unaweza kubadilisha kichwa au maneno yake kwenye fomu ya Ofa mpya na bado itaingia dukani. Ukiibadilisha kabisa, au ukichapisha kitu kingine badala yake, itawekwa nje ya duka lako na programu itakuambia. Ili kuiweka dukani, ifungue, gusa **Hariri Tangazo** kisha weka tiki kwenye **Weka hili dukani kwako**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Fomu ya Ofa mpya kwenye ramani bado haina tiki. Chapisha Ofa, kisha iweke dukani kutoka skrini yake ya kuhariri au kutoka Duka lako."
+        },
+        {
+          "type": "h2",
+          "text": "Kulifunga kwa sasa"
+        },
+        {
+          "type": "p",
+          "text": "Gusa **Funga kwa sasa**. Unaweza kusema utarudi lini: baada ya wiki, baada ya wiki mbili au baada ya mwezi. Ofa zake huondoka Sokoni na kusubiri. Hakuna kinachowekwa ndani wakati limefungwa, na hakuna Ofa yake inayoweza kurudishwa juu yenyewe."
+        },
+        {
+          "type": "p",
+          "text": "Gusa **Fungua tena duka langu** ili kuzirudisha zote. Ofa uliyoisitisha mwenyewe inabaki imesitishwa."
+        },
+        {
+          "type": "h2",
+          "text": "Kulifunga kabisa"
+        },
+        {
+          "type": "p",
+          "text": "Gusa **Funga duka langu**. Ofa zake zinabaki Sokoni kama Ofa za kawaida, au zinaisha pia ukichagua **Maliza na Ofa zake pia**. Orodha zako za kibinafsi za vifaa zinabaki kwenye simu yako. Unaweza kufungua duka jipya wakati wowote."
+        },
+        {
+          "type": "p",
+          "text": "Huwezi kulifunga, wala kulifunga kwa sasa, wakati makubaliano kuhusu kitu chake yameombwa au yanaendelea. Programu inasema ni makubaliano mangapi yako wazi, pamoja na kitufe cha kwenda **Biashara Zangu**."
+        },
+        {
+          "type": "h2",
+          "text": "Kwenye jumuiya ya kimataifa"
+        },
+        {
+          "type": "p",
+          "text": "Duka hufanya kazi vivyo hivyo kwenye jumuiya ya kimataifa. Mtu ambaye hajajiunga huona duka ni la aina gani na kuna vitu vingapi ndani yake, lakini kamwe si jina lake wala lako."
+        },
+        {
+          "type": "h2",
+          "text": "Kwenye programu ya wavuti"
+        },
+        {
+          "type": "p",
+          "text": "Programu ya wavuti bado haionyeshi maduka."
+        }
+      ]
+    },
+    {
       "slug": "my-deals",
       "title": "Biashara Zangu",
       "summary": "Mahali pamoja kwa kila makubaliano uliyomo, kila tangazo uliloweka, na makubaliano ya awali.",
@@ -3649,8 +3768,8 @@
       "slug": "near-you",
       "title": "Kupata vitu vilivyo karibu",
       "summary": "Onyesha tu matangazo yaliyo ndani ya umbali kutoka kwako, au kutoka mahali popote unapochagua.",
-      "sourceHash": "e02b25e45f78d9fe",
-      "source-hash": "e02b25e45f78d9fe",
+      "sourceHash": "2db25a661f8751ec",
+      "source-hash": "2db25a661f8751ec",
       "section": "map",
       "related": [
         "browsing-the-market",
@@ -3680,7 +3799,7 @@
         },
         {
           "type": "p",
-          "text": "Ikiwa kivinjari chako tayari kinairuhusu BeanPool kutumia eneo lako, kiteuzi kinaweza kufungukia mahali ulipo sasa. Ikiwa sivyo, hufungukia kwenye sehemu maalum isiyobadilika. Kagua pini, au gusa kitufe cha shabaha au ramani, kabla ya kugusa **Tumia**. Kwenye jumuiya ya kimataifa programu ya wavuti hutuma kitovu ulichochagua kwa jumuiya, kikiwa kimekadiriwa hadi takriban mita 11."
+          "text": "Kwenye programu ya wavuti, kiteuzi hufungukia kwenye kitovu cha mwisho ulichochagua, au vinginevyo mahali pa jumuiya yenyewe (mwonekano wa dunia ikiwa haina). Kagua pini, au gusa ramani, buruta pini au gusa kitufe cha shabaha ili kuchagua kitovu, kabla ya kugusa **Tumia**. Huomba eneo lako ukigusa kitufe cha shabaha tu. Kwenye jumuiya ya kimataifa programu ya wavuti hutuma kitovu ulichochagua kwa jumuiya, kwa ajili ya Soko, Ramani na Nyumbani, kikiwa kimekadiriwa hadi takriban kilomita moja. Hukaribia zaidi unapochagua kipenyo kidogo, au utafutaji uliohifadhi kwenye Nyumbani unapotazama ndani ya umbali mdogo."
         },
         {
           "type": "p",
@@ -3741,8 +3860,8 @@
       "title": "Ujumbe",
       "summary": "Anzisha soga, tuma picha, jibu, toa hisia, hariri, futa, nyamazisha, na mambo ya faragha.",
       "help": "Soga zako. Mazungumzo ya mtu mmoja yamelindwa mwanzo hadi mwisho. Gusa soga kuifungua, au anza kutoka tangazo au marafiki.",
-      "sourceHash": "e7d6a44f876f54e7",
-      "source-hash": "e7d6a44f876f54e7",
+      "sourceHash": "dd41c095375671ac",
+      "source-hash": "dd41c095375671ac",
       "section": "talk",
       "related": [
         "people",
@@ -3789,14 +3908,15 @@
         {
           "type": "ul",
           "items": [
-            "Kutoka kwenye chapisho: gusa **Ujumbe** na jina la mtu.",
+            "Kutoka kwenye wasifu: fungua wasifu wake na uguse **Tuma ujumbe**. Unaweza pia kumwongeza kama rafiki hapo.",
             "Kutoka **Gumzo**: gusa kitufe cha penseli, kisha mpate mtu huyo kwa jina. Kwenye jumuiya ya kimataifa, Ujumbe Mpya huorodhesha watu uliyofanya nao makubaliano na marafiki zako. Ili kumpata mtu mwingine yeyote, andika angalau herufi 2 za jina lao.",
-            "Kutoka kwa marafiki zako: **Gumzo**, kisha **Watu**, kisha **Marafiki**, na uguse kitufe cha ujumbe kando ya jina."
+            "Kutoka kwenye orodha ya wanachama: **Gumzo**, kisha **Watu**, na uguse 💬 kando ya jina la mwanachama katika **Jumuiya** au **Marafiki**.",
+            "Kutoka kwenye chapisho: gusa **Ujumbe** na jina la mtu."
           ]
         },
         {
           "type": "p",
-          "text": "Kwenye programu ya wavuti, tumia **✉️ Ujumbe Mpya wa Moja kwa Moja**, au kitufe cha **💬 Ujumbe** kwenye chapisho. Marafiki zako wako chini ya kichupo cha **Watu**."
+          "text": "Kwenye programu ya wavuti, tumia **Tuma ujumbe** kwenye wasifu wake, 💬 kwenye safu yake chini ya **Watu**, **✉️ Ujumbe Mpya wa Moja kwa Moja**, au kitufe cha **💬 Ujumbe** kwenye chapisho."
         },
         {
           "type": "h2",
@@ -3871,7 +3991,7 @@
           "type": "ul",
           "items": [
             "Gumzo kati ya watu wawili **limelindwa kwa njia fiche kutoka mwisho hadi mwisho**: limefungwa kwenye simu yako na kufunguliwa kwenye yao, kwa hivyo seva ya jumuiya yako haiwezi kulisoma. Kwenye simu, gumzo huonyesha **Imesimbwa mwanzo hadi mwisho** juu. Picha ndani yake zimelindwa kwa njia fiche pia, na vivyo hivyo marekebisho yako.",
-            "Kila ujumbe pia umefungwa kwa aliyetuma, kwa ujumbe huo mmoja, kwa gumzo lake na, ikiwa ni jibu, kwa ujumbe unaojibu. Kwa hivyo seva haiwezi kuonyesha ujumbe wako kama wa yule mtu mwingine, kuutuma tena kama ujumbe mpya, au kuelekeza jibu lako kwenye ujumbe tofauti. Inapojaribu, programu huonyesha **Ujumbe huu haukuweza kuthibitishwa, kwa hivyo hauonyeshwi.** katikati ya gumzo, kama wa mtu yeyote, badala ya maneno. Picha ambayo seva inabadilisha na nyingine inasomeka **Picha haipatikani**.",
+            "Kila ujumbe pia umefungwa kwa aliyetuma, kwa ujumbe huo mmoja, kwa gumzo lake na, ikiwa ni jibu, kwa ujumbe unaojibu. Kwa hivyo seva haiwezi kuonyesha ujumbe wako kama wa yule mtu mwingine, kuutuma tena kama ujumbe mpya, au kuelekeza jibu lako kwenye ujumbe tofauti. Inapojaribu, programu huonyesha **Ujumbe huu haukuweza kuthibitishwa, kwa hivyo hauonyeshwi.** katikati ya gumzo, bila kuonekana kuwa wa mtu yeyote, badala ya maneno. Picha ambayo seva inabadilisha na nyingine inasomeka **Picha haipatikani**.",
             "Ikiwa seva itaweka ujumbe kwenye gumzo lingine, programu huukataa huko. Wakati gumzo zako mbili na mtu yuleyule zimeunganishwa kuwa moja, kila ujumbe hubeba gumzo lililotoka. Ule uliotumwa tangu sasisho hili kisha unaonyeshwa na **Umehamishiwa hapa kutoka kwa mazungumzo mengine.** chini yake. Ule uliotumwa kabla yake unaonyesha mstari wa toleo la zamani badala yake (tazama hapa chini).",
             "Kila ujumbe pia unakumbuka ujumbe mpya zaidi ambao mwandishi wake alikuwa nao walipouandika. Ikiwa seva itauonyesha kabla ya huo, unasomeka **Imeonyeshwa bila kufuata mpangilio uliyoandikiwa.** chini yake. Jumbe mbili zilizoandikwa wakati mmoja, bila moja kufuata nyingine, zinaweza kuja kwa mpangilio wowote bila mstari huo.",
             "Kitu chochote katika gumzo kati ya watu wawili ambacho hakijafungwa hakionyeshwi kamwe kama maneno ya mtu yeyote: kinasomeka **Ujumbe huu haukusimbwa, kwa hivyo BeanPool haiwezi kuthibitisha nani aliuandika.** katikati ya gumzo, na maneno yake hayaonyeshwi. Orodha yako ya gumzo inaonyesha mstari huohuo.",
@@ -3884,7 +4004,7 @@
             "Ujumbe ambao hauwezi kufungwa hautumwi. Ikiwa programu haiwezi kupata ufunguo wa mtu yule mwingine bado, au kufunga kunashindikana, maneno yako yanabaki kwenye kisanduku cha ujumbe kukiwa na mstari unaosema hivyo. Tuma tena baada ya muda mfupi. Seva ya jumuiya yako pia inakataa ujumbe kati ya watu wawili ambao haujafungwa.",
             "Taarifa ambazo BeanPool inaongeza kwenye gumzo kuhusu makubaliano hazijalindwa kwa njia fiche: Maharagwe yaliyoshikiliwa kwa biashara, yaliyolipwa, au yaliyorudishwa inapoghairiwa, kiasi, na jinsi msimamizi alivyosuluhisha biashara iliyokwama na sababu. Watu wanaoendesha seva ya jumuiya yako wanaweza kuzisoma.",
             "Seva pia inajua nani aliyemtumia nani ujumbe, na lini, ujumbe gani ambao kila mmoja unajibu, na huona hisia za emoji. Ujumbe ambao toleo la zamani la programu lilituma bila kufuli unabaki kusomwa kwenye seva.",
-            "Gumzo la kikundi **limelindwa kwa njia fiche kutoka mwisho hadi mwisho** pia, kwenye simu na kwenye programu ya wavuti: ni wanachama wa kikundi pekee wanaoweza kulisoma, na watu wanaoendesha seva ya jumuiya yako hawawezi. Juu ya kisanduku cha ujumbe inasema **Imesimbwa mwanzo hadi mwisho**. Seva ya jumuiya yako bado inaona nani aliyeandika, lini, nani aliyetajwa, ujumbe gani ambao kila mstari unajibu, na maoni ya emoji. Unaona gumzo la kikundi kuanzia siku uliyojiunga pekee: hakuna kilichoandikwa kabla kinachoonyeshwa, na simu yako haishikilii ufunguo wake kamwe. Ujumbe ambao hauwezi kufungwa hautumwi. Mstari ambao hauwezi kukaguliwa kuwa umeandikwa na mwanachama unasomeka **Ujumbe huu haukuweza kuthibitishwa.**, kama wa mtu yeyote. Ikiwa seva ya jumuiya yako ni ya zamani na haiwezi kulinda gumzo za kikundi bado, gumzo linasema hivyo, na seva inaweza kulisoma. Seva inaposasishwa, jumbe hizo za awali zinaondolewa, na mstari katika gumzo unasema hivyo. Tazama \"Vikundi\".",
+            "Gumzo la kikundi **limelindwa kwa njia fiche kutoka mwisho hadi mwisho** pia, kwenye simu na kwenye programu ya wavuti: ni wanachama wa kikundi pekee wanaoweza kulisoma, na watu wanaoendesha seva ya jumuiya yako hawawezi. Juu ya kisanduku cha ujumbe inasema **Imesimbwa mwanzo hadi mwisho**. Seva ya jumuiya yako bado inaona nani aliyeandika, lini, nani aliyetajwa, ujumbe gani ambao kila mstari unajibu, na maoni ya emoji. Unaona gumzo la kikundi kuanzia siku uliyojiunga pekee: hakuna kilichoandikwa kabla kinachoonyeshwa, na simu yako haishikilii ufunguo wake kamwe. Ujumbe ambao hauwezi kufungwa hautumwi. Mstari ambao hauwezi kukaguliwa kuwa umeandikwa na mwanachama unasomeka **Ujumbe huu haukuweza kuthibitishwa.**, bila kuwa wa mtu yeyote. Ikiwa seva ya jumuiya yako ni ya zamani na haiwezi kulinda gumzo za kikundi bado, gumzo linasema hivyo, na seva inaweza kulisoma. Seva inaposasishwa, jumbe hizo za awali zinaondolewa, na mstari katika gumzo unasema hivyo. Tazama \"Vikundi\".",
             "Kwenye programu ya wavuti gumzo la kikundi hufanya kazi kwa njia hiyohiyo, lakini huwezi kutuma picha ndani yake.",
             "Gumzo za biashara ya kijamii na matukio hazijalindwa kwa njia fiche. Watu wanaoendesha seva ya jumuiya yako wanaweza kuzisoma, na seva inaweza kuandika ndani yake kwa jina la mtu yeyote.",
             "Gumzo kati ya watu wawili haliwezi kamwe kugeuzwa kuwa mojawapo ya hayo. Mara programu yako inapoona gumzo kama la kati ya watu wawili, au linaposhikilia ujumbe uliosimbwa kwa njia fiche, linabaki kuwa hilo, chochote ambacho seva inasema: linafunguka tu kama gumzo hilo, likiwa na ukaguzi wote ulio hapo juu, na kile unachotuma ndani yake huwa kimefungwa daima. Simu au kivinjari ambacho hakijawahi kuona gumzo hilo, na hakijapewa ujumbe wowote kati ya jumbe zake zilizosimbwa, hakiwezi kutambua: kwake, gumzo kama hilo linaonekana kama gumzo la kikundi chochote kingine, linalosomeka na seva. Kwenye programu ya wavuti hilo linahusu pia kivinjari ambacho kimetoka kuondolewa tangu wakati huo, dirisha la faragha, au ambalo data yake ya tovuti ilifutwa: programu ya wavuti husahau ni mazungumzo yapi yaliyokuwa kati ya watu wawili. Programu ya simu huweka orodha hiyo.",
@@ -4308,9 +4428,9 @@
       "slug": "people",
       "title": "Watu na marafiki",
       "summary": "Tafuta wanachama wa jumuiya yako, ongeza marafiki, na mdhamini mtu.",
-      "help": "Wanachama wa jumuiya yako na marafiki. Gusa mtu kuona wasifu wake, au gusa 💬 karibu na rafiki kumtumia ujumbe.",
-      "sourceHash": "7720f543f516d9dc",
-      "source-hash": "7720f543f516d9dc",
+      "help": "Wanachama wa jumuiya yako na marafiki zako. Gusa mtu kuona wasifu wake, au gusa 💬 karibu na mwanachama kumtumia ujumbe.",
+      "sourceHash": "44b66169497e9909",
+      "source-hash": "44b66169497e9909",
       "section": "talk",
       "related": [
         "messages",
@@ -4337,7 +4457,7 @@
         },
         {
           "type": "p",
-          "text": "Gusa mtu kuona wasifu wake: maoni na machapisho yao, na, kwenye simu katika jumuiya inayotumia Maharagwe, beji yao ya uaminifu na miamala yao. Tazama \"Wasifu wako\"."
+          "text": "Gusa mtu kuona wasifu wake: maoni na machapisho yao, na, kwenye simu katika jumuiya inayotumia Maharagwe, beji yao ya uaminifu na miamala yao. Unaweza kumtumia ujumbe moja kwa moja kutoka kwenye wasifu wake kwa **Tuma ujumbe**, au kumwongeza kama rafiki kwa **+ Ongeza rafiki**. Tazama \"Wasifu wako\"."
         },
         {
           "type": "h2",
@@ -4346,8 +4466,8 @@
         {
           "type": "ul",
           "items": [
-            "Katika **Jumuiya**, gusa **+ Ongeza** kando ya jina. Inabadilika kuwa **Ameongezwa**. Gusa **Ameongezwa** ili kuwaondoa tena. Kwenye programu ya wavuti inabadilika kuwa **✓ Rafiki**, ambayo huwezi kuigusa: ili kumwondoa mtu, tumia **Ondoa** chini ya **Marafiki**.",
-            "Katika **Marafiki**, gusa kitufe cha ujumbe ili kuanzisha soga, au kitufe cha kuondoa, kisha **Ondoa**, ili kumwondoa mtu.",
+            "Katika **Jumuiya**, gusa 💬 kuanzisha gumzo, au gusa **+ Ongeza** kando ya jina. Inabadilika kuwa **Ameongezwa**. Gusa **Ameongezwa** ili kuwaondoa tena. Kwenye programu ya wavuti inabadilika kuwa **✓ Rafiki**, ambayo huwezi kuigusa: ili kumwondoa mtu, tumia **Ondoa** chini ya **Marafiki**. Unaweza pia kumtumia mtu ujumbe au kumwongeza kama rafiki moja kwa moja kutoka kwenye wasifu wake.",
+            "Katika **Marafiki**, gusa 💬 ili kuanzisha gumzo, au kitufe cha kuondoa, kisha **Ondoa**, ili kumwondoa mtu.",
             "Mtu anapokuongeza, juu ya **Marafiki** inasema ni nani, kama vile \"Sam amekuongeza\", kukiwa na **Ongeza pia**. Gusa jina lao ili uone wasifu wao kwanza. Hakuna arifa. Mstari huo unaondoka unapowaongeza pia, au baada ya siku 30. Hadi 20 huonyeshwa, kisha wangapi zaidi.",
             "Unaweza kuongeza hadi watu 100 katika saa 24 zozote. Kumwondoa mtu kunahesabiwa pia. Ukifikia kiwango hicho, programu inasema hivyo na lini unaweza kuongeza mtu tena.",
             "Huwezi kumwongeza mtu uliyemzuia: kwanza acha kumzuia. Tazama \"Kuzuia mtu\"."
@@ -6720,8 +6840,8 @@
       "title": "Kuzuia mtu",
       "summary": "Ficha matangazo na ujumbe wa mtu usikuonekanie, na ubadilishe baadaye.",
       "help": "Watu uliowazuia. Matangazo na ujumbe wao vimefichwa kwako; ondoa kizuizi cha mtu hapa.",
-      "sourceHash": "be8515fdd8bc780e",
-      "source-hash": "be8515fdd8bc780e",
+      "sourceHash": "2fa23652f09ffb9b",
+      "source-hash": "2fa23652f09ffb9b",
       "section": "settings",
       "related": [
         "reporting",
@@ -6813,7 +6933,8 @@
           "type": "ul",
           "items": [
             "Fungua **Mipangilio**. Chini ya **KISHERIA & FARAGHA**, gusa **Dhibiti Watumiaji Waliozuiwa**.",
-            "Gusa **Ondoa kizuizi** kando ya jina, au **Ondoa Vizuizi Vyote**."
+            "Gusa **Ondoa kizuizi** kando ya jina, au **Ondoa Vizuizi Vyote**.",
+            "Kwenye programu ya simu unaweza pia kumwondolea mtu kizuizi kutoka kwenye wasifu wake. Chini ya jina lake imeandikwa \"Umemzuia\" na jina lake. Gusa **Ondoa kizuizi** hapo."
           ]
         },
         {

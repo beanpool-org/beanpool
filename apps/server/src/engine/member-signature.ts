@@ -431,14 +431,23 @@ export const NONCE_SWEEP_ABOVE = 10_000;
  *   - An established member (engine/probation.ts isEstablishedMember: a node role, or a member row 72 hours old; where
  *     probation is on, also off it and not 12 words alone): NONCE_KEY_MAX in flight, or NONCE_KEY_MINUTES × the
  *     gateway's minute allowance where that is more (nonceKeyShare; its honest most is the allowance over the 10-minute
- *     hold), refused only when the rows' region holds NONCE_ROWS_MAX: 200 established keys flooding at once.
+ *     hold), refused only when the rows' region holds NONCE_ROWS_MAX: 200 established keys flooding at once at 120 a
+ *     minute, fewer at a higher allowance (below).
  *   - A newcomer (any other key with a row: a member in their first days, on the global node one on probation or with
  *     12 words alone, a visitor's row): NONCE_NEW_KEY_MAX, or NONCE_NEW_KEY_MINUTES × the allowance (nonceNewKeyShare:
  *     twice an honest newcomer's worst case), from the same region, refused once it holds NONCE_ROWS_MAX less
- *     NONCE_MEMBERS_RESERVE (the line, 350,000: 584 newcomer keys), so established members keep the reserve.
+ *     NONCE_MEMBERS_RESERVE (the line, 350,000: 584 newcomer keys at 120 a minute), so established members keep the
+ *     reserve.
  *   - Any other verified key: NONCE_ADDRESS_MAX an address (IPv6 by its /64), NONCE_STRANGERS_MAX together, which 34
  *     addresses fill. A stranger flood of any size never touches an account: while it fills the strangers' region, new
  *     joins and strangers' gated reads wait, and their public reads are answered as unsigned.
+ *
+ * A key's shares follow the allowance, and the line, the ceiling and the reserve do not, so the higher an operator sets
+ * the allowance, the fewer keys it takes. Newcomer keys that reach the line, and established keys that fill the region,
+ * each at its share (measured on this store, 2026-10-23): 584 and 200 at 120 a minute (the default), 234 and 80 at 300,
+ * 117 and 40 at 600, 59 and 20 at 1,200, 24 and 8 at 3,000 (the manager's presets, GatewayModule.tsx). An address's
+ * share does not follow it: 34 addresses fill the strangers' region at any allowance. Whether to cap the shares'
+ * scaling is open (#2359 review of 087685cd, parked for the maintainer).
  *
  * Where NONCE_ROWS_MAX comes from: the most whose worst case stays within about a third of the 512 MB heap
  * (docker-compose.yml), beside the 58–110 MB a node of 200–1,000 members holds. Measured on this store (2026-10-23, Node

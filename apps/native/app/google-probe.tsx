@@ -17,6 +17,7 @@ import * as Crypto from 'expo-crypto';
 import { Stack, ErrorBoundary } from 'expo-router';
 
 export { ErrorBoundary };
+import { t } from '@beanpool/core';
 import { useIdentity } from './IdentityContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
 import { SsoSignInError, fetchSsoNonce, signInWithGoogle } from '../utils/sso-signin';
@@ -141,8 +142,8 @@ export default function GoogleProbeScreen() {
     if (!__DEV__) {
         return (
             <View style={styles.centre}>
-                <Stack.Screen options={{ title: 'Not available' }} />
-                <Text style={styles.muted}>This screen is a development diagnostic.</Text>
+                <Stack.Screen options={{ title: t('Not available') }} />
+                <Text style={styles.muted}>{t('This screen is a development diagnostic.')}</Text>
             </View>
         );
     }
@@ -182,54 +183,52 @@ export default function GoogleProbeScreen() {
 
     return (
         <ScrollView contentContainerStyle={styles.container}>
-            <Stack.Screen options={{ title: 'Google sub probe' }} />
+            <Stack.Screen options={{ title: t('Google sub probe') }} />
 
             <View style={styles.banner}>
                 <Text style={styles.bannerText}>
-                    Diagnostic screen. Sign in here and on the web probe with the same Google account, then
-                    compare the two values.
+                    {t('Diagnostic screen. Sign in here and on the web probe with the same Google account, then compare the two values.')}
                 </Text>
             </View>
 
-            <Text style={styles.label}>1 · Node chain</Text>
-            {chain.stage === 'loading' && <Text style={styles.muted}>Asking the node for a nonce…</Text>}
+            <Text style={styles.label}>{t('1 · Node chain')}</Text>
+            {chain.stage === 'loading' && <Text style={styles.muted}>{t('Asking the node for a nonce…')}</Text>}
             {chain.stage === 'no-identity' && (
                 <Text style={styles.error} accessibilityRole="alert">
-                    No identity on this device. Finish signup first — the nonce request has to be signed.
+                    {t('No identity on this device. Finish signup first — the nonce request has to be signed.')}
                 </Text>
             )}
             {chain.stage === 'no-node' && (
                 <Text style={styles.error} accessibilityRole="alert">
-                    No node configured. Join one first; there is nobody to ask for a nonce.
+                    {t('No node configured. Join one first; there is nobody to ask for a nonce.')}
                 </Text>
             )}
             {chain.stage === 'failed' && (
                 <>
-                    <Text style={styles.error} accessibilityRole="alert">FAILED ({chain.reason})</Text>
+                    <Text style={styles.error} accessibilityRole="alert">{t('FAILED ({reason})', { reason: chain.reason })}</Text>
                     <Text style={styles.mono}>{chain.detail}</Text>
                 </>
             )}
             {chain.stage === 'ready' && (
                 <>
-                    <Text style={styles.ok}>✓ nonce issued</Text>
+                    <Text style={styles.ok}>{t('✓ nonce issued')}</Text>
                     <Text style={styles.mono}>{chain.nonce}</Text>
                     {sentDigest && (
                         <>
-                            <Text style={styles.label}>SHA-256 of the nonce (what a hashed echo would be)</Text>
+                            <Text style={styles.label}>{t('SHA-256 of the nonce (what a hashed echo would be)')}</Text>
                             <Text style={styles.mono}>{sentDigest}</Text>
                         </>
                     )}
                     <Text style={styles.muted}>
-                        from {chain.url}
-                        {chain.providers.length > 0 && ` · accepts: ${chain.providers.join(', ')}`}
+                        {chain.providers.length > 0 ? t('from {url} · accepts: {providers}', { url: chain.url, providers: chain.providers.join(', ') }) : t('from {url}', { url: chain.url })}
                     </Text>
                 </>
             )}
 
-            <Text style={styles.label}>2 · Google sheet</Text>
+            <Text style={styles.label}>{t('2 · Google sheet')}</Text>
             {chain.stage !== 'ready' && (
                 <Text style={styles.muted}>
-                    No node nonce, so signing in still measures the sub but does NOT test the chain.
+                    {t('No node nonce, so signing in still measures the sub but does NOT test the chain.')}
                 </Text>
             )}
             
@@ -237,35 +236,32 @@ export default function GoogleProbeScreen() {
                 style={[styles.button, { backgroundColor: '#4285F4', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }]} 
                 onPress={signIn}
             >
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>Sign in with Google</Text>
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '600' }}>{t('Sign in with Google')}</Text>
             </TouchableOpacity>
 
             {error && <Text style={styles.error} accessibilityRole="alert">{error}</Text>}
 
             {nonceEcho && (
                 <>
-                    <Text style={styles.label}>3 · Nonce binding — the answer nobody has had</Text>
+                    <Text style={styles.label}>{t('3 · Nonce binding — the answer nobody has had')}</Text>
                     <Text style={nonceEcho.startsWith('MISMATCH') ? styles.error : styles.ok}>
                         {nonceEcho}
                     </Text>
                     <Text style={styles.muted}>
-                        The server tolerates both forms on documentation alone. This is the first
-                        time anything has measured which one arrives.
+                        {t('The server tolerates both forms on documentation alone. This is the first time anything has measured which one arrives.')}
                     </Text>
                 </>
             )}
 
             {idToken && chain.stage === 'ready' && identity && (
                 <>
-                    <Text style={styles.label}>4 · Does the node accept a real token?</Text>
+                    <Text style={styles.label}>{t('4 · Does the node accept a real token?')}</Text>
                     <Text style={styles.muted}>
-                        Sends this token to the node with a deliberately wrong nonce. Rejection ON
-                        THE NONCE is the pass — it means the signature, issuer and audience all held
-                        against Google&apos;s live keys. Nothing is stored either way.
+                        {t("Sends this token to the node with a deliberately wrong nonce. Rejection ON THE NONCE is the pass — it means the signature, issuer and audience all held against Google's live keys. Nothing is stored either way.")}
                     </Text>
                     <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel="Ask the node to verify this Google token"
+                        accessibilityLabel={t('Ask the node to verify this Google token')}
                         accessibilityState={{ disabled: verifying, busy: verifying }}
                         disabled={verifying}
                         style={[styles.verifyButton, verifying && styles.verifyButtonBusy]}
@@ -284,7 +280,7 @@ export default function GoogleProbeScreen() {
                         }}
                     >
                         <Text style={styles.verifyButtonText}>
-                            {verifying ? 'Asking the node…' : 'Ask the node to verify'}
+                            {verifying ? t('Asking the node…') : t('Ask the node to verify')}
                         </Text>
                     </TouchableOpacity>
                     {verifyResult && (
@@ -301,36 +297,36 @@ export default function GoogleProbeScreen() {
 
             {tokenSub && (
                 <>
-                    <Text style={styles.label}>Token sub — compare this with the web probe</Text>
+                    <Text style={styles.label}>{t('Token sub — compare this with the web probe')}</Text>
                     <TouchableOpacity
                         accessibilityRole="button"
-                        accessibilityLabel="Copy the token sub to the clipboard"
-                        accessibilityHint="Copies the value so you can compare it with the web probe"
+                        accessibilityLabel={t('Copy the token sub to the clipboard')}
+                        accessibilityHint={t('Copies the value so you can compare it with the web probe')}
                         onPress={() => Clipboard.setStringAsync(tokenSub)}
                     >
                         <Text style={styles.value}>{tokenSub}</Text>
-                        <Text style={styles.muted}>tap to copy</Text>
+                        <Text style={styles.muted}>{t('tap to copy')}</Text>
                     </TouchableOpacity>
                 </>
             )}
 
             {audience && (
                 <>
-                    <Text style={styles.label}>Audience</Text>
+                    <Text style={styles.label}>{t('Audience')}</Text>
                     <Text style={styles.mono}>{audience}</Text>
                 </>
             )}
             
             {issuer && (
                 <>
-                    <Text style={styles.label}>Issuer</Text>
+                    <Text style={styles.label}>{t('Issuer')}</Text>
                     <Text style={styles.mono}>{issuer}</Text>
                 </>
             )}
 
             {email && (
                 <>
-                    <Text style={styles.label}>Email</Text>
+                    <Text style={styles.label}>{t('Email')}</Text>
                     <Text style={styles.mono}>{email}</Text>
                 </>
             )}

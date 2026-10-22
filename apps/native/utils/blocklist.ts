@@ -378,7 +378,8 @@ let syncing: Promise<void> = Promise.resolve();
  *   key of the account whose list it is, and only while that account is on the phone. One sync at a time.
  */
 export function syncBlocks(): Promise<void> {
-    const run = syncing.then(syncBlocksOnce);
+    // After the one before it, however that ended: a sync that failed never stops the next.
+    const run = syncing.then(syncBlocksOnce, syncBlocksOnce);
     syncing = run;
     return run;
 }

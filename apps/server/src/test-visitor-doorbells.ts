@@ -29,7 +29,8 @@
  *      removal's grace window, which pauses the member (removal by vote S1), and its end (tickDecisions), an admin prune
  *      of a member with two listings, an enterprise
  *      paused and resumed, winding up and cancelled, and paused when its only keeper, the lead, is unbound; a member on
- *      holiday and back; a report actioned with a suspension; a Delete account over HTTP; a trade's step
+ *      holiday and back; an admin's pause and its lift; a report actioned with a suspension; a Delete account over HTTP;
+ *      a trade's step
  *      (othersGetDoorbell). Every socket off the member feed gets one bare listing doorbell per change, and an unsigned
  *      reader's board changes to match; the member's socket gets that change's own events and no listing doorbell, as
  *      before
@@ -492,6 +493,20 @@ async function main(): Promise<void> {
         se.setHolidayMode(fay.pk, false);
         await rings('back from holiday', 'post_updated', ['profile_updated']);
         assert((await board()).includes(fayOffer), `back from holiday: ${READER} reads her offer again`);
+
+        // An admin pauses a member, and lifts it (removal by vote S1): their listings leave the board, and come back.
+        const pat = member('DoorbellPat');
+        const patOffer = await offer(pat, 'Doorbell Pat offer');
+        await sleep(100);
+        clear();
+        assert(se.adminEmergencySuspend(pat.pk, 'owner:password', 'A doorbell test of a pause and its lift').success, 'an admin pauses Pat');
+        await rings("an admin's pause", 'post_removed', ['profile_updated']);
+        assert(!(await board()).includes(patOffer), `an admin's pause: ${READER} no longer reads his offer`);
+        await sleep(100);
+        clear();
+        assert(se.adminLiftSuspension(pat.pk, 'owner:password').success, 'and lifts it');
+        await rings('its lift', 'post_updated', ['profile_updated']);
+        assert((await board()).includes(patOffer), `its lift: ${READER} reads his offer again`);
 
         // A report actioned with a suspension: the member's listings are paused.
         const gus = member('DoorbellGus');

@@ -125,6 +125,49 @@ describe("the composer's Offer and the List sheet's choice", () => {
         expect(mockDb.runAsync.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO posts'))).toBe(false);
     });
 
+    it("the shop can't be read, or opened: nothing is posted, it says why, and the choice is kept for a retry", async () => {
+        const UNREAD = "Your shop couldn't be read just now. Try again.";
+        const notJson = () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <'); }, text: async () => '<html>' });
+        const cases: Array<{ name: string; set: () => void; says: string }> = [
+            { name: 'GET 500', set: () => { routes['GET /api/shops/mine'] = () => reply(500, {}); }, says: UNREAD },
+            { name: 'GET 403', set: () => { routes['GET /api/shops/mine'] = () => reply(403, { error: 'Members only.' }); }, says: UNREAD },
+            { name: 'GET 200, not JSON (a captive portal)', set: () => { routes['GET /api/shops/mine'] = notJson as any; }, says: UNREAD },
+            { name: 'GET 200, neither a shop nor shop: null', set: () => { routes['GET /api/shops/mine'] = () => reply(200, {}); }, says: UNREAD },
+            {
+                name: 'the PUT that opens it refused (a muted member)',
+                set: () => {
+                    routes['GET /api/shops/mine'] = () => reply(200, { shop: null });
+                    routes['PUT /api/shops/mine'] = () => reply(403, { error: 'You are muted in this community for now.' });
+                },
+                says: 'You are muted in this community for now.',
+            },
+            {
+                name: 'the PUT that opens it answering without a shop',
+                set: () => {
+                    routes['GET /api/shops/mine'] = () => reply(200, { shop: null });
+                    routes['PUT /api/shops/mine'] = () => reply(200, { success: true });
+                },
+                says: UNREAD,
+            },
+            {
+                name: 'no network',
+                set: () => { routes['GET /api/shops/mine'] = () => { throw new TypeError('Network request failed'); }; },
+                says: 'Network request failed',
+            },
+        ];
+        for (const c of cases) {
+            sent.length = 0;
+            store.map.delete(SHOP_CHOICE_KEY);
+            mockDb.runAsync.mockClear();
+            c.set();
+            await rememberShopChoice(HERE, 'Cordless drill', true);
+            await expect(createPost(composerOffer('Cordless drill')), c.name).rejects.toThrow(c.says);
+            expect(shopAndPost(), c.name).not.toContain('POST /api/marketplace/posts');
+            expect(store.map.has(SHOP_CHOICE_KEY), c.name).toBe(true);
+            expect(mockDb.runAsync.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO posts')), c.name).toBe(false);
+        }
+    });
+
     it('a node from before shops: the Offer posts on its own', async () => {
         routes['GET /api/shops/mine'] = () => reply(404, {});
         await rememberShopChoice(HERE, 'Cordless drill', true);

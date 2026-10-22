@@ -10,8 +10,11 @@
  *     (these tests wait for it, `blockSyncsEndedForTests`, before reading what reached it)
  *   - a node with no block list (404, 405): the block stands on the phone, one try, then nothing for a day
  *   - a block whose answer never came may be on the list: an unblock takes it off there all the same
+ *   - someone blocked in both apps comes off the community's list when the phone unblocks them; a web-app-only block stays
+ *   - a community the phone visits as a guest is sent nothing; once the member joins there, the next sync sends the list
+ *   - a community that has the account as no member yet (403 not_a_member) holds nothing back for a day
  *   - the blocks the phone held before this build go once, in one request, and a key the community doesn't know goes
- *     on its own
+ *     on its own; never more than 30 requests a minute of the member's 120, and the rest go by themselves
  *   - each community the member is on with the phone gets the phone's list, and an unblock reaches each of them
  *   - only ever the account's own: another account on the phone neither sends nor signs them
  *   - a sync that is cut off has its record, not a second copy: what reached the community is never sent again
@@ -50,7 +53,12 @@ vi.mock('expo-crypto', async () => {
 // db.ts loads for Sign Out; its device modules are stubbed at the boundary, as blocklist-per-account.test.ts does.
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn(), defaultDatabaseDirectory: '/data/user/0/org.beanpool.app/files/SQLite' }));
 vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/cache/', deleteAsync: vi.fn(async () => {}) }));
-vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: vi.fn() }));
+// The guest marks (markGuestNode, clearGuestNode, isGuestNode) are the real ones, over the same storage.
+vi.mock('../nodes', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../nodes')>()),
+    getDatabaseFilenameForNode: vi.fn(),
+    addSavedNode: vi.fn(),
+}));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn() }));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 vi.mock('../db', async (importOriginal) => ({
@@ -79,10 +87,12 @@ async function startApp() {
     const leaves = await import('../account-leaves-phone');
     const restore = await import('../restore-account');
     const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
+    const nodes = await import('../nodes');
     const nameOnNode = async () => null;
     return {
         ...blocklist,
         identity,
+        nodes,
         signOut: async (account: BeanPoolIdentity) => {
             await leaves.signOutOfThisPhone(account);
             await identity.wipeIdentityScopedStorage(AsyncStorage);
@@ -112,7 +122,8 @@ const net = {
     stallBody: false,
     /** The request whose body stalled, with its signal, to see that the phone aborted it. */
     stalled: undefined as { signal?: AbortSignal } | undefined,
-    sent: [] as { url: string; signedBy: string; body: any }[],
+    /** Each request, and the phone's clock as it went. */
+    sent: [] as { url: string; signedBy: string; body: any; time: number }[],
     lists: new Map<string, Set<string>>(),
     known: new Set<string>(),
 };
@@ -150,7 +161,7 @@ beforeEach(async () => {
         const headers = (init?.headers ?? {}) as Record<string, string>;
         const body = JSON.parse((init?.body as string) ?? '{}');
         const signer = headers['X-Public-Key'];
-        net.sent.push({ url, signedBy: signer, body });
+        net.sent.push({ url, signedBy: signer, body, time: Date.now() });
         const reply = (status: number, answer: unknown, raw?: string) => ({
             ok: status >= 200 && status < 300,
             status,
@@ -345,6 +356,22 @@ describe('a block made on the phone', () => {
         expect(blockChanges().map((c) => c.at)).toEqual([`${NODE}/api/blocks/remove`, `${NODE}/api/blocks/remove`]);
         expect(blockChanges().map((c) => c.body.targetPubkey).sort()).toEqual([SPAMMER, HARASSER].sort());
         expect([...listAt(NODE, ana.publicKey)]).toEqual([STRANGER]);
+    });
+
+    it('blocked in both apps, it comes off the community\'s list when the phone unblocks it: the community keeps one list', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        // Blocked in the web app first, then on the phone.
+        listAt(NODE, ana.publicKey).add(HARASSER);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
+
+        net.sent = [];
+        await app.unblockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
     });
 });
 
@@ -542,6 +569,85 @@ describe('a community that refuses a block (a 403, its limit)', () => {
     });
 });
 
+describe('a community the phone visits as a guest ("Guest view first", global-guest-visit.ts)', () => {
+    // The mark as the visit writes it, and the address the phone is set to, each with and without a trailing slash.
+    for (const [marked, setTo] of [[OTHER, OTHER], [OTHER, `${OTHER}/`], [`${OTHER}/`, OTHER]]) {
+        it(`is sent nothing of the list (marked ${marked}, set to ${setTo}); once the member joins there, the next sync sends it`, async () => {
+            const app = await startApp();
+            await app.identity.importIdentity(ana);
+            await app.blockUser(HARASSER, ana.publicKey);
+            await app.blockSyncsEndedForTests();
+
+            // Ana looks around the other community, which she is no member of: the phone marks it a guest visit and goes there.
+            await app.nodes.markGuestNode(marked);
+            mem.async.set(ANCHOR, setTo);
+            net.sent = [];
+            await app.syncBlocks();
+            await app.blockUser(SPAMMER, ana.publicKey, 'Abusive user reported via Trust Profile');
+            await app.blockSyncsEndedForTests();
+            await app.syncBlocks();
+            expect(blockChanges()).toEqual([]);
+            expect(await app.getBlockedUsers()).toEqual([HARASSER, SPAMMER]);
+
+            // She joins there as the same account, and registering clears the mark (nodes.ts): the next sync sends both, the
+            // same day.
+            await app.nodes.clearGuestNode(marked);
+            await app.syncBlocks();
+            expect(blockChanges()).toEqual([{ at: `${OTHER}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkeys: [HARASSER, SPAMMER] } }]);
+            expect([...listAt(OTHER, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
+        });
+    }
+});
+
+describe('a community that has the account as no member yet (403 not_a_member, routes/blocks.ts)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-23T08:00:00Z'));
+    });
+
+    it('holds no block back for a day: once the account is a member there, the next sync sends it', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.refuse.set(NODE, { status: 403, code: 'not_a_member' });
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+
+        // She joins; the 5-minute tick.
+        net.refuse.delete(NODE);
+        vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([HARASSER]);
+    });
+
+    it('nor an unblock, nor anything after it', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+
+        net.refuse.set(NODE, { status: 403, code: 'not_a_member' });
+        net.sent = [];
+        await app.unblockUser(HARASSER);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([{ at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+
+        net.refuse.delete(NODE);
+        vi.setSystemTime(new Date(Date.now() + 5 * 60 * 1000));
+        net.sent = [];
+        await app.blockUser(SPAMMER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toEqual([
+            { at: `${NODE}/api/blocks/remove`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } },
+            { at: `${NODE}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: SPAMMER } },
+        ]);
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([SPAMMER]);
+    });
+});
+
 describe('the blocks the phone held before this build', () => {
     it('go to the community once, in one request; a key it has no row for goes on its own, and the next sync sends nothing', async () => {
         mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
@@ -575,7 +681,48 @@ describe('the blocks the phone held before this build', () => {
         await app.syncBlocks();
         expect(blockChanges()).toEqual([]);
     });
+
+    it('many the community has no row for: never more than 30 requests a minute of the member\'s 120, and the rest go by themselves', async () => {
+        vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+        vi.setSystemTime(new Date('2026-10-23T08:00:00Z'));
+        // 100 authors from connected communities' boards: the list goes first, then each on its own.
+        const strangers = Array.from({ length: 100 }, (_, i) => (i + 1).toString(16).padStart(64, '0'));
+        mem.secure.set(IDENTITY_KEY, JSON.stringify(ana));
+        mem.async.set(listKey(ana.publicKey), JSON.stringify(strangers));
+        const app = await startApp();
+
+        await app.syncBlocks();
+        expect(blockChanges()).toHaveLength(30);
+        expect(blockChanges()[0].body).toEqual({ targetPubkeys: strangers });
+
+        // A minute at a time, with no sync asked for: every one reaches the community.
+        for (let minute = 1; minute <= 4; minute++) {
+            await vi.advanceTimersByTimeAsync(60_000);
+            await app.blockSyncsEndedForTests();
+        }
+        expect([...listAt(NODE, ana.publicKey)].sort()).toEqual([...strangers].sort());
+        expect(mostInAMinute()).toBe(30);
+
+        // Unblock All: each comes off, as many a minute.
+        net.sent = [];
+        expect(await app.clearBlocklist()).toBe(true);
+        await app.blockSyncsEndedForTests();
+        expect(blockChanges()).toHaveLength(30);
+        for (let minute = 1; minute <= 4; minute++) {
+            await vi.advanceTimersByTimeAsync(60_000);
+            await app.blockSyncsEndedForTests();
+        }
+        expect([...listAt(NODE, ana.publicKey)]).toEqual([]);
+        expect(blockChanges().filter((c) => c.at.endsWith('/remove'))).toHaveLength(100);
+        expect(mostInAMinute()).toBe(30);
+    });
 });
+
+/** The most block requests the phone sent in any one minute. */
+function mostInAMinute(): number {
+    const times = net.sent.filter((s) => s.url.includes('/api/blocks')).map((s) => s.time);
+    return Math.max(0, ...times.map((t) => times.filter((u) => u >= t && u < t + 60_000).length));
+}
 
 describe('each community the member is on with this phone', () => {
     it('gets the phone\'s list, and an unblock made at one is taken off the other when the phone is next there', async () => {

@@ -201,3 +201,73 @@ describe('a Block made on the phone, against a real community node', () => {
         expect(await blockedAtNode(ana.publicKey)).toEqual([dee.publicKey, sol].sort());
     }, START_MS);
 });
+
+/** A fresh app run: `who` on the phone, set to this community, holding `blocks` from before this build. */
+async function phoneWith(who: BeanPoolIdentity, blocks: string[]) {
+    mem.async.clear();
+    mem.secure.clear();
+    mem.async.set(ANCHOR, URL_BASE);
+    mem.secure.set(IDENTITY_KEY, JSON.stringify(who));
+    mem.async.set(`beanpool_blocked_users:${who.publicKey}`, JSON.stringify(blocks));
+    vi.resetModules();
+    return { ...(await import('../blocklist')), nodes: await import('../nodes') };
+}
+
+const asSent = () => sent.map((r) => `${r.method} ${r.path} ${r.status}`);
+
+describe('a member who is not yet a member there, against a real community node', () => {
+    it('the node\'s 403 not_a_member holds nothing back: once she joins, the next sync puts her blocks on its list', async () => {
+        await control('limiters');
+        const [kim, hal] = await Promise.all(['Kim', 'Hal'].map((n) => draftIdentity(n)));
+        await control('members', { members: [{ key: hal.publicKey, callsign: hal.callsign }] });
+        // Not marked a guest visit (markGuestNode never fails the visit, and writes nothing when storage fails).
+        const phone = await phoneWith(kim, [hal.publicKey]);
+        sent.length = 0;
+        await phone.syncBlocks();
+        expect(asSent()).toEqual(['POST /api/blocks 403']);
+        expect(await blockedAtNode(kim.publicKey)).toEqual([]);
+
+        // She joins, as the same account; the next sync (the 5-minute tick, a return to the app), the same day.
+        await control('members', { members: [{ key: kim.publicKey, callsign: kim.callsign }] });
+        sent.length = 0;
+        await phone.syncBlocks();
+        expect(asSent()).toEqual(['POST /api/blocks 200']);
+        expect(await blockedAtNode(kim.publicKey)).toEqual([hal.publicKey]);
+    }, START_MS);
+
+    it('a guest visit ("Guest view first") sends the node nothing of her list; once she joins, the next sync sends it', async () => {
+        await control('limiters');
+        const [lou, hal] = await Promise.all(['Lou', 'Hal'].map((n) => draftIdentity(n)));
+        await control('members', { members: [{ key: hal.publicKey, callsign: hal.callsign }] });
+        const phone = await phoneWith(lou, [hal.publicKey]);
+        await phone.nodes.markGuestNode(URL_BASE);
+        sent.length = 0;
+        await phone.syncBlocks();
+        expect(sent).toEqual([]);
+
+        // She joins: registering clears the mark (nodes.ts clearGuestNode).
+        await control('members', { members: [{ key: lou.publicKey, callsign: lou.callsign }] });
+        await phone.nodes.clearGuestNode(URL_BASE);
+        await phone.syncBlocks();
+        expect(asSent()).toEqual(['POST /api/blocks 200']);
+        expect(await blockedAtNode(lou.publicKey)).toEqual([hal.publicKey]);
+    }, START_MS);
+});
+
+describe('a first sync with many keys the node has no row for, against a real community node', () => {
+    it('takes at most 30 of the member\'s 120 requests a minute: none is answered 429, and her own next read is answered', async () => {
+        await control('limiters');
+        const mo = await draftIdentity('Mo');
+        await control('members', { members: [{ key: mo.publicKey, callsign: mo.callsign }] });
+        // 150 authors from connected communities' boards: the list goes first, then each on its own.
+        const strangers = Array.from({ length: 150 }, () => randomBytes(32).toString('hex'));
+        const phone = await phoneWith(mo, strangers);
+        sent.length = 0;
+        await phone.syncBlocks();
+        expect(sent.filter((r) => r.status === 429)).toEqual([]);
+        expect(sent).toHaveLength(30);
+        expect(await blockedAtNode(mo.publicKey)).toHaveLength(29);
+        // chatsOf reads them signed by her, and expects a 200.
+        expect(await chatsOf(mo)).toEqual([]);
+    }, START_MS);
+});

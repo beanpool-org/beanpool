@@ -18,7 +18,9 @@
  * - Pause ("Closed for now", optionally back on a day) and close (Marty, 19 Oct evening), neither while a deal on one of
  *   its things is asked for or open. Paused, its Offers on the board go off it (status 'paused', so every app and every
  *   copy takes them off, as a member's own pause does) and the shop keeps which ones; nothing goes in while it is, and
- *   none of them is put back up alone; reopened, those come back and an Offer its owner paused before stays paused.
+ *   none of them is put back up alone; reopened, those come back and an Offer its owner paused before stays paused. The
+ *   owner's word wins meanwhile: one they pause, end or edit out of the shop while it is closed is theirs, and stays as
+ *   they left it (forgetPausedPost).
  *   Closed, the row goes with a tombstone, and its Offers stay as ordinary Offers (the ones a pause took down back on the
  *   board) or end, as its owner picks. Closing an enterprise's shop winds up nothing.
  * - Read (routes/shops.ts): a member gets it whole, with counts of its listings as that member sees them; a visitor (the
@@ -135,12 +137,17 @@ export function shopOnEdit(post: { id: string; type: string; audienceScope?: str
     return assertShopForPost(post.authorPublicKey, post.type, post.audienceScope, shopId);
 }
 
-/** After an edit took a listing out of its shop (`from`), the shop's pause no longer holds it. In the edit's transaction. */
+/**
+ * The shop's pause (`from`) no longer holds this listing, so its reopen leaves it as it is: an edit took it out of the shop,
+ * or its owner paused or ended it themselves (engine/posts.ts updatePost, pausePost, removePost). In the caller's
+ * transaction; a shop that doesn't hold it is left unwritten.
+ */
 export function forgetPausedPost(from: string, postId: string): void {
     const shop = shopById(from);
     if (!shop?.paused_posts) return;
-    const kept = pausedPostsOf(shop).filter(id => id !== postId);
-    db.prepare('UPDATE shops SET paused_posts = ? WHERE id = ?').run(JSON.stringify(kept), shop.id);
+    const held = pausedPostsOf(shop);
+    if (!held.includes(postId)) return;
+    db.prepare('UPDATE shops SET paused_posts = ? WHERE id = ?').run(JSON.stringify(held.filter(id => id !== postId)), shop.id);
 }
 
 /** Refuses putting one of a paused shop's Offers back up alone (engine/posts.ts resumePost). */

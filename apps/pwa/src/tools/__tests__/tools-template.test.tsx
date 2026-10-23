@@ -139,16 +139,20 @@ function layoutProblems(root: HTMLElement): string[] {
 
 async function axeProblems(root: HTMLElement): Promise<string[]> {
     // jsdom computes no colours: contrast is the central tokens' (each with its dark pair) and the browser checks'.
-    const result = await axe.run(root, { rules: { 'color-contrast': { enabled: false } } });
+    // Every rule still runs and every violation keeps all its nodes; only the passes go unnamed. Naming each passing node
+    // costs a selector search of the whole page, which on the full shed's 316 rows took the run from ~1 s to over 30 s.
+    const result = await axe.run(root, { rules: { 'color-contrast': { enabled: false } }, resultTypes: ['violations'] });
     return result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`);
 }
 
 describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
-    it('the checks bite: an unwrapped line, a word too wide, a nameless button and a word outside t() are each found', async () => {
+    it('the checks bite: an unwrapped line, a word too wide, nameless buttons (each one named) and a word outside t() are each found', async () => {
         const bad = render(
             <div>
                 <p>{'[' + 'Ŵ'.repeat(30) + ']'}</p>
                 <button type="button" className="break-words"><span aria-hidden="true">…</span></button>
+                <button type="button" className="break-words">[Ök]</button>
+                <button type="button" id="second-nameless" className="break-words"><span aria-hidden="true">…</span></button>
                 <span className="break-words">Plain English</span>
             </div>,
         );
@@ -156,7 +160,10 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         const layout = layoutProblems(root);
         expect(layout.some((p) => p.startsWith('not wrapped'))).toBe(true);
         expect(layout.some((p) => p.startsWith('too wide'))).toBe(true);
-        expect((await axeProblems(root)).some((p) => p.startsWith('button-name'))).toBe(true);
+        // Passes go unnamed (axeProblems), but a violation still names every node it found.
+        const nameless = (await axeProblems(root)).find((p) => p.startsWith('button-name'));
+        expect(nameless?.split(', ')).toHaveLength(2);
+        expect(nameless).toContain('#second-nameless');
         expect(bypassing(root)).toContain('text: "Plain English"');
     });
 

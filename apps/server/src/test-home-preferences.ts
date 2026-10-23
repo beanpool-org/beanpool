@@ -34,6 +34,10 @@
  *     the card never returns on another device); a shape other than { v: 1, state, at } is refused whole; a future date
  *     is held to now; another member's read never serves it; a visitor keeps none; a member who never ended the tour
  *     reads none and `me.tour` is null.
+ * 11. The columns a member chose (`view.columns`, scratch/global-node/DESIGN-home-wide-and-content-fable.md D1, slice W0):
+ *     a saved view comes back in the save's answer, the own read and GET /api/home's `layout`, the same bytes; a columns
+ *     other than auto, 1 or 2, or a view that is no object, is refused whole with the sentence; the 8 KB bound holds with
+ *     the view inside it (exactly 8 KB kept, a byte more refused); a stored columns no build knows is served as Auto.
  *
  * Run (read auth on, the default; the opt-out is a second registered run):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-home-preferences.ts
@@ -448,6 +452,55 @@ async function main(): Promise<void> {
     assert(visitorTour.status !== 200 && stored(vis.pk, 'tour') === undefined, `a visitor keeps none (${visitorTour.status})`);
     db.prepare('INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)').run(ida.pk, 'tour', '{"v":1,"state":"maybe"}');
     assert((await homeOf(ida)).body?.me?.tour === null && !('tour' in (await read(ida)).body), 'a stored value that is no record is served as none');
+
+    // ── 11. The columns a member chose (W0) ──
+    console.log('\n— 11. view.columns: kept in the layout, served back, checked on a write —');
+    const kit = makeMember('Kit');
+    const withView = { ...frame, updatedAt: iso(-30_000), view: { columns: 2 } };
+    const viewSaved = await save(kit, { 'home.layout': withView });
+    assert(viewSaved.status === 200 && JSON.stringify(viewSaved.body?.['home.layout']) === JSON.stringify(withView),
+        `a layout with Two wide chosen is kept unchanged, and the answer says so (${show(viewSaved)})`);
+    assert(JSON.stringify((await read(kit)).body?.['home.layout']) === JSON.stringify(withView) && stored(kit.pk, 'home.layout') === JSON.stringify(withView),
+        `her own read and the stored row carry it, the same bytes (${stored(kit.pk, 'home.layout')?.slice(-60)})`);
+    const kitHome = await homeOf(kit);
+    assert(kitHome.status === 200 && JSON.stringify(kitHome.body?.layout?.view) === JSON.stringify({ columns: 2 })
+        && JSON.stringify(kitHome.body?.layout?.cards) === JSON.stringify(withView.cards),
+        `GET /api/home serves it in the answer's layout, so the web draws it on any browser (${JSON.stringify(kitHome.body?.layout?.view)})`);
+    const viewRefusals: [string, unknown][] = [
+        ['columns: 5', { columns: 5 }], ['columns: 3', { columns: 3 }], ["columns: '2'", { columns: '2' }], ['no columns', {}], ['a view that is text', 'wide'],
+    ];
+    for (const [what, view] of viewRefusals) {
+        const before = rowsOf(kit.pk);
+        const r = await save(kit, { 'home.layout': { ...withView, updatedAt: iso(-20_000), view } });
+        assert(r.status === 400 && r.body?.error === "A Home layout's view names its columns: auto, 1 or 2." && rowsOf(kit.pk) === before,
+            `${what}: refused whole with the sentence, nothing written (${show(r)})`);
+    }
+    // The 8 KB bound holds with the view inside it: padded to the byte, kept; one byte more, refused whole.
+    const bound = (n: number) => ({ v: 2, cards: cardsOf(1), dismissed: {}, updatedAt: iso(-10_000), view: { columns: 1, later: 'x'.repeat(n) } });
+    let pad = 0;
+    while (Buffer.byteLength(JSON.stringify(bound(pad + 1))) <= 8 * 1024) pad++;
+    const atBound = await save(kit, { 'home.layout': bound(pad) });
+    assert(atBound.status === 200 && Buffer.byteLength(stored(kit.pk, 'home.layout') ?? '') === 8 * 1024 && atBound.body?.['home.layout']?.view?.columns === 1,
+        `a layout of exactly 8 KB with its view is kept, the view with it (${Buffer.byteLength(stored(kit.pk, 'home.layout') ?? '')} B)`);
+    const kept8 = rowsOf(kit.pk);
+    const overBound = await save(kit, { 'home.layout': { ...bound(pad + 1), updatedAt: iso(-5_000) } });
+    assert(overBound.status === 400 && /8 KB/.test(overBound.body?.error ?? '') && rowsOf(kit.pk) === kept8,
+        `one byte more is refused whole with the 8 KB sentence, nothing written (${show(overBound)})`);
+    // A stored value is read tolerantly: a columns no build knows reads as Auto, a view that is no object as none.
+    const lee = makeMember('Lee');
+    db.prepare('INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)').run(lee.pk, 'home.layout', JSON.stringify({
+        v: 2, cards: [{ id: 'steps', type: 'steps' }], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z', view: { columns: 5 },
+    }));
+    assert(JSON.stringify((await read(lee)).body?.['home.layout']?.view) === JSON.stringify({ columns: 'auto' })
+        && JSON.stringify((await homeOf(lee)).body?.layout?.view) === JSON.stringify({ columns: 'auto' }),
+        `a stored { columns: 5 } is served as Auto, in her own read and in GET /api/home (${JSON.stringify((await read(lee)).body?.['home.layout'])})`);
+    db.prepare('UPDATE member_preferences SET pref_value = ? WHERE public_key = ? AND pref_key = ?').run(JSON.stringify({
+        v: 2, cards: [{ id: 'steps', type: 'steps' }], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z', view: 'wide',
+    }), lee.pk, 'home.layout');
+    const leeRead = (await read(lee)).body?.['home.layout'];
+    assert(leeRead?.cards?.length === 1 && !('view' in leeRead), `and a stored view that is no object is served as none, the cards kept (${JSON.stringify(leeRead)})`);
+    // A layout saved before W0 (no view) still comes back with none: nothing added to a Home that never chose.
+    assert(!('view' in ((await read(hal)).body?.['home.layout'] ?? {})), 'a layout that never chose has no view');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

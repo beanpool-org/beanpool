@@ -26,6 +26,9 @@
  *   `checkHomeLayout`: 24 cards, ids ≤ 32, types ≤ 24, settings ≤ 512 bytes each, the whole ≤ 8 KB, ids unique, real
  *   dates), never by type or id, so a card type an app invents after this node is kept byte for byte. Version 1 is taken
  *   and served as it always was (above), for today's apps; last write wins by `updatedAt` across both.
+ *   `view` (the columns a member chose for a wide screen, DESIGN-home-wide-and-content-fable.md D1, slice W0) is kept
+ *   with it and inside the same 8 KB: `{ columns: 'auto' | 1 | 2 }`, anything else refused with core's sentence on a write
+ *   and read as Auto from a stored value.
  *
  * - **The tour** (`tour`, DESIGN-getting-started-fable.md §2): `{ v: 1, state: 'done' | 'skipped' | 'open', at }`, checked by
  *   core's checkTourRecord (a date ahead of the node's held to now). Done or skipped, the apps never draw Getting started

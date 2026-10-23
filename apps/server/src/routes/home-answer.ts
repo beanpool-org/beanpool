@@ -343,7 +343,7 @@ const isIso = (v: unknown): v is string => typeof v === 'string' && v.length <= 
 export function readHomeLayout(me: string): HomeLayout | null {
     const raw = readPref(me, HOME_LAYOUT_PREF_KEY) as Record<string, unknown> | undefined;
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    // Version 2 (the card frame): every instance whose shape is right, whatever its type (core's tolerant reader).
+    // Version 2 (the card frame): every instance whose shape is right, whatever its type, and the columns chosen (core's tolerant reader).
     if (raw.v === 2) return readFrameLayout(raw);
     const dismissed = raw.dismissed && typeof raw.dismissed === 'object' ? raw.dismissed as Record<string, unknown> : {};
     return {

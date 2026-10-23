@@ -195,8 +195,9 @@ export interface HomeMe {
 
 /**
  * A member's Home as kept on their account and on the phone: core's version 2 (`{ v: 2, cards: [{ id, type, settings? }],
- * dismissed, updatedAt }`). A card is on Home because it is in `cards`, and nowhere else. Version 1 is read through core's
- * `translateV1` (their order, hidden cards left out) and never written.
+ * dismissed, updatedAt, view? }`). A card is on Home because it is in `cards`, and nowhere else. `view` holds the columns
+ * chosen on the web (W0): one column always here, so the phone carries it through every save and never reads it. Version 1
+ * is read through core's `translateV1` (their order, hidden cards left out) and never written.
  */
 export type HomeLayout = HomeLayoutV2;
 
@@ -308,13 +309,14 @@ function hash64(s: string): string {
 }
 
 /**
- * A layout's list (its cards and dismissals, not its date) as a short print: read as core reads any layout, then as JSON
- * with every object's keys sorted, so the list the phone sent and the node's answer of it print alike (the web app's
- * lib/home-layout.ts `layoutPrint`).
+ * A layout's list (its cards, dismissals and the columns chosen on the web, not its date) as a short print: read as core
+ * reads any layout, then as JSON with every object's keys sorted, so the list the phone sent and the node's answer of it
+ * print alike (the web app's lib/home-layout.ts `layoutPrint`). A layout that never chose prints as it did before W0.
  */
 export function layoutPrint(l: HomeLayout): string {
     const read = readHomeLayout(l) ?? l;
-    return hash64(JSON.stringify({ cards: read.cards, dismissed: read.dismissed ?? {} }, (_k, v: unknown) => (
+    const view = read.view ? { view: read.view } : {};
+    return hash64(JSON.stringify({ cards: read.cards, dismissed: read.dismissed ?? {}, ...view }, (_k, v: unknown) => (
         isObj(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v
     )));
 }
@@ -470,12 +472,13 @@ export function moveCard(
  * Reset to defaults: the starter set (§1.3; DESIGN-getting-started-fable.md §1: Getting started is a newcomer's, never a
  * reset's — a Home reset after the tour would otherwise be empty). A schedule's dismissal (the `safety` card) is not a layout choice: kept.
  * A card of a type this build doesn't know (a newer app's) is kept too, at the end: Reset is this app's defaults, not a
- * licence to throw away what it can't see.
+ * licence to throw away what it can't see. So are the columns chosen on the web (W0): the phone carries them, never reads them.
  */
 export function resetLayout(layout: HomeLayout | null, now: number): HomeLayout {
     const unknown = listOf(layout).filter(c => !homeCardType(c.type));
     const cards = [...starterCards(), ...unknown].slice(0, HOME_FRAME_LIMITS.cards);
-    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: at(now) };
+    const view = layout?.view ? { view: layout.view } : {};
+    return { v: 2, cards, dismissed: { ...(layout?.dismissed ?? {}) }, updatedAt: at(now), ...view };
 }
 
 /** The `safety` card was put away: when, on the account too (§3.1 "dismissal in home.layout"). */

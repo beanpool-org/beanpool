@@ -71,6 +71,18 @@ export async function registerForPushNotifications(publicKey: string): Promise<s
 }
 
 /**
+ * The member picked another language (components/LanguageProvider.tsx `onPicked`): the community the phone is set to is
+ * told at once, on the push registration's `lang`, so its next push is written in that language rather than after the
+ * next app start. Never asks for permission; nothing without an account on the phone or a token. Never throws.
+ */
+export function registerPushInPickedLanguage(): void {
+    void (async () => {
+        const identity = await loadIdentity().catch(() => null);
+        if (identity?.publicKey) await registerAccountForPush(identity.publicKey, () => phonePushToken(false), Platform.OS);
+    })().catch(() => { /* registerAccountForPush never throws; a load that did leaves the next start to tell it */ });
+}
+
+/**
  * The registrations the account on the phone still needs, tried again as the app comes back and with the 5-minute sync
  * (app/_layout.tsx; utils/push-registrations.ts `retryDueRegistrations`). Never asks for permission. Never throws.
  */

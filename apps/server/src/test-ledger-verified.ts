@@ -127,10 +127,14 @@ async function main(): Promise<void> {
     assert(on.status === 200, `setup: known floor dial on (${show(on)})`);
 
     const sam = makeMember('Sam', 2000);
+    // A member who has traded (with a partner of their own), so they may propose a Decision: a trust badge is no standing.
     let proposers = 0;
     const proposer = (): Id => {
         const m = makeMember(`Proposer${++proposers}`, 0);
-        db.prepare('UPDATE members SET earned_credit = 50 WHERE public_key = ?').run(m.pk);
+        const partner = makeMember(`Partner${proposers}`, 0);
+        const at = new Date().toISOString();
+        db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                    VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), m.pk, partner.pk, at, at);
         return m;
     };
     const donor = makeMember('Donor', 5000);

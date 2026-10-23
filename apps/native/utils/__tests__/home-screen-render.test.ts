@@ -3413,5 +3413,145 @@ describe('Home slice W5: the phone draws the cards\' real content (at 320 x 569 
         expect(document.querySelector('[data-testid="home-pulse-q3"]')).not.toBeNull();
         expect(document.querySelector('[data-testid="home-pulse-q4"]')).not.toBeNull();
         expect(card.textContent).toContain('by Studio A · 3h ago');
+        expect(document.querySelector('[data-testid="home-pulse-q1"]')!.getAttribute('aria-label')).toBe('Post 1, by Studio A, 3h ago. Opens the Pulse.');
+    });
+
+    it('deals card: nullable counterparty renders cleanly without "with" and a11y has no double periods', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                deals: {
+                    items: [
+                        { postId: 'p1', txId: 't1', title: 'Sourdough', with: null, waitsOnMe: true, at: iso(now - 10 * 60_000) },
+                    ],
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const row = document.querySelector('[data-testid="home-deal-t1"]')!;
+        expect(row.textContent).toContain('Sourdough');
+        expect(row.textContent).not.toContain('with');
+        expect(row.getAttribute('aria-label')).toBe('Sourdough. waiting on you · 10m ago. Opens the deal.');
+    });
+
+    it('enterprise card: omits balance when Beans are disabled', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                enterprise: {
+                    id: 'ent1',
+                    name: 'Mullum Ceramics',
+                    requests: 0,
+                    others: 0,
+                    lifecycle: 'ongoing',
+                    keepers: 2,
+                    balance: undefined,
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-enterprise"]')!;
+        expect(card.textContent).toContain('2 keepers');
+        expect(card.textContent).not.toContain('Balance');
+        expect(card.textContent).not.toContain('0 Beans');
+        const balRow = document.querySelector('[data-testid="home-enterprise-balance"]')!;
+        expect(balRow.getAttribute('aria-label')).toBe('2 keepers. Opens the enterprise.');
+    });
+
+    it('decide card: omits Decide link when only poll is active, and poll a11y does not duplicate closes', async () => {
+        const now = Date.now();
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                decide: {
+                    open: 0,
+                    polls: 1,
+                    pollsMore: false,
+                    items: [],
+                    poll: { id: 'poll1', title: 'Sunday market?', closesAt: iso(now + 24 * H) },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(document.querySelector('[data-testid="home-decide-poll"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-decide-all"]')).toBeNull();
+        const pollRow = document.querySelector('[data-testid="home-decide-poll"]')!;
+        expect(pollRow.getAttribute('aria-label')).not.toContain('Closes closes');
+        expect(pollRow.getAttribute('aria-label')).toContain('closes tomorrow');
+    });
+
+    it('beans card: frozen member sees spending paused warning even when month is present', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                beans: {
+                    balance: 50,
+                    room: 100,
+                    tier: 'Resident',
+                    activated: true,
+                    frozen: true,
+                    month: { trades: 2, in: 20, out: 10, fees: 0, more: false },
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-beans"]')!;
+        expect(card.textContent).toContain('Spending is paused for now. You can still receive and sell.');
+        expect(card.textContent).toContain('This month: 2 trades · +20 in · −10 out');
+    });
+
+    it('community card: sole founder sees first-member onboarding prompt', async () => {
+        const base = localMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                community: {
+                    name: 'New Community',
+                    members: 1,
+                    joined7d: 1,
+                    commonsPot: 0,
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const card = document.querySelector('[data-testid="home-card-community"]')!;
+        expect(card.textContent).toContain("1 member. You're first. Invite someone.");
+        expect(document.querySelector('[data-testid="home-community-row-members"]')).toBeNull();
+    });
+
+    it('community card: worldwide community draws directory count on row 2', async () => {
+        const base = globalMember();
+        node.answer = {
+            ...base,
+            cards: {
+                ...base.cards,
+                community: {
+                    name: 'The worldwide community',
+                    members: 1200,
+                    communities: 42,
+                    listings: 500,
+                },
+            },
+        };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const row2 = document.querySelector('[data-testid="home-community-row-trades"]')!;
+        expect(row2).not.toBeNull();
+        expect(row2.textContent).toBe('42 communities listed');
     });
 });

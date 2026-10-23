@@ -11,7 +11,8 @@
  *   - a node with no block list (404, 405): the block stands on the phone, one try, then nothing for a day
  *   - a block whose answer never came may be on the list: an unblock takes it off there all the same
  *   - someone blocked in both apps comes off the community's list when the phone unblocks them; a web-app-only block stays
- *   - a community the phone visits as a guest is sent nothing; once the member joins there, the next sync sends the list
+ *   - a community the phone visits as a guest is sent nothing; once the member joins there, the next sync sends the list,
+ *     whichever screen she joins from (every invite join clears the mark, db.ts redeemInvite)
  *   - a community that has the account as no member yet (403 not_a_member) holds nothing back for a day
  *   - the blocks the phone held before this build go once, in one request, and a key the community doesn't know goes
  *     on its own; never more than 30 requests a minute of the member's 120, and the rest go by themselves
@@ -122,6 +123,8 @@ const net = {
     stallBody: false,
     /** The request whose body stalled, with its signal, to see that the phone aborted it. */
     stalled: undefined as { signal?: AbortSignal } | undefined,
+    /** What the community answers an invite redeem: whether the key was a member there already. */
+    alreadyMember: false,
     /** Each request, and the phone's clock as it went. */
     sent: [] as { url: string; signedBy: string; body: any; time: number }[],
     lists: new Map<string, Set<string>>(),
@@ -154,6 +157,7 @@ beforeEach(async () => {
     net.hold = null;
     net.stallBody = false;
     net.stalled = undefined;
+    net.alreadyMember = false;
     net.sent = [];
     net.lists.clear();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -170,7 +174,7 @@ beforeEach(async () => {
         } as unknown as Response);
         if (!url.includes('/api/blocks')) {
             if (!net.up) throw new TypeError('Network request failed');
-            return reply(200, { success: true });
+            return reply(200, url.includes('/api/invite/') ? { success: true, alreadyMember: net.alreadyMember } : { success: true });
         }
         if (net.hold) {
             const hold = net.hold;
@@ -597,6 +601,51 @@ describe('a community the phone visits as a guest ("Guest view first", global-gu
             expect([...listAt(OTHER, ana.publicKey)].sort()).toEqual([HARASSER, SPAMMER].sort());
         });
     }
+
+    // Every invite join passes db.ts redeemInvite, and not every screen that calls it clears the mark itself: Settings'
+    // "Have an invite code for this community?", Join Node on an invite link, Switch & Join, the join wizard (review
+    // 4354899747). Here nothing but the redeem does.
+    for (const alreadyMember of [false, true]) {
+        for (const [marked, setTo] of [[OTHER, OTHER], [OTHER, `${OTHER}/`], [`${OTHER}/`, OTHER]]) {
+            it(`once she joins there with an invite (${alreadyMember ? 'a member there already' : 'new there'}; marked ${marked}, set to ${setTo}), the next sync sends the list`, async () => {
+                const app = await startApp();
+                await app.identity.importIdentity(ana);
+                await app.nodes.markGuestNode(marked);
+                mem.async.set(ANCHOR, setTo);
+                await app.blockUser(HARASSER, ana.publicKey);
+                await app.blockSyncsEndedForTests();
+                expect(blockChanges()).toEqual([]);
+
+                net.alreadyMember = alreadyMember;
+                const { redeemInvite } = await import('../db');
+                expect(await redeemInvite('INV-ABCD-1234', 'Ana', ana)).toEqual({ success: true, alreadyMember, nodeHasPhoto: false });
+                for (const url of [OTHER, `${OTHER}/`]) expect(await app.nodes.isGuestNode(url)).toBe(false);
+                net.sent = [];
+                await app.syncBlocks();
+                expect(blockChanges()).toEqual([{ at: `${OTHER}/api/blocks`, signedBy: ana.publicKey, body: { targetPubkey: HARASSER } }]);
+                expect([...listAt(OTHER, ana.publicKey)]).toEqual([HARASSER]);
+            });
+        }
+    }
+
+    it('an invite that never reached the community leaves her a guest there: still nothing is sent', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        await app.nodes.markGuestNode(OTHER);
+        mem.async.set(ANCHOR, OTHER);
+        await app.blockUser(HARASSER, ana.publicKey);
+        await app.blockSyncsEndedForTests();
+
+        net.up = false;
+        const { redeemInvite } = await import('../db');
+        await expect(redeemInvite('INV-ABCD-1234', 'Ana', ana)).rejects.toThrow();
+        expect(await app.nodes.isGuestNode(OTHER)).toBe(true);
+        net.up = true;
+        net.sent = [];
+        await app.syncBlocks();
+        expect(blockChanges()).toEqual([]);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+    });
 });
 
 describe('a community that has the account as no member yet (403 not_a_member, routes/blocks.ts)', () => {

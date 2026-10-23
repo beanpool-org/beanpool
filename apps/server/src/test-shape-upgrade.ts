@@ -194,7 +194,8 @@ async function main(): Promise<void> {
                     () => `${label()} ${wantTold ? 'one alert' : 'no alert'} wanted, got ${j(alerts.slice(a0))}`);
                 if (wantTold && got.length === 1) {
                     const invitesSaid = gw !== 'off' ? !/paused/.test(got[0].detail)
-                        : cfgBefore.invites ? /new members are paused/.test(got[0].detail)
+                        : cfgBefore.invites ? (cfgBefore.openJoin ? /The open door this server sets is the only way in/.test(got[0].detail) && !/paused/.test(got[0].detail)
+                            : /new members are paused/.test(got[0].detail))
                         : preview ? /new members were already paused/.test(got[0].detail) : !/paused/.test(got[0].detail);
                     told.check(invitesSaid
                         && (interval === 0 ? /schedule was Never/.test(got[0].detail) : !/Never/.test(got[0].detail))

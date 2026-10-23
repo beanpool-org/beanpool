@@ -5,8 +5,10 @@
  *
  *   - the gateway's `invites` switch (local-config.json gateway.features), a blunter copy of the `invites` profile switch:
  *     off, every invite and knock route answered 503. Carried over to Paused (nodeProfile.invites = false), which refuses
- *     both. Where the private preview is on, owners and admins invite all the same (the preview's own rule): the old
- *     switch stopped their invites too, and nothing does that now, so the owners are told.
+ *     both. Where the open door is set too (the global kind, an operator's nodeProfile.openJoin), invites off there read
+ *     as that door, which no owner changes (config/community-shape-write.ts): the owners are told whoever runs the server
+ *     turns invites back on. Where the private preview is on, owners and admins invite all the same (the preview's own
+ *     rule): the old switch stopped their invites too, and nothing does that now, so the owners are told.
  *   - the gateway's `messaging` and `marketplace` switches. Nothing takes their place (Q4): a community without chat or
  *     a Market has no working deals. Off, the Market answered 503 (/api/marketplace): it works again, a deliberate change
  *     of behaviour. The messaging switch matched /api/messaging, which no route is under (members' messages are
@@ -43,6 +45,7 @@ import { noteSecurityEvent } from '../services/security-signal.js';
 /** What the owners are told, one whole sentence per carry: the server's own words, never a member's. */
 export const UPGRADE_WORDS = {
     invitesPaused: word("This server's update carried an old setting over: the Gateway switch Cryptographic Invites was off, so new members are paused under How this community works. Nobody new joins until an owner changes it there."),
+    invitesOpenDoor: word("This server's update carried an old setting over: the Gateway switch Cryptographic Invites was off, so invites are off here. The open door this server sets is the only way in; whoever runs the server turns invites back on (nodeProfile.invites = true)."),
     invitesAlreadyOff: word("This server's update removed the Gateway switch Cryptographic Invites, which was off: new members were already paused under How this community works."),
     invitesPreview: word('While the private preview is on, owners and admins can invite people again: the old switch stopped their invites too, and nothing does that now.'),
     messaging: word("This server's update removed the Gateway switch P2P Direct Messaging, which was off. It never stopped messages here (it matched none of the routes they use), so members message each other as before."),
@@ -96,7 +99,11 @@ export function upgradeLegacyShape(): ShapeUpgrade {
         // lockToPrivatePreview); the old switch stopped those too, so under it they come back, paused or not before.
         const preview = isPrivatePreview();
         const previewLine = preview ? ' While the private preview is on, owners and admins invite all the same: the old switch stopped their invites too.' : '';
-        if (cfg.invites) {
+        if (cfg.invites && cfg.openJoin) {
+            carried.push('invites off (the Gateway switch Cryptographic Invites was off), the open door set beside them');
+            told.push(UPGRADE_WORDS.invitesOpenDoor, ...(preview ? [UPGRADE_WORDS.invitesPreview] : []));
+            logger.warn('SYS', "⚙️ The old Gateway switch 'Cryptographic Invites' was off: invites are off now (nodeProfile.invites = false), and the open door this server sets is the only way in. To turn invites back on, set the node_config row nodeProfile.invites = true." + previewLine);
+        } else if (cfg.invites) {
             carried.push('invites paused (the Gateway switch Cryptographic Invites was off)');
             told.push(UPGRADE_WORDS.invitesPaused, ...(preview ? [UPGRADE_WORDS.invitesPreview] : []));
             logger.warn('SYS', "⚙️ The old Gateway switch 'Cryptographic Invites' was off: this community is now Paused under How this community works (nodeProfile.invites = false). Nobody new joins until an owner changes it." + previewLine);

@@ -86,8 +86,8 @@ export type ToolDocState<D> =
 
 /**
  * The tool's one document for `owner`, from the store: loading, then ready (its empty one when nothing is kept).
- * `set` writes it whole (its last sync with the node kept, tools/store.ts keepToolDoc) and refuses one over the bound,
- * then `afterWrite` (the node copy's sync); one the browser didn't keep is taken back off the screen and throws; `reload` reads it again (after the node's copy was taken); `remove` takes this
+ * `set` writes it whole (its last sync with the node kept, tools/store.ts keepToolDoc) and refuses one over the bound
+ * that is bigger than the one it holds, then `afterWrite` (the node copy's sync); one the browser didn't keep is taken back off the screen and throws; `reload` reads it again (after the node's copy was taken); `remove` takes this
  * browser's copy away and leaves the empty one. The bound is `maxBytes()`: the tool's own, never past `nodeMax`, what
  * this community's server said it keeps (the settings' `nodeMax`, which the page hands in once it has heard it).
  */
@@ -120,7 +120,8 @@ export function useToolDoc<D>(m: ToolManifest<D> | undefined, owner: string | nu
         if (!m || !owner) throw new ToolDocNotKept();
         const max = docMaxBytes(m as ToolManifest<unknown>, heard.current);
         const bytes = toolDocBytes(next);
-        if (bytes > max) throw new ToolDocTooBig(bytes, max);
+        // One no bigger than what it holds is taken: a document already past the bound can still be made smaller.
+        if (bytes > max && (current.current === null || bytes > toolDocBytes(current.current))) throw new ToolDocTooBig(bytes, max);
         const updatedAt = new Date().toISOString();
         const was = current.current;
         let shown: ToolDocState<D> | null = null;

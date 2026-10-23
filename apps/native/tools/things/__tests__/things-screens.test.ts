@@ -266,7 +266,7 @@ vi.mock('../index', async () => {
 
 import { DatabaseSync } from 'node:sqlite';
 import {
-    THINGS, THINGS_DOC_BYTES, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, setLanguage, shedRoom, shedThings, thingCategory, toolDocBytes,
+    THINGS, THINGS_DOC_BYTES, TOOL_LIMITS, backAroundIn, lendOutside, readThingsDoc, removeThing, setLanguage, shedRoom, shedThings, thingCategory, toolDocBytes,
     toolLineText, type Thing, type ThingsDoc,
 } from '@beanpool/core';
 // The Tool shed's fixtures are never shipped: from core's sources, as the template's generic tests read them.
@@ -817,6 +817,51 @@ describe('Edit', () => {
         expect((await kept()).things).toHaveLength(full.length);
         // And the store itself holds to it: a write past it is refused there too.
         await expect(writeToolDoc(ME.publicKey, THINGS, shed(...full, atCaps(full.length)))).rejects.toBeInstanceOf(ToolDocTooBigError);
+        await settle();
+        expect(market.puts.every((doc) => toolDocBytes(doc) <= 65_536)).toBe(true);
+    });
+
+    it("a shed already past a server's 64 KB (kept before it said so): a Delete and a shorter note are kept, an Add is refused, nothing past it is sent", async () => {
+        // Kept while the phone counted against the shed's own 128 KB; then the open's GET says 65536.
+        const over: Thing[] = [];
+        while (toolDocBytes(shed(...over)) <= TOOL_LIMITS.docBytes + 4_000) over.push(atCaps(over.length));
+        await keep(shed(...over));
+        market.max = 65_536;
+        await open('main');
+        expect((await readToolSettings(ME.publicKey, 'things')).nodeMax).toBe(65_536);
+        expect(text('things-room')).toBe(FULL_LINE);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('thing', { key: 'b-0' });
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect(readThingsDoc(await kept()).things[0]).toMatchObject({ id: 'b-0', gone: true });
+        expect(shedThings(await kept())).toHaveLength(over.length - 1);
+
+        act(() => root.unmount());
+        root = createRoot(host);
+        await open('edit', { key: 'b-1' });
+        await type('edit-note', 'Top shelf.');
+        await click('edit-save');
+        expect(byTestId('edit-problem')).toBeNull();
+        expect((await keptThing('b-1'))?.ownerNote).toBe('Top shelf.');
+
+        // Still past 64 KB: one more thing is not taken, on the screen or by the store.
+        act(() => root.unmount());
+        root = createRoot(host);
+        expect(toolDocBytes(await kept())).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        await open('edit');
+        await type('edit-name', 'One more');
+        await click('edit-save');
+        expect(text('edit-problem')).toBe(FULL_LINE);
+        expect(shedThings(await kept())).toHaveLength(over.length - 1);
+        const now = await kept();
+        await expect(writeToolDoc(ME.publicKey, THINGS, { ...now, things: [...now.things, thing('t-x', 'Saw')] })).rejects.toBeInstanceOf(ToolDocTooBigError);
+        await writeToolDoc(ME.publicKey, THINGS, removeThing(now, 'b-2', NOW));
+        expect(shedThings(await kept())).toHaveLength(over.length - 2);
+        expect(toolDocBytes(await kept())).toBeGreaterThan(TOOL_LIMITS.docBytes);
         await settle();
         expect(market.puts.every((doc) => toolDocBytes(doc) <= 65_536)).toBe(true);
     });
@@ -1548,10 +1593,16 @@ describe('A thing', () => {
         expect(set).not.toHaveBeenCalled();
         expect(await keepThings(setting(set), shed(thing('t-1', 'Ladder')))).toBeNull();
         // The bound is the host's: an older server's 64 KB refuses before the host is asked, as the shed's own 128 KB does.
-        const older = { doc: { get: () => over, set, maxBytes: () => 65_536 } } as unknown as Parameters<typeof keepThings>[0];
+        const older = (held: ThingsDoc) => ({ doc: { get: () => held, set, maxBytes: () => 65_536 } }) as unknown as Parameters<typeof keepThings>[0];
+        const sixty = shed(...Array.from({ length: 60 }, (_, i) => atCaps(i)));
         set.mockClear();
-        expect(await keepThings(older, shed(...Array.from({ length: 60 }, (_, i) => atCaps(i))))).toBe('too-big');
+        expect(await keepThings(older(shed()), sixty)).toBe('too-big');
         expect(set).not.toHaveBeenCalled();
+        // Unless the host holds more than that already (kept before the server said 64 KB): smaller is handed to the host.
+        expect(toolDocBytes(sixty)).toBeGreaterThan(65_536);
+        expect(await keepThings(older(over), sixty)).toBeNull();
+        expect(set).toHaveBeenCalledWith(sixty);
+        set.mockClear();
         expect(await keepThings(setting(vi.fn(async () => { throw new ToolDocTooBigError(70_000, 65_536); })), shed())).toBe('too-big');
         expect(await keepThings(setting(vi.fn(async () => { throw new Error('database or disk is full'); })), shed())).toBe('not-kept');
     });

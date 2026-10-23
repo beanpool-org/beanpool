@@ -185,6 +185,45 @@ describe('the edit screen: its fields, what stops a save, and saving', () => {
         expect(shedFits(doc(thing('a', 'x'.repeat(70_000))), TOOL_LIMITS.docBytes)).toBe(false);
     });
 
+    it('a shed already past the bound (kept before an older node said it keeps less) can be made smaller, never bigger', () => {
+        const many = Array.from({ length: 400 }, (_, i) => thing(`t${i}`, `Thing ${i}`, { category: 'tools', lendTerms: 'Back within a week, charged.', ownerNote: 'In the shed, top shelf.' }));
+        const over = doc(...many);
+        const max = TOOL_LIMITS.docBytes;
+        expect(toolDocBytes(over)).toBeGreaterThan(max);
+        expect(shedRoom(over, max)).toBe(0);
+        // Delete leaves a tombstone, a few bytes smaller and still past the bound: taken, as what is held is bigger.
+        const deleted = removeThing(over, 't0', NOW);
+        expect(toolDocBytes(deleted)).toBeGreaterThan(max);
+        expect(toolDocBytes(deleted)).toBeLessThan(toolDocBytes(over));
+        expect(shedFits(deleted, max, over)).toBe(true);
+        // A shorter note, and a change that leaves the size as it is (another condition of the same length).
+        const shorter = saveThing(over, { ...thingInput(many[1]), ownerNote: 'Top shelf.' }, { id: 't1', newId: 'unused', now: NOW });
+        expect(toolDocBytes(shorter)).toBeLessThan(toolDocBytes(over));
+        expect(shedFits(shorter, max, over)).toBe(true);
+        const same = saveThing(over, { ...thingInput(many[2]), ownerNote: 'In the shed, low shelf.' }, { id: 't2', newId: 'unused', now: NOW });
+        expect(toolDocBytes(same)).toBe(toolDocBytes(over));
+        expect(shedFits(same, max, over)).toBe(true);
+        // Anything that makes it bigger is refused: an Add, a longer note, lending a thing out.
+        expect(shedFits(saveThing(over, blank({ name: 'Drill' }), { id: null, newId: 'n1', now: NOW }), max, over)).toBe(false);
+        expect(shedFits(saveThing(over, { ...thingInput(many[3]), ownerNote: 'In the shed, top shelf, behind the paint.' }, { id: 't3', newId: 'unused', now: NOW }), max, over)).toBe(false);
+        expect(shedFits(lendOutside(over, 't4', 'Sam', null, NOW), max, over)).toBe(false);
+        // Without what is held, the bound alone: as before.
+        expect(shedFits(deleted, max)).toBe(false);
+        // Under the bound, what is held is no licence to go past it.
+        expect(shedFits(doc(thing('a', 'x'.repeat(70_000))), max, doc(thing('a', 'Drill')))).toBe(false);
+        // A Delete at a time, each one taken, gets it back under the bound, with room to add again.
+        const add = (from: ThingsDoc) => saveThing(from, blank({ name: 'Drill' }), { id: null, newId: 'n2', now: NOW });
+        let d = over;
+        for (const t of many) {
+            if (toolDocBytes(add(d)) <= max) break;
+            const next = removeThing(d, t.id, NOW);
+            expect(shedFits(next, max, d)).toBe(true);
+            d = next;
+        }
+        expect(toolDocBytes(d)).toBeLessThan(max);
+        expect(shedFits(add(d), max, d)).toBe(true);
+    });
+
     it("room: about how many more things fit, in things the size of the member's own on average, or a typical one while there are none", () => {
         const typical = shedRoom(doc(), THINGS_DOC_BYTES);
         // A typical thing is a few hundred bytes: some hundreds fit in 128 KB, and half as many in an older node's 64 KB.

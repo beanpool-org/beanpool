@@ -288,10 +288,14 @@ export function saveThing(doc: ThingsDoc, input: ThingInput, at: { id: string | 
 
 /**
  * Whether a document fits `maxBytes`, the host's bound (host.doc.maxBytes(): the shed's 128 KB, or less on a node that
- * keeps less), so the host will keep it. Size is the shed's one bound: there is no count of things.
+ * keeps less), so the host will keep it. Size is the shed's one bound: there is no count of things. A change that leaves
+ * it no bigger than `held`, the document as the host has it now, fits too: a shed already past the bound (kept before an
+ * older node said it keeps less) can still be made smaller, a Delete or a shorter note at a time, and nothing makes it
+ * bigger. The node copy sends none of it until it is under the node's bound again.
  */
-export function shedFits(doc: ThingsDoc, maxBytes: number): boolean {
-    return toolDocBytes(doc) <= maxBytes;
+export function shedFits(doc: ThingsDoc, maxBytes: number, held?: ThingsDoc): boolean {
+    const bytes = toolDocBytes(doc);
+    return bytes <= maxBytes || (held !== undefined && bytes <= toolDocBytes(held));
 }
 
 /**

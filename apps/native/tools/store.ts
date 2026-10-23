@@ -134,13 +134,20 @@ export const toolDocMaxHere = (manifest: Pick<ToolManifest, 'doc'>, settings: To
 
 /**
  * The document written whole (§1.6: one writer, last write wins). Over its bound (toolDocMaxHere, with this community's
- * settings) it is refused with {@link ToolDocTooBigError}, never cut. `synced_at` (the node copy's, T0.4) is kept as it was.
+ * settings) it is refused with {@link ToolDocTooBigError}, never cut, unless it is no bigger than the row it replaces: one
+ * already past the bound (kept before the server said it keeps less) can still be made smaller. `synced_at` (the node
+ * copy's, T0.4) is kept as it was.
  */
 export async function writeToolDoc<D>(owner: string, manifest: ToolManifest<D>, doc: D, now: number = Date.now()): Promise<void> {
     const max = toolDocMaxHere(manifest, await readToolSettings(owner, manifest.id));
     const bytes = toolDocBytes(doc);
-    if (bytes > max) throw new ToolDocTooBigError(bytes, max);
     const db = await getDb();
+    if (bytes > max) {
+        // The row's body in UTF-8 bytes, as toolDocBytes counts them.
+        const held = await db.getFirstAsync<{ bytes: number }>(
+            'SELECT length(CAST(body AS BLOB)) AS bytes FROM tool_docs WHERE owner = ? AND tool = ?', [owner, manifest.id]);
+        if (bytes > Number(held?.bytes ?? 0)) throw new ToolDocTooBigError(bytes, max);
+    }
     await db.runAsync(
         `INSERT INTO tool_docs (owner, tool, body, updated_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(owner, tool) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at`,

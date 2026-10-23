@@ -224,7 +224,7 @@ describe('the document', () => {
         expect(docMaxBytes({ ...tool, doc: { ...tool.doc, maxBytes: 131_072 } } as ToolManifest<unknown>, 65_536)).toBe(65_536);
     });
 
-    it("set() holds to the node's max once heard: an older node's 64 KB refuses a 70 KB document of a tool that names 128 KB", async () => {
+    it("set() holds to the node's max once heard: an older node's 64 KB refuses a 70 KB document of a tool that names 128 KB, unless it is no bigger than the one held", async () => {
         const big = { ...tool, doc: { ...tool.doc, maxBytes: 131_072 } } as typeof tool;
         const seventy = { v: 1, items: ['x'.repeat(70_000)] };
         const { result, rerender } = renderHook(({ nodeMax }: { nodeMax?: number }) => useToolDoc(big, 'ana', undefined, nodeMax), { initialProps: {} });
@@ -233,11 +233,24 @@ describe('the document', () => {
         await act(async () => { await result.current.set(seventy); });
         rerender({ nodeMax: 65_536 });
         expect(result.current.maxBytes()).toBe(65_536);
+        // Past 64 KB and bigger than the 70 KB it holds: refused.
         let refused: unknown = null;
-        await act(async () => { await result.current.set({ v: 1, items: ['y'.repeat(70_000)] }).catch((e) => { refused = e; }); });
+        await act(async () => { await result.current.set({ v: 1, items: ['y'.repeat(75_000)] }).catch((e) => { refused = e; }); });
         expect(refused).toBeInstanceOf(ToolDocTooBig);
         expect((refused as ToolDocTooBig).max).toBe(65_536);
         expect(JSON.parse((await readToolRecord('ana', 'notes'))!.body)).toEqual(seventy);
+        // Past 64 KB, no bigger than what it holds (kept before the node said 64 KB): taken, so it can be made smaller.
+        const same = { v: 1, items: ['y'.repeat(70_000)] };
+        await act(async () => { await result.current.set(same); });
+        expect(JSON.parse((await readToolRecord('ana', 'notes'))!.body)).toEqual(same);
+        const smaller = { v: 1, items: ['z'.repeat(68_000)] };
+        await act(async () => { await result.current.set(smaller); });
+        expect(JSON.parse((await readToolRecord('ana', 'notes'))!.body)).toEqual(smaller);
+        // And from there back up to 70 KB is bigger than what it holds: refused, nothing written.
+        refused = null;
+        await act(async () => { await result.current.set(seventy).catch((e) => { refused = e; }); });
+        expect(refused).toBeInstanceOf(ToolDocTooBig);
+        expect(JSON.parse((await readToolRecord('ana', 'notes'))!.body)).toEqual(smaller);
     });
 
     it('set() writes whole; one over the bound is refused whole, nothing written, and the tool is told why', async () => {

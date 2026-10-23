@@ -30,7 +30,7 @@ the web), and reach the node only inside a listing the member posts. A tool whos
 tool's Settings (`apps/*/tools/node-copy.ts`, the rule in `packages/beanpool-core/src/tools/reconcile.ts`); without that
 permission nothing of it leaves the device.
 
-**What the host gives.** Every tool: `owner`, `node`, `doc` (`get`; `set`, which writes the document whole; and `maxBytes`, the most it may take now), `navigate`
+**What the host gives.** Every tool: `owner`, `node`, `doc` (`get`; `set`, which writes the document whole; and `maxBytes`, the most it may take now: `set` refuses more, unless it is no bigger than the document it holds, so one kept before the server said it keeps less can still be made smaller), `navigate`
 (to another of its screens) and `back` (as the header's Back goes: what a form does once it is saved), and `now`. Each
 permission grants one more: `photos` and `camera` (pick or take a photo, 800 px, kept on the device, by `ref`), `offerDoor`
 and `needDoor` (the composer, prefilled; nothing is posted until the member taps Post), `posts` (pause, resume and the

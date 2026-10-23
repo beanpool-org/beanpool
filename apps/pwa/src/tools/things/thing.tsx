@@ -134,10 +134,11 @@ export function ThingScreen({ host, params }: ThingsScreenProps) {
     };
     /**
      * Whether a change that makes the document bigger fits the host's bound, checked before the server is asked anything
-     * (as Edit checks): one that doesn't says the shed is full, and nothing changes, here or in the Market.
+     * (as Edit checks): one that doesn't says the shed is full, and nothing changes, here or in the Market. One that makes
+     * it no bigger always fits, so a shed already past the bound can be made smaller (core shedFits).
      */
     const fits = (next: ThingsDoc) => {
-        if (shedFits(next, host.doc.maxBytes())) return true;
+        if (shedFits(next, host.doc.maxBytes(), host.doc.get())) return true;
         setRefused(shedFullLine());
         return false;
     };

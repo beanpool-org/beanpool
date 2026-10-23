@@ -34,10 +34,11 @@ export type NotKept = 'too-big' | 'not-kept';
 /**
  * Keep a changed document: null once the host has it, else why not (the screen says which). One past the host's bound
  * (host.doc.maxBytes(): the shed's 128 KB, or less on a server that keeps less) is never handed to the host, so the shed
- * is said to be full, never "Try again".
+ * is said to be full, never "Try again"; unless it is no bigger than what the host holds (core shedFits), so a shed already
+ * past the bound can still be made smaller.
  */
 export async function keep(host: Host, next: ThingsDoc): Promise<NotKept | null> {
-    if (!shedFits(next, host.doc.maxBytes())) return 'too-big';
+    if (!shedFits(next, host.doc.maxBytes(), host.doc.get())) return 'too-big';
     try {
         await host.doc.set(next);
         return null;

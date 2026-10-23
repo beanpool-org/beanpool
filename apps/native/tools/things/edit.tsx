@@ -5,7 +5,8 @@
  * never held by BeanPool), how they lend it, the longest loan, and a note only they see. Save keeps it and goes back.
  *
  * A save is refused, in one sentence and with nothing written, for a shed past the host's bound (host.doc.maxBytes(): the
- * shed's 128 KB, or less on a server that keeps less): its size is the one bound, so a 101st small thing is kept. A
+ * shed's 128 KB, or less on a server that keeps less): its size is the one bound, so a 101st small thing is kept. A shed
+ * already past it (kept before the server said it keeps less) still saves a change that makes it no bigger. A
  * photo chosen and not kept is taken off the phone again, by Cancel or by leaving
  * any other way (the header's ←, Android's back, a swipe); a save under way keeps what it saves and tidies the rest.
  */
@@ -80,7 +81,7 @@ export function EditScreen({ host, params }: ThingsScreenProps) {
         const doc = host.doc.get();
         const now = host.now();
         const next = saveThing(doc, input, { id: existing?.id ?? null, newId: newThingId(now), now });
-        if (!shedFits(next, host.doc.maxBytes())) { setProblem(shedFullLine()); return; }
+        if (!shedFits(next, host.doc.maxBytes(), doc)) { setProblem(shedFullLine()); return; }
         setBusy(true);
         saving.current = true;
         try {

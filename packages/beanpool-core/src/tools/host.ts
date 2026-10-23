@@ -84,7 +84,8 @@ export interface ToolHostBase<D> {
     node: { url: string | null; profile: string; features: Record<string, unknown> | null };
     /**
      * The one store (§1.6): set() writes the document whole and syncs it, and refuses one over maxBytes(): the most it may
-     * take now (toolDocMaxBytes: the tool's own bound, never past what the community's server said it keeps).
+     * take now (toolDocMaxBytes: the tool's own bound, never past what the community's server said it keeps). One no
+     * bigger than the document it holds is taken even so, so a document already past the bound can be made smaller.
      */
     doc: { get(): D; set(next: D): Promise<void>; maxBytes(): number };
     /** Within the tool; back is the host's. */

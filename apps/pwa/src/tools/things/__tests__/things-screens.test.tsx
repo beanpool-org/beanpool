@@ -607,6 +607,41 @@ describe('Edit', () => {
         expect(server.puts.every((doc) => toolDocBytes(doc) <= 65_536)).toBe(true);
     });
 
+    it("a shed already past a server's 64 KB (kept before it said so): a Delete and a shorter note are kept, an Add is refused, nothing past it is sent", async () => {
+        // Kept while the browser counted against the shed's own 128 KB; then the open's GET says 65536.
+        const over: Thing[] = [];
+        while (toolDocBytes(shed(...over)) <= TOOL_LIMITS.docBytes + 4_000) over.push(atCaps(over.length));
+        await keep(shed(...over));
+        server.max = 65_536;
+        await open('main');
+        await waitFor(async () => expect((await readToolSettings(OWNER, 'things')).nodeMax).toBe(65_536));
+        await waitFor(() => expect(byTestId('things-room')?.textContent).toBe(FULL_LINE));
+        await click('thing-row-b-0');
+        await click('thing-delete');
+        await click('thing-delete-yes');
+        expect(byTestId('thing-refused')).toBeNull();
+        expect((await kept()).things[0]).toMatchObject({ id: 'b-0', gone: true });
+        expect(shedThings(await kept())).toHaveLength(over.length - 1);
+        cleanup();
+
+        await open('edit', 'b-1');
+        await waitFor(async () => expect((await readToolSettings(OWNER, 'things')).nodeMax).toBe(65_536));
+        await type('edit-note', 'Top shelf.');
+        await click('edit-save');
+        expect(byTestId('edit-problem')).toBeNull();
+        expect((await keptThing('b-1'))?.ownerNote).toBe('Top shelf.');
+        cleanup();
+
+        // Still past 64 KB: one more thing is not taken.
+        expect(toolDocBytes(await kept())).toBeGreaterThan(TOOL_LIMITS.docBytes);
+        await open('edit');
+        await type('edit-name', 'One more');
+        await click('edit-save');
+        expect(byTestId('edit-problem')?.textContent).toBe(FULL_LINE);
+        expect(shedThings(await kept())).toHaveLength(over.length - 1);
+        expect(server.puts.every((doc) => toolDocBytes(doc) <= 65_536)).toBe(true);
+    });
+
     it("a refusal on Save is announced as it shows, from a polite region there before Save; never read out twice", async () => {
         await keep(shed(...filledTo(THINGS_DOC_BYTES)));
         await open('edit');
@@ -1356,10 +1391,16 @@ describe('A thing', () => {
         expect(set).not.toHaveBeenCalled();
         expect(await keepThings(setting(set), shed(thing('t-1', 'Ladder')))).toBeNull();
         // The bound is the host's: an older server's 64 KB refuses before the host is asked, as the shed's own 128 KB does.
-        const older = { doc: { get: () => over, set, maxBytes: () => 65_536 } } as unknown as Parameters<typeof keepThings>[0];
+        const older = (held: ThingsDoc) => ({ doc: { get: () => held, set, maxBytes: () => 65_536 } }) as unknown as Parameters<typeof keepThings>[0];
+        const sixty = shed(...Array.from({ length: 60 }, (_, i) => atCaps(i)));
         set.mockClear();
-        expect(await keepThings(older, shed(...Array.from({ length: 60 }, (_, i) => atCaps(i))))).toBe('too-big');
+        expect(await keepThings(older(shed()), sixty)).toBe('too-big');
         expect(set).not.toHaveBeenCalled();
+        // Unless the host holds more than that already (kept before the server said 64 KB): smaller is handed to the host.
+        expect(toolDocBytes(sixty)).toBeGreaterThan(65_536);
+        expect(await keepThings(older(over), sixty)).toBeNull();
+        expect(set).toHaveBeenCalledWith(sixty);
+        set.mockClear();
         expect(await keepThings(setting(vi.fn(async () => { throw new ToolDocTooBig(70_000, 65_536); })), shed())).toBe('too-big');
         expect(await keepThings(setting(vi.fn(async () => { throw new ToolDocNotKept(); })), shed())).toBe('not-kept');
     });

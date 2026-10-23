@@ -47,6 +47,7 @@ import { chatLineWords } from '../../utils/chat-line-words';
 import { listingHeaderStatusWords } from '../../utils/listing-status-words';
 import { NotDeliveredMark } from '../../components/chat/NotDeliveredMark';
 import { Sentence } from '../../components/Sentence';
+import { signedRequestWords } from '../../components/signed-request-lines';
 
 // The edit window, the emoji row, the day labels, the link splitting, the bubble, the action buttons and
 // the composer all moved to utils/chat-actions, utils/chat-links and components/chat/* (chat parity,
@@ -586,7 +587,7 @@ function ChatScreen({ id }: { id: string }) {
         } catch (e: any) {
             Alert.alert(t('Nothing changed'), isDmPinStoreError(e) || !e?.message
                 ? t("This phone couldn't read or save who this chat is with, so nothing was moved. Try again in a moment.")
-                : e.message);
+                : chatLineWords(e.message));
         }
         await loadMessages(true).catch(() => {});
     };
@@ -625,7 +626,7 @@ function ChatScreen({ id }: { id: string }) {
                 setLockNotice(refused);
                 return;
             }
-            Alert.alert(wasEditing ? t('Edit Failed') : t('Message Failed'), err.message || t('Could not execute send.'));
+            Alert.alert(wasEditing ? t('Edit Failed') : t('Message Failed'), err.message ? chatLineWords(err.message) : t('Could not execute send.'));
             if (wasEditing) setEditingMessage(null); // drop back to normal compose on failure (e.g. window expired)
         } finally {
             sendingRef.current = false;
@@ -697,7 +698,7 @@ function ChatScreen({ id }: { id: string }) {
                 } catch (e: any) {
                     const refused = refusedSendNotice(e, peerPubkey ? peerName : null);
                     if (refused) setLockNotice(refused);
-                    else Alert.alert(t('Message Failed'), e.message || t('Could not resend.'));
+                    else Alert.alert(t('Message Failed'), e.message ? chatLineWords(e.message) : t('Could not resend.'));
                 }
                 loadMessages(true);
             }},
@@ -734,7 +735,7 @@ function ChatScreen({ id }: { id: string }) {
                 hapticWarning();
                 const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
                 if (refused) setLockNotice(refused);
-                else Alert.alert(t('Image Failed'), err.message || t('Could not send image.'));
+                else Alert.alert(t('Image Failed'), err.message ? chatLineWords(err.message) : t('Could not send image.'));
             } finally {
                 sendingRef.current = false;
             }
@@ -791,7 +792,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert(t('Failed'), e.message || t('Could not release credits.'));
+                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release credits.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -825,7 +826,7 @@ function ChatScreen({ id }: { id: string }) {
                             });
                         } catch (e: any) {
                             hapticWarning();
-                            Alert.alert(t('Failed'), e.message || t('Could not cancel escrow.'));
+                            Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel escrow.'));
                         } finally {
                             setActionLoading(false);
                         }
@@ -906,7 +907,7 @@ function ChatScreen({ id }: { id: string }) {
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert(t('Failed'), e.message || t('Could not release credits.'));
+                    Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not release credits.'));
                 } finally { setActionLoading(false); }
             }}
         ]);
@@ -927,7 +928,7 @@ function ChatScreen({ id }: { id: string }) {
                     loadMessages(true);
                 } catch (e: any) {
                     hapticWarning();
-                    Alert.alert(t('Failed'), e.message || t('Could not cancel.'));
+                    Alert.alert(t('Failed'), e.message ? signedRequestWords(e.message) : t('Could not cancel.'));
                 } finally { setActionLoading(false); }
             }}
         ]);
@@ -1414,7 +1415,7 @@ function ChatScreen({ id }: { id: string }) {
                 {/* The thread. Inverted, day-separated and keyboard-following — the shared list every chat uses. */}
                 {shouldShowChatLoadError({ loadError, messageCount: messages.length }) ? (
                     <View style={{ flex: 1 }}>
-                        <Text style={chat.errorText} accessibilityRole="alert">{loadError}</Text>
+                        <Text style={chat.errorText} accessibilityRole="alert">{chatLineWords(loadError)}</Text>
                         <Pressable style={chat.retryBtn} accessibilityRole="button" onPress={() => { setLoadError(null); loadMessages(); }}>
                             <Text style={chat.retryText}>{t('Try again')}</Text>
                         </Pressable>

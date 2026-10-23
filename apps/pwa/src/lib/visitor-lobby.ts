@@ -10,21 +10,27 @@
  * The words and the small rules here; what decides whether the lobby is shown is lib/visitor-lobby-gate.ts.
  */
 
+import { t, tn, word } from '@beanpool/core';
 import type { CommunityInfo, MarketplacePost } from './api';
 
-/** Under the first card of the lobby's list, once (not per card). */
-export const VISITOR_LIST_NOTE = 'Names, photos of people and exact places appear when you join.';
+/** Under the first card of the lobby's list, once (not per card). The lobby's fixed lines are word() keys (VISITOR_WORDS). */
+export const VISITOR_LIST_NOTE = word('Names, photos of people and exact places appear when you join.');
 
 /** Under the photo picker of a member's new post, on a node that shows visitors its listings. */
 export function composerVisitorNote(profile: CommunityInfo['profile']): string {
-    return `Visitors to ${profile === 'global' ? 'the global community' : 'this community'} can see this listing's photos and its rough area before they join.`;
+    return profile === 'global'
+        ? t("Visitors to the global community can see this listing's photos and its rough area before they join.")
+        : t("Visitors to this community can see this listing's photos and its rough area before they join.");
 }
 
 /** Where a price was, on a node with Beans off: the terms are in the description (as the phone's NO_BEANS_TERMS). */
-export const NO_BEANS_TERMS_TEXT = 'Free, a swap, or ask';
+export const NO_BEANS_TERMS_TEXT = word('Free, a swap, or ask');
 
 /** An event's place, on the visitor's detail sheet: the node sends only the rough area. */
-export const PLACE_AFTER_JOIN = 'Place shown after you join';
+export const PLACE_AFTER_JOIN = word('Place shown after you join');
+
+/** The three above as a table, so a screen t()s each (t(VISITOR_WORDS.listNote)). */
+export const VISITOR_WORDS = { listNote: VISITOR_LIST_NOTE, noBeansTerms: NO_BEANS_TERMS_TEXT, placeAfterJoin: PLACE_AFTER_JOIN } as const;
 
 /** Whether this node shows a visitor its listings in a lobby, from `/api/community/info` (a public read). */
 export function visitorsSeeListings(info: CommunityInfo | null | undefined): boolean {
@@ -44,10 +50,17 @@ export function beansOn(info: CommunityInfo | null | undefined): boolean {
 
 /** A listing's terms on a visitor's card: no Beans figure where there are no Beans. */
 export function visitorPriceText(post: Pick<MarketplacePost, 'credits' | 'priceType'>, beans: boolean): string {
-    if (!beans) return NO_BEANS_TERMS_TEXT;
-    if (!post.credits) return 'Free';
-    const per = ({ fixed: '', hourly: ' an hour', daily: ' a day', weekly: ' a week', monthly: ' a month' } as Record<string, string>)[post.priceType] ?? '';
-    return `${post.credits} Beans${per}`;
+    if (!beans) return t(VISITOR_WORDS.noBeansTerms);
+    if (!post.credits) return t('Free', undefined, 'price');
+    // One English form for both ("1 Beans"), as the lobby always wrote it: the other languages get theirs.
+    const n = post.credits;
+    switch (post.priceType) {
+        case 'hourly': return tn(n, '{n} Beans an hour', '{n} Beans an hour');
+        case 'daily': return tn(n, '{n} Beans a day', '{n} Beans a day');
+        case 'weekly': return tn(n, '{n} Beans a week', '{n} Beans a week');
+        case 'monthly': return tn(n, '{n} Beans a month', '{n} Beans a month');
+        default: return tn(n, '{n} Beans', '{n} Beans');
+    }
 }
 
 /**
@@ -55,7 +68,12 @@ export function visitorPriceText(post: Pick<MarketplacePost, 'credits' | 'priceT
  * tenth of a km would claim a precision nobody has.
  */
 export function visitorDistanceText(km: number): string {
-    return `about ${Math.max(1, Math.round(km))} km`;
+    return t('about {km} km', { km: Math.max(1, Math.round(km)) });
+}
+
+/** The same distance with no "about", for a sentence that says it another way ("About 11 km away · area only"). */
+export function visitorKmText(km: number): string {
+    return t('{km} km', { km: Math.max(1, Math.round(km)) });
 }
 
 /**

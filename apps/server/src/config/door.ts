@@ -65,7 +65,11 @@ let warnedBadRow: string | null = null;
  */
 export function configuredDoor(): CommunityDoor {
     const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(DOOR_KEY) as { value: string | null } | undefined;
-    const value = row?.value ?? null;
+    return doorFromRow(row?.value ?? null);
+}
+
+/** A `door` row's value as the door it sets (null: no row): configuredDoor's rule, for a copy of the row too. */
+export function doorFromRow(value: string | null): CommunityDoor {
     if (value === null || isCommunityDoor(value)) return value ?? DEFAULT_DOOR;
     if (warnedBadRow !== value) {
         warnedBadRow = value;
@@ -77,11 +81,16 @@ export function configuredDoor(): CommunityDoor {
 /** The door as it works here now: `admins` in a private preview, `open` where the profile opens the door and takes no
  *  invites, else the setting. */
 export function getDoor(): Door {
+    return doorFor(configuredDoor);
+}
+
+/** The door as it works here, for a community whose setting `configured` reads (only asked when the setting decides). */
+export function doorFor(configured: () => CommunityDoor): Door {
     // A private preview (config/private-preview.ts): only an owner or admin brings anyone in, whatever the setting.
     if (isPrivatePreview()) return 'admins';
     const s = getProfileSwitches();
     if (s.openJoin && !s.invites) return 'open';
-    return configuredDoor();
+    return configured();
 }
 
 /** Whether `pubkey` may invite and answer requests to join here, by the door. Members' standing is checked by the caller. */

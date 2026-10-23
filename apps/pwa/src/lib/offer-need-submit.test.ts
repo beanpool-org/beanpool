@@ -34,3 +34,21 @@ describe('posting an Offer or Need from the map', () => {
         expect(offerNeedSubmit({ ...filled, type: 'need', needBlocked: true })).toEqual({ disabled: true, label: '🟢 List an Offer first to post Needs' });
     });
 });
+
+describe('the button in the member\'s language', () => {
+    it('in Portuguese where the catalog has the label, in the pseudo-locale bracketed, in English as before', async () => {
+        const { setLanguage } = await import('@beanpool/core');
+        try {
+            setLanguage('pt', [{ 'Post Offer': 'Publicar Oferta', '📍 Map location required': '📍 Falta a localização no mapa' }]);
+            expect(offerNeedSubmit(filled).label).toBe('Publicar Oferta');
+            expect(offerNeedSubmit({ ...filled, hasLocation: false }).label).toBe('📍 Falta a localização no mapa');
+            setLanguage('xx');
+            for (const f of [filled, { ...filled, type: 'need' as const }, { ...filled, posting: true }, { ...filled, needBlocked: true }, { ...filled, title: '' }]) {
+                expect(offerNeedSubmit(f).label).toMatch(/^\[.*\]$/);
+            }
+        } finally {
+            setLanguage('en');
+        }
+        expect(offerNeedSubmit({ ...filled, type: 'need' }).label).toBe('Post Need');
+    });
+});

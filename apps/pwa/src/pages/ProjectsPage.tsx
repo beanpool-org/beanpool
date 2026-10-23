@@ -227,7 +227,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         }
     };
 
-    // The node's rule (earned standing, or a node admin); earned credit only until the list has loaded.
+    // The node's rule (a completed trade, or a node admin); earned credit only until the list has loaded.
     const canProposeDecision = nodeSaysCanPropose ?? (balanceInfo?.earnedCredit || 0) > 0;
     const hasOpenDecision = useMemo(() => {
         if (!identity?.publicKey) return false;

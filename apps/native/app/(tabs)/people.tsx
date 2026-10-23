@@ -44,6 +44,8 @@ import { communitySwitched } from '../../utils/community-switch';
 import { lookUpMembers, lookUpSpentKind, nearPath, searchPath } from '../../utils/members-lookup';
 import { readNearbyAreaCopy } from '../../utils/nearby-area';
 import { communityListEmpty, communityListNote, joinedWords, type CommunityListNote } from '../../utils/community-list-note';
+import { signedRequestWords } from '../../components/signed-request-lines';
+import { welcomeLineWords } from '../../components/welcome/welcome-lines';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -654,7 +656,7 @@ export default function PeopleScreen() {
                     : []),
             ], { cancelable: false });
         } catch (e: any) {
-            Alert.alert(t('Redemption Failed'), e.message);
+            Alert.alert(t('Redemption Failed'), welcomeLineWords(e.message));
         } finally {
             setRedeeming(false);
         }
@@ -906,7 +908,7 @@ export default function PeopleScreen() {
                                                 const conv = await createConversationApi('dm', [identity.publicKey, item.publicKey], identity.publicKey);
                                                 router.push(`/chat/${conv.id}`);
                                             } catch (e: any) {
-                                                Alert.alert(t('Error'), e.message);
+                                                Alert.alert(t('Error'), signedRequestWords(e.message));
                                             }
                                         }}
                                     >
@@ -1061,7 +1063,7 @@ export default function PeopleScreen() {
                                                 router.push(`/chat/${conv.id}`);
                                             } catch (e: any) {
                                                 const isOffline = !e?.message || /off-grid|network|fetch failed|failed to fetch|offline|timeout|abort/i.test(e.message);
-                                                Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : e.message);
+                                                Alert.alert(t('Error'), isOffline ? t('Connect to your community to start a chat.') : signedRequestWords(e.message));
                                             } finally {
                                                 openingDmRef.current = false;
                                                 setOpeningDmKey(null);
@@ -1087,7 +1089,7 @@ export default function PeopleScreen() {
                                                 try {
                                                     await addFriendLocal(identity.publicKey, item.public_key);
                                                 } catch (e: any) {
-                                                    Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+                                                    Alert.alert(t('Not added'), e?.message ? signedRequestWords(e.message) : t('Your community did not add them.'));
                                                 }
                                             }
                                             loadFriends();
@@ -1151,7 +1153,7 @@ export default function PeopleScreen() {
                                 <>
                                     <Text style={styles.sectionHeader}>{t('📤 Bring someone here')}</Text>
                                     <Text style={styles.sectionDesc}>{bringSomeoneHereText(nodeProfile?.features)}</Text>
-                                    {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={LOCAL_COMMUNITY_LINES.invites} />}
+                                    {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={t(LOCAL_COMMUNITY_LINES.invites)} />}
                                     <Pressable
                                         accessibilityRole="button"
                                         accessibilityLabel={t("Share this community's link")}

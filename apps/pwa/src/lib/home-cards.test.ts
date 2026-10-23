@@ -5,7 +5,8 @@
  * lib/home-layout.ts, proved in home-layout.test.ts.
  */
 import { describe, expect, it } from 'vitest';
-import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, pluralKey, setLanguage } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, NEAR_COMMUNITY_KM, addDateWords, pluralKey, setLanguage } from '@beanpool/core';
+import { dateWords as frDates } from '@beanpool/core/words-dates/fr';
 import {
     HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, findListed, findOffersStart, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
@@ -142,6 +143,25 @@ describe('the words (§3.1, §9)', () => {
         expect(beansLines({ balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false })).toEqual({ line: '-35 Beans · room to spend 165', note: 'Resident' });
         expect(beansLines({ balance: 1, room: 200, tier: 'Resident', activated: true, frozen: false }).line).toBe('1 Bean · room to spend 200');
         expect(beansLines({ balance: 12, room: 0, tier: 'Resident', activated: true, frozen: true }).line).toBe('12 Beans · spending paused');
+    });
+
+    it('Beans: a balance of a thousand or more is grouped in English with its cents too, as it always was', () => {
+        const at = (balance: number) => beansLines({ balance, room: 2310, tier: 'Resident', activated: true, frozen: false }).line;
+        expect(at(1234)).toBe('1,234 Beans · room to spend 2,310');
+        expect(at(1234.5)).toBe('1,234.5 Beans · room to spend 2,310');
+        expect(at(-1234.56)).toBe('-1,234.56 Beans · room to spend 2,310');
+        expect(at(1234567.89)).toBe('1,234,567.89 Beans · room to spend 2,310');
+        expect(at(-0.5)).toBe('-0.5 Beans · room to spend 2,310');
+        expect(at(12.5)).toBe('12.5 Beans · room to spend 2,310');
+        // Elsewhere amounts are the digits alone, with the language's decimal separator (core formatNumber).
+        addDateWords('fr', frDates);
+        setLanguage('fr');
+        try {
+            expect(at(1234.5).startsWith('1234,5 ')).toBe(true);
+            expect(at(-0.5).startsWith('-0,5 ')).toBe(true);
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('a vote closing, in the member\'s own time', () => {

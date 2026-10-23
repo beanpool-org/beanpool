@@ -103,9 +103,10 @@ async function askPhoneLock(reason: string, door: boolean): Promise<boolean> {
     if (!door) appLockPromptOpened();
     try {
         const passCounts = door ? timeDoorPrompt() : () => true;
+        // No fallback or cancel label of ours: iOS writes its own buttons in the phone's language (this file stays off
+        // the words layer), and Android shows a cancel label only where the device fallback is off.
         const res = await phoneLockPrompt({
             promptMessage: reason,
-            fallbackLabel: 'Use Passcode',
             disableDeviceFallback: false,
         }, door ? 'door' : 'app-lock');
 

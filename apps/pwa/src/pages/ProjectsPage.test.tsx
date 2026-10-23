@@ -350,7 +350,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         vi.mocked(getDecisions).mockResolvedValueOnce({ decisions: [], myPoolVoting: null, canPropose: true });
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(getDecisions).toHaveBeenCalled());
-        await waitFor(() => expect(screen.getByText(/Open to members with a completed trade or earned standing, and to node admins\./)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/Open to members who have completed a trade, and to node admins\./)).toBeInTheDocument());
         expect(screen.queryByText(/You can propose once you have completed a trade\./)).toBeNull();
     });
 

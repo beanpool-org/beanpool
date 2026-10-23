@@ -98,7 +98,15 @@ function grantBody(effect: 'grant_enterprise' | 'grant_hardship', params: unknow
     };
 }
 
+/** A completed trade: the standing to propose (the earned_credit badge makeMember gives is none). Not ledger, so no inflow. */
+function hasTraded(id: Id): void {
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at, completed_at)
+                VALUES (?, ?, ?, ?, 5, 'completed', ?, ?)`).run(crypto.randomUUID(), crypto.randomUUID(), id.pubKeyHex, recipient.pubKeyHex, now, now);
+}
+
 async function propose(effect: 'grant_enterprise' | 'grant_hardship', amount: unknown, proposer = makeMember('Proposer')) {
+    hasTraded(proposer);
     const res = await signedPost('/api/commons/decisions', grantBody(effect, amount === undefined ? undefined : { amount }), proposer);
     return { ...res, proposer };
 }
@@ -248,16 +256,20 @@ async function main(): Promise<void> {
     await expectRefused('grant_enterprise', 1e-8, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, a hundred-millionth of a Bean');
     await expectRefused('grant_hardship', 1e-9, refusal('holds 0 Beans', '0', '0'), 'with a cap of 0, a hardship grant of a billionth of a Bean');
     const target = makeMember('Target');
+    const memberProposer = makeMember('MemberProposer');
+    hasTraded(memberProposer);
     const freeze = await signedPost('/api/commons/decisions', {
         title: 'Freeze Target', description: 'Freeze their credit for a while', touches: 'member', effect: 'freeze_credit',
         subject: target.pubKeyHex,
-    }, makeMember('MemberProposer'));
+    }, memberProposer);
     assert(freeze.status === 200 && freeze.body?.success === true, `a member Decision is still proposed (${freeze.status} ${freeze.error ?? ''})`);
     const debtor = makeMember('Debtor', { treasury: true, balance: -500 });
+    const writeOffProposer = makeMember('WriteOffProposer');
+    hasTraded(writeOffProposer);
     const writeOff = await signedPost('/api/commons/decisions', {
         title: 'Write off the debt', description: 'The enterprise closed owing 500 Beans', touches: 'pool', effect: 'write_off_deficit',
         subject: debtor.pubKeyHex,
-    }, makeMember('WriteOffProposer'));
+    }, writeOffProposer);
     assert(writeOff.status === 200 && writeOff.body?.success === true,
         `a write-off of a 500-Bean deficit is still proposed: it is not a grant (${writeOff.status} ${writeOff.error ?? ''})`);
     setClock(null);

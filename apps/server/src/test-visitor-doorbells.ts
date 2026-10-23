@@ -303,11 +303,15 @@ async function main(): Promise<void> {
         // ── 3. a Decision ───────────────────────────────────────────────────────────────────────
         console.log('\n── 3. a Decision proposed and voted on over HTTP ──');
         clear();
-        const proposed = await call(alice, '/api/commons/decisions', {
+        // An admin proposes: standing to propose is a trading record, which a node with Beans off has none of, and a trust
+        // badge is no standing (badges unlock nothing). Who proposes changes no doorbell.
+        const ada = member('DoorbellAda');
+        se.grantNodeRole(ada.pk, 'admin', 'owner:password');
+        const proposed = await call(ada, '/api/commons/decisions', {
             title: 'Freeze Carol', description: 'A doorbell test Decision', touches: 'member', effect: 'freeze_credit', subject: carol.pk,
         });
         const decisionId = proposed.body?.decision?.id as string | undefined;
-        assert(proposed.status === 200 && !!decisionId, `Alice proposes a Decision (got ${proposed.status} ${JSON.stringify(proposed.body).slice(0, 160)})`);
+        assert(proposed.status === 200 && !!decisionId, `Ada, an admin, proposes a Decision (got ${proposed.status} ${JSON.stringify(proposed.body).slice(0, 160)})`);
         const voted = await call(bob, `/api/commons/decisions/${decisionId}/vote`, { support: true });
         assert(voted.status === 200, `Bob votes on it (got ${voted.status} ${JSON.stringify(voted.body).slice(0, 160)})`);
         await until(S.member, 'decision_vote_cast');
@@ -428,7 +432,9 @@ async function main(): Promise<void> {
         // A community removal: the Decision's grace runs out, tickDecisions prunes the member, and their listings go.
         const dora = member('DoorbellDora');
         const doraOffer = await offer(dora, 'Doorbell Dora offer');
-        const proposer = member('DoorbellProposer', { earned: 50 });
+        // An admin, as in 3: a trust badge is no standing to propose, and a node with Beans off has no trades.
+        const proposer = member('DoorbellProposer');
+        se.grantNodeRole(proposer.pk, 'admin', 'owner:password');
         const removal = createDecision({ authorPubkey: proposer.pk, title: 'Remove Dora', description: 'A doorbell test of a community removal', touches: 'member',
             effect: 'remove_member', subject: dora.pk });
         assert((await board()).includes(doraOffer), `setup: ${READER} reads Dora's offer`);

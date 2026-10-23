@@ -602,7 +602,7 @@ export function getQuorumRequired(decision: Decision | { effect: DecisionEffect;
 /**
  * Check if a member is eligible to author a decision (§3.2, §10):
  * - Active member, not frozen, not treasury.
- * - earnedCredit > 0 (or qualified trade value > 0, or node admin).
+ * - Qualified trade value > 0, or node admin. A trust badge (members.earned_credit) is no standing: badges unlock nothing.
  * - Max 1 open community decision per author; an enterprise's keepers' vote is that enterprise's, not this (§2.1).
  */
 export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; error?: string } {
@@ -632,10 +632,12 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
     if (frozenRow?.credit_frozen === 1) return { ok: false, error: 'Member credit is frozen' };
     if (member.isTreasury) return { ok: false, error: 'Enterprises cannot propose decisions' };
 
+    // A trading record, as qualifiedTradeValue counts it, or a node admin. Not a trust badge (members.earned_credit, which
+    // adminSetTier and genesis invites write): badges are recognition and unlock nothing (Marty, 23 Oct).
     const tradeVal = engine.qualifiedTradeValue(db, authorPubkey);
     const isAdmin = isNodeAdmin(authorPubkey);
-    if (tradeVal <= 0 && (member.earnedCredit || 0) <= 0 && !isAdmin) {
-        return { ok: false, error: 'Proposing a Decision requires earned trade standing (earnedCredit > 0)' };
+    if (tradeVal <= 0 && !isAdmin) {
+        return { ok: false, error: 'You can propose a Decision once you have completed a trade' };
     }
     return { ok: true };
 }

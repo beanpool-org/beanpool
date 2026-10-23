@@ -90,10 +90,11 @@ async function getSigned(path: string, id: Id): Promise<{ status: number; body: 
 // cards on a nearly empty Market: global only (drawn by the apps, nothing stored). Invites: on for a local community,
 // off on the lobby, whose door is the only way in (test-invites-off). The 12-words door: open beside the sign-in on the
 // lobby only (test-door-work). A member's set of nearby listings: global only, 250 km and 500 (test-sync-nearby). Members on demand (the phone holds the cards it needs): global only (test-members-on-demand). The
-// showcase (DESIGN-global-showcase-fable.md W1): reported on the lobby only, so a local node's features are unchanged. The PR that builds one of these changes its line here, with the test that proves it.
+// showcase (DESIGN-global-showcase-fable.md W1): reported on the lobby only, so a local node's features are unchanged. Message
+// requests (DESIGN-message-a-friend-fable.md §4): on the lobby only, reported only while on (test-dm-requests). The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
     local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, onlineEvents: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, door: 'members' },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, door: 'open' },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, onlineEvents: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, openMembership: true, dmRequests: true, door: 'open' },
 };
 
 async function main() {
@@ -156,6 +157,8 @@ async function main() {
         'member_joined to every member socket: a local community, as before; on the lobby only to the joiner (test-global-server-limits)');
     assert(local.retention === false && global.retention === true,
         'retention: a listing unchanged for 90 days is archived on the lobby only; a local community keeps it (test-global-cost-limits)');
+    assert(local.dmRequests === false && global.dmRequests === true,
+        'message requests: a stranger\'s first message waits to be accepted on the lobby only; a local community\'s arrive as before (test-dm-requests)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 

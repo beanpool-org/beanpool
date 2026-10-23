@@ -9,6 +9,7 @@ import { loadIdentity, KEY_ITEM_OPTIONS } from '../utils/identity';
 import { registerAccountForPush, retryDueRegistrations } from '../utils/push-registrations';
 import { checkWhileOpen, followTap, type IncomingNotice } from '../utils/push-notice-check';
 import { postNoticesFromSync, type LocalNotice } from '../utils/sync-notices';
+import { notificationChannels } from '../utils/notification-channels';
 import { PUSH_TOKEN_STORE_KEY } from '../utils/storage-keys';
 import { toolReminderRoute } from '../tools/reminders';
 
@@ -123,46 +124,11 @@ async function phonePushToken(ask: boolean): Promise<string | null> {
     try {
         // Set up Android notification channel
         if (Platform.OS === 'android') {
-            await Notifications.setNotificationChannelAsync('default', {
-                name: 'BeanPool',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#8b5cf6',
-            });
-
-            await Notifications.setNotificationChannelAsync('escrow', {
-                name: 'Held in Trust Alerts',
-                importance: Notifications.AndroidImportance.HIGH,
-                vibrationPattern: [0, 500, 250, 500],
-                lightColor: '#059669',
-                description: 'Alerts for trust events (credits locked, released, cancelled)',
-            });
-
-            await Notifications.setNotificationChannelAsync('chat', {
-                name: 'Direct Messages',
-                importance: Notifications.AndroidImportance.HIGH,
-                vibrationPattern: [0, 250],
-                lightColor: '#3b82f6',
-                description: 'Notifications for new messages',
-            });
-
-            await Notifications.setNotificationChannelAsync('marketplace', {
-                name: 'Marketplace',
-                importance: Notifications.AndroidImportance.DEFAULT,
-                vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#8b5cf6',
-                description: 'Requests and offers on your marketplace posts',
-            });
-
-            // Recovery alerts are high-priority and must not be silenced by muting
-            // deal/marketplace notifications. Separate channel means separate control.
-            await Notifications.setNotificationChannelAsync('recovery', {
-                name: 'Account Recovery Alerts',
-                importance: Notifications.AndroidImportance.MAX,
-                vibrationPattern: [0, 500, 500, 500],
-                lightColor: '#ef4444',
-                description: 'Urgent alerts when someone tries to recover your account',
-            });
+            // Named in the member's language (utils/notification-channels.ts): set again with each token, so a language
+            // change renames them in the phone's settings too.
+            for (const { id, importance, ...channel } of notificationChannels()) {
+                await Notifications.setNotificationChannelAsync(id, { ...channel, importance: Notifications.AndroidImportance[importance] });
+            }
         }
     } catch (e) {
         // The token is had: the registration goes all the same.

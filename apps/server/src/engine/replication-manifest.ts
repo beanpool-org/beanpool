@@ -112,6 +112,16 @@ const MEMBERS_REPORTS: RowRule = {
 };
 
 /**
+ * The rows of a conversation that is real here (`conversations`): a message request's (engine/dm-requests.ts). A
+ * conversation kept for a blocked opener alone (engine/withheld-lines.ts) is never in a copy, and nor is its request; once
+ * it becomes the real one, under the same id, its row is stamped and travels.
+ */
+const REAL_CONVERSATIONS: RowRule = {
+    where: 'conversation_id IN (SELECT c.id FROM conversations c)',
+    reason: 'a conversation kept for a blocked opener alone is never in a copy (withheld_conversations), and nor is its request',
+};
+
+/**
  * A plain table's age rule: its rows whose `column` (a stamp the main server wrote, the copy's) is more than `days` days
  * old go, on each server, with no tombstone (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.3 T2). The
  * main server deletes them on its own schedule (the table's own prune) and before each whole copy it serves
@@ -442,6 +452,9 @@ export const TABLES: Record<string, TableEntry> = {
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
     known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
     known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
+    // Every change to how this community works (config/community-shape.ts): the owners' accountability, as the known floor's
+    // log is, and a server that takes over shows the same lines and carries on the same ids.
+    community_settings_log: plain('id actor_pubkey actor_role setting old_value new_value note at updated_at'),
     health_access_log: plain('id actor_pubkey action subject_pubkey detail token_id token_name at updated_at'),
     known_consents: plain('member_pubkey version consented_at updated_at'),
     known_consent_log: plain('id member_pubkey action version at updated_at'),
@@ -495,6 +508,10 @@ export const TABLES: Record<string, TableEntry> = {
     // A shop (engine/shops.ts): a front window on a member's or an enterprise's account, its words, and its pause with the
     // Offers the pause took down. Its listings name it in their own rows (posts.shop_id); a close is a tombstone by its id.
     shops: plain('id owner_pubkey name kind blurb how_to_deal opened_at paused_at back_on paused_posts updated_at'),
+    // A direct conversation waiting as a message request, and what became of it (engine/dm-requests.ts), so a standby
+    // that takes over holds back the same lines and lists the same requests. Only a real conversation's: one kept for a
+    // blocked opener alone is never in a copy (withheld_conversations), and its row starts travelling when it becomes real.
+    dm_requests: plain('conversation_id from_pubkey to_pubkey state requested_at decided_at accepted_by updated_at', { rows: REAL_CONVERSATIONS }),
 
     // ── Not copied today, and the design says they should be ──
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },

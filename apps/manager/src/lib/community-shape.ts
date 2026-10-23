@@ -187,7 +187,7 @@ export async function fetchCommunityShape(
  */
 export async function updateCommunityShape(
     nodeUrl: string,
-    credential: string,
+    credential: string | undefined,
     changes: Record<string, unknown>,
     note?: string,
     tfaToken?: string,

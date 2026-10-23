@@ -318,5 +318,25 @@ describe('HomeScreen Component', () => {
             expect(screen.getByTestId('home-connections')).toHaveTextContent('2 active connections');
         });
     });
+
+    describe('How this community works card', () => {
+        it('renders the one-line summary matching shape settings and navigates to shape on click', () => {
+            const onNavigate = vi.fn();
+            const shape: any = {
+                settings: {
+                    join: { value: 'members' },
+                    beans: { value: true },
+                    decisions: { value: true },
+                    knocks: { value: true },
+                },
+            };
+            render(<HomeScreen {...defaultProps} onNavigate={onNavigate} shape={shape} />);
+            const card = screen.getByTestId('home-community-shape-card');
+            expect(card).toBeInTheDocument();
+            expect(card).toHaveTextContent('🧭 How this community works · any member invites · Beans on · votes on · requests to join on · Change ›');
+            fireEvent.click(card);
+            expect(onNavigate).toHaveBeenCalledWith('shape');
+        });
+    });
 });
 

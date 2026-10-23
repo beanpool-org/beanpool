@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
+import { nodeCredential } from '../../lib/profiles';
 import type { RolesViewer } from './NodeRolesPanel';
-import { nodeCredential, getTfaSessionToken } from '../../lib/node-client';
+import { getTfaSessionToken } from '../../lib/node-client';
 import { t } from '../../lib/fresh-proof';
 import {
     type Shape,
@@ -211,7 +212,7 @@ export function CommunityShapeSection({
             <div className="p-4 rounded-xl bg-nature-950 border border-nature-800 space-y-1.5">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-xs font-bold text-white">
-                        {t('Kind of server')}: {kind === 'global' ? t('global community') : t('local community')}
+                        {kind === 'global' ? t('Kind of server: global community') : t('Kind of server: local community')}
                     </span>
                     <span className="text-[11px] font-medium text-nature-400 bg-nature-900 px-2 py-0.5 rounded-md border border-nature-800">
                         {t('Set on the server')}
@@ -416,8 +417,8 @@ export function CommunityShapeSection({
                         icon="🤝"
                         name={t('Known floor for confirmed members')}
                         summary={t('An admin confirms a member on the names list; they can then owe up to this while they keep an offer listed.')}
-                        extraLine={`${t('Cap for one member\'s raise')}: ${settings.knownFloor.value.cap.toLocaleString('en')}.`}
-                        displayValue={settings.knownFloor.value.on ? `${t('On')} · ${settings.knownFloor.value.floor.toLocaleString('en')} Beans` : t('Off')}
+                        extraLine={t('Cap for one member\'s raise: {cap}.').replace('{cap}', settings.knownFloor.value.cap.toLocaleString('en'))}
+                        displayValue={settings.knownFloor.value.on ? t('On · {floor} Beans').replace('{floor}', settings.knownFloor.value.floor.toLocaleString('en')) : t('Off')}
                         lock={settings.knownFloor.lock}
                         isOwner={isOwner && !standby}
                         isOpen={openSetting === 'knownFloor'}

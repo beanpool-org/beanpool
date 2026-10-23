@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { HelpLink } from '../manual/Manual';
 import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } from '../../lib/node-client';
-import { nodeCredential, getTfaSessionToken } from '../../lib/node-client';
+import { getTfaSessionToken } from '../../lib/node-client';
 import { FEEDBACK_LIVE } from '@beanpool/core';
 import { SuggestChangePanel } from './SuggestChangePanel';
 import { WebVisitsCard } from './WebVisitsCard';
 import { AppVersionsCard } from './AppVersionsCard';
-import type { NodeProfile } from '../../lib/profiles';
+import { type NodeProfile, nodeCredential } from '../../lib/profiles';
 import { type Shape, fetchCommunityShape } from '../../lib/community-shape';
 
 /** The Alerts card (AlertsPanel, under Backups & Restore): where each of the server's alerts is listed and marked seen. */

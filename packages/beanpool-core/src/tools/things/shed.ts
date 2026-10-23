@@ -7,7 +7,7 @@
  *
  * A thing's states (DESIGN-tool-library-fable.md §2.1): on the shelf (private) → in the shop (its Offer live) → out (on a
  * loan through BeanPool, or lent outside it) → back in the shop → taken out of the shop (its Offer paused, kept so listing
- * it again puts the same Offer back) → gone when it is deleted (kept as a tombstone, never shown).
+ * it again puts the same Offer back) → gone when it is deleted (taken out of the document: nothing of it is kept).
  */
 import { formatDate, t, tn } from '../../words.js';
 import { PRICING_CATEGORIES, normalizeCategory } from '../../pricing-catalog.js';
@@ -340,14 +340,15 @@ export const shedFullLine = () => t('Your Tool shed is full. Delete something yo
 export const shopClosedLine = () => t("Your shop is closed for now, so this can't go back in it yet. Reopen your shop first.");
 
 /**
- * The document with a thing deleted: kept as a tombstone (`gone`, its id and name and a newer app's fields) and never
- * shown or counted again; its photo, notes, terms and Offer link go with it.
+ * The document with a thing deleted: taken out of the list, every other item where it was, and nothing of it kept, so
+ * a Delete gives back all the room the thing took and the shed never fills with things that are gone. No tombstone is
+ * needed: the sync takes or sends the document whole, last writer wins (reconcile.ts; node-copy.ts runStep), and nothing
+ * reads one, on a device or on the node. A copy that took this document has no thing to bring back; one that never did
+ * is the older document, which loses to this one or wins whole, tombstone or not ("one device at a time"). The host
+ * removes its photo.
  */
-export function removeThing(doc: ThingsDoc, id: string, now: number): ThingsDoc {
-    return changeThing(doc, id, now, (t) => ({
-        ...without(t, 'category', 'condition', 'replacementValue', 'lendTerms', 'lendMaxDays', 'ownerNote', 'photo', 'postId', 'pausedPostId', 'lentTo'),
-        gone: true,
-    }));
+export function removeThing(doc: ThingsDoc, id: string, _now: number): ThingsDoc {
+    return { ...doc, things: (doc.things ?? []).filter((t) => !(isLiveThing(t) && t.id === id)) };
 }
 
 /** When a thing is due back, `days` from now (the "back around" chips), as an ISO time. */

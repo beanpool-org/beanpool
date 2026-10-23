@@ -45,11 +45,13 @@ function setFloor(floor: number): void {
     else db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(KNOWN_FLOOR_KEY, String(floor));
 }
 
-function log(actor: string, action: string, memberPubkey: string | null, oldValue: unknown, newValue: unknown): void {
-    db.prepare('INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value) VALUES (?, ?, ?, ?, ?, ?)')
+function log(actor: string, action: string, memberPubkey: string | null, oldValue: unknown, newValue: unknown, at?: string): void {
+    db.prepare(`INSERT INTO known_floor_log (id, actor_pubkey, action, member_pubkey, old_value, new_value, at)
+                VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')))`)
         .run(crypto.randomBytes(16).toString('hex'), actor, action, memberPubkey,
             oldValue === null || oldValue === undefined ? null : String(oldValue),
-            newValue === null || newValue === undefined ? null : String(newValue));
+            newValue === null || newValue === undefined ? null : String(newValue),
+            at ?? null);
 }
 
 function wholeBeans(v: unknown, name: string): number {
@@ -68,13 +70,26 @@ export function knownFloorSettings() {
     };
 }
 
-/** The owner's change to the dial, the known floor or the cap. Checked whole before anything is written. */
-export function setKnownFloorSettings(actor: string, body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }) {
+/** A change to the dial, the known floor or the cap, checked whole: what each will be, against what they are. */
+export interface KnownFloorPlan {
+    before: ReturnType<typeof knownFloorSettings>;
+    /** The dial as sent, or undefined where it was left out. */
+    confirmation: boolean | undefined;
+    floor: number;
+    cap: number;
+}
+
+/**
+ * The owner's change to the dial, the known floor or the cap, checked and nothing written (throws KnownFloorError).
+ * `beans`: whether the node will have Beans when it is written: the shape route's change may switch them in the same
+ * request (config/community-shape-write.ts), which checks Beans itself; the node's own switches otherwise.
+ */
+export function checkKnownFloorSettings(body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }, beans = getProfileSwitches().beans): KnownFloorPlan {
     const before = knownFloorSettings();
     if (body.confirmation !== undefined && typeof body.confirmation !== 'boolean') {
         throw new KnownFloorError(400, 'bad_confirmation', 'confirmation must be true or false.');
     }
-    if (body.confirmation === true && !getProfileSwitches().beans) {
+    if (body.confirmation === true && !beans) {
         throw new KnownFloorError(409, 'no_beans', 'This node has no Beans, so it has no known floor to turn on.');
     }
     const cap = body.creditCap === undefined ? before.creditCap : wholeBeans(body.creditCap, 'The cap');
@@ -85,21 +100,36 @@ export function setKnownFloorSettings(actor: string, body: { confirmation?: unkn
     if (floor > cap) {
         throw new KnownFloorError(400, 'floor_above_cap', `The known floor can't be more than the cap (${cap.toLocaleString('en')} Beans).`);
     }
+    return { before, confirmation: body.confirmation as boolean | undefined, floor, cap };
+}
+
+/**
+ * Writes a checked change, each setting that changed one line in known_floor_log stamped `at` (the shape route stamps
+ * its own log's line the same, so the two are read as one change). Inside the caller's transaction where there is one.
+ */
+export function writeKnownFloorSettings(actor: string, plan: KnownFloorPlan, at?: string): void {
+    const { before, confirmation, cap, floor } = plan;
     db.transaction(() => {
-        if (body.confirmation !== undefined && body.confirmation !== before.confirmation) {
-            setDial(body.confirmation === true);
-            log(actor, 'confirmation', null, before.confirmation ? 'on' : 'off', body.confirmation ? 'on' : 'off');
+        if (confirmation !== undefined && confirmation !== before.confirmation) {
+            setDial(confirmation);
+            log(actor, 'confirmation', null, before.confirmation ? 'on' : 'off', confirmation ? 'on' : 'off', at);
         }
         if (cap !== before.creditCap) {
             setCap(cap);
-            log(actor, 'credit_cap', null, before.creditCap, cap);
+            log(actor, 'credit_cap', null, before.creditCap, cap, at);
         }
         if (floor !== before.knownFloor) {
             setFloor(floor);
-            log(actor, 'known_floor', null, before.knownFloor, floor);
+            log(actor, 'known_floor', null, before.knownFloor, floor, at);
         }
     })();
     clearEnterpriseFloorCache(db);
+}
+
+/** The dial, the known floor or the cap, checked whole before anything is written. Settings changes them only through
+ *  POST /api/local/admin/community-shape (config/community-shape-write.ts), which logs and tells: this is for a suite's probe. */
+export function setKnownFloorSettings(actor: string, body: { confirmation?: unknown; knownFloor?: unknown; creditCap?: unknown }) {
+    writeKnownFloorSettings(actor, checkKnownFloorSettings(body));
     return knownFloorSettings();
 }
 

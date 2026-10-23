@@ -37,6 +37,8 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 delete process.env.PRIVATE_PREVIEW;
 delete process.env.DIRECTORY_UNLISTED;
 process.env.ADMIN_PASSWORD = 'CommunityShapeWrite123!';
+// The suites' seam (scripts/server-suites.mjs sets it too): the password from .env, as on a node from before claim codes.
+process.env.BEANPOOL_SUITE_ENV_PASSWORD = '1';
 // A directory push that got past every hold-back would go here: a closed port on this machine, never the registry.
 process.env.DIRECTORY_REGISTRY_URL = 'http://127.0.0.1:9/directory-register';
 
@@ -162,9 +164,18 @@ async function main(): Promise<void> {
         { recipient: string; title: string; body: string; data: string }[];
     const logMark = () => (db.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM community_settings_log').get() as { m: number }).m;
     const linesSince = (mark: number) => db.prepare('SELECT * FROM community_settings_log WHERE id > ? ORDER BY id').all(mark) as any[];
-    const keepers = () => (db.prepare(`SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned'
+    // Every member who keeps notices: not a visitor's row, an enterprise's key (the Commons' included), a closed account,
+    // or the node's own SYSTEM row.
+    const keepers = () => (db.prepare(`SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned' AND public_key != 'SYSTEM'
                                        AND COALESCE(is_visitor, 0) = 0 AND COALESCE(is_treasury, 0) = 0 ORDER BY public_key`).all() as { public_key: string }[])
         .map((m) => m.public_key);
+    /** Each member's notices since `mark`: the bodies they were told, in order, all members alike. */
+    const toldEach = (mark: number): string[] | null => {
+        const byMember = new Map<string, string[]>();
+        for (const x of noticesSince(mark)) byMember.set(x.recipient, [...(byMember.get(x.recipient) ?? []), x.body]);
+        const all = keepers().map((pk) => JSON.stringify(byMember.get(pk) ?? []));
+        return byMember.size === keepers().length && all.every((b) => b === all[0]) ? JSON.parse(all[0]) : null;
+    };
     const SENT = (s: string) => `Your community's owners changed how it works: ${s}`;
 
     /** A refusal: its status and code, the sentence, and nothing written, alerted or told. */
@@ -242,7 +253,7 @@ async function main(): Promise<void> {
     assert(paused.status === 200 && np.getConfiguredSwitches().invites === false && !np.getNodeFeatures().invites && rowOf('door') === 'admins'
         && np.getNodeFeatures().knocks === false && paused.body.shape.settings.join.value === 'paused',
         `paused: invites off (and requests to join with them), the door row kept as it was (${show(paused)})`);
-    assert(noticesSince(nMark).every((n) => n.body === SENT('no new members are being taken for now.')), 'members are told no new members are being taken');
+    assert(isDeepStrictEqual(toldEach(nMark), [SENT('no new members are being taken for now.')]), 'members are told no new members are being taken');
     await refusedClean('requests to join while paused (invites_off)', () => change({ knocks: false }), 409, 'invites_off', lockWhy(readShape(), 'knocks'));
     const unpause = await change({ join: 'admins' });
     assert(unpause.status === 200 && np.getConfiguredSwitches().invites === true && rowOf(OVERRIDE_PREFIX + 'invites') === null && getDoor() === 'admins',
@@ -267,11 +278,12 @@ async function main(): Promise<void> {
     told = alerts.slice(aMark);
     assert(told.length === 1 && ['Requests to join', 'Community votes', 'First message from someone new', 'Share email', 'Limits on new accounts'].every((n) => told[0].detail.includes(n)),
         `one alert names every setting (${told[0]?.detail})`);
-    notices = noticesSince(nMark);
-    const severalBody = [SENT('people who find this community can ask to join.'), SENT('a first message from someone new now waits until you accept it.'),
-        SENT('community votes are off; the moderators look after things.'), SENT('new accounts have limits for their first days.')].join('\n');
-    assert(notices.length === keepers().length && notices.every((n) => n.body === severalBody),
-        `one notice each, a whole sentence per members' rule and none for the directory's email switch (${JSON.stringify(notices[0]?.body)})`);
+    const severalSaid = [SENT('people who find this community can ask to join.'), SENT('a first message from someone new now waits until you accept it.'),
+        SENT('community votes are off; the moderators look after things.'), SENT('new accounts have limits for their first days.')];
+    const severalTold = toldEach(nMark);
+    assert(isDeepStrictEqual(severalTold, memberNoticeBodies(severalSaid, null)) && severalTold!.every((b) => b.length <= NOTICE_LIMITS.body)
+        && severalSaid.every((x) => severalTold!.join('\n').includes(x)) && !severalTold!.join('\n').includes('email'),
+        `every member is told each members' rule in a whole sentence, in notices a kept one can hold, and nothing of the directory's email switch (${JSON.stringify(severalTold)})`);
 
     // The rest of the switches, back again.
     nMark = noticeMark();
@@ -279,12 +291,12 @@ async function main(): Promise<void> {
     const f2 = np.getNodeFeatures();
     assert(back.status === 200 && f2.decisions && !('dmRequests' in f2) && !f2.probation && f2.autoHideReports && f2.autoMute,
         `votes on, message requests and new-account limits off, both safety switches on (${show(back)})`);
-    assert(noticesSince(nMark).every((n) => n.body === [SENT('every message now arrives straight away.'), SENT('community votes are on.'),
+    assert(isDeepStrictEqual(toldEach(nMark), memberNoticeBodies([SENT('every message now arrives straight away.'), SENT('community votes are on.'),
         SENT('new accounts no longer have limits for their first days.'), SENT('reported posts are hidden until a moderator looks.'),
-        SENT('repeat offenders are muted automatically.')].join('\n')), 'members are told each in its own sentence');
+        SENT('repeat offenders are muted automatically.')], null)), `members are told each in its own sentence (${JSON.stringify(toldEach(nMark))})`);
     nMark = noticeMark();
     await change({ autoHide: false, autoMute: false });
-    assert(noticesSince(nMark).every((n) => n.body === [SENT('reported posts stay up until a moderator looks.'), SENT('repeat offenders are no longer muted automatically.')].join('\n')),
+    assert(isDeepStrictEqual(toldEach(nMark), [[SENT('reported posts stay up until a moderator looks.'), SENT('repeat offenders are no longer muted automatically.')].join('\n')]),
         'and when they go off again');
 
     // The directory: written, logged, alerted, and no member told.
@@ -292,7 +304,7 @@ async function main(): Promise<void> {
     const dir = await change({ listed: false, shareLocation: false, shareMemberCount: false, sharePhone: true, shareHealth: false, shareEmail: false });
     const n = se.getNodeConfig();
     assert(dir.status === 200 && dir.body?.told === 'nobody' && noticeMark() === nMark && alerts.length === aMark + 1 && linesSince(mark).length === 6
-        && np.getConfiguredSwitches().publishToDirectory === false && !n.publishLocation && !n.publishMembers && n.publishContactPhone && !n.publishHealth && !n.publishContactEmail,
+        && np.getConfiguredSwitches().publishToDirectory === false && !n.publishLocation && !n.publishMembers && n.publishContactPhone === true && !n.publishHealth && !n.publishContactEmail,
         `the directory's switches: written and logged, the owners alerted, no member told (${show(dir)})`);
     assert(dir.body.shape.settings.shareLocation.source === 'owner' && dir.body.shape.settings.listed.value === false, 'and the shape reads them');
     await change({ listed: true, shareLocation: true, shareMemberCount: true, sharePhone: false, shareHealth: true });
@@ -303,15 +315,15 @@ async function main(): Promise<void> {
     const beansOff = await change({ beans: false });
     assert(beansOff.status === 200 && !np.getNodeFeatures().beans && !np.getProfileSwitches().escrow,
         `a local community whose ledger never moved switches Beans off, escrow with them (${show(beansOff)})`);
-    assert(noticesSince(nMark).every((x) => x.body === SENT('Beans are off, so there are no prices, sends or credit here.')), 'and its members are told');
+    assert(isDeepStrictEqual(toldEach(nMark), [SENT('Beans are off, so there are no prices, sends or credit here.')]), 'and its members are told');
     await refusedClean('the known floor with no Beans (beans_off)', () => change({ knownFloor: { floor: 1300 } }), 409, 'beans_off', lockWhy(readShape(), 'knownFloor'));
     await refusedClean('the known floor\'s dial with no Beans (beans_off)', () => change({ knownFloor: { on: true } }), 409, 'beans_off');
     nMark = noticeMark();
     const beansBack = await change({ beans: true, knownFloor: { floor: 1300 } });
     assert(beansBack.status === 200 && np.getNodeFeatures().beans && knownFloorSettings().knownFloor === 1300 && knownFloorSettings().confirmation,
         `Beans on and the known floor moved in one request: the lock it lifts doesn't refuse it (${show(beansBack)})`);
-    assert(noticesSince(nMark).every((x) => x.body === [SENT('Beans are on.'), SENT('confirmed members can owe up to 1,300 Beans now (the known floor).')].join('\n')),
-        `members are told both: with Beans back, the dial that read off without them is on again (${JSON.stringify(noticesSince(nMark)[0]?.body)})`);
+    assert(isDeepStrictEqual(toldEach(nMark), [[SENT('Beans are on.'), SENT('confirmed members can owe up to 1,300 Beans now (the known floor).')].join('\n')]),
+        `members are told both: with Beans back, the dial that read off without them is on again (${JSON.stringify(toldEach(nMark))})`);
     await refusedClean('Beans off and the known floor moved in one request (beans_off)', () => change({ beans: false, knownFloor: { floor: 1400 } }), 409, 'beans_off');
     assert(np.getNodeFeatures().beans, 'and Beans stayed on: nothing of it was written');
 
@@ -380,14 +392,14 @@ async function main(): Promise<void> {
     const dialOff = await change({ knownFloor: { on: false } });
     assert(dialOff.status === 200 && knownFloorSettings().confirmation === false && dialOff.body.shape.settings.knownFloor.value.on === false,
         `the dial off (${show(dialOff)})`);
-    assert(noticesSince(nMark).every((x) => x.body === SENT('confirmed members no longer have a known floor, and go back to the credit they have earned.')), 'members are told');
+    assert(isDeepStrictEqual(toldEach(nMark), [SENT('confirmed members no longer have a known floor, and go back to the credit they have earned.')]), 'members are told');
     nMark = noticeMark();
     const dialOn = await change({ knownFloor: { on: true, floor: 1500 } }, 'Welcome, neighbours');
     lines = linesSince(mark);
     assert(dialOn.status === 200 && knownFloorSettings().confirmation && knownFloorSettings().knownFloor === 1500, `the dial on and the floor moved (${show(dialOn)})`);
     assert(isDeepStrictEqual(lines.map((l) => `${l.setting}:${l.old_value}>${l.new_value}`), ['knownFloor.on:on>off', 'knownFloor.on:off>on', 'knownFloor.floor:1300>1500']),
         `a line for each part that changed (${JSON.stringify(lines.map((l) => l.setting))})`);
-    assert(noticesSince(nMark).every((x) => x.body === `${SENT('confirmed members can owe up to 1,500 Beans now (the known floor).')}\n\nFrom the owners: “Welcome, neighbours”`),
+    assert(isDeepStrictEqual(toldEach(nMark), [`${SENT('confirmed members can owe up to 1,500 Beans now (the known floor).')}\n\nFrom the owners: “Welcome, neighbours”`]),
         'members are told the floor they can owe up to, with the note');
     const floorLines = db.prepare(`SELECT action, old_value, new_value, at, actor_pubkey FROM known_floor_log
                                    WHERE member_pubkey IS NULL AND rowid > ? ORDER BY rowid`).all(floorLogMark) as any[];
@@ -426,10 +438,10 @@ async function main(): Promise<void> {
     const words = await change({ wordsDoor: false });
     assert(words.status === 200 && np.getConfiguredSwitches().ssoRequiredForJoin === true && !np.getNodeFeatures().wordsDoor,
         `the global kind's 12-words door off: a sign-in only (${show(words)})`);
-    assert(noticesSince(nMark).every((x) => x.body === SENT('people join with a sign-in only now.')), 'members are told');
+    assert(isDeepStrictEqual(toldEach(nMark), [SENT('people join with a sign-in only now.')]), 'members are told');
     nMark = noticeMark();
     await change({ wordsDoor: true });
-    assert(np.getNodeFeatures().wordsDoor && noticesSince(nMark).every((x) => x.body === SENT('people can join with 12 secret words now, without a sign-in.')), 'and on again');
+    assert(np.getNodeFeatures().wordsDoor && isDeepStrictEqual(toldEach(nMark), [SENT('people can join with 12 secret words now, without a sign-in.')]), 'and on again');
     process.env.PRIVATE_PREVIEW = '1';
     g = readShape();
     await refusedClean('the 12-words door in a private preview (private_preview)', () => change({ wordsDoor: false }), 409, 'private_preview', lockWhy(g, 'openDoor'));

@@ -500,7 +500,7 @@ async function main(): Promise<void> {
         await sleep(100);
         clear();
         assert(se.adminEmergencySuspend(pat.pk, 'owner:password', 'A doorbell test of a pause and its lift').success, 'an admin pauses Pat');
-        await rings("an admin's pause", 'post_removed', ['profile_updated']);
+        await rings("an admin's pause", 'post_removed', ['profile_updated', 'decision_created']);
         assert(!(await board()).includes(patOffer), `an admin's pause: ${READER} no longer reads his offer`);
         await sleep(100);
         clear();
@@ -515,7 +515,8 @@ async function main(): Promise<void> {
         await sleep(100);
         clear();
         assert(se.actionReport('doorbell-report', false, true), 'a moderator actions a report on Gus and suspends him');
-        await rings("a report's suspension", 'post_removed', ['profile_updated']);
+        // It is a pause (removal by vote S1): its record is a vote, announced as an admin's is.
+        await rings("a report's suspension", 'post_removed', ['profile_updated', 'decision_created']);
         assert(!(await board()).includes(gusOffer), `a report's suspension: ${READER} no longer reads his offer`);
 
         // Delete account, over HTTP.

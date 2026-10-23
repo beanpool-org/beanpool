@@ -414,6 +414,10 @@ async function main() {
     assert(samShort.status === 400 && /at least 10 characters/.test(samShort.body?.error ?? '') && statusOf(sam) === 'active'
         && records(sam).length === 0 && reportRow(samReport)?.status === 'pending',
         `a reason too short is refused before anything is written (${samShort.status} ${samShort.text.slice(0, 100)})`);
+    let engineRefusal = '';
+    try { se.actionReport(samReport, false, true, false, { actor: ada.pubKeyHex, reason: 'rude' }); } catch (e: any) { engineRefusal = `${e?.status} ${e?.message}`; }
+    assert(/^400 .*at least 10 characters/.test(engineRefusal) && statusOf(sam) === 'active' && reportRow(samReport)?.status === 'pending',
+        `underneath the route too: the engine refuses it, and writes nothing (${engineRefusal || 'no refusal'})`);
     const robAgain = reportOn(rob, 'Still spamming, from a second member');
     const robTwice = await asAdmin(adaSession, `/api/local/admin/reports/${robAgain}/action`, { suspendUser: true });
     assert(robTwice.status === 200 && records(rob).length === 1 && reportRow(robAgain)?.status === 'actioned' && reportRow(robAgain)?.suspended_member === 0,

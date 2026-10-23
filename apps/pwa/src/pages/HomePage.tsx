@@ -31,7 +31,7 @@ import {
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
-    t, tn, word,
+    currentLanguage, formatCount, t, tn, word,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
@@ -201,6 +201,18 @@ function sentPoint(p: HomePoint | null, list: HomeLayoutV2 | null): { lat: numbe
 
 /** A shared position, rounded to 0.1° (about 11 km): enough for "near you", never a doorstep. */
 const coarse = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * A listing's price in words: Beans to the cent ("33.33", never a float's "20.299999999999997"). English groups thousands
+ * as it always has, a fraction's too ("1,234.5"); every other language writes the digits alone with its own decimal sign
+ * (formatCount: "1.500" reads as 1.5 in pt and es).
+ */
+function priceWords(credits: number): string {
+    const r = Math.round(credits * 100) / 100;
+    const [whole, fraction] = String(r).split('.');
+    const n = currentLanguage() === 'en' && fraction !== undefined ? `${formatCount(Number(whole))}.${fraction}` : formatCount(r);
+    return tn(r, '{n} Beans', '{n} Beans', { n });
+}
 
 export interface HomeVisitor {
     /** The lobby's Join card, drawn first (§3.2 (c)). */
@@ -1143,7 +1155,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const photo = resolveImageUrl(item.photoUrl);
         const cat = MARKETPLACE_CATEGORIES_BY_ID.get(item.category);
         const price = !beansOn ? (isVisitor ? t(VISITOR_WORDS.noBeansTerms) : null)
-            : typeof item.credits === 'number' ? (item.credits > 0 ? tn(item.credits, '{n} Beans', '{n} Beans', { n: item.credits.toLocaleString('en') }) : t('Free', undefined, 'price')) : null;
+            : typeof item.credits === 'number' ? (item.credits > 0 ? priceWords(item.credits) : t('Free', undefined, 'price')) : null;
         const km = distanceText(item.distanceKm);
         const kind = item.type === 'need' ? 'NEED' : 'OFFER';
         return (

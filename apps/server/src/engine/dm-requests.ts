@@ -60,7 +60,10 @@
  * the opener, whose own act accepted it, reads nothing new and writes on. Their own act (an Accept, a line, their open of
  * the chat) or a trade's accepts it again, and lifting the block shows it: an Ignore made meanwhile was
  * of a request the opener had accepted already, as option b's opener reads one once they lift theirs. Once each of them has
- * accepted it, it shows to both. A removal of the opener ignores it, as one nobody accepted. Where requests are off, one
+ * accepted it, it shows to both. A removal of the opener ignores it, as one nobody accepted. The opener's line after the
+ * 30 days makes no new request either, while the block holds: it is kept for them alone, so it moves only the request's
+ * time, and one the person ignored, or that lapsed, stays as they left it (PR #2410 review 4356319500); once they lift the
+ * block, the opener's next line is the new request (openerLinesSince). Where requests are off, one
  * the person ignored stays out of their lists, whether the opener's act accepted it while on or he writes while off: his
  * line is kept for him alone then, so it makes no new request ({@link lineWhileOff}).
  *
@@ -352,6 +355,8 @@ function waitingFor(to: string, what: 'write' | 'react'): string {
  * - the person a request waits for writing in it accepts it, and one whose acceptance they read as not made;
  * - the opener, when the rule no longer holds them (a friend add, a role, a trade since), is let through and it is accepted;
  * - the opener's first line is the request's line, and so is their first after the 30 days, which makes it a new request;
+ *   while the person blocks them, that line, kept for them alone, only starts the 30 days again, and the request stays as
+ *   the person left it;
  * - any other line of the opener's is refused.
  * An opener who reads its acceptance as not made (acceptanceHiddenFrom) is answered as if it still waited: only what lets
  * them through on their own (throughOnTheirOwn) does, and a line of theirs that would be the request's goes through and
@@ -376,20 +381,23 @@ export function lineThroughRequest(conversationId: string, author: string, now: 
         return DIRECT;
     }
     const requestLine: LineThroughRequest = hidden ? DIRECT : { kind: 'request', to: row.to_pubkey };
+    // The request's line makes it one waiting from then. Not one whose acceptance the opener reads as not made, nor while the
+    // person it is for blocks them: the line is kept for the opener alone then (engine/withheld-lines.ts), so it moves only
+    // the request's time, and what the person made of it stays as they left it (PR #2410 review 4356319500).
+    const made = hidden || hasBlocked(row.to_pubkey, author)
+        ? 'UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?'
+        : "UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL WHERE conversation_id = ?";
     if (over(row, now)) {
         assertPlainTablesWritable();
-        db.prepare(hidden
-            ? 'UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?'
-            : "UPDATE dm_requests SET state = 'pending', requested_at = ?, decided_at = NULL WHERE conversation_id = ?")
-            .run(iso(now), row.conversation_id);
+        db.prepare(made).run(iso(now), row.conversation_id);
         return requestLine;
     }
     if (openerLinesSince(row) > 0) return { kind: 'refused', message: waitingFor(row.to_pubkey, 'write') };
     // The request's line: the request is made by it, so its 30 days run from it, not from the open (PR #2392 review
     // 4354580417). Stored after this, so it is a line since the request was made (OPENER_WROTE). A standby stamps nothing.
-    if (!standbyWritesNothing()) {
-        db.prepare('UPDATE dm_requests SET requested_at = ? WHERE conversation_id = ?').run(iso(now), row.conversation_id);
-    }
+    // One the person had ignored, or that had lapsed, when a line kept during their block moved its time is a new request
+    // with it, once the block is lifted (openerLinesSince).
+    if (!standbyWritesNothing()) db.prepare(made).run(iso(now), row.conversation_id);
     return requestLine;
 }
 

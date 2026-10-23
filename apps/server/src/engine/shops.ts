@@ -23,6 +23,9 @@
  *   board) or end, as its owner picks. Closing an enterprise's shop winds up nothing.
  * - Read (routes/shops.ts): a member gets it whole, with counts of its listings as that member sees them; a visitor (the
  *   global profile's visitors' view) gets its kind and counts only, since a name a member typed can name them (§4).
+ * - Featured (featureOffer; DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 7, §4, and Marty's answers of 23 Oct):
+ *   up to six of its Offers, stamped on the listing (posts.featured_at), so every copy of the listing knows. Out of the
+ *   shop, or the shop closed, the stamp goes.
  *
  * A plain table (engine/replication-manifest.ts): a standby holds every shop verbatim, and a close reaches it as a
  * tombstone keyed by the shop's id. Every write here is the main server's: a standby refuses it (assertPlainTablesWritable,
@@ -32,7 +35,7 @@
 import crypto from 'node:crypto';
 import {
     isShopKind, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, SHOP_NAME_LIMIT, SHOP_BLURB_LIMIT, SHOP_HOW_TO_DEAL_LIMIT,
-    SHOP_BACK_ON_MAX_DAYS, type ShopCounts, type TextLimit,
+    SHOP_BACK_ON_MAX_DAYS, SHOP_FEATURED_MAX, word, type ShopCounts, type TextLimit,
 } from '@beanpool/core';
 import { getPosts, type MarketplacePost } from '@beanpool/engine';
 import { db, writeTombstone } from '../db/db.js';
@@ -308,7 +311,7 @@ export function closeShop(owner: string, endOffers: boolean, now: number = Date.
             const wages = db.prepare(`UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'`);
             for (const id of ended) { end.run(nowIso, id); wages.run(id); }
         }
-        db.prepare('UPDATE posts SET shop_id = NULL, updated_at = ? WHERE shop_id = ?').run(nowIso, shop.id);
+        db.prepare('UPDATE posts SET shop_id = NULL, featured_at = NULL, updated_at = ? WHERE shop_id = ?').run(nowIso, shop.id);
         db.prepare('DELETE FROM shops WHERE id = ?').run(shop.id);
         writeTombstone('shops', shop.id);
         return { shopId: shop.id, cleared: named, ended, paused: [] as string[], resumed };
@@ -355,10 +358,111 @@ export function addOffersToShop(owner: string, postIds: unknown, now: number = D
 export function dropShopOf(owner: string, now: number = Date.now()): string | null {
     const shop = shopOf(owner);
     if (!shop) return null;
-    db.prepare('UPDATE posts SET shop_id = NULL, updated_at = ? WHERE shop_id = ?').run(iso(now), shop.id);
+    db.prepare('UPDATE posts SET shop_id = NULL, featured_at = NULL, updated_at = ? WHERE shop_id = ?').run(iso(now), shop.id);
     db.prepare('DELETE FROM shops WHERE id = ?').run(shop.id);
     writeTombstone('shops', shop.id);
     return shop.id;
+}
+
+// ── Featured ────────────────────────────────────────────────────────────────────────────────────
+
+// Featured's refusals are marked with word('…') so the server's catalog (apps/server/words) holds them; a node writes them
+// in English (core words.test N11). The flag's names the field, a developer's words, as SHOP_PAUSED_NOT_A_FLAG's.
+export const FEATURE_NOT_YOURS = word("That listing isn't yours to feature.");
+export const FEATURE_OFFERS_ONLY = word('Only an Offer can be featured in a shop.');
+export const FEATURE_NOT_IN_SHOP = word('Put this Offer in the shop first, then feature it.');
+export const FEATURE_ENDED = word("This Offer has ended, so it can't be featured.");
+export const FEATURE_SHELF_FULL = word('Six is the shelf; un-feature one first.');
+export const FEATURE_NOT_A_FLAG = 'featured must be true or false.';
+
+export const ENTERPRISE_SHOP_CLOSED = word('This enterprise has been closed, so its shop can no longer be read or changed here.');
+export const ENTERPRISE_SHOP_WOUND_UP = word('This enterprise has been wound up, so its shop can no longer be changed.');
+
+/**
+ * What an enterprise's status leaves of its shop, for its shop routes (routes/shops.ts) and Featured on its Offers: one
+ * closed (pruned, disabled, suspended) has none to read or change, one wound up (completed) keeps its to read. The
+ * refusal, 403 enterprise_closed, or undefined.
+ */
+export function enterpriseShopRefusal(status: string | null, op: 'read' | 'write'): ShopRefusal | undefined {
+    if (status === 'pruned' || status === 'disabled' || status === 'suspended') return new ShopRefusal(403, 'enterprise_closed', ENTERPRISE_SHOP_CLOSED);
+    if (op === 'write' && status === 'completed') return new ShopRefusal(403, 'enterprise_closed', ENTERPRISE_SHOP_WOUND_UP);
+    return undefined;
+}
+
+/**
+ * Which of a shop's Offers hold a place on its shelf: featured, and on the board or able to come back to it (live, out on
+ * loan or in a deal, or paused). A pause takes one off the shopfront by its status and keeps its place, so a resume never
+ * makes the shelf hold more than six; an ended one gives its place up.
+ */
+const SHELF_SQL = `SELECT COUNT(*) AS n FROM posts WHERE shop_id = ? AND id != ? AND featured_at IS NOT NULL
+                   AND type = 'offer' AND active = 1 AND status IN ('active', 'pending', 'paused')`;
+
+/**
+ * Who may feature a listing, before anything else about it is said: its author, or a keeper of the enterprise that posted
+ * it (canOperateTreasury, as its other routes). A listing that isn't there, an id that is no text, and one that isn't the
+ * actor's are one refusal, so the answer says nothing of other members' listings (403 feature_not_yours).
+ */
+function featurableBy(postId: unknown, actor: string, mayKeep: (actor: string, enterprise: string) => boolean): FeaturePost {
+    const post = typeof postId === 'string' && postId !== '' && postId.length <= 200
+        ? db.prepare('SELECT p.id, p.type, p.shop_id, p.active, p.status, p.featured_at, p.author_pubkey, m.is_treasury, m.status AS author_status FROM posts p LEFT JOIN members m ON m.public_key = p.author_pubkey WHERE p.id = ?')
+            .get(postId) as FeaturePost | undefined
+        : undefined;
+    const mine = !!post && (post.author_pubkey === actor || (post.is_treasury === 1 && mayKeep(actor, post.author_pubkey)));
+    if (!post || !mine) throw new ShopRefusal(403, 'feature_not_yours', FEATURE_NOT_YOURS);
+    return post;
+}
+
+interface FeaturePost {
+    id: string;
+    type: string;
+    shop_id: string | null;
+    active: number;
+    status: string;
+    featured_at: string | null;
+    author_pubkey: string;
+    is_treasury: number | null;
+    author_status: string | null;
+}
+
+/**
+ * Features an Offer in its shop, or takes it off the shelf (`featured` false), for its author or a keeper of the
+ * enterprise that posted it (`mayKeep`). An enterprise's, either way, as its shop routes allow (enterpriseShopRefusal:
+ * 403 enterprise_closed once it is closed or wound up), said only to its keepers: anyone else hears feature_not_yours
+ * first. Featuring is refused,
+ * writing nothing: on anything but an Offer (400
+ * feature_offers_only), on one in no shop (400 feature_not_in_shop), on an ended one (400 feature_ended), and past the
+ * shelf (409 feature_shelf_full: SHOP_FEATURED_MAX that hold a place, SHELF_SQL). `beforeFeature`: the caller's own check
+ * of the listing's author once the listing is the actor's to feature, before it is written (a mute: featuring publishes;
+ * taking one off doesn't). Featuring a featured one keeps its stamp; taking off one that isn't is nothing. Returns the
+ * stamp now, or null, and whether anything was written; a write moves the listing's stamp and the listings' version, so
+ * every app's next read and a standby's delta carry it.
+ */
+export function featureOffer(postId: unknown, actor: string, featured: unknown, mayKeep: (actor: string, enterprise: string) => boolean,
+    beforeFeature: (author: string) => void = () => {}, now: number = Date.now()): { postId: string; featuredAt: string | null; changed: boolean } {
+    if (typeof featured !== 'boolean') throw new ShopRefusal(400, 'feature_not_a_flag', FEATURE_NOT_A_FLAG);
+    const done = db.transaction(() => {
+        const post = featurableBy(postId, actor, mayKeep);
+        // An enterprise's Offer, featured or taken off, is a change to its shop: as its shop routes say.
+        const closed = post.is_treasury === 1 ? enterpriseShopRefusal(post.author_status, 'write') : undefined;
+        if (closed) throw closed;
+        if (!featured) {
+            if (post.featured_at === null) return { postId: post.id, featuredAt: null, changed: false };
+            db.prepare('UPDATE posts SET featured_at = NULL, updated_at = ? WHERE id = ?').run(iso(now), post.id);
+            return { postId: post.id, featuredAt: null, changed: true };
+        }
+        if (post.type !== 'offer') throw new ShopRefusal(400, 'feature_offers_only', FEATURE_OFFERS_ONLY);
+        if (!post.shop_id || !shopById(post.shop_id)) throw new ShopRefusal(400, 'feature_not_in_shop', FEATURE_NOT_IN_SHOP);
+        if (post.active !== 1 || !['active', 'pending', 'paused'].includes(post.status)) throw new ShopRefusal(400, 'feature_ended', FEATURE_ENDED);
+        beforeFeature(post.author_pubkey);
+        if (post.featured_at !== null) return { postId: post.id, featuredAt: post.featured_at, changed: false };
+        const onShelf = (db.prepare(SHELF_SQL).get(post.shop_id, post.id) as { n: number }).n;
+        if (onShelf >= SHOP_FEATURED_MAX) throw new ShopRefusal(409, 'feature_shelf_full', FEATURE_SHELF_FULL);
+        const at = iso(now);
+        db.prepare('UPDATE posts SET featured_at = ?, updated_at = ? WHERE id = ?').run(at, at, post.id);
+        return { postId: post.id, featuredAt: at, changed: true };
+    })();
+    if (done.changed) bumpPostsVersion();
+    return done;
 }
 
 // ── Reading a shop ──────────────────────────────────────────────────────────────────────────────

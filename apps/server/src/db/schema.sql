@@ -336,6 +336,11 @@ CREATE TABLE IF NOT EXISTS posts (
     -- Foreign keys are off on this database, and a standby may hold a listing a moment before the shop its copy names, so
     -- every reader takes an id with no shop row as no shop. Added to an older database by db.ts, before this file runs.
     shop_id TEXT REFERENCES shops(id),
+    -- When its author, or a keeper of the enterprise that posted it, featured it in its shop (DESIGN-shops-round3-enterprise-
+    -- shopfront-fable.md §4; engine/shops.ts featureOffer): an Offer in a shop only, six at most of a shop's that can be on
+    -- the board (live or paused). A pause or an end takes it off the shopfront by its status and the stamp stays; out of its
+    -- shop, or its shop closed, the stamp goes. NULL on every other row. Added to an older database by db.ts.
+    featured_at TEXT,
     CONSTRAINT lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 -- A shop's listings (`shop=` on the listings, a shop's counts, engine/shops.ts).

@@ -16,6 +16,12 @@
  *
  *   GET | PUT /api/treasury/:treasury/shop, POST /api/treasury/:treasury/shop/close, POST /api/treasury/:treasury/shop/offers
  *
+ * and one of a shop's Offers featured on its shelf, or taken off it (DESIGN-shops-round3-enterprise-shopfront-fable.md §4),
+ * by its author or a keeper of the enterprise that posted it:
+ *
+ *   PUT  /api/marketplace/posts/:id/feature { featured }
+ *                                         → { success, postId, featuredAt }   six at most (engine/shops.ts featureOffer)
+ *
  * What goes in a shop is said when a listing is made or edited (routes/marketplace.ts, routes/treasury.ts: `shopId`), and
  * a shop's listings are read with `shop=` on GET /api/marketplace/posts.
  *
@@ -53,8 +59,8 @@ import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import {
-    ShopRefusal, shopOf, shopById, changeShop, closeShop, addOffersToShop, memberShop, visitorShop,
-    type ShopChanges, type ShopRow,
+    ShopRefusal, shopOf, shopById, changeShop, closeShop, addOffersToShop, memberShop, visitorShop, featureOffer,
+    enterpriseShopRefusal, type ShopChanges, type ShopRow,
 } from '../engine/shops.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
@@ -120,14 +126,8 @@ function enterpriseOwner(ctx: Ctx, op: Op): Owner | undefined {
     const row = db.prepare('SELECT status FROM members WHERE public_key = ? AND is_treasury = 1').get(treasury) as { status: string | null } | undefined;
     if (!row) { refuse(ctx, 404, 'Not a treasury'); return undefined; }
     if (!canOperateTreasury(actor, treasury)) { refuse(ctx, 403, 'You are not a keeper of this enterprise'); return undefined; }
-    if (row.status === 'pruned' || row.status === 'disabled' || row.status === 'suspended') {
-        refuse(ctx, 403, 'This enterprise has been closed, so its shop can no longer be read or changed here.', 'enterprise_closed');
-        return undefined;
-    }
-    if (op === 'write' && row.status === 'completed') {
-        refuse(ctx, 403, 'This enterprise has been wound up, so its shop can no longer be changed.', 'enterprise_closed');
-        return undefined;
-    }
+    const closed = enterpriseShopRefusal(row.status, op);
+    if (closed) { answeredRefusal(ctx, closed); return undefined; }
     return { key: treasury, enterprise: true, actor };
 }
 
@@ -205,6 +205,28 @@ function handlers(ownerOf: (ctx: Ctx, op: Op) => Owner | undefined) {
     };
 }
 
+/**
+ * PUT /api/marketplace/posts/:id/feature { featured }: an Offer on its shop's shelf or off it, by a member of this node who
+ * wrote it or keeps the enterprise that did (engine/shops.ts featureOffer, which refuses everyone else in one answer).
+ * Featuring publishes, so a muted signer, or a muted enterprise, can't (G3); taking one off stays open to them. Either is
+ * a change to an enterprise's shop, refused as its shop routes refuse one once it is closed or wound up. The apps
+ * hear the listing changed as they hear a shop's pause.
+ */
+async function feature(ctx: Ctx): Promise<void> {
+    const owner = ownOwner(ctx, 'write');
+    if (!owner) return;
+    try {
+        const done = featureOffer(ctx.params.id, owner.actor, ctx.requestBody?.featured, canOperateTreasury, author => {
+            assertNotMuted(owner.actor);
+            if (author !== owner.actor) assertNotMuted(author);
+        });
+        if (done.changed) tellListingsMoved([done.postId]);
+        answer(ctx, { success: true, postId: done.postId, featuredAt: done.featuredAt });
+    } catch (e) {
+        if (!answeredRefusal(ctx, e)) throw e;
+    }
+}
+
 /** GET /api/shops/:id: one shop, as this reader may see it. */
 async function getShop(ctx: Ctx): Promise<void> {
     const { guest, reader } = readerOf(ctx);
@@ -259,5 +281,6 @@ export function createShopRoutes(_deps: RouteDeps): Router {
     router.put('/api/treasury/:treasury/shop', enterprise.put);
     router.post('/api/treasury/:treasury/shop/close', enterprise.close);
     router.post('/api/treasury/:treasury/shop/offers', enterprise.offers);
+    router.put('/api/marketplace/posts/:id/feature', feature);
     return router;
 }

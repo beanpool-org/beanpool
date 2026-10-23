@@ -1182,6 +1182,14 @@ function postShop(rp: any): [string | null] {
     return [typeof rp.shopId === 'string' && rp.shopId !== '' ? rp.shopId : null];
 }
 
+/**
+ * featured_at: when the listing was featured in its shop (engine/shops.ts featureOffer), plain assignment, so one taken off
+ * the shelf is off it here too. A payload from a main server older than Featured says nothing, and it featured nothing.
+ */
+function postFeatured(rp: any): [string | null] {
+    return [typeof rp.featuredAt === 'string' && rp.featuredAt !== '' ? rp.featuredAt : null];
+}
+
 // members.area_lat / area_lng / area_updated_at (G4) come from importedArea (engine/member-area.ts): plain assignment,
 // so a member who clears their area on the main server has none here either.
 
@@ -1956,8 +1964,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                 event_repeat, event_repeat_until, event_repeat_skips, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords,
-                                lendable, lend_max_days, lend_terms, replacement_value, shop_id)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?)`).run(
+                                lendable, lend_max_days, lend_terms, replacement_value, shop_id, featured_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, ?, ?, ?)`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -2000,6 +2008,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postSearch(rp),
                         ...postLending(rp),
                         ...postShop(rp),
+                        ...postFeatured(rp),
                     );
                     newPosts++;
                 } else {
@@ -2056,6 +2065,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         lend_terms = ?,
                         replacement_value = ?,
                         shop_id = ?,
+                        featured_at = ?,
                         updated_at = ?
                         WHERE id = ?`).run(
                         rp.category,
@@ -2091,6 +2101,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         ...postSearch(rp),
                         ...postLending(rp),
                         ...postShop(rp),
+                        ...postFeatured(rp),
                         rp.updatedAt || existing.updated_at || new Date().toISOString(),
                         rp.id
                     );

@@ -9175,14 +9175,15 @@ export function createProject(proposerPubkey: string, title: string, description
         db.prepare(`INSERT INTO node_config (key, value) VALUES ('commons_projects', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(projects));
         const existingMember = db.prepare("SELECT public_key FROM members WHERE public_key = ?").get(project.id);
         if (!existingMember) {
+            // The description is its purpose; its About (members.bio) is its keepers' own words, so it starts with none.
             db.prepare(`
                 INSERT INTO members (
-                    public_key, callsign, joined_at, bio, status,
+                    public_key, callsign, joined_at, status,
                     is_treasury, earned_credit, earned_surplus,
                     purpose, goal_amount, lifecycle, paused, updated_at
-                ) VALUES (?, ?, ?, ?, 'proposed', 1, 0, 0, ?, ?, 'bounded', 0, ?)
+                ) VALUES (?, ?, ?, 'proposed', 1, 0, 0, ?, ?, 'bounded', 0, ?)
             `).run(
-                project.id, callsign, now, project.description,
+                project.id, callsign, now,
                 project.description || project.title, project.requestedAmount, now
             );
             db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(project.id);
@@ -9219,21 +9220,23 @@ export function updateProject(proposerPubkey: string, projectId: string, title: 
     
     const now = new Date().toISOString();
     // The enterprise row's name, by the one name rule, as at the create (engine projectRowName): the title is kept as typed.
+    // Its name and purpose, never its About (members.bio): that is its keepers' (PUT /api/treasury/:t/profile).
     const rowName = engine.projectRowName(db, projects[index].title, projectId);
     db.transaction(() => {
         db.prepare(`UPDATE node_config SET value=? WHERE key='commons_projects'`).run(JSON.stringify(projects));
         db.prepare(`
             UPDATE members
-            SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
+            SET callsign = ?, purpose = ?, goal_amount = ?, updated_at = ?
             WHERE public_key = ?
         `).run(
             rowName,
             projects[index].description || projects[index].title,
-            projects[index].description,
             projects[index].requestedAmount,
             now,
             projectId
         );
+        // Its chat is titled by its name: a rename carries over, as the face's does (engine/enterprise-shopfront.ts).
+        db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'enterprise_thread'").run(rowName, projectId);
     })();
     broadcast({ type: 'project_updated', project: projects[index] });
     return true;

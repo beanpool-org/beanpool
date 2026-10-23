@@ -290,6 +290,8 @@ const click = async (el: Element | null | undefined, what: string) => {
 const xx = (s: string) => pseudoLocalise(s);
 const byLabel = (label: string) => host.querySelector(`[aria-label="${label.replace(/"/g, '\\"')}"]`);
 const buttonWith = (text: string) => Array.from(host.querySelectorAll('button')).find((b) => b.textContent?.includes(text)) ?? null;
+/** The money is one line on the shopfront (S5); its figures, backing and ledger are behind "Money and backing". */
+const openMoney = () => click(host.querySelector('[data-testid="shopfront-money-toggle"]'), 'Money and backing');
 const pressAlertButton = async (text: string) => {
     const b = alerts.last.find((x) => x.text === text);
     expect(b, `the alert's ${text}`).toBeTruthy();
@@ -329,6 +331,7 @@ const bracketed = () => Array.from(host.querySelectorAll('span')).filter((s) => 
 describe('the enterprise page in the pseudo-locale: every word on it came through t() (words S3h)', () => {
     it('its lead keeper: the banner-free page, goal and pledge box, requests and changes, keepers, the balance in deficit, wage claims, Decisions, operator controls with bids and deals, the season controls, Income & Spend, listings, activity and the discussion', async () => {
         await renderIn('xx');
+        await openMoney();
         expect(host.textContent).toContain(BAKERY);
         expect(host.textContent).toContain(PURPOSE);
         expect(host.textContent).toContain('see you at the stall');
@@ -337,7 +340,8 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
         expect(host.textContent).toContain(xx('Adding {name} as a keeper, backing {n} beans').replace('{name}', 'Zoe').replace('{n}', '10'));
         expect(host.textContent).toContain(xx('removed by a keeper'));
         expect(host.textContent).toContain(xx('Show {shown} more ({n} older)').replace('{shown}', '3').replace('{n}', '3'));
-        expect(host.textContent).toContain(xx('KEEPERS ({n})').replace('{n}', '3'));
+        // Who keeps it: the shopfront's heading (S5), where the chips said KEEPERS (3).
+        expect(host.querySelector('[data-testid="shopfront-keepers"]')?.textContent).toContain(xx('Kept by'));
         expect(bracketed()).toBeGreaterThan(60);
         expect(bypassing()).toEqual([]);
     });
@@ -454,6 +458,7 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
 
         net.answer = community({ getTreasuryDetail: leadsView({ posts: [], flow: [], balance: 5 }), getEnterpriseThread: { conversation: null, messages: [], readOnly: false }, getEnterpriseLedger: { ...LEDGER, entries: [] } });
         await again('xx');
+        await openMoney();
         expect(host.textContent).toContain(xx('No transactions recorded for this period.'));
         expect(host.textContent).toContain(xx('No live listings yet.'));
         expect(host.textContent).toContain(xx('No messages yet. Start the conversation!'));
@@ -462,6 +467,7 @@ describe('the enterprise page in the pseudo-locale: every word on it came throug
 
     it('in English nothing is bracketed, and the words are as they were', async () => {
         await renderIn('en');
+        await openMoney();
         expect(bracketed()).toBe(0);
         expect(host.textContent).toContain('PENDING KEEPER REQUESTS (2)');
         expect(host.textContent).toContain('Adding Zoe as a keeper, backing 10 beans');
@@ -672,6 +678,7 @@ describe('the enterprise page and groups at 320 dp with 1.3× text, in the pseud
 
     it('the request buttons, the period tabs and the P&L labels: one line each, shrinking to fit their share', async () => {
         await renderIn('xx');
+        await openMoney();
         // The requests card's 16 dp padding and the row's 12 dp, an 8 dp gap; each button's 8 dp padding.
         const button = (FLOOR - 32 - 32 - 24 - 8) / 2 - 16;
         for (const words of ['Approve', 'Decline']) {
@@ -744,7 +751,7 @@ describe('the enterprise page follows a language picked in Settings', () => {
     const inFr = (en: string) => fr[en] ?? en;
     const MENU = { menuBtn: {}, menuIconWrap: {}, menuIcon: {}, menuText: {}, menuSub: {}, menuChevron: {} };
 
-    it('a pick redraws it in the new language: the operator buttons, a keeper\'s chip and the back button\'s spoken name', async () => {
+    it('a pick redraws it in the new language: the operator buttons, a keeper\'s row and the back button\'s spoken name', async () => {
         await act(async () => {
             root.render(createElement(LanguageProvider as any, { deviceTags: ['en-US'] },
                 createElement(DrawnInLanguage, null, createElement(LanguageRow as any, { styles: MENU }), createElement(TreasuryDetailScreen))) as any);
@@ -760,7 +767,7 @@ describe('the enterprise page follows a language picked in Settings', () => {
         expect(keeper).toBeTruthy();
         expect(host.textContent).toContain(fr['Post Offer']);
         expect(host.textContent).not.toContain('Post Offer');
-        expect(spanWith(keeper)).not.toBeNull();
+        expect(Array.from(host.querySelectorAll('[data-testid^="shopfront-keeper-"]')).some((row) => row.textContent?.includes(keeper))).toBe(true);
         expect(byLabel(fr['Go back'])).not.toBeNull();
         expect(byLabel('Go back')).toBeNull();
         // What members wrote stays as written.
@@ -768,15 +775,18 @@ describe('the enterprise page follows a language picked in Settings', () => {
         expect(host.textContent).toContain(PURPOSE);
     });
 
-    it('labels in capitals take the language\'s rule, not the phone\'s: a project\'s leader chip in Turkish reads LİDER', async () => {
+    // The keepers' parts are a line now, not a chip in capitals (S5, round 3 §3: "Damo · Lead keeper"), so the rule is held
+    // on a label the project's page still draws in capitals: its balance, under "Money and backing".
+    it('labels in capitals take the language\'s rule, not the phone\'s: a project\'s balance label in Turkish reads BAKİYE', async () => {
         const tr = JSON.parse(fs.readFileSync(path.join(NATIVE_WORDS, 'tr.json'), 'utf8')) as Record<string, string>;
-        expect(tr['Leader\u0004project role']).toBe('Lider');
+        expect(tr['Balance']).toBe('Bakiye');
         const project = leadsView({ lifecycle: 'bounded', balance: 40, keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }, { publicKey: ME, callsign: 'Ana', role: 'keeper' }] });
         net.answer = community({ getTreasuryDetail: project });
         await renderIn('tr');
-        // Dotted capital İ, as Turkish writes it; a textTransform or toUpperCase() would have drawn "LIDER".
-        expect(spanWith('LİDER')).not.toBeNull();
-        expect(host.textContent).not.toContain('LIDER');
+        await openMoney();
+        // Dotted capital İ, as Turkish writes it; a textTransform or toUpperCase() would have drawn "BAKIYE".
+        expect(spanWith('BAKİYE')).not.toBeNull();
+        expect(host.textContent).not.toContain('BAKIYE');
     });
 
     it('the hours box in French: its example is the translator\'s, and Release Payment takes the hours as the example writes them, decimal comma and all', async () => {

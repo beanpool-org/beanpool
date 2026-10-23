@@ -452,10 +452,17 @@ describe('ApplianceSection Component', () => {
     });
 
     it('sends password and callsign in body when saving node identity in identity tab', async () => {
-        // The contacts come from the admin route; this node has none stored, so the empty boxes are what it has.
+        // The contacts come from the admin route; this node has none stored, so the empty boxes are what it has. The node
+        // config read answers its directory settings, as a node does: a Save sends back only the settings it read.
         const generic = global.fetch as any;
+        const nodeConfig = {
+            publishLocation: true, publishMembers: true, publishContactEmail: false, publishContactPhone: false,
+            publishHealth: true, directoryPushIntervalHours: 12, lastDirectoryPush: null, serviceRadius: null,
+        };
         vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: unknown) => (String(url).includes('/api/local/admin/diagnostics')
             ? Promise.resolve({ ok: true, json: () => Promise.resolve({ ...mockDiag, contactEmail: null, contactPhone: null }) })
+            : String(url).includes('/api/node/config') && !String(url).includes('/admin/')
+            ? Promise.resolve({ ok: true, json: () => Promise.resolve(nodeConfig) })
             : generic(url, init))));
         await act(async () => {
             render(

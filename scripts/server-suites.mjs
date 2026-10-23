@@ -353,6 +353,7 @@ export const SUITES = [
     'test-no-docker-socket',
     'test-node-config-public',
     'test-share-location-off',
+    'test-preview-password-config',
     'test-tunnel-token-owner-only',
     'test-registrar-contract',
     'test-invite-trampoline',

@@ -24,6 +24,11 @@
  *      English the phone keeps in a list (changed-elsewhere.ts), answer each sentence that holds it with a code.
  *   6. Each family a member meets (the gate, join and profile, ledger, …): one of its refusals in English as before, and
  *      in French with the same status, code and fields; the suite's French is every marked sentence after a sign.
+ *   7. A long refusal holds the node's one event loop for no time: one that echoes 160 KB or 1 MB of what a request
+ *      sent, or 1 MB of a catalog sentence again and again, comes back as it came, the way out taking under 100 ms over
+ *      it, with the suite's French, every marked sentence in French, and the shipped catalogs; over HTTP the answer is
+ *      the one without the header, byte for byte. One just under the longest the way out reads still comes in French,
+ *      in the same time.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-words.ts
  */
@@ -745,10 +750,87 @@ async function testNothingMatchedIsMarked(): Promise<void> {
     assert(missing.length === 0, `every push sentence is a word of core's (${Object.keys(PUSH_NOTICE_KINDS).length} kinds)${missing.length ? `; not: ${missing.join(', ')}` : ''}`);
 }
 
+// ── 7 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+/** What the way out does over far more than a fixed one (100 ms: what it costs is near none, so a slow runner passes). */
+const LONG_REFUSAL_MS = 100;
+
+/** The way out over one refused answer in French, as Koa runs it: the error it left, and how long it held the loop. */
+async function wayOutOver(text: string): Promise<{ error: unknown; ms: number }> {
+    const ctx: any = {
+        status: 400, path: '/api/recovery/collect/sso', body: { error: text },
+        get: (h: string) => (h.toLowerCase() === 'x-language' ? 'fr' : ''), vary: () => {},
+    };
+    const started = performance.now();
+    await memberWordsOnTheWayOut()(ctx, async () => {});
+    return { error: ctx.body.error, ms: performance.now() - started };
+}
+
+async function testLongRefusals(): Promise<void> {
+    console.log('\n--- 7. A long refusal ---');
+    // As recovery-collect.ts wrote a provider it could not verify, the whole of what the request sent.
+    const echoed = (sent: string) => `'${sent}' is not a sign-in provider this node can verify.`;
+    const LONG: [string, string][] = [
+        ['160 KB of a request echoed', echoed('a. B'.repeat(40_000))],
+        ['1 MB of a request echoed', echoed('a. B'.repeat(262_144))],
+        ['1 MB of a catalog sentence again and again', 'Or the group can vote. '.repeat(45_600).trim()],
+    ];
+    const catalogs: [string, Record<string, unknown> | null][] = [
+        ["the suite's French", FR],
+        ['every marked sentence in French', { ...await everyMarkInFrench(), ...FR }],
+        ['the shipped catalogs', null],
+    ];
+    const app = new Koa();
+    app.use(memberWordsOnTheWayOut());
+    app.use(scrubServerFaults());
+    app.use(async (ctx) => { ctx.status = 400; ctx.body = { error: LONG[Number(ctx.query.i)][1] }; });
+    const server = http.createServer(app.callback());
+    await new Promise<void>(r => server.listen(0, '127.0.0.1', () => r()));
+    const base = `http://127.0.0.1:${(server.address() as any).port}`;
+    const timed = async (i: number, lang?: string) => {
+        const started = performance.now();
+        const res = await fetch(`${base}/api/recovery/collect/sso?i=${i}`, { headers: lang ? { 'X-Language': lang } : {} });
+        const text = await res.text();
+        return { status: res.status, text, ms: performance.now() - started };
+    };
+    try {
+        for (const [catalog, words] of catalogs) {
+            useCatalogsForTests('fr', words ? { server: words, core: FR_CORE } : null);
+            for (const [what, text] of LONG) {
+                const out = await wayOutOver(text);
+                assert(out.error === text && out.ms < LONG_REFUSAL_MS,
+                    `${catalog}: a refusal of ${what} comes back as it came, the way out over it in ${out.ms.toFixed(1)} ms (under ${LONG_REFUSAL_MS})`);
+            }
+        }
+        useCatalogsForTests('fr', { server: FR, core: FR_CORE });
+        for (const [i, [what]] of LONG.entries()) {
+            const none = await timed(i);
+            const fr = await timed(i, 'fr');
+            assert(fr.status === 400 && fr.text === none.text && fr.ms < none.ms + LONG_REFUSAL_MS,
+                `over HTTP, ${what}: with X-Language: fr, the answer without it byte for byte, in ${fr.ms.toFixed(1)} ms (${none.ms.toFixed(1)} ms without)`);
+        }
+
+        // Just under the longest the way out reads (member-words.ts LONGEST_REFUSAL_READ, 2,000 characters), with every
+        // marked sentence in French: still read, and in the same time.
+        useCatalogsForTests('fr', { server: catalogs[1][1]!, core: FR_CORE });
+        const many = 'Or the group can vote. '.repeat(86).trim();
+        const nearLong = await wayOutOver(many);
+        assert(many.length < 2000 && nearLong.error === 'Ou le groupe peut voter. '.repeat(86).trim() && nearLong.ms < LONG_REFUSAL_MS,
+            `a refusal of ${many.length} characters, a catalog sentence 86 times, comes in French in ${nearLong.ms.toFixed(1)} ms`);
+        const unknown = echoed('a. B'.repeat(480));
+        const nearUnknown = await wayOutOver(unknown);
+        assert(unknown.length < 2000 && nearUnknown.error === unknown && nearUnknown.ms < LONG_REFUSAL_MS,
+            `and one of ${unknown.length} characters, ${unknown.split('. ').length} sentences no catalog has, stays as it came in ${nearUnknown.ms.toFixed(1)} ms`);
+    } finally {
+        useCatalogsForTests('fr', null);
+        await new Promise<void>(r => server.close(() => r()));
+    }
+}
+
 async function main() {
     console.log("The server's words in the member's language...");
     testRequestLanguage();
     await testWayOut();
+    await testLongRefusals();
     await testRealServer();
     await testNothingMatchedIsMarked();
     console.log(`\n${passed}/${run} passed`);

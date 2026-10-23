@@ -3312,7 +3312,7 @@ export interface MyPoolVoting {
 }
 
 /**
- * canPropose: whether the signer may propose (earned standing, or a node admin), per the node's own rule.
+ * canPropose: whether the signer may propose (a completed trade, or a node admin), per the node's own rule.
  * Null when the list loaded unsigned, so the caller falls back rather than blocking a member who may.
  */
 export async function getDecisions(status?: string): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null; canPropose: boolean | null }> {

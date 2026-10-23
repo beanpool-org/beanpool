@@ -636,7 +636,7 @@ export function checkProposalStanding(authorPubkey: string): { ok: boolean; erro
     const tradeVal = engine.qualifiedTradeValue(db, authorPubkey);
     const isAdmin = isNodeAdmin(authorPubkey);
     if (tradeVal <= 0 && !isAdmin) {
-        return { ok: false, error: 'Proposing a Decision requires earned trade standing (earnedCredit > 0)' };
+        return { ok: false, error: 'You can propose a Decision once you have completed a trade' };
     }
     return { ok: true };
 }

@@ -24,7 +24,7 @@
  * - **No dark patterns** (§6.3): real numbers or nothing, amber (never red) only for what waits on the member, nothing
  *   tier-locked, examples always say Example, nothing here blocks the app or waits on the network to draw.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
     TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, allTipsSeen, dismissTips, emptyTipsRecord, findGuidePage, localDay, nextTip, readTipsRecord,
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
@@ -43,8 +43,8 @@ import {
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import {
-    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
-    canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
+    FEWER_CARDS_LINE, FIXED_FIRST, FIXED_LAST, HOME_COLUMN_GAP, HOME_COLUMN_MAX, HOME_HINT_LINE, SEARCH_OFFLINE_LINE, addCard, addedLine, askPinned, canMoveCard,
+    canRemoveCard, cardLabelName, cardName, cardOnNode, cardRowName, columnsFor, gridWidth, searchEmptyLine, searchFirstLine, cardOrder, cardsToAsk, changeCardSettings, fewerCardsNews, layoutV1Of,
     listOf, moveCard, ownMarkedSave, pickLayout, pickerGroups, pinnedCards, readLayout, rememberMarkSent, removeCard, removedLine,
     resetLayout, sameList, type HomeCardInstance, type HomeLayoutV2, type MarkSent,
 } from '../lib/home-layout';
@@ -151,6 +151,35 @@ function writeTips(pk: string, record: TipsRecord): void {
 }
 function reducedMotion(): boolean {
     try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return true; }
+}
+
+/** A card that spans the grid's row: Needs you at the top, the community card at the bottom, and the notes under the first card. */
+const FULL_ROW: React.CSSProperties = { gridColumn: '1 / -1' };
+
+/**
+ * How many columns Home's cards stand in (DESIGN-home-wide-and-content-fable.md D1, slice W2; Auto only): the page's own
+ * width inside its gutters (lib/home-layout.ts columnsFor), measured before the first paint and again whenever it changes
+ * (the window, the sidebar). A browser without ResizeObserver follows the window.
+ */
+function useHomeColumns(): [(el: HTMLDivElement | null) => void, number] {
+    const [el, setEl] = useState<HTMLDivElement | null>(null);
+    const [cols, setCols] = useState(1);
+    useLayoutEffect(() => {
+        if (!el) return;
+        const measure = () => {
+            const cs = getComputedStyle(el);
+            setCols(columnsFor(el.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0)));
+        };
+        measure();
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', measure);
+            return () => window.removeEventListener('resize', measure);
+        }
+        const observer = new ResizeObserver(measure);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [el]);
+    return [setEl, cols];
 }
 
 /**
@@ -301,6 +330,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     pointRef.current = point;
     const interestsCardRef = useRef<HTMLDivElement | null>(null);
     const pageRef = useRef<HTMLDivElement | null>(null);
+    const [measurePage, cols] = useHomeColumns();
+    const setPage = useCallback((el: HTMLDivElement | null) => { pageRef.current = el; measurePage(el); }, [measurePage]);
     // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
     const focusAfterHide = useRef<string[] | null>(null);
     // The next landing comes after a clear: the kept copy is gone (or going), so the node is asked afresh.
@@ -966,29 +997,31 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // ── loading and failure: never a blank page, never a block on the other tabs ────────────────────────────────────
     if (!answer) {
         return (
-            <div className="max-w-xl mx-auto px-4 pt-2 pb-6" data-testid="home-page">
-                {visitor?.joinCard}
-                {status === 'signed-out' ? (
-                    <div role="status" data-testid="home-signed-out" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{t(HOME_WORDS.signedOut)}</p>
-                        <button type="button" onClick={() => window.location.reload()}
-                            className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                            {t('Reload')}
-                        </button>
-                    </div>
-                ) : status === 'failed' ? (
-                    <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">
-                            {failure === 'notOnNode' ? t(HOME_WORDS.notOnNode) : failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
-                        </p>
-                        <button type="button" onClick={() => void fetchHome('retry')}
-                            className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
-                            {t('Try again')}
-                        </button>
-                    </div>
-                ) : (
-                    <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading your Home…')}</p>
-                )}
+            <div ref={setPage} className="px-4 pt-2 pb-6 min-w-0" data-testid="home-page" data-columns={cols}>
+                <div className="mx-auto" style={{ maxWidth: gridWidth(cols) }}>
+                    {visitor?.joinCard}
+                    {status === 'signed-out' ? (
+                        <div role="status" data-testid="home-signed-out" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
+                            <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{t(HOME_WORDS.signedOut)}</p>
+                            <button type="button" onClick={() => window.location.reload()}
+                                className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                                {t('Reload')}
+                            </button>
+                        </div>
+                    ) : status === 'failed' ? (
+                        <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
+                            <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">
+                                {failure === 'notOnNode' ? t(HOME_WORDS.notOnNode) : failure === 'failed' || !failure ? t(HOME_WORDS.failed) : failure.message}
+                            </p>
+                            <button type="button" onClick={() => void fetchHome('retry')}
+                                className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                                {t('Try again')}
+                            </button>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-nature-600 dark:text-nature-300" role="status">{t('Loading your Home…')}</p>
+                    )}
+                </div>
             </div>
         );
     }
@@ -1009,6 +1042,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             ...(card.type === 'search' ? { label: cardLabelName(card, profile) } : {}),
             canMoveUp: i > 0,
             canMoveDown: i >= 0 && i < movable.length - 1,
+            across: cols > 1,
             onRemove: () => removeFromHome(card.id),
             ...(homeCardType(card.type)?.readSettings ? { onSettings: () => setSettingsFor(card) } : {}),
             onMove: (d: 'up' | 'down') => { changeLayout((l) => moveCard(l, card.id, d, movable, Date.now(), pins)); },
@@ -1144,7 +1178,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         const id = card.type as HomeCardId;
         const c = a.cards;
         const title = nameOf(card);
-        const common = { id: card.id, title, menu: menuFor(card), style: cardStyle(index) };
+        // Needs you and the community card are full rows of the grid; every other card is one cell (D1, D3).
+        const wide = card.type === FIXED_FIRST || card.type === FIXED_LAST;
+        const common = { id: card.id, title, menu: menuFor(card), style: wide ? { ...cardStyle(index), ...FULL_ROW } : cardStyle(index) };
         switch (card.type) {
             case 'needs':
                 return c.needs && (
@@ -1597,111 +1633,121 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     const picker = pickerOpen && !isVisitor ? pickerGroups(frameOf(a), shownLayout(a, layout, { tourOver }), null, pins, tipsAllSeen ? { tips: t('All tips seen') } : {}) : null;
 
     return (
-        <div ref={pageRef} className="max-w-xl mx-auto px-4 pt-2 pb-6 min-w-0" data-testid="home-page">
-            {reveal && <style>{HOME_CARD_IN_STYLE}</style>}
-            <p className="sr-only" aria-live="polite" data-testid="home-live">{live}</p>
-            {status === 'offline' && (
-                <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>
-            )}
-            {visitor?.joinCard}
-            {startOpen && <StartCommunityScreen onClose={() => setStartOpen(false)} />}
-            {saveNote && (
-                <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
-                    <span className="min-w-0 flex-1 break-words">{saveNote}</span>
-                    <button type="button" aria-label={t('Close this note')} onClick={() => setSaveNote(null)}
-                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-                        ✕
-                    </button>
-                </p>
-            )}
-            {a.me?.standing === 'suspended' && (
-                <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
-                    {t("Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.")}
-                </p>
-            )}
-            {shown.map((card, i) => (
-                <div key={card.id}>
-                    {renderCard(card, i)}
-                    {i === 0 && fewerOpen && !isVisitor && (
-                        <p data-testid="home-fewer" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
-                            <span className="min-w-0 flex-1 break-words">{FEWER_CARDS_LINE}</span>
-                            <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
-                                className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                ✕
-                            </button>
-                        </p>
-                    )}
-                    {i === 0 && hintOpen && !isVisitor && !startUp && (
-                        <p data-testid="home-hint" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
-                            <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
-                            <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
-                                className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
-                                ✕
-                            </button>
-                        </p>
-                    )}
+        <div ref={setPage} className="px-4 pt-2 pb-6 min-w-0" data-testid="home-page" data-columns={cols}>
+            <div className="mx-auto" style={{ maxWidth: gridWidth(cols) }}>
+                {reveal && <style>{HOME_CARD_IN_STYLE}</style>}
+                <p className="sr-only" aria-live="polite" data-testid="home-live">{live}</p>
+                {status === 'offline' && (
+                    <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{t(HOME_WORDS.offline)}</p>
+                )}
+                {visitor?.joinCard}
+                {startOpen && <StartCommunityScreen onClose={() => setStartOpen(false)} />}
+                {saveNote && (
+                    <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
+                        <span className="min-w-0 flex-1 break-words">{saveNote}</span>
+                        <button type="button" aria-label={t('Close this note')} onClick={() => setSaveNote(null)}
+                            className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                            ✕
+                        </button>
+                    </p>
+                )}
+                {a.me?.standing === 'suspended' && (
+                    <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
+                        {t("Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.")}
+                    </p>
+                )}
+                {/* The cards (D1): columns 320–576 px wide, filled row first in the saved order, tops aligned, each card its
+                    own height; never `dense`, which would put a card on screen out of the order a screen reader and Tab follow.
+                    Between rows the cards' own 12 px and 4 more, as between columns; one column keeps its 12 px, as before. */}
+                <div data-testid="home-grid" style={{
+                    display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, ${HOME_COLUMN_MAX}px))`, columnGap: HOME_COLUMN_GAP,
+                    rowGap: cols > 1 ? 4 : 0, justifyContent: 'center', alignItems: 'start',
+                }}>
+                    {shown.map((card, i) => (
+                        <Fragment key={card.id}>
+                            {renderCard(card, i)}
+                            {i === 0 && fewerOpen && !isVisitor && (
+                                <p data-testid="home-fewer" style={FULL_ROW} className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
+                                    <span className="min-w-0 flex-1 break-words">{FEWER_CARDS_LINE}</span>
+                                    <button type="button" aria-label={t('Close this note')} onClick={() => setFewerOpen(false)}
+                                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                        ✕
+                                    </button>
+                                </p>
+                            )}
+                            {i === 0 && hintOpen && !isVisitor && !startUp && (
+                                <p data-testid="home-hint" style={FULL_ROW} className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
+                                    <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
+                                    <button type="button" aria-label={t('Close this tip')} onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
+                                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
+                                        ✕
+                                    </button>
+                                </p>
+                            )}
+                        </Fragment>
+                    ))}
                 </div>
-            ))}
-            {editOpen && !isVisitor && (
-                <EditHomeDialog
-                    rows={editRows}
-                    notOnAccount={notOnAccount}
-                    onAdd={() => { setEditOpen(false); setPickerOpen(true); }}
-                    onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editCards, Date.now(), pins)); }}
-                    onSettings={(id) => { const card = listOf(drawnRef.current).find(c => c.id === id); if (card) setSettingsFor(card); }}
-                    onRemove={(id) => removeFromHome(id, true)}
-                    // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
-                    // part-way through keeps their place (confirmation 1, finding 2).
-                    onReset={() => {
-                        const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
-                        if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
-                    }}
-                    onClose={() => setEditOpen(false)}
-                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-edit-open"]')}
-                />
-            )}
-            {picker && (
-                <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
-                    // Opened from Edit home, which has closed: the community card's Add a card.
-                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
-            )}
-            {addSearch && (
-                <CardSettingsDialog
-                    type="search"
-                    name={cardName('search', profile)}
-                    mode="add"
-                    initial={addSearch}
-                    hasPoint={hasPoint}
-                    onSubmit={(next) => { setAddSearch(null); addToHome('search', next); }}
-                    onClose={() => setAddSearch(null)}
-                    // Its opener, the Market's button, is on another tab: the community card's Add a card.
-                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')}
-                />
-            )}
-            {settingsFor && (
-                <CardSettingsDialog
-                    type={settingsFor.type}
-                    name={cardName(settingsFor.type, profile)}
-                    mode="save"
-                    initial={settingsFor.settings}
-                    hasPoint={hasPoint}
-                    onSubmit={(next) => {
-                        const { id, type } = settingsFor;
-                        setSettingsFor(null);
-                        // Sun and moon's place is worked out here: no read.
-                        changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: type !== 'sky' });
-                    }}
-                    onClose={() => setSettingsFor(null)}
-                    // Its opener was a menu's Settings…, gone with the menu: Edit home's row "…" while Edit home is open, else
-                    // the card's "…".
-                    returnFocus={() => {
-                        const id = settingsFor.id;
-                        return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-edit-menu-${id}"]`)
-                            ?? pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`)
-                            ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
-                    }}
-                />
-            )}
+                {editOpen && !isVisitor && (
+                    <EditHomeDialog
+                        rows={editRows}
+                        notOnAccount={notOnAccount}
+                        onAdd={() => { setEditOpen(false); setPickerOpen(true); }}
+                        onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editCards, Date.now(), pins)); }}
+                        onSettings={(id) => { const card = listOf(drawnRef.current).find(c => c.id === id); if (card) setSettingsFor(card); }}
+                        onRemove={(id) => removeFromHome(id, true)}
+                        // Reset brings Tips back when they were off, so then the tips start over (PR #1694 review 3); a member
+                        // part-way through keeps their place (confirmation 1, finding 2).
+                        onReset={() => {
+                            const tipsOff = !!tipsRef.current?.dismissedAt || !listOf(drawnRef.current).some(c => c.type === 'tips');
+                            if (changeLayout((l) => resetLayout(l, Date.now()), { reread: true }) && tipsOff) keepTips(restartTips(tipsList, localDay()));
+                        }}
+                        onClose={() => setEditOpen(false)}
+                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-edit-open"]')}
+                    />
+                )}
+                {picker && (
+                    <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
+                        // Opened from Edit home, which has closed: the community card's Add a card.
+                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
+                )}
+                {addSearch && (
+                    <CardSettingsDialog
+                        type="search"
+                        name={cardName('search', profile)}
+                        mode="add"
+                        initial={addSearch}
+                        hasPoint={hasPoint}
+                        onSubmit={(next) => { setAddSearch(null); addToHome('search', next); }}
+                        onClose={() => setAddSearch(null)}
+                        // Its opener, the Market's button, is on another tab: the community card's Add a card.
+                        returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')}
+                    />
+                )}
+                {settingsFor && (
+                    <CardSettingsDialog
+                        type={settingsFor.type}
+                        name={cardName(settingsFor.type, profile)}
+                        mode="save"
+                        initial={settingsFor.settings}
+                        hasPoint={hasPoint}
+                        onSubmit={(next) => {
+                            const { id, type } = settingsFor;
+                            setSettingsFor(null);
+                            // Sun and moon's place is worked out here: no read.
+                            changeLayout((l) => changeCardSettings(l, id, next, Date.now()), { reread: type !== 'sky' });
+                        }}
+                        onClose={() => setSettingsFor(null)}
+                        // Its opener was a menu's Settings…, gone with the menu: Edit home's row "…" while Edit home is open, else
+                        // the card's "…".
+                        returnFocus={() => {
+                            const id = settingsFor.id;
+                            return pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-edit-menu-${id}"]`)
+                                ?? pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"] [data-testid="home-card-menu"]`)
+                                ?? pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]');
+                        }}
+                    />
+                )}
+            </div>
         </div>
     );
 }

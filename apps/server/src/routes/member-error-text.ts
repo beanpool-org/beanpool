@@ -18,10 +18,11 @@
  * or the tunnel's own words are what they need to act on (NOTE-2).
  */
 import type Koa from 'koa';
+import { word } from '@beanpool/core';
 import { sanitizeMessage } from '../sanitize-message.js';
 
-/** The words a member gets for a server fault. */
-export const SERVER_FAULT_TEXT = 'Something went wrong on the server. Please try again.';
+/** The words a member gets for a server fault, in their language on the way out (member-words.ts). */
+export const SERVER_FAULT_TEXT = word('Something went wrong on the server. Please try again.');
 
 /** Kinds of error that are never a refusal written for a member. */
 const FAULT_NAMES = new Set([
@@ -80,8 +81,8 @@ function logServerFault(e: unknown): void {
     console.error(`[MemberRoute] A server fault, answered in general words: ${sanitizeMessage(text)}`);
 }
 
-/** The operator's own routes, which keep an error's detail. */
-function isOperatorPath(path: string): boolean {
+/** The operator's own routes, which keep an error's detail (and their English: member-words.ts). */
+export function isOperatorPath(path: string): boolean {
     return path.startsWith('/api/local/') || path.startsWith('/api/admin/');
 }
 

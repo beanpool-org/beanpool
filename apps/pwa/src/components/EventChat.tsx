@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatDate, t } from '@beanpool/core';
+import { chatLineWords } from '../lib/chat-line-words';
 import {
     getEventChat, postEventChatMessage, removeEventChatMessage,
     type EventThreadMessage, type EventThreadView,
@@ -285,7 +286,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
             </div>
 
             {postError && (
-                <p role="alert" className="flex-shrink-0 m-0 px-3 pb-1 text-xs text-red-600 dark:text-red-400">{postError}</p>
+                <p role="alert" className="flex-shrink-0 m-0 px-3 pb-1 text-xs text-red-600 dark:text-red-400">{chatLineWords(postError)}</p>
             )}
 
             {imageNotice && (

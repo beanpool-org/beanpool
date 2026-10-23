@@ -93,11 +93,16 @@ COPY --from=builder /app/apps/server/src/db/schema.sql ./apps/server/dist/db/sch
 COPY --from=builder /app/apps/server/public ./apps/server/public
 COPY --from=builder /app/apps/server/package.json ./apps/server/package.json
 COPY --from=builder /app/apps/server/node_modules ./apps/server/node_modules
+# The server's sentences in each language (apps/server/words, which member-words.ts reads beside dist/): without them a
+# member's refusals and pushes are in English whatever language their app names.
+COPY --from=builder /app/apps/server/words ./apps/server/words
 
 # Copy compiled core library
 COPY --from=builder /app/packages/beanpool-core/dist ./packages/beanpool-core/dist
 COPY --from=builder /app/packages/beanpool-core/package.json ./packages/beanpool-core/package.json
 COPY --from=builder /app/packages/beanpool-core/node_modules ./packages/beanpool-core/node_modules
+# Core's shared sentences in each language (@beanpool/core/words/*.json): the push sentences a server writes in each phone's.
+COPY --from=builder /app/packages/beanpool-core/words ./packages/beanpool-core/words
 
 # Copy compiled engine library (db-backed shared node logic)
 COPY --from=builder /app/packages/beanpool-engine/dist ./packages/beanpool-engine/dist

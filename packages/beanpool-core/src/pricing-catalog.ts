@@ -168,6 +168,53 @@ export function aggregateObservedPrice(prices: number[], baselinePrice: number):
     return { price: Math.max(1, aggregate), count, confidence };
 }
 
+/**
+ * Words too common in listings' names to say what a thing is ("cordless" in a drill and a saw, "hire" in every hire):
+ * a name matches a guide item only on a word left after these.
+ */
+const HINT_STOP_WORDS = new Set([
+    'and', 'the', 'with', 'for', 'set', 'hire', 'day', 'days', 'week', '24hr', 'electric', 'petrol', 'cordless', 'heavy', 'duty',
+    'small', 'large', 'big', 'old', 'new', 'standard', 'whole', 'fresh', 'local', 'my', 'our',
+]);
+const hintWords = (s: string) => new Set(s.toLowerCase().split(/[^\p{L}\p{N}]+/u)
+    .map((w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w))
+    .filter((w) => w.length >= 3 && !HINT_STOP_WORDS.has(w)));
+
+/** How a guide item's unit prices it, as a listing's price type: per day, week, hour or month, else one price. */
+function priceTypeOfUnit(unit: string | undefined): 'daily' | 'weekly' | 'hourly' | 'monthly' | 'fixed' {
+    switch (unit) {
+        case 'day': return 'daily';
+        case 'week': return 'weekly';
+        case 'hr': return 'hourly';
+        case 'month': return 'monthly';
+        default: return 'fixed';
+    }
+}
+
+/**
+ * The community's price guide on one thing a member names (`words`, in their own words, in `category`): the item whose
+ * name shares the most telling words with it (a tie goes to the item in the same category, then to the first), as its
+ * price in Beans and the price type its unit means. Null when no item shares a telling word: a guess from the category
+ * alone would say a drill costs what a saw does. A hint to show, never a price set for the member.
+ */
+export function pricingHintFor(
+    items: readonly PricingGuideItem[], category: string | null | undefined, words: string,
+): { credits: number; priceType: 'daily' | 'weekly' | 'hourly' | 'monthly' | 'fixed' } | null {
+    const wanted = hintWords(words);
+    if (wanted.size === 0) return null;
+    const cat = category ? normalizeCategory(category) : null;
+    let best: { item: PricingGuideItem; score: number; sameCategory: boolean } | null = null;
+    for (const item of items) {
+        if (!item || typeof item.name !== 'string' || typeof item.priceBeans !== 'number' || !Number.isFinite(item.priceBeans) || item.priceBeans <= 0) continue;
+        let score = 0;
+        for (const w of hintWords(item.name)) if (wanted.has(w)) score++;
+        if (score === 0) continue;
+        const sameCategory = cat !== null && item.category === cat;
+        if (!best || score > best.score || (score === best.score && sameCategory && !best.sameCategory)) best = { item, score, sameCategory };
+    }
+    return best ? { credits: best.item.priceBeans, priceType: priceTypeOfUnit(best.item.unit) } : null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Default Seed Catalog (~500 items across 15 categories)
 // ─────────────────────────────────────────────────────────────────────────────

@@ -40,7 +40,7 @@ import { pushKeyHex } from '../engine/push-notices.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { cleanRekeyCode, proposeRekey, rekeyRedeemStatus, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
 import { recordKeySuccession, rekeyedFromOf } from '../engine/key-succession.js';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
+import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText, normaliseLang } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword, hasAdminPassword,
@@ -1854,7 +1854,7 @@ router.get('/api/ledger/export', async (ctx) => {
 const PUSH_PLATFORM = /^[A-Za-z0-9_-]{1,16}$/;
 
 router.post('/api/push-tokens', async (ctx) => {
-    const { publicKey, token, platform, registeredAt } = (ctx as any).requestBody || {};
+    const { publicKey, token, platform, registeredAt, lang } = (ctx as any).requestBody || {};
     if (!publicKey || !token || typeof token !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey or token' };
@@ -1879,7 +1879,10 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null, clientLimiterKey(ctx));
+    // The language the phone writes in, so its pushes are in it (Marty's M6). One BeanPool writes, else none (English): a
+    // tag from a newer app this server doesn't know never refuses the phone.
+    const pushLang = typeof lang === 'string' ? normaliseLang(lang) : null;
+    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null, clientLimiterKey(ctx), pushLang);
     if (registration === 'left') {
         // Sent before this key's leave statement for the token and delivered after it: the phone no longer wants it.
         ctx.status = 409;

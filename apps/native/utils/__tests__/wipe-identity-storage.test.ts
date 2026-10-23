@@ -54,6 +54,9 @@ describe('wipeIdentityScopedStorage', () => {
             [`beanpool_blocked_users:${'ab'.repeat(32)}`]: JSON.stringify(['cd'.repeat(32)]),
             [`beanpool_pending_abuse_reports:${'ab'.repeat(32)}`]: JSON.stringify([{ reporterPubkey: 'ab'.repeat(32), targetPubkey: 'cd'.repeat(32), reason: 'spam', timestamp: 1 }]),
             beanpool_blocked_users_moved: '1',
+            // Which of those blocks the phone has put on each community's list (blocklist.ts syncBlocks), kept with the list
+            // it describes: restored, the account's unblocks still reach the communities it blocked at.
+            [`beanpool_community_blocks:${'ab'.repeat(32)}`]: JSON.stringify({ 'https://test.beanpool.org': { on: ['cd'.repeat(32)], sent: [] } }),
             // The key each of the account's DMs is sealed to (dm-peer-pins.ts), one value per community file, kept like its
             // block list (Marty, 13 Oct): restored here, its DMs aren't met as first sight again. And what a member's reset
             // of one community's chat memory set aside (§3.4 amendment 6), kept with them.
@@ -75,6 +78,7 @@ describe('wipeIdentityScopedStorage', () => {
         expect([...storage.data.keys()].sort()).toEqual([
             `beanpool_blocked_users:${'ab'.repeat(32)}`,
             'beanpool_blocked_users_moved',
+            `beanpool_community_blocks:${'ab'.repeat(32)}`,
             `beanpool_dm_lines_at_update:${'ab'.repeat(32)}:beanpool_test.beanpool.org.db`,
             `beanpool_dm_lines_at_update:${'ab'.repeat(32)}:community_castlemaine.db`,
             `beanpool_dm_peer_pins:${'ab'.repeat(32)}:beanpool_test.beanpool.org.db`,

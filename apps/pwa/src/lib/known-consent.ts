@@ -4,6 +4,7 @@
  * Settings, never required: a member who says nothing is still a member, and is simply never one of the admins'
  * exceptions. The same reading as the phone's (apps/native utils/known-consent.ts).
  */
+import { t } from '@beanpool/core';
 import { request } from './api';
 
 /** The text a known community shows on its join step (GET /api/community/consent-terms, public), before joining. */
@@ -62,9 +63,9 @@ export function showsConsentCard(c: KnownConsent | null): boolean {
     return shouldOfferConsent(c) || canWithdrawConsent(c);
 }
 
-/** The heading: a first ask, or the community changed its lines since. */
+/** The heading, in the member's language: a first ask, or the community changed its lines since. */
 export function consentHeading(c: KnownConsent): string {
-    return c.consentedVersion ? 'Your community changed what its admins can see' : 'What this community\'s admins can see';
+    return c.consentedVersion ? t('Your community changed what its admins can see') : t("What this community's admins can see");
 }
 
 /** The join step's text, or null: an older node, a plain community, offline. Never throws. */

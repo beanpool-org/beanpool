@@ -1156,6 +1156,9 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN storage_key TEXT`).run(); } catch { }
     // A push registration's stamp from the phone (state-engine.ts registerPushToken); NULL on rows from before it.
     try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN registered_at INTEGER`).run(); } catch { }
+    // The language a phone's pushes are written in (state-engine.ts registerPushToken); NULL, English, on rows from before:
+    // each phone names it again at its next start.
+    try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN lang TEXT`).run(); } catch { }
     // Push tokens locked at rest (services/push-token-seal.ts): the tables from before, each token in the clear, go aside
     // for the boot to lock (a main server) or drop (a standby), and schema.sql makes the new ones.
     try {
@@ -1477,6 +1480,9 @@ export function initSchema() {
     // The shop a listing is in (schema.sql; DESIGN-shops-and-tools-fable.md §12 S1). Before the schema.sql exec, which
     // indexes it (idx_posts_shop). NULL on every existing row: nothing is in a shop until its author puts it there.
     try { db.prepare(`ALTER TABLE posts ADD COLUMN shop_id TEXT REFERENCES shops(id)`).run(); } catch { }
+    // When it was featured in its shop (schema.sql; DESIGN-shops-round3-enterprise-shopfront-fable.md §4). NULL on every
+    // existing row: nothing is featured until its author or a keeper says so.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN featured_at TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN moderation_muted_until TEXT`).run(); } catch { }
     // A person's coarse area (G4, engine/member-area.ts). Before the schema.sql exec, whose members_touch_updated_at
     // (dropped below, so the exec recreates it) lists all three. NULL on every existing row: nobody has an area.
@@ -2936,14 +2942,16 @@ export function createCrowdfundProject(
     const callsign = projectRowName(db, title, id);
 
     // A fresh id (isFreshProjectId, above): every row below is new, so a clash throws rather than writing over another's.
+    // The description is its purpose; its About (members.bio) is its keepers' own words, so it starts with none
+    // (engine/enterprise-shopfront.ts).
     db.transaction(() => {
         db.prepare(`
             INSERT INTO members (
-                public_key, callsign, joined_at, bio, status,
+                public_key, callsign, joined_at, status,
                 is_treasury, earned_credit, earned_surplus,
                 purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
-            ) VALUES (?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
-        `).run(id, callsign, now, description || '', description || title.trim(), goal_amount, deadline_at, now);
+            ) VALUES (?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
+        `).run(id, callsign, now, description || title.trim(), goal_amount, deadline_at, now);
         setMemberPhoto(db, id, photoUrl || null);
         db.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
         if (creator_pubkey) {
@@ -3003,6 +3011,7 @@ export function updateCrowdfundProject(
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
     // The enterprise row's name, by the one name rule, as at the create (projectRowName): the title is stored as typed.
+    // Its name and purpose, never its About (members.bio): that is its keepers' (PUT /api/treasury/:t/profile).
     const rowName = projectRowName(db, title, id);
 
     db.transaction(() => {
@@ -3015,9 +3024,9 @@ export function updateCrowdfundProject(
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(rowName, description, description, goal_amount, deadline_at, now, id);
+            `).run(rowName, description, goal_amount, deadline_at, now, id);
         } else {
             db.prepare(`
                 UPDATE projects
@@ -3027,10 +3036,12 @@ export function updateCrowdfundProject(
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, goal_amount = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(rowName, description, description, goal_amount, now, id);
+            `).run(rowName, description, goal_amount, now, id);
         }
+        // Its chat is titled by its name: a rename carries over, as the face's does (engine/enterprise-shopfront.ts).
+        db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'enterprise_thread'").run(rowName, id);
         if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();
 

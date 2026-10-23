@@ -17,7 +17,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import axe from 'axe-core';
-import { useState, type ComponentType } from 'react';
+import { useRef, useState, type ComponentType } from 'react';
 import { TOOLS, TOOL_PERMISSIONS, type AnyToolScreenProps, type ToolApp, type ToolManifest } from '@beanpool/core';
 import { ToolsPage, type ToolsPageProps } from '../../pages/ToolsPage';
 import { TOOL_APPS } from '../index';
@@ -216,12 +216,13 @@ describe('every tool, in the frame, in xx at 320 px × 1.3', () => {
         expect(await axeProblems(page), 'the menu').toEqual([]);
         await act(async () => { fireEvent.click(one.getByTestId('tool-menu-settings')); });
         await act(async () => { fireEvent.click(one.getByTestId('tool-remove')); });
-        expect(bypassing(page), 'Settings').toEqual([]);
+        // The tool's screen is still there under a panel, hidden (a panel is no leave): its words are the member's.
+        expect(bypassing(page, { others: memberText(c.fixtures.docs.small) }), 'Settings').toEqual([]);
         expect(layoutProblems(page), 'Settings').toEqual([]);
         expect(await axeProblems(page), 'Settings').toEqual([]);
         await act(async () => { fireEvent.click(one.getByTestId('tool-menu')); });
         await act(async () => { fireEvent.click(one.getByTestId('tool-menu-about')); });
-        expect(bypassing(page), 'About').toEqual([]);
+        expect(bypassing(page, { others: memberText(c.fixtures.docs.small) }), 'About').toEqual([]);
         expect(await axeProblems(page), 'About').toEqual([]);
         one.unmount();
 
@@ -252,12 +253,25 @@ describe('a tool this build does not have', () => {
         expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
     });
 
-    it("the registry as shipped: the Tool shed's core and no web half yet, the Tools screen says no tool, and any id is not in this version", async () => {
-        // The slice that adds a tool's web half (the Tool shed's is T1.3) changes both lines on purpose.
+    // #2366 review: a manifest with no web half fetched the node's copy and kept it in this browser, then said it wasn't here.
+    it('a manifest with node-copy and no web half here asks the node nothing and keeps nothing in this browser', async () => {
+        const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ tool: 'scaffold', doc: { v: 1, items: [] }, updatedAt: '2026-10-20T08:00:00.000Z' }), { status: 200 }));
+        vi.stubGlobal('fetch', fetchSpy);
+        const withCopy: ToolManifest = { ...scaffold.manifest, permissions: ['node-copy'] };
+        draw({ manifest: withCopy, loader: scaffold.loader }, { id: 'scaffold', screen: 'main', key: null }, { apps: {} });
+        expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
+        await act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(await readToolRecord(OWNER, 'scaffold')).toBeNull();
+    });
+
+    it("the registry as shipped: the Tool shed, core and web half, on the Tools screen's shelf; an id this build doesn't have is not in this version", async () => {
+        // The slice that adds a tool's web half changes both lines on purpose (the Tool shed's was T1.3).
         expect(TOOLS.map((m) => m.id)).toEqual(['things']);
-        expect(Object.keys(TOOL_APPS)).toEqual([]);
+        expect(Object.keys(TOOL_APPS)).toEqual(['things']);
         const list = render(<ToolsPage identity={identity} open={{ id: null, screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
-        expect(await list.findByTestId('tools-none')).toBeInTheDocument();
+        expect(within(await list.findByTestId('tools-shelf-stock')).getByTestId('tools-row-things')).toBeInTheDocument();
+        expect(list.queryByTestId('tools-none')).toBeNull();
         list.unmount();
         render(<ToolsPage identity={identity} open={{ id: 'scaffold', screen: 'main', key: null }} onOpen={vi.fn()} onClose={vi.fn()} onComposer={vi.fn()} onGuide={vi.fn()} onAddHomeCard={vi.fn()} />);
         expect(await screen.findByText("This tool isn't in this version of the app")).toBeInTheDocument();
@@ -282,12 +296,12 @@ describe('the host: only what the manifest declared', () => {
         await keep('spy', { v: 1, items: [{ id: 'a', name: 'Ladder', addedAt: '2026-10-01T00:00:00.000Z' }] });
         draw(c, { id: 'spy', screen: 'main', key: null });
         await screen.findByRole('button', { name: 'offer' });
-        expect(Object.keys(seen.host!).sort()).toEqual(['doc', 'navigate', 'node', 'now', 'owner']);
+        expect(Object.keys(seen.host!).sort()).toEqual(['back', 'doc', 'navigate', 'node', 'now', 'owner']);
         expect('offerDoor' in seen.host!).toBe(false);
         expect('deals' in seen.host!).toBe(false);
     });
 
-    it('every permission at once: the web grants only what it has built (the doors, the node copy); the rest are absent, not undefined', async () => {
+    it('every permission at once: the web grants only what it has built (all but place and the event door); the rest are absent, not undefined', async () => {
         // The node copy's open asks the community's server, which keeps none yet, so this browser's copy is sent; answered
         // here, and waited for, so it can't land in a later test.
         const fetchSpy = vi.fn(async (_url: string, init?: RequestInit) => new Response(JSON.stringify(init?.method === 'PUT'
@@ -301,9 +315,12 @@ describe('the host: only what the manifest declared', () => {
         await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
         expect(fetchSpy.mock.calls.map(([url, init]) => [String(url).replace(/^.*(\/api\/)/, '$1'), init?.method])).toEqual([['/api/tools/spy', 'GET'], ['/api/tools/spy', 'PUT']]);
         await waitFor(async () => expect((await readToolRecord(OWNER, 'spy'))?.syncedAt).toBe('2026-10-21T08:00:00.000Z'));
-        expect(Object.keys(seen.host!).sort()).toEqual(['doc', 'navigate', 'needDoor', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner']);
+        // Photos, the camera, posts, deals and the pricing guide came with the Tool shed (T1.3), the first tool to ask for them.
+        expect(Object.keys(seen.host!).sort()).toEqual([
+            'back', 'camera', 'deals', 'doc', 'navigate', 'needDoor', 'node', 'nodeCopy', 'now', 'offerDoor', 'owner', 'photos', 'posts', 'pricingGuide',
+        ]);
         expect((seen.host as unknown as { nodeCopy: { on: boolean } }).nodeCopy).toEqual({ on: true });
-        for (const absent of ['photos', 'camera', 'place', 'eventDoor', 'deals', 'pricingGuide', 'posts']) {
+        for (const absent of ['place', 'eventDoor']) {
             expect(absent in seen.host!, absent).toBe(false);
         }
     });
@@ -457,6 +474,35 @@ describe('the frame', () => {
         fireEvent.click(screen.getAllByTestId('tools-back')[0]);
         expect(await screen.findByTestId('tool-doors')).toBeInTheDocument();
         expect(screen.queryByText('Ladder')).toBeNull();
+    });
+
+    // Review of #2373: a panel is no leave, so the tool's screen is still there under it, and drawn again with each host.
+    it("a tool's own back under a panel is its screens': the panel stays, and ← shows the screen it went back to", async () => {
+        const manifest: ToolManifest = { ...scaffold.manifest, id: 'two', screens: ['main', 'record'] };
+        let finish = () => {};
+        const Main = ({ host }: AnyToolScreenProps) => <button type="button" data-testid="two-open" onClick={() => host.navigate('record', { key: 'a' })}>Open</button>;
+        // Goes back once what it waits on lands, through the host it was last drawn with: the one under the panel.
+        const Record = ({ host }: AnyToolScreenProps) => {
+            const latest = useRef(host);
+            latest.current = host;
+            const done = () => { void new Promise<void>((r) => { finish = r; }).then(() => latest.current.back()); };
+            return <button type="button" data-testid="two-done" onClick={done}>Done</button>;
+        };
+        const two: WebApp = { id: 'two', screens: () => ({ main: Main, record: Record }) };
+        await keep('two', scaffold.fixtures.docs.small);
+        const { props } = draw({ manifest, loader: async () => ({ default: two }) }, { id: 'two', screen: 'main', key: null });
+        fireEvent.click(await screen.findByTestId('two-open'));
+        fireEvent.click(await screen.findByTestId('two-done'));
+        fireEvent.click(screen.getByTestId('tool-menu'));
+        fireEvent.click(screen.getByTestId('tool-menu-about'));
+        expect(screen.getByTestId('tool-about')).toBeInTheDocument();
+        await act(async () => { finish(); });
+        expect(screen.getByTestId('tool-about')).toBeInTheDocument();
+        fireEvent.click(screen.getAllByTestId('tools-back')[0]);
+        expect(screen.queryByTestId('tool-about')).toBeNull();
+        expect(screen.getByTestId('two-open')).toBeInTheDocument();
+        expect(screen.queryByTestId('two-done')).toBeNull();
+        expect(props.onClose).not.toHaveBeenCalled();
     });
 
     // Review of #2274: Back is the stack's (§1.5). A tool opened from the Tools screen went straight past it, closing the page.
@@ -615,7 +661,8 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
             await settings(view);
             expect(view.getByTestId('tool-kept-line')).toHaveTextContent(xx(REMOVED));
             expect(view.getByTestId('tool-node-copy')).toHaveAttribute('aria-checked', 'false');
-            expect(bypassing(page)).toEqual([]);
+            // The tool's screen is still there under Settings, hidden: its words are the member's.
+            expect(bypassing(page, { others })).toEqual([]);
             expect(layoutProblems(page)).toEqual([]);
             expect(await axeProblems(page)).toEqual([]);
             expect(server.log.map((r) => r.method)).toEqual(['GET']);
@@ -642,7 +689,8 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
         await waitFor(() => expect(view.getByTestId('tool-kept-line')).toHaveTextContent(xx(OLDER)));
         expect(view.getByTestId('tool-node-copy-note')).toHaveTextContent(xx(OLDER));
         const page = view.getByTestId('tools-page');
-        expect(bypassing(page)).toEqual([]);
+        // The tool's screen is still there under Settings, hidden: its words are the member's.
+        expect(bypassing(page, { others: memberText(scaffold.fixtures.docs.small) })).toEqual([]);
         expect(layoutProblems(page)).toEqual([]);
         expect(await axeProblems(page)).toEqual([]);
         view.unmount();
@@ -666,7 +714,8 @@ describe('the node copy, on the page (slice T0.4; node-copy.test.ts runs the rul
         expect(toggle).toHaveAttribute('aria-checked', 'true');
         expect(await readToolSettings(OWNER, 'kept')).toEqual({});
         const page = view.getByTestId('tools-page');
-        expect(bypassing(page)).toEqual([]);
+        // The tool's screen is still there under Settings, hidden: its words are the member's.
+        expect(bypassing(page, { others: memberText(scaffold.fixtures.docs.small) })).toEqual([]);
         expect(layoutProblems(page)).toEqual([]);
         expect(await axeProblems(page)).toEqual([]);
 

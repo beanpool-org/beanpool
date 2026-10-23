@@ -16,8 +16,10 @@ import { GroupDetailModal } from '../components/GroupDetailModal';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
-import { modeFor, readerFeaturesOnce, readsOwn, useReadsOwn } from '../lib/features';
-import { formatNumber, t, tn, word, type FeatureMode, type WordKey } from '@beanpool/core';
+import { modeFor, readerFeaturesOnce, readsOwn, useCommunityInfo, useReadsOwn } from '../lib/features';
+import { TOOLS, TOOL_SHELVES, formatNumber, t, tn, toolsOnShelf, word, type FeatureMode, type WordKey } from '@beanpool/core';
+import { TOOL_APPS } from '../tools';
+import { ToolRow } from '../tools/ui';
 import { CommonsPreview, sampleCommonsBalance, sampleDecisions, samplePoolVoting } from '../components/ShowcasePreviews';
 import { EnterpriseCard } from '../components/EnterpriseCard';
 import { LocalCommunityAction } from '../components/LocalCommunityMark';
@@ -98,6 +100,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [decisionsMode, setDecisionsMode] = useState<FeatureMode>('hidden');
     // The node did not answer, so the modes never landed: 'hidden' then means "not known", not "off".
     const [modesUnknown, setModesUnknown] = useState(false);
+    // Commons → Tools (DESIGN-tool-template-fable.md §1.5, the phone's row since T0.2): where a member here has any tool
+    // this build has a web half for. Nothing here names a tool.
+    const communityInfo = useCommunityInfo();
+    const toolsHere = useMemo(() => {
+        const facts = { profile: communityInfo?.profile ?? null, features: (communityInfo?.features ?? {}) as Record<string, unknown> };
+        return TOOL_SHELVES.some((shelf) => toolsOnShelf(shelf, null, 'member', facts, TOOLS).some((m) => !!TOOL_APPS[m.id]));
+    }, [communityInfo]);
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
@@ -218,7 +227,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
         }
     };
 
-    // The node's rule (earned standing, or a node admin); earned credit only until the list has loaded.
+    // The node's rule (a completed trade, or a node admin); earned credit only until the list has loaded.
     const canProposeDecision = nodeSaysCanPropose ?? (balanceInfo?.earnedCredit || 0) > 0;
     const hasOpenDecision = useMemo(() => {
         if (!identity?.publicKey) return false;
@@ -428,6 +437,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         )
                     )}
                 </div>
+
+                {toolsHere && onNavigate && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full min-w-0 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900">
+                        <ToolRow icon="🧰" title={t('Tools')} state={t('Things you can do on your own')} onClick={() => onNavigate('tools')} testId="commons-tools-row" />
+                    </div>
+                )}
 
                 {/* Enterprises off here and the node shows previews: Example Valley's, under the strip; Groups below stay real.
                     Drawn only on the Groups tab (where the enterprise list lives on a local node), so Decide opens at its own content. */}

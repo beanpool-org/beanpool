@@ -11,6 +11,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { t } from '@beanpool/core';
+import { settingsLineWords } from './settings/settings-lines';
 import { type AppColors } from '../constants/colors';
 import { acceptAddressFollow, addressFollowOffer, snoozeAddressFollow, type AddressFollowOffer, type FollowResult } from '../utils/address-follow';
 import { onCommunitySwitched } from '../utils/community-switch';
@@ -45,7 +46,7 @@ export function AddressFollowCard({ colors }: { colors: AppColors }) {
             // Only the switch itself throws (its database or address): said as the BeanPool sheet's switch says it.
             busyRef.current = false;
             setBusy(false);
-            Alert.alert(t("Couldn't switch community"), (e instanceof Error && e.message) || t('Please try again.'));
+            Alert.alert(t("Couldn't switch community"), (e instanceof Error && e.message) ? settingsLineWords(e.message) : t('Please try again.'));
             return;
         }
         if (result === 'moved' || result === 'moved-kept-both') {

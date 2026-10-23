@@ -56,6 +56,11 @@ export const LISTING_CATEGORY_LIMIT: TextLimit = limitOf(50);
 export const ENTERPRISE_NAME_LIMIT: TextLimit = limitOf(100);
 /** An enterprise's (and a crowdfund's) purpose: 2,000 characters, as a group's description. */
 export const ENTERPRISE_PURPOSE_LIMIT: TextLimit = limitOf(2_000);
+/**
+ * An enterprise's About, in its keepers' words (members.bio, DESIGN-shops-round3-enterprise-shopfront-fable.md §0 row 5):
+ * 600 characters. The shopfront shows four lines of it and "More".
+ */
+export const ENTERPRISE_ABOUT_LIMIT: TextLimit = limitOf(600);
 /** The note sent with Beans or a pledge (a ledger line's memo): 500 characters. */
 export const BEANS_NOTE_LIMIT: TextLimit = limitOf(500);
 /** A Decision's title: 200 characters. */

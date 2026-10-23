@@ -26,6 +26,11 @@ export function fitWithin(width: number, height: number, max = MAX_PHOTO_SIDE): 
  * decode the file.
  */
 export function resizePhotoFile(file: Blob): Promise<string> {
+    return resizePhotoFileWithSize(file).then((p) => p.dataUrl);
+}
+
+/** The same, with the size it was drawn at (a tool's photo keeps it beside its ref). */
+export function resizePhotoFileWithSize(file: Blob): Promise<{ dataUrl: string; width: number; height: number }> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => reject(reader.error ?? new Error('Could not read the file'));
@@ -40,7 +45,7 @@ export function resizePhotoFile(file: Blob): Promise<string> {
                 const ctx = canvas.getContext('2d');
                 if (!ctx) { reject(new Error('No canvas to draw the picture on')); return; }
                 ctx.drawImage(img, 0, 0, width, height);
-                resolve(canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY));
+                resolve({ dataUrl: canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY), width, height });
             };
             img.src = reader.result as string;
         };

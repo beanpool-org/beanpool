@@ -1,0 +1,52 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "beanpool-watcher",
+  "server": {},
+  "permissions": {
+    "http": {
+      "enable": true,
+      "domains": ["ntfy.sh"]
+    },
+    "redis": true,
+    "reddit": false
+  },
+  "triggers": {
+    "onPostCreate": "/internal/triggers/new-item",
+    "onCommentCreate": "/internal/triggers/new-item"
+  },
+  "settings": {
+    "global": {
+      "ntfyUrl": {
+        "type": "string",
+        "label": "ntfy topic URL (https://ntfy.sh/<topic>)",
+        "helpText": "Where the notifications go. The topic name is its password: set it with `npx devvit settings set ntfyUrl`, never in a file.",
+        "isSecret": true
+      },
+      "ntfyToken": {
+        "type": "string",
+        "label": "ntfy access token (optional)",
+        "helpText": "Only if the topic needs one: sent as Authorization: Bearer.",
+        "isSecret": true
+      },
+      "agentNtfyUrl": {
+        "type": "string",
+        "label": "The team's inbox topic URL (optional, https://ntfy.sh/<topic>)",
+        "helpText": "A second, private topic, never the phone's: each new post or comment's public text goes there for the team's fetch script (TRIAGE.md). Unset: nothing is sent. Set it with `npx devvit settings set agentNtfyUrl`.",
+        "isSecret": true
+      }
+    },
+    "subreddit": {
+      "quietUsernames": {
+        "type": "string",
+        "label": "Accounts that never ping (the team's own), comma-separated",
+        "helpText": "Posts and comments by these usernames send no notification, so the team's own replies don't ping the team.",
+        "placeholder": "name1, name2",
+        "defaultValue": ""
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run build",
+    "dev": "npm run build -- --watch=forever"
+  }
+}

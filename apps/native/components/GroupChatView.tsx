@@ -66,6 +66,7 @@ import {
 } from '../utils/chat-actions';
 // The key and line code above never reaches the words layer: what it writes is translated where it is shown.
 import { chatAuthorWords, chatLineWords } from '../utils/chat-line-words';
+import { signedRequestWords } from './signed-request-lines';
 import { NotDeliveredMark } from './chat/NotDeliveredMark';
 import { t, tn } from '@beanpool/core';
 import { normaliseTappedUrl } from '../utils/chat-links';
@@ -564,7 +565,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             setMute(next);
             yourGroupsStore.setMute(id, next);
         } catch (e: any) {
-            Alert.alert(t('Not changed'), e?.message || t('Could not reach the node.'));
+            Alert.alert(t('Not changed'), e?.message ? signedRequestWords(e.message) : t('Could not reach the node.'));
         }
     };
 

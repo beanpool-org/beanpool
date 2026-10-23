@@ -543,6 +543,9 @@ describe('Every door lands on the enterprise page', () => {
             [path.join('components', 'PulseFeedCard.tsx')]: 1,
             [path.join('components', 'AddedYouLines.tsx')]: 1,
             [path.join('components', 'GlobalHeader.tsx')]: 1,
+            // The shopfront's keeper rows and a shop's owner line (S5): a member, opened by their key.
+            [path.join('components', 'shopfront', 'Shopfront.tsx')]: 1,
+            [path.join('app', 'shop', '[id].tsx')]: 1,
         });
     });
 });

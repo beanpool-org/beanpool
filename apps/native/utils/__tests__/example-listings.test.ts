@@ -87,9 +87,10 @@ describe('what a card says', () => {
 
     it('is the same words as the web app\'s, so a visitor and a member see the same examples', () => {
         const web = fs.readFileSync(path.resolve(__dirname, '../../../pwa/src/lib/example-listings.ts'), 'utf-8');
+        // Both are word() keys, so each language's catalog serves the two apps the same sentence.
         for (const e of EXAMPLE_LISTINGS) {
-            expect(web).toContain(`title: '${e.title}'`);
-            expect(web).toContain(`description: '${e.description}'`);
+            expect(web).toContain(`title: word('${e.title}')`);
+            expect(web).toContain(`description: word('${e.description}')`);
         }
         expect(web).toContain(`export const EXAMPLES_UNTIL = ${EXAMPLES_UNTIL};`);
     });

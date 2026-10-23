@@ -3,8 +3,9 @@
  * (GET /api/friends/added-you; server engine/friends-added-you.ts). Quiet on purpose: a line each, no push, no badge.
  * Adding back makes it a friendship both ways, which is what a connection in common is made of. Nothing shows when
  * nobody has, or when the node can't say (an older node, off-grid).
- * A block made on this phone stays on this phone (utils/blocklist.ts): the node never hears of it, so its own filter
- * can't leave them out. They are left out here, as the People lists leave them out, and at once when blocked.
+ * A block made on this phone reaches the node only once the phone is connected (utils/blocklist.ts syncBlocks), and never
+ * a node with no block list, so its own filter can't be counted on to leave them out. They are left out here, as the
+ * People lists leave them out, and at once when blocked.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { DeviceEventEmitter, View, Text, Pressable, Alert } from 'react-native';
@@ -15,6 +16,7 @@ import { addFriendLocal, fetchAddedYou, type AddedYou } from '../utils/db';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 import { t, tn } from '@beanpool/core';
 import { Sentence } from './Sentence';
+import { signedRequestWords } from './signed-request-lines';
 
 export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBack: () => void }) {
     const styles = useStyles(({ colors }) => ({
@@ -75,7 +77,7 @@ export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBa
                                 setLines(prev => prev.filter(x => x.publicKey !== l.publicKey));
                                 onAddedBack();
                             } catch (e: any) {
-                                Alert.alert(t('Not added'), e?.message || t('Your community did not add them.'));
+                                Alert.alert(t('Not added'), e?.message ? signedRequestWords(e.message) : t('Your community did not add them.'));
                             } finally {
                                 setBusy(null);
                             }

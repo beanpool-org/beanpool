@@ -39,7 +39,8 @@ import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS 
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { ProfileGateModal } from '../components/ProfileGateModal';
-import { getProfileStatus, describeMissing } from '../lib/profile-status';
+import { getProfileStatus, type ProfileStatus } from '../lib/profile-status';
+import { TIER_WORDS } from '../lib/trust-tier';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
@@ -75,6 +76,13 @@ const MAP_NEAR_LIMIT = 200;
 const NEAR_WAIT_MS = 1500;
 
 // Simple deterministic hash for consistent pin placement
+/** Why the profile gate stops a new post: the whole sentence for what is missing (the phone's, and MarketplacePage's for an accept). */
+function postGateSentence(status: ProfileStatus): string {
+    if (status.missingName && status.missingAvatar) return t("Your community likes to know who they're dealing with, so you need a name and a photo before you can post. It only takes a moment.");
+    if (status.missingName) return t("Your community likes to know who they're dealing with, so you need a name before you can post. It only takes a moment.");
+    return t("Your community likes to know who they're dealing with, so you need a photo before you can post. It only takes a moment.");
+}
+
 function simpleHash(str: string): number {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -462,7 +470,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         ]);
         if (!postRulesFor((info?.features as { beans?: unknown } | undefined)?.beans !== false).profilePhoto) status.missingAvatar = false;
         if (status.missingName || status.missingAvatar) {
-            setProfileGateMsg(`Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can post. It only takes a moment.`);
+            setProfileGateMsg(postGateSentence(status));
             return;
         }
         setShowNewPost(true);
@@ -511,7 +519,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         setNewPostCashAlsoNeeded(openDraft.cashAlsoNeeded);
         setNewPostReach('local');
         setNewPostReachPeers([]);
-        setNewPostPhotos([]);
+        setNewPostPhotos(openDraft.photos ?? []);
         setAudienceScope('public');
         setTargetGroupId('');
         setPostLat(null);
@@ -1047,7 +1055,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             refreshPosts();
             onNavigate?.('marketplace', id);
         } catch (e: any) {
-            showPostError(e, 'The event could not be saved.');
+            showPostError(e, t('The event could not be saved.'));
         }
         setPosting(false);
     }
@@ -1139,7 +1147,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', res?.post?.id);
         } catch (e: any) {
-            showPostError(e, 'Failed to create the event.');
+            showPostError(e, t('Failed to create the event.'));
         }
         setPosting(false);
     }
@@ -1198,7 +1206,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 refreshPosts();
                 if (onNavigate) onNavigate('marketplace');
             } catch (e: any) {
-                showPostError(e, 'Failed to create poll.');
+                showPostError(e, t('Failed to create poll.'));
             }
             setPosting(false);
             return;
@@ -1266,7 +1274,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             refreshPosts();
             if (onNavigate) onNavigate('marketplace', 'deals_active');
         } catch (e: any) {
-            showPostError(e, 'Failed to create post. Are you offline?');
+            showPostError(e, t('Failed to create post. Are you offline?'));
         }
         setPosting(false);
     }
@@ -1549,7 +1557,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     iconSize: [40, 48],
                     iconAnchor: [20, 48],
                 });
-                const label = `Event: ${post.title}`;
+                const label = t('Event: {title}', { title: post.title });
                 const marker = L.marker([post.lat!, post.lng!], { icon, title: label, alt: label, zIndexOffset: 1000 });
                 marker.on('click', () => {
                     setPreviewPost(post);
@@ -2228,7 +2236,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             {previewPost.title}
                         </span>
                         <span className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 truncate transition-colors">
-                            {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{tierForCredit(previewPost.authorEnergyCycled ?? 0).name === 'Elder' ? ' ⛰️ Elder' : ''}
+                            {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{tierForCredit(previewPost.authorEnergyCycled ?? 0).name === 'Elder' ? <> ⛰️ <span>{t(TIER_WORDS.Elder)}</span></> : ''}
                         </span>
                         <button
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
@@ -2256,7 +2264,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}
             >
                 <div className="flex justify-between items-center mb-4">
-                    <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">{eventEdit ? 'Edit Event' : eventIsCopy ? 'Copy Event' : 'New Post'}</span>
+                    <span className="font-bold text-lg text-nature-950 dark:text-white tracking-tight">{eventEdit ? t('Edit Event') : eventIsCopy ? t('Copy Event') : t('New Post')}</span>
                     <button onClick={() => {
                         setShowNewPost(false);
                         setPostApproximate(false);
@@ -2872,7 +2880,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                         >
                             {MARKETPLACE_CATEGORIES.map(c => (
-                                <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>
+                                <option key={c.id} value={c.id}>{t('{emoji} {label}', { emoji: c.emoji, label: t(c.label) })}</option>
                             ))}
                         </select>
 
@@ -2997,9 +3005,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     A labelled group of pressed-state buttons is complete exactly as written. */}
                                 <div className="flex gap-2" role="group" aria-labelledby="reach-chooser-label">
                                     {([
-                                        { value: 'local' as const, label: '🏠 Stays here' },
-                                        { value: 'peers' as const, label: '🤝 Chosen' },
-                                        { value: 'everywhere' as const, label: '🌏 Everywhere' },
+                                        { value: 'local' as const, label: t('🏠 Stays here') },
+                                        { value: 'peers' as const, label: t('🤝 Chosen') },
+                                        { value: 'everywhere' as const, label: t('🌏 Everywhere') },
                                     ]).map(opt => (
                                         <button
                                             key={opt.value}
@@ -3033,7 +3041,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                                             : 'bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-300 dark:border-nature-700'
                                                     }`}
                                                 >
-                                                    {on ? '✓ ' : ''}{p.callsign || `Peer ${p.peerId.slice(-8)}`}
+                                                    {on ? '✓ ' : ''}{p.callsign || t('Peer {id}', { id: p.peerId.slice(-8) })}
                                                 </button>
                                             );
                                         })}
@@ -3049,12 +3057,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                         : 'text-nature-500 dark:text-nature-400'
                                 }`}>
                                     {newPostReach === 'local'
-                                        ? 'Stays on this community\'s board.'
+                                        ? t("Stays on this community's board.")
                                         : newPostReach === 'everywhere'
-                                            ? 'Appears on the board of every community you trade with, and they can buy it.'
+                                            ? t('Appears on the board of every community you trade with, and they can buy it.')
                                             : newPostReachPeers.length > 0
-                                                ? 'Appears on the board of the communities you ticked.'
-                                                : '⚠️ Tick at least one community, or it stays here.'}
+                                                ? t('Appears on the board of the communities you ticked.')
+                                                : t('⚠️ Tick at least one community, or it stays here.')}
                                 </p>
                             </div>
                         )}
@@ -3096,9 +3104,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             : (newPostType === 'poll' ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md' : newPostType === 'event' ? 'bg-violet-700 hover:bg-violet-800 text-white shadow-md' : 'bg-nature-600 text-white hover:bg-nature-700 shadow-md')
                     }`}
                 >
-                    {posting ? 'Posting...' :
-                     newPostType === 'event' ? (!eventOnline && postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : eventEdit ? 'Save changes' : 'Create Event') :
-                     newPostType === 'poll' ? '🗳️ Create Poll' :
+                    {posting ? t('Posting...') :
+                     newPostType === 'event' ? (!eventOnline && postLat == null ? t('📍 Map location required') : !newPostTitle.trim() || !eventStart ? t('✏️ Add a title and start time') : eventEdit ? t('Save changes') : t('Create Event')) :
+                     newPostType === 'poll' ? t('🗳️ Create Poll') :
                      offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).label}
                 </button>
             </div>

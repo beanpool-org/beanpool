@@ -23,6 +23,7 @@ import {
 import { buildSuccessionView, voteConfirmText, type GroupSuccessionData } from '../utils/group-succession';
 import { inCapitalsOf, t } from '@beanpool/core';
 import { hapticSuccess } from '../utils/haptics';
+import { signedRequestWords } from './signed-request-lines';
 
 interface Props {
     groupId: string;
@@ -141,7 +142,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             if (res?.executed && onLeadChanged) onLeadChanged();
         } catch (e: any) {
             // The server's own words. It knows who may stand and who may propose; this does not.
-            setError(e?.message || t('Could not propose a new lead.'));
+            setError(e?.message ? signedRequestWords(e.message) : t('Could not propose a new lead.'));
         } finally {
             setBusy(false);
         }
@@ -172,7 +173,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             await load();
             if (res?.executed && onLeadChanged) onLeadChanged();
         } catch (e: any) {
-            setError(e?.message || t('Could not record your vote.'));
+            setError(e?.message ? signedRequestWords(e.message) : t('Could not record your vote.'));
         } finally {
             setBusy(false);
         }

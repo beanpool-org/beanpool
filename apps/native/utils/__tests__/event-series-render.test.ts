@@ -69,6 +69,7 @@ const copies = vi.hoisted(() => [] as any[]);
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: (p: any) => { if (p.prefill) copies.push(p.prefill); return null; } }));
 vi.mock('../../components/EventExtras', () => ({ EventReminder: () => null, EventShareAndCalendar: () => null }));
 
+import { setLanguage } from '@beanpool/core';
 import { EventDetail } from '../../components/EventDetail';
 import { EventRepeatFields } from '../../components/EventRepeatFields';
 
@@ -213,6 +214,19 @@ describe('the detail, drawn at 320 dp and 1.3×', () => {
         await click(byTestId('event-date-cancel')[1]);
         await yes();
         expect(byTestId('event-next-dates-problem')[0].textContent).toBe('This is the last date: change when the event ends, or cancel the event');
+    });
+
+    it("utils/db.ts's own refusal (no community set), in the member's language (components/event-lines.ts)", async () => {
+        setLanguage('pt', [{ 'You are currently offline.': 'Está sem ligação.' }]);
+        try {
+            node.refuse = 'You are currently offline.';
+            await draw(hostView);
+            await click(byTestId('event-date-cancel')[1]);
+            await yes();
+            expect(byTestId('event-next-dates-problem')[0].textContent).toBe('Está sem ligação.');
+        } finally {
+            setLanguage('en');
+        }
     });
 
     it('Change this date only: cancels it, then opens the copy with "Moved from the regular Friday" on top', async () => {

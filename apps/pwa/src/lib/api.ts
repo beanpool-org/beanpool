@@ -6,6 +6,7 @@
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 import { languageHeaders } from './language';
 import type { RepeatPattern, ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
+import { t } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -78,9 +79,9 @@ export async function testNodeConnection(url: string): Promise<{ ok: boolean; ca
             return { ok: false, error: `HTTP ${res.status}: ${res.statusText}` };
         }
         const data = await res.json();
-        return { ok: true, callsign: data.communityName || data.callsign || 'BeanPool Node', latencyMs };
+        return { ok: true, callsign: data.communityName || data.callsign || t('BeanPool Node'), latencyMs };
     } catch (e: any) {
-        return { ok: false, error: e.message || 'Connection failed' };
+        return { ok: false, error: e.message || t('Connection failed') };
     }
 }
 
@@ -214,7 +215,7 @@ export const groupKeysNet = {
 async function refusalError(res: Response): Promise<Error> {
     let unsaid = false;
     const err = await res.json().catch(() => { unsaid = true; return { error: res.statusText }; });
-    const error = new Error(err.message || err.error || `Request failed: ${res.status}`);
+    const error = new Error(err.message || err.error || t('Request failed: {status}', { status: res.status }));
     // An answer without JSON (a proxy's page): its words are only the status text. A screen may say it in its own.
     if (unsaid) (error as Error & { unsaid?: boolean }).unsaid = true;
     // The status travels with the error: a node older than a route answers 404, and a screen that can
@@ -244,7 +245,7 @@ export async function signedRequestWithKey<T>(
     const res = await signedFetchWithKey(method, path, body, privateKeyHex, publicKeyHex);
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || `Request failed: ${res.status}`);
+        throw new Error(err.error || t('Request failed: {status}', { status: res.status }));
     }
     return res.json();
 }
@@ -1719,11 +1720,14 @@ export async function resumeMarketplacePost(
     return request('POST', '/api/marketplace/posts/resume', { postId, authorPublicKey });
 }
 
+/** Newest first; the node answers 50 when no `limit` is given, and at most 200 a page. */
 export async function getMyMarketplaceTransactions(
-    publicKey: string, status?: string
+    publicKey: string, status?: string, limit?: number, offset?: number
 ): Promise<MarketplaceTransaction[]> {
     const params = new URLSearchParams({ publicKey });
     if (status) params.set('status', status);
+    if (limit) params.set('limit', String(limit));
+    if (offset) params.set('offset', String(offset));
     return request('GET', `/api/marketplace/transactions?${params}`);
 }
 
@@ -2097,7 +2101,7 @@ export interface MyPoolVoting {
     hasCompletedTrade: boolean;
 }
 
-/** canPropose: whether the signer may propose (earned standing, or a node admin), per the node's own rule. */
+/** canPropose: whether the signer may propose (a completed trade, or a node admin), per the node's own rule. */
 export async function getDecisions(status?: DecisionStatus): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null; canPropose?: boolean | null }> {
     return request('GET', `/api/commons/decisions${status ? `?status=${encodeURIComponent(status)}` : ''}`);
 }

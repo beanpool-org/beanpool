@@ -19,8 +19,9 @@ import { MessageRequestsList, RequestActions, closedPhotoWords } from '../compon
 import { iRated, tradeOfReleaseLine, unratedTradeWith } from '../lib/trade-review';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
-    dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
+    dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_DELETED_TEXT, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
+import { chatAuthorWords, chatLineWords } from '../lib/chat-line-words';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
 import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
@@ -1209,7 +1210,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // What decryptMessage() puts in place of a body it could not read. A photo's
     // body is its caption, so these must never be shown as one.
-    const UNREADABLE_BODIES = [t('[Encrypted — update your app to read]'), t('[Unable to decrypt this message]'), DM_LINE_NOT_VERIFIED_TEXT];
+    const UNREADABLE_BODIES = [t('[Encrypted — update your app to read]'), t('[Unable to decrypt this message]'), chatLineWords(DM_LINE_NOT_VERIFIED_TEXT)];
+    /** A DM line's words: a member's as written; the app's own stand-ins (no words, a tombstone) in the member's language. */
+    const dmShownText = (view: Parameters<typeof dmLineShownText>[0]): string =>
+        (view?.text != null && view.text !== DM_LINE_DELETED_TEXT ? view.text : chatLineWords(dmLineShownText(view)));
 
     function decryptMessage(msg: ApiMessage): string {
         // A locked group chat's line, as drawn (groupLineShown): never a row's own words unless they opened.
@@ -1220,7 +1224,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const view = lineViews?.get(msg.id);
             if (view) {
                 if (view.mark === 'not-verified' && isEncryptedNonce(msg.nonce) && !dmCtxFor(activeConv)) return t('[Encrypted — update your app to read]');
-                return dmLineShownText(view);
+                return dmShownText(view);
             }
             if (msg.nonce === '00000') return msg.ciphertext;
             if (isEncryptedNonce(msg.nonce)) {
@@ -1231,7 +1235,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     return openDmLine({ ciphertext: msg.ciphertext, nonce: msg.nonce }, ctx,
                         { conversationId: ctx.conversationId, senderPubHex: msg.authorPubkey, messageId: msg.id, part: 'body', metadata: msg.metadata }).text;
                 } catch {
-                    return DM_LINE_NOT_VERIFIED_TEXT;
+                    return chatLineWords(DM_LINE_NOT_VERIFIED_TEXT);
                 }
             }
             return decodePlaintext(msg.ciphertext, msg.nonce);
@@ -1251,20 +1255,22 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         // In a locked group chat, the answered line as drawn: under its signer's name, or nobody's.
         const g = groupShown?.get(parent.id);
         if (g) {
-            const author = g.mine ? t('You') : g.nodeLine ? 'BeanPool' : (g.name ?? GROUP_LINE_UNVERIFIED_NAME);
-            return { author, text: g.text ?? formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId), note: null, named: false };
+            // The name and words of a line that is nobody's, or a tombstone's, are the app's own: in the member's language.
+            const author = g.mine ? t('You') : g.nodeLine ? 'BeanPool' : chatAuthorWords(g.name ?? GROUP_LINE_UNVERIFIED_NAME);
+            const text = g.text === null ? formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId) : g.unattributed || g.nodeLine ? chatLineWords(g.text) : g.text;
+            return { author, text, note: null, named: false };
         }
         const view = lineViews?.get(parent.id);
         if (lineViews) {
             const from = dmQuoteFrom({ authorPubkey: parent.authorPubkey, nonce: parent.nonce, type: parent.type, metadata: parent.metadata }, view);
-            if (from === 'notice') return { author: dmQuoteLabel(from), text: formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId), note: null, named: false };
-            if (from !== 'author') return { author: dmQuoteLabel(from), text: dmLineShownText(view), note: null, named: false };
+            if (from === 'notice') return { author: chatLineWords(dmQuoteLabel(from)), text: formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId), note: null, named: false };
+            if (from !== 'author') return { author: chatLineWords(dmQuoteLabel(from)), text: dmShownText(view), note: null, named: false };
         }
         return {
             author: membersByPublicKey.get(parent.authorPubkey)?.callsign
                 || (parent.authorPubkey === identity.publicKey ? t('You') : parent.authorPubkey.substring(0, 8)),
             text: parent.type === 'image' ? t('🔒 Photo') : decryptMessage(parent),
-            note: dmLineMarkText(view?.mark),
+            note: chatLineWords(dmLineMarkText(view?.mark)) ?? null,
             named: true,
         };
     }
@@ -1348,7 +1354,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 fontSize: '0.85rem', color: 'var(--text-secondary)',
             }}
         >
-            <span style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>{chatRefusal}</span>
+            {/* The app's own refusals (lib/group-hold.ts, group-chat-keys.ts, dm-lock.ts) in the member's language; the node's as it wrote them. */}
+            <span style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>{chatLineWords(chatRefusal)}</span>
             <button
                 type="button"
                 onClick={() => setChatRefusal(null)}
@@ -1876,7 +1883,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-tombstone" data-removed-count={run ? run.ids.length : undefined} style={{ alignSelf: 'center', margin: '0.5rem 0', maxWidth: '90%' }}>
                                     {run?.ids.slice(1).map((id) => <span key={id} id={`msg-${id}`} />)}
                                     <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted-on-hover)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
-                                        {run ? removedRunText(run.kind, run.ids.length) : groupLine.text}
+                                        {run ? removedRunText(run.kind, run.ids.length) : chatLineWords(groupLine.text)}
                                     </div>
                                 </div>
                             );
@@ -1889,17 +1896,17 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0.5rem 0', maxWidth: '90%',
                                 }}>
                                     {groupLine.name && (
-                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{groupLine.name}</div>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{chatAuthorWords(groupLine.name)}</div>
                                     )}
                                     <div style={{
                                         background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '16px', padding: '0.4rem 0.8rem',
                                         fontSize: '0.8rem', fontWeight: 500, whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'center',
                                     }}>
-                                        {groupLine.text}
+                                        {chatLineWords(groupLine.text)}
                                     </div>
                                     {groupLine.details && (
                                         <div data-testid="group-line-details" style={{ fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, textAlign: 'center' }}>
-                                            {groupLine.details}
+                                            {chatLineWords(groupLine.details)}
                                         </div>
                                     )}
                                 </div>
@@ -1909,7 +1916,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             // A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed): a line that didn't open, a row
                             // in a member's name that wasn't encrypted, or the admin page's message. In the middle of the
                             // chat, never in its named author's bubble, and with no actions.
-                            const note = dmLineMarkText(lineView?.mark);
+                            const note = chatLineWords(dmLineMarkText(lineView?.mark));
                             return (
                                 <div key={msg.id} id={`msg-${msg.id}`} data-testid="dm-line-unattributed" style={{
                                     alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0.5rem 0', maxWidth: '90%',
@@ -2053,7 +2060,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 {!isMe && activeConv.type === 'group_thread' && (
                                     <div data-testid="group-line-author" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>
                                         {groupLine
-                                            ? <>{groupLine.name}{groupLine.nameHint && <span style={{ opacity: 0.75 }}> · {groupLine.nameHint}</span>}</>
+                                            ? <>{chatAuthorWords(groupLine.name)}{groupLine.nameHint && <span style={{ opacity: 0.75 }}> · {chatLineWords(groupLine.nameHint)}</span>}</>
                                             : (membersByPublicKey.get(msg.authorPubkey)?.callsign || msg.authorPubkey.substring(0, 8))}
                                     </div>
                                 )}
@@ -2205,12 +2212,12 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     </div>
                                     {groupLine?.details && (
                                         <div data-testid="group-line-details" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
-                                            {groupLine.details}
+                                            {chatLineWords(groupLine.details)}
                                         </div>
                                     )}
                                     {(() => {
                                         // A line the node moved or reordered, or an old-format line (checkDmThread).
-                                        const note = dmLineMarkText(lineView?.mark);
+                                        const note = chatLineWords(dmLineMarkText(lineView?.mark));
                                         return note ? (
                                             <div data-testid="dm-line-note" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
                                                 ⚠️ {note}
@@ -2488,7 +2495,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             fontSize: '0.85rem', color: 'var(--text-secondary)',
                         }}
                     >
-                        <span style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>{imageNotice}</span>
+                        <span style={{ minWidth: 0, flex: 1, wordBreak: 'break-word' }}>{chatLineWords(imageNotice)}</span>
                         <button
                             type="button"
                             onClick={() => setImageNotice(null)}
@@ -2506,8 +2513,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         padding: '0.4rem 1rem', borderTop: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
                         fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-word',
                     }}>
-                        {groupLocked ? '🔒 ' : ''}{groupChatNotice({ nodeSaysLocked: openGroup.nodeSaysLocked, seenLocked: openGroup.seenLocked, chatError: openGroup.answer ? null : openGroup.error })}
-                        {openGroup.thread?.waitingForNextKey ? ` ${GROUP_KEY_WAITING_TEXT}` : ''}
+                        {groupLocked ? '🔒 ' : ''}{chatLineWords(groupChatNotice({ nodeSaysLocked: openGroup.nodeSaysLocked, seenLocked: openGroup.seenLocked, chatError: openGroup.answer ? null : openGroup.error }))}
+                        {openGroup.thread?.waitingForNextKey ? ` ${chatLineWords(GROUP_KEY_WAITING_TEXT)}` : ''}
                     </div>
                 )}
 

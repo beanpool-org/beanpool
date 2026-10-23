@@ -66,7 +66,7 @@ vi.mock('expo-crypto', async () => {
 // tables. Everything else in it is real.
 vi.mock('expo-sqlite', () => ({ openDatabaseAsync: vi.fn(), defaultDatabaseDirectory: '/data/user/0/org.beanpool.app/files/SQLite' }));
 vi.mock('expo-file-system/legacy', () => ({ cacheDirectory: '/tmp/cache/', deleteAsync: vi.fn(async () => {}) }));
-vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: vi.fn() }));
+vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn(), addSavedNode: vi.fn(), isGuestNode: vi.fn(async () => false) }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(async () => null), saveCanonicalProfile: vi.fn() }));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 vi.mock('../db', async (importOriginal) => ({
@@ -100,7 +100,7 @@ async function startApp() {
     const restore = await import('../restore-account');
     const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
     const nameOnNode = async () => null;
-    return {
+    const app = {
         ...blocklist,
         identity,
         /**
@@ -118,7 +118,15 @@ async function startApp() {
         replaceWith: (account: BeanPoolIdentity, node = NODE) =>
             restore.restoreFromWords(account.mnemonic!, node, { nameOnNode, confirmReplace: async () => true }),
     };
+    started.push(app);
+    return app;
 }
+
+/**
+ * Each app run this test started. A Block also begins a sync with the community (blocklist.ts `syncBlocks`) and doesn't
+ * wait for it: each run's syncs end before the test does, so none reaches the next test's fetch, or the real one.
+ */
+const started: { blockSyncsEndedForTests(): Promise<void> }[] = [];
 
 /**
  * The node, as far as these tests go: it answers, or it can't be reached. The next report's answer can be held, and
@@ -161,7 +169,8 @@ beforeEach(async () => {
     net.sent = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         net.sent.push({ url: String(input), headers: (init?.headers ?? {}) as Record<string, string>, body: init?.body as string | undefined });
-        if (net.hold) {
+        // Only a report is held: never the block a sync sends beside it.
+        if (net.hold && String(input).endsWith('/api/reports')) {
             const hold = net.hold;
             net.hold = null;
             await hold;
@@ -183,7 +192,8 @@ beforeEach(async () => {
     mem.async.set(ANCHOR, NODE);
 });
 
-afterEach(() => {
+afterEach(async () => {
+    await Promise.all(started.splice(0).map((app) => app.blockSyncsEndedForTests()));
     vi.unstubAllGlobals();
 });
 

@@ -12,7 +12,8 @@
  *      not in their chats, their unread count or their badge; a second line and a reaction are refused in words (R2); an
  *      open with no line yet asks nothing (not listed, counted or ignorable), and the 30 days run from the line
  *   2. someone the person has added, and a node role, go straight through (R3, R6)
- *   3. Accept: the sender hears it and their next line arrives, pushed; only the person it was sent to decides (R8, R17)
+ *   3. Accept: the sender hears it and their next line arrives, pushed; only the person it was sent to decides (R8, R17);
+ *      a decision's refusal comes in the member's language, its status and code as they were (member-words.ts, #2400)
  *   4. the person's own first line accepts it (an owner's answer from the node's inbox too), and so does adding the sender
  *      as a friend (R11)
  *   5. Ignore: every answer the sender gets is the one a waiting request gets; the person's lists drop it (R9)
@@ -76,6 +77,7 @@ import { emptyCopiedTables } from './engine/copied-tables.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startP2P } from './p2p.js';
 import { pinMainServerForTests } from './standby-pin-test-helper.js';
+import { useCatalogsForTests } from './member-words.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -383,6 +385,28 @@ async function globalRun(): Promise<void> {
     const ignoreAccepted = await decide(ann, boConv, 'ignore');
     assert(again.status === 200 && ignoreAccepted.status === 409 && rowOf(boConv)?.state === 'accepted',
         `accepting again changes nothing; an accepted chat can't be ignored (${show(ignoreAccepted)})`);
+    // The catalogs are drafted after merge, so the suite brings its own French (as test-member-words does).
+    const NO_REQUEST = 'There is no message request for you in this chat.';
+    const ACCEPTED_ALREADY = 'You have accepted this chat already, so it is no longer a request.';
+    assert(nobody.body?.error === NO_REQUEST && nobody.body?.code === 'request_not_found'
+        && ignoreAccepted.body?.error === ACCEPTED_ALREADY && ignoreAccepted.body?.code === 'request_accepted',
+        `with no language named, a decision's refusal is the English (${show(nobody)}; ${show(ignoreAccepted)})`);
+    const FR: Record<string, string> = {
+        [NO_REQUEST]: "Il n'y a pas de demande de message pour vous dans ce chat.",
+        [ACCEPTED_ALREADY]: "Vous avez déjà accepté ce chat : ce n'est plus une demande.",
+    };
+    useCatalogsForTests('fr', { server: FR });
+    try {
+        const fr = { 'X-Language': 'fr' };
+        const nobodyFr = await call('POST', cy, '/api/messages/request', { conversationId: crypto.randomUUID(), decision: 'accept' }, fr);
+        const ignoreAcceptedFr = await call('POST', ann, '/api/messages/request', { conversationId: boConv, decision: 'ignore' }, fr);
+        assert(nobodyFr.status === 404 && nobodyFr.body?.code === 'request_not_found' && nobodyFr.body?.error === FR[NO_REQUEST]
+            && ignoreAcceptedFr.status === 409 && ignoreAcceptedFr.body?.code === 'request_accepted' && ignoreAcceptedFr.body?.error === FR[ACCEPTED_ALREADY]
+            && rowOf(boConv)?.state === 'accepted',
+            `with X-Language: fr a decision's refusal comes in French, its status and code as they were (${show(nobodyFr)}; ${show(ignoreAcceptedFr)})`);
+    } finally {
+        useCatalogsForTests('fr', null);
+    }
 
     // ── 4. the person's own line, or a friend add, accepts ─────────────────────────────────────
     console.log('── 4. her own line, or adding them, accepts ──');

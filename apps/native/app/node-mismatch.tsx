@@ -23,6 +23,7 @@ import {
 } from '../utils/delete-here';
 import { keyLineWords, stillKeptWords } from '../components/key-lines';
 import { deletePlanFailedWords, settingsLineWords } from '../components/settings/settings-lines';
+import { welcomeLineWords } from '../components/welcome/welcome-lines';
 import { requestSync } from '../services/pillar-sync';
 import { askBeforeSwitch } from '../utils/reconnect';
 import { CLOSED_ACCOUNT_DELETE, mismatchPlan, inviteFromText } from '../utils/mismatch-plan';
@@ -190,7 +191,7 @@ export default function NodeMismatchScreen() {
                 setAddressUnfolded(false);
             }
         } catch (e: any) {
-            setError(e?.message || t('Could not switch to that community.'));
+            setError(e?.message ? settingsLineWords(e.message) : t('Could not switch to that community.'));
         } finally {
             setLoading(false);
         }
@@ -215,7 +216,7 @@ export default function NodeMismatchScreen() {
         try {
             invite = inviteFromText(inviteText, pageUrl);
         } catch (e: any) {
-            setError(e?.message || t("That invite doesn't look right."));
+            setError(e?.message ? settingsLineWords(e.message) : t("That invite doesn't look right."));
             return;
         }
         if (!invite) return;
@@ -236,8 +237,8 @@ export default function NodeMismatchScreen() {
                     : []),
             ], { cancelable: false });
         } catch (e: any) {
-            // The community's own words; the phone is back where it was (join-another-community.ts).
-            setError(e?.message || t('Your join could not be completed. Please try again.'));
+            // The community's own words, or redeemInvite's; the phone is back where it was (join-another-community.ts).
+            setError(e?.message ? welcomeLineWords(e.message) : t('Your join could not be completed. Please try again.'));
         } finally {
             setJoiningInvite(false);
         }

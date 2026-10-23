@@ -33,7 +33,7 @@ A grant can be for no more than the Commons holds now plus what came into it in 
 
 ## Who can start a Decision
 
-Any active member whose credit is not frozen, and who has traded in the market or was given a trust badge by an admin. A vouch on its own is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.
+Any active member whose credit is not frozen, and who has traded in the market. A trust badge or a vouch is not enough. Admins can too. You can have one open Decision at a time. You must explain why, in at least 10 characters.
 
 ## Who can vote
 
@@ -87,7 +87,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 - After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
 - A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.
 - When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.
-- The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote cannot take that away; the app says so if you try. An owner can take an admin's role away first, and after that they are a member like any other.
+- The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote someone proposes cannot take that away; the app says so if you try. The one way a vote ends their role is by keeping their emergency suspension (see below). An owner can take an admin's role away first, and after that they are a member like any other.
 
 ## Emergency suspension
 
@@ -97,6 +97,7 @@ An admin can suspend a member at once, for example to stop harm. They must give 
 - It needs the usual turnout and 60% Yes.
 - If it does not pass, or too few people vote, the suspension lifts by itself.
 - An admin cannot suspend themselves, and cannot suspend the server's only owner. Only an owner can suspend another owner.
+- An admin can suspend another admin. If the community votes to keep the suspension, that admin loses the role.
 
 On the global community there is no vote. The suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner. To keep someone out for longer, the admins suspend them again, or remove their account.
 

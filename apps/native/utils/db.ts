@@ -20,7 +20,7 @@ import {
 import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
 import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
-import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
+import { getDatabaseFilenameForNode, addSavedNode, clearGuestNode } from './nodes';
 import { getCachedNodeProfile, membersByKey, noteMembersOnDemand } from './node-profile';
 import { isMembersOnDemandRefusal } from './members-on-demand';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -3312,7 +3312,7 @@ export interface MyPoolVoting {
 }
 
 /**
- * canPropose: whether the signer may propose (earned standing, or a node admin), per the node's own rule.
+ * canPropose: whether the signer may propose (a completed trade, or a node admin), per the node's own rule.
  * Null when the list loaded unsigned, so the caller falls back rather than blocking a member who may.
  */
 export async function getDecisions(status?: string): Promise<{ decisions: DecisionWithTally[]; myPoolVoting: MyPoolVoting | null; canPropose: boolean | null }> {
@@ -6688,10 +6688,28 @@ export async function redeemInvite(
         const memberAvatar = data.member?.avatarUrl ?? data.member?.avatar ?? null;
         const nodeHasPhoto = alreadyMember && isServableAvatarValue(memberAvatar);
 
+        // A member here now, new or not: no longer a guest visit (nodes.ts markGuestNode). Every invite join passes here,
+        // and not every screen that calls this clears the mark itself; while it stands, the next sync sends this community
+        // none of the phone's blocks (blocklist.ts). Each spelling the sync reads; never fails the join.
+        try {
+            const plain = anchorUrl.replace(/\/+$/, '');
+            for (const url of new Set([anchorUrl, plain, `${plain}/`])) await clearGuestNode(url);
+        } catch (e) {
+            console.warn('[DB] Could not clear the guest mark for this community', e);
+        }
+
         if (alreadyMember) {
             console.log('[DB] ℹ️ User is already a registered member of this community.');
         } else {
             console.log('[DB] ✅ Invite redeemed successfully!');
+            // A new member here keeps no block list here yet, whatever the phone once sent to this address (a node set up
+            // again there): the next sync sends the phone's blocks (blocklist.ts). Not waited for; never fails the join.
+            try {
+                const { communityKeepsNoBlocks } = await import('./blocklist');
+                void communityKeepsNoBlocks(identity.publicKey, anchorUrl);
+            } catch (e) {
+                console.warn('[DB] Could not tell the block list this is a new member here', e);
+            }
         }
         return { success: true, alreadyMember, nodeHasPhoto };
     } catch (e: any) {
@@ -6892,12 +6910,15 @@ async function _signedRequest(endpoint: string, payload: any) {
         // code in `message` (chatActionErrorMessage's old-node refusals, the profile-photo heal below), so a caller whose
         // error the member reads puts it there itself (reportAbuse).
         let nodeMessage: string | undefined;
+        // The node's code beside its sentence (`shop_paused`: an Offer in a shop closed for now), so a screen can say why.
+        let nodeCode: string | undefined;
         try {
             const errJson = await res.json();
             // This key was replaced by a re-key: the old phone's offer of its old words (utils/key-replaced.ts).
             if (isKeyReplacedAnswer(res.status, errJson)) void noteKeyReplaced(anchorUrl, identity.publicKey);
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
             if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
+            if (typeof errJson.code === 'string') nodeCode = errJson.code;
         } catch {
             try {
                 const txt = await res.text();
@@ -6929,6 +6950,7 @@ async function _signedRequest(endpoint: string, payload: any) {
         err.status = res.status;
         err.nodeAnswered = nodeAnswered;
         err.nodeMessage = nodeMessage;
+        if (nodeCode) err.code = nodeCode;
         throw err;
     }
 
@@ -7616,6 +7638,7 @@ export async function getMarketplaceTransactions(publicKey: string, filter?: { s
             sellerPublicKey: r.seller_pubkey, 
             sellerCallsign: r.sellerCallsign, 
             credits: r.credits, 
+            hours: typeof r.hours === 'number' ? r.hours : null,
             status: r.status, 
             createdAt: r.created_at, 
             completedAt: r.completed_at,

@@ -8,7 +8,8 @@ import {
     foldApostrophes,
     parseReachPeers,
     type PostReach,
-    type AudienceScope
+    type AudienceScope,
+    word
 } from '@beanpool/core';
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
@@ -107,6 +108,11 @@ export interface MarketplacePost {
      * as before, and an app that predates shops shows it as the Offer it is.
      */
     shopId?: string;
+    /**
+     * When it was featured in its shop (DESIGN-shops-round3-enterprise-shopfront-fable.md §4; apps/server engine/shops.ts
+     * featureOffer): one of the six the shopfront draws first. Only on a featured Offer; a visitor's copy never carries it.
+     */
+    featuredAt?: string;
     acceptedBy?: string;
     acceptedByCallsign?: string;
     acceptedAt?: string;
@@ -609,7 +615,7 @@ export function validatePostPhotos(photos: string[] | undefined): void {
             throw new Error('Each photo must be a base64 data URL (JPEG, PNG, or WebP)');
         }
         if (p.length > MAX_PHOTO_BASE64_CHARS) {
-            throw new Error('Photo too large — resize to 800px JPEG before uploading');
+            throw new Error(word('Photo too large — resize to 800px JPEG before uploading'));
         }
     }
 }
@@ -704,6 +710,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         cashAlsoNeeded: Boolean(row.cash_also_needed),
         ...lendFieldsOf(db, row),
         ...(typeof row.shop_id === 'string' && row.shop_id ? { shopId: row.shop_id } : {}),
+        ...(typeof row.featured_at === 'string' && row.featured_at ? { featuredAt: row.featured_at } : {}),
         acceptedBy: row.accepted_by,
         acceptedByCallsign: row.accepted_callsign,
         acceptedAt: row.accepted_at,
@@ -2271,6 +2278,9 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // (DESIGN-shops-and-tools-fable.md §4, §9.4; apps/server routes/shops.ts). So the id links the listings its owner
     // put in the one front window, as the shop card does, and no others: their listings outside it stay apart.
     shopId: 'keep',
+    // Which of a shop's Offers its keepers featured, and when: the shopfront's, a members' page (round 3 §5), so not a
+    // visitor's. The listing itself stays.
+    featuredAt: 'drop',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // That the host lets people in is what a visitor needs to know before they join to go; who was let in is not.

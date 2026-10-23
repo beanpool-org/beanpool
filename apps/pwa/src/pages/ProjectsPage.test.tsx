@@ -350,7 +350,7 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         vi.mocked(getDecisions).mockResolvedValueOnce({ decisions: [], myPoolVoting: null, canPropose: true });
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(getDecisions).toHaveBeenCalled());
-        await waitFor(() => expect(screen.getByText(/Open to members with a completed trade or earned standing, and to node admins\./)).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText(/Open to members who have completed a trade, and to node admins\./)).toBeInTheDocument());
         expect(screen.queryByText(/You can propose once you have completed a trade\./)).toBeNull();
     });
 
@@ -898,5 +898,17 @@ describe('the Commons reads nothing of the reader\'s where its features are in p
         render(<ProjectsPage identity={backerIdentity} />);
         await waitFor(() => { expect(getDecisions).toHaveBeenCalled(); expect(getCommonsBalance).toHaveBeenCalled(); expect(getBalance).toHaveBeenCalled(); });
         expect(getTreasuries).not.toHaveBeenCalled();
+    });
+});
+
+describe('Commons → Tools (the Tool shed on the web, T1.3)', () => {
+    it('a row opens the Tools page, where this build has a tool for a member here', async () => {
+        const onNavigate = vi.fn();
+        render(<ProjectsPage identity={creatorIdentity} onNavigate={onNavigate} isMember={true} />);
+        const row = await screen.findByTestId('commons-tools-row');
+        expect(row).toHaveTextContent('Tools');
+        expect(row).toHaveTextContent('Things you can do on your own');
+        fireEvent.click(row);
+        expect(onNavigate).toHaveBeenCalledWith('tools');
     });
 });

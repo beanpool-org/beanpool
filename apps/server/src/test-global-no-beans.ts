@@ -241,7 +241,15 @@ async function main() {
     }, alice);
     assert(noStanding.status === 403 && noStanding.body?.code === 'profile_no_beans',
         `a pool-money Decision gets the plain answer first, even from a member with no standing to propose (${noStanding.status} ${JSON.stringify(noStanding.body)})`);
-    db.prepare('UPDATE members SET earned_credit = 1 WHERE public_key = ?').run(carol.pubKeyHex); // standing to propose
+    // Standing to propose is a trading record, and a node without Beans has none. A trust badge is no standing (badges
+    // unlock nothing), so here only an admin proposes.
+    db.prepare('UPDATE members SET earned_credit = 1 WHERE public_key = ?').run(carol.pubKeyHex);
+    const badgeOnly = await call('POST', '/api/commons/decisions', {
+        title: 'Freeze Dave', description: 'Freeze Dave for a while', touches: 'member', effect: 'freeze_credit', subject: dave.pubKeyHex,
+    }, carol);
+    assert(badgeOnly.status === 400 && badgeOnly.body?.error === 'You can propose a Decision once you have completed a trade',
+        `a member with a trust badge and no trade can't propose one (${badgeOnly.status} ${JSON.stringify(badgeOnly.body)})`);
+    se.grantNodeRole(carol.pubKeyHex, 'admin', 'owner:password');
     const grant = await call('POST', '/api/commons/decisions', {
         title: 'Help Dave', description: 'A hardship grant for Dave', touches: 'pool', effect: 'grant_hardship', subject: dave.pubKeyHex, params: { amount: 5 },
     }, carol);
@@ -250,6 +258,7 @@ async function main() {
         title: 'Freeze Dave', description: 'Freeze Dave for a while', touches: 'member', effect: 'freeze_credit', subject: dave.pubKeyHex,
     }, carol);
     assert(memberDecision.status === 200 && memberDecision.body?.success, `a member Decision is still proposed (${memberDecision.status} ${JSON.stringify(memberDecision.body).slice(0, 120)})`);
+    se.revokeNodeRole(carol.pubKeyHex, 'admin', 'owner:password');
     const { preflightAssert } = await import('./decisions-engine.js');
     const pre = preflightAssert({ effect: 'grant_hardship', touches: 'pool', subject: dave.pubKeyHex, params: { amount: 5 } } as any);
     assert(pre.status === 'blocked', `a pool Decision that reached execution would be blocked (${JSON.stringify(pre)})`);

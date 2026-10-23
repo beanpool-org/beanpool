@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount, loanDays, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, loanDays, type PushNoticeKind, word } from '@beanpool/core';
 import { db, memberHasPhoto } from '../db/db.js';
 import { heldPrivilegedRole } from './node-roles.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -111,9 +111,9 @@ function assertAccountOpen(publicKey: string): void {
     if (isSyntheticAccount(publicKey)) return;
     const member = db.prepare("SELECT status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) throw new Error('Member not found');
-    if (member.status === 'disabled') throw new Error('Account is disabled');
-    if (member.status === 'pruned') throw new Error('Account has been pruned');
-    if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
+    if (member.status === 'disabled') throw new Error(word('Account is disabled'));
+    if (member.status === 'pruned') throw new Error(word('Account has been pruned'));
+    if (member.status === 'completed') throw new Error(word('Enterprise has wound up — account closed'));
 }
 
 function assertProfileComplete(publicKey: string): void {
@@ -124,7 +124,7 @@ function assertProfileComplete(publicKey: string): void {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {
-        throw new Error('Please set a display name before using the marketplace.');
+        throw new Error(word('Please set a display name before using the marketplace.'));
     }
 }
 
@@ -153,7 +153,7 @@ function hiddenFromCaller(hiddenAt: string | null | undefined, authorPubkey: str
  * refusal and not a rollback; core's ledger refuses it again.
  */
 function assertDealAmount(credits: unknown): asserts credits is number {
-    if (!isBeanAmount(credits)) throw new Error('This listing has no valid price — ask the seller to edit it');
+    if (!isBeanAmount(credits)) throw new Error(word('This listing has no valid price — ask the seller to edit it'));
 }
 
 /**
@@ -176,7 +176,7 @@ function assertDealRowAmount(credits: unknown, stage: 'requested' | 'pending'): 
  */
 function postHiddenNoNewDeal(): Error {
     return Object.assign(
-        new Error('This post is hidden while a moderator looks at reports about it, so no new deal can start on it. You can approve this request once it is restored.'),
+        new Error(word('This post is hidden while a moderator looks at reports about it, so no new deal can start on it. You can approve this request once it is restored.')),
         { status: 409, statusCode: 409, code: 'post_hidden' },
     );
 }
@@ -253,7 +253,7 @@ function tellWaitingBorrowers(cb: EscrowCallbacks, waiting: Array<{ buyer_pubkey
  * How often a new deal from the same member on the same listing pushes the listing's author: a request, or a 1-step
  * accept, cancelled by its maker and made again, over and over, is one push an hour, not one each time (the push audit's
  * item 2: 100 pushes in 0.7 s to an author who had blocked nobody, before the 100 a day stopped it; with a 1-step accept
- * and its cancel, two a turn). Anyone could, and a block made in the phone app never reaches the node to stop it. The
+ * and its cancel, two a turn). Anyone could, and a block made in the phone app may not have reached the node yet. The
  * deal itself is as any other's: in the author's deals, with its SYSTEM lines and its escrow. Kept in memory, as the
  * host's "people are waiting" push is (engine/posts.ts): a restart may send one more.
  */
@@ -332,18 +332,18 @@ export function requestPost(
     assertAccountOpen(post.author_pubkey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.author_pubkey) as any;
     if (authorMember?.is_treasury) {
-        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot request posts while paused');
-        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new requests');
-        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+        if (authorMember.paused === 1) throw new Error(word('Enterprise is paused — cannot request posts while paused'));
+        if (authorMember.status === 'winding_up') throw new Error(word('Enterprise is winding up — cannot accept new requests'));
+        if (authorMember.status === 'completed') throw new Error(word('Enterprise has wound up — trading closed'));
     }
     const requesterMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(requesterPublicKey) as any;
     if (requesterMember?.is_treasury) {
-        if (requesterMember.paused === 1) throw new Error('Enterprise is paused — cannot request posts while paused');
-        if (requesterMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot place new requests');
-        if (requesterMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+        if (requesterMember.paused === 1) throw new Error(word('Enterprise is paused — cannot request posts while paused'));
+        if (requesterMember.status === 'winding_up') throw new Error(word('Enterprise is winding up — cannot place new requests'));
+        if (requesterMember.status === 'completed') throw new Error(word('Enterprise has wound up — trading closed'));
     }
-    if (post.author_pubkey === requesterPublicKey) throw new Error('You cannot request your own post');
-    if (isOnHoliday(post.author_pubkey)) throw new Error('This member is away (holiday mode) and not trading right now.');
+    if (post.author_pubkey === requesterPublicKey) throw new Error(word('You cannot request your own post'));
+    if (isOnHoliday(post.author_pubkey)) throw new Error(word('This member is away (holiday mode) and not trading right now.'));
 
     // NOTE: post is a raw DB row here (snake_case), not a MarketplacePost (camelCase).
     // acceptPost uses getPosts() which returns camelCase. Support both for resilience.
@@ -370,7 +370,7 @@ export function requestPost(
 
     const author = getMember(db, post.author_pubkey);
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
-        throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
+        throw new Error(word('Daily Pulse inspirational posts cannot be requested or transacted'));
     }
     if (post.type === 'poll' || post.type === 'event') {
         throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : 'Polls cannot be requested or transacted');
@@ -406,7 +406,7 @@ export function requestPost(
     // column name rather than the mapped field. The payee is the other side of the same swap as the payer.
     assertTradableHere({ originNode: post.origin_node }, isOffer ? post.author_pubkey : requesterPublicKey);
     const { balance, floor, usableFloor: uFloor } = cb.getBalance(payerPubkey);
-    if (balance - finalCredits < floor) throw new Error('Insufficient balance to request this post.');
+    if (balance - finalCredits < floor) throw new Error(word('Insufficient balance to request this post.'));
     if (balance - finalCredits < uFloor) throw cb.floorLockedError(payerPubkey, balance - finalCredits);
 
     const buyerPublicKey = isOffer ? requesterPublicKey : post.author_pubkey;
@@ -492,19 +492,19 @@ export function approvePostRequest(
     assertNodeMember(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
     if (isOnHoliday(row.buyer_pubkey) || isOnHoliday(row.seller_pubkey)) {
-        throw new Error('Trading is paused while a member is in holiday mode.');
+        throw new Error(word('Trading is paused while a member is in holiday mode.'));
     }
 
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(authorPublicKey) as any;
     if (authorMember?.is_treasury) {
-        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot approve bids while paused');
-        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
-        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+        if (authorMember.paused === 1) throw new Error(word('Enterprise is paused — cannot approve bids while paused'));
+        if (authorMember.status === 'winding_up') throw new Error(word('Enterprise is winding up — cannot accept new orders'));
+        if (authorMember.status === 'completed') throw new Error(word('Enterprise has wound up — trading closed'));
     }
     if (buyerMember?.is_treasury) {
-        if (buyerMember.paused === 1) throw new Error('Enterprise is paused — cannot approve bids while paused');
-        if (buyerMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
-        if (buyerMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+        if (buyerMember.paused === 1) throw new Error(word('Enterprise is paused — cannot approve bids while paused'));
+        if (buyerMember.status === 'winding_up') throw new Error(word('Enterprise is winding up — cannot accept new orders'));
+        if (buyerMember.status === 'completed') throw new Error(word('Enterprise has wound up — trading closed'));
     }
 
     // #102: the approver is the post author, but the money moves from the BUYER on this row.
@@ -522,14 +522,14 @@ export function approvePostRequest(
     // (FABLE-sec-money LOW 3).
     if (isEnterpriseNeed) {
         if (!opts?.authSigner) {
-            const err: any = new Error('Enterprise approval requires an authenticated keeper signature.');
+            const err: any = new Error(word('Enterprise approval requires an authenticated keeper signature.'));
             err.status = 401;
             err.statusCode = 401;
             throw err;
         }
         const isKeeper = signerKeepsEnterprise(cb, opts.authSigner, row.buyer_pubkey);
         if (!isKeeper) {
-            const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
+            const err: any = new Error(word('Signer is not an authorized keeper of this enterprise.'));
             err.status = 403;
             err.statusCode = 403;
             throw err;
@@ -576,7 +576,7 @@ export function approvePostRequest(
             throw err;
         }
     } else {
-        if (balance - row.credits < floor) throw new Error('Buyer has insufficient balance to cover escrow');
+        if (balance - row.credits < floor) throw new Error(word('Buyer has insufficient balance to cover escrow'));
         if (balance - row.credits < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - row.credits);
     }
 
@@ -584,7 +584,7 @@ export function approvePostRequest(
     // is no longer on the board, rather than by the update below, inside it (a throw there unwinds the ledger).
     const oneAtATime = oneDealAtATime(post);
     if (oneAtATime && post.status !== 'active') {
-        throw post.lendable === 1 && post.status === 'pending' ? loanOut() : new Error('Post is no longer available');
+        throw post.lendable === 1 && post.status === 'pending' ? loanOut() : new Error(word('Post is no longer available'));
     }
     const waitingBorrowers = oneAtATime && post.lendable === 1
         ? db.prepare(`SELECT buyer_pubkey FROM marketplace_transactions WHERE post_id=? AND id!=? AND status='requested'`).all(post.id, row.id) as Array<{ buyer_pubkey: string }>
@@ -594,11 +594,11 @@ export function approvePostRequest(
 
     cb.conservingTransaction(() => {
         const res = db.prepare(`UPDATE marketplace_transactions SET status='pending' WHERE id=? AND status='requested'`).run(transactionId);
-        if (res.changes === 0) throw new Error('Transaction is no longer in requested state');
+        if (res.changes === 0) throw new Error(word('Transaction is no longer in requested state'));
 
         if (oneAtATime) {
             const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(row.buyer_pubkey, new Date().toISOString(), row.id, post.id);
-            if (updated.changes === 0) throw new Error('Post is no longer available');
+            if (updated.changes === 0) throw new Error(word('Post is no longer available'));
 
             db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
               .run(post.id, row.id);
@@ -616,7 +616,7 @@ export function approvePostRequest(
             true,
             (isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined
         );
-        if (!escrowResult) throw new Error('Failed to lock funds in escrow');
+        if (!escrowResult) throw new Error(word('Failed to lock funds in escrow'));
 
         if (isPayeeKeeper) {
             db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
@@ -746,15 +746,15 @@ export function acceptPost(
     assertAccountOpen(post.authorPublicKey);
     const authorMember = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key=?').get(post.authorPublicKey) as any;
     if (authorMember?.is_treasury) {
-        if (authorMember.paused === 1) throw new Error('Enterprise is paused — cannot transact while paused');
-        if (authorMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
-        if (authorMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+        if (authorMember.paused === 1) throw new Error(word('Enterprise is paused — cannot transact while paused'));
+        if (authorMember.status === 'winding_up') throw new Error(word('Enterprise is winding up — cannot accept new orders'));
+        if (authorMember.status === 'completed') throw new Error(word('Enterprise has wound up — trading closed'));
     }
     const buyerMember = db.prepare('SELECT is_treasury, paused, status, callsign FROM members WHERE public_key=?').get(buyerPublicKey) as any;
     if (buyerMember?.is_treasury) {
-        if (buyerMember.paused === 1) throw new Error('Enterprise is paused — cannot transact while paused');
-        if (buyerMember.status === 'winding_up') throw new Error('Enterprise is winding up — cannot accept new orders');
-        if (buyerMember.status === 'completed') throw new Error('Enterprise has wound up — trading closed');
+        if (buyerMember.paused === 1) throw new Error(word('Enterprise is paused — cannot transact while paused'));
+        if (buyerMember.status === 'winding_up') throw new Error(word('Enterprise is winding up — cannot accept new orders'));
+        if (buyerMember.status === 'completed') throw new Error(word('Enterprise has wound up — trading closed'));
     }
 
     // NOTE: post comes from getPosts() which returns camelCase MarketplacePost.
@@ -778,19 +778,19 @@ export function acceptPost(
             throw new Error('UNAUTHORIZED: This direct offer is not addressed to you');
         }
     }
-    if (post.authorPublicKey === buyerPublicKey) throw new Error('Cannot accept your own post');
-    if (isOnHoliday(post.authorPublicKey)) throw new Error('This member is away (holiday mode) and not trading right now.');
+    if (post.authorPublicKey === buyerPublicKey) throw new Error(word('Cannot accept your own post'));
+    if (isOnHoliday(post.authorPublicKey)) throw new Error(word('This member is away (holiday mode) and not trading right now.'));
 
     const author = getMember(db, post.authorPublicKey);
     if (post.id?.startsWith('pulse_') || (author?.isTreasury && author?.callsign?.toLowerCase() === 'daily pulse')) {
-        throw new Error('Daily Pulse inspirational posts cannot be requested or transacted');
+        throw new Error(word('Daily Pulse inspirational posts cannot be requested or transacted'));
     }
     if (post.type === 'poll' || post.type === 'event') {
         throw new Error(post.type === 'event' ? 'Events cannot be requested or transacted' : 'Polls cannot be requested or transacted');
     }
 
     if (post.type !== 'offer') {
-        throw new Error('Only Offers can be 1-step accepted');
+        throw new Error(word('Only Offers can be 1-step accepted'));
     }
 
     if (!hasListedOffer(db, buyerPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
@@ -857,7 +857,7 @@ export function acceptPost(
             throw err;
         }
     } else {
-        if (balance - finalCredits < floor) throw new Error('Insufficient balance to accept this offer');
+        if (balance - finalCredits < floor) throw new Error(word('Insufficient balance to accept this offer'));
         if (balance - finalCredits < uFloor) throw cb.floorLockedError(buyerPublicKey, balance - finalCredits);
     }
 
@@ -882,7 +882,7 @@ export function acceptPost(
     cb.conservingTransaction(() => {
         if (oneAtATime) {
             const updated = db.prepare(`UPDATE posts SET status='pending', accepted_by=?, accepted_at=?, pending_transaction_id=?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='active'`).run(buyerPublicKey, tx.createdAt, tx.id, post.id);
-            if (updated.changes === 0) throw new Error('Post is no longer available — it is already committed to another deal');
+            if (updated.changes === 0) throw new Error(word('Post is no longer available — it is already committed to another deal'));
 
             db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND id!=? AND status='requested'`)
               .run(post.id, tx.id);
@@ -899,7 +899,7 @@ export function acceptPost(
             true,
             (isEnterprisePayer && opts?.authSigner) ? { signer: opts.authSigner } : undefined
         );
-        if (!escrowResult) throw new Error('Failed to lock funds in escrow — insufficient balance or ledger error');
+        if (!escrowResult) throw new Error(word('Failed to lock funds in escrow — insufficient balance or ledger error'));
 
         if (isPayeeKeeper) {
             db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?')
@@ -973,14 +973,14 @@ export function completePostTransaction(
     const isEnterpriseBuyer = Boolean(buyerMember?.is_treasury);
     if (isEnterpriseBuyer) {
         if (!opts?.authSigner) {
-            const err: any = new Error('Enterprise completion requires an authenticated keeper signature.');
+            const err: any = new Error(word('Enterprise completion requires an authenticated keeper signature.'));
             err.status = 401;
             err.statusCode = 401;
             throw err;
         }
         const isKeeper = signerKeepsEnterprise(cb, opts.authSigner, row.buyer_pubkey);
         if (!isKeeper) {
-            const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
+            const err: any = new Error(word('Signer is not an authorized keeper of this enterprise.'));
             err.status = 403;
             err.statusCode = 403;
             throw err;
@@ -1000,7 +1000,7 @@ export function completePostTransaction(
         );
         const trow = db.prepare('SELECT paused FROM members WHERE public_key = ?').get(row.buyer_pubkey) as any;
         if (trow?.paused === 1 && isPayeeKeeper) {
-            const err: any = new Error('Enterprise is paused — wage payments to keepers cannot be made while paused.');
+            const err: any = new Error(word('Enterprise is paused — wage payments to keepers cannot be made while paused.'));
             err.status = 403;
             err.statusCode = 403;
             throw err;
@@ -1063,7 +1063,7 @@ export function completePostTransaction(
 
     cb.conservingTransaction(() => {
         const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'completed', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
-        if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
+        if (updateRes.changes === 0) throw new Error(word('Deal was already completed or cancelled'));
 
         if (isHourly && releaseCredits !== row.credits) {
             const diff = releaseCredits - row.credits;
@@ -1093,16 +1093,16 @@ export function completePostTransaction(
                         // and the node stops summing to zero. We are inside the enclosing conservingTransaction,
                         // so a throw unwinds the status update, the earned_surplus debit and the ledger together.
                         const toppedUp = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
-                        if (!toppedUp) throw new Error('Failed to top up escrow for the extra hours');
+                        if (!toppedUp) throw new Error(word('Failed to top up escrow for the extra hours'));
                     }
                 } else {
-                    if (balance - diff < floor) throw new Error('Insufficient balance to cover extra hours');
+                    if (balance - diff < floor) throw new Error(word('Insufficient balance to cover extra hours'));
                     if (balance - diff < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - diff);
                     // Same reasoning as the keeper branch above: an ignored failure here pays the seller out
                     // of an escrow that never received the top-up. The floor checks on the two lines above
                     // are a pre-flight, not the authority — `transfer()` re-checks and can still refuse.
                     const toppedUp = cb.transfer(row.buyer_pubkey, `escrow_${row.id}`, diff, `Adjust escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
-                    if (!toppedUp) throw new Error('Failed to top up escrow for the extra hours');
+                    if (!toppedUp) throw new Error(word('Failed to top up escrow for the extra hours'));
                 }
             } else if (diff < 0) {
                 const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
@@ -1119,7 +1119,7 @@ export function completePostTransaction(
                 // to the buyer before the rest is released. A silent failure here strands `|diff|` in an escrow
                 // that the release then closes, and the buyer never sees their change.
                 const refunded = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, Math.abs(diff), `Refund unearned escrow for ${finalHours} hours`, 'escrow', true, opts?.authSigner ? { signer: opts.authSigner } : undefined);
-                if (!refunded) throw new Error('Failed to refund the unearned escrow hours');
+                if (!refunded) throw new Error(word('Failed to refund the unearned escrow hours'));
             }
             db.prepare(`UPDATE marketplace_transactions SET credits=?, hours=? WHERE id=?`).run(releaseCredits, finalHours, transactionId);
         }
@@ -1129,7 +1129,7 @@ export function completePostTransaction(
         // settles to a real member's account. Cross-node settlement handles its own fee separately
         // (federation-settlement-exchange.ts § commitOutboundSettlement → moveToCommons).
         releaseResult = cb.transfer(`escrow_${row.id}`, row.seller_pubkey, releaseCredits, `Escrow payout for completed post ${row.post_id}`, 'escrow', false, opts?.authSigner ? { signer: opts.authSigner } : undefined);
-        if (!releaseResult) throw new Error('Failed to release escrow funds');
+        if (!releaseResult) throw new Error(word('Failed to release escrow funds'));
 
         if (post && !backOnBoardAfterDeal(post)) {
             db.prepare(`UPDATE posts SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?`).run(completedAt, completedAt, row.post_id);
@@ -1222,10 +1222,10 @@ export function cancelPostTransaction(
 
     cb.conservingTransaction(() => {
         const updateRes = db.prepare(`UPDATE marketplace_transactions SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'pending'`).run(completedAt, transactionId);
-        if (updateRes.changes === 0) throw new Error('Deal was already completed or cancelled');
+        if (updateRes.changes === 0) throw new Error(word('Deal was already completed or cancelled'));
 
         const refundResult = cb.transfer(`escrow_${row.id}`, row.buyer_pubkey, row.credits, `Escrow refund for cancelled post ${row.post_id}`, 'escrow', true);
-        if (!refundResult) throw new Error('Failed to refund escrow funds');
+        if (!refundResult) throw new Error(word('Failed to refund escrow funds'));
 
         const buyerMember = db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(row.buyer_pubkey) as any;
         if (buyerMember?.is_treasury === 1) {

@@ -20,6 +20,7 @@ import { LOCAL_COMMUNITY_STRIP, formatDate, formatNumber, inCapitalsOf, t, tn, w
 import { DECISION_CARD_WORDS, NO_TRADE_POOL_VOTE_MESSAGE, electorateLine, keepSuspensionHeadline, poolVoteBlocker, turnoutLine, voiceCreditsLine } from '../utils/decision-card';
 import { LocalCommunityMark, ExampleHeader } from './showcase/LocalCommunityMark';
 import { samplePoolVoting } from './showcase/sample-screens';
+import { signedRequestWords } from './signed-request-lines';
 
 /**
  * What a Decision does, what it touches and where it ended, as the node names them: word() keys, shown through t(). A
@@ -139,7 +140,7 @@ export function DecideSection({
                 Alert.alert(t('Voting Error'), refusal === NO_TRADE_POOL_VOTE_MESSAGE ? t(DECISION_CARD_WORDS.noTradePoolVote) : refusal || t('Failed to record vote'));
             }
         } catch (err: any) {
-            Alert.alert(t('Error'), err.message || t('Failed to cast vote'));
+            Alert.alert(t('Error'), err.message ? signedRequestWords(err.message) : t('Failed to cast vote'));
         } finally {
             setVotingId(null);
         }
@@ -679,14 +680,14 @@ export function DecideSection({
             {/* OPEN DECISIONS VIEW */}
             {activeView === 'open' && (
                 <>
-                    {/* Propose Decision Banner (earned standing or a node admin; 1 open per author; no bond) */}
+                    {/* Propose Decision Banner (a completed trade or a node admin; 1 open per author; no bond) */}
                     <View style={styles.proposeBanner}>
                         <View style={styles.proposeHeaderRow}>
                             <Text style={styles.proposeTitle}>{t('🌱 Propose Community Action')}</Text>
                             <Text style={{ fontSize: 12, color: colors.text.muted }}>{t('No bond required')}</Text>
                         </View>
                         <Text style={styles.proposeDesc}>
-                            {t('Binding decisions execute automatically upon passing (§3.7). Open to members with a completed trade or earned standing, and to node admins.')}
+                            {t('Binding decisions execute automatically upon passing (§3.7). Open to members who have completed a trade, and to node admins.')}
                         </Text>
                         {preview ? (
                             <LocalCommunityMark variant="action" feature="decisions" label={t('+ Propose a Decision')} />

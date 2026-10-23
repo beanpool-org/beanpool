@@ -402,6 +402,10 @@ run_check "setup_backup" node --test scripts/setup-backup.test.mjs
 # against a stand-in node on localhost. Instant.
 run_check "token_scripts" node --test scripts/automation-token.test.mjs scripts/bootstrap-community-eggs.test.mjs scripts/grant-operator.test.mjs scripts/credential-redirects.test.mjs scripts/rotate-node-env.test.mjs
 
+# The team's Reddit inbox fetch (scripts/reddit-inbox.mjs, apps/reddit-watcher/TRIAGE.md) against a stand-in ntfy on
+# localhost: one read a run, each item kept once, the topic file kept private and never printed. A second.
+run_check "reddit_inbox" node --test scripts/reddit-inbox.test.mjs
+
 # The words layer (translation, DESIGN-translation-fable.md S0): every t()/tn() call is a whole sentence written as a
 # literal, every catalog keeps the English placeholders and its language's plural forms, and the English a member reads
 # outside t() (JSX text, text props, alerts) does not grow past scripts/words/lint-baseline.json. A second or two.

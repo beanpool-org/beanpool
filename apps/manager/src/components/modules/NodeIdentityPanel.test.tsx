@@ -1292,6 +1292,149 @@ describe('NodeIdentityPanel Component', () => {
         });
     });
 
+    describe("a Save never writes a directory setting or a service area the node didn't give (the private preview's password read)", () => {
+        const SETTINGS = ['publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'];
+        const CONTROLS = ['publish-location', 'publish-members', 'publish-contact-email', 'publish-contact-phone', 'publish-health', 'directory-push-interval'];
+        const AREA_CONTROLS = ['location-search', 'radius-slider', 'radius-km'];
+        const AREA = { lat: -28.55555, lng: 153.49999, radiusKm: 25 };
+
+        /** The beforeEach routes, with the node config read answered by `config` instead. */
+        function configAnswers(config: () => Promise<unknown>) {
+            const base = (global.fetch as any).getMockImplementation();
+            (global.fetch as any).mockImplementation((url: string, init?: RequestInit) =>
+                url.includes('/api/node/config') && !url.includes('/admin/') ? config() : base(url, init));
+        }
+        const nodeConfigBody = () => {
+            const call = (global.fetch as any).mock.calls.find((c: any[]) => c[0].includes('/api/local/admin/node/config'));
+            return call ? JSON.parse(call[1].body) : undefined;
+        };
+
+        it.each([
+            // What a private preview answered an owner signed in with the password, before the node gave them the whole
+            // config: the service area alone. The form's defaults would have switched "Share Location & Radius" back on.
+            ['the service area alone', () => Promise.resolve({ ok: true, json: () => Promise.resolve({ serviceRadius: AREA }) })],
+            ['a refusal', () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'boom' }) })],
+            ['no answer', () => Promise.reject(new TypeError('offline'))],
+        ])('after %s: the switches and the schedule are closed, a line says why, and a Save leaves them all out', async (_what, config) => {
+            configAnswers(config);
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(screen.getByText(/couldn.t load the directory settings/i)).toBeInTheDocument());
+            for (const id of CONTROLS) expect(document.getElementById(id)).toBeDisabled();
+            // Message requests: a switch only for a read that gave it, so none here.
+            expect(document.getElementById('dm-requests')).toBeNull();
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            const body = nodeConfigBody();
+            expect(body).toBeDefined();
+            for (const name of SETTINGS) expect(name in body).toBe(false);
+            expect('dmRequests' in body).toBe(false);
+        });
+
+        it('the area alone still saves the pin it gave, exact', async () => {
+            configAnswers(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ serviceRadius: AREA }) }));
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect((document.getElementById('radius-km') as HTMLInputElement).value).toBe('25'));
+            for (const id of AREA_CONTROLS) expect(document.getElementById(id)).not.toBeDisabled();
+            expect(screen.queryByText(/couldn.t load the service area/i)).toBeNull();
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()?.serviceRadius).toEqual(AREA);
+        });
+
+        it.each([
+            ['a refusal', () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: 'boom' }) })],
+            ['no answer', () => Promise.reject(new TypeError('offline'))],
+            // A node always says serviceRadius (null for none): an answer without it says nothing about the area.
+            ['the settings without the area', () => Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({
+                    publishLocation: false, publishMembers: true, publishContactEmail: false, publishContactPhone: false,
+                    publishHealth: true, directoryPushIntervalHours: 12,
+                }),
+            })],
+        ])("after %s: the area is closed, a line says why, and a Save leaves it out (null would clear the node's)", async (_what, config) => {
+            configAnswers(config);
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(screen.getByText(/couldn.t load the service area/i)).toBeInTheDocument());
+            for (const id of AREA_CONTROLS) expect(document.getElementById(id)).toBeDisabled();
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            const body = nodeConfigBody();
+            expect(body).toBeDefined();
+            expect('serviceRadius' in body).toBe(false);
+        });
+
+        it('a node with no area yet: the area is open, and a Save sends the place picked', async () => {
+            configAnswers(() => Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({
+                    serviceRadius: null, publishLocation: true, publishMembers: true, publishContactEmail: false, publishContactPhone: false,
+                    publishHealth: true, directoryPushIntervalHours: 12,
+                }),
+            }));
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect(document.getElementById('publish-location')).not.toBeDisabled());
+            for (const id of AREA_CONTROLS) expect(document.getElementById(id)).not.toBeDisabled();
+            expect(screen.queryByText(/couldn.t load the service area/i)).toBeNull();
+
+            await act(async () => {
+                fireEvent.change(screen.getByPlaceholderText(/Search for a location.../i), { target: { value: 'Byron Bay' } });
+            });
+            await act(async () => {
+                await new Promise((r) => setTimeout(r, 1100));
+            });
+            await waitFor(() => expect(screen.getByText('Byron Bay, NSW, Australia')).toBeInTheDocument());
+            await act(async () => {
+                fireEvent.click(screen.getByText('Byron Bay, NSW, Australia'));
+                fireEvent.change(document.getElementById('radius-km')!, { target: { value: '30' } });
+            });
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()?.serviceRadius).toEqual({ lat: -28.6474, lng: 153.612, radiusKm: 30 });
+        });
+
+        it('the whole config: every control open, no line, and a Save sends back what the node holds', async () => {
+            configAnswers(() => Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({
+                    serviceRadius: AREA, publishLocation: false, publishMembers: false, publishContactEmail: true, publishContactPhone: false,
+                    publishHealth: false, directoryPushIntervalHours: 0, lastDirectoryPush: null, acceptKnocks: true, door: 'admins',
+                    dmRequests: false,
+                }),
+            }));
+            await act(async () => {
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
+            });
+            await waitFor(() => expect((document.getElementById('publish-contact-email') as HTMLInputElement).checked).toBe(true));
+            for (const id of CONTROLS) expect(document.getElementById(id)).not.toBeDisabled();
+            expect(screen.queryByText(/couldn.t load the directory settings/i)).toBeNull();
+            for (const id of AREA_CONTROLS) expect(document.getElementById(id)).not.toBeDisabled();
+            expect(screen.queryByText(/couldn.t load the service area/i)).toBeNull();
+
+            await act(async () => {
+                fireEvent.click(screen.getByRole('button', { name: /save identity/i }));
+            });
+            expect(nodeConfigBody()).toMatchObject({
+                publishLocation: false, publishMembers: false, publishContactEmail: true, publishContactPhone: false,
+                publishHealth: false, directoryPushIntervalHours: 0, serviceRadius: AREA, dmRequests: false,
+            });
+        });
+    });
+
     describe('Directory publishing: why the community is not listed', () => {
         /** The beforeEach routes, with these answered instead. */
         const answer = (routes: Record<string, { ok: boolean; status?: number; body: unknown }>) => {

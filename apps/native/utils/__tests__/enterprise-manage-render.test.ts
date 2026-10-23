@@ -413,6 +413,29 @@ for (const dark of [false, true]) {
             expect(writes()).toEqual([]);
         });
 
+        // Its shop's routes and the feature route take its keepers only; its profile route takes a node admin too (PR #2405
+        // review 4355986004).
+        it('a node admin who keeps none of it gets the face its profile route takes: no kind, no how we deal, no Featured', async () => {
+            net.answer = community({ getTreasuryDetail: leadsView({ shop: null, keepers: [{ publicKey: KOFI, callsign: 'Kofi', role: 'lead' }] }), getBalance: { balance: 10, keeperOf: [] } });
+            await render('console');
+            expect(byId('manage-screen')).not.toBeNull();
+            expect(byLabel('Approve keeper request')).not.toBeNull();
+            expect(byId('manage-face')).not.toBeNull();
+            expect((byId('manage-face-name') as HTMLInputElement).value).toBe(NAME);
+            expect(byId('manage-face-purpose')).not.toBeNull();
+            expect(byId('manage-face-about')).not.toBeNull();
+            expect(byId('manage-face-logo')).not.toBeNull();
+            expect(byId('manage-face-kind')).toBeNull();
+            expect(byId('manage-face-how')).toBeNull();
+            expect(byId('manage-featured')).toBeNull();
+            expect(byId('manage-shop-open')).toBeNull();
+            expect(host.textContent).not.toContain('OPERATOR CONTROLS');
+            await type(byId('manage-face-about'), 'We bake on Saturdays and Wednesdays.', 'About');
+            await click(byId('manage-face-save'), 'Save');
+            expect(writes()).toEqual([{ method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { about: 'We bake on Saturdays and Wednesdays.' } }]);
+            expect(byId('manage-face-saved')?.textContent).toBe('Saved.');
+        });
+
         it('the console unreachable says so in a sentence, with Try again', async () => {
             net.answer = community({ getTreasuryDetail: null });
             await render('console');

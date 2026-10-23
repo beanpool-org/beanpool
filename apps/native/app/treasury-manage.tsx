@@ -836,11 +836,12 @@ export default function TreasuryManageScreen() {
                     )}
                 </View>
 
-                {/* Its shopfront: its face with one Save, and Featured (round 3 §3, §4) */}
+                {/* Its shopfront: its face with one Save, and Featured (round 3 §3, §4). Featured and its shop are its keepers'
+                    only (routes/shops.ts): a node admin who keeps none of it gets the face the profile route takes. */}
                 {treasuryKey && (
                     <>
-                        <ManageFace treasury={treasuryKey} detail={detail} lead={leadsIt(detail)} project={project} logoUrl={detail?.avatar} onSaved={load} />
-                        <ManageFeatured treasury={treasuryKey} shopId={shopId} offers={offers} onOffers={setOffers} onShopChanged={load} />
+                        <ManageFace treasury={treasuryKey} detail={detail} lead={leadsIt(detail)} keeper={isKeeperOfThis} project={project} logoUrl={detail?.avatar} onSaved={load} />
+                        {isKeeperOfThis && <ManageFeatured treasury={treasuryKey} shopId={shopId} offers={offers} onOffers={setOffers} onShopChanged={load} />}
                     </>
                 )}
 

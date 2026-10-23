@@ -9,8 +9,11 @@
  * - Its face as one form with one Save: any keeper its About, logo, kind and how we deal; the lead (its sole keeper, or a
  *   node admin) its name and purpose, which the others read with the sentence why. Only what changed is sent, each to
  *   its own route (the face to PUT /api/treasury/:t/profile, its kind and how we deal to its shop), the face first.
+ *   A node admin who keeps none of it gets its name, purpose, About and logo only: its shop's routes take its keepers
+ *   only (apps/server routes/shops.ts enterpriseOwner), so its kind and how we deal aren't theirs to change.
  * - Featured: its live Offers in its shop, six at most on the shelf (core SHOP_FEATURED_MAX), as the node counts them;
- *   and its live Offers not in its shop yet, which can't be featured until they are put in.
+ *   and its live Offers not in its shop yet, which can't be featured until they are put in. Its keepers' only, as the
+ *   feature and shop routes are.
  *
  * Not here: the banner (the node keeps no photo for a shop yet) and the tool shelves (the phone opens a tool as the
  * member only): each is said in the PR that built this.
@@ -76,9 +79,11 @@ export interface FaceSave {
 
 /**
  * What changed between the form as read and as typed, trimmed as the node stores it. Its name and purpose only when
- * `lead` (the node refuses anyone else them); an empty How we deal clears it; a new logo goes as the picture picked.
+ * `lead` (the node refuses anyone else them); its kind and how we deal only when `keeper` (its shop's routes take its
+ * keepers only, never a node admin who keeps none of it); an empty How we deal clears it; a new logo goes as the
+ * picture picked.
  */
-export function faceSaveOf(before: FaceForm, draft: FaceForm, lead: boolean): FaceSave {
+export function faceSaveOf(before: FaceForm, draft: FaceForm, lead: boolean, keeper = true): FaceSave {
     const face: EnterpriseFaceChanges = {};
     const shop: MyShopChanges = {};
     const changed = (a: string, b: string) => a.trim() !== b.trim();
@@ -86,8 +91,8 @@ export function faceSaveOf(before: FaceForm, draft: FaceForm, lead: boolean): Fa
     if (lead && changed(draft.purpose, before.purpose)) face.purpose = draft.purpose.trim();
     if (changed(draft.about, before.about)) face.about = draft.about.trim();
     if (draft.logo) face.avatar = draft.logo;
-    if (draft.kind !== before.kind) shop.kind = draft.kind;
-    if (changed(draft.howToDeal, before.howToDeal)) shop.howToDeal = draft.howToDeal.trim() || null;
+    if (keeper && draft.kind !== before.kind) shop.kind = draft.kind;
+    if (keeper && changed(draft.howToDeal, before.howToDeal)) shop.howToDeal = draft.howToDeal.trim() || null;
     return { face, shop };
 }
 

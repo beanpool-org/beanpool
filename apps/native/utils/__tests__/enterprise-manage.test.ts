@@ -58,6 +58,13 @@ describe('what one Save sends', () => {
     it('About emptied goes as empty words, which the node clears; a kind taken off goes as none', () => {
         expect(faceSaveOf(before, { ...before, about: '   ', kind: null }, false)).toEqual({ face: { about: '' }, shop: { kind: null } });
     });
+
+    // Its shop's routes take its keepers only (PR #2405 review 4355986004): a node admin who keeps none of it leads it.
+    it('a node admin who keeps none of it sends its face only, never its kind or how we deal', () => {
+        const draft = { ...before, name: 'Renamed', about: 'New words.', kind: 'food' as const, howToDeal: 'Somewhere else.' };
+        expect(faceSaveOf(before, draft, true, false)).toEqual({ face: { name: 'Renamed', about: 'New words.' }, shop: {} });
+        expect(savesAnything(faceSaveOf(before, { ...before, kind: 'food', howToDeal: '' }, true, false))).toBe(false);
+    });
 });
 
 describe('the form when the enterprise is read again, and once saved', () => {

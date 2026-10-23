@@ -4,7 +4,8 @@
  * Featured shelf. Their rules are utils/enterprise-manage.ts; the node's routes utils/shop.ts.
  *
  * - The face: any keeper its About, logo, kind and how we deal; its lead its name and what it is for, which every other
- *   keeper reads with the sentence why (never hidden without saying). One Save sends what changed; the node's refusal
+ *   keeper reads with the sentence why (never hidden without saying). A node admin who keeps none of it gets no kind and
+ *   no how we deal (its shop's routes take its keepers only), and no Featured (drawn by the console for keepers). One Save sends what changed; the node's refusal
  *   shows in its own words, and no answer says so, keeping what was typed. The console reads the enterprise again after
  *   any action on it, and what was typed and not saved stays through that (faceOnRead).
  * - Featured: each of its live Offers in its shop, on the shelf or off it with one tap (six at most, said once when
@@ -27,10 +28,12 @@ import { addOffersToEnterpriseShop, changeEnterpriseFace, changeEnterpriseShop, 
 import { faceAfterSave, faceFormOf, faceOnRead, faceSaveOf, featuredShelf, leadOnlyLine, refusalWords, savesAnything, type FaceForm, type FaceSave, type FaceState } from '../../utils/enterprise-manage';
 
 /** Its face: one form, one Save. `onSaved` reads the enterprise again once anything was written. */
-export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }: {
+export function ManageFace({ treasury, detail, lead, keeper, project, logoUrl, onSaved }: {
     treasury: string;
     detail: unknown;
     lead: boolean;
+    /** A keeper of it: its kind and how we deal are its shop's, which only its keepers change (not a node admin's). */
+    keeper: boolean;
     project: boolean;
     /** Its logo now (its avatar's address). */
     logoUrl: string | null | undefined;
@@ -50,7 +53,7 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
     const [partly, setPartly] = useState(false);
     const [picking, setPicking] = useState(false);
     const [choosingKind, setChoosingKind] = useState(false);
-    const plan = faceSaveOf(before, draft, lead);
+    const plan = faceSaveOf(before, draft, lead, keeper);
     const name = typeof (detail as Record<string, unknown> | null)?.name === 'string' ? (detail as Record<string, string>).name : '';
     const logoShown = draft.logo ?? (sentLogo && sentLogo.over === logoUrl ? sentLogo.uri : null) ?? logoUrl ?? null;
 
@@ -122,10 +125,15 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
                 </View>
             </View>
             <ToolInput label={t('About')} value={draft.about} onChange={(v) => edit({ about: v })} max={ENTERPRISE_ABOUT_LIMIT.chars} lines={4} testID="manage-face-about" />
-            {/* Its kind in a row, the fourteen in the sheet Your shop uses: picked here, sent with the one Save. */}
-            <ToolRow title={t('Kind')} state={draft.kind ? shopKindLabel(draft.kind) : t('Not chosen yet')} onPress={() => setChoosingKind(true)} testID="manage-face-kind" />
-            <ToolInput label={t('How we deal')} value={draft.howToDeal} onChange={(v) => edit({ howToDeal: v })} max={SHOP_HOW_TO_DEAL_LIMIT.chars} lines={3}
-                hint={t('Where to pick up, and when things come back.')} testID="manage-face-how" />
+            {/* Its kind in a row, the fourteen in the sheet Your shop uses: picked here, sent with the one Save. Its shop's, so
+                its keepers' only. */}
+            {keeper ? (
+                <>
+                    <ToolRow title={t('Kind')} state={draft.kind ? shopKindLabel(draft.kind) : t('Not chosen yet')} onPress={() => setChoosingKind(true)} testID="manage-face-kind" />
+                    <ToolInput label={t('How we deal')} value={draft.howToDeal} onChange={(v) => edit({ howToDeal: v })} max={SHOP_HOW_TO_DEAL_LIMIT.chars} lines={3}
+                        hint={t('Where to pick up, and when things come back.')} testID="manage-face-how" />
+                </>
+            ) : null}
             <ToolButtons>
                 <ToolButton primary text={busy ? t('Saving…') : t('Save')} onPress={() => { void save(); }} disabled={busy || !savesAnything(plan)} testID="manage-face-save" />
             </ToolButtons>

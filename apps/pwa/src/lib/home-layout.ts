@@ -481,7 +481,11 @@ export function cardsToAsk(
 
 /** A column is never narrower than the phone's floor, which every card's body is proven at (320 dp × 1.3)… */
 export const HOME_COLUMN_MIN = 320;
-/** …nor wider than the one column Home has always been. */
+/**
+ * …nor wider than 576 px (D1): the old one column's box (`max-w-xl`), not its cards, which were 544 px inside the box's
+ * 16 px gutters, as the App.tsx banners above Home still are. So one column on a page over 576 px (a 577–687 px window,
+ * or 833–943 px with the sidebar) is up to 32 px wider than before (review of #2411).
+ */
 export const HOME_COLUMN_MAX = 576;
 export const HOME_COLUMN_GAP = 16;
 

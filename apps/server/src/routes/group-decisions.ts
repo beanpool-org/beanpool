@@ -44,8 +44,9 @@ function cardNames(d: Decision): Record<string, string> {
     return names;
 }
 
-function card(d: Decision, actor: string) {
-    const mine = getOwnDecisionVotes(actor, [d.id]).get(d.id);
+function card(d: Decision, actor: string, ownVotesMap?: Map<string, any>) {
+    // ⚡ Bolt: Batch pre-fetch own decision votes to eliminate N+1 queries when mapping decisions
+    const mine = ownVotesMap ? ownVotesMap.get(d.id) : getOwnDecisionVotes(actor, [d.id]).get(d.id);
     return {
         ...publicDecision(d),
         tally: scopedTallyForReader(d),
@@ -68,7 +69,8 @@ export function createGroupDecisionRoutes(_deps: RouteDeps): Router {
             const roll = groupRollNow(ctx.params.id);
             const closedAt = groupClosedAt(ctx.params.id);
             const onRollNow = roll.some(k => k.pubkey === actor);
-            const cards = decisions.map(d => card(d, actor));
+            const ownVotes = getOwnDecisionVotes(actor, decisions.map(d => d.id));
+            const cards = decisions.map(d => card(d, actor, ownVotes));
             const votesOnOne = cards.some(c => c.canVote);
             const canPropose = decisionsOn() && !closedAt && roll.length >= 2 && onRollNow;
             ctx.body = {

@@ -39,7 +39,9 @@
  * request too, or ignoring would show), or 'accepted', which is visible because the opener can write again.
  *
  * A block lifted is one exception, as lifting it is meant to be: the line kept for the opener during it never reaches the
- * other person, so it no longer counts as the request's one line, and the opener's next line is (openerLinesSince).
+ * other person, so it no longer counts as the request's one line, and the opener's next line is (openerLinesSince). Until
+ * that line makes a conversation kept for them the real one, it is still theirs alone: an acceptance in it rings only them
+ * ({@link accept}, PR #2392 review 4355143120).
  *
  * A block the opener made is the other. What a blocked member does never reaches the person who blocked them
  * (engine/member-blocks.ts), and an acceptance would, by the composer coming back. So while the opener blocks the person
@@ -209,6 +211,11 @@ function acceptable(row: RequestRow | undefined): row is RequestRow {
  * blocked them (engine/member-blocks.ts), nor does an acceptance that comes of it (PR #2392 review 4354581168). `actor`,
  * whose act it is, always hears their own. One accepted already is accepted again only by an act of its opener's own,
  * where they read it as not made (acceptanceHiddenFrom): it is theirs then, and they read it, as they would have.
+ *
+ * A conversation still kept for its opener alone when the write commits (engine/withheld-lines.ts; a block lifted since,
+ * then the person adding them, or a role letting them through) is no chat the person it was for has: only the opener
+ * hears, even when the act was the other's. The event names it and its opener, so it would tell that person someone wrote
+ * to them while blocked (PR #2392 review 4355143120). They hear of it when the opener's next line makes it real.
  */
 function accept(row: RequestRow, now: number, actor?: string): void {
     const again = row.state === 'accepted';
@@ -222,7 +229,11 @@ function accept(row: RequestRow, now: number, actor?: string): void {
     const hears = again ? [actor!] : [[row.from_pubkey, row.to_pubkey], [row.to_pubkey, row.from_pubkey]]
         .filter(([who, other]) => who === actor || !hasBlocked(who, other)).map(([who]) => who);
     if (hears.length === 0) return;
-    afterTransactionCommit(() => ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request }, hears));
+    afterTransactionCommit(() => {
+        const real = !!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(row.conversation_id);
+        const heard = real ? hears : hears.filter(who => who === row.from_pubkey);
+        if (heard.length > 0) ring({ type: 'dm_request_updated', conversationId: row.conversation_id, request }, heard);
+    });
 }
 
 // ── the open ───────────────────────────────────────────────────────────────────────────────────────────────────

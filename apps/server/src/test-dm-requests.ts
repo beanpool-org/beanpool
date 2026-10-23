@@ -17,7 +17,8 @@
  *      as a friend (R11)
  *   5. Ignore: every answer the sender gets is the one a waiting request gets; the person's lists drop it (R9)
  *   6. Block, after the request or before it: the same answers again, and nothing listed (R10); once a block is lifted, the
- *      line kept during it doesn't count, and the opener's next line is the request Ann sees; an acceptance never rings
+ *      line kept during it doesn't count, and the opener's next line is the request Ann sees; an acceptance in a
+ *      conversation still kept for its opener rings only them; an acceptance never rings
  *      someone who has blocked the one whose act it was, and an opener who blocked Ann reads an acceptance she made after
  *      the block as a request still waiting, until they lift it
  *   7. read receipts: neither side's read marker reaches the other until it is accepted
@@ -525,6 +526,43 @@ async function globalRun(): Promise<void> {
     const v3 = await send(vicConv, vic);
     assert(u3.status === 403 && u3.body?.code === 'dm_request_pending' && v3.status === 403 && v3.body?.code === 'dm_request_pending',
         `and the line after it waits, as any request's (${show(u3)}; ${show(v3)})`);
+    // Until the opener's next line makes it real, a conversation kept for them is theirs alone (PR #2392 review 4355143120).
+    // Ann blocks Ash and Bea before they open, each writes a line kept for them, and she lifts both blocks. Her adding Ash
+    // accepts his, and Bea, made a moderator, accepts hers by reacting to her kept line: Ann hears of neither, as she has no
+    // such chat, and each opener hears it and reads it accepted. Ash's next line makes his the real one, a chat in her list.
+    const [ash, bea] = [member('Ash'), member('Bea')];
+    const blocksKept = [await call('POST', ann, '/api/blocks', { targetPubkey: ash.pk }), await call('POST', ann, '/api/blocks', { targetPubkey: bea.pk })];
+    const ashConv: string = (await open(ash, ann)).body?.conversation?.id;
+    const beaConv: string = (await open(bea, ann)).body?.conversation?.id;
+    const a1 = await send(ashConv, ash);
+    const beaLine: string = (await send(beaConv, bea)).body?.message?.id;
+    for (const s of [ash, bea]) blocksKept.push(await call('POST', ann, '/api/blocks/remove', { targetPubkey: s.pk }));
+    const ashSock = await socket(ash);
+    const beaSock = await socket(bea);
+    await sleep(50);
+    const annHeardKept = annSock.events.length;
+    const addAsh = await call('POST', ann, '/api/friends/add', { friendPubkey: ash.pk });
+    grantNodeRole(bea.pk, 'moderator', owner.pk);
+    const beaReacts = await react(beaLine, bea);
+    await sleep(200);
+    const keptOnly = (c: string) => !db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(c);
+    assert(blocksKept.every(r => r.status === 200) && a1.status === 200 && addAsh.status === 200 && beaReacts.status === 200
+        && keptOnly(ashConv) && keptOnly(beaConv) && rowOf(ashConv)?.state === 'accepted' && rowOf(beaConv)?.state === 'accepted',
+        `in a conversation still kept for its opener, Ann's add accepts Ash's, and Bea's reaction hers (${show(addAsh)}; ${show(beaReacts)})`);
+    assert(heardOf(annSock, ashConv, annHeardKept).length === 0 && heardOf(annSock, beaConv, annHeardKept).length === 0,
+        `Ann hears nothing of either (${heardOf(annSock, ashConv, annHeardKept).map(e => e.type)}; ${heardOf(annSock, beaConv, annHeardKept).map(e => e.type)})`);
+    const keptUpdate = (s: Sock, c: string) => heardOf(s, c).filter(e => e.type === 'dm_request_updated' && e.request?.state === 'accepted');
+    const ashReads = entryOf(await listOf(ash), ashConv)?.request?.state;
+    const beaReads = entryOf(await listOf(bea), beaConv)?.request?.state;
+    assert(keptUpdate(ashSock, ashConv).length === 1 && keptUpdate(beaSock, beaConv).length === 1 && ashReads === 'accepted' && beaReads === 'accepted',
+        `each opener hears it and reads it accepted (${keptUpdate(ashSock, ashConv).length}/${ashReads}, ${keptUpdate(beaSock, beaConv).length}/${beaReads})`);
+    const annListKept = await listOf(ann);
+    const a2 = await send(ashConv, ash);
+    const annListReal = await listOf(ann);
+    assert(![ashConv, beaConv].some(c => inChats(annListKept, c) || inRequests(annListKept, c)) && a2.status === 200 && !keptOnly(ashConv)
+        && inChats(annListReal, ashConv) && entryOf(annListReal, ashConv)?.request?.state === 'accepted',
+        `neither is in Ann's list until Ash's next line makes his real: then it is a chat of hers, accepted (${show(a2)})`);
+    for (const s of [ashSock, beaSock]) s.ws.close();
     // An acceptance never reaches someone who has blocked the one whose act it was (PR #2392 review 4354581168). Wes and
     // Xan each write, then block Ann: her reply accepts Wes's, her Accept Xan's. Ann blocks Yul after his line, and he is
     // made a moderator: his next line accepts it.

@@ -14,4 +14,5 @@ export type WebToolApp = ToolApp<ComponentType<AnyToolScreenProps>>;
 
 /** Every tool's web half, by id, as a loader. */
 export const TOOL_APPS: Readonly<Record<string, () => Promise<{ default: WebToolApp }>>> = {
+    things: () => import('./things'),
 };

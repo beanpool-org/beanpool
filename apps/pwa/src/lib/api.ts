@@ -25,6 +25,7 @@ import {
 import type { OwnDecisionVote } from './decision-own-vote';
 import { wrapLng } from './listings-near';
 import { NOTICES_SEEN_EVENT, type HomeAnswer } from './home-cards';
+import { ringProfileSaved } from './profile-saved';
 import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
 export type { MyEvent };
@@ -603,7 +604,10 @@ export async function updateMemberProfile(publicKey: string, update: {
     callsign?: string;
     archetype?: string | null;
 }): Promise<{ success: boolean; profile: MemberProfile }> {
-    return request('POST', '/api/profile/update', { publicKey, ...update });
+    const answer = await request<{ success: boolean; profile: MemberProfile }>('POST', '/api/profile/update', { publicKey, ...update });
+    // Taken: the page hears it (lib/profile-saved.ts), so the sidebar's picture follows the save.
+    ringProfileSaved();
+    return answer;
 }
 
 /** Vouch for a member — hands out the -20 credit floor. Signed POST; server verifies the
@@ -1671,11 +1675,14 @@ export async function resumeMarketplacePost(
     return request('POST', '/api/marketplace/posts/resume', { postId, authorPublicKey });
 }
 
+/** Newest first; the node answers 50 when no `limit` is given, and at most 200 a page. */
 export async function getMyMarketplaceTransactions(
-    publicKey: string, status?: string
+    publicKey: string, status?: string, limit?: number, offset?: number
 ): Promise<MarketplaceTransaction[]> {
     const params = new URLSearchParams({ publicKey });
     if (status) params.set('status', status);
+    if (limit) params.set('limit', String(limit));
+    if (offset) params.set('offset', String(offset));
     return request('GET', `/api/marketplace/transactions?${params}`);
 }
 

@@ -53,6 +53,7 @@ import { ownWithheldLine, withheldAttachmentFor } from '../engine/withheld-lines
 import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
+import { word } from '@beanpool/core';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -71,7 +72,7 @@ export function createMarketplaceRoutes(deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return false;
         }
         if (actor === targetPubkey) {
@@ -192,7 +193,7 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
             // operator nothing.
             console.error(`[Photos] ${id}/${orderNum}:`, e);
             ctx.status = 503;
-            ctx.body = { error: 'This photo is temporarily unavailable' };
+            ctx.body = { error: word('This photo is temporarily unavailable') };
             return;
         }
     }
@@ -243,7 +244,7 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
                 if (!(e instanceof MissingObjectError) || withheldAttachmentFor(id)?.storage_key === own.storage_key) {
                     console.error(`[Attachments] ${id}:`, e);
                     ctx.status = 503;
-                    ctx.body = { error: 'This attachment is temporarily unavailable' };
+                    ctx.body = { error: word('This attachment is temporarily unavailable') };
                     return;
                 }
             }
@@ -278,7 +279,7 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
         }
         console.error(`[Attachments] ${id}:`, e);
         ctx.status = 503;
-        ctx.body = { error: 'This attachment is temporarily unavailable' };
+        ctx.body = { error: word('This attachment is temporarily unavailable') };
         return;
     }
     if (data === null) {
@@ -454,7 +455,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // One member's listings, or the posts for a group or a person, are people's records: answered as asked or not
         // at all, never as a quietly empty list.
         ctx.status = 403;
-        ctx.body = { error: "Sign in to see one member's listings", code: 'members_only' };
+        ctx.body = { error: word("Sign in to see one member's listings"), code: 'members_only' };
         return;
     }
 
@@ -752,7 +753,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         );
         if (!post) {
             ctx.status = 400;
-            ctx.body = { error: 'Failed — author must be a registered member' };
+            ctx.body = { error: word('Failed — author must be a registered member') };
             return;
         }
 
@@ -780,7 +781,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
 
@@ -887,12 +888,12 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
         if ((voterPublicKey && voterPublicKey !== actor) || (voterPubkey && voterPubkey !== actor)) {
             ctx.status = 403;
-            ctx.body = { error: 'Cannot vote on behalf of another member' };
+            ctx.body = { error: word('Cannot vote on behalf of another member') };
             return;
         }
         if (!id || !optionId) {
@@ -917,12 +918,12 @@ router.post('/api/marketplace/polls/vote', async (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
         if ((voterPublicKey && voterPublicKey !== actor) || (voterPubkey && voterPubkey !== actor)) {
             ctx.status = 403;
-            ctx.body = { error: 'Cannot vote on behalf of another member' };
+            ctx.body = { error: word('Cannot vote on behalf of another member') };
             return;
         }
         if (!targetId || !optionId) {
@@ -947,12 +948,12 @@ router.post('/api/marketplace/posts/:id/close', async (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
         if ((authorPublicKey && authorPublicKey !== actor) || (authorPubkey && authorPubkey !== actor)) {
             ctx.status = 403;
-            ctx.body = { error: 'Cannot close poll on behalf of another member' };
+            ctx.body = { error: word('Cannot close poll on behalf of another member') };
             return;
         }
         if (!id) {
@@ -980,12 +981,12 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
         if ((authorPublicKey && authorPublicKey !== actor) || (authorPubkey && authorPubkey !== actor)) {
             ctx.status = 403;
-            ctx.body = { error: 'Cannot close poll on behalf of another member' };
+            ctx.body = { error: word('Cannot close poll on behalf of another member') };
             return;
         }
         if (!targetId) {
@@ -1017,12 +1018,12 @@ router.post('/api/marketplace/posts/:id/rsvp', async (ctx) => {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return;
         }
         if ((body.memberPublicKey && body.memberPublicKey !== actor) || (body.memberPubkey && body.memberPubkey !== actor)) {
             ctx.status = 403;
-            ctx.body = { error: 'Cannot RSVP on behalf of another member' };
+            ctx.body = { error: word('Cannot RSVP on behalf of another member') };
             return;
         }
         const status = body.status ?? null;
@@ -1046,7 +1047,7 @@ router.post('/api/marketplace/posts/:id/let-in', async (ctx) => {
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'Authentication required' };
+        ctx.body = { error: word('Authentication required') };
         return;
     }
     // The answer names the people Going: the visitors' view answers first, as on every route that hands its caller a person.
@@ -1103,7 +1104,7 @@ router.get('/api/marketplace/posts/:id/chat', async (ctx) => {
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'Authentication required' };
+        ctx.body = { error: word('Authentication required') };
         return;
     }
     // Same clamping as every other paged route, capped at this chat's page of 100.
@@ -1126,7 +1127,7 @@ router.post('/api/marketplace/posts/:id/chat/message', async (ctx) => {
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'Authentication required' };
+        ctx.body = { error: word('Authentication required') };
         return;
     }
     if (!chatRateLimit(ctx, actor)) return;
@@ -1143,7 +1144,7 @@ router.post('/api/marketplace/posts/:id/chat/message', async (ctx) => {
     }
     if (!text.trim()) {
         ctx.status = 400;
-        ctx.body = { error: 'Message text cannot be empty' };
+        ctx.body = { error: word('Message text cannot be empty') };
         return;
     }
     try {
@@ -1169,7 +1170,7 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'Authentication required' };
+        ctx.body = { error: word('Authentication required') };
         return;
     }
     // The answer names the writer. The engine refuses a non-member on every node (removeEventThreadMessage); here, as
@@ -1426,7 +1427,7 @@ router.get('/api/marketplace/transactions', async (ctx) => {
     const actor = ctx.state?.actor as string | undefined;
     if (!actor) {
         ctx.status = 401;
-        ctx.body = { error: 'Authentication required' };
+        ctx.body = { error: word('Authentication required') };
         return;
     }
     const isSelf = actor === publicKey;

@@ -47,7 +47,7 @@ On the global community no vote opens. The suspension lasts 7 days and then lift
 
 Only the community removes a member, by a Decision. When it passes, the person is suspended and frozen at once, and has **7 days' grace**. After that they are removed automatically, and their balance or debt goes to the commons.
 
-No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it. If an admin must go, an owner takes the role away first; after that they are a member like any other.
+No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it, with one exception: if the community votes to keep their emergency suspension (above), the role it set aside is gone for good. If an admin must go, an owner takes the role away first; after that they are a member like any other.
 
 ## Halting a Decision
 

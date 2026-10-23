@@ -61,6 +61,7 @@ import { sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT, snapshotSendWeight } from '.
 import { noteRosterSent, rosterSlot, rosterSnapshotKey, rosterSnapshotSize, storeRosterSnapshot, usableRosterSnapshot, type RosterSnapshot, type RosterView } from '../roster-snapshots.js';
 import { formerKeysReader } from '../engine/key-succession.js';
 import { accountsDeletedAmong } from '../engine/message-tombstone.js';
+import { word } from '@beanpool/core';
 
 /**
  * Each active row gains `formerKeys`: the keys a re-key replaced with the member's, each with the succession statement
@@ -89,7 +90,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const actor = ctx.state?.actor as string | undefined;
         if (!actor) {
             ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
+            ctx.body = { error: word('Authentication required') };
             return null;
         }
         // A group names its people: its members and convenors by name and face, who said what in its chat. The group
@@ -173,7 +174,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (member !== undefined && getProfileSwitches().openMembership && member !== viewerPubkey) {
             ctx.status = 403;
             ctx.set('Cache-Control', 'private, no-store');
-            ctx.body = { error: 'Join the group to see who is here', code: 'join_to_see' };
+            ctx.body = { error: word('Join the group to see who is here'), code: 'join_to_see' };
             return;
         }
 
@@ -341,7 +342,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         // exists (they can open its card), so they get a plain refusal rather than a 404.
         if (group.joinPolicy === 'invite_only' && group.relation !== 'active') {
             ctx.status = 403;
-            ctx.body = { error: 'Only members of this group can see who is in it' };
+            ctx.body = { error: word('Only members of this group can see who is in it') };
             return;
         }
         // Where anyone can join in a minute (`openMembership`, the global node), every group's roster is its own members'
@@ -352,7 +353,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             && !(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey))) {
             ctx.status = 403;
             ctx.set('Cache-Control', 'private, no-store');
-            ctx.body = { error: 'Join the group to see who is here', code: 'join_to_see' };
+            ctx.body = { error: word('Join the group to see who is here'), code: 'join_to_see' };
             return;
         }
         // Who asked to join and who is invited is for a convenor whose powers are not resting: a suspended convenor sees

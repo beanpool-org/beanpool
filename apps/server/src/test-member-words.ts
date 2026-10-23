@@ -427,6 +427,22 @@ async function testFamilies({ owner, ann, bob, se }: People): Promise<void> {
             `${name}: in French, with the same status, code and fields (${fr.status} ${fr.text})`);
     };
 
+    // A web app served from another origin the operator lists may send the language (CORS): the preflight allows it.
+    const { updateGatewayConfig, getGatewayConfig } = await import('./config/local-config.js');
+    const before = getGatewayConfig().corsAllowedOrigins;
+    updateGatewayConfig({ corsAllowedOrigins: ['https://web.example'] });
+    try {
+        const preflight = await fetch(`${BASE}/api/home`, {
+            method: 'OPTIONS',
+            headers: { Origin: 'https://web.example', 'Access-Control-Request-Method': 'GET', 'Access-Control-Request-Headers': 'x-language, x-signature' },
+        });
+        const allowed = (preflight.headers.get('access-control-allow-headers') ?? '').toLowerCase().split(/\s*,\s*/);
+        assert(preflight.headers.get('access-control-allow-origin') === 'https://web.example' && allowed.includes('x-language'),
+            `a listed origin's preflight allows X-Language beside the signature's headers (${preflight.status} ${allowed.join(', ')})`);
+    } finally {
+        updateGatewayConfig({ corsAllowedOrigins: before });
+    }
+
     // The gate (https-server.ts).
     await family('the gate, a community\'s listings to a visitor', "This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
         'GET', null, '/api/marketplace/posts');

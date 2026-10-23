@@ -470,6 +470,12 @@ export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/home',
 ]);
 
+/**
+ * The headers a web app on another origin may send (CORS): the signature's, the admin's, and the member's language
+ * (X-Language, member-words.ts), so a web app served from elsewhere gets refusals in its member's language too.
+ */
+const ALLOWED_REQUEST_HEADERS = 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for, x-language';
+
 /** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
 export const LISTINGS_MEMBERS_ONLY = {
     error: word("This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org."),
@@ -1333,13 +1339,13 @@ export async function startHttpsServer(port: number): Promise<number> {
                 ctx.set('Access-Control-Allow-Origin', requestOrigin);
                 ctx.vary('Origin');
                 if (!isAdminSurfacePath(ctx.path)) ctx.set('Access-Control-Allow-Credentials', 'true');
-                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for');
+                ctx.set('Access-Control-Allow-Headers', ALLOWED_REQUEST_HEADERS);
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             } else if (isWildcardAllowed) {
                 // Wildcard allowed: set '*' origin, DO NOT set Access-Control-Allow-Credentials to true
                 ctx.set('Access-Control-Allow-Origin', '*');
-                ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for');
+                ctx.set('Access-Control-Allow-Headers', ALLOWED_REQUEST_HEADERS);
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
             } else if (/^\/api\/local\/admin\/unlock\/[0-9a-f]{64}$/.test(ctx.path)) {

@@ -138,6 +138,27 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const shownPubkey = useRef(pubkey);
     shownPubkey.current = pubkey;
     useEffect(() => { setTab('page'); setOwnListings(undefined); }, [pubkey]);
+    // Manage's Featured card shows these same listings, so an Offer posted, paused or resumed in Manage shows there as on the
+    // page. The newest read stands (an older one that lands late is dropped), and one that fails keeps what was read before.
+    // An Offer put on or off the shelf while a read is out keeps its new place over what that read says of it.
+    const listingsTurn = useRef(0);
+    const featuredMeanwhile = useRef(new Set<Map<string, string | null>>());
+    const readListings = useCallback(async () => {
+        const turn = ++listingsTurn.current;
+        const meanwhile = new Map<string, string | null>();
+        featuredMeanwhile.current.add(meanwhile);
+        const read = await readOwnerListings(pubkey);
+        featuredMeanwhile.current.delete(meanwhile);
+        if (shownPubkey.current !== pubkey || turn !== listingsTurn.current) return;
+        setOwnListings((was) => !read
+            ? (Array.isArray(was) ? was : read)
+            : read.map((l) => (meanwhile.has(l.id) ? { ...l, featuredAt: meanwhile.get(l.id) ?? null } : l)));
+    }, [pubkey]);
+    const featuredHere = (postId: string, featuredAt: string | null) => {
+        if (shownPubkey.current !== pubkey) return;
+        featuredMeanwhile.current.forEach((m) => m.set(postId, featuredAt));
+        setOwnListings((was) => was && was.map((l) => (l.id === postId ? { ...l, featuredAt } : l)));
+    };
 
     // Operator Action States
     const [sweepAmount, setSweepAmount] = useState('');
@@ -496,7 +517,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             if (!current()) return;
             setDetail(d);
             // Its listings with photos and the Featured stamp (S5): from a node with the shopfront, for a member's page only.
-            if (hasShopfront(d) && readsAsMember(d)) void readOwnerListings(pubkey).then((l) => { if (current()) setOwnListings(l); });
+            if (hasShopfront(d) && readsAsMember(d)) void readListings();
 
             if (identity?.publicKey && viewerIsMember) {
                 const inKeepers = Array.isArray(d?.keepers) && d.keepers.some((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) === identity.publicKey);
@@ -520,7 +541,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } finally {
             if (!quiet && current()) setLoading(false);
         }
-    }, [pubkey, identity?.publicKey, viewerIsMember, isEffectivePreview, elsewhere]);
+    }, [pubkey, identity?.publicKey, viewerIsMember, isEffectivePreview, elsewhere, readListings]);
 
     useEffect(() => {
         load();
@@ -1913,8 +1934,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <EnterpriseFace treasury={pubkey} detail={detail} project={project} lead={isLeadOrSoleKeeperOrAdmin} shopEditable={isKeeperOfThis} onSaved={() => load(true)} />
                                 )}
                                 {!isEffectivePreview && faceOpen && isKeeperOfThis && (
-                                    <EnterpriseFeatured treasury={pubkey} shopId={typeof detail?.shop?.id === 'string' ? detail.shop.id : null} onShopOpened={() => load(true)}
-                                        onListingsChanged={(l) => { if (shownPubkey.current === pubkey) setOwnListings(l); }} />
+                                    <EnterpriseFeatured treasury={pubkey} shopId={typeof detail?.shop?.id === 'string' ? detail.shop.id : null} listings={ownListings}
+                                        onShopOpened={() => load(true)} onReadAgain={readListings} onFeatured={featuredHere} />
                                 )}
                             </div>
                         ) : (

@@ -13,7 +13,7 @@
  *
  * Never a false success: a change shows as made only once the node says so.
  */
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import {
     ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, SHOP_KINDS, t, tn,
     type ShopKind,
@@ -22,7 +22,7 @@ import { addEnterpriseShopOffers, changeEnterpriseFace, changeEnterpriseShop, fe
 import { resolveAvatarUrl } from '../lib/avatar';
 import { resizePhotoFile } from '../lib/photo-resize';
 import {
-    faceChanges, listingPriceLine, readOwnerListings, shelfLine, shelfOf, shopKindLabel, type Face, type ShopfrontListing,
+    faceChanges, listingPriceLine, shelfLine, shelfOf, shopKindLabel, type Face, type ShopfrontListing,
 } from '../lib/shopfront';
 
 const card = 'bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-4';
@@ -218,26 +218,33 @@ export function EnterpriseFace({ treasury, detail, project, lead, shopEditable, 
 }
 
 /**
- * The live Offers in its shop, each on or off its shelf; those outside it; no shop: open one. `onListingsChanged` hears its
- * listings as they now are, so its page's Featured tiles show the change.
+ * The live Offers in its shop, each on or off its shelf; those outside it; no shop: open one. Its listings are its page's,
+ * read again after every Manage action, so an Offer posted, paused or resumed there shows here without opening the tab again;
+ * a change made here shows in the page's Featured tiles.
  */
-export function EnterpriseFeatured({ treasury, shopId, onShopOpened, onListingsChanged }: {
+export function EnterpriseFeatured({ treasury, shopId, listings, onShopOpened, onReadAgain, onFeatured }: {
     treasury: string;
     shopId: string | null;
+    /** Its listings as its page holds them: undefined until read, null when they couldn't be. */
+    listings: ShopfrontListing[] | null | undefined;
     onShopOpened: () => void;
-    onListingsChanged?: (listings: ShopfrontListing[]) => void;
+    /** Reads its listings again: after Offers go into its shop, and Try again. */
+    onReadAgain: () => Promise<void>;
+    /** An Offer on its shelf or off it, as the node now has it. */
+    onFeatured: (postId: string, featuredAt: string | null) => void;
 }) {
     const id = useId();
-    const [listings, setListings] = useState<ShopfrontListing[] | null | undefined>(undefined);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const read = useCallback(async () => {
-        const rows = await readOwnerListings(treasury);
-        setListings(rows);
-        return rows;
-    }, [treasury]);
-    useEffect(() => { void read(); }, [read, shopId]);
+    const readAgain = async () => {
+        setBusy('read');
+        try {
+            await onReadAgain();
+        } finally {
+            setBusy(null);
+        }
+    };
 
     const openShop = async () => {
         setBusy('shop');
@@ -258,9 +265,7 @@ export function EnterpriseFeatured({ treasury, shopId, onShopOpened, onListingsC
         setError(null);
         try {
             const res = await featureOffer(l.id, !l.featuredAt);
-            const now = (listings ?? []).map((r) => (r.id === l.id ? { ...r, featuredAt: res.featuredAt ?? null } : r));
-            setListings(now);
-            onListingsChanged?.(now);
+            onFeatured(l.id, res.featuredAt ?? null);
         } catch (e) {
             setError(refusalWords(e));
         } finally {
@@ -273,8 +278,7 @@ export function EnterpriseFeatured({ treasury, shopId, onShopOpened, onListingsC
         setError(null);
         try {
             await addEnterpriseShopOffers(treasury, ids);
-            const rows = await read();
-            if (rows) onListingsChanged?.(rows);
+            await onReadAgain();
         } catch (e) {
             setError(refusalWords(e));
         } finally {
@@ -307,12 +311,12 @@ export function EnterpriseFeatured({ treasury, shopId, onShopOpened, onListingsC
     return (
         <section data-testid="manage-featured" aria-labelledby={`${id}-heading`} className={card}>
             {intro}
-            {listings === undefined ? (
+            {listings === undefined || busy === 'read' ? (
                 <p className={muted}>{t('Loading…')}</p>
             ) : listings === null ? (
                 <div className="space-y-2">
                     <p data-testid="manage-featured-unread" className={muted}>{t("Its Offers couldn't be read just now.")}</p>
-                    <button type="button" onClick={() => { setListings(undefined); void read(); }} className={secondary}>{t('Try again')}</button>
+                    <button type="button" onClick={() => void readAgain()} className={secondary}>{t('Try again')}</button>
                 </div>
             ) : (
                 <>

@@ -731,6 +731,87 @@ describe("the keepers' Manage tab", () => {
             await waitFor(() => expect(writes()).toEqual([{ method: 'POST', path: `/api/treasury/${ENT}/shop/offers`, body: { postIds: ['p5'] } }]));
         });
 
+        const listingsReads = () => reads().filter((r) => r.startsWith('/api/marketplace/posts?')).length;
+        const saveAbout = (panel: HTMLElement) => {
+            fireEvent.change(within(panel).getByTestId('manage-face-about'), { target: { value: 'We bake on Sundays now.' } });
+            fireEvent.click(within(panel).getByTestId('manage-face-save'));
+        };
+
+        it('an Offer posted from Manage shows on the shelf without opening the tab again; a pause takes its Offers off', async () => {
+            const HONEY = { id: 'p6', type: 'offer', category: 'food', title: 'Honey cake', credits: 7, priceType: 'fixed', status: 'active', audienceScope: 'public', featuredAt: null, shopId: null };
+            await open({
+                // The node's next read of its listings answers what each change made.
+                write: (method, path, body) => {
+                    if (path === `/api/treasury/${ENT}/offer`) {
+                        node.offers = [...OFFERS, HONEY];
+                        return { status: 200, body: { success: true, post: HONEY } };
+                    }
+                    if (path === `/api/enterprise/${ENT}/pause`) {
+                        node.offers = (node.offers as Array<{ type: string }>).map((o) => (o.type === 'offer' ? { ...o, status: 'paused' } : o));
+                        node.detail = leadsView({ paused: true, pausedAt: iso(now) });
+                        return { status: 200, body: { success: true, paused: true, pausedAt: iso(now) } };
+                    }
+                    return okWrites(method, path, body);
+                },
+            });
+            const panel = await manage();
+            await within(panel).findByTestId('manage-featured');
+            expect(byId('manage-shop-outside')?.textContent).toBe("1 of its live Offers isn't in its shop yet, so it can't be featured.");
+
+            fireEvent.click(found(ACTIONS.find((a) => a.what === 'post its Offer')!, panel) as HTMLElement);
+            fireEvent.change(screen.getByPlaceholderText('e.g. Dozen fresh eggs'), { target: { value: 'Honey cake' } });
+            fireEvent.change(screen.getByPlaceholderText('20'), { target: { value: '7' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Publish Listing' }));
+            await waitFor(() => expect(byId('manage-shop-outside')?.textContent).toBe("2 of its live Offers aren't in its shop yet, so they can't be featured."));
+            expect(byId('manage-feature-p3')).toBeInTheDocument();
+
+            fireEvent.click(found(ACTIONS.find((a) => a.what === 'pause for the season')!, panel) as HTMLElement);
+            fireEvent.click(within(panel).getByRole('button', { name: 'Confirm Season Pause' }));
+            await waitFor(() => expect(byId('manage-feature-p3')).toBeNull());
+            expect(byId('manage-feature-p1')).toBeNull();
+            expect(byId('manage-shop-outside')).toBeNull();
+            // The featured one, paused, keeps its place on the shelf for the resume (the node counts it).
+            expect(byId('manage-featured')?.textContent).toContain('1 of 6 on the shelf');
+        });
+
+        it('an Offer put on the shelf while its listings are being read again keeps its place, here and on its page', async () => {
+            await open();
+            const panel = await manage();
+            await within(panel).findByTestId('manage-featured');
+            // The next read of its listings is held. It left before the tap below, so it answers as the node was then.
+            let release!: () => void;
+            const held = new Promise<void>((r) => { release = r; });
+            const base = fetchMock.getMockImplementation()!;
+            fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+                const answered = base(url, init);
+                return new URL(String(url), 'http://node').pathname === '/api/marketplace/posts' ? held.then(() => answered) : answered;
+            });
+            const asked = listingsReads();
+            saveAbout(panel);
+            await waitFor(() => expect(listingsReads()).toBe(asked + 1));
+            fireEvent.click(byId('manage-feature-p3')!);
+            await waitFor(() => expect(byId('manage-feature-p3')).toBeChecked());
+            await act(async () => { release(); await new Promise((r) => setTimeout(r, 20)); });
+            expect(byId('manage-feature-p3')).toBeChecked();
+            expect(byId('manage-featured')?.textContent).toContain('2 of 6 on the shelf');
+            fireEvent.click(screen.getByRole('tab', { name: 'Page' }));
+            expect(await screen.findByTestId('shopfront-featured-p3')).toBeInTheDocument();
+        });
+
+        it('a read again that fails leaves the shelf as it was', async () => {
+            await open();
+            const panel = await manage();
+            await within(panel).findByTestId('manage-featured');
+            const asked = listingsReads();
+            node.offers = 'down';
+            saveAbout(panel);
+            await waitFor(() => expect(listingsReads()).toBe(asked + 1));
+            await act(async () => { await new Promise((r) => setTimeout(r, 20)); });
+            expect(byId('manage-featured-unread')).toBeNull();
+            expect(byId('manage-feature-p1')).toBeChecked();
+            expect(byId('manage-feature-p3')).toBeInTheDocument();
+        });
+
         it("a refusal is the node's own sentence; Offers that couldn't be read say so", async () => {
             await open({ write: () => ({ status: 400, body: { error: "This Offer has ended, so it can't be featured.", code: 'feature_ended' } }) });
             let panel = await manage();

@@ -6,7 +6,7 @@ import { toEd25519Pkcs8 } from '@beanpool/core';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { ApiMessage } from '../lib/api';
-import { decideMessageRequest, ignoreAllMessageRequests, getMessageAttachmentApi, sendMessageApi, toggleMessageReactionApi, createConversationApi } from '../lib/api';
+import { decideMessageRequest, ignoreAllMessageRequests, getMessageAttachmentApi, sendMessageApi, toggleMessageReactionApi, createConversationApi, getConversationMessages } from '../lib/api';
 import { blockUser } from '../lib/blocklist';
 import { lockForDm } from '../lib/dm-lock';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
@@ -368,6 +368,35 @@ describe('a request card', () => {
         await waitFor(() => expect(screen.getAllByTestId('request-card')).toHaveLength(1));
         await act(async () => { open(); });
         expect(await screen.findByText('Cy here')).toBeInTheDocument();
+    });
+
+    it('a card\'s lines are read once while the page is open: into a chat and Back reads none of them again', async () => {
+        // PR #2404 review 4356503723: the list is drawn again on Back, and on a slow connection each card's read is a round trip.
+        const cy = person('Cy');
+        const CY = crypto.randomUUID();
+        const cyChat = { id: CY, type: 'dm', participants: [ann.publicKey, cy.publicKey] };
+        const id = crypto.randomUUID();
+        node.list = annListWith([requestEntry(bo, CONV), requestEntry(cy, CY)]);
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hello')]);
+        node.reads[CY] = readOf(pending(cy.publicKey), []);
+        node.reads[CY].conversation = { ...node.reads[CY].conversation, id: CY, participants: [ann.publicKey, cy.publicKey], createdBy: cy.publicKey };
+        node.reads[CY].messages = [{ id, conversationId: CY, authorPubkey: cy.publicKey, ...lockForDm('Cy here', cyChat, cy, { messageId: id, after: null }),
+            type: 'text', systemType: null, metadata: null, timestamp: LINE_AT, editedAt: null, updatedAt: LINE_AT }];
+        vi.mocked(getConversationMessages).mockClear();
+        render(<MessagesPage identity={idOf(ann)} />);
+        const list = await openRequests();
+        await within(list).findByText('Cy here');
+        fireEvent.click(await within(list).findByText('Hello'));
+        await screen.findByTestId('request-mode');
+        fireEvent.click(screen.getByRole('button', { name: 'Back to messages' }));
+        const again = await screen.findByTestId('message-requests');
+        expect(within(again).getByText('Cy here')).toBeInTheDocument();
+        expect(within(again).getByText('Hello')).toBeInTheDocument();
+        expect(within(again).queryByText('Loading…')).toBeNull();
+        await act(async () => {});
+        // A card's read asks for 20 lines; the chat's own reads ask for none.
+        const cardReads = vi.mocked(getConversationMessages).mock.calls.filter((c) => c[1] === 20).map((c) => c[0]);
+        expect(cardReads.sort()).toEqual([CONV, CY].sort());
     });
 
     it('a refusal from the node is said in its own words (a standby)', async () => {

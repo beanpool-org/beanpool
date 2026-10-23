@@ -207,12 +207,15 @@ function markHomeOffered(owner: string, id: string) {
 function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCard, tools = TOOLS, apps = TOOL_APPS, now = Date.now }: ToolsPageProps & { id: string; onBack: () => void }) {
     const manifest = toolById(id, tools);
     const loader = manifest ? apps[id] : undefined;
+    // A tool this build has: its manifest and its web half. Nothing of any other is read or asked for, here or on the node
+    // (#2366 review: a manifest with no web half fetched and kept the node's copy, then said it wasn't in this version).
+    const here = manifest && loader ? manifest : undefined;
     const [attempt, setAttempt] = useState(0);
     const loaded = useToolApp(id, loader, attempt);
     const owner = identity.publicKey;
     const copyOf: WebToolCopy | null = useMemo(
-        () => (manifest && keepsNodeCopy(manifest) ? { manifest, owner: { kind: 'member', publicKey: owner }, node: pageNode() } : null),
-        [manifest, owner]);
+        () => (here && keepsNodeCopy(here) ? { manifest: here, owner: { kind: 'member', publicKey: owner }, node: pageNode() } : null),
+        [here, owner]);
     const [copy, setCopy] = useState<CopyView>({ setting: undefined, note: null, busy: false, failed: null });
     const noteRef = useRef<CopyView['note']>(null);
     noteRef.current = copy.note;
@@ -226,7 +229,7 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     const afterWrite = useCallback(() => {
         if (copyOf && noteRef.current !== 'older-node') toolCopyAfterWrite(copyOf, heard);
     }, [copyOf, heard]);
-    const store = useToolDoc(manifest, owner, afterWrite);
+    const store = useToolDoc(here, owner, afterWrite);
     reloadRef.current = store.reload;
     const info = useCommunityInfo();
     const [stack, setStack] = useState<Step[]>(() => [{ screen: open.screen, params: open.key ? { key: open.key } : {} as Record<string, string> }]);
@@ -275,20 +278,26 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
     }, [store.remove, copyOf, owner, manifest]);
 
     const step = stack[stack.length - 1];
-    const back = useCallback(() => {
-        if (panel !== 'tool') { setPanel('tool'); return; }
+    /** The tool's own back (a Save, a Delete that lands): its screens', even under a panel, which stays where it is. */
+    const toolBack = useCallback(() => {
         if (stack.length > 1) { setStack((s) => s.slice(0, -1)); return; }
         onBack();
-    }, [panel, stack.length, onBack]);
+    }, [stack.length, onBack]);
+    /** The page's ←: a panel first, then the tool's screens. */
+    const back = useCallback(() => {
+        if (panel !== 'tool') { setPanel('tool'); return; }
+        toolBack();
+    }, [panel, toolBack]);
 
     const ctx: WebHostContext = useMemo(() => ({
         owner: { kind: 'member', publicKey: owner, name: identity.callsign },
         node: { url: getNodeApiUrl() || null, profile: info?.profile ?? 'local', features: (info?.features as Record<string, unknown> | undefined) ?? null },
         navigate: (screen, params) => setStack((s) => [...s, { screen, params: { ...(params ?? {}) } }]),
+        back: toolBack,
         openComposer: onComposer,
         now,
         nodeCopy: !!copyOf && copy.setting !== false && copy.note !== 'older-node',
-    }), [owner, identity.callsign, info, onComposer, now, copyOf, copy.setting, copy.note]);
+    }), [owner, identity.callsign, info, toolBack, onComposer, now, copyOf, copy.setting, copy.note]);
     const docHandle = useMemo(() => ({ get: store.get, set: store.set }), [store.get, store.set]);
     const host = useMemo(() => (manifest ? webHostFor(manifest, ctx, docHandle) : null), [manifest, ctx, docHandle]);
 
@@ -329,10 +338,14 @@ function ToolView({ id, open, identity, onBack, onComposer, onGuide, onAddHomeCa
                 {panel === 'tool' && ready && empty && !pastDoors && step.screen === 'main' && (
                     <EmptyDoors manifest={manifest} owner={owner} onIn={() => setPastDoors(true)} onGuide={onGuide} onAddHomeCard={onAddHomeCard} />
                 )}
-                {panel === 'tool' && ready && (!empty || pastDoors || step.screen !== 'main') && (
-                    <ScreenBoundary key={`${step.screen}:${stack.length}`}>
-                        <Screen host={host as unknown as AnyToolScreenProps['host']} params={step.params} />
-                    </ScreenBoundary>
+                {ready && (!empty || pastDoors || step.screen !== 'main') && (
+                    // Drawn under a panel too, only hidden, as the phone's sheet sits over its screen: Settings or About is no
+                    // leave, so what Edit holds (what was typed, a photo chosen) and a change under way are there on ←.
+                    <div hidden={panel !== 'tool'} className="min-w-0">
+                        <ScreenBoundary key={`${step.screen}:${stack.length}`}>
+                            <Screen host={host as unknown as AnyToolScreenProps['host']} params={step.params} />
+                        </ScreenBoundary>
+                    </div>
                 )}
             </div>
         </>

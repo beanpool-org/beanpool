@@ -41,7 +41,9 @@ The new Offer form on the map has no tick yet. Post the Offer, then put it in fr
 
 Tap **Close for now**. You can say when you are back: in a week, in two weeks or in a month. Its Offers come off the Market and wait. Nothing goes in while it is closed, and none of its Offers can be put back up on its own.
 
-Tap **Reopen my shop** to put them all back. An Offer you had paused yourself stays paused.
+Tap **Reopen my shop** to put them back. An Offer you paused yourself stays paused, whether you paused it before you closed the shop or while it was closed. One you ended stays ended, and one you took out of the shop from its edit screen stays paused, outside the shop.
+
+In the Tool shed, **Lent to someone outside BeanPool** and **Delete** pause a thing's Offer for you while the shop is closed, so it stays off the Market when you reopen. **Take out of your shop** is not there while it is closed, but a thing you took out before you closed it stays out.
 
 ## Closing it
 

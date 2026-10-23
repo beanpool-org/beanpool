@@ -45,9 +45,9 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
-import { word } from './words.js';
+import { t, word, type Words } from './words.js';
 
-/** The title of every push a community sends. */
+/** The title of every push a community sends: the app's name, the same in every language. */
 export const PUSH_NOTICE_TITLE = 'BeanPool';
 
 /** Where the app goes for a notice whose details it can't fetch: the tab its kind belongs to. */
@@ -55,9 +55,8 @@ export type PushNoticeTab = 'home' | 'market' | 'chats' | 'settings';
 
 /**
  * Every kind of push a community sends, with the one sentence its lock screen shows. A server never sends free text in a
- * push: the sender names a kind, and the words come from here. Each sentence is a word() key: the server sends it in
- * English, and the phone shows it through t() where it writes a notice in a push's place (apps/native
- * utils/push-notice-check.ts), so the check against what came stays on the English.
+ * push: the sender names a kind, and the words come from here, in the language of the phone it goes to
+ * ({@link pushNoticeWords}).
  */
 export const PUSH_NOTICE_KINDS = {
     'chat.message': { body: word('You have a new message.'), tab: 'chats' },
@@ -90,9 +89,13 @@ export function isPushNoticeKind(value: unknown): value is PushNoticeKind {
     return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PUSH_NOTICE_KINDS, value);
 }
 
-/** The words a push of this kind shows: the fixed title and its kind's sentence. */
-export function pushNoticeWords(kind: PushNoticeKind): { title: string; body: string } {
-    return { title: PUSH_NOTICE_TITLE, body: PUSH_NOTICE_KINDS[kind].body };
+/**
+ * The words a push of this kind shows: the fixed title and its kind's sentence, in `words`' language. A server passes
+ * the words of the phone's language (wordsFor, from the language its push registration named); an app leaves it out for
+ * its own language, so a push shown while the app is open reads as the one on the lock screen.
+ */
+export function pushNoticeWords(kind: PushNoticeKind, words: Pick<Words, 't'> = { t }): { title: string; body: string } {
+    return { title: PUSH_NOTICE_TITLE, body: words.t(PUSH_NOTICE_KINDS[kind].body) };
 }
 
 /** The tag line of a notice's signed bytes. A new format is a new tag. */

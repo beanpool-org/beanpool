@@ -1453,6 +1453,8 @@ async function main(): Promise<void> {
             // Shops (routes/shops.ts): near a place, one, the signer's own and its changes, and an enterprise's by a keeper.
             'GET /api/shops', 'GET /api/shops/:id', 'GET /api/shops/mine', 'PUT /api/shops/mine', 'POST /api/shops/mine/close', 'POST /api/shops/mine/offers',
             'GET /api/treasury/:treasury/shop', 'PUT /api/treasury/:treasury/shop', 'POST /api/treasury/:treasury/shop/close', 'POST /api/treasury/:treasury/shop/offers',
+            // One of a shop's Offers on its shelf (routes/shops.ts), and an enterprise's face by a keeper (routes/treasury.ts, E2).
+            'PUT /api/marketplace/posts/:id/feature', 'PUT /api/treasury/:treasury/profile', 'PUT /api/enterprise/:treasury/profile',
             'GET /api/treasuries', 'GET /api/treasuries/map', 'GET /api/treasuries/statuses',
             'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing',
             'GET /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing', 'POST /api/treasury/:treasury/backing/release',

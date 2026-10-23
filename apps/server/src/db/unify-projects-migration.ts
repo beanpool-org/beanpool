@@ -67,14 +67,15 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                     ).get(enterprisePubkey) as any;
 
                     if (!existingMember) {
+                        // The description is its purpose; its About (members.bio) is its keepers' own words: none yet.
                         targetDb.prepare(`
                             INSERT INTO members (
-                                public_key, callsign, joined_at, bio, status,
+                                public_key, callsign, joined_at, status,
                                 is_treasury, earned_credit, earned_surplus,
                                 purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
-                            ) VALUES (?, ?, ?, ?, ?, 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
+                            ) VALUES (?, ?, ?, ?, 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
                         `).run(
-                            enterprisePubkey, callsign, createdAt, desc, status,
+                            enterprisePubkey, callsign, createdAt, status,
                             purpose, goal, deadline, updatedAt
                         );
                         setMemberPhoto(targetDb, enterprisePubkey, photoUrl || null);
@@ -162,14 +163,15 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                             ).get(enterprisePubkey) as any;
 
                             if (!existingMember) {
+                                // As above: the description is its purpose, and its About is none yet.
                                 targetDb.prepare(`
                                     INSERT INTO members (
-                                        public_key, callsign, joined_at, bio, status,
+                                        public_key, callsign, joined_at, status,
                                         is_treasury, earned_credit, earned_surplus,
                                         purpose, goal_amount, lifecycle, paused, updated_at
-                                    ) VALUES (?, ?, ?, ?, ?, 1, 0, 0, ?, ?, 'bounded', 0, ?)
+                                    ) VALUES (?, ?, ?, ?, 1, 0, 0, ?, ?, 'bounded', 0, ?)
                                 `).run(
-                                    enterprisePubkey, callsign, createdAt, desc, status,
+                                    enterprisePubkey, callsign, createdAt, status,
                                     purpose, goal, createdAt
                                 );
                             } else {

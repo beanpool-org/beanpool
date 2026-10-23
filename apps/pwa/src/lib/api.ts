@@ -1676,11 +1676,14 @@ export async function resumeMarketplacePost(
     return request('POST', '/api/marketplace/posts/resume', { postId, authorPublicKey });
 }
 
+/** Newest first; the node answers 50 when no `limit` is given, and at most 200 a page. */
 export async function getMyMarketplaceTransactions(
-    publicKey: string, status?: string
+    publicKey: string, status?: string, limit?: number, offset?: number
 ): Promise<MarketplaceTransaction[]> {
     const params = new URLSearchParams({ publicKey });
     if (status) params.set('status', status);
+    if (limit) params.set('limit', String(limit));
+    if (offset) params.set('offset', String(offset));
     return request('GET', `/api/marketplace/transactions?${params}`);
 }
 

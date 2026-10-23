@@ -5,6 +5,7 @@ import {
     PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_MARKER, PUSH_NOTICE_TITLE, isPushNoticeId, isPushNoticeKind,
     pushCommunityTag, pushNoticeBytes, pushNoticeWords, verifyPushNotice, type PushNoticeData, type PushNoticeKind,
 } from '../push-notice.js';
+import { wordsFor } from '../words.js';
 
 const SEED = new Uint8Array(32).map((_, i) => i + 7);
 const KEY = bytesToHex(ed25519.getPublicKey(SEED));
@@ -33,6 +34,14 @@ describe('the kinds', () => {
         }
         expect(isPushNoticeKind('chat.nope')).toBe(false);
         expect(isPushNoticeKind('toString')).toBe(false);
+    });
+
+    it("a kind's sentence comes in the phone's language: the words passed, English by default and for a sentence not translated", () => {
+        const fr = wordsFor('fr', [{ 'You have a new message.': 'Vous avez un nouveau message.' }]);
+        expect(pushNoticeWords('chat.message', fr)).toEqual({ title: PUSH_NOTICE_TITLE, body: 'Vous avez un nouveau message.' });
+        expect(pushNoticeWords('review.new', fr)).toEqual({ title: PUSH_NOTICE_TITLE, body: 'You have a new review.' });
+        // No words passed: the app's own language, English in a test, as before.
+        expect(pushNoticeWords('chat.message')).toEqual({ title: PUSH_NOTICE_TITLE, body: 'You have a new message.' });
     });
 
     it('no sentence names a person, an amount or a listing', () => {

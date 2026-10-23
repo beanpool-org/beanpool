@@ -39,6 +39,16 @@ export function blockedUsersStoreKey(publicKey: string): string {
 }
 
 /**
+ * Which of one account's blocks this phone has put on each community's own list for it (utils/blocklist.ts `syncBlocks`):
+ * an object, community address → `{ on, sent, waitUntil? }`. Kept with {@link blockedUsersStoreKey}, the list it
+ * describes, when the account leaves the phone, so the same account restored here still takes off a community's list
+ * the blocks it lifted; never read for another account.
+ */
+export function communityBlocksStoreKey(publicKey: string): string {
+    return `beanpool_community_blocks:${publicKey.toLowerCase()}`;
+}
+
+/**
  * The key each of one account's direct messages in one community file is sealed to, as this phone pinned it
  * (utils/dm-peer-pins.ts): `{ pins }`, conversation id lower-cased → pin. One value per (account, file), so no community's
  * node can grow another's or reach its pins (§3.4 amendment 6); its presence is the record that the update's seed of that

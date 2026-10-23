@@ -49,7 +49,8 @@ import {
     fitsTextLimit,
     isPreviewed,
     previewText,
-    replaceLoneSurrogates
+    replaceLoneSurrogates,
+    word
 } from '@beanpool/core';
 import { isSuspendedAccount, memberPhotoColumnsOf, type MemberPhotoColumns } from './members.js';
 import { likeContains } from './like.js';
@@ -249,7 +250,7 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
 
     const created = getGroup(db, id, params.createdBy);
     if (!created) {
-        throw new Error('Failed to create group');
+        throw new Error(word('Failed to create group'));
     }
     return created;
 }
@@ -683,14 +684,14 @@ export function handOverGroupLead(db: Db, groupId: string, leadPubkey: string, t
         throw new Error('UNAUTHORIZED: Only the lead convenor can hand the lead over');
     }
     assertConvenorPowersActive(db, leadPubkey);
-    if (leadPubkey === targetPubkey) throw new Error('You already lead this group');
+    if (leadPubkey === targetPubkey) throw new Error(word('You already lead this group'));
 
     const target = getGroupMember(db, groupId, targetPubkey);
     if (!target || target.status !== 'active') {
-        throw new Error('The new lead convenor must be an active member of this group');
+        throw new Error(word('The new lead convenor must be an active member of this group'));
     }
     if (target.role === 'observer') {
-        throw new Error('An observer only watches this group. Make them a member or a convenor first.');
+        throw new Error(word('An observer only watches this group. Make them a member or a convenor first.'));
     }
 
     const now = membershipWriteAt(db, groupId, targetPubkey);
@@ -806,10 +807,10 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
             return getGroupMember(db, groupId, memberPubkey)!;
         }
         if (existing.status === 'pending_approval') {
-            throw new Error('Membership request already pending');
+            throw new Error(word('Membership request already pending'));
         }
         if (existing.status === 'removed') {
-            throw new Error('A convenor removed you from this group. Only a convenor can add you back.');
+            throw new Error(word('A convenor removed you from this group. Only a convenor can add you back.'));
         }
         if (existing.status === 'invited') {
             refuseWhileSuspended();
@@ -839,7 +840,7 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
             VALUES (?, ?, 'member', 'pending_approval', ?, ?, ?)
         `).run(groupId, memberPubkey, now, now, now);
     } else if (group.join_policy === 'invite_only') {
-        throw new Error('This group is invite only. You must be invited by a convenor.');
+        throw new Error(word('This group is invite only. You must be invited by a convenor.'));
     } else {
         throw new Error(`Unknown join policy: ${group.join_policy}`);
     }
@@ -860,7 +861,7 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
 
     const target = getGroupMember(db, groupId, targetPubkey);
     if (!target || target.status === 'removed') {
-        throw new Error('Target is not a member of this group');
+        throw new Error(word('Target is not a member of this group'));
     }
 
     // The lead convenor. Nobody demotes them — the lead themselves hands the lead over first, and that is the only
@@ -885,7 +886,7 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
             "SELECT COUNT(*) as c FROM group_members WHERE group_id = ? AND role = 'convenor' AND status = 'active' AND member_pubkey != ?"
         ).get(groupId, targetPubkey) as any;
         if ((activeConvenors?.c || 0) === 0) {
-            throw new Error('Cannot demote the last active convenor of a group');
+            throw new Error(word('Cannot demote the last active convenor of a group'));
         }
     }
 
@@ -944,7 +945,7 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
         ).get(groupId, targetPubkey) as any;
 
         if ((otherConvenors?.c || 0) === 0 && (otherMembers?.c || 0) > 0) {
-            throw new Error('Cannot remove the last active convenor while other active members remain');
+            throw new Error(word('Cannot remove the last active convenor while other active members remain'));
         }
     }
 
@@ -1153,14 +1154,14 @@ export function deleteGroupPost(db: Db, groupId: string, convenorPubkey: string,
     if (!post) return false;
 
     if (post.audience_scope !== 'group' || post.target_group_id !== groupId) {
-        throw new Error('Post does not belong to this group');
+        throw new Error(word('Post does not belong to this group'));
     }
 
     const pendingTx = db.prepare(
         "SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'"
     ).get(postId) as any;
     if (pendingTx && pendingTx.c > 0) {
-        throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');
+        throw new Error(word('This post has a deal in escrow — complete or cancel the deal before deleting it'));
     }
 
     let removed = false;

@@ -48,6 +48,11 @@ export interface Thing {
     photo?: string;
     /** Offer post id when listed in the shop. */
     postId?: string;
+    /**
+     * The Offer taken out of the shop (paused, not ended), so listing the thing again puts the same Offer back
+     * (DESIGN-tool-library-fable.md §2.4: list "or resumes a paused one"). Never set beside `postId`.
+     */
+    pausedPostId?: string;
     /** Current borrower details when lent out. */
     lentTo?: ThingLentTo;
     createdAt: string;
@@ -126,6 +131,7 @@ function readThing(raw: unknown, ours: boolean): Thing | null {
         : undefined;
     const photo = typeof raw.photo === 'string' ? raw.photo : undefined;
     const postId = typeof raw.postId === 'string' ? raw.postId : undefined;
+    const pausedPostId = typeof raw.pausedPostId === 'string' ? raw.pausedPostId : undefined;
     const lentTo = readLentTo(raw.lentTo, ours);
     const createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : new Date(0).toISOString();
     const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : createdAt;
@@ -142,6 +148,7 @@ function readThing(raw: unknown, ours: boolean): Thing | null {
         ownerNote: _note,
         photo: _photo,
         postId: _post,
+        pausedPostId: _paused,
         lentTo: _lent,
         createdAt: _ca,
         updatedAt: _ua,
@@ -161,6 +168,7 @@ function readThing(raw: unknown, ours: boolean): Thing | null {
         ...(ownerNote !== undefined ? { ownerNote } : {}),
         ...(photo !== undefined ? { photo } : {}),
         ...(postId !== undefined ? { postId } : {}),
+        ...(pausedPostId !== undefined ? { pausedPostId } : {}),
         ...(lentTo !== undefined ? { lentTo } : {}),
         createdAt,
         updatedAt,

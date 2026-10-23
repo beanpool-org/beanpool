@@ -352,6 +352,8 @@ export const SUITES = [
     'test-tunnel-connector',
     'test-no-docker-socket',
     'test-node-config-public',
+    'test-share-location-off',
+    'test-preview-password-config',
     'test-tunnel-token-owner-only',
     'test-registrar-contract',
     'test-invite-trampoline',
@@ -444,6 +446,7 @@ export const SUITES = [
     'test-member-blocks-standby',
     'test-tool-store',
     'test-shops',
+    'test-enterprise-shopfront',
     'test-blocks-on-messaging',
     'test-messaging-idor',
     'test-probation',
@@ -554,6 +557,7 @@ export const SUITES = [
     'test-security-followups-0919',
     'test-security-followups-1001',
     'test-member-error-text',
+    'test-member-words',
     'test-storm-smalls',
 ];
 
@@ -596,6 +600,9 @@ export const VARIANTS = [
     // default, so the plain run is the pass that matters (the public-read allowlist under enforcement); this covers a
     // node whose operator set ENFORCE_READ_AUTH=false.
     { name: 'test-keeper-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // The enterprise shopfront's detail with read auth opted out: a non-member reaches the handler, whose own gate keeps the
+    // keepers' badges and categories to members (E2, DESIGN-shops-round3-enterprise-shopfront-fable.md §4, §5).
+    { name: 'test-enterprise-shopfront', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // On an open node a DM list and a DM by id are still their people's alone (#1909, #2119): someone else's list or DM is
     // refused, unsigned included, and only the DM's people are served its former keys (#1871 review NB1).
     { name: 'test-dm-former-keys-readers', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },

@@ -309,8 +309,8 @@ export interface PushRowsChecked { held: number; relocked: number; removed: numb
  */
 export function checkPushRowsAtBoot(): PushRowsChecked {
     const live = requireKeys();
-    const rows = db.prepare(`SELECT rowid AS id, public_key, token_id, token_box, platform, created_at, registered_at FROM push_tokens`).all() as
-        { id: number; public_key: string; token_id: string; token_box: string; platform: string | null; created_at: string | null; registered_at: number | null }[];
+    const rows = db.prepare(`SELECT rowid AS id, public_key, token_id, token_box, platform, lang, created_at, registered_at FROM push_tokens`).all() as
+        { id: number; public_key: string; token_id: string; token_box: string; platform: string | null; lang: string | null; created_at: string | null; registered_at: number | null }[];
     let retired: Keys[] | null = null;
     const relock: (typeof rows[number] & { token: string })[] = [];
     const remove: number[] = [];
@@ -326,11 +326,11 @@ export function checkPushRowsAtBoot(): PushRowsChecked {
         db.transaction(() => {
             const gone = [...remove, ...relock.map((r) => r.id)];
             deletePlainRows('push_tokens', 'rowid IN (SELECT value FROM json_each(?))', JSON.stringify(gone));
-            const put = db.prepare(`INSERT INTO push_tokens (public_key, token_id, token_box, platform, created_at, registered_at)
-                VALUES (?, ?, ?, ?, COALESCE(?, ${NOW}), ?) ON CONFLICT (public_key, token_id) DO NOTHING`);
+            const put = db.prepare(`INSERT INTO push_tokens (public_key, token_id, token_box, platform, lang, created_at, registered_at)
+                VALUES (?, ?, ?, ?, ?, COALESCE(?, ${NOW}), ?) ON CONFLICT (public_key, token_id) DO NOTHING`);
             for (const r of relock) {
                 const id = idUnder(live, r.token);
-                put.run(r.public_key, id, boxUnder(live, r.public_key, id, r.token), r.platform ?? 'ios', r.created_at, r.registered_at);
+                put.run(r.public_key, id, boxUnder(live, r.public_key, id, r.token), r.platform ?? 'ios', r.lang, r.created_at, r.registered_at);
             }
         })();
     }

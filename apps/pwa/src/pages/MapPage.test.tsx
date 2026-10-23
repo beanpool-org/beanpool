@@ -2359,6 +2359,18 @@ describe("a tool's draft in the composer (openDraft, DESIGN-tool-template-fable.
         expect(create).not.toHaveBeenCalled();
     });
 
+    it("a tool's photos come into the composer with its draft (the Tool shed's List, T1.3); a draft without any opens with none", async () => {
+        const photo = 'data:image/jpeg;base64,/9j/AAAA';
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={{ ...draft, photos: [photo] }} />); });
+        let panel = await view!.findByTestId('map-new-post-panel');
+        expect(within(panel).getByAltText('photo 1')).toHaveAttribute('src', photo);
+        view!.unmount();
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openDraft={draft} />); });
+        panel = await view!.findByTestId('map-new-post-panel');
+        expect(within(panel).queryByAltText('photo 1')).toBeNull();
+    });
+
     it('a Need draft opens the composer as a Need, with no price carried', async () => {
         const create = vi.spyOn(api, 'createMarketplacePost');
         let view: ReturnType<typeof render> | undefined;

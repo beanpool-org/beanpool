@@ -35,6 +35,15 @@ describe('requestModeOf', () => {
     it('30 days on (expired), the reader\'s next line is a new request', () => {
         expect(requestModeOf(dm({ state: 'expired', from: ME, at: AT }), ME, [lineBy(ME, AT)])).toBe('mine-unsent');
     });
+
+    it('the reader\'s own waiting request, before this chat\'s lines are read (null): not known yet, never "unsent"', () => {
+        expect(requestModeOf(dm({ state: 'pending', from: ME, at: AT }), ME, null)).toBe('mine-loading');
+        // The rest never depend on the lines.
+        expect(requestModeOf(dm({ state: 'expired', from: ME, at: AT }), ME, null)).toBe('mine-unsent');
+        expect(requestModeOf(dm({ state: 'pending', from: PEER, at: AT }), ME, null)).toBe('to-me');
+        expect(requestModeOf(dm({ state: 'accepted', from: ME, at: AT }), ME, null)).toBe('none');
+        expect(requestModeOf(dm(null), ME, null)).toBe('none');
+    });
 });
 
 describe('requestAfterRead', () => {

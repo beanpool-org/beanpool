@@ -496,7 +496,8 @@ describe('the sender\'s side', () => {
         node.reads[CONV] = readOf(pending(), []);
         render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
         expect(await screen.findByPlaceholderText('Message...')).toBeEnabled();
-        expect(screen.getByTestId('request-first-line')).toHaveTextContent('Your first message goes to Ann as a request. You can write more once they accept.');
+        // Said once the chat's lines are read, and none of Bo's is in it (until then it isn't known).
+        expect(await screen.findByTestId('request-first-line')).toHaveTextContent('Your first message goes to Ann as a request. You can write more once they accept.');
         expect(ANN_PEER.peerCallsign).toBe('Ann');
     });
 
@@ -510,6 +511,21 @@ describe('the sender\'s side', () => {
         expect(screen.queryByRole('button', { name: 'Reply to message' })).toBeNull();
         // Nothing beyond what the node said: no "seen", no "ignored".
         expect(screen.queryByText(/ignored|blocked|seen/i)).toBeNull();
+    });
+
+    it('while the chat is still being read, it says neither: a line already sent is never offered as the first', async () => {
+        // A slow connection: Bo's line is in, and his read of the chat hasn't come back yet.
+        let open!: () => void;
+        node.gates[CONV] = new Promise<void>((r) => { open = r; });
+        node.list = boList(pending());
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        expect(await screen.findByPlaceholderText('Message...')).toBeInTheDocument();
+        expect(screen.queryByTestId('request-first-line')).toBeNull();
+        expect(screen.queryByTitle('Send photo')).toBeNull();
+        await act(async () => { open(); });
+        expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Requests. You can write more once they accept.');
+        expect(screen.queryByTestId('request-first-line')).toBeNull();
     });
 
     it('their own line can still be edited while it waits', async () => {

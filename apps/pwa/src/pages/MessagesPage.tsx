@@ -1520,8 +1520,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             : '';
         const isPeerBlocked = peerPubkey ? isUserBlocked(peerPubkey) : false;
         // A message request (lib/dm-requests.ts): read from the node's `request` and, for the opener, the loaded lines of
-        // this chat only (never the last chat's, still in `messages` until this one's arrive).
-        const requestMode = requestModeOf(activeConv, identity.publicKey, loadedDmId === activeConv.id ? shownMessages : []);
+        // this chat only (never the last chat's, still in `messages` until this one's arrive): until they do, the opener's
+        // is not known, rather than taken for one with no line in it yet.
+        const requestMode = requestModeOf(activeConv, identity.publicKey, loadedDmId === activeConv.id ? shownMessages : null);
         const inRequest = requestMode !== 'none';
 
         // Dropping onto a blocked conversation would only produce a message the
@@ -2629,7 +2630,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         borderTop: '1px solid var(--border-primary)',
                         background: 'var(--bg-secondary)',
                     }}>
-                        {activeConv.type === 'dm' && requestMode !== 'mine-waiting' && (
+                        {activeConv.type === 'dm' && requestMode !== 'mine-waiting' && requestMode !== 'mine-loading' && (
                             <label title={t('Send photo')} style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 width: '40px', height: '40px', borderRadius: '50%',

@@ -23,7 +23,10 @@ export type RequestMode =
     /** The reader's own request with no line of theirs in it yet (or one 30 days on): their next line is the request. */
     | 'mine-unsent'
     /** The reader's own request with their line in it: they can write more once it is accepted. */
-    | 'mine-waiting';
+    | 'mine-waiting'
+    /** The reader's own waiting request while this chat's lines are still being read: whether their line is in it isn't
+     *  known yet, so the page says neither, and offers nothing only an unsent request takes. */
+    | 'mine-loading';
 
 /** The most request cards one screen shows; the rest are counted ("and {n} more"), as the design's list. */
 export const REQUEST_CARDS_SHOWN = 50;
@@ -46,19 +49,21 @@ function openerLinesSince(conv: Pick<Conversation, 'request'>, lines: ReadonlyAr
 }
 
 /**
- * What request mode a direct chat is in for `me`, from the node's `request` on it and the lines loaded. A request that
- * isn't accepted is the person's to decide, whatever state the node names to them. The opener's own: waiting once their
- * line is in it; `expired` (30 days) makes their next line a new request.
+ * What request mode a direct chat is in for `me`, from the node's `request` on it and the lines loaded (null until this
+ * chat's have been read: no lines is not the same as none read). A request that isn't accepted is the person's to decide,
+ * whatever state the node names to them. The opener's own: waiting once their line is in it, not known before their
+ * lines are read; `expired` (30 days) makes their next line a new request.
  */
 export function requestModeOf(
     conv: Pick<Conversation, 'type' | 'request'> | null | undefined,
     me: string,
-    lines: ReadonlyArray<Pick<ApiMessage, 'authorPubkey' | 'timestamp' | 'type'>>,
+    lines: ReadonlyArray<Pick<ApiMessage, 'authorPubkey' | 'timestamp' | 'type'>> | null,
 ): RequestMode {
     const r = conv?.type === 'dm' ? conv.request : null;
     if (!r || r.state === 'accepted') return 'none';
     if (r.from !== me) return 'to-me';
     if (r.state === 'expired') return 'mine-unsent';
+    if (!lines) return 'mine-loading';
     return openerLinesSince(conv!, lines) > 0 ? 'mine-waiting' : 'mine-unsent';
 }
 

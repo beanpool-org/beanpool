@@ -434,7 +434,11 @@ for (const dark of [false, true]) {
                 expect(byId('manage-face-save')?.getAttribute('aria-disabled')).toBe('true');
 
                 await type(byId('manage-face-name'), 'Hill Bakery and Mill', 'name');
-                await click(byId('manage-face-kind-food'), 'the kind');
+                expect(byId('manage-face-kind')?.textContent).toContain('🍞 Cooked food and baking');
+                await click(byId('manage-face-kind'), 'Kind');
+                await click(byId('shop-kind-pick-food'), 'the kind');
+                expect(byId('shop-kind-sheet')).toBeNull();
+                expect(byId('manage-face-kind')?.textContent).toContain('🥕 Food from the garden or farm');
                 await click(byId('manage-face-save'), 'Save');
                 expect(writes()).toEqual([
                     { method: 'PUT', path: `/api/treasury/${ENT}/profile`, body: { name: 'Hill Bakery and Mill' } },

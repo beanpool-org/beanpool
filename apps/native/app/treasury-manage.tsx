@@ -1031,7 +1031,8 @@ export default function TreasuryManageScreen() {
 
                     {/* Its keepers: the lead removes one (3-day objection window), any keeper steps down */}
                     {(removableKeepers.length > 0 || mayStepDown) && (
-                        <View style={styles.seasonCard} testID="manage-keepers">
+                        // 12 dp above: the Decisions block over it has a top margin only, and would touch it.
+                        <View style={[styles.seasonCard, { marginTop: 12 }]} testID="manage-keepers">
                             <View style={[styles.opTitleRow, { marginBottom: 4 }]}>
                                 <MaterialCommunityIcons name="account-group" size={16} color={colors.brand.primary} />
                                 <Text style={styles.seasonTitle}>{inCapitalsOf(project ? t('Its collaborators') : t('Its keepers'))}</Text>

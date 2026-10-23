@@ -27,6 +27,8 @@ Only you see how much trust you have left to back with. The lead keeper sees you
 
 ## For keepers
 
+On the phone, all of this is under **Manage** at the top of the enterprise's page. In the web app it is on the page.
+
 - **Approve** or **Decline** requests under **Pending keeper requests** (**Asking to join as keepers** in the web app). Each request shows the pledge and says whether the person's standing covers it. If it doesn't, approving is refused until it does.
 - Changes waiting under **Keeper changes waiting** show the objection window. Tap **Object** to stop one. **Object works on the first tap, with no second question.** One objection cancels the change.
 - The lead can remove a keeper with **Remove** and their name. Other keepers can object in the same way.
@@ -34,14 +36,14 @@ Only you see how much trust you have left to back with. The lead keeper sees you
 
 ## Stepping down
 
-Tap **Step down as a keeper**, then confirm (**Step down** on the phone, **OK** in the web app).
+Tap **Step down as a keeper** (under **Manage** on the phone), then confirm (**Step down** on the phone, **OK** in the web app).
 
 - The only keeper cannot step down. They can wind the enterprise up instead.
 - If the enterprise is below zero and needs your backing to cover it, the app says you can't yet (on the phone, **Not yet**).
 
 ## Votes among the keepers
 
-When an enterprise has two or more keepers, any keeper can open a vote among them. Open the enterprise: its votes are under **Decisions**, and only its keepers see them. Tap **Propose a vote** and choose what should happen:
+When an enterprise has two or more keepers, any keeper can open a vote among them. Open the enterprise (on the phone, then tap **Manage**): its votes are under **Decisions**, and only its keepers see them. Tap **Propose a vote** and choose what should happen:
 
 - **Pay Beans out** of the enterprise's own account, to a keeper you pick. It can never pay more than the enterprise holds, and never from its credit line. You can't propose paying yourself. Paying a keeper is a wage, so it only comes out of what the enterprise has earned. The usual 1.5% trade fee comes out of the amount and goes to the Commons; the form shows both figures before you send it.
 - **Remove a keeper.** The lead keeper is not removed this way: they are replaced.
@@ -51,10 +53,10 @@ Everyone who was a keeper when the vote opened can vote **Yes** or **No**, the p
 
 While a vote is open, everyone sees how many have voted, not how. Yes and No show once it closes. Nobody sees who voted how. In a very small group, though, the result and who has voted can show it: if three keepers all vote and it ends 3–0, everyone knows how everyone voted.
 
-Every keeper on the vote but the one who proposed it gets one notification when it opens, unless they muted the enterprise's chat or turned chat notifications off. It names nobody: it says a vote opened in one of your groups, and the app shows the rest. On Home, an open vote you haven't cast shows under **Needs you** and opens the enterprise.
+Every keeper on the vote but the one who proposed it gets one notification when it opens, unless they muted the enterprise's chat or turned chat notifications off. It names nobody: it says a vote opened in one of your groups, and the app shows the rest. On Home, an open vote you haven't cast shows under **Needs you** and opens the enterprise's **Manage**, where its votes are.
 
 A keeper who steps down during a vote leaves it, and their vote goes with them. A keeper removed during a vote keeps the vote they cast. If the enterprise starts winding up, its open votes end without doing anything.
 
 ## When the lead goes quiet
 
-If the lead keeper has not been active for a long time, the other keepers see **Propose Active Keeper as Lead** and can vote **Yes** or **No**. In the web app, pick an active keeper from the list, then tap **Propose Lead** (on a project it reads **Propose Leader**). Votes on keepers cannot be changed.
+If the lead keeper has not been active for a long time, the other keepers see **Propose Active Keeper as Lead** (under **Manage** on the phone) and can vote **Yes** or **No**. In the web app, pick an active keeper from the list, then tap **Propose Lead** (on a project it reads **Propose Leader**). Votes on keepers cannot be changed.

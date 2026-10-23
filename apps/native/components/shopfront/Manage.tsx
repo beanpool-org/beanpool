@@ -15,16 +15,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, formatCount, t, tn, type ShopKind } from '@beanpool/core';
+import { ENTERPRISE_ABOUT_LIMIT, ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, SHOP_FEATURED_MAX, SHOP_HOW_TO_DEAL_LIMIT, formatCount, t, tn } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
 import { HOME_TARGET_DP, homeStyles } from '../home/HomeParts';
 import { MemberAvatar } from '../MemberAvatar';
 import { AvatarPickerSheet } from '../AvatarPickerSheet';
-import { ToolButton, ToolButtons, ToolChips, ToolField, ToolInput, ToolNote, ToolSection } from '../../tools/ui';
-import { SHOP_KIND_IDS, addOffersToEnterpriseShop, changeEnterpriseFace, changeEnterpriseShop, featureOffer, shopKindLabel, type ShopListing } from '../../utils/shop';
+import { ToolButton, ToolButtons, ToolField, ToolInput, ToolNote, ToolRow, ToolSection } from '../../tools/ui';
+import { ShopKindSheet } from '../shop/ShopSheets';
+import { addOffersToEnterpriseShop, changeEnterpriseFace, changeEnterpriseShop, featureOffer, shopKindLabel, type ShopListing } from '../../utils/shop';
 import { faceFormOf, faceSaveOf, featuredShelf, leadOnlyLine, refusalWords, savesAnything, type FaceForm } from '../../utils/enterprise-manage';
-
-type KindChoice = ShopKind | 'none';
 
 /** Its face: one form, one Save. `onSaved` reads the enterprise again once anything was written. */
 export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }: {
@@ -46,6 +45,7 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
     const [error, setError] = useState<string | null>(null);
     const [partly, setPartly] = useState(false);
     const [picking, setPicking] = useState(false);
+    const [choosingKind, setChoosingKind] = useState(false);
     const plan = faceSaveOf(before, draft, lead);
     const name = typeof (detail as Record<string, unknown> | null)?.name === 'string' ? (detail as Record<string, string>).name : '';
 
@@ -84,11 +84,6 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
         }
     };
 
-    const kinds: Array<{ value: KindChoice; label: string }> = [
-        ...SHOP_KIND_IDS.map((k) => ({ value: k as KindChoice, label: shopKindLabel(k) })),
-        { value: 'none', label: t('None') },
-    ];
-
     return (
         <ToolSection title={t('Its shopfront')} testID="manage-face">
             <ToolNote text={t('What members see on its page. Change any of it, then Save.')} />
@@ -116,14 +111,8 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
                 </View>
             </View>
             <ToolInput label={t('About')} value={draft.about} onChange={(v) => edit({ about: v })} max={ENTERPRISE_ABOUT_LIMIT.chars} lines={4} testID="manage-face-about" />
-            <ToolChips<KindChoice>
-                options={kinds}
-                value={draft.kind ?? 'none'}
-                onPick={(v) => edit({ kind: v === 'none' ? null : v })}
-                label={t('Kind')}
-                heading
-                testID="manage-face-kind"
-            />
+            {/* Its kind in a row, the fourteen in the sheet Your shop uses: picked here, sent with the one Save. */}
+            <ToolRow title={t('Kind')} state={draft.kind ? shopKindLabel(draft.kind) : t('Not chosen yet')} onPress={() => setChoosingKind(true)} testID="manage-face-kind" />
             <ToolInput label={t('How we deal')} value={draft.howToDeal} onChange={(v) => edit({ howToDeal: v })} max={SHOP_HOW_TO_DEAL_LIMIT.chars} lines={3}
                 hint={t('Where to pick up, and when things come back.')} testID="manage-face-how" />
             <ToolButtons>
@@ -132,6 +121,8 @@ export function ManageFace({ treasury, detail, lead, project, logoUrl, onSaved }
             {saved ? <ToolNote text={t('Saved.')} testID="manage-face-saved" /> : null}
             {error ? <ToolNote tone="danger" text={error} testID="manage-face-error" /> : null}
             {partly ? <ToolNote text={t('Its other changes were saved.')} testID="manage-face-partly" /> : null}
+            <ShopKindSheet visible={choosingKind} kind={draft.kind} busy={false} refusal={null} colors={colors}
+                onPick={(k) => { edit({ kind: k }); setChoosingKind(false); }} onClose={() => setChoosingKind(false)} />
             <AvatarPickerSheet visible={picking} title={t('Its logo')} colors={colors} onClose={() => setPicking(false)} onSelectImage={(uri) => edit({ logo: uri })} />
         </ToolSection>
     );

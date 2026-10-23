@@ -9,7 +9,7 @@ related: keepers, commons-fund, proposing-a-decision, rules, beans-and-the-globa
 
 Projects and enterprises are the groups that hold Beans. Each has its own beans, its own Offers and Needs, and its own credit line.
 
-On the global community there are no enterprises, so **Commons** shows an example one from a local community, the Example Valley Bakery, marked **🏘️ Local community**. Its buttons, such as **Pledge** and **Pause**, say why enterprises live in a local community, and change nothing. See "Beans and the global community".
+On the global community there are no enterprises, so **Commons** shows an example one from a local community, the Example Valley Bakery, marked **🏘️ Local community**. Its buttons, such as **Pledge** and **Manage**, say why enterprises live in a local community, and change nothing. See "Beans and the global community".
 
 - A **project** has a leader, a goal in Beans and usually an end date: raise 500 Beans for a new roof, build the shade house by November. The **leader** runs it; **collaborators** help. When the goal is met, the pledges go into the project's account and it takes no more. When the work is done, its leader winds it up. After 7 days the leader finalises it, and what is left goes back to the Commons.
 - An **enterprise** keeps going and trades: a tool library, the egg flock, a market stall. Its **keepers** run it together and stand behind it. One of them is the **lead keeper**.
@@ -51,19 +51,26 @@ At the bottom, **Report Enterprise** (**Report Project** on a project) if someth
 
 ## If you keep it
 
-If you keep an enterprise, or help run a project, its page has **Operator controls**:
+If you keep an enterprise, or help run a project, tap **Manage** at the top of its page on the phone. Everything only its keepers do is there, so its page shows what every member sees. **Manage** shows only what you can do:
 
-- **Post Offer** and **Post Need:** post in its name.
-- **To Commons:** send some of its surplus to the Commons.
-- In the web app, **Set map pin** puts it on the map.
+- requests to join, keeper changes waiting and, when the lead has gone quiet, choosing a new one. See "Keepers".
+- **Its shopfront:** its name and what it is for, its logo, **About**, its kind and **How we deal**. Any keeper can change the logo, **About**, the kind and **How we deal**. Only the lead keeper, the only keeper or a community admin can change its name and what it is for; other keepers see them with a line saying so. Change what you want, then tap **Save** once.
+- **Featured:** tap an Offer to put it on its shelf, or take it off. Six at most. An Offer must be in its shop first: **Put them in its shop** puts its live Offers in.
+- **Operator controls:** **Post Offer** and **Post Need** post in its name, and **To Commons** sends some of its surplus to the Commons. Bids on its Needs and its deals are here too, to approve and to pay.
+- **Decisions:** its keepers' votes.
+- Removing a keeper, and stepping down.
+- **Season & lifecycle controls:** pausing and closing it (below).
+- **Discussion:** remove a message that breaks your community's rules. It then shows as removed.
 
-Pausing and closing it are in the same panel in the web app. On the phone they are in a card of their own below it, **Season & lifecycle controls**, which shows only the buttons you can use:
+**Season & lifecycle controls** shows only the buttons you can use:
 
 - **Pause for Season:** any keeper. Its listings pause so nobody can buy, and its credit line stays where it is, for up to 90 days. **Resume Enterprise** (**Resume Project**) ends the pause.
 - **Start Wind-Up:** the lead keeper, the only keeper or a community admin. A 7-day wait starts; nothing closes the enterprise by itself. Any keeper or a community admin can tap **Stop Wind-Up** during the wait.
 - **Finalise Wind-Up:** once the 7 days are up, the lead keeper, the only keeper or a community admin finishes closing it. See "Rules and how decisions work".
 
-Before a project reaches its goal, its leader can also cancel it, and every pledge goes back.
+In the web app these are still on its page: **Operator controls** has posting, **To Commons**, pausing and closing, and **Set map pin** puts it on the map.
+
+Before a project reaches its goal, its leader can also cancel it (on the phone, under **Manage**), and every pledge goes back.
 
 ## Starting one
 
@@ -78,4 +85,4 @@ It starts straight away, and you are its leader (a project) or its lead keeper (
 
 You can start 3 projects or enterprises in any 24 hours, and have 20 running at once. Past that the app says no. If you have 20 running, wind one up before you start another.
 
-The name, purpose and photo cannot be changed in the app yet.
+On the phone, its keepers change its picture and its words under **Manage** (see "If you keep it"). In the web app they cannot be changed yet.

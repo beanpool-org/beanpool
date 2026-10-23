@@ -199,6 +199,19 @@ describe('the Requests pill', () => {
         await act(async () => {});
         expect(within(await chips()).queryByRole('button', { name: /Requests/ })).toBeNull();
     });
+
+    it('goes when requests are turned off while it is open, and the list is back on All, never on no chip at all', async () => {
+        node.list = annListWith([requestEntry(bo, CONV)]);
+        render(<MessagesPage identity={idOf(ann)} />);
+        await openRequests();
+        // The operator turns requests off: the next list read has no `requests`.
+        node.list = { conversations: [], totalUnread: 0, deletedAccounts: [] };
+        await ringDoorbell();
+        const bar = await chips();
+        await waitFor(() => expect(within(bar).queryByRole('button', { name: /Requests/ })).toBeNull());
+        expect(within(bar).getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByTestId('message-requests')).toBeNull();
+    });
 });
 
 describe('a request card', () => {
@@ -526,6 +539,29 @@ describe('the sender\'s side', () => {
         await act(async () => { open(); });
         expect(await screen.findByTestId('request-waiting')).toHaveTextContent('Sent as a request. Ann will see it under Requests. You can write more once they accept.');
         expect(screen.queryByTestId('request-first-line')).toBeNull();
+    });
+
+    it('a dragged photo is taken before the first line, and not while the chat is still being read (its 📎 is hidden then too)', async () => {
+        const dragged = { dataTransfer: { files: [], items: [], types: ['Files'] } };
+        node.list = boList(pending());
+        node.reads[CONV] = readOf(pending(), []);
+        const { unmount } = render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        await screen.findByTestId('request-first-line');
+        fireEvent.dragEnter(screen.getByPlaceholderText('Message...'), dragged);
+        expect(await screen.findByTestId('chat-drop-hint')).toBeInTheDocument();
+        unmount();
+
+        let open!: () => void;
+        node.gates[CONV] = new Promise<void>((r) => { open = r; });
+        node.reads[CONV] = readOf(pending(), [line(bo, 'Hi Ann')]);
+        render(<MessagesPage identity={idOf(bo)} openConversationId={CONV} />);
+        const composer = await screen.findByPlaceholderText('Message...');
+        expect(screen.queryByTitle('Send photo')).toBeNull();
+        fireEvent.dragEnter(composer, dragged);
+        await act(async () => {});
+        expect(screen.queryByTestId('chat-drop-hint')).toBeNull();
+        await act(async () => { open(); });
+        await screen.findByTestId('request-waiting');
     });
 
     it('their own line can still be edited while it waits', async () => {

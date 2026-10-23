@@ -13,7 +13,7 @@ import {
     SEARCH_OFFLINE_LINE, searchEmptyLine, searchFirstLine,
     RSVP_SAID, RSVP_WORDS, beansAmount, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventLine,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence, DECIDE_HREF, formatBeans,
-    communitiesListed, timeAgoInWords,
+    communitiesListed, decideOnNode, timeAgoInWords,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
 import { TIPS_DONT_SHOW, TIPS_DONT_SHOW_LABEL, formatCount, listPhotoUrl, readSearchSettings, t, tipsNextLabel, tn, type SkyToday, type TierName, type TipsView } from '@beanpool/core';
@@ -396,13 +396,18 @@ export function DecideBody({ card, features, colors, now }: { card: NonNullable<
                         colors={colors}
                         text={t('Poll: {title}', { title: card.poll.title })}
                         sub={closesInWords(card.poll.closesAt, now)}
-                        a11y={t('Poll: {title}. Closes {closes}. Opens the poll.', { title: card.poll.title, closes: closesInWords(card.poll.closesAt, now) })}
+                        a11y={t('Poll: {title}. {closes}. Opens the poll.', {
+                            title: card.poll.title,
+                            closes: sentence(closesInWords(card.poll.closesAt, now)),
+                        })}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: card.poll!.id } })}
                         testID="home-decide-poll"
                     />
                 )}
-                <HomeLink id="decide:all" colors={colors} text={t('Decide')} a11y={t('Open Decide, in Commons')}
-                    onPress={() => router.push(DECIDE_HREF)} testID="home-decide-all" />
+                {decideOnNode(features) && (card.items?.length ?? 0) > 0 && (
+                    <HomeLink id="decide:all" colors={colors} text={t('Decide')} a11y={t('Open Decide, in Commons')}
+                        onPress={() => router.push(DECIDE_HREF)} testID="home-decide-all" />
+                )}
             </>
         );
     }

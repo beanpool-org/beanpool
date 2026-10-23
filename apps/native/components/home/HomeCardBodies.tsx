@@ -443,7 +443,9 @@ export function GroupsBody({ card, colors }: { card: NonNullable<HomeCards['grou
                         text={line}
                         sub={sub}
                         strong={g.unread > 0 && !g.muted}
-                        a11y={sub ? t('{line}. {sub}. Opens the chat.', { line: sentence(line), sub: sentence(sub) }) : t('{line} Opens the chat.', { line: sentence(line) })}
+                        a11y={sub
+                            ? t('{line} {sub} Opens the chat.', { line: sentence(line), sub: sentence(sub) })
+                            : t('{line} Opens the chat.', { line: sentence(line) })}
                         onPress={() => router.push(g.kind === 'event'
                             ? { pathname: '/chat/[id]', params: { id: g.id, event: '1' } }
                             : { pathname: '/chat/[id]', params: { id: g.id, [g.kind]: '1' } })}
